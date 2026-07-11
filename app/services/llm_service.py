@@ -13,8 +13,37 @@ import threading
 import logging
 import requests
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_library_symlinks(bin_dir: str) -> None:
+    """Recreate common SONAME symlinks required by llama-server binaries.
+
+    Some llama.cpp archives ship versioned shared libs as regular files (for
+    example `libllama-common.so.0.0.9940`) but expect loader-compatible names
+    like `libllama-common.so.0` to exist at runtime. The download flattening
+    path in this project extracts only regular files, so symlinks can be lost;
+    create them proactively on each ensure pass.
+    """
+    # Only Linux paths need these symlinks for this runtime.
+    if os.name != "nt":
+        for fname in os.listdir(bin_dir):
+            m = _re.match(r"^(?P<base>.+\\.so)\\.(?P<major>\\d+)(?:\\.\d+)+$", fname)
+            if not m:
+                continue
+            alias = f"{m.group('base')}.{m.group('major')}"
+            target = os.path.join(bin_dir, fname)
+            alias_path = os.path.join(bin_dir, alias)
+            if os.path.lexists(alias_path):
+                continue
+            try:
+                os.symlink(fname, alias_path)
+            except OSError:
+                # Best-effort; the server launch will fail noisily if unresolved.
+                # Avoid hard failing here so install flow remains resilient.
+                pass
 
 # Singleton state
 _process: Optional[subprocess.Popen] = None
@@ -549,14 +578,23 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
 
     # Query remote OpenAI-compatible server (LM Studio, etc.)
     if provider in ("remote", "openai") and remote_url:
+        remote_url = _normalize_remote_url(remote_url)
         try:
             headers = {}
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
             url = remote_url.rstrip("/")
-            resp = requests.get(f"{url}/v1/models", headers=headers, timeout=10)
-            if resp.ok:
+
+            # OpenAI-compatible endpoints support this path.
+            # Ollama's older compatibility can still work via /api/tags,
+            # so we fall back there for remote mode.
+            endpoints = ["/v1/models", "/api/tags"] if provider == "remote" else ["/v1/models"]
+            for endpoint in endpoints:
+                resp = requests.get(f"{url}{endpoint}", headers=headers, timeout=10)
+                if not resp.ok:
+                    continue
                 data = resp.json()
+                # OpenAI-compatible shape
                 for m in data.get("data", []):
                     mid = m.get("id", "")
                     if mid:
@@ -566,6 +604,19 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
                             "size_hint": provider,
                             "provider": provider,
                         })
+                # Ollama legacy shape
+                if not remote_models:
+                    for m in data.get("models", []):
+                        mid = m.get("name") if isinstance(m, dict) else ""
+                        if mid:
+                            remote_models.append({
+                                "id": mid,
+                                "label": f"{mid} (Remote)",
+                                "size_hint": provider,
+                                "provider": provider,
+                            })
+                if remote_models:
+                    break
         except Exception as e:
             print(f"[LLM] Failed to query remote models at {remote_url}: {e}")
 
@@ -594,8 +645,51 @@ def get_model_dir() -> str:
 
 def _server_url() -> str:
     if _provider in ("remote", "openai") and _remote_url:
+        parsed = urlparse(_remote_url)
+        path = parsed.path.rstrip("/")
+        if path.endswith("/v1"):
+            path = path[:-3]
+            parsed = parsed._replace(path=path)
+            return urlunparse(parsed).rstrip("/")
         return _remote_url.rstrip("/")
     return f"http://127.0.0.1:{_server_port}"
+
+
+def _normalize_remote_url(raw_url: str) -> str:
+    """Normalize remote provider base URL to avoid accidental '/v1' duplication.
+
+    Users can save either `http://host:11434` or `http://host:11434/v1` in
+    settings. The service always appends `/v1` when calling endpoints.
+    """
+    raw_url = (raw_url or "").strip()
+    if not raw_url:
+        return raw_url
+    parsed = urlparse(raw_url)
+    path = parsed.path.rstrip("/")
+    if path.endswith("/v1"):
+        path = path[:-3]
+        parsed = parsed._replace(path=path)
+        return urlunparse(parsed).rstrip("/")
+    return raw_url.rstrip("/")
+
+
+def _normalize_remote_payload(payload: dict, provider: str) -> dict:
+    """Adjust payload fields for non-local providers.
+
+    Some OpenAI-like proxies and Ollama-compatible endpoints reject
+    local-only/llama-server-specific tuning fields. Keep the request
+    minimal and standards-compatible.
+    """
+    if provider == "local":
+        return payload
+    cleaned = dict(payload)
+    if provider in ("remote", "openai") and _model_id:
+        cleaned.setdefault("model", _model_id)
+    cleaned.pop("cache_prompt", None)
+    cleaned.pop("chat_template_kwargs", None)
+    cleaned.pop("enable_thinking", None)
+    cleaned.pop("response_format", None)
+    return cleaned
 
 
 def _api_headers() -> dict:
@@ -916,6 +1010,7 @@ def _ensure_llama_server(bin_dir: str) -> None:
         # unparseable (don't risk a re-download loop on an unknown build).
         # Only a KNOWN-too-old build triggers an upgrade.
         if build is None or build >= MIN_LLAMA_BUILD:
+            _ensure_library_symlinks(bin_dir)
             return
         print(f"[LLM] llama-server build {build} < required {MIN_LLAMA_BUILD}; "
               "upgrading to the latest llama.cpp release.")
@@ -1076,6 +1171,7 @@ def _ensure_llama_server(bin_dir: str) -> None:
             f"Downloaded llama.cpp release but {exe_name} not found in {bin_dir} "
             f"after extraction. Tried: {asset_urls}"
         )
+    _ensure_library_symlinks(bin_dir)
     print(f"[LLM] llama-server installed to {exe_path}")
 
 
@@ -1118,6 +1214,7 @@ def load_model(
 
     # Handle remote/API providers — no subprocess needed
     if provider in ("remote", "openai", "anthropic"):
+        remote_url = _normalize_remote_url(remote_url)
         with _lock:
             if is_loaded() and _model_id == model_id and _provider == provider and not force_reload:
                 return
@@ -1373,6 +1470,12 @@ def _diagnose_llm_request_failure(exc: Exception) -> "RuntimeError":
             "or failed to start — retry, or check the Services settings."
         )
     # Server still alive (or a remote provider) — a real network/timeout issue.
+    if isinstance(exc, requests.exceptions.HTTPError) and getattr(exc, "response", None) is not None:
+        rsp = exc.response
+        body = (rsp.text or "").strip()
+        if len(body) > 1000:
+            body = f"{body[:1000]}..."
+        return RuntimeError(f"LLM request failed: {exc} (body={body})")
     return RuntimeError(f"LLM request failed: {exc}")
 
 
@@ -1564,6 +1667,7 @@ def generate(
         return _generate_anthropic(messages, total_tokens, max(temperature, 0.01), top_p)
 
     try:
+        payload = _normalize_remote_payload(payload, _provider)
         resp = requests.post(
             f"{_server_url()}/v1/chat/completions",
             json=payload,
@@ -1773,6 +1877,7 @@ def generate_streaming(
     reasoning_content = ""
     in_reasoning = False
     try:
+        payload = _normalize_remote_payload(payload, _provider)
         resp = requests.post(
             f"{_server_url()}/v1/chat/completions",
             json=payload,
