@@ -145,6 +145,16 @@ module.exports = {
             : "Install Inpaint Support (SAM 3.1)",
           href: "sam_install.js",
         }, {
+          // Install / re-install the UniRig AI auto-rigging engine
+          // (separate Python 3.11 conda env; weights ~2GB download on
+          // first use; needs an NVIDIA GPU with 8GB+ VRAM). Optional:
+          // the Animate tab's procedural engine works without it.
+          icon: "fa-solid fa-person-running",
+          text: info.exists("app/services/rigging/env")
+            ? "Update AI Rigging (UniRig)"
+            : "Install AI Rigging (UniRig)",
+          href: "rigging_install.js",
+        }, {
           icon: "fa-regular fa-circle-xmark",
           text: "<div><strong>Reset</strong><div>Revert to pre-install state</div></div>",
           href: "reset.js",

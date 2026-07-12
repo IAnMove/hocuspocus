@@ -1,0 +1,22 @@
+# Maestro-owned dependency set for the optional UniRig auto-rigging engine.
+# Mirrors UniRig's requirements.txt with three deliberate changes:
+#  - wandb removed (training-only telemetry),
+#  - flash_attn removed here — it needs torch preinstalled and
+#    --no-build-isolation, so rigging_install.js installs it as its own step,
+#  - pygltflib added for Maestro's animation-clip baking pass.
+# numpy is pinned by a dedicated final install step (UniRig requires 1.26.4).
+transformers==4.51.3
+python-box
+einops
+omegaconf
+pytorch_lightning
+lightning
+addict
+timm
+fast-simplification
+bpy==4.2
+trimesh
+open3d
+pyrender
+huggingface_hub
+pygltflib==1.16.3

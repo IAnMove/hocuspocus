@@ -28,6 +28,15 @@ INSTALL_MARKER = ENV_DIR / ".maestro_hunyuan3d_v1.installed"
 WORKER_PATH = SERVICE_DIR / "rig_worker.py"
 JOBS_DIR = Path(__file__).resolve().parents[1] / "ckpts" / "rig" / "jobs"
 
+# Optional UniRig AI engine: separate Python 3.11 env installed on demand
+# through rigging_install.js ("Install AI Rigging (UniRig)" in the menu).
+RIGGING_DIR = Path(__file__).resolve().parent / "rigging"
+RIGGING_ENV_DIR = RIGGING_DIR / "env"
+RIGGING_MARKER = RIGGING_ENV_DIR / ".maestro_rigging_v1.installed"
+UNIRIG_WORKER_PATH = RIGGING_DIR / "rig_worker_unirig.py"
+UNIRIG_VENDOR_DIR = RIGGING_DIR / "vendor" / "UniRig"
+HF_CACHE_DIR = Path(__file__).resolve().parents[1] / "ckpts" / "rig" / "huggingface"
+
 ANIMATIONS: list[dict[str, str]] = [
     {"id": "idle", "label": "Idle Sway", "description": "Gentle side-to-side spine sway, stronger toward the top."},
     {"id": "breathe", "label": "Breathe", "description": "Soft squash-and-stretch breathing loop."},
@@ -56,6 +65,11 @@ def _python_path() -> Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
+def _unirig_python_path() -> Path | None:
+    candidates = [RIGGING_ENV_DIR / "python.exe", RIGGING_ENV_DIR / "bin" / "python"]
+    return next((path for path in candidates if path.is_file()), None)
+
+
 def installation_status() -> dict[str, Any]:
     python_path = _python_path()
     installed = bool(python_path and INSTALL_MARKER.is_file() and WORKER_PATH.is_file())
@@ -65,10 +79,20 @@ def installation_status() -> dict[str, Any]:
     }
 
 
+def unirig_installation_status() -> dict[str, Any]:
+    python_path = _unirig_python_path()
+    installed = bool(python_path and RIGGING_MARKER.is_file() and UNIRIG_WORKER_PATH.is_file() and UNIRIG_VENDOR_DIR.is_dir())
+    return {
+        "installed": installed,
+        "install_hint": None if installed else "Open the Maestro item in Pinokio and run 'Install AI Rigging (UniRig)'. Needs an NVIDIA GPU with 8GB+ VRAM; weights (~2GB) download on first use.",
+    }
+
+
 def capabilities() -> dict[str, Any]:
     with _lock:
         active = sum(1 for job in _jobs.values() if job["status"] in {"queued", "running"})
     status = installation_status()
+    unirig_status = unirig_installation_status()
     return {
         "engines": [
             {
@@ -77,6 +101,13 @@ def capabilities() -> dict[str, Any]:
                 "description": "Spine-chain skeleton with distance-based skinning. Works on any object; no extra downloads.",
                 "installed": status["installed"],
                 "install_hint": status["install_hint"],
+            },
+            {
+                "id": "unirig",
+                "label": "UniRig (AI)",
+                "description": "VAST-AI UniRig predicts a real skeleton and learned skinning weights. Best for characters and creatures; ~8GB VRAM.",
+                "installed": unirig_status["installed"],
+                "install_hint": unirig_status["install_hint"],
             },
         ],
         "animations": ANIMATIONS,
@@ -102,9 +133,11 @@ def _prune_finished_jobs_locked() -> None:
 
 
 def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dict[str, Any]:
-    runtime = installation_status()
-    if not runtime["installed"]:
-        raise RuntimeError(runtime["install_hint"])
+    # Each engine has its own runtime; gate on the one actually requested.
+    if str(body.get("engine") or "procedural") != "unirig":
+        runtime = installation_status()
+        if not runtime["installed"]:
+            raise RuntimeError(runtime["install_hint"])
 
     with _lock:
         _prune_finished_jobs_locked()
@@ -113,8 +146,12 @@ def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dic
         raise ValueError("Too many queued rig jobs; wait for the current ones to finish or cancel them")
 
     engine = str(body.get("engine") or "procedural")
-    if engine != "procedural":
+    if engine not in {"procedural", "unirig"}:
         raise ValueError(f"Unknown rig engine: {engine}")
+    if engine == "unirig":
+        unirig_status = unirig_installation_status()
+        if not unirig_status["installed"]:
+            raise RuntimeError(unirig_status["install_hint"])
     animations = body.get("animations") or [item["id"] for item in ANIMATIONS]
     if not isinstance(animations, list) or not animations:
         raise ValueError("Select at least one animation")
@@ -186,15 +223,27 @@ def _cleanup_partial_output(output_path: Path) -> None:
 
 
 def _run_job_serialized(job_id: str, output_dir: str) -> None:
-    python_path = _python_path()
-    if not python_path:
-        _update_job(job_id, status="failed", phase="failed", error="Rig runtime is not installed")
-        return
-
     with _lock:
         job = _jobs.get(job_id)
         request_data = job.get("request") if job else None
     if not request_data:
+        return
+    engine = request_data.get("engine") or "procedural"
+    if engine == "unirig":
+        python_path = _unirig_python_path()
+        worker_path = UNIRIG_WORKER_PATH
+        worker_cwd = RIGGING_DIR
+        # GPU inference plus a one-time weights download on first use.
+        inactivity_limit = 15 * 60
+        time_limit = 2 * 3600
+    else:
+        python_path = _python_path()
+        worker_path = WORKER_PATH
+        worker_cwd = SERVICE_DIR
+        inactivity_limit = _WORKER_INACTIVITY_LIMIT_SECONDS
+        time_limit = _WORKER_TIME_LIMIT_SECONDS
+    if not python_path:
+        _update_job(job_id, status="failed", phase="failed", error="Rig runtime is not installed")
         return
     source = Path(request_data["source"])
     stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
@@ -207,8 +256,27 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     request_path.write_text(json.dumps(request_data, indent=2), encoding="utf-8")
     pid_path = JOBS_DIR / f"{job_id}.pid"
 
-    command = [str(python_path), str(WORKER_PATH), "--request", str(request_path), "--output", str(output_path)]
+    command = [str(python_path), str(worker_path), "--request", str(request_path), "--output", str(output_path)]
     env = os.environ.copy()
+    if engine == "unirig":
+        # Same network isolation as the Hunyuan3D worker: the public UniRig
+        # weights must not inherit Pinokio's HF credentials or proxy setup.
+        for env_var in (
+            "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_TOKEN_PATH",
+            "HF_ENDPOINT", "HF_INFERENCE_ENDPOINT", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE",
+            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+            "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+            "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "SSL_CERT_FILE",
+        ):
+            env.pop(env_var, None)
+        HF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        env.update({
+            "HF_HOME": str(HF_CACHE_DIR),
+            "HUGGINGFACE_HUB_CACHE": str(HF_CACHE_DIR / "hub"),
+            "HF_ENDPOINT": "https://huggingface.co",
+            "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1",
+            "TOKENIZERS_PARALLELISM": "false",
+        })
     env.update({"PYTHONUNBUFFERED": "1"})
     lines: list[str] = []
     result_summary: dict[str, Any] = {}
@@ -216,7 +284,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         _update_job(job_id, status="running", phase="starting", message="Starting rig worker", progress=0.02)
         process = subprocess.Popen(
             command,
-            cwd=str(SERVICE_DIR),
+            cwd=str(worker_cwd),
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -231,17 +299,17 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             pass
 
         activity = {"at": time.monotonic()}
-        deadline = time.monotonic() + _WORKER_TIME_LIMIT_SECONDS
+        deadline = time.monotonic() + time_limit
         timeout_reason: dict[str, str] = {}
 
         def _watchdog() -> None:
             while process.poll() is None:
                 time.sleep(5)
                 now = time.monotonic()
-                if now - activity["at"] > _WORKER_INACTIVITY_LIMIT_SECONDS:
-                    timeout_reason["error"] = f"Rig worker produced no output for {_WORKER_INACTIVITY_LIMIT_SECONDS // 60} minutes"
+                if now - activity["at"] > inactivity_limit:
+                    timeout_reason["error"] = f"Rig worker produced no output for {inactivity_limit // 60} minutes"
                 elif now > deadline:
-                    timeout_reason["error"] = f"Rig job exceeded the {_WORKER_TIME_LIMIT_SECONDS // 60} minute limit"
+                    timeout_reason["error"] = f"Rig job exceeded the {time_limit // 60} minute limit"
                 else:
                     continue
                 process.kill()
@@ -381,19 +449,25 @@ def cancel_all_jobs() -> int:
     return len(active_ids)
 
 
+def _cmdline_is_rig_worker(cmdline: str) -> bool:
+    return (WORKER_PATH.name in cmdline and "hunyuan3d" in cmdline) or (
+        UNIRIG_WORKER_PATH.name in cmdline and "rigging" in cmdline
+    )
+
+
 def _is_rig_worker(pid: int) -> bool:
     proc_cmdline = Path("/proc") / str(pid) / "cmdline"
     try:
         if proc_cmdline.is_file():
             cmdline = proc_cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace")
-            return WORKER_PATH.name in cmdline and "hunyuan3d" in cmdline
+            return _cmdline_is_rig_worker(cmdline)
     except OSError:
         return False
     try:
         import psutil
 
         cmdline = " ".join(psutil.Process(pid).cmdline())
-        return WORKER_PATH.name in cmdline and "hunyuan3d" in cmdline
+        return _cmdline_is_rig_worker(cmdline)
     except Exception:
         return False
 

@@ -56,6 +56,18 @@ def _quat_y(angle: float) -> list[float]:
     return [0.0, math.sin(angle / 2.0), 0.0, math.cos(angle / 2.0)]
 
 
+def _quat_mul(a: list[float], b: list[float]) -> list[float]:
+    """Hamilton product a⊗b for [x, y, z, w] quaternions."""
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return [
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    ]
+
+
 def _quat_to_matrix(q: list[float]) -> np.ndarray:
     x, y, z, w = q
     return np.array([
@@ -262,30 +274,55 @@ def _build_clip(
     gltf: GLTF2,
     blob: bytearray,
     clip_id: str,
-    root_index: int,
-    root_translation: np.ndarray,
-    spine_indices: list[int],
-    skeleton: dict[str, Any],
+    target: dict[str, Any],
 ) -> None:
+    """Bake one clip onto a rig described by `target`:
+
+    - root_index / chain_indices: node indices (root + a joint chain).
+    - root_translation / root_rotation / root_scale: the root's bind TRS —
+      channel values compose with these so non-identity binds (UniRig
+      skeletons) keep their pose.
+    - chain_rotations: bind rotation per chain node.
+    - height: characteristic size used to scale motion amplitudes.
+    """
     animation = Animation(name=CLIPS[clip_id], channels=[], samplers=[])
-    height = max(float(skeleton["height"]), 1e-6)
-    count = len(spine_indices)
+    height = max(float(target["height"]), 1e-6)
+    root_index = target["root_index"]
+    chain = target["chain_indices"]
+    root_translation = np.asarray(target["root_translation"], dtype=np.float64)
+    root_rotation = target.get("root_rotation") or [0.0, 0.0, 0.0, 1.0]
+    root_scale = np.asarray(target.get("root_scale") or [1.0, 1.0, 1.0], dtype=np.float64)
+    chain_rotations = target.get("chain_rotations") or [[0.0, 0.0, 0.0, 1.0]] * len(chain)
+    count = len(chain)
 
     def timeline(duration: float, per_second: int = 12) -> np.ndarray:
         samples = max(2, int(duration * per_second) + 1)
         return np.linspace(0.0, duration, samples)
 
+    def chain_sway(times: np.ndarray, period: float, base_deg: float, tip_deg: float, phase_step: float) -> None:
+        for i, node_index in enumerate(chain):
+            amplitude = math.radians(base_deg + (tip_deg - base_deg) * (i / max(count - 1, 1)))
+            phase = i * phase_step
+            bind = chain_rotations[i]
+            # Local-space delta: rotate within the bone's own frame.
+            quats = np.array([
+                _quat_mul(bind, _quat_z(amplitude * math.sin(2 * math.pi * t / period + phase)))
+                for t in times
+            ])
+            _add_sampler(gltf, blob, animation, times, quats, node_index, "rotation")
+
+    def root_yaw(times: np.ndarray, angles: list[float]) -> np.ndarray:
+        # Parent-space delta: spins stay upright even when the root's bind
+        # rotation tilts the skeleton.
+        return np.array([_quat_mul(_quat_y(angle), root_rotation) for angle in angles])
+
     if clip_id == "idle":
         times = timeline(3.0)
-        for i, node_index in enumerate(spine_indices):
-            amplitude = math.radians(4.0 + 6.0 * (i / max(count - 1, 1)))
-            phase = i * 0.5
-            quats = np.array([_quat_z(amplitude * math.sin(2 * math.pi * t / 3.0 + phase)) for t in times])
-            _add_sampler(gltf, blob, animation, times, quats, node_index, "rotation")
+        chain_sway(times, period=3.0, base_deg=4.0, tip_deg=10.0, phase_step=0.5)
     elif clip_id == "breathe":
         times = timeline(2.5)
         wave = 0.03 * np.sin(2 * math.pi * times / 2.5)
-        scales = np.stack([1.0 + wave, 1.0 - 0.66 * wave, 1.0 + wave], axis=1)
+        scales = np.stack([1.0 + wave, 1.0 - 0.66 * wave, 1.0 + wave], axis=1) * root_scale[None, :]
         _add_sampler(gltf, blob, animation, times, scales, root_index, "scale")
     elif clip_id == "bounce":
         times = timeline(1.0, per_second=24)
@@ -293,28 +330,24 @@ def _build_clip(
         translations = np.tile(root_translation, (len(times), 1))
         translations[:, 1] += lift
         normalized = lift / lift.max() if lift.max() > 0 else lift
-        scales = np.stack([1.04 - 0.04 * normalized, 0.92 + 0.08 * normalized, 1.04 - 0.04 * normalized], axis=1)
+        scales = np.stack([1.04 - 0.04 * normalized, 0.92 + 0.08 * normalized, 1.04 - 0.04 * normalized], axis=1) * root_scale[None, :]
         _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
         _add_sampler(gltf, blob, animation, times, scales, root_index, "scale")
     elif clip_id == "spin":
         # Quaternion keys every 45° so LINEAR slerp never takes a shortcut.
         steps = 9
         times = np.linspace(0.0, 4.0, steps)
-        quats = np.array([_quat_y(2 * math.pi * i / (steps - 1)) for i in range(steps)])
+        quats = root_yaw(times, [2 * math.pi * i / (steps - 1) for i in range(steps)])
         _add_sampler(gltf, blob, animation, times, quats, root_index, "rotation")
     elif clip_id == "wobble":
         times = timeline(2.0)
-        yaw = np.array([_quat_y(math.radians(20.0) * math.sin(2 * math.pi * t / 2.0)) for t in times])
+        yaw = root_yaw(times, [math.radians(20.0) * math.sin(2 * math.pi * t / 2.0) for t in times])
         _add_sampler(gltf, blob, animation, times, yaw, root_index, "rotation")
         lift = 0.03 * height * np.abs(np.sin(2 * math.pi * times / 2.0))
         translations = np.tile(root_translation, (len(times), 1))
         translations[:, 1] += lift
         _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
-        for i, node_index in enumerate(spine_indices):
-            amplitude = math.radians(6.0)
-            phase = i * 0.6
-            quats = np.array([_quat_z(amplitude * math.sin(2 * math.pi * t / 2.0 + phase)) for t in times])
-            _add_sampler(gltf, blob, animation, times, quats, node_index, "rotation")
+        chain_sway(times, period=2.0, base_deg=6.0, tip_deg=6.0, phase_step=0.6)
     else:
         raise ValueError(f"Unknown animation clip: {clip_id}")
 
@@ -417,8 +450,14 @@ def rig_glb(
             item["primitive"].attributes.WEIGHTS_0 = weights_accessor
 
     emit("animating", 0.8, "Baking animation clips")
+    clip_target = {
+        "root_index": root_index,
+        "chain_indices": spine_indices,
+        "root_translation": [float(v) for v in root_translation],
+        "height": skeleton["height"],
+    }
     for clip_id in clip_ids:
-        _build_clip(gltf, blob, clip_id, root_index, np.asarray(root_translation, dtype=np.float64), spine_indices, skeleton)
+        _build_clip(gltf, blob, clip_id, clip_target)
 
     emit("export", 0.95, "Writing rigged GLB")
     gltf.set_binary_blob(bytes(blob))
@@ -429,4 +468,82 @@ def rig_glb(
         "joints": spine_joints,
         "vertices": int(len(combined)),
         "mesh_nodes": len(per_node),
+    }
+
+
+def bake_clips_onto_existing_rig(
+    source: str,
+    destination: str,
+    clip_ids: list[str],
+    progress: ProgressFn | None = None,
+) -> dict[str, Any]:
+    """Add Maestro's clip library to a GLB that already has a skin.
+
+    Used after UniRig merges its predicted skeleton+weights: the root joint
+    receives the whole-object clips and the longest root→leaf joint chain
+    plays the sway-style clips. Channel values compose with each joint's
+    bind TRS so the predicted pose is preserved.
+    """
+    emit = progress or (lambda phase, value, message: None)
+    for clip_id in clip_ids:
+        if clip_id not in CLIPS:
+            raise ValueError(f"Unknown animation clip: {clip_id}")
+    if not clip_ids:
+        raise ValueError("Select at least one animation")
+
+    emit("animating", 0.86, "Baking animation clips onto the AI skeleton")
+    gltf = GLTF2().load_binary(source)
+    blob = bytearray(gltf.binary_blob())
+    if not gltf.skins or not gltf.skins[0].joints:
+        raise ValueError("The merged model has no skin — cannot animate")
+    joints = list(gltf.skins[0].joints)
+    joint_set = set(joints)
+
+    parent_of: dict[int, int] = {}
+    for index, node in enumerate(gltf.nodes):
+        for child in node.children or []:
+            parent_of[child] = index
+    roots = [j for j in joints if parent_of.get(j) not in joint_set]
+    root_index = roots[0] if roots else joints[0]
+
+    # Longest root→leaf path through joint children = the "spine".
+    def longest_chain(index: int) -> list[int]:
+        children = [c for c in (gltf.nodes[index].children or []) if c in joint_set]
+        best: list[int] = []
+        for child in children:
+            candidate = longest_chain(child)
+            if len(candidate) > len(best):
+                best = candidate
+        return [index] + best
+
+    chain = longest_chain(root_index)
+
+    globals_by_node = _global_matrices(gltf)
+    joint_positions = np.array([
+        globals_by_node[j][:3, 3] for j in joints if j in globals_by_node
+    ]) if any(j in globals_by_node for j in joints) else np.zeros((1, 3))
+    extents = joint_positions.max(axis=0) - joint_positions.min(axis=0)
+    height = float(max(extents.max(), 1e-6))
+
+    root_node = gltf.nodes[root_index]
+    target = {
+        "root_index": root_index,
+        "chain_indices": chain,
+        "root_translation": list(root_node.translation or [0.0, 0.0, 0.0]),
+        "root_rotation": list(root_node.rotation or [0.0, 0.0, 0.0, 1.0]),
+        "root_scale": list(root_node.scale or [1.0, 1.0, 1.0]),
+        "chain_rotations": [list(gltf.nodes[j].rotation or [0.0, 0.0, 0.0, 1.0]) for j in chain],
+        "height": height,
+    }
+    for clip_id in clip_ids:
+        _build_clip(gltf, blob, clip_id, target)
+
+    emit("export", 0.95, "Writing animated GLB")
+    gltf.set_binary_blob(bytes(blob))
+    gltf.buffers[0].byteLength = len(blob)
+    gltf.save_binary(destination)
+    return {
+        "animations": [CLIPS[clip_id] for clip_id in clip_ids],
+        "joints": len(joints),
+        "chain_length": len(chain),
     }

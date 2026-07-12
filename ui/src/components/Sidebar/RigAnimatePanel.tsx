@@ -24,6 +24,7 @@ export function RigAnimatePanel() {
   const [capabilities, setCapabilities] = useState<RigCapabilities | null>(null)
   const [capabilityError, setCapabilityError] = useState<string | null>(null)
   const [source, setSource] = useState<string | null>(null)
+  const [engineId, setEngineId] = useState('procedural')
   const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set())
   const [spineJoints, setSpineJoints] = useState(5)
   const [job, setJob] = useState<RigJob | null>(null)
@@ -62,8 +63,9 @@ export function RigAnimatePanel() {
 
   const engine = capabilities?.engines.find(item => item.id === 'procedural')
   const installed = !!engine?.installed
+  const selectedEngine = capabilities?.engines.find(item => item.id === engineId)
   const isRunning = job?.status === 'queued' || job?.status === 'running'
-  const canRun = installed && !!source && selectedClips.size > 0 && !isRunning
+  const canRun = !!selectedEngine?.installed && !!source && selectedClips.size > 0 && !isRunning
 
   useEffect(() => {
     if (!job || (job.status !== 'queued' && job.status !== 'running')) return
@@ -117,7 +119,7 @@ export function RigAnimatePanel() {
     try {
       setJob(await startRigJob({
         source,
-        engine: 'procedural',
+        engine: engineId,
         animations: Array.from(selectedClips),
         spine_joints: spineJoints,
       }))
@@ -186,6 +188,22 @@ export function RigAnimatePanel() {
           </div>
 
           <div>
+            <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Engine</label>
+            <div className="space-y-1">
+              {capabilities.engines.map(item => (
+                <label key={item.id} className={`flex items-start gap-2 rounded-lg border px-2.5 py-1.5 ${item.installed ? 'border-border bg-bg-tertiary cursor-pointer hover:border-border-light' : 'border-border/60 bg-bg-tertiary/50 cursor-not-allowed opacity-70'}`}>
+                  <input type="radio" name="rig-engine" checked={engineId === item.id} disabled={!item.installed} onChange={() => setEngineId(item.id)} className="mt-0.5" />
+                  <span>
+                    <span className="block text-[11px] text-text-primary">{item.label}</span>
+                    <span className="block text-[9px] text-text-muted">{item.description}</span>
+                    {!item.installed && item.install_hint && <span className="block text-[9px] text-amber-400 mt-0.5">{item.install_hint}</span>}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Animations</label>
             <div className="space-y-1">
               {capabilities.animations.map(animation => (
@@ -200,10 +218,12 @@ export function RigAnimatePanel() {
             </div>
           </div>
 
-          <label className="text-[10px] text-text-muted uppercase tracking-wider block">
-            <span className="flex items-center gap-1.5"><Bone size={11} /> Spine joints: <span className="text-text-primary">{spineJoints}</span></span>
-            <input type="range" min={2} max={9} value={spineJoints} onChange={event => setSpineJoints(Number(event.target.value))} className="mt-1.5 w-full" />
-          </label>
+          {engineId === 'procedural' && (
+            <label className="text-[10px] text-text-muted uppercase tracking-wider block">
+              <span className="flex items-center gap-1.5"><Bone size={11} /> Spine joints: <span className="text-text-primary">{spineJoints}</span></span>
+              <input type="range" min={2} max={9} value={spineJoints} onChange={event => setSpineJoints(Number(event.target.value))} className="mt-1.5 w-full" />
+            </label>
+          )}
 
           {job && (
             <div className={`rounded-lg border p-3 ${job.status === 'failed' ? 'border-red-500/30 bg-red-500/10' : 'border-border bg-bg-tertiary'}`}>
@@ -219,7 +239,7 @@ export function RigAnimatePanel() {
           ) : (
             <button disabled={!canRun} onClick={() => void run()} className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${canRun ? 'bg-cta hover:brightness-110 shadow-accent-glow text-white' : 'bg-bg-tertiary border border-border text-text-muted cursor-not-allowed'}`}><Play size={13} fill={canRun ? 'currentColor' : 'none'} /> Rig &amp; animate</button>
           )}
-          <p className="text-[9px] text-text-muted text-center">Runs on CPU in seconds. The animated GLB plays its clips in the gallery viewer.</p>
+          <p className="text-[9px] text-text-muted text-center">{engineId === 'unirig' ? 'AI rigging uses the GPU; the first run downloads the UniRig weights (~2GB).' : 'Runs on CPU in seconds. The animated GLB plays its clips in the gallery viewer.'}</p>
         </>
       )}
     </div>
