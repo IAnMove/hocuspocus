@@ -187,6 +187,14 @@ export interface SceneLayer {
     curve: SceneCurve
     spin?: boolean
     rotationSpeed?: number
+    /** Optional motion relationship: this layer circles another scene layer. */
+    orbit?: {
+      targetLayerId: string
+      radiusX: number
+      radiusY: number
+      turns: number
+      phase: number
+    }
   }
 }
 
