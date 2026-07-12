@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,13 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 VENDOR_DIR = HERE / "vendor" / "UniRig"
+# UniRig's launch/inference/*.sh scripts invoke bare `python`/`python3`
+# rather than sys.executable. Without this, that resolves via PATH to
+# whatever interpreter is first there — typically the base conda env, which
+# has neither bpy nor UniRig's other dependencies installed. Prepending this
+# worker's own interpreter directory makes those bare calls resolve to the
+# rigging env instead.
+_ENV_BIN_DIR = str(Path(sys.executable).resolve().parent)
 # The clip baker lives with the procedural engine; it only needs
 # numpy/pygltflib, both installed in this environment too.
 sys.path.insert(0, str(HERE.parent / "hunyuan3d"))
@@ -33,8 +41,10 @@ def event(phase: str, progress: float, message: str) -> None:
 
 def run_unirig(script: str, arguments: list[str]) -> None:
     """Run one of UniRig's launch/inference bash scripts, streaming output."""
+    env = os.environ.copy()
+    env["PATH"] = _ENV_BIN_DIR + os.pathsep + env.get("PATH", "")
     command = ["bash", f"launch/inference/{script}", *arguments]
-    process = subprocess.run(command, cwd=str(VENDOR_DIR))
+    process = subprocess.run(command, cwd=str(VENDOR_DIR), env=env)
     if process.returncode != 0:
         raise RuntimeError(f"UniRig {script} failed with exit code {process.returncode}")
 
