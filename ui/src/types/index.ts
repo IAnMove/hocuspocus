@@ -190,6 +190,8 @@ export interface SceneLayer {
     curve: SceneCurve
     spin?: boolean
     rotationSpeed?: number
+    /** Name of a baked glTF skeletal clip to play (rigged GLB layers). */
+    clip?: string
     /** Optional motion relationship: this layer circles another scene layer. */
     orbit?: {
       targetLayerId: string
