@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* A Scene Animator GLB is one visual layer among DOM image/video layers.
+   model-viewer's loading poster is opaque by default, which otherwise masks
+   the layers below it and makes CSS z-index look broken. */
+model-viewer.scene-animator-model {
+  background-color: transparent;
+  --poster-color: transparent;
+}
+
 /* ─── Theme tokens ──────────────────────────────────────────────────────
  * Tailwind v4 reads `@theme` once at compile time and emits utility
  * classes that reference these CSS variables via `var(--color-...)` at

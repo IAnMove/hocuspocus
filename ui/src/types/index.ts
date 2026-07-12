@@ -154,7 +154,42 @@ export interface OutputFile {
   thumbnail_url?: string | null
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'avatars' | 'multiclip' | 'favorites'
+export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay'
+export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
+
+export interface SceneLayer {
+  id: string
+  name: string
+  type: SceneLayerType
+  source: string
+  thumbnail?: string
+  visible: boolean
+  z: number
+  /** Object URLs cannot survive a scene export/import and need reassignment. */
+  missingAsset?: boolean
+  /** Image/video is cropped to cover the complete scene frame. */
+  fill?: boolean
+  transform: { x: number; y: number; scale: number; opacity: number; rotation?: number }
+  animation: {
+    start: { x: number; y: number; scale: number; opacity?: number }
+    end: { x: number; y: number; scale: number; opacity?: number }
+    duration: number
+    curve: SceneCurve
+    spin?: boolean
+    rotationSpeed?: number
+  }
+}
+
+export interface Scene {
+  version: 1
+  name: string
+  width: number
+  height: number
+  duration: number
+  layers: SceneLayer[]
+}
+
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scene3d' | 'avatars' | 'multiclip' | 'favorites'
 export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
