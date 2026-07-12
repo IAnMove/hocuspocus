@@ -79,6 +79,26 @@ def installation_status() -> dict[str, Any]:
     }
 
 
+UNIRIG_REPO = "VAST-AI/UniRig"
+
+
+def is_unirig_downloaded() -> bool:
+    """Whether the UniRig weights snapshot is cached locally."""
+    repo_cache = HF_CACHE_DIR / "hub" / f"models--{UNIRIG_REPO.replace('/', '--')}" / "snapshots"
+    if not repo_cache.is_dir():
+        return False
+    return any(path.is_dir() for path in repo_cache.iterdir())
+
+
+def delete_unirig_cache() -> list[str]:
+    """Remove the cached UniRig weights (the runtime env stays installed)."""
+    repo_cache = HF_CACHE_DIR / "hub" / f"models--{UNIRIG_REPO.replace('/', '--')}"
+    if not repo_cache.exists():
+        return []
+    shutil.rmtree(repo_cache)
+    return [UNIRIG_REPO]
+
+
 def unirig_installation_status() -> dict[str, Any]:
     python_path = _unirig_python_path()
     installed = bool(python_path and RIGGING_MARKER.is_file() and UNIRIG_WORKER_PATH.is_file() and UNIRIG_VENDOR_DIR.is_dir())

@@ -26,6 +26,9 @@ export interface ModelDef {
   // Hunyuan3D variants stored in one shared HF repo: deleting this
   // model's cache also removes the weights of every listed sibling.
   shared_cache_group?: string[]
+  // Weight-managed tool models (e.g. UniRig): shown in the settings
+  // catalog for download/delete, but never selectable for generation.
+  tool_only?: boolean
 }
 
 export interface Resolution {

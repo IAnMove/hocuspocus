@@ -369,6 +369,28 @@ def list_models():
             "shared_cache_group": [item["id"] for item in model3d_service.models_sharing_repo(model["id"])],
         })
 
+    # UniRig is a generative ML model too (autoregressive skeleton + learned
+    # skinning), so its weights are managed from the same catalog. tool_only
+    # keeps it out of the generation model selectors: it rigs existing
+    # meshes from the Animate tab instead of generating new ones.
+    from services import rig_service
+    models.append({
+        "model_type": "unirig",
+        "name": "UniRig (AI Rigging)",
+        "family": "hunyuan3d",
+        "architecture": "unirig",
+        "is_i2v": False,
+        "is_t2v": False,
+        "guidance_max_phases": 1,
+        "fps": 0,
+        "supports_end_frame": False,
+        "supports_audio": False,
+        "supports_ref_images": False,
+        "is_downloaded": rig_service.is_unirig_downloaded(),
+        "nsfw_only": False,
+        "tool_only": True,
+    })
+
     return {"families": families, "models": models}
 
 
@@ -408,6 +430,10 @@ def debug_model(model_type: str):
 @api.delete("/api/v1/models/{model_type}")
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
+    if model_type == "unirig":
+        from services import rig_service
+        deleted = rig_service.delete_unirig_cache()
+        return {"deleted": deleted, "model_type": model_type, "affected_models": []}
     if model_type in model3d_service.MODEL_BY_ID:
         affected = [item["id"] for item in model3d_service.models_sharing_repo(model_type)]
         deleted = model3d_service.delete_model_cache(model_type)

@@ -531,7 +531,7 @@ function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], m
   // Fallback: first model in first family of this mode
   const modeFamilies = getFamiliesForMode(mode, families)
   if (modeFamilies.length > 0) {
-    const firstModel = getModelsForFamily(modeFamilies[0].id, models, mode)[0]
+    const firstModel = getModelsForFamily(modeFamilies[0].id, models, mode).filter(m => !m.tool_only)[0]
     if (firstModel) return firstModel.model_type
   }
   return ''
@@ -2311,6 +2311,7 @@ export const useStore = create<AppState>((set, get) => ({
         is_downloaded: m.is_downloaded ?? false,
         nsfw_only: m.nsfw_only ?? false,
         shared_cache_group: m.shared_cache_group,
+        tool_only: m.tool_only ?? false,
       }))
       // Inject models maintained by Maestro services alongside backend models.
       const models = [...backendModels, ...SFX_VIRTUAL_MODELS]
