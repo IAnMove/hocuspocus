@@ -342,6 +342,7 @@ const familyModeMap: Record<string, GenerationMode> = {
   kandinsky5: 'video',
   tts: 'audio',
   longcat: 'avatar',
+  hunyuan3d: 'model3d',
 }
 
 // Model types classified as Avatar even though their family is primarily Video
@@ -400,6 +401,19 @@ const SFX_VIRTUAL_MODELS: ModelDef[] = [
   { model_type: 'mmaudio_nsfw', name: 'MMAudio NSFW', family: 'tts', architecture: 'mmaudio', is_i2v: false, is_t2v: false, guidance_max_phases: 1, fps: 0, is_downloaded: false },
 ]
 
+const HUNYUAN3D_MODEL_TYPES = [
+  'hunyuan3d-2mini-turbo',
+  'hunyuan3d-2mini-fast',
+  'hunyuan3d-2mini',
+  'hunyuan3d-2-turbo',
+  'hunyuan3d-2-fast',
+  'hunyuan3d-2',
+  'hunyuan3d-2mv-turbo',
+  'hunyuan3d-2mv-fast',
+  'hunyuan3d-2mv',
+  'hunyuan3d-2.1',
+] as const
+
 // Default enabled models (shown by default in selectors)
 const DEFAULT_ENABLED_MODELS = new Set([
   // Image
@@ -432,6 +446,7 @@ const DEFAULT_ENABLED_MODELS = new Set([
 ])
 
 const ENABLED_MODELS_KEY = 'maestro_enabled_models'
+const HUNYUAN3D_VISIBILITY_MIGRATION_KEY = 'maestro_hunyuan3d_visibility_v2'
 
 function _saveEnabledModels(models: Set<string>) {
   try {
@@ -442,7 +457,18 @@ function _saveEnabledModels(models: Set<string>) {
 function _loadEnabledModels(): Set<string> | null {
   try {
     const raw = localStorage.getItem(ENABLED_MODELS_KEY)
-    if (raw) return new Set(JSON.parse(raw))
+    if (raw) {
+      const models = new Set<string>(JSON.parse(raw))
+      if (localStorage.getItem(HUNYUAN3D_VISIBILITY_MIGRATION_KEY) !== '1') {
+        // Hunyuan3D weights are downloaded on first use. Keep the optional
+        // models hidden until the user enables one, rather than presenting
+        // every variant as already chosen on an existing installation.
+        HUNYUAN3D_MODEL_TYPES.forEach(modelType => models.delete(modelType))
+        _saveEnabledModels(models)
+        localStorage.setItem(HUNYUAN3D_VISIBILITY_MIGRATION_KEY, '1')
+      }
+      return models
+    }
   } catch { /* ignore */ }
   return null
 }
@@ -452,6 +478,7 @@ const modeDefaultModel: Record<GenerationMode, string> = {
   image: 'flux2_klein_9b',
   video: 'ltx2_22B_distilled_1_1',
   audio: 'kugelaudio_0_open',
+  model3d: 'hunyuan3d-2-turbo',
   avatar: '',  // will fallback to first available
   tools: '',   // Tools is non-generative post-processing — owns no model
 }
@@ -468,6 +495,7 @@ export function getModelMode(modelType: string, familyId: string): GenerationMod
 }
 
 export function getFamiliesForMode(mode: GenerationMode, allFamilies: ModelFamily[], _editSubMode?: string, audioSubMode?: string): ModelFamily[] {
+  if (mode === 'tools') return []
   if (mode === 'avatar') {
     // All edit sub-modes (retake, inpaint, restyle) use LTX models
     return allFamilies.filter(f => f.id === 'ltx2' || f.id === 'ltxv')
@@ -1352,6 +1380,8 @@ function computeFilteredOutputs(outputs: OutputFile[], mediaFilter: MediaFilter)
     _foCachedResult = outputs.filter(o => o.type === 'image')
   } else if (mediaFilter === 'audio') {
     _foCachedResult = outputs.filter(o => o.type === 'audio')
+  } else if (mediaFilter === 'model3d') {
+    _foCachedResult = outputs.filter(o => o.type === 'model3d')
   } else if (mediaFilter === 'avatars') {
     // "Edits" filter — show outputs from any of the Edit tab sub-modes.
     // Filter by `edit_sub_mode` (set by retake/inpaint/outpaint/restyle/
@@ -1663,7 +1693,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (mode === 'tools') {
       const s = get()
       const prev = s.generationMode
-      if (prev === 'tools') { set({ generationMode: 'tools' }); return }
+      if (prev === mode) { set({ generationMode: mode }); return }
       const { model_type: _mt, prompt: _p, activated_loras: _al, loras_multipliers: _lm, ...paramsSnapshot } = s.params
       const savedModels = { ...s.selectedModelPerMode, [prev]: s.params.model_type }
       const savedParams = {
@@ -1676,7 +1706,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
       const savedPrompts = { ...s.savedPromptPerMode, [prev]: s.params.prompt }
       set({
-        generationMode: 'tools',
+        generationMode: mode,
         selectedModelPerMode: savedModels,
         savedParamsPerMode: savedParams,
         savedLoraPerMode: savedLoras,
@@ -1781,7 +1811,7 @@ export const useStore = create<AppState>((set, get) => ({
       loraWeights: sameModel ? restoredLora.loraWeights : {},
       availableLoras: sameModel ? restoredLora.availableLoras : [],
     }))
-    if (newModelType && !sfxModelTypes.has(newModelType)) {
+    if (newModelType && !sfxModelTypes.has(newModelType) && mode !== 'model3d') {
       if (!sameModel) {
         get().loadLoras(newModelType)
       }
@@ -2284,6 +2314,10 @@ export const useStore = create<AppState>((set, get) => ({
   clearModelVisibilityFocus: () => set({ modelVisibilityFocus: null }),
   loadModels: async () => {
     try {
+      // The backend catalog is the single source for Hunyuan3D models too:
+      // /api/v1/models already lists them (family included) with real
+      // download state, so re-adding them from the capabilities endpoint
+      // would duplicate every variant in the selectors.
       const data = await api.fetchModels()
       const families = data.families
       const backendModels = data.models.map(m => ({
@@ -2297,8 +2331,9 @@ export const useStore = create<AppState>((set, get) => ({
         fps: m.fps ?? 16,
         is_downloaded: m.is_downloaded ?? false,
         nsfw_only: m.nsfw_only ?? false,
+        shared_cache_group: m.shared_cache_group,
       }))
-      // Inject virtual SFX (MMAudio) models alongside backend models
+      // Inject models maintained by Maestro services alongside backend models.
       const models = [...backendModels, ...SFX_VIRTUAL_MODELS]
 
       // Hydrate persisted per-mode settings from localStorage
@@ -2361,7 +2396,7 @@ export const useStore = create<AppState>((set, get) => ({
             availableLoras: savedLora.availableLoras || [],
           }))
         }
-        if (!sfxModelTypes.has(mt)) {
+        if (!sfxModelTypes.has(mt) && mode !== 'model3d') {
           get().loadLoras(mt)
           get().loadModelOptions(mt)
         }
@@ -5904,7 +5939,7 @@ export const useStore = create<AppState>((set, get) => ({
       availableLoras: [],
     }))
     // Virtual SFX models don't have backend model options or LoRAs
-    if (!sfxModelTypes.has(modelType)) {
+    if (!sfxModelTypes.has(modelType) && currentMode !== 'model3d') {
       get().loadLoras(modelType)
       get().loadModelOptions(modelType)
       _applyModelDefaults(get, set, modelType)
@@ -6022,6 +6057,7 @@ export const useStore = create<AppState>((set, get) => ({
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
+        thumbnail_url: o.thumbnail_url || null,
       }))
       set({ outputs, outputsTotal: total, selectedOutput: 0, outputsLoading: false })
       if (outputs.length > 0) {
@@ -6050,6 +6086,7 @@ export const useStore = create<AppState>((set, get) => ({
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
+        thumbnail_url: o.thumbnail_url || null,
       }))
       // Deduplicate (in case items shifted during generation)
       const existingNames = new Set(current.map(o => o.name))
@@ -6076,6 +6113,7 @@ export const useStore = create<AppState>((set, get) => ({
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
+        thumbnail_url: o.thumbnail_url || null,
       }))
       const current = get().outputs
       const currentNames = new Set(current.map(o => o.name))

@@ -59,6 +59,121 @@ module.exports = {
         message: "python scripts/install_gguf_kernels.py"
       }
     },
+    // Native Hunyuan3D runtime. Dependency isolation is internal because the
+    // official stack conflicts with Maestro's audio/video Python packages;
+    // from the user's perspective this is part of the normal Maestro install.
+    {
+      when: "{{!exists('app/services/hunyuan3d/vendor/Hunyuan3D-2')}}",
+      method: "shell.run",
+      params: {
+        message: "git clone --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2 app/services/hunyuan3d/vendor/Hunyuan3D-2"
+      }
+    },
+    {
+      when: "{{exists('app/services/hunyuan3d/vendor/Hunyuan3D-2/.git')}}",
+      method: "shell.run",
+      params: {
+        path: "app/services/hunyuan3d/vendor/Hunyuan3D-2",
+        message: "git pull --ff-only"
+      }
+    },
+    {
+      when: "{{!exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1')}}",
+      method: "shell.run",
+      params: {
+        message: "git clone --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1 app/services/hunyuan3d/vendor/Hunyuan3D-2.1"
+      }
+    },
+    {
+      when: "{{exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1/.git')}}",
+      method: "shell.run",
+      params: {
+        path: "app/services/hunyuan3d/vendor/Hunyuan3D-2.1",
+        message: "git pull --ff-only"
+      }
+    },
+    {
+      method: "shell.run",
+      params: {
+        conda: {
+          path: "app/services/hunyuan3d/env",
+          python: "3.10"
+        },
+        message: [
+          "uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128",
+          "uv pip install -r app/services/hunyuan3d/requirements.txt"
+        ]
+      }
+    },
+    {
+      // Clean the nested environment created by the first native-3D migration,
+      // where conda.path was incorrectly resolved from this extension folder.
+      when: "{{exists('app/services/hunyuan3d/vendor/Hunyuan3D-2/hy3dgen/texgen/custom_rasterizer/app')}}",
+      method: "fs.rm",
+      params: {
+        path: "app/services/hunyuan3d/vendor/Hunyuan3D-2/hy3dgen/texgen/custom_rasterizer/app"
+      }
+    },
+    {
+      method: "shell.run",
+      params: {
+        conda: { path: "../../../../../env", python: "3.10" },
+        env: {
+          CUDA_HOME: "{{path.resolve(path.dirname(which('nvcc')), '..')}}",
+          CPATH: "{{path.resolve(path.dirname(which('nvcc')), '../targets/x86_64-linux/include')}}",
+          LIBRARY_PATH: "{{path.resolve(path.dirname(which('nvcc')), '../targets/x86_64-linux/lib')}}",
+          LD_LIBRARY_PATH: "{{path.resolve(path.dirname(which('nvcc')), '../targets/x86_64-linux/lib')}}"
+        },
+        path: "app/services/hunyuan3d/vendor/Hunyuan3D-2/hy3dgen/texgen/custom_rasterizer",
+        message: "uv pip install --no-build-isolation -e ."
+      }
+    },
+    {
+      method: "shell.run",
+      params: {
+        conda: { path: "../../../../../env", python: "3.10" },
+        path: "app/services/hunyuan3d/vendor/Hunyuan3D-2/hy3dgen/texgen/differentiable_renderer",
+        message: "uv pip install --no-build-isolation -e ."
+      }
+    },
+    {
+      method: "shell.run",
+      params: {
+        conda: { path: "../../../../env", python: "3.10" },
+        env: {
+          CUDA_HOME: "{{path.resolve(path.dirname(which('nvcc')), '..')}}",
+          CPATH: "{{path.resolve(path.dirname(which('nvcc')), '../targets/x86_64-linux/include')}}",
+          LIBRARY_PATH: "{{path.resolve(path.dirname(which('nvcc')), '../targets/x86_64-linux/lib')}}",
+          LD_LIBRARY_PATH: "{{path.resolve(path.dirname(which('nvcc')), '../targets/x86_64-linux/lib')}}"
+        },
+        path: "app/services/hunyuan3d/vendor/Hunyuan3D-2.1/hy3dpaint/custom_rasterizer",
+        message: "uv pip install --no-build-isolation -e ."
+      }
+    },
+    {
+      method: "shell.run",
+      params: {
+        conda: { path: "../../../../env", python: "3.10" },
+        shell: "{{which('bash')}}",
+        path: "app/services/hunyuan3d/vendor/Hunyuan3D-2.1/hy3dpaint/DifferentiableRenderer",
+        message: "bash compile_mesh_painter.sh"
+      }
+    },
+    {
+      when: "{{!exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1/hy3dpaint/ckpt/RealESRGAN_x4plus.pth')}}",
+      method: "fs.download",
+      params: {
+        url: "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+        path: "app/services/hunyuan3d/vendor/Hunyuan3D-2.1/hy3dpaint/ckpt/RealESRGAN_x4plus.pth"
+      }
+    },
+    {
+      method: "fs.write",
+      params: {
+        path: "app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed",
+        text: "ok"
+      }
+    },
     // Fetch the seed-vc voice-conversion component (GPL-3.0). It lives in
     // its own repository and is cloned into place at install time instead
     // of being tracked in this repo, so the GPL-licensed tree keeps its own

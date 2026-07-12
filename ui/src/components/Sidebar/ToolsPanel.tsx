@@ -29,7 +29,6 @@ export function ToolsPanel() {
   const revoiceRefs = useStore(s => s.toolsRevoiceRefs)
   const setRevoiceRef = useStore(s => s.setToolsRevoiceRef)
   const runTool = useStore(s => s.runTool)
-
   const outputs = useStore(s => s.outputs)
   const selectedOutput = useStore(s => s.selectedOutput)
   const flashvsrMode = useStore(s => s.servicesConfig?.flashvsr_mode ?? 1)

@@ -23,6 +23,9 @@ export interface ModelDef {
   // store auto-adds these models to enabledModels so they appear in
   // selectors without the user having to enable each one manually.
   nsfw_only?: boolean
+  // Hunyuan3D variants stored in one shared HF repo: deleting this
+  // model's cache also removes the weights of every listed sibling.
+  shared_cache_group?: string[]
 }
 
 export interface Resolution {
@@ -151,8 +154,8 @@ export interface GenerationJob {
 export interface OutputFile {
   name: string
   url: string
-  type: 'video' | 'image' | 'audio'
-  mode: GenerationMode | null
+  type: 'video' | 'image' | 'audio' | 'model3d'
+  mode: GenerationMode | 'model3d' | null
   /** Edit sub-mode tag from the .meta.json sidecar params (set by the
    *  retake/inpaint/outpaint/restyle/edit_anything endpoints). The gallery's
    *  Edits filter checks this to identify edit-mode outputs regardless of
@@ -161,12 +164,14 @@ export interface OutputFile {
   favorite: boolean
   size: number
   created_at: number
+  /** Static preview for 3D output cards; never a live model viewer. */
+  thumbnail_url?: string | null
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'avatars' | 'multiclip' | 'favorites'
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'avatars' | 'multiclip' | 'favorites'
 export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
-export type GenerationMode = 'image' | 'video' | 'audio' | 'avatar' | 'tools'
+export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
 export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything'
 export type AudioSubMode = 'speech' | 'music' | 'sfx' | 'mixer'
 

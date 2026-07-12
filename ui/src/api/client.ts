@@ -14,6 +14,9 @@ export interface ApiModel {
   // model block. The UI hides it from selectors and the visibility
   // settings unless servicesConfig.nsfw_mode is enabled.
   nsfw_only?: boolean
+  // Hunyuan3D variants stored in one shared HF repo: deleting this
+  // model's cache also removes the weights of every listed sibling.
+  shared_cache_group?: string[]
 }
 
 export interface ApiFamily {
@@ -29,12 +32,14 @@ export interface ApiResolution {
 
 export interface ApiOutput {
   name: string
-  type: 'video' | 'image' | 'audio'
+  type: 'video' | 'image' | 'audio' | 'model3d'
   mode: string | null
   favorite?: boolean
   size: number
   created_at: number
   url: string
+  /** Static source image for a 3D output's history-card preview. */
+  thumbnail_url?: string | null
   /** Edit-mode sub-classification (retake / inpaint / outpaint / restyle /
    *  edit_anything). Field added as a recovery stub after a git
    *  filter-repo reset wiped the original Stream C/D work that
@@ -74,7 +79,7 @@ export async function reloadModels(): Promise<{ status: string; model_count: num
   return res.json()
 }
 
-export async function deleteModel(modelType: string): Promise<{ deleted: string[]; model_type: string }> {
+export async function deleteModel(modelType: string): Promise<{ deleted: string[]; model_type: string; affected_models?: string[] }> {
   const res = await fetch(`${BASE}/api/v1/models/${encodeURIComponent(modelType)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete model')
   return res.json()
@@ -984,6 +989,116 @@ export async function updateServicesConfig(
     const err = await res.json().catch(() => ({ detail: 'Update failed' }))
     throw new Error(err.detail || 'Update failed')
   }
+  return res.json()
+}
+
+// --- Native Hunyuan3D ---
+
+export interface Hunyuan3DModel {
+  id: string
+  label: string
+  engine: 'v2' | 'v21'
+  repo: string
+  subfolder: string
+  parameters: string
+  multiview: boolean
+  turbo: boolean
+  supports_text: boolean
+  recommended_vram_gb: number
+  description: string
+}
+
+export interface Hunyuan3DPreset {
+  id: string
+  label: string
+  description: string
+  model_id: string
+  num_inference_steps: number
+  guidance_scale: number
+  octree_resolution: number
+  num_chunks: number
+  texture_mode: string
+  cpu_offload: boolean
+  flashvdm: boolean
+}
+
+export interface Hunyuan3DCapabilities {
+  runtime: { installed: boolean; isolated_runtime: boolean; releases_vram_after_job: boolean; install_hint: string | null }
+  models: Hunyuan3DModel[]
+  presets: Hunyuan3DPreset[]
+  texture_modes: { id: string; label: string; recommended_vram_gb: number }[]
+  input_views: string[]
+  output_formats: string[]
+  active_jobs: number
+}
+
+export interface Hunyuan3DJob {
+  job_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  phase: string
+  message: string
+  error: string | null
+  filename: string | null
+  url: string | null
+  model_id: string
+  size?: number
+}
+
+export async function fetchHunyuan3DCapabilities(): Promise<Hunyuan3DCapabilities> {
+  const res = await fetch(`${BASE}/api/v1/model3d/capabilities`)
+  if (!res.ok) throw new Error('Failed to fetch Hunyuan3D capabilities')
+  return res.json()
+}
+
+export async function startHunyuan3DJob(params: {
+  preset?: string
+  model_id?: string
+  prompt?: string
+  images?: Partial<Record<'front' | 'left' | 'right' | 'back', string>>
+  output_format?: string
+  texture_mode?: string
+  seed?: number
+  num_inference_steps?: number
+  guidance_scale?: number
+  octree_resolution?: number
+  num_chunks?: number
+  texture_resolution?: number
+  cpu_offload?: boolean
+  flashvdm?: boolean
+  remove_background?: boolean
+  compile?: boolean
+  reduce_face?: boolean
+  target_face_num?: number
+  mc_algo?: string
+}): Promise<Hunyuan3DJob> {
+  const res = await fetch(`${BASE}/api/v1/model3d/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '3D generation failed' }))
+    throw new Error(err.detail || '3D generation failed')
+  }
+  return res.json()
+}
+
+export async function fetchHunyuan3DJob(jobId: string): Promise<Hunyuan3DJob> {
+  const res = await fetch(`${BASE}/api/v1/model3d/status/${encodeURIComponent(jobId)}`)
+  if (!res.ok) {
+    // A 404 means the job registry no longer knows this id (the backend
+    // restarted mid-generation); callers use the status to stop polling.
+    const error = new Error(res.status === 404 ? 'Hunyuan3D job not found' : 'Failed to fetch Hunyuan3D job')
+    ;(error as Error & { status?: number }).status = res.status
+    throw error
+  }
+  return res.json()
+}
+
+export async function cancelHunyuan3DJob(jobId: string): Promise<Hunyuan3DJob> {
+  const res = await fetch(`${BASE}/api/v1/model3d/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to cancel Hunyuan3D job')
   return res.json()
 }
 

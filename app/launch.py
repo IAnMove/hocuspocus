@@ -87,6 +87,7 @@ if _hf_token_path:
 # Now safe to import wgp - all module-level code will run with patched argv
 print("[Maestro] Importing WanGP engine...")
 import wgp
+from services import model3d_service
 print(f"[Maestro] WanGP loaded: {len(wgp.displayed_model_types)} models available")
 # Base save path always comes from server_config["save_path"] (never from wgp.save_path which gets workspace-modified)
 
@@ -315,6 +316,7 @@ def list_models():
         if fid == "unknown":
             continue
         families.append({"id": fid, "label": label, "order": order})
+    families.append({"id": "hunyuan3d", "label": "Hunyuan3D", "order": 350})
     families.sort(key=lambda f: f["order"])
 
     # Models
@@ -345,12 +347,41 @@ def list_models():
             "nsfw_only": bool(md.get("nsfw_only", False)),
         })
 
+    for model in model3d_service.MODELS:
+        models.append({
+            "model_type": model["id"],
+            "name": model["label"],
+            "family": "hunyuan3d",
+            "architecture": "hunyuan3d",
+            # Multi-view variants are image-only; the rest accept a prompt.
+            "is_i2v": not model["supports_text"],
+            "is_t2v": model["supports_text"],
+            "guidance_max_phases": 1,
+            "fps": 0,
+            "supports_end_frame": False,
+            "supports_audio": False,
+            "supports_ref_images": True,
+            "is_downloaded": model3d_service.is_model_downloaded(model["id"]),
+            "nsfw_only": False,
+            # Variants sharing one HF repo lose their weights together when
+            # the cache is deleted; the UI warns using this list.
+            "shared_cache_group": [item["id"] for item in model3d_service.models_sharing_repo(model["id"])],
+        })
+
     return {"families": families, "models": models}
 
 
 @api.get("/api/v1/models/{model_type}/debug")
 def debug_model(model_type: str):
     """Debug: show raw model definition and download check."""
+    if model_type in model3d_service.MODEL_BY_ID:
+        model = model3d_service.MODEL_BY_ID[model_type]
+        return {
+            "model_type": model_type,
+            "keys": model,
+            "is_downloaded": model3d_service.is_model_downloaded(model_type),
+            "ckpts_dir": str(model3d_service.HF_CACHE_DIR),
+        }
     md = wgp.get_model_def(model_type)
     if not md:
         return {"error": "Model not found"}
@@ -376,6 +407,10 @@ def debug_model(model_type: str):
 @api.delete("/api/v1/models/{model_type}")
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
+    if model_type in model3d_service.MODEL_BY_ID:
+        affected = [item["id"] for item in model3d_service.models_sharing_repo(model_type)]
+        deleted = model3d_service.delete_model_cache(model_type)
+        return {"deleted": deleted, "model_type": model_type, "affected_models": affected if deleted else []}
     md = wgp.get_model_def(model_type)
     if not md:
         return JSONResponse({"error": "Model not found"}, status_code=404)
@@ -999,6 +1034,8 @@ def list_all_installed_loras():
 @api.get("/api/v1/loras/{model_type}")
 def list_loras(model_type: str):
     """List available LoRA files for a model type."""
+    if model_type in model3d_service.MODEL_BY_ID:
+        return {"loras": [], "guidance_max_phases": 1}
     md = wgp.get_model_def(model_type)
     if md is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
@@ -1026,6 +1063,8 @@ def list_loras(model_type: str):
 @api.get("/api/v1/loras/{model_type}/details")
 def list_loras_details(model_type: str):
     """List LoRAs with metadata from .civitai.json sidecars."""
+    if model_type in model3d_service.MODEL_BY_ID:
+        return {"loras": [], "guidance_max_phases": 1}
     md = wgp.get_model_def(model_type)
     if md is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
@@ -3976,6 +4015,25 @@ async def scan_and_generate_guides(request: Request):
 @api.get("/api/v1/model-options/{model_type}")
 def get_model_options(model_type: str):
     """Return UI-relevant model options for dynamic rendering."""
+    if model_type in model3d_service.MODEL_BY_ID:
+        return {
+            "model_type": model_type,
+            "architecture": "hunyuan3d",
+            "guidance_max_phases": 1,
+            "lock_guidance_phases": False,
+            "sliding_window": False,
+            "motion_amplitude": False,
+            "flow_shift": False,
+            "tea_cache": False,
+            "returns_audio": False,
+            "any_audio_prompt": False,
+            "audio_scale_name": "",
+            "lock_inference_steps": False,
+            "lock_guidance_scale": False,
+            "no_negative_prompt": True,
+            "i2v_class": False,
+            "fps": 0,
+        }
     md = wgp.get_model_def(model_type)
     if md is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
@@ -4788,6 +4846,97 @@ async def update_services_config(request: Request):
         f.write(json.dumps(wgp.server_config, indent=4))
 
     return {"status": "ok", "updated": updated}
+
+
+# ============================================================================
+# API Routes: native Hunyuan3D generation
+# ============================================================================
+
+def _resolve_model3d_input_path(value: str) -> str | None:
+    """Resolve a UI-provided upload/output path to a local file."""
+    if not value:
+        return None
+    value = value.strip()
+    if value.startswith("/api/v1/uploads/"):
+        value = value.rsplit("/", 1)[-1]
+        return _safe_join(os.path.join(os.getcwd(), "uploads"), value)
+    if value.startswith("/api/v1/file/"):
+        value = value.rsplit("/", 1)[-1]
+        return _safe_join(_workspace_dir(), value)
+    if os.path.isabs(value):
+        uploads_root = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
+        outputs_root = os.path.realpath(wgp.server_config.get("save_path", "outputs"))
+        real = os.path.realpath(value)
+        if real.startswith(uploads_root + os.sep) or real.startswith(outputs_root + os.sep):
+            return real
+        return None
+    upload_candidate = _safe_join(os.path.join(os.getcwd(), "uploads"), value)
+    if upload_candidate and os.path.isfile(upload_candidate):
+        return upload_candidate
+    return _safe_join(_workspace_dir(), value)
+
+
+@api.get("/api/v1/model3d/capabilities")
+def model3d_capabilities():
+    from services import model3d_service
+    return model3d_service.capabilities()
+
+
+@api.post("/api/v1/model3d/generate")
+async def generate_model3d(request: Request):
+    from services import model3d_service
+    body = await request.json()
+    raw_images = body.get("images") or {}
+    if not isinstance(raw_images, dict):
+        raise HTTPException(status_code=400, detail="images must be an object keyed by front/left/right/back")
+    # Backward-compatible single-image input becomes the front view.
+    if body.get("image_path") and not raw_images.get("front"):
+        raw_images["front"] = body["image_path"]
+    image_paths = {}
+    for view, value in raw_images.items():
+        if view not in {"front", "left", "right", "back"} or not value:
+            continue
+        resolved = _resolve_model3d_input_path(str(value))
+        if not resolved or not os.path.isfile(resolved):
+            raise HTTPException(status_code=400, detail=f"3D {view} image not found")
+        image_paths[view] = resolved
+    try:
+        return model3d_service.start_job(
+            body=body,
+            image_paths=image_paths,
+            output_dir=_workspace_dir(),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/api/v1/model3d/status/{job_id}")
+def model3d_job_status(job_id: str):
+    from services import model3d_service
+    job = model3d_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="3D generation job not found")
+    return job
+
+
+@api.post("/api/v1/model3d/jobs/{job_id}/cancel")
+def cancel_model3d_job(job_id: str):
+    from services import model3d_service
+    job = model3d_service.cancel_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="3D generation job not found")
+    return job
+
+
+@api.post("/api/v1/model3d/unload")
+def unload_model3d():
+    """Stop active workers. Completed jobs already release all Hunyuan VRAM."""
+    from services import model3d_service
+    cancelled = model3d_service.cancel_all_jobs()
+    return {"status": "ok", "cancelled_jobs": cancelled, "model_loaded": False}
 
 
 # ============================================================================
@@ -10388,9 +10537,45 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
     if not os.path.isdir(out_dir):
         return {"outputs": [], "total": 0}
 
-    media_exts = {".mp4", ".webm", ".gif", ".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3"}
+    media_exts = {".mp4", ".webm", ".gif", ".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
     video_exts = {".mp4", ".webm", ".gif"}
     audio_exts = {".wav", ".mp3"}
+    model3d_exts = {".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
+
+    def model3d_thumbnail_url(name: str, params: dict) -> str | None:
+        """Return a cheap static image preview for a 3D output card.
+
+        The gallery must never instantiate a second ``model-viewer`` for its
+        80px history cards: parsing many GLB files there is surprisingly
+        expensive.  The Hunyuan3D worker saves the normalized front view as a
+        ``<output>.preview.png`` sibling (for text-only jobs that is the
+        generated conditioning image), so prefer it.  Older outputs fall back
+        to the input views recorded in the sidecar; when neither exists the
+        client renders a lightweight 3D icon instead.
+        """
+        preview_name = os.path.splitext(name)[0] + ".preview.png"
+        if os.path.isfile(os.path.join(out_dir, preview_name)):
+            return f"/api/v1/file/{preview_name}"
+        images = params.get("images")
+        if not isinstance(images, dict):
+            return None
+        front = images.get("front")
+        if not isinstance(front, str) or not front:
+            return None
+        try:
+            source = os.path.realpath(front)
+            if not os.path.isfile(source):
+                return None
+            uploads_root = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
+            outputs_root = os.path.realpath(wgp.server_config.get("save_path", "outputs"))
+            filename = os.path.basename(source)
+            if source.startswith(uploads_root + os.sep):
+                return f"/api/v1/uploads/{filename}"
+            if source.startswith(outputs_root + os.sep):
+                return f"/api/v1/file/{filename}"
+        except OSError:
+            pass
+        return None
 
     favs = _load_favorites()
 
@@ -10399,6 +10584,9 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
     raw_entries = []
     for name in os.listdir(out_dir):
         if name.startswith(".trash_") or name.startswith("."):
+            continue
+        # 3D preview sidecars are served as card thumbnails, not gallery items.
+        if name.endswith(".preview.png"):
             continue
         filepath = os.path.join(out_dir, name)
         if not os.path.isfile(filepath):
@@ -10435,6 +10623,7 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
             "mode": meta.get("generation_mode"),
             "edit_sub_mode": params.get("edit_sub_mode"),
             "multi_clip_info": params.get("multi_clip_info"),
+            "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
         }
         mci = sidecar_cache[name]["multi_clip_info"]
         if mci and mci.get("group_id"):
@@ -10450,7 +10639,7 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
     # Second pass: build the file list using the cached sidecar data.
     files = []
     for name, filepath, ext, mtime in raw_entries:
-        ftype = "video" if ext in video_exts else ("audio" if ext in audio_exts else "image")
+        ftype = "video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image"))
         cached = sidecar_cache.get(name) or {}
         mode = cached.get("mode")
         edit_sub_mode = cached.get("edit_sub_mode")
@@ -10483,6 +10672,7 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
             "size": size,
             "created_at": mtime,
             "url": f"/api/v1/file/{name}",
+            "thumbnail_url": cached.get("thumbnail_url"),
         })
 
     # Special filters: return ALL matches, bypass pagination
@@ -10807,14 +10997,14 @@ async def move_output(name: str, request: Request):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to move file: {e}")
 
-    # Move sidecar metadata
-    meta_name = os.path.splitext(name)[0] + ".meta.json"
-    src_meta = os.path.join(src_dir, meta_name)
-    if os.path.isfile(src_meta):
-        try:
-            shutil.move(src_meta, os.path.join(dst_dir, meta_name))
-        except Exception:
-            pass
+    # Move sidecar metadata and the 3D card preview image, when present
+    for sidecar_name in (os.path.splitext(name)[0] + ".meta.json", os.path.splitext(name)[0] + ".preview.png"):
+        src_sidecar = os.path.join(src_dir, sidecar_name)
+        if os.path.isfile(src_sidecar):
+            try:
+                shutil.move(src_sidecar, os.path.join(dst_dir, sidecar_name))
+            except Exception:
+                pass
 
     # Update favorites
     favs = _load_favorites()
@@ -10863,6 +11053,14 @@ def delete_output(name: str):
     if os.path.isfile(meta_path):
         try:
             os.remove(meta_path)
+        except Exception:
+            pass
+
+    # Delete the 3D card preview image if one was saved alongside the model
+    preview_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png")
+    if os.path.isfile(preview_path):
+        try:
+            os.remove(preview_path)
         except Exception:
             pass
 

@@ -8,6 +8,10 @@ module.exports = {
     { method: "fs.rm", params: { path: "app/services/sam/env" } },
     // SAM 3 source checkout (will be re-cloned on install)
     { method: "fs.rm", params: { path: "app/services/sam/sam3" } },
+    // Hunyuan3D isolated runtime, official source checkouts, and model cache
+    { method: "fs.rm", params: { path: "app/services/hunyuan3d/env" } },
+    { method: "fs.rm", params: { path: "app/services/hunyuan3d/vendor" } },
+    { method: "fs.rm", params: { path: "app/ckpts/model3d" } },
     // UI build artifacts
     { method: "fs.rm", params: { path: "ui/node_modules" } },
     { method: "fs.rm", params: { path: "ui/dist" } }

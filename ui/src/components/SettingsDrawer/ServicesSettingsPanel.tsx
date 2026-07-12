@@ -265,7 +265,6 @@ export function ServicesSettingsPanel() {
   const llmModels = useStore(s => s.llmModels)
   const loadLlmModels = useStore(s => s.loadLlmModels)
   const [refreshing, setRefreshing] = useState(false)
-
   if (servicesConfigLoading && !servicesConfig) {
     return <div className="text-xs text-text-muted py-4 text-center">Loading...</div>
   }
