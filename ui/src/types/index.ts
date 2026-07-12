@@ -194,6 +194,9 @@ export interface SceneLayer {
       radiusY: number
       turns: number
       phase: number
+      /** Fine adjustment from the target layer's visual center, in scene percent. */
+      centerOffsetX?: number
+      centerOffsetY?: number
     }
   }
 }
