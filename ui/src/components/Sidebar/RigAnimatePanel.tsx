@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Bone, Box, Loader2, PersonStanding, Play, RefreshCw, Square } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import {
   cancelRigJob,
+  fetchOutputs,
   fetchRigCapabilities,
   fetchRigJob,
   startRigJob,
@@ -10,13 +11,16 @@ import {
   type RigJob,
 } from '../../api/client'
 
+type RigSource = { name: string; thumbnail_url?: string | null }
+
 /** Rig & Animate: adds a procedural skeleton + looping clips to a generated
  *  3D output. Complements the 3D tab (which creates static meshes) and the
  *  scene animator (which moves the camera, not the mesh). */
 export function RigAnimatePanel() {
-  const outputs = useStore(state => state.outputs)
   const loadOutputs = useStore(state => state.loadOutputs)
   const setMediaFilter = useStore(state => state.setMediaFilter)
+  const [sources, setSources] = useState<RigSource[]>([])
+  const [sourcesLoading, setSourcesLoading] = useState(true)
   const [capabilities, setCapabilities] = useState<RigCapabilities | null>(null)
   const [capabilityError, setCapabilityError] = useState<string | null>(null)
   const [source, setSource] = useState<string | null>(null)
@@ -35,16 +39,26 @@ export function RigAnimatePanel() {
     })
   }, [])
 
-  useEffect(() => {
-    if (outputs.length === 0) void loadOutputs()
-  }, [outputs.length, loadOutputs])
+  // The gallery store paginates (newest 100), which can hide older GLB
+  // outputs entirely — fetch the complete .glb list straight from the
+  // backend's search filter instead (it bypasses pagination).
+  const loadSources = useCallback(async () => {
+    setSourcesLoading(true)
+    try {
+      const { outputs: files } = await fetchOutputs(0, 0, { search: '.glb' })
+      setSources(files
+        .filter(file => file.type === 'model3d' && /\.glb$/i.test(file.name) && !file.name.includes('_rigged_'))
+        .map(file => ({ name: file.name, thumbnail_url: file.thumbnail_url })))
+    } catch {
+      setSources([])
+    } finally {
+      setSourcesLoading(false)
+    }
+  }, [])
 
-  // Riggable sources: generated GLB meshes that are not rig outputs already.
-  const sources = useMemo(
-    () => outputs.filter(file =>
-      file.type === 'model3d' && /\.glb$/i.test(file.name) && !file.name.includes('_rigged_')),
-    [outputs],
-  )
+  useEffect(() => {
+    void loadSources()
+  }, [loadSources])
 
   const engine = capabilities?.engines.find(item => item.id === 'procedural')
   const installed = !!engine?.installed
@@ -82,10 +96,11 @@ export function RigAnimatePanel() {
   useEffect(() => {
     if (job?.status === 'completed') {
       void loadOutputs()
+      void loadSources()
       setMediaFilter('model3d')
     }
     if (job?.status === 'failed') setError(job.error || job.message)
-  }, [job?.status, job?.error, job?.message, loadOutputs, setMediaFilter])
+  }, [job?.status, job?.error, job?.message, loadOutputs, loadSources, setMediaFilter])
 
   const toggleClip = (id: string) => {
     setSelectedClips(current => {
@@ -141,14 +156,16 @@ export function RigAnimatePanel() {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-[10px] text-text-muted uppercase tracking-wider">3D object</label>
-              <button onClick={() => void loadOutputs()} className="text-text-muted hover:text-text-primary transition-colors" title="Refresh 3D outputs">
+              <button onClick={() => void loadSources()} className="text-text-muted hover:text-text-primary transition-colors" title="Refresh 3D outputs">
                 <RefreshCw size={11} />
               </button>
             </div>
-            {sources.length === 0 ? (
+            {sourcesLoading ? (
+              <div className="flex items-center gap-2 text-[10px] text-text-muted p-3"><Loader2 size={12} className="animate-spin" /> Loading 3D outputs...</div>
+            ) : sources.length === 0 ? (
               <p className="text-[10px] text-text-muted rounded-lg border border-dashed border-border p-3">No GLB outputs yet. Generate an object in the 3D tab first.</p>
             ) : (
-              <div className="grid grid-cols-3 gap-1.5 max-h-56 overflow-y-auto pr-0.5">
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-2 max-h-72 overflow-y-auto pr-0.5">
                 {sources.map(file => (
                   <button
                     key={file.name}
