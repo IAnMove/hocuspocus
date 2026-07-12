@@ -4940,6 +4940,62 @@ def unload_model3d():
 
 
 # ============================================================================
+# API Routes: Rig & Animate (procedural skeletons for 3D outputs)
+# ============================================================================
+
+@api.get("/api/v1/rig/capabilities")
+def rig_capabilities():
+    from services import rig_service
+    return rig_service.capabilities()
+
+
+@api.post("/api/v1/rig/generate")
+async def generate_rig(request: Request):
+    from services import rig_service
+    body = await request.json()
+    source_name = str(body.get("source") or "").strip()
+    if not source_name:
+        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
+    if not source_name.lower().endswith(".glb"):
+        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
+    source_path = _safe_join(_workspace_dir(), source_name)
+    if not source_path or not os.path.isfile(source_path):
+        # Also accept absolute/upload paths through the shared 3D resolver.
+        source_path = _resolve_model3d_input_path(source_name)
+    if not source_path or not os.path.isfile(source_path):
+        raise HTTPException(status_code=400, detail="Source 3D model not found")
+    try:
+        return rig_service.start_job(
+            body=body,
+            source_path=source_path,
+            output_dir=_workspace_dir(),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/api/v1/rig/status/{job_id}")
+def rig_job_status(job_id: str):
+    from services import rig_service
+    job = rig_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Rig job not found")
+    return job
+
+
+@api.post("/api/v1/rig/jobs/{job_id}/cancel")
+def cancel_rig_job(job_id: str):
+    from services import rig_service
+    job = rig_service.cancel_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Rig job not found")
+    return job
+
+
+# ============================================================================
 # API Routes: Workspaces
 # ============================================================================
 
