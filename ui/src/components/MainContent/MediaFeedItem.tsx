@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react'
-import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Box } from 'lucide-react'
+import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Box, Film } from 'lucide-react'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { useStore } from '../../stores/useStore'
 import { getUploadUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
 import { modelDisplayName } from '../../lib/modelDisplay'
+import { stageSceneForEditor } from '../../lib/sceneOutput'
 
 interface Props {
   file: OutputFile
@@ -31,11 +32,6 @@ function RetryImage({ url, alt }: { url: string; alt: string }) {
   const [src, setSrc] = useState(url)
   const retries = useRef(0)
   const maxRetries = 5
-
-  useEffect(() => {
-    retries.current = 0
-    setSrc(url)
-  }, [url])
 
   const scheduleRetry = useCallback(() => {
     if (retries.current < maxRetries) {
@@ -74,6 +70,7 @@ function RetryImage({ url, alt }: { url: string; alt: string }) {
 
 export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, style }: Props) {
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
+  const setMediaFilter = useStore(s => s.setMediaFilter)
   const loadSettingsFromOutput = useStore(s => s.loadSettingsFromOutput)
   const rerollGeneration = useStore(s => s.rerollGeneration)
   const deleteOutput = useStore(s => s.deleteSelectedOutput)
@@ -173,6 +170,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const modelLabel = modelDisplayName(modelType, models)
   const isAudio = file.type === 'audio'
   const isModel3d = file.type === 'model3d'
+  const isScene = file.type === 'scene'
   const canPreviewModel3d = isModel3d && /\.(glb|gltf)$/i.test(file.name)
 
   // Keep the model-viewer runtime out of Maestro's main Image/Video/Audio
@@ -196,8 +194,14 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const imageEndFile = Array.isArray(rawEnd) ? (rawEnd.find((f: string) => f) || null) : rawEnd
 
   const handleSelect = useCallback(() => {
+    if (isScene) {
+      void stageSceneForEditor(file)
+        .then(() => setMediaFilter('scene3d'))
+        .catch(error => console.error('Failed to open scene:', error))
+      return
+    }
     setSelectedOutput(index)
-  }, [index, setSelectedOutput])
+  }, [file, index, isScene, setMediaFilter, setSelectedOutput])
 
   const handleLoadSettings = useCallback(() => {
     setSelectedOutput(index)
@@ -394,6 +398,10 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             <p className="text-xs text-text-muted mb-2">{file.name}</p>
             <audio key={file.url} src={file.url} controls className="w-64" />
           </div>
+        ) : isScene ? (
+          file.thumbnail_url
+            ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" />
+            : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
         ) : isModel3d ? (
           <div className="w-full h-full relative">
             {canPreviewModel3d ? (

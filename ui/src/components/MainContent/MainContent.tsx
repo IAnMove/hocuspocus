@@ -6,6 +6,7 @@ import { MediaFeedItem } from './MediaFeedItem'
 import { SceneAnimatorPanel } from '../Sidebar/SceneAnimatorPanel'
 import { useStore } from '../../stores/useStore'
 import type { GenerationJob } from '../../types'
+import { stageSceneForEditor } from '../../lib/sceneOutput'
 
 function WorkspaceSelector() {
   const workspaces = useStore(s => s.workspaces)
@@ -278,6 +279,7 @@ export function MainContent() {
   const stopGeneration = useStore(s => s.stopGeneration)
   const dismissJob = useStore(s => s.dismissJob)
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
+  const setMediaFilter = useStore(s => s.setMediaFilter)
 
   const feedRef = useRef<HTMLDivElement>(null)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -371,6 +373,13 @@ export function MainContent() {
   }, [setSelectedOutput])
 
   const handleThumbnailClick = useCallback((index: number) => {
+    const file = outputs[index]
+    if (file?.type === 'scene') {
+      void stageSceneForEditor(file)
+        .then(() => setMediaFilter('scene3d'))
+        .catch(error => console.error('Failed to open scene:', error))
+      return
+    }
     setSelectedOutput(index)
     setActiveIndex(index)
     scrollTargetIndex.current = index
@@ -444,7 +453,7 @@ export function MainContent() {
       }
     }
     requestAnimationFrame(align)
-  }, [setSelectedOutput, getItemHeight, placeholderTotalHeight])
+  }, [getItemHeight, outputs, placeholderTotalHeight, setMediaFilter, setSelectedOutput])
 
   // Infinite scroll: load more when near the bottom
   const loadingMore = useRef(false)

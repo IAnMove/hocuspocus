@@ -29,7 +29,7 @@ export interface ApiResolution {
 
 export interface ApiOutput {
   name: string
-  type: 'video' | 'image' | 'audio' | 'model3d'
+  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene'
   mode: string | null
   favorite?: boolean
   size: number
@@ -293,6 +293,19 @@ export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly
   if (!res.ok) throw new Error('Failed to fetch outputs')
   const data = await res.json()
   return { outputs: data.outputs, total: data.total ?? data.outputs.length }
+}
+
+export async function saveScene(scene: import('../types').Scene, preview: string): Promise<{ name: string; type: 'scene'; url: string; thumbnail_url: string }> {
+  const res = await fetch(`${BASE}/api/v1/scenes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scene, preview }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to save scene' }))
+    throw new Error(error.detail || 'Failed to save scene')
+  }
+  return res.json()
 }
 
 export function getFileUrl(filename: string): string {

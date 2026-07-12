@@ -14,6 +14,7 @@ Environment variables:
 """
 
 import gc
+import base64
 import sys
 import torch
 import os
@@ -10514,6 +10515,70 @@ def toggle_favorite(name: str):
     return {"name": name, "favorite": is_fav}
 
 
+@api.post("/api/v1/scenes")
+def save_scene_output(body: dict):
+    """Persist a Scene Animator project as a first-class workspace output.
+
+    The JSON keeps lightweight references to Maestro outputs/uploads while the
+    PNG is only a gallery preview. Locally imported assets are uploaded by the
+    client before this endpoint is called, so no transient blob: URL is saved.
+    """
+    import re as _re_scene
+
+    scene = body.get("scene")
+    preview = body.get("preview")
+    if not isinstance(scene, dict) or scene.get("version") != 1:
+        raise HTTPException(status_code=400, detail="A version 1 scene is required")
+    layers = scene.get("layers")
+    if not isinstance(layers, list) or len(layers) > 500:
+        raise HTTPException(status_code=400, detail="Scene layers must be a list of at most 500 items")
+    if not isinstance(preview, str) or not preview.startswith("data:image/png;base64,"):
+        raise HTTPException(status_code=400, detail="A PNG scene preview is required")
+
+    try:
+        preview_bytes = base64.b64decode(preview.split(",", 1)[1], validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid PNG preview") from exc
+    if len(preview_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Scene preview is too large")
+
+    raw_name = str(scene.get("name") or "Untitled scene").strip()
+    safe_name = _re_scene.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "scene"
+    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+    stem = f"{stamp}_{safe_name}_{uuid.uuid4().hex[:6]}.scene"
+    out_dir = _workspace_dir()
+    os.makedirs(out_dir, exist_ok=True)
+    scene_name = f"{stem}.json"
+    preview_name = f"{stem}.preview.png"
+    scene_path = os.path.join(out_dir, scene_name)
+    preview_path = os.path.join(out_dir, preview_name)
+
+    scene_tmp = scene_path + ".tmp"
+    preview_tmp = preview_path + ".tmp"
+    try:
+        with open(scene_tmp, "w", encoding="utf-8") as handle:
+            json.dump(scene, handle, ensure_ascii=False, indent=2)
+        with open(preview_tmp, "wb") as handle:
+            handle.write(preview_bytes)
+        os.replace(scene_tmp, scene_path)
+        os.replace(preview_tmp, preview_path)
+    except Exception as exc:
+        for path in (scene_tmp, preview_tmp):
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                pass
+        raise HTTPException(status_code=500, detail=f"Failed to save scene: {exc}") from exc
+
+    return {
+        "name": scene_name,
+        "type": "scene",
+        "url": f"/api/v1/file/{scene_name}",
+        "thumbnail_url": f"/api/v1/file/{preview_name}",
+    }
+
+
 @api.get("/api/v1/outputs")
 def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = ""):
     """List generated output files (newest first) from the active workspace.
@@ -10581,7 +10646,7 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
         if not os.path.isfile(filepath):
             continue
         ext = os.path.splitext(name)[1].lower()
-        if ext not in media_exts:
+        if ext not in media_exts and not name.endswith(".scene.json"):
             continue
         raw_entries.append((name, filepath, ext, os.path.getmtime(filepath)))
 
@@ -10628,7 +10693,8 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
     # Second pass: build the file list using the cached sidecar data.
     files = []
     for name, filepath, ext, mtime in raw_entries:
-        ftype = "video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image"))
+        is_scene = name.endswith(".scene.json")
+        ftype = "scene" if is_scene else ("video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image")))
         cached = sidecar_cache.get(name) or {}
         mode = cached.get("mode")
         edit_sub_mode = cached.get("edit_sub_mode")
@@ -10661,7 +10727,7 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
             "size": size,
             "created_at": mtime,
             "url": f"/api/v1/file/{name}",
-            "thumbnail_url": cached.get("thumbnail_url"),
+            "thumbnail_url": (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png" if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png")) else cached.get("thumbnail_url")),
         })
 
     # Special filters: return ALL matches, bypass pagination

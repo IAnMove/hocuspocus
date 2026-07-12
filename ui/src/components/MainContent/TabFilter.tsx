@@ -9,6 +9,7 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
   { value: 'videos', label: 'Videos', shortLabel: 'Vid' },
   { value: 'audio', label: 'Audio', shortLabel: 'Aud' },
   { value: 'model3d', label: '3D', shortLabel: '3D', icon: 'box' },
+  { value: 'scenes', label: 'Scenes', shortLabel: 'Scn', icon: 'film' },
   { value: 'scene3d', label: '3D Video', shortLabel: '3DV', icon: 'film' },
   { value: 'avatars', label: 'Edits', shortLabel: 'Edit' },
   { value: 'multiclip', label: 'Multi-clip', shortLabel: 'MC', icon: 'film' },

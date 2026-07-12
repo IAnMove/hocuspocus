@@ -140,7 +140,7 @@ export interface GenerationJob {
 export interface OutputFile {
   name: string
   url: string
-  type: 'video' | 'image' | 'audio' | 'model3d'
+  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene'
   mode: GenerationMode | 'model3d' | null
   /** Edit sub-mode tag from the .meta.json sidecar params (set by the
    *  retake/inpaint/outpaint/restyle/edit_anything endpoints). The gallery's
@@ -169,7 +169,17 @@ export interface SceneLayer {
   missingAsset?: boolean
   /** Image/video is cropped to cover the complete scene frame. */
   fill?: boolean
-  transform: { x: number; y: number; scale: number; opacity: number; rotation?: number }
+  transform: {
+    x: number
+    y: number
+    scale: number
+    opacity: number
+    /** 2D rotation for images/video/overlays. */
+    rotation?: number
+    /** Persisted model-viewer camera orbit in degrees. */
+    rotationX?: number
+    rotationY?: number
+  }
   animation: {
     start: { x: number; y: number; scale: number; opacity?: number }
     end: { x: number; y: number; scale: number; opacity?: number }
@@ -189,7 +199,7 @@ export interface Scene {
   layers: SceneLayer[]
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scene3d' | 'avatars' | 'multiclip' | 'favorites'
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'scene3d' | 'avatars' | 'multiclip' | 'favorites'
 export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'

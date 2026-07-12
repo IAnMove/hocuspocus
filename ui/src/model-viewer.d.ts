@@ -9,6 +9,8 @@ declare module 'react' {
         'camera-controls'?: boolean
         'auto-rotate'?: boolean
         'shadow-intensity'?: string
+        'camera-orbit'?: string
+        'interaction-prompt'?: 'auto' | 'none'
         exposure?: string
         loading?: 'auto' | 'lazy' | 'eager'
       }
