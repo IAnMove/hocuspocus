@@ -456,6 +456,7 @@ const modeDefaultModel: Record<GenerationMode, string> = {
   video: 'ltx2_22B_distilled_1_1',
   audio: 'kugelaudio_0_open',
   model3d: 'hunyuan3d-2-turbo',
+  rig: '',     // Rig & Animate works on existing 3D outputs — owns no model
   avatar: '',  // will fallback to first available
   tools: '',   // Tools is non-generative post-processing — owns no model
 }
@@ -472,7 +473,7 @@ export function getModelMode(modelType: string, familyId: string): GenerationMod
 }
 
 export function getFamiliesForMode(mode: GenerationMode, allFamilies: ModelFamily[], _editSubMode?: string, audioSubMode?: string): ModelFamily[] {
-  if (mode === 'tools') return []
+  if (mode === 'tools' || mode === 'rig') return []
   if (mode === 'avatar') {
     // All edit sub-modes (retake, inpaint, restyle) use LTX models
     return allFamilies.filter(f => f.id === 'ltx2' || f.id === 'ltxv')
@@ -1669,7 +1670,8 @@ export const useStore = create<AppState>((set, get) => ({
     // so returning to it restores correctly, leave `params` untouched (no model
     // load, no defaults reset), and persist the *previous* real mode as the
     // landing mode so a reload doesn't drop into Tools with no model loaded.
-    if (mode === 'tools') {
+    // Rig & Animate behaves identically: it operates on existing 3D outputs.
+    if (mode === 'tools' || mode === 'rig') {
       const s = get()
       const prev = s.generationMode
       if (prev === mode) { set({ generationMode: mode }); return }

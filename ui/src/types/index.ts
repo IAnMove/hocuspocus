@@ -216,7 +216,7 @@ export interface Scene {
 export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'scene3d' | 'avatars' | 'multiclip' | 'favorites'
 export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
-export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
+export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'rig' | 'avatar' | 'tools'
 export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything'
 export type AudioSubMode = 'speech' | 'music' | 'sfx' | 'mixer'
 
