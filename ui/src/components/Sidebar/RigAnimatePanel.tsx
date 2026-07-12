@@ -30,15 +30,20 @@ export function RigAnimatePanel() {
   const [job, setJob] = useState<RigJob | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadCapabilities = useCallback(() => {
+    setCapabilityError(null)
     fetchRigCapabilities().then(caps => {
       setCapabilities(caps)
       setSpineJoints(caps.default_spine_joints)
-      setSelectedClips(new Set(caps.animations.map(animation => animation.id)))
+      setSelectedClips(current => current.size > 0 ? current : new Set(caps.animations.map(animation => animation.id)))
     }).catch(err => {
       setCapabilityError(err instanceof Error ? err.message : 'Could not load rig capabilities')
     })
   }, [])
+
+  useEffect(() => {
+    loadCapabilities()
+  }, [loadCapabilities])
 
   // The gallery store paginates (newest 100), which can hide older GLB
   // outputs entirely — fetch the complete .glb list straight from the
@@ -137,7 +142,13 @@ export function RigAnimatePanel() {
     }
   }
 
-  if (capabilityError) return <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{capabilityError}</div>
+  if (capabilityError) return (
+    <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 space-y-2">
+      <p className="text-xs text-red-300">{capabilityError}</p>
+      <p className="text-[10px] text-text-muted">Maestro's backend did not answer — it may be stopped or restarting. The procedural engine needs no extra install; this is a connection issue, not a missing installation.</p>
+      <button onClick={loadCapabilities} className="rounded border border-border bg-bg-tertiary px-2.5 py-1.5 text-[10px] text-text-secondary hover:text-text-primary flex items-center gap-1"><RefreshCw size={11} /> Retry</button>
+    </div>
+  )
 
   return (
     <div className="flex flex-col gap-4">
