@@ -266,6 +266,13 @@ export interface SceneLayer {
     rotationSpeed?: number
     /** Name of a baked glTF skeletal clip to play (rigged GLB layers). */
     clip?: string
+    /** Skeletal clip timing is independent from the layer transform timing. */
+    clipOffset?: number
+    clipSpeed?: number
+    clipReverse?: boolean
+    clipLoop?: boolean
+    clipTrimStart?: number
+    clipTrimEnd?: number
     /** Optional motion relationship: this layer circles another scene layer. */
     orbit?: {
       targetLayerId: string
