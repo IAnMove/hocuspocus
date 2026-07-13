@@ -65,13 +65,19 @@ export const getSceneKeyframes = (layer: SceneLayer): SceneKeyframe[] => {
 export const normalizeSceneKeyframes = (value: unknown, layer: SceneLayer): SceneKeyframe[] | undefined => {
   if (!Array.isArray(value)) return undefined
   const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce']
+  const usedIds = new Set<string>()
   const frames = value.flatMap((raw, index) => {
     if (!raw || typeof raw !== 'object') return []
     const item = raw as Partial<SceneKeyframe>
     if (typeof item.time !== 'number' || !Number.isFinite(item.time)) return []
+    const fallbackId = `${layer.id}-keyframe-${index}`
+    let id = typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 200) : fallbackId
+    if (usedIds.has(id)) id = fallbackId
+    while (usedIds.has(id)) id = `${fallbackId}-${usedIds.size + 1}`
+    usedIds.add(id)
     return [{
-      id: typeof item.id === 'string' && item.id ? item.id : `${layer.id}-keyframe-${index}`,
-      time: Math.max(0, item.time),
+      id,
+      time: Math.max(0, Math.min(3600, item.time)),
       x: typeof item.x === 'number' && Number.isFinite(item.x) ? item.x : layer.transform.x,
       y: typeof item.y === 'number' && Number.isFinite(item.y) ? item.y : layer.transform.y,
       scale: typeof item.scale === 'number' && Number.isFinite(item.scale) ? Math.max(.01, item.scale) : layer.transform.scale,
@@ -80,7 +86,8 @@ export const normalizeSceneKeyframes = (value: unknown, layer: SceneLayer): Scen
       curve: curves.includes(item.curve as SceneCurve) ? item.curve as SceneCurve : layer.animation.curve,
     }]
   }).sort((a, b) => a.time - b.time)
-  return frames.length >= 2 ? frames : undefined
+  const distinctTimes = frames.filter((frame, index) => index === 0 || Math.abs(frame.time - frames[index - 1].time) > .000001)
+  return distinctTimes.length >= 2 ? distinctTimes : undefined
 }
 
 export const normalizeSceneEvents = (value: unknown, duration: number, idPrefix = 'scene') => {
@@ -186,8 +193,8 @@ export const withSceneKeyframes = (
   requestedDuration = layer.animation.duration,
 ): SceneLayer => {
   if (keyframes.length < 2) return layer
-  const ordered = [...keyframes].sort((a, b) => a.time - b.time)
-  const duration = Math.max(.1, requestedDuration, ordered[ordered.length - 1].time)
+  const ordered = [...keyframes].map(frame => ({ ...frame, time: Math.max(0, Math.min(3600, frame.time)) })).sort((a, b) => a.time - b.time)
+  const duration = Math.min(3600, Math.max(.1, requestedDuration, ordered[ordered.length - 1].time))
   return {
     ...layer,
     animation: {
