@@ -160,7 +160,7 @@ export interface OutputFile {
   thumbnail_url?: string | null
 }
 
-export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay'
+export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'camera'
 export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
 
 export interface SceneLayer {
@@ -175,6 +175,10 @@ export interface SceneLayer {
   missingAsset?: boolean
   /** Image/video is cropped to cover the complete scene frame. */
   fill?: boolean
+  /** Camera-pan multiplier: 0 ignores camera pan, 1 follows it normally,
+   *  and values above 1 create foreground parallax. Camera zoom/roll still
+   *  affect every visual layer. Ignored by camera layers. */
+  parallax?: number
   transform: {
     x: number
     y: number
@@ -187,8 +191,8 @@ export interface SceneLayer {
     rotationY?: number
   }
   animation: {
-    start: { x: number; y: number; scale: number; opacity?: number }
-    end: { x: number; y: number; scale: number; opacity?: number }
+    start: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
+    end: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
     duration: number
     curve: SceneCurve
     spin?: boolean

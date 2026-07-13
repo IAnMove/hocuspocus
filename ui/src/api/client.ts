@@ -1132,11 +1132,28 @@ export interface RigAnimation {
   id: string
   label: string
   description: string
+  category?: string
+}
+
+export type RigProfileId = 'prop' | 'humanoid' | 'quadruped' | 'flying' | 'serpentine'
+
+export interface RigProfile {
+  id: RigProfileId
+  label: string
+  description: string
+  default_spine_joints: number
+  default_axis_mode: 'auto' | 'x' | 'y' | 'z'
+  default_weight_falloff: number
+  recommended_animations: string[]
+  allowed_animations: string[]
 }
 
 export interface RigCapabilities {
   engines: RigEngine[]
   animations: RigAnimation[]
+  /** Optional during rolling upgrades from backends predating rig profiles. */
+  rig_profiles?: RigProfile[]
+  default_rig_profile?: RigProfileId
   default_spine_joints: number
   active_jobs: number
 }
@@ -1151,6 +1168,7 @@ export interface RigJob {
   filename: string | null
   url: string | null
   engine: string
+  rig_profile?: RigProfileId
   source_file: string
   animations?: string[]
   created_at: number
@@ -1166,8 +1184,11 @@ export async function fetchRigCapabilities(): Promise<RigCapabilities> {
 export async function startRigJob(params: {
   source: string
   engine?: string
+  rig_profile?: RigProfileId
   animations?: string[]
   spine_joints?: number
+  axis_mode?: 'auto' | 'x' | 'y' | 'z'
+  weight_falloff?: number
 }): Promise<RigJob> {
   const res = await fetch(`${BASE}/api/v1/rig/generate`, {
     method: 'POST',

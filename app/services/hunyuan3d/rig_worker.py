@@ -37,7 +37,10 @@ def main() -> None:
         source,
         str(output_path),
         clip_ids=list(request.get("animations") or list(procedural_rig.CLIPS)),
+        rig_profile=str(request.get("rig_profile") or "prop"),
         spine_joints=int(request.get("spine_joints") or 5),
+        axis_mode=str(request.get("axis_mode") or "auto"),
+        weight_falloff=float(request.get("weight_falloff") or 2.0),
         progress=event,
     )
     if not output_path.is_file() or output_path.stat().st_size == 0:

@@ -38,13 +38,98 @@ UNIRIG_VENDOR_DIR = RIGGING_DIR / "vendor" / "UniRig"
 HF_CACHE_DIR = Path(__file__).resolve().parents[1] / "ckpts" / "rig" / "huggingface"
 
 ANIMATIONS: list[dict[str, str]] = [
-    {"id": "idle", "label": "Idle Sway", "description": "Gentle side-to-side spine sway, stronger toward the top."},
-    {"id": "breathe", "label": "Breathe", "description": "Soft squash-and-stretch breathing loop."},
-    {"id": "bounce", "label": "Bounce", "description": "Rhythmic hops with squash on landing."},
-    {"id": "spin", "label": "Turntable Spin", "description": "Full 360 degree showcase rotation."},
-    {"id": "wobble", "label": "Wobble Dance", "description": "Playful yaw wiggle with sway and a light hop."},
+    {"id": "idle", "label": "Idle Sway", "description": "Gentle side-to-side spine sway, stronger toward the top.", "category": "Ambient"},
+    {"id": "breathe", "label": "Breathe", "description": "Soft squash-and-stretch breathing loop.", "category": "Ambient"},
+    {"id": "hover", "label": "Hover", "description": "Smooth floating loop for pickups, drones, props and spirits.", "category": "Ambient"},
+    {"id": "alert", "label": "Alert Look", "description": "A cautious scan with a small ready-state lean.", "category": "Game"},
+    {"id": "walk", "label": "Walk Cycle", "description": "In-place game walk with body bob, yaw and articulated sway.", "category": "Locomotion"},
+    {"id": "run", "label": "Run Cycle", "description": "Fast in-place sprint loop with stronger lift and compression.", "category": "Locomotion"},
+    {"id": "strafe", "label": "Strafe Loop", "description": "Side-to-side evasive locomotion for gameplay shots.", "category": "Locomotion"},
+    {"id": "jump", "label": "Jump", "description": "Anticipation, airborne stretch and a clean landing loop.", "category": "Action"},
+    {"id": "attack", "label": "Attack Lunge", "description": "Quick wind-up, forward strike and recovery.", "category": "Action"},
+    {"id": "hit", "label": "Hit Reaction", "description": "Sharp sideways recoil followed by recovery to idle.", "category": "Action"},
+    {"id": "roll", "label": "Combat Roll", "description": "Full forward tumble suitable for creatures and game props.", "category": "Action"},
+    {"id": "charge", "label": "Charge Up", "description": "Escalating pulse and tense sway for power-up moments.", "category": "Action"},
+    {"id": "victory", "label": "Victory Jump", "description": "Celebratory jump with a complete showcase turn.", "category": "Cinematic"},
+    {"id": "bounce", "label": "Bounce", "description": "Rhythmic hops with squash on landing.", "category": "Stylized"},
+    {"id": "spin", "label": "Turntable Spin", "description": "Full 360 degree showcase rotation.", "category": "Cinematic"},
+    {"id": "wobble", "label": "Wobble Dance", "description": "Playful yaw wiggle with sway and a light hop.", "category": "Stylized"},
 ]
 ANIMATION_IDS = {item["id"] for item in ANIMATIONS}
+
+# These profiles tune Maestro's procedural chain and guide clip selection.
+# They are intentionally not presented as semantic humanoid/creature
+# retargeting: the procedural engine still builds a robust single chain,
+# while UniRig remains responsible for predicting a richer skeleton.
+RIG_PROFILES: list[dict[str, Any]] = [
+    {
+        "id": "prop",
+        "label": "Prop / object",
+        "description": "Rigid or softly deforming objects, pickups, logos and mechanical props.",
+        "default_spine_joints": 3,
+        "default_axis_mode": "auto",
+        "default_weight_falloff": 3.5,
+        "recommended_animations": ["hover", "bounce", "spin", "wobble", "charge", "hit"],
+        "allowed_animations": [
+            "idle", "breathe", "hover", "alert", "jump", "attack", "hit", "roll",
+            "charge", "victory", "bounce", "spin", "wobble",
+        ],
+    },
+    {
+        "id": "humanoid",
+        "label": "Humanoid",
+        "description": "Upright characters. Uses a denser Y-up body chain; it is a procedural approximation, not semantic limb retargeting.",
+        "default_spine_joints": 7,
+        "default_axis_mode": "y",
+        "default_weight_falloff": 2.4,
+        "recommended_animations": [
+            "idle", "breathe", "alert", "walk", "run", "strafe", "jump", "attack",
+            "hit", "roll", "charge", "victory",
+        ],
+        "allowed_animations": [item["id"] for item in ANIMATIONS],
+    },
+    {
+        "id": "quadruped",
+        "label": "Quadruped / creature",
+        "description": "Four-legged and horizontally oriented creatures using a flexible dominant-axis chain.",
+        "default_spine_joints": 7,
+        "default_axis_mode": "auto",
+        "default_weight_falloff": 2.0,
+        "recommended_animations": ["idle", "breathe", "alert", "walk", "run", "jump", "attack", "hit", "charge"],
+        "allowed_animations": [
+            "idle", "breathe", "alert", "walk", "run", "jump", "attack", "hit", "roll",
+            "charge", "victory", "bounce", "spin", "wobble",
+        ],
+    },
+    {
+        "id": "flying",
+        "label": "Flying creature / drone",
+        "description": "Birds, winged creatures, ships and drones with a light dominant-axis chain.",
+        "default_spine_joints": 5,
+        "default_axis_mode": "auto",
+        "default_weight_falloff": 2.8,
+        "recommended_animations": ["hover", "idle", "alert", "strafe", "attack", "hit", "roll", "charge"],
+        "allowed_animations": [
+            "idle", "breathe", "hover", "alert", "strafe", "jump", "attack", "hit", "roll",
+            "charge", "victory", "bounce", "spin", "wobble",
+        ],
+    },
+    {
+        "id": "serpentine",
+        "label": "Serpentine / tentacle",
+        "description": "Snakes, tails, tentacles and elongated flexible meshes with a long smooth chain.",
+        "default_spine_joints": 9,
+        "default_axis_mode": "auto",
+        "default_weight_falloff": 1.6,
+        "recommended_animations": ["idle", "breathe", "hover", "alert", "strafe", "attack", "hit", "charge", "wobble"],
+        "allowed_animations": [
+            "idle", "breathe", "hover", "alert", "strafe", "attack", "hit", "roll",
+            "charge", "victory", "bounce", "spin", "wobble",
+        ],
+    },
+]
+RIG_PROFILES_BY_ID = {profile["id"]: profile for profile in RIG_PROFILES}
+DEFAULT_RIG_PROFILE = "prop"
 
 _jobs: dict[str, dict[str, Any]] = {}
 _processes: dict[str, subprocess.Popen] = {}
@@ -131,6 +216,8 @@ def capabilities() -> dict[str, Any]:
             },
         ],
         "animations": ANIMATIONS,
+        "rig_profiles": RIG_PROFILES,
+        "default_rig_profile": DEFAULT_RIG_PROFILE,
         "default_spine_joints": 5,
         "active_jobs": active,
     }
@@ -172,22 +259,68 @@ def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dic
         unirig_status = unirig_installation_status()
         if not unirig_status["installed"]:
             raise RuntimeError(unirig_status["install_hint"])
-    animations = body.get("animations") or [item["id"] for item in ANIMATIONS]
+
+    raw_profile = body.get("rig_profile")
+    profile_was_explicit = raw_profile is not None and str(raw_profile).strip() != ""
+    rig_profile = str(raw_profile).strip().lower() if profile_was_explicit else DEFAULT_RIG_PROFILE
+    profile = RIG_PROFILES_BY_ID.get(rig_profile)
+    if profile is None:
+        raise ValueError(f"Unknown rig profile: {rig_profile}")
+
+    # Preserve the pre-profile API behaviour when old clients omit the field:
+    # all clips and the original 5/auto/2 defaults remain valid. New clients
+    # get the selected profile's curated clips and fitting defaults.
+    animations = body.get("animations")
+    if animations is None:
+        animations = (
+            list(profile["recommended_animations"])
+            if profile_was_explicit
+            else [item["id"] for item in ANIMATIONS]
+        )
     if not isinstance(animations, list) or not animations:
         raise ValueError("Select at least one animation")
+    if len(animations) > len(ANIMATION_IDS):
+        raise ValueError(f"Select at most {len(ANIMATION_IDS)} animations")
+    if any(not isinstance(item, str) for item in animations):
+        raise ValueError("Animation identifiers must be strings")
+    animations = list(dict.fromkeys(item.strip() for item in animations))
+    if not animations or any(not item for item in animations):
+        raise ValueError("Animation identifiers cannot be empty")
     invalid = [item for item in animations if item not in ANIMATION_IDS]
     if invalid:
         raise ValueError(f"Unknown animations: {', '.join(map(str, invalid))}")
+    if profile_was_explicit:
+        allowed = set(profile["allowed_animations"])
+        incompatible = [item for item in animations if item not in allowed]
+        if incompatible:
+            raise ValueError(
+                f"Animations not available for the {rig_profile} profile: "
+                + ", ".join(map(str, incompatible))
+            )
+
+    default_spine_joints = int(profile["default_spine_joints"]) if profile_was_explicit else 5
+    default_axis_mode = str(profile["default_axis_mode"]) if profile_was_explicit else "auto"
+    default_weight_falloff = float(profile["default_weight_falloff"]) if profile_was_explicit else 2.0
     try:
-        spine_joints = max(2, min(9, int(body.get("spine_joints") or 5)))
+        spine_joints = max(2, min(9, int(body.get("spine_joints") or default_spine_joints)))
     except (TypeError, ValueError):
-        spine_joints = 5
+        spine_joints = default_spine_joints
+    axis_mode = str(body.get("axis_mode") or default_axis_mode).lower()
+    if axis_mode not in {"auto", "x", "y", "z"}:
+        raise ValueError(f"Unknown skeleton axis: {axis_mode}")
+    try:
+        weight_falloff = max(1.0, min(6.0, float(body.get("weight_falloff") or default_weight_falloff)))
+    except (TypeError, ValueError):
+        weight_falloff = default_weight_falloff
 
     request_data = {
         "engine": engine,
         "source": os.path.abspath(source_path),
+        "rig_profile": rig_profile,
         "animations": [str(item) for item in animations],
         "spine_joints": spine_joints,
+        "axis_mode": axis_mode,
+        "weight_falloff": weight_falloff,
     }
     job_id = uuid.uuid4().hex
     job = {
@@ -200,6 +333,10 @@ def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dic
         "filename": None,
         "url": None,
         "engine": engine,
+        "rig_profile": rig_profile,
+        "spine_joints": spine_joints,
+        "axis_mode": axis_mode,
+        "weight_falloff": weight_falloff,
         "source_file": os.path.basename(source_path),
         "created_at": time.time(),
         "updated_at": time.time(),
@@ -384,12 +521,15 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                     "job_id": job_id,
                     "created_at": time.time(),
                     "params": {
-                        "model_type": "rig-procedural",
+                        "model_type": f"rig-{request_data['engine']}",
                         "rigged": True,
                         "rig_engine": request_data["engine"],
+                        "rig_profile": request_data.get("rig_profile", DEFAULT_RIG_PROFILE),
                         "source_file": source.name,
                         "animations": result_summary.get("animations") or request_data["animations"],
-                        "spine_joints": request_data["spine_joints"],
+                        "spine_joints": result_summary.get("joints", request_data["spine_joints"]),
+                        "axis_mode": result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
+                        "weight_falloff": result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
                         "prompt": f"Rigged from {source.name}",
                     },
                 },
@@ -414,6 +554,10 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             url=f"/api/v1/file/{filename}",
             size=output_path.stat().st_size,
             animations=result_summary.get("animations") or request_data["animations"],
+            rig_profile=result_summary.get("rig_profile", request_data.get("rig_profile", DEFAULT_RIG_PROFILE)),
+            spine_joints=result_summary.get("joints", request_data["spine_joints"]),
+            axis_mode=result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
+            weight_falloff=result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
         )
     except Exception as exc:
         with _lock:

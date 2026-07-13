@@ -12,7 +12,8 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 WIDTH, HEIGHT, FPS = 480, 270, 24
-Point = tuple[float, float, float]
+Point = tuple[float, float, float] | tuple[float, float, float, float]
+State = tuple[float, float, float, float]
 
 PRESETS: list[tuple[str, Point, Point, float, bool, str]] = [
     ("turntable", (50, 50, .8), (50, 50, .8), 5, True, "linear"),
@@ -36,6 +37,20 @@ PRESETS: list[tuple[str, Point, Point, float, bool, str]] = [
     ("exit-frame", (50, 50, .8), (120, -10, .25), 2, True, "dramatic"),
     ("floating-logo", (50, 45, .72), (50, 55, .72), 4, True, "ease"),
     ("orbit-layer", (50, 50, .45), (50, 50, .45), 5, True, "linear"),
+    ("game-spawn", (50, 55, .05, 0), (50, 50, .8, 1), 1.2, True, "bounce"),
+    ("loot-drop", (50, -18, .35), (50, 72, .72), 1.4, True, "bounce"),
+    ("item-pickup", (50, 68, .72, 1), (50, 20, .12, 0), .9, True, "dramatic"),
+    ("projectile-launch", (-12, 58, .16), (115, 42, .5), .75, True, "dramatic"),
+    ("boss-entrance", (50, -20, .18, 0), (50, 58, 1.25, 1), 2.2, False, "bounce"),
+    ("dodge-dash", (30, 55, .82), (78, 50, .68), .55, False, "dramatic"),
+    ("hit-knockback", (55, 48, .88), (32, 58, .62), .65, True, "bounce"),
+    ("power-up-rise", (50, 78, .3, .25), (50, 42, 1.05, 1), 1.8, True, "bounce"),
+    ("cinematic-push", (38, 55, .28), (54, 48, 1.18), 5.5, False, "ease"),
+    ("hero-flyover", (-18, 22, .22), (118, 72, 1.15), 4.2, True, "ease"),
+    ("fade-reveal", (50, 50, .78, 0), (50, 50, .92, 1), 2.5, False, "ease"),
+    ("foreground-parallax", (-28, 50, 1.55), (128, 50, 1.55), 7, False, "linear"),
+    ("crane-reveal", (50, 112, 1.3, .2), (50, 45, .72, 1), 4.5, False, "ease"),
+    ("portal-arrival", (50, 50, .02, 0), (50, 50, 1, 1), 1.6, True, "dramatic"),
 ]
 
 
@@ -49,13 +64,18 @@ def easing(value: float, curve: str) -> float:
     return value
 
 
-def motion_state(preset_id: str, start: Point, end: Point, curve: str, progress: float) -> Point:
+def normalize_point(point: Point) -> State:
+    return point[0], point[1], point[2], point[3] if len(point) > 3 else 1.0
+
+
+def motion_state(preset_id: str, start: Point, end: Point, curve: str, progress: float) -> State:
     if preset_id == "orbit-layer":
         angle = progress * math.pi * 4
         depth = math.sin(angle)
-        return 50 + math.cos(angle) * 18, 50 + depth * 9, .45 * (1 + depth * .12)
+        return 50 + math.cos(angle) * 18, 50 + depth * 9, .45 * (1 + depth * .12), 1
     value = easing(progress, curve)
-    return tuple(a + (b - a) * value for a, b in zip(start, end))  # type: ignore[return-value]
+    start_state, end_state = normalize_point(start), normalize_point(end)
+    return tuple(a + (b - a) * value for a, b in zip(start_state, end_state))  # type: ignore[return-value]
 
 
 def background() -> Image.Image:
@@ -82,8 +102,8 @@ def prepare_sprite(path: Path) -> Image.Image:
     return image.crop(box) if box else image
 
 
-def place_sprite(canvas: Image.Image, source: Image.Image, state: Point, spin: bool, progress: float, depth_order: int = 0) -> None:
-    x, y, scale = state
+def place_sprite(canvas: Image.Image, source: Image.Image, state: State, spin: bool, progress: float, depth_order: int = 0) -> None:
+    x, y, scale, opacity = state
     base = 170 * scale / .8
     ratio = source.width / max(1, source.height)
     width = base if ratio >= 1 else base * ratio
@@ -94,6 +114,8 @@ def place_sprite(canvas: Image.Image, source: Image.Image, state: Point, spin: b
     sprite = source.resize((max(1, round(width)), max(1, round(height))), Image.Resampling.LANCZOS)
     if spin and math.cos(progress * math.pi * 4) < 0:
         sprite = sprite.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    if opacity < 1:
+        sprite.putalpha(sprite.getchannel("A").point(lambda value: round(value * max(0, opacity))))
     shadow = Image.new("RGBA", sprite.size, (0, 0, 0, 0))
     shadow.putalpha(sprite.getchannel("A").filter(ImageFilter.GaussianBlur(8)))
     px, py = round(WIDTH * x / 100 - sprite.width / 2), round(HEIGHT * y / 100 - sprite.height / 2)
@@ -107,7 +129,7 @@ def render_frame(primary: Image.Image, secondary: Image.Image, preset: tuple[str
     draw = ImageDraw.Draw(frame)
     if poster:
         samples = [motion_state(preset_id, start, end, curve, index / 24) for index in range(25)]
-        points = [(WIDTH * x / 100, HEIGHT * y / 100) for x, y, _scale in samples]
+        points = [(WIDTH * x / 100, HEIGHT * y / 100) for x, y, _scale, _opacity in samples]
         draw.line(points, fill=(70, 220, 255, 150), width=3)
         for index, point in enumerate(points[::4]):
             radius = 2 if index < 6 else 4
@@ -117,7 +139,7 @@ def render_frame(primary: Image.Image, secondary: Image.Image, preset: tuple[str
         depth = math.sin(progress * math.pi * 4)
         if depth < 0:
             place_sprite(frame, primary, state, spin, progress)
-        place_sprite(frame, secondary, (50, 50, .72), False, progress)
+        place_sprite(frame, secondary, (50, 50, .72, 1), False, progress)
         if depth >= 0:
             place_sprite(frame, primary, state, spin, progress)
     else:
@@ -149,11 +171,13 @@ def main() -> None:
     parser.add_argument("--primary", required=True, type=Path)
     parser.add_argument("--secondary", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--only", nargs="*", help="Generate only these preset ids")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     primary, secondary = prepare_sprite(args.primary), prepare_sprite(args.secondary)
-    for index, preset in enumerate(PRESETS, 1):
-        print(f"[{index:02d}/{len(PRESETS)}] {preset[0]}", flush=True)
+    presets = [preset for preset in PRESETS if not args.only or preset[0] in args.only]
+    for index, preset in enumerate(presets, 1):
+        print(f"[{index:02d}/{len(presets)}] {preset[0]}", flush=True)
         encode_preview(args.output, primary, secondary, preset)
 
 
