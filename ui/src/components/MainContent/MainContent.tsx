@@ -3,8 +3,11 @@ import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked } f
 import { TabFilter } from './TabFilter'
 import { ThumbnailGallery } from './ThumbnailGallery'
 import { MediaFeedItem } from './MediaFeedItem'
+import { SceneAnimatorPanel } from '../Sidebar/SceneAnimatorPanel'
+import { RigAnimatePanel } from '../Sidebar/RigAnimatePanel'
 import { useStore } from '../../stores/useStore'
 import type { GenerationJob } from '../../types'
+import { stageSceneForEditor } from '../../lib/sceneOutput'
 
 function WorkspaceSelector() {
   const workspaces = useStore(s => s.workspaces)
@@ -277,6 +280,7 @@ export function MainContent() {
   const stopGeneration = useStore(s => s.stopGeneration)
   const dismissJob = useStore(s => s.dismissJob)
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
+  const setMediaFilter = useStore(s => s.setMediaFilter)
 
   const feedRef = useRef<HTMLDivElement>(null)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -370,6 +374,13 @@ export function MainContent() {
   }, [setSelectedOutput])
 
   const handleThumbnailClick = useCallback((index: number) => {
+    const file = outputs[index]
+    if (file?.type === 'scene') {
+      void stageSceneForEditor(file)
+        .then(() => setMediaFilter('scene3d'))
+        .catch(error => console.error('Failed to open scene:', error))
+      return
+    }
     setSelectedOutput(index)
     setActiveIndex(index)
     scrollTargetIndex.current = index
@@ -443,7 +454,7 @@ export function MainContent() {
       }
     }
     requestAnimationFrame(align)
-  }, [setSelectedOutput, getItemHeight, placeholderTotalHeight])
+  }, [getItemHeight, outputs, placeholderTotalHeight, setMediaFilter, setSelectedOutput])
 
   // Infinite scroll: load more when near the bottom
   const loadingMore = useRef(false)
@@ -493,6 +504,7 @@ export function MainContent() {
     }
     return items
   }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets])
+  const mediaFilter = useStore(s => s.mediaFilter)
 
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden">
@@ -501,7 +513,9 @@ export function MainContent() {
         <TabFilter />
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-[10px] md:text-xs text-text-muted hidden md:block">
-            {outputsTotal > outputs.length
+            {mediaFilter === 'scene3d' ? '3D Video editor'
+              : mediaFilter === 'animate3d' ? 'Rig & Animate'
+              : outputsTotal > outputs.length
               ? `${outputs.length} / ${outputsTotal} items`
               : `${outputs.length} ${outputs.length === 1 ? 'item' : 'items'}`}
           </div>
@@ -511,6 +525,19 @@ export function MainContent() {
 
       {/* Content area: feed + thumbnails */}
       <div className="flex-1 flex flex-row gap-0 overflow-hidden relative">
+        {mediaFilter === 'scene3d' ? (
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
+            <div className="max-w-[1600px] mx-auto">
+              <SceneAnimatorPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'animate3d' ? (
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
+            <div className="max-w-2xl mx-auto">
+              <RigAnimatePanel />
+            </div>
+          </div>
+        ) : <>
         {/* Scrollable media feed */}
         <div
           ref={feedRef}
@@ -601,6 +628,7 @@ export function MainContent() {
           activeIndex={activeIndex}
           onThumbnailClick={handleThumbnailClick}
         />
+        </>}
       </div>
     </main>
   )

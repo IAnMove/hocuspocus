@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react'
-import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Box } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties } from 'react'
+import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Box, Film } from 'lucide-react'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { useStore } from '../../stores/useStore'
 import { getUploadUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
 import { modelDisplayName } from '../../lib/modelDisplay'
+import { stageSceneForEditor } from '../../lib/sceneOutput'
 
 interface Props {
   file: OutputFile
@@ -31,11 +32,6 @@ function RetryImage({ url, alt }: { url: string; alt: string }) {
   const [src, setSrc] = useState(url)
   const retries = useRef(0)
   const maxRetries = 5
-
-  useEffect(() => {
-    retries.current = 0
-    setSrc(url)
-  }, [url])
 
   const scheduleRetry = useCallback(() => {
     if (retries.current < maxRetries) {
@@ -74,6 +70,7 @@ function RetryImage({ url, alt }: { url: string; alt: string }) {
 
 export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, style }: Props) {
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
+  const setMediaFilter = useStore(s => s.setMediaFilter)
   const loadSettingsFromOutput = useStore(s => s.loadSettingsFromOutput)
   const rerollGeneration = useStore(s => s.rerollGeneration)
   const deleteOutput = useStore(s => s.deleteSelectedOutput)
@@ -173,7 +170,13 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const modelLabel = modelDisplayName(modelType, models)
   const isAudio = file.type === 'audio'
   const isModel3d = file.type === 'model3d'
+  const isScene = file.type === 'scene'
   const canPreviewModel3d = isModel3d && /\.(glb|gltf)$/i.test(file.name)
+  // Rigged outputs carry their baked glTF clip names in the sidecar; the
+  // viewer autoplays one and offers a selector to switch.
+  const isRigged = !!params?.rigged
+  const riggedClips = useMemo(() => (Array.isArray(params?.animations) ? (params.animations as string[]) : []), [params])
+  const [activeClip, setActiveClip] = useState<string | null>(null)
 
   // Keep the model-viewer runtime out of Maestro's main Image/Video/Audio
   // bundle. It is loaded only when a 3D gallery item is actually rendered.
@@ -196,8 +199,14 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const imageEndFile = Array.isArray(rawEnd) ? (rawEnd.find((f: string) => f) || null) : rawEnd
 
   const handleSelect = useCallback(() => {
+    if (isScene) {
+      void stageSceneForEditor(file)
+        .then(() => setMediaFilter('scene3d'))
+        .catch(error => console.error('Failed to open scene:', error))
+      return
+    }
     setSelectedOutput(index)
-  }, [index, setSelectedOutput])
+  }, [file, index, isScene, setMediaFilter, setSelectedOutput])
 
   const handleLoadSettings = useCallback(() => {
     setSelectedOutput(index)
@@ -394,10 +403,14 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             <p className="text-xs text-text-muted mb-2">{file.name}</p>
             <audio key={file.url} src={file.url} controls className="w-64" />
           </div>
+        ) : isScene ? (
+          file.thumbnail_url
+            ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" />
+            : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
         ) : isModel3d ? (
           <div className="w-full h-full relative">
             {canPreviewModel3d ? (
-              <model-viewer key={file.url} src={getFileUrl(file.name)} alt={file.name} camera-controls auto-rotate shadow-intensity="1" exposure="1" loading="lazy" className="w-full h-full" />
+              <model-viewer key={file.url} src={getFileUrl(file.name)} alt={file.name} camera-controls auto-rotate={isRigged ? undefined : true} autoplay={isRigged ? true : undefined} animation-name={isRigged && activeClip ? activeClip : undefined} shadow-intensity="1" exposure="1" loading="lazy" className="w-full h-full" />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center px-4">
                 <div className="w-16 h-16 rounded-2xl bg-bg-active flex items-center justify-center"><Box size={26} className="text-accent-blue" /></div>
@@ -411,6 +424,16 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             >
               Download
             </a>
+            {isRigged && riggedClips.length > 0 && (
+              <select
+                value={activeClip ?? riggedClips[0]}
+                onChange={event => setActiveClip(event.target.value)}
+                className="absolute bottom-2 left-2 px-2 py-1 text-[10px] bg-black/60 border border-white/20 rounded-lg text-white"
+                title="Animation clip"
+              >
+                {riggedClips.map((clip: string) => <option key={clip} value={clip}>{clip}</option>)}
+              </select>
+            )}
           </div>
         ) : (
           <RetryImage url={file.url} alt={file.name} />

@@ -26,6 +26,9 @@ export interface ModelDef {
   // Hunyuan3D variants stored in one shared HF repo: deleting this
   // model's cache also removes the weights of every listed sibling.
   shared_cache_group?: string[]
+  // Weight-managed tool models (e.g. UniRig): shown in the settings
+  // catalog for download/delete, but never selectable for generation.
+  tool_only?: boolean
 }
 
 export interface Resolution {
@@ -154,7 +157,7 @@ export interface GenerationJob {
 export interface OutputFile {
   name: string
   url: string
-  type: 'video' | 'image' | 'audio' | 'model3d'
+  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene'
   mode: GenerationMode | 'model3d' | null
   /** Edit sub-mode tag from the .meta.json sidecar params (set by the
    *  retake/inpaint/outpaint/restyle/edit_anything endpoints). The gallery's
@@ -168,7 +171,65 @@ export interface OutputFile {
   thumbnail_url?: string | null
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'avatars' | 'multiclip' | 'favorites'
+export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay'
+export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
+
+export interface SceneLayer {
+  id: string
+  name: string
+  type: SceneLayerType
+  source: string
+  thumbnail?: string
+  visible: boolean
+  z: number
+  /** Object URLs cannot survive a scene export/import and need reassignment. */
+  missingAsset?: boolean
+  /** Image/video is cropped to cover the complete scene frame. */
+  fill?: boolean
+  transform: {
+    x: number
+    y: number
+    scale: number
+    opacity: number
+    /** 2D rotation for images/video/overlays. */
+    rotation?: number
+    /** Persisted model-viewer camera orbit in degrees. */
+    rotationX?: number
+    rotationY?: number
+  }
+  animation: {
+    start: { x: number; y: number; scale: number; opacity?: number }
+    end: { x: number; y: number; scale: number; opacity?: number }
+    duration: number
+    curve: SceneCurve
+    spin?: boolean
+    rotationSpeed?: number
+    /** Name of a baked glTF skeletal clip to play (rigged GLB layers). */
+    clip?: string
+    /** Optional motion relationship: this layer circles another scene layer. */
+    orbit?: {
+      targetLayerId: string
+      radiusX: number
+      radiusY: number
+      turns: number
+      phase: number
+      /** Fine adjustment from the target layer's visual center, in scene percent. */
+      centerOffsetX?: number
+      centerOffsetY?: number
+    }
+  }
+}
+
+export interface Scene {
+  version: 1
+  name: string
+  width: number
+  height: number
+  duration: number
+  layers: SceneLayer[]
+}
+
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
 export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'

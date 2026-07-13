@@ -17,6 +17,9 @@ export interface ApiModel {
   // Hunyuan3D variants stored in one shared HF repo: deleting this
   // model's cache also removes the weights of every listed sibling.
   shared_cache_group?: string[]
+  // Weight-managed tool models (e.g. UniRig): shown in the settings
+  // catalog for download/delete, but never selectable for generation.
+  tool_only?: boolean
 }
 
 export interface ApiFamily {
@@ -32,7 +35,7 @@ export interface ApiResolution {
 
 export interface ApiOutput {
   name: string
-  type: 'video' | 'image' | 'audio' | 'model3d'
+  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene'
   mode: string | null
   favorite?: boolean
   size: number
@@ -296,6 +299,19 @@ export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly
   if (!res.ok) throw new Error('Failed to fetch outputs')
   const data = await res.json()
   return { outputs: data.outputs, total: data.total ?? data.outputs.length }
+}
+
+export async function saveScene(scene: import('../types').Scene, preview: string): Promise<{ name: string; type: 'scene'; url: string; thumbnail_url: string }> {
+  const res = await fetch(`${BASE}/api/v1/scenes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scene, preview }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to save scene' }))
+    throw new Error(error.detail || 'Failed to save scene')
+  }
+  return res.json()
 }
 
 export function getFileUrl(filename: string): string {
@@ -1099,6 +1115,86 @@ export async function fetchHunyuan3DJob(jobId: string): Promise<Hunyuan3DJob> {
 export async function cancelHunyuan3DJob(jobId: string): Promise<Hunyuan3DJob> {
   const res = await fetch(`${BASE}/api/v1/model3d/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
   if (!res.ok) throw new Error('Failed to cancel Hunyuan3D job')
+  return res.json()
+}
+
+// --- Rig & Animate (procedural skeletons for 3D outputs) ---
+
+export interface RigEngine {
+  id: string
+  label: string
+  description: string
+  installed: boolean
+  install_hint: string | null
+}
+
+export interface RigAnimation {
+  id: string
+  label: string
+  description: string
+}
+
+export interface RigCapabilities {
+  engines: RigEngine[]
+  animations: RigAnimation[]
+  default_spine_joints: number
+  active_jobs: number
+}
+
+export interface RigJob {
+  job_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  phase: string
+  message: string
+  error: string | null
+  filename: string | null
+  url: string | null
+  engine: string
+  source_file: string
+  animations?: string[]
+  created_at: number
+  updated_at: number
+}
+
+export async function fetchRigCapabilities(): Promise<RigCapabilities> {
+  const res = await fetch(`${BASE}/api/v1/rig/capabilities`)
+  if (!res.ok) throw new Error('Failed to fetch rig capabilities')
+  return res.json()
+}
+
+export async function startRigJob(params: {
+  source: string
+  engine?: string
+  animations?: string[]
+  spine_joints?: number
+}): Promise<RigJob> {
+  const res = await fetch(`${BASE}/api/v1/rig/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Rig job failed to start' }))
+    throw new Error(err.detail || 'Rig job failed to start')
+  }
+  return res.json()
+}
+
+export async function fetchRigJob(jobId: string): Promise<RigJob> {
+  const res = await fetch(`${BASE}/api/v1/rig/status/${encodeURIComponent(jobId)}`)
+  if (!res.ok) {
+    // 404 → the registry lost the job (backend restart); callers stop polling.
+    const error = new Error(res.status === 404 ? 'Rig job not found' : 'Failed to fetch rig job')
+    ;(error as Error & { status?: number }).status = res.status
+    throw error
+  }
+  return res.json()
+}
+
+export async function cancelRigJob(jobId: string): Promise<RigJob> {
+  const res = await fetch(`${BASE}/api/v1/rig/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to cancel rig job')
   return res.json()
 }
 

@@ -45,6 +45,7 @@ export function ModelSelector() {
   const groups = modeFamilies.map(family => ({
     family,
     models: getModelsForFamily(family.id, models, generationMode, effectiveSubMode)
+      .filter(m => !m.tool_only)
       .filter(m => enabledModels.has(m.model_type))
       .filter(m => !m.nsfw_only || nsfwMode),
   })).filter(g => g.models.length > 0)
@@ -53,6 +54,7 @@ export function ModelSelector() {
   // "+N" hint that nudges users toward Settings → Enabled Models.
   const disabledCount = modeFamilies.reduce((n, family) => {
     const avail = getModelsForFamily(family.id, models, generationMode, effectiveSubMode)
+      .filter(m => !m.tool_only)
       .filter(m => !m.nsfw_only || nsfwMode)
     return n + avail.filter(m => !enabledModels.has(m.model_type)).length
   }, 0)

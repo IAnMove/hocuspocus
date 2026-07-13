@@ -9,6 +9,12 @@ declare module 'react' {
         'camera-controls'?: boolean
         'auto-rotate'?: boolean
         'shadow-intensity'?: string
+        'camera-orbit'?: string
+        'interaction-prompt'?: 'auto' | 'none'
+        'rotation-per-second'?: string
+        // glTF animation playback (rigged Maestro outputs)
+        autoplay?: boolean
+        'animation-name'?: string
         exposure?: string
         loading?: 'auto' | 'lazy' | 'eager'
       }

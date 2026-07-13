@@ -14,6 +14,7 @@ Environment variables:
 """
 
 import gc
+import base64
 import sys
 import torch
 import os
@@ -368,6 +369,28 @@ def list_models():
             "shared_cache_group": [item["id"] for item in model3d_service.models_sharing_repo(model["id"])],
         })
 
+    # UniRig is a generative ML model too (autoregressive skeleton + learned
+    # skinning), so its weights are managed from the same catalog. tool_only
+    # keeps it out of the generation model selectors: it rigs existing
+    # meshes from the Animate tab instead of generating new ones.
+    from services import rig_service
+    models.append({
+        "model_type": "unirig",
+        "name": "UniRig (AI Rigging)",
+        "family": "hunyuan3d",
+        "architecture": "unirig",
+        "is_i2v": False,
+        "is_t2v": False,
+        "guidance_max_phases": 1,
+        "fps": 0,
+        "supports_end_frame": False,
+        "supports_audio": False,
+        "supports_ref_images": False,
+        "is_downloaded": rig_service.is_unirig_downloaded(),
+        "nsfw_only": False,
+        "tool_only": True,
+    })
+
     return {"families": families, "models": models}
 
 
@@ -407,6 +430,10 @@ def debug_model(model_type: str):
 @api.delete("/api/v1/models/{model_type}")
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
+    if model_type == "unirig":
+        from services import rig_service
+        deleted = rig_service.delete_unirig_cache()
+        return {"deleted": deleted, "model_type": model_type, "affected_models": []}
     if model_type in model3d_service.MODEL_BY_ID:
         affected = [item["id"] for item in model3d_service.models_sharing_repo(model_type)]
         deleted = model3d_service.delete_model_cache(model_type)
@@ -4937,6 +4964,62 @@ def unload_model3d():
     from services import model3d_service
     cancelled = model3d_service.cancel_all_jobs()
     return {"status": "ok", "cancelled_jobs": cancelled, "model_loaded": False}
+
+
+# ============================================================================
+# API Routes: Rig & Animate (procedural skeletons for 3D outputs)
+# ============================================================================
+
+@api.get("/api/v1/rig/capabilities")
+def rig_capabilities():
+    from services import rig_service
+    return rig_service.capabilities()
+
+
+@api.post("/api/v1/rig/generate")
+async def generate_rig(request: Request):
+    from services import rig_service
+    body = await request.json()
+    source_name = str(body.get("source") or "").strip()
+    if not source_name:
+        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
+    if not source_name.lower().endswith(".glb"):
+        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
+    source_path = _safe_join(_workspace_dir(), source_name)
+    if not source_path or not os.path.isfile(source_path):
+        # Also accept absolute/upload paths through the shared 3D resolver.
+        source_path = _resolve_model3d_input_path(source_name)
+    if not source_path or not os.path.isfile(source_path):
+        raise HTTPException(status_code=400, detail="Source 3D model not found")
+    try:
+        return rig_service.start_job(
+            body=body,
+            source_path=source_path,
+            output_dir=_workspace_dir(),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/api/v1/rig/status/{job_id}")
+def rig_job_status(job_id: str):
+    from services import rig_service
+    job = rig_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Rig job not found")
+    return job
+
+
+@api.post("/api/v1/rig/jobs/{job_id}/cancel")
+def cancel_rig_job(job_id: str):
+    from services import rig_service
+    job = rig_service.cancel_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Rig job not found")
+    return job
 
 
 # ============================================================================
@@ -10525,6 +10608,70 @@ def toggle_favorite(name: str):
     return {"name": name, "favorite": is_fav}
 
 
+@api.post("/api/v1/scenes")
+def save_scene_output(body: dict):
+    """Persist a Scene Animator project as a first-class workspace output.
+
+    The JSON keeps lightweight references to Maestro outputs/uploads while the
+    PNG is only a gallery preview. Locally imported assets are uploaded by the
+    client before this endpoint is called, so no transient blob: URL is saved.
+    """
+    import re as _re_scene
+
+    scene = body.get("scene")
+    preview = body.get("preview")
+    if not isinstance(scene, dict) or scene.get("version") != 1:
+        raise HTTPException(status_code=400, detail="A version 1 scene is required")
+    layers = scene.get("layers")
+    if not isinstance(layers, list) or len(layers) > 500:
+        raise HTTPException(status_code=400, detail="Scene layers must be a list of at most 500 items")
+    if not isinstance(preview, str) or not preview.startswith("data:image/png;base64,"):
+        raise HTTPException(status_code=400, detail="A PNG scene preview is required")
+
+    try:
+        preview_bytes = base64.b64decode(preview.split(",", 1)[1], validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid PNG preview") from exc
+    if len(preview_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Scene preview is too large")
+
+    raw_name = str(scene.get("name") or "Untitled scene").strip()
+    safe_name = _re_scene.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "scene"
+    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+    stem = f"{stamp}_{safe_name}_{uuid.uuid4().hex[:6]}.scene"
+    out_dir = _workspace_dir()
+    os.makedirs(out_dir, exist_ok=True)
+    scene_name = f"{stem}.json"
+    preview_name = f"{stem}.preview.png"
+    scene_path = os.path.join(out_dir, scene_name)
+    preview_path = os.path.join(out_dir, preview_name)
+
+    scene_tmp = scene_path + ".tmp"
+    preview_tmp = preview_path + ".tmp"
+    try:
+        with open(scene_tmp, "w", encoding="utf-8") as handle:
+            json.dump(scene, handle, ensure_ascii=False, indent=2)
+        with open(preview_tmp, "wb") as handle:
+            handle.write(preview_bytes)
+        os.replace(scene_tmp, scene_path)
+        os.replace(preview_tmp, preview_path)
+    except Exception as exc:
+        for path in (scene_tmp, preview_tmp):
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                pass
+        raise HTTPException(status_code=500, detail=f"Failed to save scene: {exc}") from exc
+
+    return {
+        "name": scene_name,
+        "type": "scene",
+        "url": f"/api/v1/file/{scene_name}",
+        "thumbnail_url": f"/api/v1/file/{preview_name}",
+    }
+
+
 @api.get("/api/v1/outputs")
 def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = ""):
     """List generated output files (newest first) from the active workspace.
@@ -10592,7 +10739,7 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
         if not os.path.isfile(filepath):
             continue
         ext = os.path.splitext(name)[1].lower()
-        if ext not in media_exts:
+        if ext not in media_exts and not name.endswith(".scene.json"):
             continue
         raw_entries.append((name, filepath, ext, os.path.getmtime(filepath)))
 
@@ -10639,7 +10786,8 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
     # Second pass: build the file list using the cached sidecar data.
     files = []
     for name, filepath, ext, mtime in raw_entries:
-        ftype = "video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image"))
+        is_scene = name.endswith(".scene.json")
+        ftype = "scene" if is_scene else ("video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image")))
         cached = sidecar_cache.get(name) or {}
         mode = cached.get("mode")
         edit_sub_mode = cached.get("edit_sub_mode")
@@ -10672,7 +10820,7 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
             "size": size,
             "created_at": mtime,
             "url": f"/api/v1/file/{name}",
-            "thumbnail_url": cached.get("thumbnail_url"),
+            "thumbnail_url": (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png" if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png")) else cached.get("thumbnail_url")),
         })
 
     # Special filters: return ALL matches, bypass pagination
