@@ -163,6 +163,8 @@ export interface OutputFile {
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'camera'
 export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
 export type SceneFrameRate = 30 | 60
+export type SceneBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken'
+export type SceneMask = 'none' | 'rounded' | 'ellipse'
 
 export interface SceneKeyframe {
   id: string
@@ -211,6 +213,19 @@ export interface SceneLayer {
     offsetY?: number
     strength?: number
     rotationOffset?: number
+  }
+  /** 2D composition effects shared by DOM preview and canvas capture. */
+  effects?: {
+    blur?: number
+    brightness?: number
+    contrast?: number
+    saturation?: number
+    hue?: number
+    glow?: number
+    shadow?: number
+    blendMode?: SceneBlendMode
+    mask?: SceneMask
+    maskRadius?: number
   }
   transform: {
     x: number

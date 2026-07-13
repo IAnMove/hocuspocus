@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
-import type { Scene, SceneAnimationEvent, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType } from '../../types'
+import type { Scene, SceneAnimationEvent, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
@@ -24,6 +24,7 @@ type PresetCategory = 'classic' | 'game' | 'cinematic'
 type Preset = { id: string; label: string; category: PresetCategory; start: Point; end: Point; duration: number; spin: boolean; curve: SceneCurve; requiresTarget?: boolean; preview: string; poster: string }
 type CameraPreset = { id: string; label: string; start: Point; end: Point; duration: number; curve: SceneCurve; shake?: { amount: number; frequency: number; seed?: number } }
 type Gesture = { id: string; mode: 'move' | 'resize' | 'orbit'; startX: number; startY: number; x: number; y: number; scale: number; rotationX: number; rotationY: number }
+type LayerEffects = Required<NonNullable<SceneLayer['effects']>>
 
 const makePoint = (x: number, y: number, scale: number): Point => ({ x, y, scale })
 const CAMERA_PRESETS: CameraPreset[] = [
@@ -59,12 +60,46 @@ const PRESETS: Preset[] = ([
 ]).map(preset => ({ ...preset, preview: `/preset-previews/${preset.id}.webm`, poster: `/preset-previews/${preset.id}.webp` }))
 
 const DEFAULT_COMPOSITION: NonNullable<Scene['composition']> = { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }
+const DEFAULT_EFFECTS: LayerEffects = { blur: 0, brightness: 1, contrast: 1, saturation: 1, hue: 0, glow: 0, shadow: 0, blendMode: 'normal', mask: 'none', maskRadius: 12 }
 const blankScene = (): AnimatorScene => ({ version: 1, name: 'Untitled scene', width: 1280, height: 720, fps: 30, duration: 5, layers: [], composition: { ...DEFAULT_COMPOSITION } })
 const AUTOSAVE_KEY = 'maestro-scene-animator-autosave-v1'
 const HISTORY_LIMIT = 80
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const finiteNumber = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback
 const boundedNumber = (value: unknown, fallback: number, min: number, max: number) => Math.max(min, Math.min(max, finiteNumber(value, fallback)))
+const normalizedEffects = (value: SceneLayer['effects'] | undefined): LayerEffects => ({
+  blur: boundedNumber(value?.blur, DEFAULT_EFFECTS.blur, 0, 3),
+  brightness: boundedNumber(value?.brightness, DEFAULT_EFFECTS.brightness, 0, 3),
+  contrast: boundedNumber(value?.contrast, DEFAULT_EFFECTS.contrast, 0, 3),
+  saturation: boundedNumber(value?.saturation, DEFAULT_EFFECTS.saturation, 0, 4),
+  hue: boundedNumber(value?.hue, DEFAULT_EFFECTS.hue, -180, 180),
+  glow: boundedNumber(value?.glow, DEFAULT_EFFECTS.glow, 0, 5),
+  shadow: boundedNumber(value?.shadow, DEFAULT_EFFECTS.shadow, 0, 8),
+  blendMode: ['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken'].includes(value?.blendMode ?? '') ? value?.blendMode as SceneBlendMode : 'normal',
+  mask: ['none', 'rounded', 'ellipse'].includes(value?.mask ?? '') ? value?.mask as SceneMask : 'none',
+  maskRadius: boundedNumber(value?.maskRadius, DEFAULT_EFFECTS.maskRadius, 0, 50),
+})
+const effectFilter = (effects: LayerEffects, pixelUnit: number) => {
+  const filters = [`brightness(${effects.brightness})`, `contrast(${effects.contrast})`, `saturate(${effects.saturation})`, `hue-rotate(${effects.hue}deg)`]
+  if (effects.blur > 0) filters.unshift(`blur(${(effects.blur * pixelUnit).toFixed(2)}px)`)
+  if (effects.glow > 0) filters.push(`drop-shadow(0 0 ${(effects.glow * pixelUnit).toFixed(2)}px rgba(96,165,250,.9))`)
+  if (effects.shadow > 0) filters.push(`drop-shadow(0 ${(effects.shadow * pixelUnit * .35).toFixed(2)}px ${(effects.shadow * pixelUnit * .7).toFixed(2)}px rgba(0,0,0,.8))`)
+  return filters.join(' ')
+}
+const hasCanvasFilterEffects = (effects: LayerEffects) => effects.blur > 0 || effects.glow > 0 || effects.shadow > 0 || effects.brightness !== 1 || effects.contrast !== 1 || effects.saturation !== 1 || effects.hue !== 0
+const applyLayerMask = (context: CanvasRenderingContext2D, effects: LayerEffects, width: number, height: number) => {
+  context.beginPath()
+  if (effects.mask === 'none') context.rect(-width / 2, -height / 2, width, height)
+  else if (effects.mask === 'ellipse') context.ellipse(0, 0, width / 2, height / 2, 0, 0, Math.PI * 2)
+  else {
+    const x = -width / 2; const y = -height / 2; const radius = Math.min(width, height) * effects.maskRadius / 100
+    context.moveTo(x + radius, y); context.lineTo(x + width - radius, y); context.arcTo(x + width, y, x + width, y + radius, radius)
+    context.lineTo(x + width, y + height - radius); context.arcTo(x + width, y + height, x + width - radius, y + height, radius)
+    context.lineTo(x + radius, y + height); context.arcTo(x, y + height, x, y + height - radius, radius)
+    context.lineTo(x, y + radius); context.arcTo(x, y, x + radius, y, radius)
+  }
+  context.closePath(); context.clip()
+}
 const isMissing = (source: string) => source.startsWith('blob:')
 const isAnimatorLayerType = (value: unknown): value is AnimatorLayerType => value === 'model3d' || value === 'image' || value === 'video' || value === 'overlay' || value === 'camera'
 const isVisualLayer = (layer: AnimatorLayer): layer is VisualAnimatorLayer => layer.type !== 'camera'
@@ -174,6 +209,7 @@ export function SceneAnimatorPanel() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [historyRevision, setHistoryRevision] = useState(0)
   const [lastAutosaveAt, setLastAutosaveAt] = useState<number | null>(null)
+  const [previewWidth, setPreviewWidth] = useState(1280)
   const [clipsByLayer, setClipsByLayer] = useState<Record<string, string[]>>({})
   const canvasRef = useRef<HTMLDivElement>(null)
   const animationRef = useRef<number | null>(null)
@@ -196,8 +232,18 @@ export function SceneAnimatorPanel() {
   const snapCoordinate = (value: number) => composition.snap ? Math.round(value / Math.max(1, composition.gridSize)) * Math.max(1, composition.gridSize) : value
   const generatedModels = outputs.filter(output => output.type === 'model3d' && /\.glb$/i.test(output.name))
   const generatedMedia = outputs.filter(output => output.type === 'image' || output.type === 'video')
+  const previewShortSide = Math.min(previewWidth, previewWidth * scene.height / Math.max(1, scene.width))
 
   useEffect(() => { void import('@google/model-viewer') }, [])
+  useEffect(() => {
+    const element = canvasRef.current
+    if (!element) return
+    const update = () => setPreviewWidth(Math.max(1, element.getBoundingClientRect().width))
+    update()
+    if (typeof ResizeObserver === 'undefined') { window.addEventListener('resize', update); return () => window.removeEventListener('resize', update) }
+    const observer = new ResizeObserver(update); observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
   useEffect(() => {
     const layer = sceneRef.current.layers.find(item => item.id === selectedId)
     setSelectedKeyframeId(id => id && layer && getSceneKeyframes(layer).some(frame => frame.id === id) ? id : null)
@@ -660,6 +706,7 @@ export function SceneAnimatorPanel() {
     if (dependencyWouldCycle(selected.id, targetId)) { setMessage('That orbit would create a dependency cycle.'); return }
     updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, targetLayerId: targetId } : undefined } }))
   }
+  const updateLayerEffects = (id: string, patch: Partial<LayerEffects>) => updateLayer(id, layer => ({ ...layer, effects: normalizedEffects({ ...normalizedEffects(layer.effects), ...patch }) }))
   const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, keyframes: layer.animation.keyframes, events: getSceneEvents(layer), duration: layer.animation.duration, curve: layer.animation.curve, offset: layer.animation.offset, speed: layer.animation.speed, loop: layer.animation.loop, trimStart: layer.animation.trimStart, trimEnd: layer.animation.trimEnd, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, shake: layer.animation.shake, orbit: layer.animation.orbit })
   const applyMotion = (raw: unknown) => {
     if (!selected || selected.locked || !raw || typeof raw !== 'object') throw new Error('Select an unlocked layer and provide a motion object.')
@@ -854,6 +901,7 @@ export function SceneAnimatorPanel() {
           visible,
           locked: rawLayer.locked === true,
           relationship,
+          effects: isCamera ? undefined : normalizedEffects(rawLayer.effects),
           parallax: isCamera ? undefined : typeof rawLayer.parallax === 'number' && Number.isFinite(rawLayer.parallax) ? Math.max(0, Math.min(2, rawLayer.parallax)) : 1,
           transform,
           animation: { ...rawLayer.animation, start, end, keyframes: undefined, events, duration, curve, shake, orbit },
@@ -920,10 +968,14 @@ export function SceneAnimatorPanel() {
     if (!context) return false
     context.fillStyle = '#0b1020'; context.fillRect(0, 0, canvas.width, canvas.height)
     scene.layers.filter(layer => layer.visible && isVisualLayer(layer)).map(layer => ({ layer, state: renderedLayerState(layer, time) })).sort((a, b) => a.state.z - b.state.z).forEach(({ layer, state }) => {
+      const effects = normalizedEffects(layer.effects)
       context.save(); context.globalAlpha = state.opacity
+      context.globalCompositeOperation = effects.blendMode === 'normal' ? 'source-over' : effects.blendMode
+      if ('filter' in context) context.filter = effectFilter(effects, Math.min(canvas.width, canvas.height) / 100)
       const width = canvas.width * (layer.type === 'model3d' ? .52 : 1) * state.scale
       const height = canvas.height * (layer.type === 'model3d' ? .75 : 1) * state.scale
       context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100); context.rotate(state.rotation * Math.PI / 180)
+      applyLayerMask(context, effects, width, height)
       if (layer.type === 'model3d') {
         const viewer = canvasRef.current?.querySelector(`[data-layer-id="${layer.id}"]`)?.shadowRoot?.querySelector('canvas') as HTMLCanvasElement | null
         if (viewer) context.drawImage(viewer, -width / 2, -height / 2, width, height)
@@ -947,7 +999,8 @@ export function SceneAnimatorPanel() {
   const record = () => {
     if (!scene.layers.some(layer => layer.visible && isVisualLayer(layer))) { setMessage('Add a visible visual layer before recording.'); return }
     if (!('MediaRecorder' in window)) { setMessage('This browser cannot record the scene.'); return }
-    const canvas = document.createElement('canvas'); canvas.width = scene.width; canvas.height = scene.height; if (!canvas.getContext('2d')) return
+    const canvas = document.createElement('canvas'); canvas.width = scene.width; canvas.height = scene.height; const context = canvas.getContext('2d'); if (!context) return
+    if (!('filter' in context) && scene.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) { setMessage('This browser can preview layer filters but cannot capture them. Use Chromium/Chrome to record this scene.'); return }
     paintScene(canvas, 0)
     const stream = canvas.captureStream(fps); const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'; const videoBitsPerSecond = Math.round(Math.max(4_000_000, Math.min(60_000_000, scene.width * scene.height * fps * .12))); const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond }); const chunks: Blob[] = []
     recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }; recorder.onstop = () => { const url = URL.createObjectURL(new Blob(chunks, { type: mime })); const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${scene.width}x${scene.height}-${fps}fps-${Date.now()}.webm`; link.click(); URL.revokeObjectURL(url); setRecording(false) }
@@ -994,7 +1047,7 @@ export function SceneAnimatorPanel() {
       setSaving(false)
     }
   }
-  const numberInput = (label: string, value: number, change: (value: number) => void, min = -100, max = 200, step = 1) => <label className="text-[10px] text-text-muted">{label}<input type="number" min={min} max={max} step={step} value={value} onChange={event => { const next = Number(event.target.value); if (Number.isFinite(next)) change(next) }} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs" /></label>
+  const numberInput = (label: string, value: number, change: (value: number) => void, min = -100, max = 200, step = 1, disabled = false) => <label className="text-[10px] text-text-muted">{label}<input type="number" min={min} max={max} step={step} value={value} disabled={disabled} onChange={event => { const next = Number(event.target.value); if (Number.isFinite(next)) change(next) }} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50" /></label>
   const orbitPivot = (() => {
     if (!selected || !isVisualLayer(selected)) return null
     const orbit = selected?.animation.orbit
@@ -1005,7 +1058,12 @@ export function SceneAnimatorPanel() {
   })()
   const renderLayer = (layer: AnimatorLayer) => {
     if (layer.type === 'camera') return null
-    const state = renderedLayerState(layer); const common = { left: `${state.x}%`, top: `${state.y}%`, width: `${(layer.type === 'model3d' ? 52 : 100) * state.scale}%`, height: `${(layer.type === 'model3d' ? 75 : 100) * state.scale}%`, opacity: state.opacity, zIndex: state.z, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)` }; const selection = selectedId === layer.id
+    const effects = normalizedEffects(layer.effects)
+    const state = renderedLayerState(layer); const common: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: `${(layer.type === 'model3d' ? 52 : 100) * state.scale}%`, height: `${(layer.type === 'model3d' ? 75 : 100) * state.scale}%`, opacity: state.opacity, zIndex: state.z, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)`, mixBlendMode: effects.blendMode }; const selection = selectedId === layer.id
+    const effectStyle: CSSProperties = { filter: effectFilter(effects, previewShortSide / 100) }
+    const previewHeight = previewWidth * scene.height / Math.max(1, scene.width)
+    const layerShortSide = Math.min(previewWidth * (layer.type === 'model3d' ? .52 : 1) * state.scale, previewHeight * (layer.type === 'model3d' ? .75 : 1) * state.scale)
+    const maskStyle: CSSProperties = { overflow: 'hidden', borderRadius: effects.mask === 'ellipse' ? '50%' : effects.mask === 'rounded' ? `${layerShortSide * effects.maskRadius / 100}px` : undefined }
     if (!layer.visible) return null
     if (layer.missingAsset) return <button key={layer.id} onClick={() => setSelectedId(layer.id)} className={`absolute flex items-center justify-center border border-dashed border-red-400/70 bg-red-500/10 text-[10px] text-red-300 ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`} style={common}>Missing asset</button>
     const edgeMove = (event: ReactPointerEvent<HTMLElement>) => { if (layer.type !== 'model3d') return startGesture(event, layer, 'move'); const box = event.currentTarget.getBoundingClientRect(); const edge = (event.clientX - box.left) / box.width < .18 || (event.clientX - box.left) / box.width > .82 || (event.clientY - box.top) / box.height < .18 || (event.clientY - box.top) / box.height > .82; startGesture(event, layer, edge ? 'move' : 'orbit') }
@@ -1014,9 +1072,10 @@ export function SceneAnimatorPanel() {
       : layer.type === 'video'
         ? <video data-layer-id={layer.id} ref={element => { videoRefs.current[layer.id] = element }} src={layer.source} muted loop className={`h-full w-full ${layer.fill ? 'object-cover' : 'object-contain'}`} />
         : <img data-layer-id={layer.id} src={layer.source} alt={layer.name} draggable={false} className={`h-full w-full select-none ${layer.fill ? 'object-cover' : 'object-contain'}`} />
-    return <div key={layer.id} style={common} onPointerDown={edgeMove} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture} className={`absolute touch-none cursor-grab active:cursor-grabbing ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`}>{media}{selection && <button aria-label="Resize layer" onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
+    return <div key={layer.id} style={common} onPointerDown={edgeMove} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture} className={`absolute touch-none cursor-grab active:cursor-grabbing ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`}><div className="h-full w-full" style={maskStyle}><div className="h-full w-full" style={effectStyle}>{media}</div></div>{selection && <button aria-label="Resize layer" onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
   }
   const activeCamera = activeCameraLayer()
+  const selectedEffects = selected && isVisualLayer(selected) ? normalizedEffects(selected.effects) : null
   const relationshipTargets = selected ? scene.layers.filter(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id)) : []
   const canUndo = historyRevision >= 0 && pastScenesRef.current.length > 0
   const canRedo = historyRevision >= 0 && futureScenesRef.current.length > 0
@@ -1103,6 +1162,16 @@ export function SceneAnimatorPanel() {
         <div className="grid grid-cols-3 gap-1">{(['background', 'midground', 'foreground'] as const).map(preset => <button key={preset} onClick={() => applyParallaxPreset(selected.id, preset)} className={`rounded border px-1 py-1.5 text-[8px] capitalize ${Math.abs((selected.parallax ?? 1) - PARALLAX_PRESETS[preset]) < .001 ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border text-text-muted hover:border-cyan-400/60'}`}>{preset}</button>)}</div>
         {numberInput('Parallax strength', selected.parallax ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, parallax: Math.max(0, Math.min(2, value)) })), 0, 2, .05)}
         <p className="text-[9px] text-text-muted">0 ignores camera pan, 1 follows it normally, and values above 1 feel closer. Zoom and camera roll still affect the full shot. Background adds 20% overscan to image/video layers; extreme moves may need more scale.</p>
+      </div>}
+      {selected && selectedEffects && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Layer effects & mask</span><button type="button" disabled={selected.locked} onClick={() => updateLayer(selected.id, layer => ({ ...layer, effects: undefined }))} className="text-[8px] text-text-muted hover:text-text-primary disabled:opacity-40">Reset</button></div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <label className="text-[9px] text-text-muted">Blend<select value={selectedEffects.blendMode} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { blendMode: event.target.value as SceneBlendMode })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="normal">Normal</option><option value="screen">Screen</option><option value="multiply">Multiply</option><option value="overlay">Overlay</option><option value="lighten">Lighten</option><option value="darken">Darken</option></select></label>
+          <label className="text-[9px] text-text-muted">Mask<select value={selectedEffects.mask} disabled={selected.locked} onChange={event => updateLayerEffects(selected.id, { mask: event.target.value as SceneMask })} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-1.5 py-1 text-[10px] disabled:opacity-50"><option value="none">Rectangle</option><option value="rounded">Rounded</option><option value="ellipse">Ellipse</option></select></label>
+        </div>
+        {selectedEffects.mask === 'rounded' && numberInput('Corner radius %', selectedEffects.maskRadius, value => updateLayerEffects(selected.id, { maskRadius: value }), 0, 50, 1, selected.locked)}
+        <div className="grid grid-cols-2 gap-1.5">{numberInput('Blur %', selectedEffects.blur, value => updateLayerEffects(selected.id, { blur: value }), 0, 3, .05, selected.locked)}{numberInput('Glow %', selectedEffects.glow, value => updateLayerEffects(selected.id, { glow: value }), 0, 5, .05, selected.locked)}{numberInput('Shadow %', selectedEffects.shadow, value => updateLayerEffects(selected.id, { shadow: value }), 0, 8, .1, selected.locked)}{numberInput('Brightness', selectedEffects.brightness, value => updateLayerEffects(selected.id, { brightness: value }), 0, 3, .05, selected.locked)}{numberInput('Contrast', selectedEffects.contrast, value => updateLayerEffects(selected.id, { contrast: value }), 0, 3, .05, selected.locked)}{numberInput('Saturation', selectedEffects.saturation, value => updateLayerEffects(selected.id, { saturation: value }), 0, 4, .05, selected.locked)}{numberInput('Hue °', selectedEffects.hue, value => updateLayerEffects(selected.id, { hue: value }), -180, 180, 1, selected.locked)}</div>
+        <p className="text-[8px] text-text-muted">Percent effects scale from the frame’s short side, so preview, saved thumbnail and WebM stay visually aligned. Effects are clipped to the layer box or selected mask.</p>
       </div>}
       </>}
       {selected && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
