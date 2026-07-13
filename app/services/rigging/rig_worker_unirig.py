@@ -19,6 +19,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from pygltflib import GLTF2
+
 HERE = Path(__file__).resolve().parent
 VENDOR_DIR = HERE / "vendor" / "UniRig"
 # UniRig's launch/inference/*.sh scripts invoke bare `python`/`python3`
@@ -49,6 +51,39 @@ def run_unirig(script: str, arguments: list[str]) -> None:
         raise RuntimeError(f"UniRig {script} failed with exit code {process.returncode}")
 
 
+def require_fbx(path: Path, label: str) -> None:
+    """Reject missing/truncated phase artifacts even if a vendor shell exits 0."""
+    if not path.is_file() or path.stat().st_size < 1024:
+        raise RuntimeError(f"UniRig did not produce valid {label} data")
+    with path.open("rb") as handle:
+        header = handle.read(32)
+    if not (header.startswith(b"Kaydara FBX Binary") or header.lstrip().startswith(b"; FBX")):
+        raise RuntimeError(f"UniRig produced an invalid {label} FBX")
+
+
+def require_rigged_glb(path: Path, label: str, expected_animations: list[str] | None = None) -> None:
+    """Parse and inspect a GLB before it can be exposed as a completed job."""
+    if not path.is_file() or path.stat().st_size < 20:
+        raise RuntimeError(f"UniRig did not produce a valid {label}")
+    with path.open("rb") as handle:
+        header = handle.read(4)
+    if header != b"glTF":
+        raise RuntimeError(f"UniRig produced an invalid {label} header")
+    try:
+        gltf = GLTF2().load_binary(str(path))
+        if not gltf.meshes or not gltf.nodes or not gltf.binary_blob():
+            raise ValueError("missing mesh, nodes or binary payload")
+        if not gltf.skins or not any(skin.joints for skin in gltf.skins):
+            raise ValueError("missing skin joints")
+        if expected_animations:
+            names = {animation.name for animation in gltf.animations or []}
+            missing = [name for name in expected_animations if name not in names]
+            if missing:
+                raise ValueError("missing animation clips: " + ", ".join(missing))
+    except Exception as exc:
+        raise RuntimeError(f"UniRig produced an invalid {label}: {exc}") from exc
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--request", required=True)
@@ -74,23 +109,19 @@ def main() -> None:
 
         event("skeleton", 0.1, "Predicting skeleton (first run downloads UniRig weights)")
         run_unirig("generate_skeleton.sh", ["--input", str(source), "--output", str(skeleton_fbx), "--seed", str(seed)])
-        if not skeleton_fbx.is_file():
-            raise RuntimeError("UniRig did not produce a skeleton")
+        require_fbx(skeleton_fbx, "skeleton")
 
         event("skinning", 0.45, "Predicting skinning weights")
         run_unirig("generate_skin.sh", ["--input", str(skeleton_fbx), "--output", str(skin_fbx)])
-        if not skin_fbx.is_file():
-            raise RuntimeError("UniRig did not produce skinning weights")
+        require_fbx(skin_fbx, "skinning weights")
 
         event("merge", 0.7, "Merging rig into the original model")
         run_unirig("merge.sh", ["--source", str(skin_fbx), "--target", str(source), "--output", str(merged_glb)])
-        if not merged_glb.is_file():
-            raise RuntimeError("UniRig merge did not produce a rigged model")
+        require_rigged_glb(merged_glb, "merged rig")
 
         summary = procedural_rig.bake_clips_onto_existing_rig(str(merged_glb), str(output_path), clip_ids, progress=event)
 
-    if not output_path.is_file() or output_path.stat().st_size == 0:
-        raise RuntimeError("UniRig rigging did not produce an output file")
+    require_rigged_glb(output_path, "animated output", [procedural_rig.CLIPS[clip_id] for clip_id in clip_ids])
     print("MAESTRO_RESULT " + json.dumps(summary), flush=True)
     event("completed", 1.0, "AI-rigged model saved")
 
