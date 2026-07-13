@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Image as ImageIcon, Loader2, Lock, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
+import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
@@ -55,7 +55,8 @@ const PRESETS: Preset[] = ([
   { id: 'portal-arrival', label: 'Portal arrival', category: 'cinematic', start: { x: 50, y: 50, scale: .02, opacity: 0 }, end: { x: 50, y: 50, scale: 1, opacity: 1 }, duration: 1.6, spin: true, curve: 'dramatic' },
 ]).map(preset => ({ ...preset, preview: `/preset-previews/${preset.id}.webm`, poster: `/preset-previews/${preset.id}.webp` }))
 
-const blankScene = (): AnimatorScene => ({ version: 1, name: 'Untitled scene', width: 1280, height: 720, duration: 5, layers: [] })
+const DEFAULT_COMPOSITION: NonNullable<Scene['composition']> = { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }
+const blankScene = (): AnimatorScene => ({ version: 1, name: 'Untitled scene', width: 1280, height: 720, duration: 5, layers: [], composition: { ...DEFAULT_COMPOSITION } })
 const AUTOSAVE_KEY = 'maestro-scene-animator-autosave-v1'
 const HISTORY_LIMIT = 80
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -154,6 +155,8 @@ export function SceneAnimatorPanel() {
   const futureScenesRef = useRef<AnimatorScene[]>([])
   const lastHistoryAtRef = useRef(0)
   const selected = scene.layers.find(layer => layer.id === selectedId) ?? null
+  const composition = { ...DEFAULT_COMPOSITION, ...scene.composition }
+  const snapCoordinate = (value: number) => composition.snap ? Math.round(value / Math.max(1, composition.gridSize)) * Math.max(1, composition.gridSize) : value
   const generatedModels = outputs.filter(output => output.type === 'model3d' && /\.glb$/i.test(output.name))
   const generatedMedia = outputs.filter(output => output.type === 'image' || output.type === 'video')
 
@@ -359,9 +362,10 @@ export function SceneAnimatorPanel() {
       setReassignId(null)
     } else addLayer(type, source, file.name, undefined, file)
   }
-  const translateLayer = (id: string, x: number, y: number) => updateLayer(id, layer => {
-    const dx = x - layer.transform.x; const dy = y - layer.transform.y
-    return { ...layer, transform: { ...layer.transform, x, y }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: point.x + dx, y: point.y + dy })) }
+  const translateLayer = (id: string, x: number, y: number, useSnap = true) => updateLayer(id, layer => {
+    const nextX = useSnap ? snapCoordinate(x) : x; const nextY = useSnap ? snapCoordinate(y) : y
+    const dx = nextX - layer.transform.x; const dy = nextY - layer.transform.y
+    return { ...layer, transform: { ...layer.transform, x: nextX, y: nextY }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: point.x + dx, y: point.y + dy })) }
   })
   const resizeLayer = (id: string, scale: number) => updateLayer(id, layer => ({ ...layer, transform: { ...layer.transform, scale }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, scale })) }))
   const startGesture = (event: ReactPointerEvent<HTMLElement>, layer: AnimatorLayer, mode: Gesture['mode']) => {
@@ -543,14 +547,15 @@ export function SceneAnimatorPanel() {
   }
   const updateTimelineKeyframe = (keyframeId: string, patch: Partial<Omit<SceneKeyframe, 'id'>>) => {
     if (!selected || selected.locked) return
+    const snappedPatch = { ...patch, x: patch.x === undefined ? undefined : snapCoordinate(patch.x), y: patch.y === undefined ? undefined : snapCoordinate(patch.y) }
     updateLayer(selected.id, layer => {
       const frames = getSceneKeyframes(layer)
       const index = frames.findIndex(frame => frame.id === keyframeId)
       if (index < 0) return layer
       const previousTime = index > 0 ? frames[index - 1].time + .01 : frames[index].time
       const nextTime = index < frames.length - 1 ? frames[index + 1].time - .01 : frames[index].time
-      const time = index === 0 || index === frames.length - 1 ? frames[index].time : Math.max(previousTime, Math.min(nextTime, patch.time ?? frames[index].time))
-      const updated = frames.map(frame => frame.id === keyframeId ? { ...frame, ...patch, time } : frame)
+      const time = index === 0 || index === frames.length - 1 ? frames[index].time : Math.max(previousTime, Math.min(nextTime, snappedPatch.time ?? frames[index].time))
+      const updated = frames.map(frame => frame.id === keyframeId ? { ...frame, ...snappedPatch, x: snappedPatch.x ?? frame.x, y: snappedPatch.y ?? frame.y, time } : frame)
       return withSceneKeyframes(layer, updated) as AnimatorLayer
     })
   }
@@ -626,7 +631,16 @@ export function SceneAnimatorPanel() {
         return keyframes ? withSceneKeyframes(timedLayer, keyframes, timedLayer.animation.duration) as AnimatorLayer : timedLayer
       }))
       const duration = Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed }))
-      localFilesRef.current = {}; replaceScene({ ...blankScene(), ...incoming, duration, layers }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setMessage('Scene imported. Reassign layers marked missing asset.'); setJsonOpen(false)
+      const incomingComposition = incoming.composition as Partial<NonNullable<Scene['composition']>> | undefined
+      const safeAreas: NonNullable<Scene['composition']>['safeArea'][] = ['none', 'action', 'title', 'vertical', 'all']
+      const rawGridSize = typeof incomingComposition?.gridSize === 'number' && Number.isFinite(incomingComposition.gridSize) ? incomingComposition.gridSize : DEFAULT_COMPOSITION.gridSize
+      const composition: NonNullable<Scene['composition']> = {
+        showGrid: incomingComposition?.showGrid === true,
+        gridSize: Math.max(1, Math.min(50, rawGridSize)),
+        snap: incomingComposition?.snap === true,
+        safeArea: safeAreas.includes(incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea']) ? incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea'] : 'none',
+      }
+      localFilesRef.current = {}; replaceScene({ ...blankScene(), ...incoming, duration, layers, composition }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setMessage('Scene imported. Reassign layers marked missing asset.'); setJsonOpen(false)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
   }
   useEffect(() => {
@@ -755,15 +769,33 @@ export function SceneAnimatorPanel() {
   const activeCamera = activeCameraLayer()
   const canUndo = historyRevision >= 0 && pastScenesRef.current.length > 0
   const canRedo = historyRevision >= 0 && futureScenesRef.current.length > 0
+  const verticalSafeWidth = Math.min(100, (9 / 16) / (scene.width / Math.max(1, scene.height)) * 100)
 
   return <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-bg-tertiary xl:flex-row">
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex gap-2"><button onClick={play} disabled={!scene.layers.length || playing || recording} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : 'Record WebM'}</button></div></div>
       <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? `Autosaved ${new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Autosave waiting…'}</span></div>
       <div className="mb-3 flex flex-wrap gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{label}</button>)}</div>
+      <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary p-1.5">
+        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, showGrid: !composition.showGrid } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.showGrid ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-border text-text-muted'}`}><Grid3X3 size={10} /> Grid</button>
+        <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, snap: !composition.snap } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.snap ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border text-text-muted'}`}><Magnet size={10} /> Snap</button>
+        <label className="flex items-center gap-1 text-[8px] text-text-muted">Grid %<input type="number" min={1} max={50} step={1} value={composition.gridSize} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateScene(current => ({ ...current, composition: { ...composition, gridSize: Math.max(1, Math.min(50, value)) } })) }} className="w-12 rounded border border-border bg-bg-primary px-1 py-1 text-[9px]" /></label>
+        <label className="ml-auto flex items-center gap-1 text-[8px] text-text-muted">Safe area<select value={composition.safeArea} onChange={event => updateScene(current => ({ ...current, composition: { ...composition, safeArea: event.target.value as NonNullable<Scene['composition']>['safeArea'] } }))} className="rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="none">Off</option><option value="action">Action 90%</option><option value="title">Title 80%</option><option value="vertical">9:16 social</option><option value="all">All guides</option></select></label>
+        {selected && isVisualLayer(selected) && <><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, 50, selected.transform.y, false)} title="Center horizontally" className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignHorizontalJustifyCenter size={11} /></button><button type="button" disabled={selected.locked} onClick={() => translateLayer(selected.id, selected.transform.x, 50, false)} title="Center vertically" className="rounded border border-border p-1 text-text-muted disabled:opacity-30"><AlignVerticalJustifyCenter size={11} /></button></>}
+      </div>
       {selected && isVisualLayer(selected) && selected.type !== 'model3d' && <button onClick={() => updateLayer(selected.id, layer => ({ ...layer, fill: !layer.fill, transform: { ...layer.transform, x: 50, y: 50, scale: 1 }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: 50, y: 50, scale: 1 })) }))} className={`mb-3 rounded border px-2 py-1 text-[10px] ${selected.fill ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.fill ? 'Fill screen enabled' : 'Fill screen'}</button>}
       {selected && isVisualLayer(selected) && selected.type !== 'model3d' && <button onClick={() => { sendToBack(selected.id); applyParallaxPreset(selected.id, 'background') }} className="mb-3 ml-1 rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-secondary">Use as background</button>}
-      <div ref={canvasRef} className="relative isolate mx-auto w-full min-h-[240px] overflow-hidden rounded-lg border border-border bg-[#0b1020]" style={{ aspectRatio: `${scene.width} / ${scene.height}`, maxHeight: '68vh' }}>{[...scene.layers].sort((a, b) => a.z - b.z).map(renderLayer)}{activeCamera && <div className="pointer-events-none absolute left-2 top-2 z-[997] flex items-center gap-1 rounded bg-black/55 px-1.5 py-1 text-[8px] text-cyan-200"><Camera size={10} /> {activeCamera.name}</div>}{orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}{flash && <div className="pointer-events-none absolute z-[999]" style={{ left: `${flash.x}%`, top: `${flash.y}%` }}><span className="absolute -left-6 -top-6 h-12 w-12 rounded-full border-2 border-white/90 animate-ping" /><span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-white shadow-[0_0_20px_8px_rgba(96,165,250,.9)]" /></div>}<div className="absolute inset-x-0 bottom-0 z-[1000] h-1 bg-black/40"><div className="h-full bg-accent-blue" style={{ width: `${progress * 100}%` }} /></div></div>
+      <div ref={canvasRef} className="relative isolate mx-auto w-full min-h-[240px] overflow-hidden rounded-lg border border-border bg-[#0b1020]" style={{ aspectRatio: `${scene.width} / ${scene.height}`, maxHeight: '68vh' }}>
+        {[...scene.layers].sort((a, b) => a.z - b.z).map(renderLayer)}
+        {composition.showGrid && <div className="pointer-events-none absolute inset-0 z-[990] opacity-35" style={{ backgroundImage: 'linear-gradient(to right, rgba(125,211,252,.55) 1px, transparent 1px), linear-gradient(to bottom, rgba(125,211,252,.55) 1px, transparent 1px)', backgroundSize: `${composition.gridSize}% ${composition.gridSize}%` }} />}
+        {(composition.safeArea === 'action' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[5%] z-[991] border border-dashed border-emerald-300/80"><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-emerald-200">Action safe 90%</span></div>}
+        {(composition.safeArea === 'title' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[10%] z-[992] border border-dashed border-amber-300/80"><span className="absolute right-1 top-1 rounded bg-black/55 px-1 text-[7px] text-amber-200">Title safe 80%</span></div>}
+        {(composition.safeArea === 'vertical' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-y-0 left-1/2 z-[993] -translate-x-1/2 border-x border-dashed border-fuchsia-300/90 bg-fuchsia-400/[.03]" style={{ width: `${verticalSafeWidth}%` }}><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-fuchsia-200">9:16 social</span></div>}
+        {activeCamera && <div className="pointer-events-none absolute left-2 top-2 z-[997] flex items-center gap-1 rounded bg-black/55 px-1.5 py-1 text-[8px] text-cyan-200"><Camera size={10} /> {activeCamera.name}</div>}
+        {orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}
+        {flash && <div className="pointer-events-none absolute z-[999]" style={{ left: `${flash.x}%`, top: `${flash.y}%` }}><span className="absolute -left-6 -top-6 h-12 w-12 rounded-full border-2 border-white/90 animate-ping" /><span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-white shadow-[0_0_20px_8px_rgba(96,165,250,.9)]" /></div>}
+        <div className="absolute inset-x-0 bottom-0 z-[1000] h-1 bg-black/40"><div className="h-full bg-accent-blue" style={{ width: `${progress * 100}%` }} /></div>
+      </div>
       <p className="mt-2 text-[9px] text-text-muted">Center-drag a 3D layer to orbit it 360°; drag its outer edge to move it. Camera layers animate pan, zoom and rotation without rendering an asset. Parallax controls how strongly each visual layer follows camera pan. WebM uses the same camera transform and Z order as this preview.</p>
       <SceneTimeline
         layers={scene.layers}

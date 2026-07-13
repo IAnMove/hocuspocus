@@ -246,6 +246,12 @@ export interface Scene {
   height: number
   duration: number
   layers: SceneLayer[]
+  composition?: {
+    showGrid: boolean
+    gridSize: number
+    snap: boolean
+    safeArea: 'none' | 'action' | 'title' | 'vertical' | 'all'
+  }
 }
 
 export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
