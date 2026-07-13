@@ -3,8 +3,8 @@ import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, 
 import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
-import { evaluateSceneLayer, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
-import type { Scene, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType } from '../../types'
+import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
+import type { Scene, SceneAnimationEvent, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
@@ -171,6 +171,7 @@ export function SceneAnimatorPanel() {
   const [jsonOpen, setJsonOpen] = useState(false)
   const [selectedPresetId, setSelectedPresetId] = useState('')
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null)
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [historyRevision, setHistoryRevision] = useState(0)
   const [lastAutosaveAt, setLastAutosaveAt] = useState<number | null>(null)
   const [clipsByLayer, setClipsByLayer] = useState<Record<string, string[]>>({})
@@ -197,6 +198,11 @@ export function SceneAnimatorPanel() {
   const generatedMedia = outputs.filter(output => output.type === 'image' || output.type === 'video')
 
   useEffect(() => { void import('@google/model-viewer') }, [])
+  useEffect(() => {
+    const layer = sceneRef.current.layers.find(item => item.id === selectedId)
+    setSelectedKeyframeId(id => id && layer && getSceneKeyframes(layer).some(frame => frame.id === id) ? id : null)
+    setSelectedEventId(id => id && layer && getSceneEvents(layer).some(event => event.id === id) ? id : null)
+  }, [selectedId])
   // Rigged GLBs expose their baked clips through model-viewer's
   // availableAnimations; poll briefly after selection until the model loads.
   useEffect(() => {
@@ -243,14 +249,14 @@ export function SceneAnimatorPanel() {
     if (!previous) return
     futureScenesRef.current.push(sceneRef.current)
     replaceScene(previous); lastHistoryAtRef.current = 0; setHistoryRevision(value => value + 1)
-    setSelectedId(id => id && previous.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setMessage('Undo')
+    setSelectedId(id => id && previous.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage('Undo')
   }
   const redoScene = () => {
     const next = futureScenesRef.current.pop()
     if (!next) return
     pastScenesRef.current.push(sceneRef.current)
     replaceScene(next); lastHistoryAtRef.current = 0; setHistoryRevision(value => value + 1)
-    setSelectedId(id => id && next.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setMessage('Redo')
+    setSelectedId(id => id && next.layers.some(layer => layer.id === id) ? id : null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage('Redo')
   }
   const updateLayer = (id: string, updater: (layer: AnimatorLayer) => AnimatorLayer) => updateScene(current => {
     const target = current.layers.find(layer => layer.id === id)
@@ -279,7 +285,8 @@ export function SceneAnimatorPanel() {
         if (layer.locked) return layer
         const previousDuration = Math.max(.1, layer.animation.duration)
         const keyframes = layer.animation.keyframes?.map(frame => ({ ...frame, time: frame.time * duration / previousDuration }))
-        return { ...layer, animation: { ...layer.animation, duration, keyframes, trimStart: (layer.animation.trimStart ?? 0) * duration / previousDuration, trimEnd: (layer.animation.trimEnd ?? previousDuration) * duration / previousDuration } }
+        const events = layer.animation.events?.map(event => ({ ...event, time: event.time * duration / previousDuration }))
+        return { ...layer, animation: { ...layer.animation, duration, keyframes, events, trimStart: (layer.animation.trimStart ?? 0) * duration / previousDuration, trimEnd: (layer.animation.trimEnd ?? previousDuration) * duration / previousDuration } }
       }),
     }
   })
@@ -389,13 +396,14 @@ export function SceneAnimatorPanel() {
       clone.visible = source.type === 'camera' ? false : source.visible
       clone.z = source.z + 5
       clone.animation.keyframes = clone.animation.keyframes?.map(frame => ({ ...frame, id: uid() }))
+      clone.animation.events = clone.animation.events?.map(event => ({ ...event, id: uid() }))
       if (isVisualLayer(clone)) {
         clone.transform = { ...clone.transform, x: clone.transform.x + 3, y: clone.transform.y + 3 }
         clone.animation = mapSceneAnimationPoints(clone, point => ({ ...point, x: point.x + 3, y: point.y + 3 }))
       }
       return { ...current, layers: normalizeZ([...current.layers, clone]) }
     })
-    setSelectedId(duplicateId); setSelectedKeyframeId(null); setMessage(`Duplicated ${original.name}.`)
+    setSelectedId(duplicateId); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage(`Duplicated ${original.name}.`)
   }
   const addOrReassign = (type: VisualLayerType, file: File) => {
     const source = URL.createObjectURL(file)
@@ -572,7 +580,7 @@ export function SceneAnimatorPanel() {
     if (!preset) return
     const target = scene.layers.find(layer => layer.id !== selected.id && layer.type === 'model3d' && !dependencyWouldCycle(selected.id, layer.id)) ?? scene.layers.find(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id))
     if (preset.requiresTarget && !target) { setMessage('Add a second layer before applying this relational movement.'); return }
-    updateLayer(selected.id, layer => ({ ...layer, relationship: preset.requiresTarget ? undefined : layer.relationship, animation: { start: preset.start, end: preset.end, duration: preset.duration, curve: preset.curve, spin: preset.spin, rotationSpeed: layer.animation.rotationSpeed, clip: layer.animation.clip, orbit: preset.requiresTarget && target ? { targetLayerId: target.id, radiusX: 18, radiusY: 9, turns: 2, phase: 0, centerOffsetX: 0, centerOffsetY: 0 } : undefined } }))
+    updateLayer(selected.id, layer => ({ ...layer, relationship: preset.requiresTarget ? undefined : layer.relationship, animation: { start: preset.start, end: preset.end, duration: preset.duration, curve: preset.curve, events: normalizeSceneEvents(layer.animation.events, preset.duration, layer.id), spin: preset.spin, rotationSpeed: layer.animation.rotationSpeed, clip: layer.animation.clip, orbit: preset.requiresTarget && target ? { targetLayerId: target.id, radiusX: 18, radiusY: 9, turns: 2, phase: 0, centerOffsetX: 0, centerOffsetY: 0 } : undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
     setMessage(preset.requiresTarget ? `Orbit target: ${target?.name}` : null); setSelectedKeyframeId(null); setProgress(0)
   }
@@ -580,7 +588,7 @@ export function SceneAnimatorPanel() {
     if (!selected || selected.type !== 'camera' || selected.locked) return
     const preset = CAMERA_PRESETS.find(item => item.id === presetId)
     if (!preset) return
-    updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, duration: preset.duration, curve: preset.curve, offset: 0, speed: 1, loop: false, trimStart: 0, trimEnd: preset.duration, shake: preset.shake, orbit: undefined } }))
+    updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, events: normalizeSceneEvents(layer.animation.events, preset.duration, layer.id), duration: preset.duration, curve: preset.curve, offset: 0, speed: 1, loop: false, trimStart: 0, trimEnd: preset.duration, shake: preset.shake, orbit: undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
     setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${preset.label} applied to ${selected.name}.`)
   }
@@ -652,7 +660,7 @@ export function SceneAnimatorPanel() {
     if (dependencyWouldCycle(selected.id, targetId)) { setMessage('That orbit would create a dependency cycle.'); return }
     updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, targetLayerId: targetId } : undefined } }))
   }
-  const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, keyframes: layer.animation.keyframes, duration: layer.animation.duration, curve: layer.animation.curve, offset: layer.animation.offset, speed: layer.animation.speed, loop: layer.animation.loop, trimStart: layer.animation.trimStart, trimEnd: layer.animation.trimEnd, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, shake: layer.animation.shake, orbit: layer.animation.orbit })
+  const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, keyframes: layer.animation.keyframes, events: getSceneEvents(layer), duration: layer.animation.duration, curve: layer.animation.curve, offset: layer.animation.offset, speed: layer.animation.speed, loop: layer.animation.loop, trimStart: layer.animation.trimStart, trimEnd: layer.animation.trimEnd, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, shake: layer.animation.shake, orbit: layer.animation.orbit })
   const applyMotion = (raw: unknown) => {
     if (!selected || selected.locked || !raw || typeof raw !== 'object') throw new Error('Select an unlocked layer and provide a motion object.')
     const value = (raw as { motion?: unknown }).motion ?? raw
@@ -661,6 +669,7 @@ export function SceneAnimatorPanel() {
     if (!item.start || !item.end || typeof item.duration !== 'number' || !Number.isFinite(item.duration)) throw new Error('Motion needs start, end and a finite duration.')
     const duration = Math.max(.1, item.duration)
     updateLayer(selected.id, layer => {
+      const events = item.events === undefined ? getSceneEvents(layer) : normalizeSceneEvents(item.events, duration, layer.id)
       const rawShake = item.shake
       const shake = rawShake === undefined
         ? layer.animation.shake
@@ -677,6 +686,7 @@ export function SceneAnimatorPanel() {
           keyframes: undefined,
           duration,
           curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(item.curve ?? '') ? item.curve as SceneCurve : 'linear',
+          events,
           shake,
         },
       }) as AnimatorLayer
@@ -686,7 +696,7 @@ export function SceneAnimatorPanel() {
     const timingLayer = withNormalizedSceneTiming({ ...selected, animation: { ...selected.animation, ...item, duration } }) as AnimatorLayer
     const timing = getSceneLayerTiming(timingLayer)
     updateScene(current => ({ ...current, duration: Math.max(current.duration, timing.offset + timing.span / timing.speed) }))
-    setSelectedKeyframeId(null); setProgress(0)
+    setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0)
   }
   const addKeyframeAtPlayhead = () => {
     if (!selected || selected.locked) { setMessage('Unlock the layer before adding keyframes.'); return }
@@ -694,12 +704,12 @@ export function SceneAnimatorPanel() {
     const time = sceneTimeToLayerTime(selected, sceneTime)
     const frames = getSceneKeyframes(selected)
     const existing = frames.find(frame => Math.abs(frame.time - time) < .025)
-    if (existing) { setSelectedKeyframeId(existing.id); return }
+    if (existing) { setSelectedKeyframeId(existing.id); setSelectedEventId(null); return }
     const point = evaluateSceneLayer(selected, time)
     const keyframe: SceneKeyframe = { id: uid(), time, ...point, curve: selected.animation.curve }
     updateLayer(selected.id, layer => withSceneKeyframes(layer, [...getSceneKeyframes(layer), keyframe], Math.max(layer.animation.duration, time)) as AnimatorLayer)
     updateScene(current => ({ ...current, duration: Math.max(current.duration, time) }))
-    setSelectedKeyframeId(keyframe.id)
+    setSelectedKeyframeId(keyframe.id); setSelectedEventId(null)
     setMessage(`Keyframe added at local ${time.toFixed(2)}s (scene ${sceneTime.toFixed(2)}s).`)
   }
   const updateTimelineKeyframe = (keyframeId: string, patch: Partial<Omit<SceneKeyframe, 'id'>>) => {
@@ -725,6 +735,36 @@ export function SceneAnimatorPanel() {
     setSelectedKeyframeId(null)
     setMessage('Keyframe deleted.')
   }
+  const addEventAtPlayhead = () => {
+    if (!selected || selected.locked) { setMessage('Unlock the layer before adding events.'); return }
+    const sceneTime = progress * scene.duration
+    const time = sceneTimeToLayerTime(selected, sceneTime)
+    const event: SceneAnimationEvent = { id: uid(), time, name: `Event ${getSceneEvents(selected).length + 1}` }
+    updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, events: [...getSceneEvents(layer), event].sort((a, b) => a.time - b.time) } }))
+    setSelectedKeyframeId(null); setSelectedEventId(event.id)
+    setMessage(`Event added at local ${time.toFixed(2)}s (scene ${sceneTime.toFixed(2)}s).`)
+  }
+  const updateTimelineEvent = (eventId: string, patch: Partial<Omit<SceneAnimationEvent, 'id'>>) => {
+    if (!selected || selected.locked) return
+    updateLayer(selected.id, layer => ({
+      ...layer,
+      animation: {
+        ...layer.animation,
+        events: getSceneEvents(layer).map(event => event.id === eventId ? {
+          ...event,
+          ...patch,
+          time: Math.max(0, Math.min(layer.animation.duration, finiteNumber(patch.time, event.time))),
+          name: patch.name === undefined ? event.name : patch.name.trim().slice(0, 100) || 'Event',
+          payload: patch.payload === undefined ? event.payload : patch.payload.slice(0, 2000) || undefined,
+        } : event).sort((a, b) => a.time - b.time),
+      },
+    }))
+  }
+  const deleteTimelineEvent = () => {
+    if (!selected || selected.locked || !selectedEventId) return
+    updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, events: getSceneEvents(layer).filter(event => event.id !== selectedEventId) } }))
+    setSelectedEventId(null); setMessage('Animation event deleted.')
+  }
   const copyTimelineKeyframes = () => {
     if (!selected) return
     const payload = JSON.stringify({ version: 1, keyframes: getSceneKeyframes(selected) }, null, 2)
@@ -746,7 +786,7 @@ export function SceneAnimatorPanel() {
       const timing = getSceneLayerTiming({ ...selected, animation: { ...selected.animation, duration: pastedDuration, trimStart: 0, trimEnd: pastedDuration } })
       const effectiveEnd = timing.offset + timing.span / timing.speed
       updateScene(current => ({ ...current, duration: Math.max(current.duration, effectiveEnd) }))
-      setSelectedKeyframeId(frames[0].id); setProgress(timing.offset / Math.max(.1, Math.max(scene.duration, effectiveEnd))); setMessage(`${frames.length} keyframes pasted.`)
+      setSelectedKeyframeId(frames[0].id); setSelectedEventId(null); setProgress(timing.offset / Math.max(.1, Math.max(scene.duration, effectiveEnd))); setMessage(`${frames.length} keyframes pasted.`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid keyframe clipboard.') }
   }
   const download = (name: string, data: unknown) => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url) }
@@ -806,6 +846,7 @@ export function SceneAnimatorPanel() {
         } : undefined
         const duration = boundedNumber(rawLayer.animation?.duration, finiteNumber(incoming.duration, 5), .1, 3600)
         const curve: SceneCurve = ['linear', 'ease', 'dramatic', 'bounce'].includes(rawLayer.animation?.curve ?? '') ? rawLayer.animation.curve : 'linear'
+        const events = normalizeSceneEvents(rawLayer.animation?.events, duration, rawLayer.id)
         const layer = {
           ...rawLayer,
           name: typeof rawLayer.name === 'string' && rawLayer.name.trim() ? rawLayer.name : `Layer ${rawLayer.id}`,
@@ -815,7 +856,7 @@ export function SceneAnimatorPanel() {
           relationship,
           parallax: isCamera ? undefined : typeof rawLayer.parallax === 'number' && Number.isFinite(rawLayer.parallax) ? Math.max(0, Math.min(2, rawLayer.parallax)) : 1,
           transform,
-          animation: { ...rawLayer.animation, start, end, keyframes: undefined, duration, curve, shake, orbit },
+          animation: { ...rawLayer.animation, start, end, keyframes: undefined, events, duration, curve, shake, orbit },
           missingAsset: isCamera ? false : Boolean(rawLayer.missingAsset || isMissing(String(rawLayer.source ?? ''))),
         } as AnimatorLayer
         const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
@@ -833,7 +874,7 @@ export function SceneAnimatorPanel() {
         snap: incomingComposition?.snap === true,
         safeArea: safeAreas.includes(incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea']) ? incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea'] : 'none',
       }
-      localFilesRef.current = {}; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setMessage('Scene imported. Invalid dependency cycles were removed; reassign layers marked missing asset.'); setJsonOpen(false)
+      localFilesRef.current = {}; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage('Scene imported. Invalid dependency cycles were removed; reassign layers marked missing asset.'); setJsonOpen(false)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
   }
   useEffect(() => {
@@ -1016,14 +1057,19 @@ export function SceneAnimatorPanel() {
         currentTime={progress * scene.duration}
         selectedLayerId={selectedId}
         selectedKeyframeId={selectedKeyframeId}
+        selectedEventId={selectedEventId}
         onScrub={time => { if (animationRef.current) cancelAnimationFrame(animationRef.current); setPlaying(false); Object.values(videoRefs.current).forEach(video => video?.pause()); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
-        onSelectLayer={id => { setSelectedId(id); setSelectedKeyframeId(null) }}
-        onSelectKeyframe={(layerId, keyframeId, time) => { setSelectedId(layerId); setSelectedKeyframeId(keyframeId); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onSelectLayer={id => { setSelectedId(id); setSelectedKeyframeId(null); setSelectedEventId(null) }}
+        onSelectKeyframe={(layerId, keyframeId, time) => { setSelectedId(layerId); setSelectedKeyframeId(keyframeId); setSelectedEventId(null); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onSelectEvent={(layerId, eventId, time) => { setSelectedId(layerId); setSelectedKeyframeId(null); setSelectedEventId(eventId); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
         onAddKeyframe={addKeyframeAtPlayhead}
+        onAddEvent={addEventAtPlayhead}
         onDeleteKeyframe={deleteTimelineKeyframe}
+        onDeleteEvent={deleteTimelineEvent}
         onCopyKeyframes={copyTimelineKeyframes}
         onPasteKeyframes={() => void pasteTimelineKeyframes()}
         onUpdateKeyframe={updateTimelineKeyframe}
+        onUpdateEvent={updateTimelineEvent}
         onUpdateTiming={patch => selected && updateLayerTiming(selected.id, patch)}
       />
     </section>
@@ -1085,7 +1131,7 @@ export function SceneAnimatorPanel() {
           <button onClick={() => setJsonOpen(value => !value)} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> Import JSON</button>
         </div>
         {jsonOpen && <div className="space-y-1.5"><textarea value={motionText} onChange={event => setMotionText(event.target.value)} placeholder="Paste movement JSON" rows={4} className="w-full rounded border border-border bg-bg-primary p-1.5 text-[9px] font-mono" /><div className="flex gap-1.5"><button onClick={() => { try { applyMotion(JSON.parse(motionText)); setMessage('Movement applied to selected layer.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid motion JSON.') } }} className="rounded bg-accent-blue px-2 py-1 text-[10px] text-white">Apply movement</button><button onClick={() => motionInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">Load motion file</button><button onClick={() => sceneInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">Import scene</button></div><input ref={motionInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) file.text().then(setMotionText) }} /><input ref={sceneInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) file.text().then(importScene) }} /></div>}
-        <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">Return only valid Maestro Scene Animator motion JSON.{`\n`}Use start/end x and y from 0 to 100, start/end scale,{`\n`}duration in seconds, curve as linear/ease/dramatic/bounce,{`\n`}and optional spin plus rotationSpeed. For multi-step motion, add keyframes with id, time, x, y, scale, opacity, rotation and curve.{`\n`}Do not include Markdown or explanations.{`\n\n`}{'{"version":1,"motion":{"start":{"x":10,"y":70,"scale":0.2},"end":{"x":90,"y":30,"scale":0.8},"duration":3,"curve":"dramatic","spin":true,"rotationSpeed":240}}'}</div>
+        <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">Return only valid Maestro Scene Animator motion JSON.{`\n`}Use start/end x and y from 0 to 100, start/end scale,{`\n`}duration in seconds, curve as linear/ease/dramatic/bounce,{`\n`}and optional spin plus rotationSpeed. For multi-step motion, add keyframes with id, time, x, y, scale, opacity, rotation and curve. Optional events use id, local time, name and a plain-text payload.{`\n`}Do not include Markdown or explanations.{`\n\n`}{'{"version":1,"motion":{"start":{"x":10,"y":70,"scale":0.2},"end":{"x":90,"y":30,"scale":0.8},"duration":3,"curve":"dramatic","spin":true,"rotationSpeed":240}}'}</div>
       </div>
       {message && <p className="text-[10px] text-text-secondary">{message}</p>}
     </aside>

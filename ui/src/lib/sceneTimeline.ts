@@ -1,4 +1,4 @@
-import type { SceneCurve, SceneKeyframe, SceneLayer } from '../types'
+import type { SceneAnimationEvent, SceneCurve, SceneKeyframe, SceneLayer } from '../types'
 
 export type SceneAnimationPoint = Pick<SceneKeyframe, 'x' | 'y' | 'scale' | 'opacity' | 'rotation'>
 
@@ -82,6 +82,32 @@ export const normalizeSceneKeyframes = (value: unknown, layer: SceneLayer): Scen
   }).sort((a, b) => a.time - b.time)
   return frames.length >= 2 ? frames : undefined
 }
+
+export const normalizeSceneEvents = (value: unknown, duration: number, idPrefix = 'scene') => {
+  if (!Array.isArray(value)) return [] as SceneAnimationEvent[]
+  const maxTime = Math.max(.1, Number.isFinite(duration) ? duration : .1)
+  const usedIds = new Set<string>()
+  const events: SceneAnimationEvent[] = []
+  value.forEach((raw, index) => {
+    if (!raw || typeof raw !== 'object') return
+    const item = raw as Partial<SceneAnimationEvent>
+    if (typeof item.time !== 'number' || !Number.isFinite(item.time) || typeof item.name !== 'string' || !item.name.trim()) return
+    const fallbackId = `${idPrefix}-event-${index + 1}`
+    let id = typeof item.id === 'string' && item.id.trim() ? item.id : fallbackId
+    if (usedIds.has(id)) id = fallbackId
+    while (usedIds.has(id)) id = `${fallbackId}-${usedIds.size + 1}`
+    usedIds.add(id)
+    events.push({
+      id,
+      time: Math.max(0, Math.min(maxTime, item.time)),
+      name: item.name.trim().slice(0, 100),
+      payload: typeof item.payload === 'string' && item.payload.length > 0 ? item.payload.slice(0, 2000) : undefined,
+    })
+  })
+  return events.sort((a, b) => a.time - b.time)
+}
+
+export const getSceneEvents = (layer: SceneLayer) => normalizeSceneEvents(layer.animation.events, layer.animation.duration, layer.id)
 
 export const getSceneLayerTiming = (layer: SceneLayer): SceneLayerTiming => {
   const duration = Math.max(.1, layer.animation.duration)

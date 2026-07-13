@@ -177,6 +177,15 @@ export interface SceneKeyframe {
   curve: SceneCurve
 }
 
+export interface SceneAnimationEvent {
+  id: string
+  /** Local layer time in seconds, before offset/speed/loop are applied. */
+  time: number
+  name: string
+  /** Optional plain-text metadata for a game engine, sound cue or external tool. */
+  payload?: string
+}
+
 export interface SceneLayer {
   id: string
   name: string
@@ -219,6 +228,8 @@ export interface SceneLayer {
     end: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
     /** Multi-keyframe timeline. Older scenes continue to use start/end. */
     keyframes?: SceneKeyframe[]
+    /** Metadata markers only; Maestro does not execute them during browser capture. */
+    events?: SceneAnimationEvent[]
     duration: number
     curve: SceneCurve
     /** Scene time in seconds before this layer's local motion starts. */

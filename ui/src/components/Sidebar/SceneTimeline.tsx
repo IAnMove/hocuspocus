@@ -1,7 +1,7 @@
-import { ClipboardPaste, Copy, Plus, Trash2 } from 'lucide-react'
+import { ClipboardPaste, Copy, Flag, Plus, Trash2 } from 'lucide-react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { getSceneKeyframes, getSceneLayerTiming, layerTimeToSceneTime } from '../../lib/sceneTimeline'
-import type { SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer } from '../../types'
+import { getSceneEvents, getSceneKeyframes, getSceneLayerTiming, layerTimeToSceneTime } from '../../lib/sceneTimeline'
+import type { SceneAnimationEvent, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer } from '../../types'
 
 type Props = {
   layers: SceneLayer[]
@@ -10,14 +10,19 @@ type Props = {
   currentTime: number
   selectedLayerId: string | null
   selectedKeyframeId: string | null
+  selectedEventId: string | null
   onScrub: (time: number) => void
   onSelectLayer: (id: string) => void
   onSelectKeyframe: (layerId: string, keyframeId: string, time: number) => void
+  onSelectEvent: (layerId: string, eventId: string, time: number) => void
   onAddKeyframe: () => void
+  onAddEvent: () => void
   onDeleteKeyframe: () => void
+  onDeleteEvent: () => void
   onCopyKeyframes: () => void
   onPasteKeyframes: () => void
   onUpdateKeyframe: (keyframeId: string, patch: Partial<Omit<SceneKeyframe, 'id'>>) => void
+  onUpdateEvent: (eventId: string, patch: Partial<Omit<SceneAnimationEvent, 'id'>>) => void
   onUpdateTiming: (patch: Partial<Pick<SceneLayer['animation'], 'offset' | 'speed' | 'loop' | 'trimStart' | 'trimEnd'>>) => void
 }
 
@@ -38,12 +43,14 @@ const numberField = (label: string, value: number, change: (value: number) => vo
   <label className="text-[9px] text-text-muted">{label}<input type="number" value={Number.isFinite(value) ? Number(value.toFixed(3)) : 0} step={step} min={min} max={max} disabled={disabled} onChange={event => { const next = Number(event.target.value); if (Number.isFinite(next)) change(next) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
 )
 
-export function SceneTimeline({ layers, duration, fps, currentTime, selectedLayerId, selectedKeyframeId, onScrub, onSelectLayer, onSelectKeyframe, onAddKeyframe, onDeleteKeyframe, onCopyKeyframes, onPasteKeyframes, onUpdateKeyframe, onUpdateTiming }: Props) {
+export function SceneTimeline({ layers, duration, fps, currentTime, selectedLayerId, selectedKeyframeId, selectedEventId, onScrub, onSelectLayer, onSelectKeyframe, onSelectEvent, onAddKeyframe, onAddEvent, onDeleteKeyframe, onDeleteEvent, onCopyKeyframes, onPasteKeyframes, onUpdateKeyframe, onUpdateEvent, onUpdateTiming }: Props) {
   const selectedLayer = layers.find(layer => layer.id === selectedLayerId) ?? null
   const selectedFrames = selectedLayer ? getSceneKeyframes(selectedLayer) : []
+  const selectedEvents = selectedLayer ? getSceneEvents(selectedLayer) : []
   const selectedTiming = selectedLayer ? getSceneLayerTiming(selectedLayer) : null
   const selectedIndex = selectedFrames.findIndex(frame => frame.id === selectedKeyframeId)
   const selectedFrame = selectedIndex >= 0 ? selectedFrames[selectedIndex] : null
+  const selectedEvent = selectedEvents.find(event => event.id === selectedEventId) ?? null
   const locked = Boolean(selectedLayer?.locked)
   const isEndpoint = selectedIndex === 0 || selectedIndex === selectedFrames.length - 1
   const isLast = selectedIndex === selectedFrames.length - 1
@@ -58,7 +65,8 @@ export function SceneTimeline({ layers, duration, fps, currentTime, selectedLaye
     <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
       <span className="mr-auto text-[10px] font-medium uppercase tracking-wider text-text-secondary">Timeline · {currentTime.toFixed(2)}s / {duration.toFixed(2)}s · {fps} FPS</span>
       <button type="button" onClick={onAddKeyframe} disabled={!selectedLayer || locked} className="flex items-center gap-1 rounded border border-border px-1.5 py-1 text-[9px] disabled:opacity-40"><Plus size={10} /> Keyframe</button>
-      <button type="button" onClick={onDeleteKeyframe} disabled={!selectedFrame || isEndpoint || locked} title={isEndpoint ? 'The first and last keyframes define the clip bounds.' : 'Delete selected keyframe'} className="rounded border border-border p-1 text-red-300 disabled:opacity-30"><Trash2 size={11} /></button>
+      <button type="button" onClick={onAddEvent} disabled={!selectedLayer || locked} className="flex items-center gap-1 rounded border border-amber-400/40 px-1.5 py-1 text-[9px] text-amber-200 disabled:opacity-40"><Flag size={10} /> Event</button>
+      <button type="button" onClick={selectedEvent ? onDeleteEvent : onDeleteKeyframe} disabled={locked || (!selectedEvent && (!selectedFrame || isEndpoint))} title={selectedEvent ? 'Delete selected event' : isEndpoint ? 'The first and last keyframes define the clip bounds.' : 'Delete selected keyframe'} className="rounded border border-border p-1 text-red-300 disabled:opacity-30"><Trash2 size={11} /></button>
       <button type="button" onClick={onCopyKeyframes} disabled={!selectedLayer} title="Copy all keyframes from this layer" className="rounded border border-border p-1 disabled:opacity-30"><Copy size={11} /></button>
       <button type="button" onClick={onPasteKeyframes} disabled={!selectedLayer || locked} title="Paste keyframes onto this layer" className="rounded border border-border p-1 disabled:opacity-30"><ClipboardPaste size={11} /></button>
     </div>
@@ -67,11 +75,14 @@ export function SceneTimeline({ layers, duration, fps, currentTime, selectedLaye
       <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
         {[...layers].sort((a, b) => b.z - a.z).map(layer => {
           const frames = getSceneKeyframes(layer)
+          const events = getSceneEvents(layer)
+          const timing = getSceneLayerTiming(layer)
           return <div key={layer.id} className={`grid grid-cols-[88px_1fr] items-center gap-1 rounded px-1 py-0.5 ${selectedLayerId === layer.id ? 'bg-accent-blue/10' : ''}`}>
             <button type="button" onClick={() => onSelectLayer(layer.id)} className="truncate text-left text-[9px] text-text-secondary" title={layer.name}>{layer.type === 'camera' ? 'CAM · ' : ''}{layer.name}{layer.locked ? ' · locked' : ''}</button>
-            <div onPointerDown={seekTrack} className="relative h-5 cursor-ew-resize rounded bg-bg-primary">
+            <div onPointerDown={seekTrack} className="relative h-6 cursor-ew-resize rounded bg-bg-primary">
               <span className="pointer-events-none absolute inset-y-0 w-px bg-white/70" style={{ left: `${Math.max(0, Math.min(100, currentTime / Math.max(.1, duration) * 100))}%` }} />
-              {frames.map((frame, index) => { const timing = getSceneLayerTiming(layer); const sceneFrameTime = layerTimeToSceneTime(layer, frame.time); const outsideTrim = frame.time < timing.trimStart || frame.time > timing.trimEnd; return <button key={frame.id} type="button" title={`Local ${frame.time.toFixed(2)}s · scene ${sceneFrameTime.toFixed(2)}s · ${frame.curve}`} onPointerDown={event => event.stopPropagation()} onClick={() => onSelectKeyframe(layer.id, frame.id, sceneFrameTime)} className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border ${outsideTrim ? 'opacity-30' : ''} ${selectedLayerId === layer.id && selectedKeyframeId === frame.id ? 'z-10 border-white bg-accent-blue' : index === 0 || index === frames.length - 1 ? 'border-cyan-200 bg-cyan-500/70' : 'border-purple-200 bg-purple-500/80'}`} style={{ left: `${Math.max(0, Math.min(100, sceneFrameTime / Math.max(.1, duration) * 100))}%` }} /> })}
+              {events.map(event => { const sceneEventTime = layerTimeToSceneTime(layer, event.time); const outsideTrim = event.time < timing.trimStart || event.time > timing.trimEnd; return <button key={`event-${event.id}`} type="button" title={`${event.name} · local ${event.time.toFixed(2)}s · scene ${sceneEventTime.toFixed(2)}s${event.payload ? ` · ${event.payload}` : ''}`} onPointerDown={pointer => pointer.stopPropagation()} onClick={() => onSelectEvent(layer.id, event.id, sceneEventTime)} className={`absolute top-0.5 h-2 w-2 -translate-x-1/2 rotate-45 border border-amber-100 bg-amber-400 ${outsideTrim ? 'opacity-30' : ''} ${selectedLayerId === layer.id && selectedEventId === event.id ? 'z-20 ring-1 ring-white' : 'z-10'}`} style={{ left: `${Math.max(0, Math.min(100, sceneEventTime / Math.max(.1, duration) * 100))}%` }} /> })}
+              {frames.map((frame, index) => { const sceneFrameTime = layerTimeToSceneTime(layer, frame.time); const outsideTrim = frame.time < timing.trimStart || frame.time > timing.trimEnd; return <button key={`frame-${frame.id}`} type="button" title={`Local ${frame.time.toFixed(2)}s · scene ${sceneFrameTime.toFixed(2)}s · ${frame.curve}`} onPointerDown={event => event.stopPropagation()} onClick={() => onSelectKeyframe(layer.id, frame.id, sceneFrameTime)} className={`absolute top-[68%] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border ${outsideTrim ? 'opacity-30' : ''} ${selectedLayerId === layer.id && selectedKeyframeId === frame.id ? 'z-10 border-white bg-accent-blue' : index === 0 || index === frames.length - 1 ? 'border-cyan-200 bg-cyan-500/70' : 'border-purple-200 bg-purple-500/80'}`} style={{ left: `${Math.max(0, Math.min(100, sceneFrameTime / Math.max(.1, duration) * 100))}%` }} /> })}
             </div>
           </div>
         })}
@@ -103,6 +114,15 @@ export function SceneTimeline({ layers, duration, fps, currentTime, selectedLaye
         {!isLast && <CurvePreview curve={selectedFrame.curve} />}
         <p className="text-[8px] leading-tight text-text-muted">Each diamond stores position, scale, opacity and rotation. Its curve controls only the following segment.</p>
       </div>
+    </div>}
+    {selectedEvent && selectedLayer && <div className="border-t border-amber-400/30 bg-amber-400/[.04] px-2 py-2">
+      <div className="mb-1.5 flex items-center justify-between"><span className="flex items-center gap-1 text-[9px] font-medium text-amber-200"><Flag size={10} /> Animation event · {selectedEvent.time.toFixed(2)}s local</span><span className="text-[8px] text-text-muted">Metadata marker</span></div>
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-[100px_1fr_2fr]">
+        {numberField('Time', selectedEvent.time, value => onUpdateEvent(selectedEvent.id, { time: value }), 1 / fps, 0, selectedLayer.animation.duration, locked)}
+        <label className="text-[9px] text-text-muted">Name<input value={selectedEvent.name} disabled={locked} maxLength={100} onChange={event => onUpdateEvent(selectedEvent.id, { name: event.target.value })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
+        <label className="text-[9px] text-text-muted">Payload (optional)<input value={selectedEvent.payload ?? ''} disabled={locked} maxLength={2000} placeholder="sound=impact_heavy or your engine metadata" onChange={event => onUpdateEvent(selectedEvent.id, { payload: event.target.value })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
+      </div>
+      <p className="mt-1 text-[8px] text-text-muted">Amber markers are saved in scene and movement JSON for game engines and external tools. Browser preview and WebM capture do not execute the payload yet.</p>
     </div>}
   </div>
 }
