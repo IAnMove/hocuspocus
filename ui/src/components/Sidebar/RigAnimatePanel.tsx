@@ -42,6 +42,8 @@ export function RigAnimatePanel() {
     setCapabilityError(null)
     fetchRigCapabilities().then(caps => {
       setCapabilities(caps)
+      const availableEngine = caps.engines.find(item => item.id === 'procedural' && item.installed) ?? caps.engines.find(item => item.installed) ?? caps.engines[0]
+      if (availableEngine) setEngineId(availableEngine.id)
       const profiles = caps.rig_profiles ?? []
       const profileId = caps.default_rig_profile || profiles[0]?.id || 'prop'
       const profile = profiles.find(item => item.id === profileId)
@@ -80,8 +82,7 @@ export function RigAnimatePanel() {
     void loadSources()
   }, [loadSources])
 
-  const engine = capabilities?.engines.find(item => item.id === 'procedural')
-  const installed = !!engine?.installed
+  const installedEngines = capabilities?.engines.filter(item => item.installed) ?? []
   const selectedEngine = capabilities?.engines.find(item => item.id === engineId)
   const selectedProfile = capabilities?.rig_profiles?.find(item => item.id === rigProfileId)
   const profileAnimations = capabilities?.animations.filter(animation => !selectedProfile || selectedProfile.allowed_animations.includes(animation.id)) ?? []
@@ -236,10 +237,10 @@ export function RigAnimatePanel() {
 
       {!capabilities ? (
         <div className="flex items-center justify-center py-8 text-xs text-text-muted"><Loader2 size={15} className="animate-spin mr-2" /> Loading...</div>
-      ) : !installed ? (
+      ) : installedEngines.length === 0 ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-          <p className="text-xs font-medium text-amber-300">Rig runtime is not installed</p>
-          <p className="text-[10px] text-text-muted mt-1 leading-relaxed">{engine?.install_hint}</p>
+          <p className="text-xs font-medium text-amber-300">No rig engine is installed</p>
+          <div className="mt-1 space-y-1">{capabilities.engines.map(item => item.install_hint && <p key={item.id} className="text-[10px] leading-relaxed text-text-muted"><span className="text-text-secondary">{item.label}:</span> {item.install_hint}</p>)}</div>
         </div>
       ) : (
         <>
