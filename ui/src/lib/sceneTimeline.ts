@@ -1,0 +1,134 @@
+import type { SceneCurve, SceneKeyframe, SceneLayer } from '../types'
+
+export type SceneAnimationPoint = Pick<SceneKeyframe, 'x' | 'y' | 'scale' | 'opacity' | 'rotation'>
+
+const lerp = (a: number, b: number, amount: number) => a + (b - a) * amount
+
+export const applySceneCurve = (amount: number, curve: SceneCurve) => {
+  const value = Math.max(0, Math.min(1, amount))
+  if (curve === 'ease') return value * value * (3 - 2 * value)
+  if (curve === 'dramatic') return value * value
+  if (curve === 'bounce') return Math.max(0, Math.min(1, value + Math.sin(value * Math.PI * 3) * (1 - value) * .18))
+  return value
+}
+
+const pointFrom = (
+  point: SceneLayer['animation']['start'],
+  layer: SceneLayer,
+): SceneAnimationPoint => ({
+  x: point.x,
+  y: point.y,
+  scale: point.scale,
+  opacity: point.opacity ?? layer.transform.opacity,
+  rotation: point.rotation ?? layer.transform.rotation ?? 0,
+})
+
+export const getSceneKeyframes = (layer: SceneLayer): SceneKeyframe[] => {
+  const stored = layer.animation.keyframes
+  if (stored && stored.length >= 2) {
+    return [...stored]
+      .filter(frame => Number.isFinite(frame.time))
+      .sort((a, b) => a.time - b.time)
+      .map(frame => ({
+        ...frame,
+        opacity: Number.isFinite(frame.opacity) ? frame.opacity : layer.transform.opacity,
+        rotation: Number.isFinite(frame.rotation) ? frame.rotation : layer.transform.rotation ?? 0,
+        curve: frame.curve ?? layer.animation.curve,
+      }))
+  }
+
+  return [
+    {
+      id: `${layer.id}-start`,
+      time: 0,
+      ...pointFrom(layer.animation.start, layer),
+      curve: layer.animation.curve,
+    },
+    {
+      id: `${layer.id}-end`,
+      time: Math.max(.1, layer.animation.duration),
+      ...pointFrom(layer.animation.end, layer),
+      curve: layer.animation.curve,
+    },
+  ]
+}
+
+export const normalizeSceneKeyframes = (value: unknown, layer: SceneLayer): SceneKeyframe[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+  const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce']
+  const frames = value.flatMap((raw, index) => {
+    if (!raw || typeof raw !== 'object') return []
+    const item = raw as Partial<SceneKeyframe>
+    if (typeof item.time !== 'number' || !Number.isFinite(item.time)) return []
+    return [{
+      id: typeof item.id === 'string' && item.id ? item.id : `${layer.id}-keyframe-${index}`,
+      time: Math.max(0, item.time),
+      x: typeof item.x === 'number' && Number.isFinite(item.x) ? item.x : layer.transform.x,
+      y: typeof item.y === 'number' && Number.isFinite(item.y) ? item.y : layer.transform.y,
+      scale: typeof item.scale === 'number' && Number.isFinite(item.scale) ? Math.max(.01, item.scale) : layer.transform.scale,
+      opacity: typeof item.opacity === 'number' && Number.isFinite(item.opacity) ? Math.max(0, Math.min(1, item.opacity)) : layer.transform.opacity,
+      rotation: typeof item.rotation === 'number' && Number.isFinite(item.rotation) ? item.rotation : layer.transform.rotation ?? 0,
+      curve: curves.includes(item.curve as SceneCurve) ? item.curve as SceneCurve : layer.animation.curve,
+    }]
+  }).sort((a, b) => a.time - b.time)
+  return frames.length >= 2 ? frames : undefined
+}
+
+export const evaluateSceneLayer = (layer: SceneLayer, timeSeconds: number): SceneAnimationPoint => {
+  const frames = getSceneKeyframes(layer)
+  if (timeSeconds <= frames[0].time) return frames[0]
+  const finalFrame = frames[frames.length - 1]
+  if (timeSeconds >= finalFrame.time) return finalFrame
+
+  const rightIndex = frames.findIndex(frame => frame.time >= timeSeconds)
+  const start = frames[Math.max(0, rightIndex - 1)]
+  const end = frames[rightIndex]
+  const span = Math.max(.0001, end.time - start.time)
+  const amount = applySceneCurve((timeSeconds - start.time) / span, start.curve)
+  return {
+    x: lerp(start.x, end.x, amount),
+    y: lerp(start.y, end.y, amount),
+    scale: lerp(start.scale, end.scale, amount),
+    opacity: lerp(start.opacity, end.opacity, amount),
+    rotation: lerp(start.rotation, end.rotation, amount),
+  }
+}
+
+const framePoint = (frame: SceneKeyframe) => ({
+  x: frame.x,
+  y: frame.y,
+  scale: frame.scale,
+  opacity: frame.opacity,
+  rotation: frame.rotation,
+})
+
+export const withSceneKeyframes = (
+  layer: SceneLayer,
+  keyframes: SceneKeyframe[],
+  requestedDuration = layer.animation.duration,
+): SceneLayer => {
+  if (keyframes.length < 2) return layer
+  const ordered = [...keyframes].sort((a, b) => a.time - b.time)
+  const duration = Math.max(.1, requestedDuration, ordered[ordered.length - 1].time)
+  return {
+    ...layer,
+    animation: {
+      ...layer.animation,
+      start: framePoint(ordered[0]),
+      end: framePoint(ordered[ordered.length - 1]),
+      keyframes: ordered,
+      duration,
+      curve: ordered[0].curve,
+    },
+  }
+}
+
+export const mapSceneAnimationPoints = (
+  layer: SceneLayer,
+  map: (point: SceneAnimationPoint) => SceneAnimationPoint,
+): SceneLayer['animation'] => ({
+  ...layer.animation,
+  start: map(pointFrom(layer.animation.start, layer)),
+  end: map(pointFrom(layer.animation.end, layer)),
+  keyframes: layer.animation.keyframes?.map(frame => ({ ...frame, ...map(frame) })),
+})

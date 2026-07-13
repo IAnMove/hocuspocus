@@ -3,7 +3,9 @@ import { Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, Copy, Downloa
 import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
-import type { Scene, SceneCurve, SceneLayer, SceneLayerType } from '../../types'
+import { evaluateSceneLayer, getSceneKeyframes, mapSceneAnimationPoints, normalizeSceneKeyframes, withSceneKeyframes } from '../../lib/sceneTimeline'
+import type { Scene, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType } from '../../types'
+import { SceneTimeline } from './SceneTimeline'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 type AnimatorLayerType = SceneLayerType
@@ -23,8 +25,6 @@ type Preset = { id: string; label: string; category: PresetCategory; start: Poin
 type CameraPreset = { id: string; label: string; start: Point; end: Point; duration: number; curve: SceneCurve }
 type Gesture = { id: string; mode: 'move' | 'resize' | 'orbit'; startX: number; startY: number; x: number; y: number; scale: number; rotationX: number; rotationY: number }
 
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t
-const ease = (t: number, curve: SceneCurve) => curve === 'ease' ? t * t * (3 - 2 * t) : curve === 'dramatic' ? t * t : curve === 'bounce' ? Math.min(1, t + Math.sin(t * Math.PI * 3) * (1 - t) * .18) : t
 const makePoint = (x: number, y: number, scale: number): Point => ({ x, y, scale })
 const CAMERA_PRESETS: CameraPreset[] = [
   { id: 'camera-locked', label: 'Locked shot', start: { x: 50, y: 50, scale: 1, rotation: 0 }, end: { x: 50, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'linear' },
@@ -69,6 +69,39 @@ const RESOLUTIONS = [
 
 const assignZ = (layers: AnimatorLayer[]) => layers.map((layer, index) => ({ ...layer, z: index * 10 }))
 const normalizeZ = (layers: AnimatorLayer[]) => assignZ([...layers].sort((a, b) => a.z - b.z))
+const ANIMATED_FIELDS = ['x', 'y', 'scale', 'opacity', 'rotation'] as const
+type AnimatedField = typeof ANIMATED_FIELDS[number]
+
+const endpointValue = (layer: AnimatorLayer, endpoint: 'start' | 'end', field: AnimatedField) => {
+  const value = layer.animation[endpoint][field]
+  if (typeof value === 'number') return value
+  return field === 'opacity' ? layer.transform.opacity : field === 'rotation' ? layer.transform.rotation ?? 0 : 0
+}
+
+const reconcileLegacyKeyframeUpdate = (before: AnimatorLayer, after: AnimatorLayer): AnimatorLayer => {
+  if (!before.animation.keyframes?.length || after.animation.keyframes !== before.animation.keyframes) return after
+  let frames = getSceneKeyframes(before)
+  for (const field of ANIMATED_FIELDS) {
+    const beforeStart = endpointValue(before, 'start', field)
+    const beforeEnd = endpointValue(before, 'end', field)
+    const afterStart = endpointValue(after, 'start', field)
+    const afterEnd = endpointValue(after, 'end', field)
+    const startChanged = Math.abs(afterStart - beforeStart) > 1e-9
+    const endChanged = Math.abs(afterEnd - beforeEnd) > 1e-9
+    if (!startChanged && !endChanged) continue
+    const transformChanged = field in before.transform && field in after.transform && before.transform[field as keyof typeof before.transform] !== after.transform[field as keyof typeof after.transform]
+    if (startChanged && endChanged && transformChanged && (field === 'scale' || field === 'opacity') && Math.abs(afterStart - afterEnd) < 1e-9) {
+      frames = frames.map(frame => ({ ...frame, [field]: afterStart }))
+    } else if (startChanged && endChanged && Math.abs((afterStart - beforeStart) - (afterEnd - beforeEnd)) < 1e-9) {
+      const delta = afterStart - beforeStart
+      frames = frames.map(frame => ({ ...frame, [field]: frame[field] + delta }))
+    } else {
+      frames = frames.map((frame, index) => index === 0 && startChanged ? { ...frame, [field]: afterStart } : index === frames.length - 1 && endChanged ? { ...frame, [field]: afterEnd } : frame)
+    }
+  }
+  if (before.animation.curve !== after.animation.curve) frames = frames.map(frame => ({ ...frame, curve: after.animation.curve }))
+  return withSceneKeyframes(after, frames, after.animation.duration) as AnimatorLayer
+}
 
 function MotionPresetCard({ preset, selected, onSelect }: { preset: Preset; selected: boolean; onSelect: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -98,6 +131,7 @@ export function SceneAnimatorPanel() {
   const [reassignId, setReassignId] = useState<string | null>(null)
   const [jsonOpen, setJsonOpen] = useState(false)
   const [selectedPresetId, setSelectedPresetId] = useState('')
+  const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null)
   const [clipsByLayer, setClipsByLayer] = useState<Record<string, string[]>>({})
   const canvasRef = useRef<HTMLDivElement>(null)
   const animationRef = useRef<number | null>(null)
@@ -110,6 +144,7 @@ export function SceneAnimatorPanel() {
   const flashTimerRef = useRef<number | null>(null)
   const gestureRef = useRef<Gesture | null>(null)
   const localFilesRef = useRef<Record<string, File>>({})
+  const keyframeClipboardRef = useRef('')
   const selected = scene.layers.find(layer => layer.id === selectedId) ?? null
   const generatedModels = outputs.filter(output => output.type === 'model3d' && /\.glb$/i.test(output.name))
   const generatedMedia = outputs.filter(output => output.type === 'image' || output.type === 'video')
@@ -139,7 +174,7 @@ export function SceneAnimatorPanel() {
   const updateLayer = (id: string, updater: (layer: AnimatorLayer) => AnimatorLayer) => updateScene(current => {
     const target = current.layers.find(layer => layer.id === id)
     if (!target) return current
-    const updated = updater(target)
+    const updated = reconcileLegacyKeyframeUpdate(target, updater(target))
     const activatesCamera = updated.type === 'camera' && updated.visible
     return { ...current, layers: current.layers.map(layer => layer.id === id ? updated : activatesCamera && layer.type === 'camera' ? { ...layer, visible: false } : layer) }
   })
@@ -148,9 +183,35 @@ export function SceneAnimatorPanel() {
     return {
       ...current,
       duration: Math.max(current.duration, duration),
-      layers: current.layers.map(layer => layer.id === id ? { ...layer, animation: { ...layer.animation, duration } } : layer),
+      layers: current.layers.map(layer => {
+        if (layer.id !== id) return layer
+        const previousDuration = Math.max(.1, layer.animation.duration)
+        const keyframes = layer.animation.keyframes?.map(frame => ({ ...frame, time: frame.time * duration / previousDuration }))
+        return { ...layer, animation: { ...layer.animation, duration, keyframes } }
+      }),
     }
   })
+  const updateLayerEndpoint = (id: string, endpoint: 'start' | 'end', patch: Partial<Point>) => updateLayer(id, layer => {
+    if (!layer.animation.keyframes?.length) return { ...layer, animation: { ...layer.animation, [endpoint]: { ...layer.animation[endpoint], ...patch } } }
+    const frames = getSceneKeyframes(layer)
+    const index = endpoint === 'start' ? 0 : frames.length - 1
+    const keyframe = frames[index]
+    frames[index] = {
+      ...keyframe,
+      ...patch,
+      opacity: patch.opacity ?? keyframe.opacity,
+      rotation: patch.rotation ?? keyframe.rotation,
+    }
+    return withSceneKeyframes(layer, frames) as AnimatorLayer
+  })
+  const updateLayerCurve = (id: string, curve: SceneCurve) => updateLayer(id, layer => ({
+    ...layer,
+    animation: {
+      ...layer.animation,
+      curve,
+      keyframes: layer.animation.keyframes?.map(frame => ({ ...frame, curve })),
+    },
+  }))
   const setLayerVisibility = (id: string, visible: boolean) => updateScene(current => {
     const target = current.layers.find(layer => layer.id === id)
     return {
@@ -218,9 +279,9 @@ export function SceneAnimatorPanel() {
   }
   const translateLayer = (id: string, x: number, y: number) => updateLayer(id, layer => {
     const dx = x - layer.transform.x; const dy = y - layer.transform.y
-    return { ...layer, transform: { ...layer.transform, x, y }, animation: { ...layer.animation, start: { ...layer.animation.start, x: layer.animation.start.x + dx, y: layer.animation.start.y + dy }, end: { ...layer.animation.end, x: layer.animation.end.x + dx, y: layer.animation.end.y + dy } } }
+    return { ...layer, transform: { ...layer.transform, x, y }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: point.x + dx, y: point.y + dy })) }
   })
-  const resizeLayer = (id: string, scale: number) => updateLayer(id, layer => ({ ...layer, transform: { ...layer.transform, scale }, animation: { ...layer.animation, start: { ...layer.animation.start, scale }, end: { ...layer.animation.end, scale } } }))
+  const resizeLayer = (id: string, scale: number) => updateLayer(id, layer => ({ ...layer, transform: { ...layer.transform, scale }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, scale })) }))
   const startGesture = (event: ReactPointerEvent<HTMLElement>, layer: AnimatorLayer, mode: Gesture['mode']) => {
     event.preventDefault(); event.stopPropagation(); setSelectedId(layer.id)
     gestureRef.current = { id: layer.id, mode, startX: event.clientX, startY: event.clientY, x: layer.transform.x, y: layer.transform.y, scale: layer.transform.scale, rotationX: layer.transform.rotationX ?? 75, rotationY: layer.transform.rotationY ?? 0 }
@@ -240,7 +301,7 @@ export function SceneAnimatorPanel() {
     else updateLayer(gesture.id, layer => ({ ...layer, transform: { ...layer.transform, rotationY: gesture.rotationY + (event.clientX - gesture.startX) * .8, rotationX: Math.max(1, Math.min(179, gesture.rotationX + (event.clientY - gesture.startY) * .5)) } }))
   }
   const endGesture = () => { gestureRef.current = null }
-  const baseLayerState = (layer: AnimatorLayer, time: number): LayerState => { const t = ease(Math.min(1, time * scene.duration / Math.max(.1, layer.animation.duration)), layer.animation.curve); return { x: lerp(layer.animation.start.x, layer.animation.end.x, t), y: lerp(layer.animation.start.y, layer.animation.end.y, t), scale: lerp(layer.animation.start.scale, layer.animation.end.scale, t), opacity: lerp(layer.animation.start.opacity ?? layer.transform.opacity, layer.animation.end.opacity ?? layer.transform.opacity, t), rotation: lerp(layer.animation.start.rotation ?? layer.transform.rotation ?? 0, layer.animation.end.rotation ?? layer.transform.rotation ?? 0, t), z: layer.z } }
+  const baseLayerState = (layer: AnimatorLayer, time: number): LayerState => ({ ...evaluateSceneLayer(layer, time * scene.duration), z: layer.z })
   const activeCameraLayer = () => [...scene.layers].filter(layer => layer.type === 'camera' && layer.visible).sort((a, b) => b.z - a.z)[0]
   const cameraState = (time: number): LayerState => {
     const camera = activeCameraLayer()
@@ -312,15 +373,15 @@ export function SceneAnimatorPanel() {
     if (preset.requiresTarget && !target) { setMessage('Add a second layer before applying this relational movement.'); return }
     updateLayer(selected.id, layer => ({ ...layer, animation: { start: preset.start, end: preset.end, duration: preset.duration, curve: preset.curve, spin: preset.spin, rotationSpeed: layer.animation.rotationSpeed, clip: layer.animation.clip, orbit: preset.requiresTarget && target ? { targetLayerId: target.id, radiusX: 18, radiusY: 9, turns: 2, phase: 0, centerOffsetX: 0, centerOffsetY: 0 } : undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
-    setMessage(preset.requiresTarget ? `Orbit target: ${target?.name}` : null); setProgress(0)
+    setMessage(preset.requiresTarget ? `Orbit target: ${target?.name}` : null); setSelectedKeyframeId(null); setProgress(0)
   }
   const applyCameraPreset = (presetId: string) => {
     if (!selected || selected.type !== 'camera') return
     const preset = CAMERA_PRESETS.find(item => item.id === presetId)
     if (!preset) return
-    updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, duration: preset.duration, curve: preset.curve, orbit: undefined } }))
+    updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, duration: preset.duration, curve: preset.curve, orbit: undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
-    setSelectedPresetId(preset.id); setProgress(0); setMessage(`${preset.label} applied to ${selected.name}.`)
+    setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${preset.label} applied to ${selected.name}.`)
   }
   const updateCameraTransform = (id: string, field: 'x' | 'y' | 'scale' | 'rotation', value: number) => updateLayer(id, layer => {
     if (layer.type !== 'camera') return layer
@@ -330,22 +391,14 @@ export function SceneAnimatorPanel() {
       return {
         ...layer,
         transform: { ...layer.transform, scale: value },
-        animation: {
-          ...layer.animation,
-          start: { ...layer.animation.start, scale: Math.max(.05, layer.animation.start.scale * ratio) },
-          end: { ...layer.animation.end, scale: Math.max(.05, layer.animation.end.scale * ratio) },
-        },
+        animation: mapSceneAnimationPoints(layer, point => ({ ...point, scale: Math.max(.05, point.scale * ratio) })),
       }
     }
     const delta = value - previous
     return {
       ...layer,
       transform: { ...layer.transform, [field]: value },
-      animation: {
-        ...layer.animation,
-        start: { ...layer.animation.start, [field]: (layer.animation.start[field] ?? previous) + delta },
-        end: { ...layer.animation.end, [field]: (layer.animation.end[field] ?? previous) + delta },
-      },
+      animation: mapSceneAnimationPoints(layer, point => ({ ...point, [field]: point[field] + delta })),
     }
   })
   const applyParallaxPreset = (id: string, preset: ParallaxPreset) => updateLayer(id, layer => {
@@ -358,15 +411,67 @@ export function SceneAnimatorPanel() {
       parallax,
       fill: true,
       transform: { ...layer.transform, scale: Math.max(overscan, layer.transform.scale) },
-      animation: {
-        ...layer.animation,
-        start: { ...layer.animation.start, scale: Math.max(overscan, layer.animation.start.scale) },
-        end: { ...layer.animation.end, scale: Math.max(overscan, layer.animation.end.scale) },
-      },
+      animation: mapSceneAnimationPoints(layer, point => ({ ...point, scale: Math.max(overscan, point.scale) })),
     }
   })
-  const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, duration: layer.animation.duration, curve: layer.animation.curve, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, orbit: layer.animation.orbit })
-  const applyMotion = (raw: unknown) => { if (!selected || !raw || typeof raw !== 'object') throw new Error('Select a layer and provide a motion object.'); const value = (raw as { motion?: unknown }).motion ?? raw; if (!value || typeof value !== 'object') throw new Error('JSON must contain motion.'); const item = value as Partial<AnimatorLayer['animation']>; if (!item.start || !item.end || typeof item.duration !== 'number' || !Number.isFinite(item.duration)) throw new Error('Motion needs finite start, end and duration values.'); const duration = Math.max(.1, item.duration); updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, ...item, start: { ...layer.animation.start, ...item.start }, end: { ...layer.animation.end, ...item.end }, duration, curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(item.curve ?? '') ? item.curve as SceneCurve : 'linear' } })); updateScene(current => ({ ...current, duration: Math.max(current.duration, duration) })); setProgress(0) }
+  const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, keyframes: layer.animation.keyframes, duration: layer.animation.duration, curve: layer.animation.curve, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, orbit: layer.animation.orbit })
+  const applyMotion = (raw: unknown) => { if (!selected || !raw || typeof raw !== 'object') throw new Error('Select a layer and provide a motion object.'); const value = (raw as { motion?: unknown }).motion ?? raw; if (!value || typeof value !== 'object') throw new Error('JSON must contain motion.'); const item = value as Partial<AnimatorLayer['animation']>; if (!item.start || !item.end || typeof item.duration !== 'number' || !Number.isFinite(item.duration)) throw new Error('Motion needs start, end and a finite duration.'); const duration = Math.max(.1, item.duration); updateLayer(selected.id, layer => { const updated = { ...layer, animation: { ...layer.animation, ...item, start: { ...layer.animation.start, ...item.start }, end: { ...layer.animation.end, ...item.end }, keyframes: undefined, duration, curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(item.curve ?? '') ? item.curve as SceneCurve : 'linear' } }; const keyframes = normalizeSceneKeyframes(item.keyframes, updated); return keyframes ? withSceneKeyframes(updated, keyframes, duration) as AnimatorLayer : updated }); updateScene(current => ({ ...current, duration: Math.max(current.duration, duration) })); setSelectedKeyframeId(null); setProgress(0) }
+  const addKeyframeAtPlayhead = () => {
+    if (!selected) return
+    const time = progress * scene.duration
+    const frames = getSceneKeyframes(selected)
+    const existing = frames.find(frame => Math.abs(frame.time - time) < .025)
+    if (existing) { setSelectedKeyframeId(existing.id); return }
+    const point = evaluateSceneLayer(selected, time)
+    const keyframe: SceneKeyframe = { id: uid(), time, ...point, curve: selected.animation.curve }
+    updateLayer(selected.id, layer => withSceneKeyframes(layer, [...getSceneKeyframes(layer), keyframe], Math.max(layer.animation.duration, time)) as AnimatorLayer)
+    updateScene(current => ({ ...current, duration: Math.max(current.duration, time) }))
+    setSelectedKeyframeId(keyframe.id)
+    setMessage(`Keyframe added at ${time.toFixed(2)}s.`)
+  }
+  const updateTimelineKeyframe = (keyframeId: string, patch: Partial<Omit<SceneKeyframe, 'id'>>) => {
+    if (!selected) return
+    updateLayer(selected.id, layer => {
+      const frames = getSceneKeyframes(layer)
+      const index = frames.findIndex(frame => frame.id === keyframeId)
+      if (index < 0) return layer
+      const previousTime = index > 0 ? frames[index - 1].time + .01 : frames[index].time
+      const nextTime = index < frames.length - 1 ? frames[index + 1].time - .01 : frames[index].time
+      const time = index === 0 || index === frames.length - 1 ? frames[index].time : Math.max(previousTime, Math.min(nextTime, patch.time ?? frames[index].time))
+      const updated = frames.map(frame => frame.id === keyframeId ? { ...frame, ...patch, time } : frame)
+      return withSceneKeyframes(layer, updated) as AnimatorLayer
+    })
+  }
+  const deleteTimelineKeyframe = () => {
+    if (!selected || !selectedKeyframeId) return
+    const frames = getSceneKeyframes(selected)
+    const index = frames.findIndex(frame => frame.id === selectedKeyframeId)
+    if (index <= 0 || index >= frames.length - 1) return
+    updateLayer(selected.id, layer => withSceneKeyframes(layer, getSceneKeyframes(layer).filter(frame => frame.id !== selectedKeyframeId)) as AnimatorLayer)
+    setSelectedKeyframeId(null)
+    setMessage('Keyframe deleted.')
+  }
+  const copyTimelineKeyframes = () => {
+    if (!selected) return
+    const payload = JSON.stringify({ version: 1, keyframes: getSceneKeyframes(selected) }, null, 2)
+    keyframeClipboardRef.current = payload
+    void navigator.clipboard?.writeText(payload).catch(() => {})
+    setMessage(`${getSceneKeyframes(selected).length} keyframes copied.`)
+  }
+  const pasteTimelineKeyframes = async () => {
+    if (!selected) return
+    let text = keyframeClipboardRef.current
+    try { text = await navigator.clipboard?.readText() || text } catch { /* Internal clipboard remains available. */ }
+    if (!text) { setMessage('Copy keyframes first.'); return }
+    try {
+      const parsed = JSON.parse(text) as { keyframes?: unknown }
+      const frames = normalizeSceneKeyframes(Array.isArray(parsed) ? parsed : parsed.keyframes, selected)?.map(frame => ({ ...frame, id: uid() }))
+      if (!frames) throw new Error('Clipboard does not contain at least two valid keyframes.')
+      updateLayer(selected.id, layer => withSceneKeyframes(layer, frames, frames[frames.length - 1].time) as AnimatorLayer)
+      updateScene(current => ({ ...current, duration: Math.max(current.duration, frames[frames.length - 1].time) }))
+      setSelectedKeyframeId(frames[0].id); setProgress(frames[0].time / Math.max(.1, scene.duration)); setMessage(`${frames.length} keyframes pasted.`)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid keyframe clipboard.') }
+  }
   const download = (name: string, data: unknown) => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url) }
   const importScene = (text: string) => {
     try {
@@ -391,18 +496,20 @@ export function SceneAnimatorPanel() {
         const start = { x: rawLayer.animation?.start?.x ?? transform.x, y: rawLayer.animation?.start?.y ?? transform.y, scale: rawLayer.animation?.start?.scale ?? transform.scale, opacity: rawLayer.animation?.start?.opacity, rotation: rawLayer.animation?.start?.rotation ?? (isCamera ? transform.rotation : undefined) }
         const end = { x: rawLayer.animation?.end?.x ?? transform.x, y: rawLayer.animation?.end?.y ?? transform.y, scale: rawLayer.animation?.end?.scale ?? transform.scale, opacity: rawLayer.animation?.end?.opacity, rotation: rawLayer.animation?.end?.rotation ?? (isCamera ? transform.rotation : undefined) }
         const visible = isCamera ? rawLayer.id === activeCameraId : rawLayer.visible !== false
-        return {
+        const layer = {
           ...rawLayer,
           source: isCamera ? '' : String(rawLayer.source ?? ''),
           visible,
           parallax: isCamera ? undefined : typeof rawLayer.parallax === 'number' && Number.isFinite(rawLayer.parallax) ? Math.max(0, Math.min(2, rawLayer.parallax)) : 1,
           transform,
-          animation: { ...rawLayer.animation, start, end, duration: Math.max(.1, rawLayer.animation?.duration ?? incoming.duration ?? 5), curve: rawLayer.animation?.curve ?? 'linear' },
+          animation: { ...rawLayer.animation, start, end, keyframes: undefined, duration: Math.max(.1, rawLayer.animation?.duration ?? incoming.duration ?? 5), curve: rawLayer.animation?.curve ?? 'linear' },
           missingAsset: isCamera ? false : Boolean(rawLayer.missingAsset || isMissing(String(rawLayer.source ?? ''))),
         } as AnimatorLayer
+        const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, layer)
+        return keyframes ? withSceneKeyframes(layer, keyframes, layer.animation.duration) as AnimatorLayer : layer
       }))
       const duration = Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => layer.animation.duration))
-      localFilesRef.current = {}; setScene({ ...blankScene(), ...incoming, duration, layers }); setSelectedId(layers[0]?.id ?? null); setMessage('Scene imported. Reassign layers marked missing asset.'); setJsonOpen(false)
+      localFilesRef.current = {}; setScene({ ...blankScene(), ...incoming, duration, layers }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setMessage('Scene imported. Reassign layers marked missing asset.'); setJsonOpen(false)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
   }
   useEffect(() => {
@@ -502,10 +609,25 @@ export function SceneAnimatorPanel() {
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex gap-2"><button onClick={play} disabled={!scene.layers.length || playing || recording} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : 'Record WebM'}</button></div></div>
       <div className="mb-3 flex flex-wrap gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{label}</button>)}</div>
-      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && <button onClick={() => updateLayer(selected.id, layer => ({ ...layer, fill: !layer.fill, transform: { ...layer.transform, x: 50, y: 50, scale: 1 }, animation: { ...layer.animation, start: { ...layer.animation.start, x: 50, y: 50, scale: 1 }, end: { ...layer.animation.end, x: 50, y: 50, scale: 1 } } }))} className={`mb-3 rounded border px-2 py-1 text-[10px] ${selected.fill ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.fill ? 'Fill screen enabled' : 'Fill screen'}</button>}
+      {selected && isVisualLayer(selected) && selected.type !== 'model3d' && <button onClick={() => updateLayer(selected.id, layer => ({ ...layer, fill: !layer.fill, transform: { ...layer.transform, x: 50, y: 50, scale: 1 }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: 50, y: 50, scale: 1 })) }))} className={`mb-3 rounded border px-2 py-1 text-[10px] ${selected.fill ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.fill ? 'Fill screen enabled' : 'Fill screen'}</button>}
       {selected && isVisualLayer(selected) && selected.type !== 'model3d' && <button onClick={() => { sendToBack(selected.id); applyParallaxPreset(selected.id, 'background') }} className="mb-3 ml-1 rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-secondary">Use as background</button>}
       <div ref={canvasRef} className="relative isolate mx-auto w-full min-h-[240px] overflow-hidden rounded-lg border border-border bg-[#0b1020]" style={{ aspectRatio: `${scene.width} / ${scene.height}`, maxHeight: '68vh' }}>{[...scene.layers].sort((a, b) => a.z - b.z).map(renderLayer)}{activeCamera && <div className="pointer-events-none absolute left-2 top-2 z-[997] flex items-center gap-1 rounded bg-black/55 px-1.5 py-1 text-[8px] text-cyan-200"><Camera size={10} /> {activeCamera.name}</div>}{orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}{flash && <div className="pointer-events-none absolute z-[999]" style={{ left: `${flash.x}%`, top: `${flash.y}%` }}><span className="absolute -left-6 -top-6 h-12 w-12 rounded-full border-2 border-white/90 animate-ping" /><span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-white shadow-[0_0_20px_8px_rgba(96,165,250,.9)]" /></div>}<div className="absolute inset-x-0 bottom-0 z-[1000] h-1 bg-black/40"><div className="h-full bg-accent-blue" style={{ width: `${progress * 100}%` }} /></div></div>
       <p className="mt-2 text-[9px] text-text-muted">Center-drag a 3D layer to orbit it 360°; drag its outer edge to move it. Camera layers animate pan, zoom and rotation without rendering an asset. Parallax controls how strongly each visual layer follows camera pan. WebM uses the same camera transform and Z order as this preview.</p>
+      <SceneTimeline
+        layers={scene.layers}
+        duration={scene.duration}
+        currentTime={progress * scene.duration}
+        selectedLayerId={selectedId}
+        selectedKeyframeId={selectedKeyframeId}
+        onScrub={time => { if (animationRef.current) cancelAnimationFrame(animationRef.current); setPlaying(false); Object.values(videoRefs.current).forEach(video => video?.pause()); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onSelectLayer={id => { setSelectedId(id); setSelectedKeyframeId(null) }}
+        onSelectKeyframe={(layerId, keyframeId, time) => { setSelectedId(layerId); setSelectedKeyframeId(keyframeId); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onAddKeyframe={addKeyframeAtPlayhead}
+        onDeleteKeyframe={deleteTimelineKeyframe}
+        onCopyKeyframes={copyTimelineKeyframes}
+        onPasteKeyframes={() => void pasteTimelineKeyframes()}
+        onUpdateKeyframe={updateTimelineKeyframe}
+      />
     </section>
     <aside className="w-full shrink-0 border-t border-border bg-bg-secondary p-3 overflow-y-auto space-y-3 xl:w-[300px] xl:border-l xl:border-t-0">
       <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> Add layer</button>{addOpen && <div className="absolute z-[1100] mt-1 w-full rounded border border-border bg-bg-primary p-1 shadow-xl space-y-1"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">Add camera</button><button onClick={() => { setPicker('model'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated 3D model</button><button onClick={() => { setAddOpen(false); modelInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import GLB</button><button onClick={() => { setPicker('media'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated image/video</button><button onClick={() => { setAddOpen(false); mediaInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import image/video</button><button onClick={() => { setAddOpen(false); overlayInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import transparent PNG/WebP</button></div>}</div>
@@ -524,8 +646,8 @@ export function SceneAnimatorPanel() {
           {numberInput('Z / priority', selected.z, value => updateLayer(selected.id, layer => ({ ...layer, z: value })))}
         </div>
         <div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Camera shots</span><span className="text-[9px] text-text-muted">Click to apply</span></div><div className="grid grid-cols-2 gap-1">{CAMERA_PRESETS.map(preset => <button key={preset.id} onClick={() => applyCameraPreset(preset.id)} className={`rounded border px-2 py-1.5 text-left text-[9px] ${selectedPresetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border bg-bg-primary text-text-secondary hover:border-cyan-400/60'}`}>{preset.label}</button>)}</div></div>
-        <div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] capitalize text-text-muted">{key} camera</div>{numberInput('X', selected.animation[key].x, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], x: value } } })))}{numberInput('Y', selected.animation[key].y, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], y: value } } })))}{numberInput('Zoom', selected.animation[key].scale, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], scale: Math.max(.05, value) } } })), .05, 5, .05)}{numberInput('Rotation', selected.animation[key].rotation ?? selected.transform.rotation ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, [key]: { ...layer.animation[key], rotation: value } } })), -360, 360, .5)}</div>)}</div>
-        <div className="grid grid-cols-2 gap-1.5">{numberInput('Duration (s)', selected.animation.duration, value => updateLayerDuration(selected.id, value), .1, 30, .05)}<label className="text-[10px] text-text-muted">Curve<select value={selected.animation.curve} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, curve: event.target.value as SceneCurve } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">Linear</option><option value="ease">Ease</option><option value="dramatic">Dramatic</option><option value="bounce">Bounce</option></select></label></div>
+        <div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] capitalize text-text-muted">{key} camera</div>{numberInput('X', selected.animation[key].x, value => updateLayerEndpoint(selected.id, key, { x: value }))}{numberInput('Y', selected.animation[key].y, value => updateLayerEndpoint(selected.id, key, { y: value }))}{numberInput('Zoom', selected.animation[key].scale, value => updateLayerEndpoint(selected.id, key, { scale: Math.max(.05, value) }), .05, 5, .05)}{numberInput('Rotation', selected.animation[key].rotation ?? selected.transform.rotation ?? 0, value => updateLayerEndpoint(selected.id, key, { rotation: value }), -360, 360, .5)}</div>)}</div>
+        <div className="grid grid-cols-2 gap-1.5">{numberInput('Duration (s)', selected.animation.duration, value => updateLayerDuration(selected.id, value), .1, 30, .05)}<label className="text-[10px] text-text-muted">All segment curves<select value={selected.animation.curve} onChange={event => updateLayerCurve(selected.id, event.target.value as SceneCurve)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">Linear</option><option value="ease">Ease</option><option value="dramatic">Dramatic</option><option value="bounce">Bounce</option></select></label></div>
         <p className="text-[9px] text-text-muted">The highest visible camera is active. Its pan, zoom and rotation are applied identically to preview and WebM capture.</p>
       </div>}
       {selected?.type !== 'camera' && <>
@@ -553,7 +675,7 @@ export function SceneAnimatorPanel() {
           <button onClick={() => setJsonOpen(value => !value)} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> Import JSON</button>
         </div>
         {jsonOpen && <div className="space-y-1.5"><textarea value={motionText} onChange={event => setMotionText(event.target.value)} placeholder="Paste movement JSON" rows={4} className="w-full rounded border border-border bg-bg-primary p-1.5 text-[9px] font-mono" /><div className="flex gap-1.5"><button onClick={() => { try { applyMotion(JSON.parse(motionText)); setMessage('Movement applied to selected layer.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid motion JSON.') } }} className="rounded bg-accent-blue px-2 py-1 text-[10px] text-white">Apply movement</button><button onClick={() => motionInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">Load motion file</button><button onClick={() => sceneInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">Import scene</button></div><input ref={motionInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) file.text().then(setMotionText) }} /><input ref={sceneInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) file.text().then(importScene) }} /></div>}
-        <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">Return only valid Maestro Scene Animator motion JSON.{`\n`}Use start/end x and y from 0 to 100, start/end scale,{`\n`}duration in seconds, curve as linear/ease/dramatic/bounce,{`\n`}optional spin plus rotationSpeed, and optional start/end rotation for cameras.{`\n`}Do not include Markdown or explanations.{`\n\n`}{'{"version":1,"motion":{"start":{"x":10,"y":70,"scale":0.2},"end":{"x":90,"y":30,"scale":0.8},"duration":3,"curve":"dramatic","spin":true,"rotationSpeed":240}}'}</div>
+        <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">Return only valid Maestro Scene Animator motion JSON.{`\n`}Use start/end x and y from 0 to 100, start/end scale,{`\n`}duration in seconds, curve as linear/ease/dramatic/bounce,{`\n`}and optional spin plus rotationSpeed. For multi-step motion, add keyframes with id, time, x, y, scale, opacity, rotation and curve.{`\n`}Do not include Markdown or explanations.{`\n\n`}{'{"version":1,"motion":{"start":{"x":10,"y":70,"scale":0.2},"end":{"x":90,"y":30,"scale":0.8},"duration":3,"curve":"dramatic","spin":true,"rotationSpeed":240}}'}</div>
       </div>
       {message && <p className="text-[10px] text-text-secondary">{message}</p>}
     </aside>

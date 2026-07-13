@@ -163,6 +163,19 @@ export interface OutputFile {
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'camera'
 export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
 
+export interface SceneKeyframe {
+  id: string
+  /** Seconds from the beginning of this layer's animation. */
+  time: number
+  x: number
+  y: number
+  scale: number
+  opacity: number
+  rotation: number
+  /** Easing used from this keyframe to the next one. */
+  curve: SceneCurve
+}
+
 export interface SceneLayer {
   id: string
   name: string
@@ -193,6 +206,8 @@ export interface SceneLayer {
   animation: {
     start: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
     end: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
+    /** Multi-keyframe timeline. Older scenes continue to use start/end. */
+    keyframes?: SceneKeyframe[]
     duration: number
     curve: SceneCurve
     spin?: boolean
