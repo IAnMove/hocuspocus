@@ -65,6 +65,16 @@ def _quat_z(angle: float) -> list[float]:
     return [0.0, 0.0, math.sin(angle / 2.0), math.cos(angle / 2.0)]
 
 
+def _quat_axis(axis: list[float] | np.ndarray, angle: float) -> list[float]:
+    direction = np.asarray(axis, dtype=np.float64)
+    norm = float(np.linalg.norm(direction))
+    if norm <= 1e-9:
+        return [0.0, 0.0, 0.0, 1.0]
+    direction /= norm
+    sine = math.sin(angle / 2.0)
+    return [float(direction[0] * sine), float(direction[1] * sine), float(direction[2] * sine), math.cos(angle / 2.0)]
+
+
 def _quat_x(angle: float) -> list[float]:
     return [math.sin(angle / 2.0), 0.0, 0.0, math.cos(angle / 2.0)]
 
@@ -186,6 +196,21 @@ def _principal_axis(world_verts: np.ndarray) -> np.ndarray:
     if axis[dominant_component] < 0:
         axis = -axis
     return axis
+
+
+def _perpendicular_sway_axis(chain_axis: list[float] | np.ndarray) -> np.ndarray:
+    """Keep bending perpendicular to the chain instead of twisting along it."""
+    direction = np.asarray(chain_axis, dtype=np.float64)
+    norm = float(np.linalg.norm(direction))
+    if norm <= 1e-9:
+        return np.array([0.0, 0.0, 1.0])
+    direction /= norm
+    for preferred in (np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0])):
+        projected = preferred - direction * float(preferred @ direction)
+        projected_norm = float(np.linalg.norm(projected))
+        if projected_norm > 1e-6:
+            return projected / projected_norm
+    return np.array([0.0, 1.0, 0.0])
 
 
 def _profile_bin_edges(low: float, high: float, count: int, rig_profile: str) -> np.ndarray:
@@ -342,6 +367,9 @@ def _build_clip(
     root_rotation = target.get("root_rotation") or [0.0, 0.0, 0.0, 1.0]
     root_scale = np.asarray(target.get("root_scale") or [1.0, 1.0, 1.0], dtype=np.float64)
     chain_rotations = target.get("chain_rotations") or [[0.0, 0.0, 0.0, 1.0]] * len(chain)
+    sway_axis = target.get("sway_axis")
+    if sway_axis is None:
+        sway_axis = [0.0, 0.0, 1.0]
     count = len(chain)
 
     def timeline(duration: float, per_second: int = 12) -> np.ndarray:
@@ -355,7 +383,7 @@ def _build_clip(
             bind = chain_rotations[i]
             # Local-space delta: rotate within the bone's own frame.
             quats = np.array([
-                _quat_mul(bind, _quat_z(amplitude * math.sin(2 * math.pi * t / period + phase)))
+                _quat_mul(bind, _quat_axis(sway_axis, amplitude * math.sin(2 * math.pi * t / period + phase)))
                 for t in times
             ])
             _add_sampler(gltf, blob, animation, times, quats, node_index, "rotation")
@@ -655,6 +683,7 @@ def rig_glb(
         "chain_indices": spine_indices,
         "root_translation": [float(v) for v in root_translation],
         "height": skeleton["height"],
+        "sway_axis": [float(value) for value in _perpendicular_sway_axis(skeleton["axis"])],
     }
     for clip_id in clip_ids:
         _build_clip(gltf, blob, clip_id, clip_target)
