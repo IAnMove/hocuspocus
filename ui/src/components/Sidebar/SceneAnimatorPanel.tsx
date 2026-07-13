@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
@@ -243,7 +243,7 @@ export function SceneAnimatorPanel() {
   const selectedModelSource = selected?.type === 'model3d' ? selected.source : null
   const selectedModelClip = selected?.type === 'model3d' ? selected.animation.clip : undefined
 
-  function syncSkeletalClips(sceneSeconds: number) {
+  const syncSceneMedia = useCallback((sceneSeconds: number) => {
     sceneRef.current.layers.filter(layer => layer.type === 'model3d').forEach(layer => {
       const viewer = findLayerElement(canvasRef.current, layer.id) as ModelViewerAnimationElement | null
       if (!viewer || typeof viewer.pause !== 'function') return
@@ -256,7 +256,20 @@ export function SceneAnimatorPanel() {
       if (viewer.animationName !== layer.animation.clip) { viewer.animationName = layer.animation.clip; queueMicrotask(applyTime) }
       else applyTime()
     })
-  }
+    sceneRef.current.layers.filter(layer => layer.type === 'video').forEach(layer => {
+      const video = videoRefs.current[layer.id]
+      if (!video) return
+      video.pause()
+      const duration = finiteNumber(video.duration, 0)
+      if (duration <= 0) return
+      const layerTime = sceneTimeToLayerTime(layer, sceneSeconds)
+      const finalFrame = Math.max(0, duration - 1 / fps)
+      const target = layer.animation.loop ? layerTime % duration : Math.min(finalFrame, layerTime)
+      if (Math.abs(video.currentTime - target) > 1 / (fps * 2)) {
+        try { video.currentTime = target } catch { /* Metadata can disappear while a source is being reassigned. */ }
+      }
+    })
+  }, [fps])
 
   useEffect(() => { void import('@google/model-viewer') }, [])
   useEffect(() => {
@@ -275,9 +288,9 @@ export function SceneAnimatorPanel() {
   }, [selectedId])
   useEffect(() => {
     // The scene object intentionally resynchronizes clips after inspector edits.
-    const frame = requestAnimationFrame(() => syncSkeletalClips(progress * scene.duration))
+    const frame = requestAnimationFrame(() => syncSceneMedia(progress * scene.duration))
     return () => cancelAnimationFrame(frame)
-  }, [progress, scene])
+  }, [progress, scene, syncSceneMedia])
   // Rigged GLBs expose their baked clips through model-viewer's
   // availableAnimations; poll briefly after selection until the model loads.
   useEffect(() => {
@@ -291,7 +304,7 @@ export function SceneAnimatorPanel() {
         const duration = finiteNumber(element?.duration, 0)
         if (duration > 0) {
           setClipDurationsByLayer(current => current[selectedModelId] === duration ? current : { ...current, [selectedModelId]: duration })
-          syncSkeletalClips(progressRef.current * sceneRef.current.duration)
+          syncSceneMedia(progressRef.current * sceneRef.current.duration)
         }
         if ((!selectedModelClip || duration > 0) && timer !== null) window.clearInterval(timer)
       }
@@ -299,7 +312,7 @@ export function SceneAnimatorPanel() {
     read()
     timer = window.setInterval(read, 800)
     return () => { if (timer !== null) window.clearInterval(timer) }
-  }, [selectedModelId, selectedModelSource, selectedModelClip])
+  }, [selectedModelId, selectedModelSource, selectedModelClip, syncSceneMedia])
   useEffect(() => { void loadOutputs() }, [loadOutputs])
   useEffect(() => () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); if (flashTimerRef.current) clearTimeout(flashTimerRef.current) }, [])
 
@@ -634,12 +647,11 @@ export function SceneAnimatorPanel() {
     if (!layer || layer.locked) return current
     return { ...current, layers: assignZ([layer, ...layers.filter(item => item.id !== id)]) }
   })
-  const resetSkeletalClips = () => syncSkeletalClips(0)
+  const resetSceneMedia = () => syncSceneMedia(0)
   const animate = (done?: () => void) => {
     const started = performance.now()
     let renderedFrame = -1
-    resetSkeletalClips(); setPlaying(true)
-    Object.values(videoRefs.current).forEach(video => { if (video) { video.currentTime = 0; void video.play().catch(() => {}) } })
+    resetSceneMedia(); setPlaying(true)
     const frame = (now: number) => {
       const elapsed = Math.min(scene.duration, (now - started) / 1000)
       const frameIndex = Math.floor(elapsed * fps)
@@ -647,7 +659,7 @@ export function SceneAnimatorPanel() {
       if (frameIndex !== renderedFrame || finished) {
         renderedFrame = frameIndex
         const next = finished ? 1 : frameIndex / fps / scene.duration
-        syncSkeletalClips(next * scene.duration); setProgress(next)
+        syncSceneMedia(next * scene.duration); setProgress(next)
       }
       if (!finished) animationRef.current = requestAnimationFrame(frame)
       else { setPlaying(false); Object.values(videoRefs.current).forEach(video => video?.pause()); done?.() }
@@ -1049,19 +1061,17 @@ export function SceneAnimatorPanel() {
     if (!('MediaRecorder' in window)) { setMessage('This browser cannot record the scene.'); return }
     const canvas = document.createElement('canvas'); canvas.width = scene.width; canvas.height = scene.height; const context = canvas.getContext('2d'); if (!context) return
     if (!('filter' in context) && scene.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) { setMessage('This browser can preview layer filters but cannot capture them. Use Chromium/Chrome to record this scene.'); return }
-    resetSkeletalClips(); setRecording(true); setProgress(0)
-    Object.values(videoRefs.current).forEach(video => { if (video) video.currentTime = 0 })
+    resetSceneMedia(); setRecording(true); setProgress(0)
     requestAnimationFrame(() => {
       paintScene(canvas, 0)
       const stream = canvas.captureStream(fps); const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'; const videoBitsPerSecond = Math.round(Math.max(4_000_000, Math.min(60_000_000, scene.width * scene.height * fps * .12))); const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond }); const chunks: Blob[] = []
       recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }; recorder.onstop = () => { const url = URL.createObjectURL(new Blob(chunks, { type: mime })); const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${scene.width}x${scene.height}-${fps}fps-${Date.now()}.webm`; link.click(); URL.revokeObjectURL(url); setRecording(false) }
       recorder.start(250)
       const started = performance.now(); let syncedFrame = 0
-      Object.values(videoRefs.current).forEach(video => { if (video) void video.play().catch(() => {}) })
       const finish = () => {
         const readyProgress = Math.min(1, syncedFrame / fps / scene.duration)
         setProgress(readyProgress); paintScene(canvas, readyProgress)
-        syncSkeletalClips(scene.duration)
+        syncSceneMedia(scene.duration)
         requestAnimationFrame(() => {
           setProgress(1); paintScene(canvas, 1)
           Object.values(videoRefs.current).forEach(video => video?.pause()); recorder.stop()
@@ -1075,7 +1085,7 @@ export function SceneAnimatorPanel() {
           const readyProgress = Math.min(1, syncedFrame / fps / scene.duration)
           setProgress(readyProgress); paintScene(canvas, readyProgress)
           syncedFrame = desiredFrame
-          syncSkeletalClips(Math.min(scene.duration, desiredFrame / fps))
+          syncSceneMedia(Math.min(scene.duration, desiredFrame / fps))
         }
         requestAnimationFrame(frame)
       }
@@ -1129,9 +1139,9 @@ export function SceneAnimatorPanel() {
     if (layer.missingAsset) return <button key={layer.id} onClick={() => setSelectedId(layer.id)} className={`absolute flex items-center justify-center border border-dashed border-red-400/70 bg-red-500/10 text-[10px] text-red-300 ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`} style={common}>Missing asset</button>
     const edgeMove = (event: ReactPointerEvent<HTMLElement>) => { if (layer.type !== 'model3d') return startGesture(event, layer, 'move'); const box = event.currentTarget.getBoundingClientRect(); const edge = (event.clientX - box.left) / box.width < .18 || (event.clientX - box.left) / box.width > .82 || (event.clientY - box.top) / box.height < .18 || (event.clientY - box.top) / box.height > .82; startGesture(event, layer, edge ? 'move' : 'orbit') }
     const media = layer.type === 'model3d'
-      ? <model-viewer data-layer-id={layer.id} src={layer.source} camera-orbit={`${layer.transform.rotationY ?? 0}deg ${layer.transform.rotationX ?? 75}deg auto`} interaction-prompt="none" auto-rotate={layer.animation.spin && (playing || recording) ? true : undefined} rotation-per-second={`${layer.animation.rotationSpeed ?? 35}deg`} animation-name={layer.animation.clip || undefined} animation-crossfade-duration="0" onLoad={() => syncSkeletalClips(progressRef.current * sceneRef.current.duration)} shadow-intensity="1" exposure="1" loading="eager" className="scene-animator-model pointer-events-none h-full w-full" />
+      ? <model-viewer data-layer-id={layer.id} src={layer.source} camera-orbit={`${layer.transform.rotationY ?? 0}deg ${layer.transform.rotationX ?? 75}deg auto`} interaction-prompt="none" auto-rotate={layer.animation.spin && (playing || recording) ? true : undefined} rotation-per-second={`${layer.animation.rotationSpeed ?? 35}deg`} animation-name={layer.animation.clip || undefined} animation-crossfade-duration="0" onLoad={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} shadow-intensity="1" exposure="1" loading="eager" className="scene-animator-model pointer-events-none h-full w-full" />
       : layer.type === 'video'
-        ? <video data-layer-id={layer.id} ref={element => { videoRefs.current[layer.id] = element }} src={layer.source} muted loop className={`h-full w-full ${layer.fill ? 'object-cover' : 'object-contain'}`} />
+        ? <video data-layer-id={layer.id} ref={element => { videoRefs.current[layer.id] = element }} src={layer.source} muted playsInline preload="auto" onLoadedMetadata={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} className={`h-full w-full ${layer.fill ? 'object-cover' : 'object-contain'}`} />
         : <img data-layer-id={layer.id} src={layer.source} alt={layer.name} draggable={false} className={`h-full w-full select-none ${layer.fill ? 'object-cover' : 'object-contain'}`} />
     return <div key={layer.id} style={common} onPointerDown={edgeMove} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture} className={`absolute touch-none cursor-grab active:cursor-grabbing ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`}><div className="h-full w-full" style={maskStyle}><div className="h-full w-full" style={effectStyle}>{media}</div></div>{selection && <button aria-label="Resize layer" onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
   }
@@ -1179,10 +1189,10 @@ export function SceneAnimatorPanel() {
         selectedLayerId={selectedId}
         selectedKeyframeId={selectedKeyframeId}
         selectedEventId={selectedEventId}
-        onScrub={time => { if (animationRef.current) cancelAnimationFrame(animationRef.current); setPlaying(false); Object.values(videoRefs.current).forEach(video => video?.pause()); syncSkeletalClips(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onScrub={time => { if (animationRef.current) cancelAnimationFrame(animationRef.current); setPlaying(false); syncSceneMedia(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
         onSelectLayer={id => { setSelectedId(id); setSelectedKeyframeId(null); setSelectedEventId(null) }}
-        onSelectKeyframe={(layerId, keyframeId, time) => { setSelectedId(layerId); setSelectedKeyframeId(keyframeId); setSelectedEventId(null); syncSkeletalClips(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
-        onSelectEvent={(layerId, eventId, time) => { setSelectedId(layerId); setSelectedKeyframeId(null); setSelectedEventId(eventId); syncSkeletalClips(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onSelectKeyframe={(layerId, keyframeId, time) => { setSelectedId(layerId); setSelectedKeyframeId(keyframeId); setSelectedEventId(null); syncSceneMedia(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onSelectEvent={(layerId, eventId, time) => { setSelectedId(layerId); setSelectedKeyframeId(null); setSelectedEventId(eventId); syncSceneMedia(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
         onAddKeyframe={addKeyframeAtPlayhead}
         onAddEvent={addEventAtPlayhead}
         onDeleteKeyframe={deleteTimelineKeyframe}
