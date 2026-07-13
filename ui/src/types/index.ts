@@ -184,6 +184,8 @@ export interface SceneLayer {
   thumbnail?: string
   visible: boolean
   z: number
+  /** Prevent accidental transform, timing and inspector edits. */
+  locked?: boolean
   /** Object URLs cannot survive a scene export/import and need reassignment. */
   missingAsset?: boolean
   /** Image/video is cropped to cover the complete scene frame. */
