@@ -87,15 +87,16 @@ export function RigAnimatePanel() {
   const profileAnimations = capabilities?.animations.filter(animation => !selectedProfile || selectedProfile.allowed_animations.includes(animation.id)) ?? []
   const recommendedAnimationIds = selectedProfile?.recommended_animations ?? profileAnimations.map(animation => animation.id)
   const isRunning = job?.status === 'queued' || job?.status === 'running'
+  const activeJobId = isRunning ? job?.job_id ?? null : null
   const canRun = !!selectedEngine?.installed && !!source && selectedClips.size > 0 && !isRunning
 
   useEffect(() => {
-    if (!job || (job.status !== 'queued' && job.status !== 'running')) return
+    if (!activeJobId) return
     let disposed = false
     let failures = 0
     const poll = async () => {
       try {
-        const next = await fetchRigJob(job.job_id)
+        const next = await fetchRigJob(activeJobId)
         failures = 0
         if (!disposed) setJob(next)
       } catch (err) {
@@ -115,7 +116,7 @@ export function RigAnimatePanel() {
       disposed = true
       window.clearInterval(timer)
     }
-  }, [job?.job_id, job?.status])
+  }, [activeJobId])
 
   useEffect(() => {
     if (job?.status === 'completed') {
