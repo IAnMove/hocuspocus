@@ -3,7 +3,7 @@ import { Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, Copy, Downloa
 import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
-import { evaluateSceneLayer, getSceneKeyframes, mapSceneAnimationPoints, normalizeSceneKeyframes, withSceneKeyframes } from '../../lib/sceneTimeline'
+import { evaluateSceneLayer, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
 import type { Scene, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
 
@@ -187,9 +187,20 @@ export function SceneAnimatorPanel() {
         if (layer.id !== id) return layer
         const previousDuration = Math.max(.1, layer.animation.duration)
         const keyframes = layer.animation.keyframes?.map(frame => ({ ...frame, time: frame.time * duration / previousDuration }))
-        return { ...layer, animation: { ...layer.animation, duration, keyframes } }
+        return { ...layer, animation: { ...layer.animation, duration, keyframes, trimStart: (layer.animation.trimStart ?? 0) * duration / previousDuration, trimEnd: (layer.animation.trimEnd ?? previousDuration) * duration / previousDuration } }
       }),
     }
+  })
+  const updateLayerTiming = (id: string, patch: Partial<Pick<AnimatorLayer['animation'], 'offset' | 'speed' | 'loop' | 'trimStart' | 'trimEnd'>>) => updateScene(current => {
+    let sceneEnd = current.duration
+    const layers = current.layers.map(layer => {
+      if (layer.id !== id) return layer
+      const updated = withNormalizedSceneTiming({ ...layer, animation: { ...layer.animation, ...patch } }) as AnimatorLayer
+      const timing = getSceneLayerTiming(updated)
+      sceneEnd = Math.max(sceneEnd, timing.offset + timing.span / timing.speed)
+      return updated
+    })
+    return { ...current, duration: sceneEnd, layers }
   })
   const updateLayerEndpoint = (id: string, endpoint: 'start' | 'end', patch: Partial<Point>) => updateLayer(id, layer => {
     if (!layer.animation.keyframes?.length) return { ...layer, animation: { ...layer.animation, [endpoint]: { ...layer.animation[endpoint], ...patch } } }
@@ -301,7 +312,7 @@ export function SceneAnimatorPanel() {
     else updateLayer(gesture.id, layer => ({ ...layer, transform: { ...layer.transform, rotationY: gesture.rotationY + (event.clientX - gesture.startX) * .8, rotationX: Math.max(1, Math.min(179, gesture.rotationX + (event.clientY - gesture.startY) * .5)) } }))
   }
   const endGesture = () => { gestureRef.current = null }
-  const baseLayerState = (layer: AnimatorLayer, time: number): LayerState => ({ ...evaluateSceneLayer(layer, time * scene.duration), z: layer.z })
+  const baseLayerState = (layer: AnimatorLayer, time: number): LayerState => ({ ...evaluateSceneLayer(layer, sceneTimeToLayerTime(layer, time * scene.duration)), z: layer.z })
   const activeCameraLayer = () => [...scene.layers].filter(layer => layer.type === 'camera' && layer.visible).sort((a, b) => b.z - a.z)[0]
   const cameraState = (time: number): LayerState => {
     const camera = activeCameraLayer()
@@ -334,7 +345,7 @@ export function SceneAnimatorPanel() {
     const target = orbit && scene.layers.find(item => item.id === orbit.targetLayerId)
     if (!orbit || !target || !isVisualLayer(target) || target.id === layer.id) return state
     const targetState = baseLayerState(target, time)
-    const orbitProgress = Math.min(1, time * scene.duration / Math.max(.1, layer.animation.duration))
+    const orbitProgress = sceneLayerMotionProgress(layer, time * scene.duration)
     const angle = orbit.phase * Math.PI / 180 + orbitProgress * orbit.turns * Math.PI * 2
     const depth = Math.sin(angle)
     const centerX = targetState.x + (orbit.centerOffsetX ?? 0)
@@ -379,7 +390,7 @@ export function SceneAnimatorPanel() {
     if (!selected || selected.type !== 'camera') return
     const preset = CAMERA_PRESETS.find(item => item.id === presetId)
     if (!preset) return
-    updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, duration: preset.duration, curve: preset.curve, orbit: undefined } }))
+    updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, duration: preset.duration, curve: preset.curve, offset: 0, speed: 1, loop: false, trimStart: 0, trimEnd: preset.duration, orbit: undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
     setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${preset.label} applied to ${selected.name}.`)
   }
@@ -414,11 +425,39 @@ export function SceneAnimatorPanel() {
       animation: mapSceneAnimationPoints(layer, point => ({ ...point, scale: Math.max(overscan, point.scale) })),
     }
   })
-  const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, keyframes: layer.animation.keyframes, duration: layer.animation.duration, curve: layer.animation.curve, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, orbit: layer.animation.orbit })
-  const applyMotion = (raw: unknown) => { if (!selected || !raw || typeof raw !== 'object') throw new Error('Select a layer and provide a motion object.'); const value = (raw as { motion?: unknown }).motion ?? raw; if (!value || typeof value !== 'object') throw new Error('JSON must contain motion.'); const item = value as Partial<AnimatorLayer['animation']>; if (!item.start || !item.end || typeof item.duration !== 'number' || !Number.isFinite(item.duration)) throw new Error('Motion needs start, end and a finite duration.'); const duration = Math.max(.1, item.duration); updateLayer(selected.id, layer => { const updated = { ...layer, animation: { ...layer.animation, ...item, start: { ...layer.animation.start, ...item.start }, end: { ...layer.animation.end, ...item.end }, keyframes: undefined, duration, curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(item.curve ?? '') ? item.curve as SceneCurve : 'linear' } }; const keyframes = normalizeSceneKeyframes(item.keyframes, updated); return keyframes ? withSceneKeyframes(updated, keyframes, duration) as AnimatorLayer : updated }); updateScene(current => ({ ...current, duration: Math.max(current.duration, duration) })); setSelectedKeyframeId(null); setProgress(0) }
+  const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, keyframes: layer.animation.keyframes, duration: layer.animation.duration, curve: layer.animation.curve, offset: layer.animation.offset, speed: layer.animation.speed, loop: layer.animation.loop, trimStart: layer.animation.trimStart, trimEnd: layer.animation.trimEnd, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, orbit: layer.animation.orbit })
+  const applyMotion = (raw: unknown) => {
+    if (!selected || !raw || typeof raw !== 'object') throw new Error('Select a layer and provide a motion object.')
+    const value = (raw as { motion?: unknown }).motion ?? raw
+    if (!value || typeof value !== 'object') throw new Error('JSON must contain motion.')
+    const item = value as Partial<AnimatorLayer['animation']>
+    if (!item.start || !item.end || typeof item.duration !== 'number' || !Number.isFinite(item.duration)) throw new Error('Motion needs start, end and a finite duration.')
+    const duration = Math.max(.1, item.duration)
+    updateLayer(selected.id, layer => {
+      const updated = withNormalizedSceneTiming({
+        ...layer,
+        animation: {
+          ...layer.animation,
+          ...item,
+          start: { ...layer.animation.start, ...item.start },
+          end: { ...layer.animation.end, ...item.end },
+          keyframes: undefined,
+          duration,
+          curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(item.curve ?? '') ? item.curve as SceneCurve : 'linear',
+        },
+      }) as AnimatorLayer
+      const keyframes = normalizeSceneKeyframes(item.keyframes, updated)
+      return keyframes ? withSceneKeyframes(updated, keyframes, duration) as AnimatorLayer : updated
+    })
+    const timingLayer = withNormalizedSceneTiming({ ...selected, animation: { ...selected.animation, ...item, duration } }) as AnimatorLayer
+    const timing = getSceneLayerTiming(timingLayer)
+    updateScene(current => ({ ...current, duration: Math.max(current.duration, timing.offset + timing.span / timing.speed) }))
+    setSelectedKeyframeId(null); setProgress(0)
+  }
   const addKeyframeAtPlayhead = () => {
     if (!selected) return
-    const time = progress * scene.duration
+    const sceneTime = progress * scene.duration
+    const time = sceneTimeToLayerTime(selected, sceneTime)
     const frames = getSceneKeyframes(selected)
     const existing = frames.find(frame => Math.abs(frame.time - time) < .025)
     if (existing) { setSelectedKeyframeId(existing.id); return }
@@ -427,7 +466,7 @@ export function SceneAnimatorPanel() {
     updateLayer(selected.id, layer => withSceneKeyframes(layer, [...getSceneKeyframes(layer), keyframe], Math.max(layer.animation.duration, time)) as AnimatorLayer)
     updateScene(current => ({ ...current, duration: Math.max(current.duration, time) }))
     setSelectedKeyframeId(keyframe.id)
-    setMessage(`Keyframe added at ${time.toFixed(2)}s.`)
+    setMessage(`Keyframe added at local ${time.toFixed(2)}s (scene ${sceneTime.toFixed(2)}s).`)
   }
   const updateTimelineKeyframe = (keyframeId: string, patch: Partial<Omit<SceneKeyframe, 'id'>>) => {
     if (!selected) return
@@ -467,9 +506,12 @@ export function SceneAnimatorPanel() {
       const parsed = JSON.parse(text) as { keyframes?: unknown }
       const frames = normalizeSceneKeyframes(Array.isArray(parsed) ? parsed : parsed.keyframes, selected)?.map(frame => ({ ...frame, id: uid() }))
       if (!frames) throw new Error('Clipboard does not contain at least two valid keyframes.')
-      updateLayer(selected.id, layer => withSceneKeyframes(layer, frames, frames[frames.length - 1].time) as AnimatorLayer)
-      updateScene(current => ({ ...current, duration: Math.max(current.duration, frames[frames.length - 1].time) }))
-      setSelectedKeyframeId(frames[0].id); setProgress(frames[0].time / Math.max(.1, scene.duration)); setMessage(`${frames.length} keyframes pasted.`)
+      const pastedDuration = Math.max(.1, frames[frames.length - 1].time)
+      updateLayer(selected.id, layer => withSceneKeyframes({ ...layer, animation: { ...layer.animation, trimStart: 0, trimEnd: pastedDuration } }, frames, pastedDuration) as AnimatorLayer)
+      const timing = getSceneLayerTiming({ ...selected, animation: { ...selected.animation, duration: pastedDuration, trimStart: 0, trimEnd: pastedDuration } })
+      const effectiveEnd = timing.offset + timing.span / timing.speed
+      updateScene(current => ({ ...current, duration: Math.max(current.duration, effectiveEnd) }))
+      setSelectedKeyframeId(frames[0].id); setProgress(timing.offset / Math.max(.1, Math.max(scene.duration, effectiveEnd))); setMessage(`${frames.length} keyframes pasted.`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid keyframe clipboard.') }
   }
   const download = (name: string, data: unknown) => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url) }
@@ -505,10 +547,11 @@ export function SceneAnimatorPanel() {
           animation: { ...rawLayer.animation, start, end, keyframes: undefined, duration: Math.max(.1, rawLayer.animation?.duration ?? incoming.duration ?? 5), curve: rawLayer.animation?.curve ?? 'linear' },
           missingAsset: isCamera ? false : Boolean(rawLayer.missingAsset || isMissing(String(rawLayer.source ?? ''))),
         } as AnimatorLayer
-        const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, layer)
-        return keyframes ? withSceneKeyframes(layer, keyframes, layer.animation.duration) as AnimatorLayer : layer
+        const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
+        const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
+        return keyframes ? withSceneKeyframes(timedLayer, keyframes, timedLayer.animation.duration) as AnimatorLayer : timedLayer
       }))
-      const duration = Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => layer.animation.duration))
+      const duration = Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed }))
       localFilesRef.current = {}; setScene({ ...blankScene(), ...incoming, duration, layers }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setMessage('Scene imported. Reassign layers marked missing asset.'); setJsonOpen(false)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
   }
@@ -627,6 +670,7 @@ export function SceneAnimatorPanel() {
         onCopyKeyframes={copyTimelineKeyframes}
         onPasteKeyframes={() => void pasteTimelineKeyframes()}
         onUpdateKeyframe={updateTimelineKeyframe}
+        onUpdateTiming={patch => selected && updateLayerTiming(selected.id, patch)}
       />
     </section>
     <aside className="w-full shrink-0 border-t border-border bg-bg-secondary p-3 overflow-y-auto space-y-3 xl:w-[300px] xl:border-l xl:border-t-0">

@@ -1,6 +1,6 @@
 import { ClipboardPaste, Copy, Plus, Trash2 } from 'lucide-react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { getSceneKeyframes } from '../../lib/sceneTimeline'
+import { getSceneKeyframes, getSceneLayerTiming, layerTimeToSceneTime } from '../../lib/sceneTimeline'
 import type { SceneCurve, SceneKeyframe, SceneLayer } from '../../types'
 
 type Props = {
@@ -17,6 +17,7 @@ type Props = {
   onCopyKeyframes: () => void
   onPasteKeyframes: () => void
   onUpdateKeyframe: (keyframeId: string, patch: Partial<Omit<SceneKeyframe, 'id'>>) => void
+  onUpdateTiming: (patch: Partial<Pick<SceneLayer['animation'], 'offset' | 'speed' | 'loop' | 'trimStart' | 'trimEnd'>>) => void
 }
 
 const CURVES: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce']
@@ -36,9 +37,10 @@ const numberField = (label: string, value: number, change: (value: number) => vo
   <label className="text-[9px] text-text-muted">{label}<input type="number" value={Number.isFinite(value) ? Number(value.toFixed(3)) : 0} step={step} min={min} max={max} disabled={disabled} onChange={event => { const next = Number(event.target.value); if (Number.isFinite(next)) change(next) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
 )
 
-export function SceneTimeline({ layers, duration, currentTime, selectedLayerId, selectedKeyframeId, onScrub, onSelectLayer, onSelectKeyframe, onAddKeyframe, onDeleteKeyframe, onCopyKeyframes, onPasteKeyframes, onUpdateKeyframe }: Props) {
+export function SceneTimeline({ layers, duration, currentTime, selectedLayerId, selectedKeyframeId, onScrub, onSelectLayer, onSelectKeyframe, onAddKeyframe, onDeleteKeyframe, onCopyKeyframes, onPasteKeyframes, onUpdateKeyframe, onUpdateTiming }: Props) {
   const selectedLayer = layers.find(layer => layer.id === selectedLayerId) ?? null
   const selectedFrames = selectedLayer ? getSceneKeyframes(selectedLayer) : []
+  const selectedTiming = selectedLayer ? getSceneLayerTiming(selectedLayer) : null
   const selectedIndex = selectedFrames.findIndex(frame => frame.id === selectedKeyframeId)
   const selectedFrame = selectedIndex >= 0 ? selectedFrames[selectedIndex] : null
   const isEndpoint = selectedIndex === 0 || selectedIndex === selectedFrames.length - 1
@@ -66,12 +68,23 @@ export function SceneTimeline({ layers, duration, currentTime, selectedLayerId, 
             <button type="button" onClick={() => onSelectLayer(layer.id)} className="truncate text-left text-[9px] text-text-secondary" title={layer.name}>{layer.type === 'camera' ? 'CAM · ' : ''}{layer.name}</button>
             <div onPointerDown={seekTrack} className="relative h-5 cursor-ew-resize rounded bg-bg-primary">
               <span className="pointer-events-none absolute inset-y-0 w-px bg-white/70" style={{ left: `${Math.max(0, Math.min(100, currentTime / Math.max(.1, duration) * 100))}%` }} />
-              {frames.map((frame, index) => <button key={frame.id} type="button" title={`${frame.time.toFixed(2)}s · ${frame.curve}`} onPointerDown={event => event.stopPropagation()} onClick={() => onSelectKeyframe(layer.id, frame.id, frame.time)} className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border ${selectedLayerId === layer.id && selectedKeyframeId === frame.id ? 'z-10 border-white bg-accent-blue' : index === 0 || index === frames.length - 1 ? 'border-cyan-200 bg-cyan-500/70' : 'border-purple-200 bg-purple-500/80'}`} style={{ left: `${Math.max(0, Math.min(100, frame.time / Math.max(.1, duration) * 100))}%` }} />)}
+              {frames.map((frame, index) => { const timing = getSceneLayerTiming(layer); const sceneFrameTime = layerTimeToSceneTime(layer, frame.time); const outsideTrim = frame.time < timing.trimStart || frame.time > timing.trimEnd; return <button key={frame.id} type="button" title={`Local ${frame.time.toFixed(2)}s · scene ${sceneFrameTime.toFixed(2)}s · ${frame.curve}`} onPointerDown={event => event.stopPropagation()} onClick={() => onSelectKeyframe(layer.id, frame.id, sceneFrameTime)} className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border ${outsideTrim ? 'opacity-30' : ''} ${selectedLayerId === layer.id && selectedKeyframeId === frame.id ? 'z-10 border-white bg-accent-blue' : index === 0 || index === frames.length - 1 ? 'border-cyan-200 bg-cyan-500/70' : 'border-purple-200 bg-purple-500/80'}`} style={{ left: `${Math.max(0, Math.min(100, sceneFrameTime / Math.max(.1, duration) * 100))}%` }} /> })}
             </div>
           </div>
         })}
       </div>
     </div>
+    {selectedLayer && selectedTiming && <div className="border-t border-border bg-bg-tertiary px-2 py-2">
+      <div className="mb-1.5 flex items-center justify-between"><span className="text-[9px] font-medium text-text-secondary">Layer timing</span><span className="text-[8px] text-text-muted">Effective range {selectedTiming.offset.toFixed(2)}–{(selectedTiming.offset + selectedTiming.span / selectedTiming.speed).toFixed(2)}s</span></div>
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-5">
+        {numberField('Offset', selectedTiming.offset, value => onUpdateTiming({ offset: Math.max(0, value) }), .05, 0, duration)}
+        {numberField('Trim in', selectedTiming.trimStart, value => onUpdateTiming({ trimStart: value }), .05, 0, selectedLayer.animation.duration - .01)}
+        {numberField('Trim out', selectedTiming.trimEnd, value => onUpdateTiming({ trimEnd: value }), .05, .01, selectedLayer.animation.duration)}
+        {numberField('Speed', selectedTiming.speed, value => onUpdateTiming({ speed: value }), .1, .1, 8)}
+        <label className="flex items-end gap-1.5 pb-1 text-[9px] text-text-secondary"><input type="checkbox" checked={selectedTiming.loop} onChange={event => onUpdateTiming({ loop: event.target.checked })} /> Repeat motion</label>
+      </div>
+      <p className="mt-1 text-[8px] text-text-muted">Offset delays this layer. Trim chooses its local keyframe range; speed remaps time; repeat loops that range. Dimmed diamonds are outside the trim.</p>
+    </div>}
     {selectedFrame && selectedLayer && <div className="border-t border-border bg-bg-tertiary px-2 py-2">
       <div className="mb-1.5 flex items-center justify-between"><span className="text-[9px] font-medium text-text-secondary">Selected keyframe · {selectedFrame.time.toFixed(2)}s</span><span className="text-[8px] text-text-muted">{isEndpoint ? 'Clip boundary' : `Frame ${selectedIndex + 1}/${selectedFrames.length}`}</span></div>
       <div className="grid grid-cols-3 gap-1.5 md:grid-cols-6">

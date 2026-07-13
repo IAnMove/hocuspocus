@@ -210,6 +210,15 @@ export interface SceneLayer {
     keyframes?: SceneKeyframe[]
     duration: number
     curve: SceneCurve
+    /** Scene time in seconds before this layer's local motion starts. */
+    offset?: number
+    /** Local motion playback multiplier. */
+    speed?: number
+    /** Repeat the selected local time range until the scene ends. */
+    loop?: boolean
+    /** Optional local in/out range, in seconds. */
+    trimStart?: number
+    trimEnd?: number
     spin?: boolean
     rotationSpeed?: number
     /** Name of a baked glTF skeletal clip to play (rigged GLB layers). */

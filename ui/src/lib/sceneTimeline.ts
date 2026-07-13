@@ -2,6 +2,15 @@ import type { SceneCurve, SceneKeyframe, SceneLayer } from '../types'
 
 export type SceneAnimationPoint = Pick<SceneKeyframe, 'x' | 'y' | 'scale' | 'opacity' | 'rotation'>
 
+export type SceneLayerTiming = {
+  offset: number
+  speed: number
+  loop: boolean
+  trimStart: number
+  trimEnd: number
+  span: number
+}
+
 const lerp = (a: number, b: number, amount: number) => a + (b - a) * amount
 
 export const applySceneCurve = (amount: number, curve: SceneCurve) => {
@@ -72,6 +81,49 @@ export const normalizeSceneKeyframes = (value: unknown, layer: SceneLayer): Scen
     }]
   }).sort((a, b) => a.time - b.time)
   return frames.length >= 2 ? frames : undefined
+}
+
+export const getSceneLayerTiming = (layer: SceneLayer): SceneLayerTiming => {
+  const duration = Math.max(.1, layer.animation.duration)
+  const offset = typeof layer.animation.offset === 'number' && Number.isFinite(layer.animation.offset) ? Math.max(0, layer.animation.offset) : 0
+  const speed = typeof layer.animation.speed === 'number' && Number.isFinite(layer.animation.speed) ? Math.max(.1, Math.min(8, layer.animation.speed)) : 1
+  const rawStart = typeof layer.animation.trimStart === 'number' && Number.isFinite(layer.animation.trimStart) ? layer.animation.trimStart : 0
+  const trimStart = Math.max(0, Math.min(duration - .01, rawStart))
+  const rawEnd = typeof layer.animation.trimEnd === 'number' && Number.isFinite(layer.animation.trimEnd) ? layer.animation.trimEnd : duration
+  const trimEnd = Math.max(trimStart + .01, Math.min(duration, rawEnd))
+  return { offset, speed, loop: Boolean(layer.animation.loop), trimStart, trimEnd, span: trimEnd - trimStart }
+}
+
+export const sceneTimeToLayerTime = (layer: SceneLayer, sceneTime: number) => {
+  const timing = getSceneLayerTiming(layer)
+  const elapsed = Math.max(0, sceneTime - timing.offset) * timing.speed
+  if (timing.loop && elapsed > 0) return timing.trimStart + (elapsed % timing.span)
+  return timing.trimStart + Math.min(timing.span, elapsed)
+}
+
+export const layerTimeToSceneTime = (layer: SceneLayer, layerTime: number) => {
+  const timing = getSceneLayerTiming(layer)
+  return timing.offset + (Math.max(timing.trimStart, layerTime) - timing.trimStart) / timing.speed
+}
+
+export const sceneLayerMotionProgress = (layer: SceneLayer, sceneTime: number) => {
+  const timing = getSceneLayerTiming(layer)
+  return (sceneTimeToLayerTime(layer, sceneTime) - timing.trimStart) / timing.span
+}
+
+export const withNormalizedSceneTiming = (layer: SceneLayer): SceneLayer => {
+  const timing = getSceneLayerTiming(layer)
+  return {
+    ...layer,
+    animation: {
+      ...layer.animation,
+      offset: timing.offset,
+      speed: timing.speed,
+      loop: timing.loop,
+      trimStart: timing.trimStart,
+      trimEnd: timing.trimEnd,
+    },
+  }
 }
 
 export const evaluateSceneLayer = (layer: SceneLayer, timeSeconds: number): SceneAnimationPoint => {
