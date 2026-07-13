@@ -1135,7 +1135,7 @@ export interface RigAnimation {
   category?: string
 }
 
-export type RigProfileId = 'prop' | 'humanoid' | 'quadruped' | 'flying' | 'serpentine'
+export type RigProfileId = 'prop' | 'vehicle' | 'humanoid' | 'quadruped' | 'flying' | 'serpentine'
 
 export interface RigProfile {
   id: RigProfileId

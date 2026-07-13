@@ -65,13 +65,26 @@ RIG_PROFILES: list[dict[str, Any]] = [
     {
         "id": "prop",
         "label": "Prop / object",
-        "description": "Rigid or softly deforming objects, pickups, logos and mechanical props.",
+        "description": "Simple pickups, logos and softly deforming standalone objects.",
         "default_spine_joints": 3,
         "default_axis_mode": "auto",
         "default_weight_falloff": 3.5,
         "recommended_animations": ["hover", "bounce", "spin", "wobble", "charge", "hit"],
         "allowed_animations": [
             "idle", "breathe", "hover", "alert", "jump", "attack", "hit", "roll",
+            "charge", "victory", "bounce", "spin", "wobble",
+        ],
+    },
+    {
+        "id": "vehicle",
+        "label": "Vehicle / mechanical",
+        "description": "Ships, cars, robots and hard-surface machinery using a short, stiff dominant-axis chain.",
+        "default_spine_joints": 3,
+        "default_axis_mode": "auto",
+        "default_weight_falloff": 5.5,
+        "recommended_animations": ["hover", "alert", "strafe", "attack", "hit", "charge", "spin"],
+        "allowed_animations": [
+            "idle", "hover", "alert", "strafe", "jump", "attack", "hit", "roll",
             "charge", "victory", "bounce", "spin", "wobble",
         ],
     },

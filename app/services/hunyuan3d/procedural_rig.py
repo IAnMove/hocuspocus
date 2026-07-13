@@ -35,7 +35,7 @@ ARRAY_BUFFER = 34962
 MAX_VERTICES = 2_000_000
 MAX_INFLUENCES = 4
 AXIS_MODES = {"auto", "x", "y", "z"}
-RIG_PROFILES = {"prop", "humanoid", "quadruped", "flying", "serpentine"}
+RIG_PROFILES = {"prop", "vehicle", "humanoid", "quadruped", "flying", "serpentine"}
 
 # Clip ids exposed through the API; the label becomes the glTF animation name
 # that viewers (model-viewer, Blender) display.
