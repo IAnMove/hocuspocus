@@ -22,7 +22,7 @@ type VisualAnimatorLayer = AnimatorLayer & { type: VisualLayerType }
 type LayerState = { x: number; y: number; scale: number; opacity: number; rotation: number; z: number }
 type PresetCategory = 'classic' | 'game' | 'cinematic'
 type Preset = { id: string; label: string; category: PresetCategory; start: Point; end: Point; duration: number; spin: boolean; curve: SceneCurve; requiresTarget?: boolean; preview: string; poster: string }
-type CameraPreset = { id: string; label: string; start: Point; end: Point; duration: number; curve: SceneCurve }
+type CameraPreset = { id: string; label: string; start: Point; end: Point; duration: number; curve: SceneCurve; shake?: { amount: number; frequency: number; seed?: number } }
 type Gesture = { id: string; mode: 'move' | 'resize' | 'orbit'; startX: number; startY: number; x: number; y: number; scale: number; rotationX: number; rotationY: number }
 
 const makePoint = (x: number, y: number, scale: number): Point => ({ x, y, scale })
@@ -34,6 +34,9 @@ const CAMERA_PRESETS: CameraPreset[] = [
   { id: 'camera-pull-out', label: 'Reveal pull-out', start: { x: 50, y: 50, scale: 1.6, rotation: 0 }, end: { x: 50, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
   { id: 'camera-crane-up', label: 'Crane up', start: { x: 50, y: 68, scale: 1.15, rotation: 0 }, end: { x: 50, y: 34, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
   { id: 'camera-dutch-drift', label: 'Dutch drift', start: { x: 44, y: 54, scale: 1.05, rotation: -6 }, end: { x: 57, y: 46, scale: 1.28, rotation: 7 }, duration: 6, curve: 'ease' },
+  { id: 'camera-handheld', label: 'Handheld', start: { x: 50, y: 50, scale: 1.08, rotation: 0 }, end: { x: 51, y: 49, scale: 1.12, rotation: .6 }, duration: 6, curve: 'ease', shake: { amount: .75, frequency: 3.2, seed: 1.7 } },
+  { id: 'camera-whip-pan', label: 'Whip pan', start: { x: 28, y: 50, scale: 1.18, rotation: -2 }, end: { x: 72, y: 50, scale: 1.05, rotation: 2 }, duration: 1.1, curve: 'dramatic', shake: { amount: .35, frequency: 7, seed: 3.1 } },
+  { id: 'camera-dolly', label: 'Dolly reveal', start: { x: 36, y: 57, scale: 1.5, rotation: -2 }, end: { x: 58, y: 46, scale: .92, rotation: 0 }, duration: 5.5, curve: 'ease' },
 ]
 const PRESETS: Preset[] = ([
   ['turntable', 'Product turntable', 50, 50, 50, 50, .8, .8, 5, true, 'linear'], ['meteor', 'Meteor fly-by', -10, 82, 112, 18, .22, .65, 2, true, 'dramatic'], ['space-cruise', 'Spacecraft cruise', 8, 54, 92, 43, .48, .68, 5, true, 'ease'], ['hover', 'Hovering reveal', 50, 54, 50, 46, .7, .76, 4, true, 'ease'], ['landing', 'Landing', 50, -12, 50, 60, .2, .82, 4, false, 'bounce'], ['liftoff', 'Lift-off', 50, 68, 54, -15, .82, .28, 3, false, 'dramatic'], ['zoom-in', 'Hero zoom in', 50, 50, 50, 50, .18, 1.35, 3, true, 'dramatic'], ['zoom-out', 'Retreat into distance', 50, 50, 50, 50, 1.25, .18, 3, true, 'ease'], ['drift-right', 'Slow drift right', 25, 50, 75, 50, .68, .68, 6, false, 'linear'], ['drift-left', 'Slow drift left', 75, 50, 25, 50, .68, .68, 6, false, 'linear'], ['diagonal-rise', 'Diagonal rise', 20, 82, 78, 22, .38, .82, 4, true, 'ease'], ['diagonal-drop', 'Diagonal drop', 78, 16, 24, 84, .82, .35, 3, true, 'dramatic'], ['pop', 'Pop into frame', 50, 50, 50, 50, .05, .85, 1, true, 'bounce'], ['glide', 'Low glide', -8, 72, 108, 70, .4, .52, 4, false, 'ease'], ['pass-camera', 'Pass the camera', 16, 50, 90, 50, .18, 1.5, 3, true, 'dramatic'], ['vibrate', 'Nave vibrando', 49, 51, 51, 49, .72, .75, 2, false, 'bounce'], ['orbit-sweep', 'Orbit sweep', 18, 70, 86, 30, .32, .9, 5, true, 'ease'], ['center-reveal', 'Center reveal', 50, 105, 50, 52, .35, .9, 3, true, 'ease'], ['exit-frame', 'Emergency exit', 50, 50, 120, -10, .8, .25, 2, true, 'dramatic'], ['floating-logo', 'Floating logo', 50, 45, 50, 55, .72, .72, 4, true, 'ease'],
@@ -60,6 +63,8 @@ const blankScene = (): AnimatorScene => ({ version: 1, name: 'Untitled scene', w
 const AUTOSAVE_KEY = 'maestro-scene-animator-autosave-v1'
 const HISTORY_LIMIT = 80
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+const finiteNumber = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback
+const boundedNumber = (value: unknown, fallback: number, min: number, max: number) => Math.max(min, Math.min(max, finiteNumber(value, fallback)))
 const isMissing = (source: string) => source.startsWith('blob:')
 const isAnimatorLayerType = (value: unknown): value is AnimatorLayerType => value === 'model3d' || value === 'image' || value === 'video' || value === 'overlay' || value === 'camera'
 const isVisualLayer = (layer: AnimatorLayer): layer is VisualAnimatorLayer => layer.type !== 'camera'
@@ -72,6 +77,36 @@ const RESOLUTIONS = [
 
 const assignZ = (layers: AnimatorLayer[]) => layers.map((layer, index) => ({ ...layer, z: index * 10 }))
 const normalizeZ = (layers: AnimatorLayer[]) => assignZ([...layers].sort((a, b) => a.z - b.z))
+const dependencyTargets = (layer: AnimatorLayer) => [layer.relationship?.targetLayerId, layer.animation.orbit?.targetLayerId].filter((id): id is string => Boolean(id))
+const dependencyWouldCycleIn = (layers: AnimatorLayer[], layerId: string, targetId: string) => {
+  const pending = [targetId]
+  const visited = new Set<string>()
+  while (pending.length > 0) {
+    const currentId = pending.pop()
+    if (!currentId) continue
+    if (currentId === layerId) return true
+    if (visited.has(currentId)) continue
+    visited.add(currentId)
+    const current = layers.find(layer => layer.id === currentId)
+    if (current) pending.push(...dependencyTargets(current))
+  }
+  return false
+}
+const breakDependencyCycles = (layers: AnimatorLayer[]) => {
+  let next = layers
+  for (const candidate of layers) {
+    const current = next.find(layer => layer.id === candidate.id)
+    if (!current) continue
+    if (current.relationship && dependencyWouldCycleIn(next, current.id, current.relationship.targetLayerId)) {
+      next = next.map(layer => layer.id === current.id ? { ...layer, relationship: undefined } : layer)
+    }
+    const withRelationshipChecked = next.find(layer => layer.id === candidate.id)
+    if (withRelationshipChecked?.animation.orbit && dependencyWouldCycleIn(next, withRelationshipChecked.id, withRelationshipChecked.animation.orbit.targetLayerId)) {
+      next = next.map(layer => layer.id === withRelationshipChecked.id ? { ...layer, animation: { ...layer.animation, orbit: undefined } } : layer)
+    }
+  }
+  return next
+}
 const ANIMATED_FIELDS = ['x', 'y', 'scale', 'opacity', 'rotation'] as const
 type AnimatedField = typeof ANIMATED_FIELDS[number]
 
@@ -185,10 +220,12 @@ export function SceneAnimatorPanel() {
   const replaceScene = (next: AnimatorScene) => { sceneRef.current = next; setScene(next) }
   const updateScene = (updater: (current: AnimatorScene) => AnimatorScene) => {
     const current = sceneRef.current
-    const next = updater(current)
+    let next = updater(current)
     if (next === current) return
     const removesLockedLayer = current.layers.some(layer => layer.locked && !next.layers.some(candidate => candidate.id === layer.id))
     if (removesLockedLayer) { setMessage('Unlock the layer before deleting it.'); return }
+    const removedIds = new Set(current.layers.filter(layer => !next.layers.some(candidate => candidate.id === layer.id)).map(layer => layer.id))
+    if (removedIds.size > 0) next = { ...next, layers: next.layers.map(layer => ({ ...layer, relationship: layer.relationship && removedIds.has(layer.relationship.targetLayerId) ? undefined : layer.relationship, animation: { ...layer.animation, orbit: layer.animation.orbit && removedIds.has(layer.animation.orbit.targetLayerId) ? undefined : layer.animation.orbit } })) }
     const now = Date.now()
     if (pastScenesRef.current.length === 0 || now - lastHistoryAtRef.current > 350) {
       pastScenesRef.current.push(current)
@@ -217,7 +254,12 @@ export function SceneAnimatorPanel() {
   const updateLayer = (id: string, updater: (layer: AnimatorLayer) => AnimatorLayer) => updateScene(current => {
     const target = current.layers.find(layer => layer.id === id)
     if (!target) return current
-    const updated = reconcileLegacyKeyframeUpdate(target, updater(target))
+    let updated = reconcileLegacyKeyframeUpdate(target, updater(target))
+    if (target.relationship?.type === 'follow' && updated.relationship === target.relationship) {
+      const dx = updated.transform.x - target.transform.x
+      const dy = updated.transform.y - target.transform.y
+      if (dx || dy) updated = { ...updated, relationship: { ...target.relationship, offsetX: (target.relationship.offsetX ?? 0) + dx, offsetY: (target.relationship.offsetY ?? 0) + dy } }
+    }
     if (target.locked) {
       const changedKeys = (Object.keys(updated) as Array<keyof AnimatorLayer>).filter(key => updated[key] !== target[key])
       if (changedKeys.some(key => key !== 'visible' && key !== 'locked')) return current
@@ -392,13 +434,13 @@ export function SceneAnimatorPanel() {
   const activeCameraLayer = () => [...scene.layers].filter(layer => layer.type === 'camera' && layer.visible).sort((a, b) => b.z - a.z)[0]
   const cameraState = (time: number): LayerState => {
     const camera = activeCameraLayer()
-    return camera ? baseLayerState(camera, time) : { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0, z: 0 }
+    return camera ? layerState(camera, time) : { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0, z: 0 }
   }
   const applyCameraTransform = (state: LayerState, layer: AnimatorLayer, time: number): LayerState => {
     const camera = activeCameraLayer()
     if (!camera || layer.type === 'camera') return state
-    const view = baseLayerState(camera, time)
-    const parallax = layer.parallax ?? 1
+    const view = layerState(camera, time)
+    const parallax = effectiveParallax(layer)
     const dx = state.x - 50 - (view.x - 50) * parallax
     const dy = state.y - 50 - (view.y - 50) * parallax
     const radians = view.rotation * Math.PI / 180
@@ -415,18 +457,71 @@ export function SceneAnimatorPanel() {
       rotation: state.rotation - view.rotation,
     }
   }
-  const layerState = (layer: AnimatorLayer, time = progress) => {
-    const state = baseLayerState(layer, time)
+  function effectiveParallax(layer: AnimatorLayer, visited = new Set<string>()): number {
+    if (visited.has(layer.id)) return layer.parallax ?? 1
+    const nextVisited = new Set(visited); nextVisited.add(layer.id)
+    const targetId = layer.relationship?.targetLayerId ?? layer.animation.orbit?.targetLayerId
+    const target = targetId && scene.layers.find(item => item.id === targetId)
+    return target && isVisualLayer(target) ? effectiveParallax(target, nextVisited) : layer.parallax ?? 1
+  }
+  function layerState(layer: AnimatorLayer, time = progress, visited = new Set<string>(), applyShake = true): LayerState {
+    let state = baseLayerState(layer, time)
+    if (visited.has(layer.id)) return state
+    const nextVisited = new Set(visited); nextVisited.add(layer.id)
+    const relationship = layer.relationship
+    const relationshipTarget = relationship && scene.layers.find(item => item.id === relationship.targetLayerId)
+    if (relationship && relationshipTarget && isVisualLayer(relationshipTarget) && !nextVisited.has(relationshipTarget.id)) {
+      const targetState = layerState(relationshipTarget, time, nextVisited, applyShake)
+      if (relationship.type === 'parent') {
+        const targetOrigin = layerState(relationshipTarget, 0, nextVisited, applyShake)
+        const scaleRatio = targetState.scale / Math.max(.01, targetOrigin.scale)
+        const angle = (targetState.rotation - targetOrigin.rotation) * Math.PI / 180
+        const relativeX = (state.x - targetOrigin.x) * scene.width
+        const relativeY = (state.y - targetOrigin.y) * scene.height
+        const rotatedX = (relativeX * Math.cos(angle) - relativeY * Math.sin(angle)) * scaleRatio
+        const rotatedY = (relativeX * Math.sin(angle) + relativeY * Math.cos(angle)) * scaleRatio
+        state = {
+          ...state,
+          x: targetState.x + rotatedX / scene.width,
+          y: targetState.y + rotatedY / scene.height,
+          scale: state.scale * scaleRatio,
+          rotation: state.rotation + targetState.rotation - targetOrigin.rotation,
+        }
+      } else if (relationship.type === 'follow') {
+        const strength = Math.max(0, Math.min(1, relationship.strength ?? 1))
+        const targetX = targetState.x + (relationship.offsetX ?? 0)
+        const targetY = targetState.y + (relationship.offsetY ?? 0)
+        state = { ...state, x: state.x + (targetX - state.x) * strength, y: state.y + (targetY - state.y) * strength }
+      } else {
+        const dx = (targetState.x - state.x) * scene.width
+        const dy = (targetState.y - state.y) * scene.height
+        state = { ...state, rotation: Math.atan2(dy, dx) * 180 / Math.PI + (relationship.rotationOffset ?? 0) }
+      }
+    }
     const orbit = layer.animation.orbit
     const target = orbit && scene.layers.find(item => item.id === orbit.targetLayerId)
-    if (!orbit || !target || !isVisualLayer(target) || target.id === layer.id) return state
-    const targetState = baseLayerState(target, time)
-    const orbitProgress = sceneLayerMotionProgress(layer, time * scene.duration)
-    const angle = orbit.phase * Math.PI / 180 + orbitProgress * orbit.turns * Math.PI * 2
-    const depth = Math.sin(angle)
-    const centerX = targetState.x + (orbit.centerOffsetX ?? 0)
-    const centerY = targetState.y + (orbit.centerOffsetY ?? 0)
-    return { ...state, x: centerX + Math.cos(angle) * orbit.radiusX, y: centerY + depth * orbit.radiusY, scale: state.scale * (1 + depth * .12), z: target.z + (depth >= 0 ? 1 : -1) }
+    if (orbit && target && isVisualLayer(target) && target.id !== layer.id && !nextVisited.has(target.id)) {
+      const targetState = layerState(target, time, nextVisited, applyShake)
+      const orbitProgress = sceneLayerMotionProgress(layer, time * scene.duration)
+      const angle = orbit.phase * Math.PI / 180 + orbitProgress * orbit.turns * Math.PI * 2
+      const depth = Math.sin(angle)
+      const centerX = targetState.x + (orbit.centerOffsetX ?? 0)
+      const centerY = targetState.y + (orbit.centerOffsetY ?? 0)
+      state = { ...state, x: centerX + Math.cos(angle) * orbit.radiusX, y: centerY + depth * orbit.radiusY, scale: state.scale * (1 + depth * .12), z: target.z + (depth >= 0 ? 1 : -1) }
+    }
+    if (applyShake && layer.type === 'camera' && layer.animation.shake?.amount) {
+      const amount = Math.max(0, Math.min(8, layer.animation.shake.amount))
+      const frequency = Math.max(.1, Math.min(30, layer.animation.shake.frequency))
+      const sceneSeconds = time * scene.duration
+      const timing = getSceneLayerTiming(layer)
+      const elapsed = Math.max(0, sceneSeconds - timing.offset) * timing.speed
+      if (sceneSeconds >= timing.offset && (timing.loop || elapsed <= timing.span)) {
+        const localElapsed = sceneTimeToLayerTime(layer, sceneSeconds) - timing.trimStart
+        const phase = localElapsed * frequency * Math.PI * 2 + (layer.animation.shake.seed ?? 0)
+        state = { ...state, x: state.x + Math.sin(phase) * amount, y: state.y + Math.sin(phase * 1.37 + 1.2) * amount * .65, rotation: state.rotation + Math.sin(phase * .73 + .4) * amount * .35 }
+      }
+    }
+    return state
   }
   const renderedLayerState = (layer: AnimatorLayer, time = progress) => applyCameraTransform(layerState(layer, time), layer, time)
   const moveLayerZ = (id: string, direction: 1 | -1) => updateScene(current => {
@@ -457,9 +552,9 @@ export function SceneAnimatorPanel() {
     if (!selected || selected.type === 'camera' || selected.locked) return
     const preset = PRESETS.find(item => item.id === presetId)
     if (!preset) return
-    const target = scene.layers.find(layer => layer.id !== selected.id && layer.type === 'model3d') ?? scene.layers.find(layer => layer.id !== selected.id && isVisualLayer(layer))
+    const target = scene.layers.find(layer => layer.id !== selected.id && layer.type === 'model3d' && !dependencyWouldCycle(selected.id, layer.id)) ?? scene.layers.find(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id))
     if (preset.requiresTarget && !target) { setMessage('Add a second layer before applying this relational movement.'); return }
-    updateLayer(selected.id, layer => ({ ...layer, animation: { start: preset.start, end: preset.end, duration: preset.duration, curve: preset.curve, spin: preset.spin, rotationSpeed: layer.animation.rotationSpeed, clip: layer.animation.clip, orbit: preset.requiresTarget && target ? { targetLayerId: target.id, radiusX: 18, radiusY: 9, turns: 2, phase: 0, centerOffsetX: 0, centerOffsetY: 0 } : undefined } }))
+    updateLayer(selected.id, layer => ({ ...layer, relationship: preset.requiresTarget ? undefined : layer.relationship, animation: { start: preset.start, end: preset.end, duration: preset.duration, curve: preset.curve, spin: preset.spin, rotationSpeed: layer.animation.rotationSpeed, clip: layer.animation.clip, orbit: preset.requiresTarget && target ? { targetLayerId: target.id, radiusX: 18, radiusY: 9, turns: 2, phase: 0, centerOffsetX: 0, centerOffsetY: 0 } : undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
     setMessage(preset.requiresTarget ? `Orbit target: ${target?.name}` : null); setSelectedKeyframeId(null); setProgress(0)
   }
@@ -467,7 +562,7 @@ export function SceneAnimatorPanel() {
     if (!selected || selected.type !== 'camera' || selected.locked) return
     const preset = CAMERA_PRESETS.find(item => item.id === presetId)
     if (!preset) return
-    updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, duration: preset.duration, curve: preset.curve, offset: 0, speed: 1, loop: false, trimStart: 0, trimEnd: preset.duration, orbit: undefined } }))
+    updateLayer(selected.id, layer => ({ ...layer, transform: { ...layer.transform, x: preset.start.x, y: preset.start.y, scale: preset.start.scale, rotation: preset.start.rotation ?? 0 }, animation: { ...layer.animation, start: { ...preset.start }, end: { ...preset.end }, keyframes: undefined, duration: preset.duration, curve: preset.curve, offset: 0, speed: 1, loop: false, trimStart: 0, trimEnd: preset.duration, shake: preset.shake, orbit: undefined } }))
     updateScene(current => ({ ...current, duration: Math.max(current.duration, preset.duration) }))
     setSelectedPresetId(preset.id); setSelectedKeyframeId(null); setProgress(0); setMessage(`${preset.label} applied to ${selected.name}.`)
   }
@@ -502,7 +597,44 @@ export function SceneAnimatorPanel() {
       animation: mapSceneAnimationPoints(layer, point => ({ ...point, scale: Math.max(overscan, point.scale) })),
     }
   })
-  const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, keyframes: layer.animation.keyframes, duration: layer.animation.duration, curve: layer.animation.curve, offset: layer.animation.offset, speed: layer.animation.speed, loop: layer.animation.loop, trimStart: layer.animation.trimStart, trimEnd: layer.animation.trimEnd, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, orbit: layer.animation.orbit })
+  const dependencyWouldCycle = (layerId: string, targetId: string) => dependencyWouldCycleIn(scene.layers, layerId, targetId)
+  const setLayerRelationship = (type: NonNullable<AnimatorLayer['relationship']>['type'] | 'none') => {
+    if (!selected || selected.locked) return
+    if (type === 'none') { updateLayer(selected.id, layer => ({ ...layer, relationship: undefined })); return }
+    const existingTarget = selected.relationship && scene.layers.find(layer => layer.id === selected.relationship?.targetLayerId && isVisualLayer(layer))
+    const target = existingTarget ?? scene.layers.find(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id))
+    if (!target) { setMessage('Add another visual layer before creating a relationship.'); return }
+    const selectedState = layerState(selected, progress, new Set(), false)
+    const targetState = layerState(target, progress, new Set(), false)
+    const facingAngle = Math.atan2((targetState.y - selectedState.y) * scene.height, (targetState.x - selectedState.x) * scene.width) * 180 / Math.PI
+    updateLayer(selected.id, layer => ({
+      ...layer,
+      relationship: {
+        type,
+        targetLayerId: target.id,
+        offsetX: selectedState.x - targetState.x,
+        offsetY: selectedState.y - targetState.y,
+        strength: 1,
+        rotationOffset: type === 'lookAt' ? selectedState.rotation - facingAngle : 0,
+      },
+      animation: { ...layer.animation, orbit: undefined },
+    }))
+  }
+  const setRelationshipTarget = (targetId: string) => {
+    if (!selected?.relationship || selected.locked || dependencyWouldCycle(selected.id, targetId)) { setMessage('That relationship would create a cycle.'); return }
+    const target = scene.layers.find(layer => layer.id === targetId && isVisualLayer(layer))
+    if (!target) return
+    const selectedState = layerState(selected, progress, new Set(), false)
+    const targetState = layerState(target, progress, new Set(), false)
+    const facingAngle = Math.atan2((targetState.y - selectedState.y) * scene.height, (targetState.x - selectedState.x) * scene.width) * 180 / Math.PI
+    updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, targetLayerId: targetId, offsetX: selectedState.x - targetState.x, offsetY: selectedState.y - targetState.y, rotationOffset: layer.relationship.type === 'lookAt' ? selectedState.rotation - facingAngle : layer.relationship.rotationOffset } : undefined }))
+  }
+  const setOrbitTarget = (targetId: string) => {
+    if (!selected || !isVisualLayer(selected) || selected.locked) return
+    if (dependencyWouldCycle(selected.id, targetId)) { setMessage('That orbit would create a dependency cycle.'); return }
+    updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, targetLayerId: targetId } : undefined } }))
+  }
+  const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, keyframes: layer.animation.keyframes, duration: layer.animation.duration, curve: layer.animation.curve, offset: layer.animation.offset, speed: layer.animation.speed, loop: layer.animation.loop, trimStart: layer.animation.trimStart, trimEnd: layer.animation.trimEnd, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, shake: layer.animation.shake, orbit: layer.animation.orbit })
   const applyMotion = (raw: unknown) => {
     if (!selected || selected.locked || !raw || typeof raw !== 'object') throw new Error('Select an unlocked layer and provide a motion object.')
     const value = (raw as { motion?: unknown }).motion ?? raw
@@ -511,6 +643,12 @@ export function SceneAnimatorPanel() {
     if (!item.start || !item.end || typeof item.duration !== 'number' || !Number.isFinite(item.duration)) throw new Error('Motion needs start, end and a finite duration.')
     const duration = Math.max(.1, item.duration)
     updateLayer(selected.id, layer => {
+      const rawShake = item.shake
+      const shake = rawShake === undefined
+        ? layer.animation.shake
+        : layer.type === 'camera' && Number.isFinite(rawShake.amount) && Number.isFinite(rawShake.frequency)
+          ? { amount: Math.max(0, Math.min(8, rawShake.amount)), frequency: Math.max(.1, Math.min(30, rawShake.frequency)), seed: Number.isFinite(rawShake.seed) ? rawShake.seed : 0 }
+          : undefined
       const updated = withNormalizedSceneTiming({
         ...layer,
         animation: {
@@ -521,6 +659,7 @@ export function SceneAnimatorPanel() {
           keyframes: undefined,
           duration,
           curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(item.curve ?? '') ? item.curve as SceneCurve : 'linear',
+          shake,
         },
       }) as AnimatorLayer
       const keyframes = normalizeSceneKeyframes(item.keyframes, updated)
@@ -597,40 +736,76 @@ export function SceneAnimatorPanel() {
     try {
       const incoming = JSON.parse(text) as AnimatorScene
       if (incoming.version !== 1 || !Array.isArray(incoming.layers)) throw new Error('This is not a Maestro Scene Animator scene.')
+      const incomingIds = incoming.layers.map((layer, index) => {
+        const id = (layer as { id?: unknown } | null)?.id
+        if (typeof id !== 'string' || !id.trim()) throw new Error(`Layer ${index + 1} needs a valid id.`)
+        return id
+      })
+      if (new Set(incomingIds).size !== incomingIds.length) throw new Error('Every scene layer must have a unique id.')
+      const width = Math.round(boundedNumber(incoming.width, 1280, 64, 7680))
+      const height = Math.round(boundedNumber(incoming.height, 720, 64, 7680))
+      const incomingVisualIds = new Set(incoming.layers.filter(layer => layer && layer.type !== 'camera').map(layer => layer.id))
       const activeCameraId = [...incoming.layers]
         .filter(layer => layer.type === 'camera' && layer.visible)
         .sort((a, b) => (b.z ?? 0) - (a.z ?? 0))[0]?.id
-      const layers = normalizeZ(incoming.layers.map(rawLayer => {
+      const normalizedLayers = normalizeZ(incoming.layers.map(rawLayer => {
         if (!isAnimatorLayerType((rawLayer as { type?: unknown }).type)) throw new Error(`Unsupported scene layer type: ${String((rawLayer as { type?: unknown }).type ?? 'missing')}`)
         const isCamera = rawLayer.type === 'camera'
         const transform = {
           ...rawLayer.transform,
-          x: rawLayer.transform?.x ?? 50,
-          y: rawLayer.transform?.y ?? 50,
-          scale: rawLayer.transform?.scale ?? 1,
-          opacity: rawLayer.transform?.opacity ?? 1,
-          rotation: rawLayer.transform?.rotation ?? 0,
-          rotationX: rawLayer.transform?.rotationX ?? 75,
-          rotationY: rawLayer.transform?.rotationY ?? 0,
+          x: finiteNumber(rawLayer.transform?.x, 50),
+          y: finiteNumber(rawLayer.transform?.y, 50),
+          scale: boundedNumber(rawLayer.transform?.scale, 1, .01, 20),
+          opacity: boundedNumber(rawLayer.transform?.opacity, 1, 0, 1),
+          rotation: finiteNumber(rawLayer.transform?.rotation, 0),
+          rotationX: boundedNumber(rawLayer.transform?.rotationX, 75, 1, 179),
+          rotationY: finiteNumber(rawLayer.transform?.rotationY, 0),
         }
-        const start = { x: rawLayer.animation?.start?.x ?? transform.x, y: rawLayer.animation?.start?.y ?? transform.y, scale: rawLayer.animation?.start?.scale ?? transform.scale, opacity: rawLayer.animation?.start?.opacity, rotation: rawLayer.animation?.start?.rotation ?? (isCamera ? transform.rotation : undefined) }
-        const end = { x: rawLayer.animation?.end?.x ?? transform.x, y: rawLayer.animation?.end?.y ?? transform.y, scale: rawLayer.animation?.end?.scale ?? transform.scale, opacity: rawLayer.animation?.end?.opacity, rotation: rawLayer.animation?.end?.rotation ?? (isCamera ? transform.rotation : undefined) }
+        const start = { x: finiteNumber(rawLayer.animation?.start?.x, transform.x), y: finiteNumber(rawLayer.animation?.start?.y, transform.y), scale: boundedNumber(rawLayer.animation?.start?.scale, transform.scale, .01, 20), opacity: boundedNumber(rawLayer.animation?.start?.opacity, transform.opacity, 0, 1), rotation: finiteNumber(rawLayer.animation?.start?.rotation, transform.rotation) }
+        const end = { x: finiteNumber(rawLayer.animation?.end?.x, transform.x), y: finiteNumber(rawLayer.animation?.end?.y, transform.y), scale: boundedNumber(rawLayer.animation?.end?.scale, transform.scale, .01, 20), opacity: boundedNumber(rawLayer.animation?.end?.opacity, transform.opacity, 0, 1), rotation: finiteNumber(rawLayer.animation?.end?.rotation, transform.rotation) }
         const visible = isCamera ? rawLayer.id === activeCameraId : rawLayer.visible !== false
+        const rawRelationship = rawLayer.relationship
+        const relationshipTypes = ['parent', 'follow', 'lookAt']
+        const relationship = rawRelationship && relationshipTypes.includes(rawRelationship.type) && (!isCamera || rawRelationship.type === 'follow') && rawRelationship.targetLayerId !== rawLayer.id && incomingVisualIds.has(rawRelationship.targetLayerId) ? {
+          type: rawRelationship.type,
+          targetLayerId: rawRelationship.targetLayerId,
+          offsetX: Number.isFinite(rawRelationship.offsetX) ? rawRelationship.offsetX : 0,
+          offsetY: Number.isFinite(rawRelationship.offsetY) ? rawRelationship.offsetY : 0,
+          strength: Number.isFinite(rawRelationship.strength) ? Math.max(0, Math.min(1, rawRelationship.strength ?? 1)) : 1,
+          rotationOffset: Number.isFinite(rawRelationship.rotationOffset) ? rawRelationship.rotationOffset : 0,
+        } as AnimatorLayer['relationship'] : undefined
+        const rawShake = rawLayer.animation?.shake
+        const shake = isCamera && rawShake && Number.isFinite(rawShake.amount) && Number.isFinite(rawShake.frequency) ? { amount: Math.max(0, Math.min(8, rawShake.amount)), frequency: Math.max(.1, Math.min(30, rawShake.frequency)), seed: Number.isFinite(rawShake.seed) ? rawShake.seed : 0 } : undefined
+        const rawOrbit = rawLayer.animation?.orbit
+        const orbit = !isCamera && rawOrbit && rawOrbit.targetLayerId !== rawLayer.id && incomingVisualIds.has(rawOrbit.targetLayerId) ? {
+          targetLayerId: rawOrbit.targetLayerId,
+          radiusX: boundedNumber(rawOrbit.radiusX, 18, 0, 100),
+          radiusY: boundedNumber(rawOrbit.radiusY, 9, 0, 100),
+          turns: boundedNumber(rawOrbit.turns, 1, -20, 20),
+          phase: boundedNumber(rawOrbit.phase, 0, -360, 360),
+          centerOffsetX: boundedNumber(rawOrbit.centerOffsetX, 0, -100, 100),
+          centerOffsetY: boundedNumber(rawOrbit.centerOffsetY, 0, -100, 100),
+        } : undefined
+        const duration = boundedNumber(rawLayer.animation?.duration, finiteNumber(incoming.duration, 5), .1, 3600)
+        const curve: SceneCurve = ['linear', 'ease', 'dramatic', 'bounce'].includes(rawLayer.animation?.curve ?? '') ? rawLayer.animation.curve : 'linear'
         const layer = {
           ...rawLayer,
+          name: typeof rawLayer.name === 'string' && rawLayer.name.trim() ? rawLayer.name : `Layer ${rawLayer.id}`,
           source: isCamera ? '' : String(rawLayer.source ?? ''),
           visible,
           locked: rawLayer.locked === true,
+          relationship,
           parallax: isCamera ? undefined : typeof rawLayer.parallax === 'number' && Number.isFinite(rawLayer.parallax) ? Math.max(0, Math.min(2, rawLayer.parallax)) : 1,
           transform,
-          animation: { ...rawLayer.animation, start, end, keyframes: undefined, duration: Math.max(.1, rawLayer.animation?.duration ?? incoming.duration ?? 5), curve: rawLayer.animation?.curve ?? 'linear' },
+          animation: { ...rawLayer.animation, start, end, keyframes: undefined, duration, curve, shake, orbit },
           missingAsset: isCamera ? false : Boolean(rawLayer.missingAsset || isMissing(String(rawLayer.source ?? ''))),
         } as AnimatorLayer
         const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
         const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
         return keyframes ? withSceneKeyframes(timedLayer, keyframes, timedLayer.animation.duration) as AnimatorLayer : timedLayer
       }))
-      const duration = Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed }))
+      const layers = breakDependencyCycles(normalizedLayers)
+      const duration = Math.min(3600, Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed })))
       const incomingComposition = incoming.composition as Partial<NonNullable<Scene['composition']>> | undefined
       const safeAreas: NonNullable<Scene['composition']>['safeArea'][] = ['none', 'action', 'title', 'vertical', 'all']
       const rawGridSize = typeof incomingComposition?.gridSize === 'number' && Number.isFinite(incomingComposition.gridSize) ? incomingComposition.gridSize : DEFAULT_COMPOSITION.gridSize
@@ -640,7 +815,7 @@ export function SceneAnimatorPanel() {
         snap: incomingComposition?.snap === true,
         safeArea: safeAreas.includes(incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea']) ? incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea'] : 'none',
       }
-      localFilesRef.current = {}; replaceScene({ ...blankScene(), ...incoming, duration, layers, composition }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setMessage('Scene imported. Reassign layers marked missing asset.'); setJsonOpen(false)
+      localFilesRef.current = {}; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, duration, layers, composition }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setMessage('Scene imported. Invalid dependency cycles were removed; reassign layers marked missing asset.'); setJsonOpen(false)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
   }
   useEffect(() => {
@@ -750,7 +925,7 @@ export function SceneAnimatorPanel() {
     const orbit = selected?.animation.orbit
     const target = orbit && scene.layers.find(layer => layer.id === orbit.targetLayerId)
     if (!orbit || !target || !isVisualLayer(target)) return null
-    const targetState = baseLayerState(target, progress)
+    const targetState = layerState(target, progress)
     return applyCameraTransform({ ...targetState, x: targetState.x + (orbit.centerOffsetX ?? 0), y: targetState.y + (orbit.centerOffsetY ?? 0) }, selected, progress)
   })()
   const renderLayer = (layer: AnimatorLayer) => {
@@ -767,6 +942,7 @@ export function SceneAnimatorPanel() {
     return <div key={layer.id} style={common} onPointerDown={edgeMove} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture} className={`absolute touch-none cursor-grab active:cursor-grabbing ${selection ? 'ring-2 ring-accent-blue ring-inset' : ''}`}>{media}{selection && <button aria-label="Resize layer" onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
   }
   const activeCamera = activeCameraLayer()
+  const relationshipTargets = selected ? scene.layers.filter(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id)) : []
   const canUndo = historyRevision >= 0 && pastScenesRef.current.length > 0
   const canRedo = historyRevision >= 0 && futureScenesRef.current.length > 0
   const verticalSafeWidth = Math.min(100, (9 / 16) / (scene.width / Math.max(1, scene.height)) * 100)
@@ -785,7 +961,8 @@ export function SceneAnimatorPanel() {
       </div>
       {selected && isVisualLayer(selected) && selected.type !== 'model3d' && <button onClick={() => updateLayer(selected.id, layer => ({ ...layer, fill: !layer.fill, transform: { ...layer.transform, x: 50, y: 50, scale: 1 }, animation: mapSceneAnimationPoints(layer, point => ({ ...point, x: 50, y: 50, scale: 1 })) }))} className={`mb-3 rounded border px-2 py-1 text-[10px] ${selected.fill ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-secondary'}`}>{selected.fill ? 'Fill screen enabled' : 'Fill screen'}</button>}
       {selected && isVisualLayer(selected) && selected.type !== 'model3d' && <button onClick={() => { sendToBack(selected.id); applyParallaxPreset(selected.id, 'background') }} className="mb-3 ml-1 rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-secondary">Use as background</button>}
-      <div ref={canvasRef} className="relative isolate mx-auto w-full min-h-[240px] overflow-hidden rounded-lg border border-border bg-[#0b1020]" style={{ aspectRatio: `${scene.width} / ${scene.height}`, maxHeight: '68vh' }}>
+      <div className="flex w-full justify-center">
+      <div ref={canvasRef} className="relative isolate w-full overflow-hidden rounded-lg border border-border bg-[#0b1020]" style={{ aspectRatio: `${scene.width} / ${scene.height}`, maxWidth: `${68 * scene.width / scene.height}vh` }}>
         {[...scene.layers].sort((a, b) => a.z - b.z).map(renderLayer)}
         {composition.showGrid && <div className="pointer-events-none absolute inset-0 z-[990] opacity-35" style={{ backgroundImage: 'linear-gradient(to right, rgba(125,211,252,.55) 1px, transparent 1px), linear-gradient(to bottom, rgba(125,211,252,.55) 1px, transparent 1px)', backgroundSize: `${composition.gridSize}% ${composition.gridSize}%` }} />}
         {(composition.safeArea === 'action' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[5%] z-[991] border border-dashed border-emerald-300/80"><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-emerald-200">Action safe 90%</span></div>}
@@ -795,6 +972,7 @@ export function SceneAnimatorPanel() {
         {orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}
         {flash && <div className="pointer-events-none absolute z-[999]" style={{ left: `${flash.x}%`, top: `${flash.y}%` }}><span className="absolute -left-6 -top-6 h-12 w-12 rounded-full border-2 border-white/90 animate-ping" /><span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-white shadow-[0_0_20px_8px_rgba(96,165,250,.9)]" /></div>}
         <div className="absolute inset-x-0 bottom-0 z-[1000] h-1 bg-black/40"><div className="h-full bg-accent-blue" style={{ width: `${progress * 100}%` }} /></div>
+      </div>
       </div>
       <p className="mt-2 text-[9px] text-text-muted">Center-drag a 3D layer to orbit it 360°; drag its outer edge to move it. Camera layers animate pan, zoom and rotation without rendering an asset. Parallax controls how strongly each visual layer follows camera pan. WebM uses the same camera transform and Z order as this preview.</p>
       <SceneTimeline
@@ -834,6 +1012,7 @@ export function SceneAnimatorPanel() {
         <div className="space-y-1.5"><div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Camera shots</span><span className="text-[9px] text-text-muted">Click to apply</span></div><div className="grid grid-cols-2 gap-1">{CAMERA_PRESETS.map(preset => <button key={preset.id} onClick={() => applyCameraPreset(preset.id)} className={`rounded border px-2 py-1.5 text-left text-[9px] ${selectedPresetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 text-cyan-200' : 'border-border bg-bg-primary text-text-secondary hover:border-cyan-400/60'}`}>{preset.label}</button>)}</div></div>
         <div className="grid grid-cols-2 gap-1.5">{(['start', 'end'] as const).map(key => <div key={key} className="space-y-1"><div className="text-[10px] capitalize text-text-muted">{key} camera</div>{numberInput('X', selected.animation[key].x, value => updateLayerEndpoint(selected.id, key, { x: value }))}{numberInput('Y', selected.animation[key].y, value => updateLayerEndpoint(selected.id, key, { y: value }))}{numberInput('Zoom', selected.animation[key].scale, value => updateLayerEndpoint(selected.id, key, { scale: Math.max(.05, value) }), .05, 5, .05)}{numberInput('Rotation', selected.animation[key].rotation ?? selected.transform.rotation ?? 0, value => updateLayerEndpoint(selected.id, key, { rotation: value }), -360, 360, .5)}</div>)}</div>
         <div className="grid grid-cols-2 gap-1.5">{numberInput('Duration (s)', selected.animation.duration, value => updateLayerDuration(selected.id, value), .1, 30, .05)}<label className="text-[10px] text-text-muted">All segment curves<select value={selected.animation.curve} onChange={event => updateLayerCurve(selected.id, event.target.value as SceneCurve)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"><option value="linear">Linear</option><option value="ease">Ease</option><option value="dramatic">Dramatic</option><option value="bounce">Bounce</option></select></label></div>
+        <div className="grid grid-cols-2 gap-1.5">{numberInput('Shake amount', selected.animation.shake?.amount ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: Math.max(0, Math.min(8, value)), frequency: layer.animation.shake?.frequency ?? 3, seed: layer.animation.shake?.seed ?? 0 } } })), 0, 8, .1)}{numberInput('Shake Hz', selected.animation.shake?.frequency ?? 3, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, shake: { amount: layer.animation.shake?.amount ?? 0, frequency: Math.max(.1, Math.min(30, value)), seed: layer.animation.shake?.seed ?? 0 } } })), .1, 30, .1)}</div>
         <p className="text-[9px] text-text-muted">The highest visible camera is active. Its pan, zoom and rotation are applied identically to preview and WebM capture.</p>
       </div>}
       {selected?.type !== 'camera' && <>
@@ -845,9 +1024,19 @@ export function SceneAnimatorPanel() {
         <p className="text-[9px] text-text-muted">0 ignores camera pan, 1 follows it normally, and values above 1 feel closer. Zoom and camera roll still affect the full shot. Background adds 20% overscan to image/video layers; extreme moves may need more scale.</p>
       </div>}
       </>}
+      {selected && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-text-secondary">Layer relationship</span><span className="text-[8px] text-text-muted">2D scene space</span></div>
+        <label className="text-[9px] text-text-muted">Behaviour<select value={selected.relationship?.type ?? 'none'} disabled={selected.locked} onChange={event => setLayerRelationship(event.target.value as NonNullable<AnimatorLayer['relationship']>['type'] | 'none')} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="none">Independent</option>{selected.type !== 'camera' && <option value="parent">Parent / child</option>}<option value="follow">Follow layer</option>{selected.type !== 'camera' && <option value="lookAt">Look at layer</option>}</select></label>
+        {selected.relationship && <>
+          <label className="text-[9px] text-text-muted">Target<select value={selected.relationship.targetLayerId} disabled={selected.locked} onChange={event => setRelationshipTarget(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50">{relationshipTargets.map(layer => <option key={layer.id} value={layer.id}>{layer.name} · {layer.type}</option>)}</select></label>
+          {selected.relationship.type === 'follow' && <div className="grid grid-cols-3 gap-1">{numberInput('Offset X', selected.relationship.offsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetX: value } : undefined })), -200, 200, .5)}{numberInput('Offset Y', selected.relationship.offsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, offsetY: value } : undefined })), -200, 200, .5)}{numberInput('Strength', selected.relationship.strength ?? 1, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, strength: Math.max(0, Math.min(1, value)) } : undefined })), 0, 1, .05)}</div>}
+          {selected.relationship.type === 'lookAt' && numberInput('Angle offset', selected.relationship.rotationOffset ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, relationship: layer.relationship ? { ...layer.relationship, rotationOffset: value } : undefined })), -360, 360, 1)}
+          <p className="text-[8px] text-text-muted">{selected.relationship.type === 'parent' ? 'Inherits the target movement, scale and rotation while preserving this layer’s own animation.' : selected.relationship.type === 'follow' ? 'Blends toward the target plus the stored offset. Camera follow keeps the subject framed.' : 'Rotates this layer so it faces the target in the current output aspect ratio.'}</p>
+        </>}
+      </div>}
       {selected && isVisualLayer(selected) && selected.animation.orbit && <div className="rounded border border-accent-blue/40 bg-accent-blue/10 p-2 space-y-2">
         <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-accent-blue">Relational orbit</span><button onClick={() => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: undefined } }))} className="text-[9px] text-text-muted hover:text-red-400">Remove</button></div>
-        <label className="text-[10px] text-text-muted">Orbit around<select value={selected.animation.orbit.targetLayerId} onChange={event => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, targetLayerId: event.target.value } : undefined } }))} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs">{scene.layers.filter(layer => layer.id !== selected.id && isVisualLayer(layer)).map(layer => <option key={layer.id} value={layer.id}>{layer.name} · {layer.type}</option>)}</select></label>
+        <label className="text-[10px] text-text-muted">Orbit around<select value={selected.animation.orbit.targetLayerId} disabled={selected.locked} onChange={event => setOrbitTarget(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs disabled:opacity-50">{scene.layers.filter(layer => layer.id !== selected.id && isVisualLayer(layer) && !dependencyWouldCycle(selected.id, layer.id)).map(layer => <option key={layer.id} value={layer.id}>{layer.name} · {layer.type}</option>)}</select></label>
         <div className="grid grid-cols-2 gap-1.5">{numberInput('Horizontal radius', selected.animation.orbit.radiusX, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusX: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput('Vertical radius', selected.animation.orbit.radiusY, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, radiusY: Math.max(0, value) } : undefined } })), 0, 100, 1)}{numberInput('Center offset X', selected.animation.orbit.centerOffsetX ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetX: value } : undefined } })), -100, 100, .5)}{numberInput('Center offset Y', selected.animation.orbit.centerOffsetY ?? 0, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, centerOffsetY: value } : undefined } })), -100, 100, .5)}{numberInput('Turns', selected.animation.orbit.turns, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, turns: value } : undefined } })), -20, 20, .25)}{numberInput('Start phase °', selected.animation.orbit.phase, value => updateLayer(selected.id, layer => ({ ...layer, animation: { ...layer.animation, orbit: layer.animation.orbit ? { ...layer.animation.orbit, phase: value } : undefined } })), -360, 360, 5)}</div>
         <p className="text-[9px] text-text-muted">The cyan cross marks the exact orbit center. Use center offsets when an asymmetric GLB's visual center differs from its layer box. Negative turns reverse direction.</p>
       </div>}

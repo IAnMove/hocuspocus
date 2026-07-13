@@ -194,6 +194,14 @@ export interface SceneLayer {
    *  and values above 1 create foreground parallax. Camera zoom/roll still
    *  affect every visual layer. Ignored by camera layers. */
   parallax?: number
+  relationship?: {
+    type: 'parent' | 'follow' | 'lookAt'
+    targetLayerId: string
+    offsetX?: number
+    offsetY?: number
+    strength?: number
+    rotationOffset?: number
+  }
   transform: {
     x: number
     y: number
@@ -221,6 +229,12 @@ export interface SceneLayer {
     /** Optional local in/out range, in seconds. */
     trimStart?: number
     trimEnd?: number
+    /** Deterministic camera shake; only used by camera layers. */
+    shake?: {
+      amount: number
+      frequency: number
+      seed?: number
+    }
     spin?: boolean
     rotationSpeed?: number
     /** Name of a baked glTF skeletal clip to play (rigged GLB layers). */
