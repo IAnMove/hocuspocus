@@ -4,6 +4,7 @@ import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { getSceneClipTime } from '../../lib/sceneClip'
+import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
 import type { Scene, SceneAnimationEvent, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
@@ -769,46 +770,12 @@ export function SceneAnimatorPanel() {
   const updateLayerEffects = (id: string, patch: Partial<LayerEffects>) => updateLayer(id, layer => ({ ...layer, effects: normalizedEffects({ ...normalizedEffects(layer.effects), ...patch }) }))
   const motion = (layer: AnimatorLayer) => ({ start: layer.animation.start, end: layer.animation.end, keyframes: layer.animation.keyframes, events: getSceneEvents(layer), duration: layer.animation.duration, curve: layer.animation.curve, offset: layer.animation.offset, speed: layer.animation.speed, loop: layer.animation.loop, trimStart: layer.animation.trimStart, trimEnd: layer.animation.trimEnd, spin: layer.animation.spin, rotationSpeed: layer.animation.rotationSpeed, shake: layer.animation.shake, orbit: layer.animation.orbit })
   const applyMotion = (raw: unknown) => {
-    if (!selected || selected.locked || !raw || typeof raw !== 'object') throw new Error('Select an unlocked layer and provide a motion object.')
-    const value = (raw as { motion?: unknown }).motion ?? raw
-    if (!value || typeof value !== 'object') throw new Error('JSON must contain motion.')
-    const item = value as Partial<AnimatorLayer['animation']>
-    if (!item.start || !item.end || typeof item.duration !== 'number' || !Number.isFinite(item.duration)) throw new Error('Motion needs start, end and a finite duration.')
-    const duration = Math.max(.1, item.duration)
-    updateLayer(selected.id, layer => {
-      const events = item.events === undefined ? getSceneEvents(layer) : normalizeSceneEvents(item.events, duration, layer.id)
-      const rawShake = item.shake
-      const shake = rawShake === undefined
-        ? layer.animation.shake
-        : layer.type === 'camera' && Number.isFinite(rawShake.amount) && Number.isFinite(rawShake.frequency)
-          ? { amount: Math.max(0, Math.min(8, rawShake.amount)), frequency: Math.max(.1, Math.min(30, rawShake.frequency)), seed: Number.isFinite(rawShake.seed) ? rawShake.seed : 0 }
-          : undefined
-      const updated = withNormalizedSceneTiming({
-        ...layer,
-        animation: {
-          ...layer.animation,
-          ...item,
-          start: { ...layer.animation.start, ...item.start },
-          end: { ...layer.animation.end, ...item.end },
-          keyframes: undefined,
-          duration,
-          curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(item.curve ?? '') ? item.curve as SceneCurve : 'linear',
-          events,
-          clip: layer.animation.clip,
-          clipOffset: layer.animation.clipOffset,
-          clipSpeed: layer.animation.clipSpeed,
-          clipReverse: layer.animation.clipReverse,
-          clipLoop: layer.animation.clipLoop,
-          clipTrimStart: layer.animation.clipTrimStart,
-          clipTrimEnd: layer.animation.clipTrimEnd,
-          shake,
-        },
-      }) as AnimatorLayer
-      const keyframes = normalizeSceneKeyframes(item.keyframes, updated)
-      return keyframes ? withSceneKeyframes(updated, keyframes, duration) as AnimatorLayer : updated
-    })
-    const timingLayer = withNormalizedSceneTiming({ ...selected, animation: { ...selected.animation, ...item, duration } }) as AnimatorLayer
-    const timing = getSceneLayerTiming(timingLayer)
+    if (!selected || selected.locked) throw new Error('Select an unlocked layer before applying movement JSON.')
+    const updated = sanitizeSceneMotion(raw, selected, {
+      isValidOrbitTarget: targetId => targetId !== selected.id && scene.layers.some(layer => layer.id === targetId && isVisualLayer(layer)) && !dependencyWouldCycle(selected.id, targetId),
+    }) as AnimatorLayer
+    updateLayer(selected.id, () => updated)
+    const timing = getSceneLayerTiming(updated)
     updateScene(current => ({ ...current, duration: Math.max(current.duration, timing.offset + timing.span / timing.speed) }))
     setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0)
   }
