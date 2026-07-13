@@ -217,6 +217,9 @@ export function SceneAnimatorPanel() {
   const [clipDurationsByLayer, setClipDurationsByLayer] = useState<Record<string, number>>({})
   const canvasRef = useRef<HTMLDivElement>(null)
   const animationRef = useRef<number | null>(null)
+  const recordingAnimationRef = useRef<number | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordingStreamRef = useRef<MediaStream | null>(null)
   const modelInputRef = useRef<HTMLInputElement>(null)
   const mediaInputRef = useRef<HTMLInputElement>(null)
   const overlayInputRef = useRef<HTMLInputElement>(null)
@@ -314,7 +317,17 @@ export function SceneAnimatorPanel() {
     return () => { if (timer !== null) window.clearInterval(timer) }
   }, [selectedModelId, selectedModelSource, selectedModelClip, syncSceneMedia])
   useEffect(() => { void loadOutputs() }, [loadOutputs])
-  useEffect(() => () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); if (flashTimerRef.current) clearTimeout(flashTimerRef.current) }, [])
+  useEffect(() => () => {
+    if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    if (recordingAnimationRef.current) cancelAnimationFrame(recordingAnimationRef.current)
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    const recorder = mediaRecorderRef.current
+    if (recorder) {
+      recorder.ondataavailable = null; recorder.onerror = null; recorder.onstop = null
+      if (recorder.state !== 'inactive') { try { recorder.stop() } catch { /* Recorder may already be shutting down. */ } }
+    }
+    recordingStreamRef.current?.getTracks().forEach(track => track.stop())
+  }, [])
 
   useEffect(() => { sceneRef.current = scene }, [scene])
   const replaceScene = (next: AnimatorScene) => { sceneRef.current = next; setScene(next) }
@@ -1057,39 +1070,96 @@ export function SceneAnimatorPanel() {
     return true
   }
   const record = () => {
+    if (recording) return
+    if (playing) { setMessage('Wait for Preview to finish before recording.'); return }
     if (!scene.layers.some(layer => layer.visible && isVisualLayer(layer))) { setMessage('Add a visible visual layer before recording.'); return }
     if (!('MediaRecorder' in window)) { setMessage('This browser cannot record the scene.'); return }
     const canvas = document.createElement('canvas'); canvas.width = scene.width; canvas.height = scene.height; const context = canvas.getContext('2d'); if (!context) return
     if (!('filter' in context) && scene.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) { setMessage('This browser can preview layer filters but cannot capture them. Use Chromium/Chrome to record this scene.'); return }
-    resetSceneMedia(); setRecording(true); setProgress(0)
-    requestAnimationFrame(() => {
-      paintScene(canvas, 0)
-      const stream = canvas.captureStream(fps); const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'; const videoBitsPerSecond = Math.round(Math.max(4_000_000, Math.min(60_000_000, scene.width * scene.height * fps * .12))); const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond }); const chunks: Blob[] = []
-      recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }; recorder.onstop = () => { const url = URL.createObjectURL(new Blob(chunks, { type: mime })); const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${scene.width}x${scene.height}-${fps}fps-${Date.now()}.webm`; link.click(); URL.revokeObjectURL(url); setRecording(false) }
-      recorder.start(250)
+    let stream: MediaStream | null = null
+    let recorder: MediaRecorder | null = null
+    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'
+    const videoBitsPerSecond = Math.round(Math.max(4_000_000, Math.min(60_000_000, scene.width * scene.height * fps * .12)))
+    try {
+      stream = canvas.captureStream(fps)
+      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond })
+    } catch (error) {
+      stream?.getTracks().forEach(track => track.stop())
+      setMessage(error instanceof Error ? `Recording could not start: ${error.message}` : 'Recording could not start in this browser.')
+      return
+    }
+    const captureStream = stream
+    const mediaRecorder = recorder
+    const chunks: Blob[] = []
+    let failed = false
+    let finishing = false
+    const clearCapture = () => {
+      if (recordingAnimationRef.current !== null) cancelAnimationFrame(recordingAnimationRef.current)
+      recordingAnimationRef.current = null
+      if (mediaRecorderRef.current === mediaRecorder) mediaRecorderRef.current = null
+      if (recordingStreamRef.current === captureStream) recordingStreamRef.current = null
+      captureStream.getTracks().forEach(track => track.stop())
+      Object.values(videoRefs.current).forEach(video => video?.pause())
+      setRecording(false)
+    }
+    const fail = (error: unknown) => {
+      if (failed) return
+      failed = true
+      const detail = error instanceof Error ? error.message : String(error || 'Unknown recorder error')
+      setMessage(`Recording failed: ${detail}`)
+      if (mediaRecorder.state !== 'inactive') {
+        try { mediaRecorder.stop() } catch { clearCapture() }
+      } else clearCapture()
+    }
+    mediaRecorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }
+    mediaRecorder.onerror = event => fail((event as Event & { error?: DOMException }).error ?? new Error('MediaRecorder reported an error.'))
+    mediaRecorder.onstop = () => {
+      if (!failed && chunks.length > 0) {
+        const url = URL.createObjectURL(new Blob(chunks, { type: mime }))
+        const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${scene.width}x${scene.height}-${fps}fps-${Date.now()}.webm`; link.click()
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } else if (!failed) setMessage('Recording stopped without producing video data.')
+      clearCapture()
+    }
+    mediaRecorderRef.current = mediaRecorder
+    recordingStreamRef.current = captureStream
+    resetSceneMedia(); setRecording(true); setProgress(0); setMessage(null)
+    recordingAnimationRef.current = requestAnimationFrame(() => {
+      try {
+        paintScene(canvas, 0)
+        mediaRecorder.start(250)
+      } catch (error) { fail(error); return }
       const started = performance.now(); let syncedFrame = 0
       const finish = () => {
-        const readyProgress = Math.min(1, syncedFrame / fps / scene.duration)
-        setProgress(readyProgress); paintScene(canvas, readyProgress)
-        syncSceneMedia(scene.duration)
-        requestAnimationFrame(() => {
-          setProgress(1); paintScene(canvas, 1)
-          Object.values(videoRefs.current).forEach(video => video?.pause()); recorder.stop()
-        })
-      }
-      const frame = (now: number) => {
-        const elapsed = Math.min(scene.duration, (now - started) / 1000)
-        if (elapsed >= scene.duration) { finish(); return }
-        const desiredFrame = Math.floor(elapsed * fps)
-        if (desiredFrame !== syncedFrame) {
+        if (finishing) return
+        finishing = true
+        try {
           const readyProgress = Math.min(1, syncedFrame / fps / scene.duration)
           setProgress(readyProgress); paintScene(canvas, readyProgress)
-          syncedFrame = desiredFrame
-          syncSceneMedia(Math.min(scene.duration, desiredFrame / fps))
-        }
-        requestAnimationFrame(frame)
+          syncSceneMedia(scene.duration)
+          recordingAnimationRef.current = requestAnimationFrame(() => {
+            try {
+              setProgress(1); paintScene(canvas, 1)
+              if (mediaRecorder.state !== 'inactive') mediaRecorder.stop(); else clearCapture()
+            } catch (error) { fail(error) }
+          })
+        } catch (error) { fail(error) }
       }
-      requestAnimationFrame(frame)
+      const frame = (now: number) => {
+        try {
+          const elapsed = Math.min(scene.duration, (now - started) / 1000)
+          if (elapsed >= scene.duration) { finish(); return }
+          const desiredFrame = Math.floor(elapsed * fps)
+          if (desiredFrame !== syncedFrame) {
+            const readyProgress = Math.min(1, syncedFrame / fps / scene.duration)
+            setProgress(readyProgress); paintScene(canvas, readyProgress)
+            syncedFrame = desiredFrame
+            syncSceneMedia(Math.min(scene.duration, desiredFrame / fps))
+          }
+          recordingAnimationRef.current = requestAnimationFrame(frame)
+        } catch (error) { fail(error) }
+      }
+      recordingAnimationRef.current = requestAnimationFrame(frame)
     })
   }
   const persistScene = async () => {
@@ -1155,7 +1225,7 @@ export function SceneAnimatorPanel() {
 
   return <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-bg-tertiary xl:flex-row">
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex gap-2"><button onClick={play} disabled={!scene.layers.length || playing || recording} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : 'Record WebM'}</button></div></div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex gap-2"><button onClick={play} disabled={!scene.layers.length || playing || recording} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording || playing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : 'Record WebM'}</button></div></div>
       <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? `Autosaved ${new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Autosave waiting…'}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{label}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">Frame rate{([30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{rate} FPS</button>)}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary p-1.5">
@@ -1189,10 +1259,10 @@ export function SceneAnimatorPanel() {
         selectedLayerId={selectedId}
         selectedKeyframeId={selectedKeyframeId}
         selectedEventId={selectedEventId}
-        onScrub={time => { if (animationRef.current) cancelAnimationFrame(animationRef.current); setPlaying(false); syncSceneMedia(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onScrub={time => { if (recording) return; if (animationRef.current) cancelAnimationFrame(animationRef.current); setPlaying(false); syncSceneMedia(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
         onSelectLayer={id => { setSelectedId(id); setSelectedKeyframeId(null); setSelectedEventId(null) }}
-        onSelectKeyframe={(layerId, keyframeId, time) => { setSelectedId(layerId); setSelectedKeyframeId(keyframeId); setSelectedEventId(null); syncSceneMedia(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
-        onSelectEvent={(layerId, eventId, time) => { setSelectedId(layerId); setSelectedKeyframeId(null); setSelectedEventId(eventId); syncSceneMedia(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onSelectKeyframe={(layerId, keyframeId, time) => { if (recording) return; setSelectedId(layerId); setSelectedKeyframeId(keyframeId); setSelectedEventId(null); syncSceneMedia(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
+        onSelectEvent={(layerId, eventId, time) => { if (recording) return; setSelectedId(layerId); setSelectedKeyframeId(null); setSelectedEventId(eventId); syncSceneMedia(time); setProgress(Math.max(0, Math.min(1, time / Math.max(.1, scene.duration)))) }}
         onAddKeyframe={addKeyframeAtPlayhead}
         onAddEvent={addEventAtPlayhead}
         onDeleteKeyframe={deleteTimelineKeyframe}
