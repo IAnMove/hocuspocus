@@ -4,7 +4,7 @@ import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { evaluateSceneLayer, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
-import type { Scene, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType } from '../../types'
+import type { Scene, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
@@ -59,7 +59,7 @@ const PRESETS: Preset[] = ([
 ]).map(preset => ({ ...preset, preview: `/preset-previews/${preset.id}.webm`, poster: `/preset-previews/${preset.id}.webp` }))
 
 const DEFAULT_COMPOSITION: NonNullable<Scene['composition']> = { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }
-const blankScene = (): AnimatorScene => ({ version: 1, name: 'Untitled scene', width: 1280, height: 720, duration: 5, layers: [], composition: { ...DEFAULT_COMPOSITION } })
+const blankScene = (): AnimatorScene => ({ version: 1, name: 'Untitled scene', width: 1280, height: 720, fps: 30, duration: 5, layers: [], composition: { ...DEFAULT_COMPOSITION } })
 const AUTOSAVE_KEY = 'maestro-scene-animator-autosave-v1'
 const HISTORY_LIMIT = 80
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -191,6 +191,7 @@ export function SceneAnimatorPanel() {
   const lastHistoryAtRef = useRef(0)
   const selected = scene.layers.find(layer => layer.id === selectedId) ?? null
   const composition = { ...DEFAULT_COMPOSITION, ...scene.composition }
+  const fps: SceneFrameRate = scene.fps === 60 ? 60 : 30
   const snapCoordinate = (value: number) => composition.snap ? Math.round(value / Math.max(1, composition.gridSize)) * Math.max(1, composition.gridSize) : value
   const generatedModels = outputs.filter(output => output.type === 'model3d' && /\.glb$/i.test(output.name))
   const generatedMedia = outputs.filter(output => output.type === 'image' || output.type === 'video')
@@ -546,7 +547,24 @@ export function SceneAnimatorPanel() {
     return { ...current, layers: assignZ([layer, ...layers.filter(item => item.id !== id)]) }
   })
   const resetSkeletalClips = () => canvasRef.current?.querySelectorAll('.scene-animator-model').forEach(element => { (element as HTMLElement & { currentTime: number }).currentTime = 0 })
-  const animate = (done?: () => void) => { const started = performance.now(); resetSkeletalClips(); setPlaying(true); Object.values(videoRefs.current).forEach(video => { if (video) { video.currentTime = 0; void video.play().catch(() => {}) } }); const frame = (now: number) => { const next = Math.min(1, (now - started) / (scene.duration * 1000)); setProgress(next); if (next < 1) animationRef.current = requestAnimationFrame(frame); else { setPlaying(false); Object.values(videoRefs.current).forEach(video => video?.pause()); done?.() } }; animationRef.current = requestAnimationFrame(frame) }
+  const animate = (done?: () => void) => {
+    const started = performance.now()
+    let renderedFrame = -1
+    resetSkeletalClips(); setPlaying(true)
+    Object.values(videoRefs.current).forEach(video => { if (video) { video.currentTime = 0; void video.play().catch(() => {}) } })
+    const frame = (now: number) => {
+      const elapsed = Math.min(scene.duration, (now - started) / 1000)
+      const frameIndex = Math.floor(elapsed * fps)
+      const finished = elapsed >= scene.duration
+      if (frameIndex !== renderedFrame || finished) {
+        renderedFrame = frameIndex
+        setProgress(finished ? 1 : frameIndex / fps / scene.duration)
+      }
+      if (!finished) animationRef.current = requestAnimationFrame(frame)
+      else { setPlaying(false); Object.values(videoRefs.current).forEach(video => video?.pause()); done?.() }
+    }
+    animationRef.current = requestAnimationFrame(frame)
+  }
   const play = () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); setProgress(0); animate() }
   const applyPreset = (presetId: string) => {
     if (!selected || selected.type === 'camera' || selected.locked) return
@@ -815,7 +833,7 @@ export function SceneAnimatorPanel() {
         snap: incomingComposition?.snap === true,
         safeArea: safeAreas.includes(incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea']) ? incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea'] : 'none',
       }
-      localFilesRef.current = {}; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, duration, layers, composition }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setMessage('Scene imported. Invalid dependency cycles were removed; reassign layers marked missing asset.'); setJsonOpen(false)
+      localFilesRef.current = {}; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setMessage('Scene imported. Invalid dependency cycles were removed; reassign layers marked missing asset.'); setJsonOpen(false)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
   }
   useEffect(() => {
@@ -889,9 +907,25 @@ export function SceneAnimatorPanel() {
     if (!scene.layers.some(layer => layer.visible && isVisualLayer(layer))) { setMessage('Add a visible visual layer before recording.'); return }
     if (!('MediaRecorder' in window)) { setMessage('This browser cannot record the scene.'); return }
     const canvas = document.createElement('canvas'); canvas.width = scene.width; canvas.height = scene.height; if (!canvas.getContext('2d')) return
-    const stream = canvas.captureStream(30); const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'; const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 }); const chunks: Blob[] = []
-    recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }; recorder.onstop = () => { const url = URL.createObjectURL(new Blob(chunks, { type: mime })); const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${Date.now()}.webm`; link.click(); URL.revokeObjectURL(url); setRecording(false) }
-    resetSkeletalClips(); setRecording(true); setProgress(0); recorder.start(250); const started = performance.now(); Object.values(videoRefs.current).forEach(video => { if (video) { video.currentTime = 0; void video.play().catch(() => {}) } }); const frame = (now: number) => { const next = Math.min(1, (now - started) / (scene.duration * 1000)); setProgress(next); paintScene(canvas, next); if (next < 1) requestAnimationFrame(frame); else { Object.values(videoRefs.current).forEach(video => video?.pause()); recorder.stop() } }; requestAnimationFrame(frame)
+    paintScene(canvas, 0)
+    const stream = canvas.captureStream(fps); const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'; const videoBitsPerSecond = Math.round(Math.max(4_000_000, Math.min(60_000_000, scene.width * scene.height * fps * .12))); const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond }); const chunks: Blob[] = []
+    recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }; recorder.onstop = () => { const url = URL.createObjectURL(new Blob(chunks, { type: mime })); const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${scene.width}x${scene.height}-${fps}fps-${Date.now()}.webm`; link.click(); URL.revokeObjectURL(url); setRecording(false) }
+    resetSkeletalClips(); setRecording(true); setProgress(0); recorder.start(250)
+    const started = performance.now(); let renderedFrame = 0
+    Object.values(videoRefs.current).forEach(video => { if (video) { video.currentTime = 0; void video.play().catch(() => {}) } })
+    const frame = (now: number) => {
+      const elapsed = Math.min(scene.duration, (now - started) / 1000)
+      const frameIndex = Math.floor(elapsed * fps)
+      const finished = elapsed >= scene.duration
+      if (frameIndex !== renderedFrame || finished) {
+        renderedFrame = frameIndex
+        const next = finished ? 1 : frameIndex / fps / scene.duration
+        setProgress(next); paintScene(canvas, next)
+      }
+      if (!finished) requestAnimationFrame(frame)
+      else { Object.values(videoRefs.current).forEach(video => video?.pause()); recorder.stop() }
+    }
+    requestAnimationFrame(frame)
   }
   const persistScene = async () => {
     if (!scene.layers.length) { setMessage('Add at least one layer before saving.'); return }
@@ -951,7 +985,7 @@ export function SceneAnimatorPanel() {
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex gap-2"><button onClick={play} disabled={!scene.layers.length || playing || recording} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : 'Record WebM'}</button></div></div>
       <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? `Autosaved ${new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Autosave waiting…'}</span></div>
-      <div className="mb-3 flex flex-wrap gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{label}</button>)}</div>
+      <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{label}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">Frame rate{([30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{rate} FPS</button>)}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary p-1.5">
         <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, showGrid: !composition.showGrid } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.showGrid ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-border text-text-muted'}`}><Grid3X3 size={10} /> Grid</button>
         <button type="button" onClick={() => updateScene(current => ({ ...current, composition: { ...composition, snap: !composition.snap } }))} className={`flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] ${composition.snap ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border text-text-muted'}`}><Magnet size={10} /> Snap</button>
@@ -978,6 +1012,7 @@ export function SceneAnimatorPanel() {
       <SceneTimeline
         layers={scene.layers}
         duration={scene.duration}
+        fps={fps}
         currentTime={progress * scene.duration}
         selectedLayerId={selectedId}
         selectedKeyframeId={selectedKeyframeId}

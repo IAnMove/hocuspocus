@@ -162,6 +162,7 @@ export interface OutputFile {
 
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'camera'
 export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
+export type SceneFrameRate = 30 | 60
 
 export interface SceneKeyframe {
   id: string
@@ -258,6 +259,8 @@ export interface Scene {
   name: string
   width: number
   height: number
+  /** Preview, timeline and browser capture sampling rate. Defaults to 30 for legacy scenes. */
+  fps?: SceneFrameRate
   duration: number
   layers: SceneLayer[]
   composition?: {

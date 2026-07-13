@@ -1,11 +1,12 @@
 import { ClipboardPaste, Copy, Plus, Trash2 } from 'lucide-react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getSceneKeyframes, getSceneLayerTiming, layerTimeToSceneTime } from '../../lib/sceneTimeline'
-import type { SceneCurve, SceneKeyframe, SceneLayer } from '../../types'
+import type { SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer } from '../../types'
 
 type Props = {
   layers: SceneLayer[]
   duration: number
+  fps: SceneFrameRate
   currentTime: number
   selectedLayerId: string | null
   selectedKeyframeId: string | null
@@ -37,7 +38,7 @@ const numberField = (label: string, value: number, change: (value: number) => vo
   <label className="text-[9px] text-text-muted">{label}<input type="number" value={Number.isFinite(value) ? Number(value.toFixed(3)) : 0} step={step} min={min} max={max} disabled={disabled} onChange={event => { const next = Number(event.target.value); if (Number.isFinite(next)) change(next) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
 )
 
-export function SceneTimeline({ layers, duration, currentTime, selectedLayerId, selectedKeyframeId, onScrub, onSelectLayer, onSelectKeyframe, onAddKeyframe, onDeleteKeyframe, onCopyKeyframes, onPasteKeyframes, onUpdateKeyframe, onUpdateTiming }: Props) {
+export function SceneTimeline({ layers, duration, fps, currentTime, selectedLayerId, selectedKeyframeId, onScrub, onSelectLayer, onSelectKeyframe, onAddKeyframe, onDeleteKeyframe, onCopyKeyframes, onPasteKeyframes, onUpdateKeyframe, onUpdateTiming }: Props) {
   const selectedLayer = layers.find(layer => layer.id === selectedLayerId) ?? null
   const selectedFrames = selectedLayer ? getSceneKeyframes(selectedLayer) : []
   const selectedTiming = selectedLayer ? getSceneLayerTiming(selectedLayer) : null
@@ -46,22 +47,23 @@ export function SceneTimeline({ layers, duration, currentTime, selectedLayerId, 
   const locked = Boolean(selectedLayer?.locked)
   const isEndpoint = selectedIndex === 0 || selectedIndex === selectedFrames.length - 1
   const isLast = selectedIndex === selectedFrames.length - 1
+  const quantizeTime = (time: number) => Math.max(0, Math.min(duration, Math.round(time * fps) / fps))
 
   const seekTrack = (event: ReactPointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
-    onScrub(Math.max(0, Math.min(duration, (event.clientX - bounds.left) / Math.max(1, bounds.width) * duration)))
+    onScrub(quantizeTime((event.clientX - bounds.left) / Math.max(1, bounds.width) * duration))
   }
 
   return <div className="mt-3 overflow-hidden rounded-lg border border-border bg-bg-secondary">
     <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
-      <span className="mr-auto text-[10px] font-medium uppercase tracking-wider text-text-secondary">Timeline · {currentTime.toFixed(2)}s / {duration.toFixed(2)}s</span>
+      <span className="mr-auto text-[10px] font-medium uppercase tracking-wider text-text-secondary">Timeline · {currentTime.toFixed(2)}s / {duration.toFixed(2)}s · {fps} FPS</span>
       <button type="button" onClick={onAddKeyframe} disabled={!selectedLayer || locked} className="flex items-center gap-1 rounded border border-border px-1.5 py-1 text-[9px] disabled:opacity-40"><Plus size={10} /> Keyframe</button>
       <button type="button" onClick={onDeleteKeyframe} disabled={!selectedFrame || isEndpoint || locked} title={isEndpoint ? 'The first and last keyframes define the clip bounds.' : 'Delete selected keyframe'} className="rounded border border-border p-1 text-red-300 disabled:opacity-30"><Trash2 size={11} /></button>
       <button type="button" onClick={onCopyKeyframes} disabled={!selectedLayer} title="Copy all keyframes from this layer" className="rounded border border-border p-1 disabled:opacity-30"><Copy size={11} /></button>
       <button type="button" onClick={onPasteKeyframes} disabled={!selectedLayer || locked} title="Paste keyframes onto this layer" className="rounded border border-border p-1 disabled:opacity-30"><ClipboardPaste size={11} /></button>
     </div>
     <div className="px-2 pb-2 pt-1.5">
-      <input aria-label="Scene playhead" type="range" min={0} max={Math.max(.1, duration)} step={1 / 60} value={Math.min(duration, currentTime)} onChange={event => onScrub(Number(event.target.value))} className="mb-1.5 w-full accent-blue-500" />
+      <input aria-label="Scene playhead" type="range" min={0} max={Math.max(.1, duration)} step={1 / fps} value={Math.min(duration, currentTime)} onChange={event => onScrub(quantizeTime(Number(event.target.value)))} className="mb-1.5 w-full accent-blue-500" />
       <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
         {[...layers].sort((a, b) => b.z - a.z).map(layer => {
           const frames = getSceneKeyframes(layer)
