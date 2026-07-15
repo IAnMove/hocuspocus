@@ -171,8 +171,33 @@ export interface OutputFile {
   thumbnail_url?: string | null
 }
 
-export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay'
+export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'camera'
 export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
+export type SceneFrameRate = 30 | 60
+export type SceneBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken'
+export type SceneMask = 'none' | 'rounded' | 'ellipse'
+
+export interface SceneKeyframe {
+  id: string
+  /** Seconds from the beginning of this layer's animation. */
+  time: number
+  x: number
+  y: number
+  scale: number
+  opacity: number
+  rotation: number
+  /** Easing used from this keyframe to the next one. */
+  curve: SceneCurve
+}
+
+export interface SceneAnimationEvent {
+  id: string
+  /** Local layer time in seconds, before offset/speed/loop are applied. */
+  time: number
+  name: string
+  /** Optional plain-text metadata for a game engine, sound cue or external tool. */
+  payload?: string
+}
 
 export interface SceneLayer {
   id: string
@@ -182,10 +207,37 @@ export interface SceneLayer {
   thumbnail?: string
   visible: boolean
   z: number
+  /** Prevent accidental transform, timing and inspector edits. */
+  locked?: boolean
   /** Object URLs cannot survive a scene export/import and need reassignment. */
   missingAsset?: boolean
   /** Image/video is cropped to cover the complete scene frame. */
   fill?: boolean
+  /** Camera-pan multiplier: 0 ignores camera pan, 1 follows it normally,
+   *  and values above 1 create foreground parallax. Camera zoom/roll still
+   *  affect every visual layer. Ignored by camera layers. */
+  parallax?: number
+  relationship?: {
+    type: 'parent' | 'follow' | 'lookAt'
+    targetLayerId: string
+    offsetX?: number
+    offsetY?: number
+    strength?: number
+    rotationOffset?: number
+  }
+  /** 2D composition effects shared by DOM preview and canvas capture. */
+  effects?: {
+    blur?: number
+    brightness?: number
+    contrast?: number
+    saturation?: number
+    hue?: number
+    glow?: number
+    shadow?: number
+    blendMode?: SceneBlendMode
+    mask?: SceneMask
+    maskRadius?: number
+  }
   transform: {
     x: number
     y: number
@@ -198,14 +250,40 @@ export interface SceneLayer {
     rotationY?: number
   }
   animation: {
-    start: { x: number; y: number; scale: number; opacity?: number }
-    end: { x: number; y: number; scale: number; opacity?: number }
+    start: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
+    end: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
+    /** Multi-keyframe timeline. Older scenes continue to use start/end. */
+    keyframes?: SceneKeyframe[]
+    /** Metadata markers only; Maestro does not execute them during browser capture. */
+    events?: SceneAnimationEvent[]
     duration: number
     curve: SceneCurve
+    /** Scene time in seconds before this layer's local motion starts. */
+    offset?: number
+    /** Local motion playback multiplier. */
+    speed?: number
+    /** Repeat the selected local time range until the scene ends. */
+    loop?: boolean
+    /** Optional local in/out range, in seconds. */
+    trimStart?: number
+    trimEnd?: number
+    /** Deterministic camera shake; only used by camera layers. */
+    shake?: {
+      amount: number
+      frequency: number
+      seed?: number
+    }
     spin?: boolean
     rotationSpeed?: number
     /** Name of a baked glTF skeletal clip to play (rigged GLB layers). */
     clip?: string
+    /** Skeletal clip timing is independent from the layer transform timing. */
+    clipOffset?: number
+    clipSpeed?: number
+    clipReverse?: boolean
+    clipLoop?: boolean
+    clipTrimStart?: number
+    clipTrimEnd?: number
     /** Optional motion relationship: this layer circles another scene layer. */
     orbit?: {
       targetLayerId: string
@@ -225,8 +303,16 @@ export interface Scene {
   name: string
   width: number
   height: number
+  /** Preview, timeline and browser capture sampling rate. Defaults to 30 for legacy scenes. */
+  fps?: SceneFrameRate
   duration: number
   layers: SceneLayer[]
+  composition?: {
+    showGrid: boolean
+    gridSize: number
+    snap: boolean
+    safeArea: 'none' | 'action' | 'title' | 'vertical' | 'all'
+  }
 }
 
 export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'

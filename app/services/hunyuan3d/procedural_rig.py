@@ -34,12 +34,25 @@ ARRAY_BUFFER = 34962
 
 MAX_VERTICES = 2_000_000
 MAX_INFLUENCES = 4
+AXIS_MODES = {"auto", "x", "y", "z"}
+RIG_PROFILES = {"prop", "vehicle", "humanoid", "quadruped", "flying", "serpentine"}
 
 # Clip ids exposed through the API; the label becomes the glTF animation name
 # that viewers (model-viewer, Blender) display.
 CLIPS: dict[str, str] = {
     "idle": "Idle Sway",
     "breathe": "Breathe",
+    "hover": "Hover",
+    "alert": "Alert Look",
+    "walk": "Walk Cycle",
+    "run": "Run Cycle",
+    "strafe": "Strafe Loop",
+    "jump": "Jump",
+    "attack": "Attack Lunge",
+    "hit": "Hit Reaction",
+    "roll": "Combat Roll",
+    "charge": "Charge Up",
+    "victory": "Victory Jump",
     "bounce": "Bounce",
     "spin": "Turntable Spin",
     "wobble": "Wobble Dance",
@@ -50,6 +63,20 @@ ProgressFn = Callable[[str, float, str], None]
 
 def _quat_z(angle: float) -> list[float]:
     return [0.0, 0.0, math.sin(angle / 2.0), math.cos(angle / 2.0)]
+
+
+def _quat_axis(axis: list[float] | np.ndarray, angle: float) -> list[float]:
+    direction = np.asarray(axis, dtype=np.float64)
+    norm = float(np.linalg.norm(direction))
+    if norm <= 1e-9:
+        return [0.0, 0.0, 0.0, 1.0]
+    direction /= norm
+    sine = math.sin(angle / 2.0)
+    return [float(direction[0] * sine), float(direction[1] * sine), float(direction[2] * sine), math.cos(angle / 2.0)]
+
+
+def _quat_x(angle: float) -> list[float]:
+    return [math.sin(angle / 2.0), 0.0, 0.0, math.cos(angle / 2.0)]
 
 
 def _quat_y(angle: float) -> list[float]:
@@ -159,26 +186,73 @@ def _append_accessor(
     return len(gltf.accessors) - 1
 
 
-def _build_skeleton(world_verts: np.ndarray, spine_joints: int) -> dict[str, Any]:
+def _principal_axis(world_verts: np.ndarray) -> np.ndarray:
+    """Return a stable dominant PCA direction for elongated meshes."""
+    centered = world_verts - world_verts.mean(axis=0)
+    sample = centered[:: max(1, len(centered) // 50_000)]
+    _, vectors = np.linalg.eigh(np.cov(sample.T))
+    axis = vectors[:, -1]
+    dominant_component = int(np.argmax(np.abs(axis)))
+    if axis[dominant_component] < 0:
+        axis = -axis
+    return axis
+
+
+def _perpendicular_sway_axis(chain_axis: list[float] | np.ndarray) -> np.ndarray:
+    """Keep bending perpendicular to the chain instead of twisting along it."""
+    direction = np.asarray(chain_axis, dtype=np.float64)
+    norm = float(np.linalg.norm(direction))
+    if norm <= 1e-9:
+        return np.array([0.0, 0.0, 1.0])
+    direction /= norm
+    for preferred in (np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0])):
+        projected = preferred - direction * float(preferred @ direction)
+        projected_norm = float(np.linalg.norm(projected))
+        if projected_norm > 1e-6:
+            return projected / projected_norm
+    return np.array([0.0, 1.0, 0.0])
+
+
+def _profile_bin_edges(low: float, high: float, count: int, rig_profile: str) -> np.ndarray:
+    """Profile-aware spacing for the same honest single-chain skeleton."""
+    normalized = np.linspace(0.0, 1.0, count + 1)
+    if rig_profile == "humanoid":
+        # Slightly denser toward the base/hips of an upright character.
+        normalized = np.power(normalized, 1.18)
+    elif rig_profile == "quadruped":
+        # Extra articulation toward both ends (head/tail) of a long body.
+        normalized = 0.5 - 0.5 * np.cos(math.pi * normalized)
+    elif rig_profile == "flying":
+        # Keep a little more control toward the leading end of a light rig.
+        normalized = np.power(normalized, 0.88)
+    return low + (high - low) * normalized
+
+
+def _build_skeleton(
+    world_verts: np.ndarray,
+    spine_joints: int,
+    axis_mode: str = "auto",
+    rig_profile: str = "prop",
+) -> dict[str, Any]:
     mins = world_verts.min(axis=0)
     maxs = world_verts.max(axis=0)
     extents = maxs - mins
-    # glTF is Y-up: keep the natural axis when the object stands upright,
-    # otherwise follow the dominant PCA direction ("lying" objects).
-    if extents[1] >= 0.6 * float(extents.max()):
-        axis = np.array([0.0, 1.0, 0.0])
+    if axis_mode != "auto":
+        axis = np.eye(3, dtype=np.float64)[{"x": 0, "y": 1, "z": 2}[axis_mode]]
     else:
-        centered = world_verts - world_verts.mean(axis=0)
-        # Sample for the covariance on huge meshes; direction only.
-        sample = centered[:: max(1, len(centered) // 50_000)]
-        _, vectors = np.linalg.eigh(np.cov(sample.T))
-        axis = vectors[:, -1]
-        if axis[1] < 0:
-            axis = -axis
+        # Humanoids strongly prefer glTF's natural Y-up body axis. Creature,
+        # flying and serpentine profiles deliberately follow their dominant
+        # shape direction so horizontally oriented assets do not stand up.
+        upright_threshold = 0.45 if rig_profile == "humanoid" else 0.6
+        prefers_upright = rig_profile in {"prop", "humanoid"}
+        if prefers_upright and extents[1] >= upright_threshold * float(extents.max()):
+            axis = np.array([0.0, 1.0, 0.0])
+        else:
+            axis = _principal_axis(world_verts)
 
     projection = world_verts @ axis
     low, high = float(projection.min()), float(projection.max())
-    edges = np.linspace(low, high, spine_joints + 1)
+    edges = _profile_bin_edges(low, high, spine_joints, rig_profile)
     joints: list[np.ndarray | None] = []
     for i in range(spine_joints):
         mask = (projection >= edges[i]) & (projection <= edges[i + 1])
@@ -216,7 +290,7 @@ def _build_skeleton(world_verts: np.ndarray, spine_joints: int) -> dict[str, Any
     }
 
 
-def _compute_weights(world_verts: np.ndarray, skeleton: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+def _compute_weights(world_verts: np.ndarray, skeleton: dict[str, Any], weight_falloff: float = 2.0) -> tuple[np.ndarray, np.ndarray]:
     joints = skeleton["joints"]
     axis = skeleton["axis"]
     count = len(joints)
@@ -238,7 +312,7 @@ def _compute_weights(world_verts: np.ndarray, skeleton: dict[str, Any]) -> tuple
         closest = start[None, :] + t[:, None] * segment[None, :]
         distances[:, j] = np.linalg.norm(world_verts - closest, axis=1)
 
-    raw = 1.0 / (distances**2 + epsilon**2)
+    raw = 1.0 / (np.power(distances, weight_falloff) + epsilon**weight_falloff)
     influences = min(MAX_INFLUENCES, count)
     order = np.argsort(-raw, axis=1)[:, :influences]
     top = np.take_along_axis(raw, order, axis=1)
@@ -293,6 +367,9 @@ def _build_clip(
     root_rotation = target.get("root_rotation") or [0.0, 0.0, 0.0, 1.0]
     root_scale = np.asarray(target.get("root_scale") or [1.0, 1.0, 1.0], dtype=np.float64)
     chain_rotations = target.get("chain_rotations") or [[0.0, 0.0, 0.0, 1.0]] * len(chain)
+    sway_axis = target.get("sway_axis")
+    if sway_axis is None:
+        sway_axis = [0.0, 0.0, 1.0]
     count = len(chain)
 
     def timeline(duration: float, per_second: int = 12) -> np.ndarray:
@@ -306,7 +383,7 @@ def _build_clip(
             bind = chain_rotations[i]
             # Local-space delta: rotate within the bone's own frame.
             quats = np.array([
-                _quat_mul(bind, _quat_z(amplitude * math.sin(2 * math.pi * t / period + phase)))
+                _quat_mul(bind, _quat_axis(sway_axis, amplitude * math.sin(2 * math.pi * t / period + phase)))
                 for t in times
             ])
             _add_sampler(gltf, blob, animation, times, quats, node_index, "rotation")
@@ -316,6 +393,24 @@ def _build_clip(
         # rotation tilts the skeleton.
         return np.array([_quat_mul(_quat_y(angle), root_rotation) for angle in angles])
 
+    def root_euler(
+        times: np.ndarray,
+        x_angles: np.ndarray | None = None,
+        y_angles: np.ndarray | None = None,
+        z_angles: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Compose parent-space Euler deltas with a non-identity bind pose."""
+        zeros = np.zeros(len(times), dtype=np.float64)
+        xs = zeros if x_angles is None else x_angles
+        ys = zeros if y_angles is None else y_angles
+        zs = zeros if z_angles is None else z_angles
+        result = []
+        for x_angle, y_angle, z_angle in zip(xs, ys, zs):
+            delta = _quat_mul(_quat_y(float(y_angle)), _quat_x(float(x_angle)))
+            delta = _quat_mul(delta, _quat_z(float(z_angle)))
+            result.append(_quat_mul(delta, root_rotation))
+        return np.asarray(result)
+
     if clip_id == "idle":
         times = timeline(3.0)
         chain_sway(times, period=3.0, base_deg=4.0, tip_deg=10.0, phase_step=0.5)
@@ -324,6 +419,129 @@ def _build_clip(
         wave = 0.03 * np.sin(2 * math.pi * times / 2.5)
         scales = np.stack([1.0 + wave, 1.0 - 0.66 * wave, 1.0 + wave], axis=1) * root_scale[None, :]
         _add_sampler(gltf, blob, animation, times, scales, root_index, "scale")
+    elif clip_id == "hover":
+        duration = 3.0
+        times = timeline(duration, per_second=18)
+        phase = 2 * math.pi * times / duration
+        translations = np.tile(root_translation, (len(times), 1))
+        translations[:, 1] += 0.045 * height * np.sin(phase)
+        _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
+        tilts = math.radians(3.0) * np.sin(phase + math.pi / 2)
+        _add_sampler(gltf, blob, animation, times, root_euler(times, z_angles=tilts), root_index, "rotation")
+        chain_sway(times, period=duration, base_deg=2.0, tip_deg=6.0, phase_step=0.35)
+    elif clip_id == "alert":
+        duration = 2.4
+        times = timeline(duration, per_second=18)
+        phase = 2 * math.pi * times / duration
+        yaw = np.radians(12.0) * np.sin(phase)
+        lean = np.radians(3.0) * (1 - np.cos(phase)) * .5
+        _add_sampler(gltf, blob, animation, times, root_euler(times, x_angles=lean, y_angles=yaw), root_index, "rotation")
+        chain_sway(times, period=duration, base_deg=2.0, tip_deg=8.0, phase_step=.25)
+    elif clip_id == "walk":
+        duration = 1.0
+        times = timeline(duration, per_second=24)
+        phase = 2 * math.pi * times / duration
+        translations = np.tile(root_translation, (len(times), 1))
+        translations[:, 1] += .024 * height * (.5 - .5 * np.cos(phase * 2))
+        _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
+        yaw = np.radians(3.5) * np.sin(phase)
+        _add_sampler(gltf, blob, animation, times, root_euler(times, y_angles=yaw), root_index, "rotation")
+        chain_sway(times, period=duration, base_deg=7.0, tip_deg=14.0, phase_step=.65)
+    elif clip_id == "run":
+        duration = .64
+        times = timeline(duration, per_second=30)
+        phase = 2 * math.pi * times / duration
+        lift = .052 * height * np.abs(np.sin(phase))
+        translations = np.tile(root_translation, (len(times), 1))
+        translations[:, 1] += lift
+        _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
+        normalized = lift / max(float(lift.max()), 1e-9)
+        scales = np.stack([1.035 - .035 * normalized, .94 + .06 * normalized, 1.035 - .035 * normalized], axis=1) * root_scale[None, :]
+        _add_sampler(gltf, blob, animation, times, scales, root_index, "scale")
+        yaw = np.radians(5.0) * np.sin(phase)
+        _add_sampler(gltf, blob, animation, times, root_euler(times, y_angles=yaw), root_index, "rotation")
+        chain_sway(times, period=duration, base_deg=11.0, tip_deg=20.0, phase_step=.75)
+    elif clip_id == "strafe":
+        duration = 1.2
+        times = timeline(duration, per_second=24)
+        phase = 2 * math.pi * times / duration
+        translations = np.tile(root_translation, (len(times), 1))
+        translations[:, 0] += .075 * height * np.sin(phase)
+        translations[:, 1] += .018 * height * (.5 - .5 * np.cos(phase * 2))
+        _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
+        lean = np.radians(-9.0) * np.sin(phase)
+        _add_sampler(gltf, blob, animation, times, root_euler(times, z_angles=lean), root_index, "rotation")
+        chain_sway(times, period=duration, base_deg=5.0, tip_deg=11.0, phase_step=.45)
+    elif clip_id == "jump":
+        duration = 1.25
+        times = timeline(duration, per_second=30)
+        normalized = times / duration
+        airborne = np.sin(math.pi * normalized) ** 1.25
+        translations = np.tile(root_translation, (len(times), 1))
+        translations[:, 1] += .22 * height * airborne
+        _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
+        scales = np.stack([1.0 - .045 * airborne, 1.0 + .09 * airborne, 1.0 - .045 * airborne], axis=1) * root_scale[None, :]
+        _add_sampler(gltf, blob, animation, times, scales, root_index, "scale")
+        pitch = np.radians(-5.0) * np.sin(math.pi * normalized)
+        _add_sampler(gltf, blob, animation, times, root_euler(times, x_angles=pitch), root_index, "rotation")
+        chain_sway(times, period=duration, base_deg=2.0, tip_deg=8.0, phase_step=.2)
+    elif clip_id == "attack":
+        duration = .8
+        times = timeline(duration, per_second=30)
+        normalized = times / duration
+        strike = np.sin(math.pi * normalized) ** 2
+        translations = np.tile(root_translation, (len(times), 1))
+        translations[:, 2] -= .12 * height * strike
+        translations[:, 1] += .025 * height * strike
+        _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
+        yaw = np.radians(24.0) * np.sin(math.pi * normalized) * np.sin(2 * math.pi * normalized)
+        pitch = np.radians(-12.0) * strike
+        _add_sampler(gltf, blob, animation, times, root_euler(times, x_angles=pitch, y_angles=yaw), root_index, "rotation")
+        chain_sway(times, period=duration, base_deg=8.0, tip_deg=18.0, phase_step=.25)
+    elif clip_id == "hit":
+        duration = .7
+        times = timeline(duration, per_second=30)
+        normalized = times / duration
+        recoil = np.sin(math.pi * normalized)
+        translations = np.tile(root_translation, (len(times), 1))
+        translations[:, 0] += .065 * height * recoil
+        translations[:, 1] -= .025 * height * recoil
+        _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
+        tilt = np.radians(-17.0) * recoil
+        _add_sampler(gltf, blob, animation, times, root_euler(times, z_angles=tilt), root_index, "rotation")
+        chain_sway(times, period=duration, base_deg=-4.0, tip_deg=-12.0, phase_step=.15)
+    elif clip_id == "roll":
+        duration = 1.0
+        steps = 13
+        times = np.linspace(0.0, duration, steps)
+        normalized = times / duration
+        pitch = 2 * math.pi * normalized
+        translations = np.tile(root_translation, (len(times), 1))
+        translations[:, 1] += .09 * height * np.sin(math.pi * normalized)
+        _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
+        _add_sampler(gltf, blob, animation, times, root_euler(times, x_angles=pitch), root_index, "rotation")
+    elif clip_id == "charge":
+        duration = 1.6
+        times = timeline(duration, per_second=24)
+        normalized = times / duration
+        pulse = np.sin(2 * math.pi * normalized * 3) * np.sin(math.pi * normalized)
+        scales = np.stack([1.0 + .055 * pulse, 1.0 + .08 * pulse, 1.0 + .055 * pulse], axis=1) * root_scale[None, :]
+        _add_sampler(gltf, blob, animation, times, scales, root_index, "scale")
+        yaw = np.radians(4.0) * pulse
+        _add_sampler(gltf, blob, animation, times, root_euler(times, y_angles=yaw), root_index, "rotation")
+        chain_sway(times, period=duration / 3, base_deg=2.0, tip_deg=7.0, phase_step=.3)
+    elif clip_id == "victory":
+        duration = 2.0
+        steps = 25
+        times = np.linspace(0.0, duration, steps)
+        normalized = times / duration
+        lift = .13 * height * np.sin(math.pi * normalized) ** 2
+        translations = np.tile(root_translation, (len(times), 1))
+        translations[:, 1] += lift
+        _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
+        yaw = 2 * math.pi * normalized
+        _add_sampler(gltf, blob, animation, times, root_euler(times, y_angles=yaw), root_index, "rotation")
+        chain_sway(times, period=duration, base_deg=4.0, tip_deg=13.0, phase_step=.4)
     elif clip_id == "bounce":
         times = timeline(1.0, per_second=24)
         lift = 0.10 * height * np.abs(np.sin(math.pi * times / 1.0 * 2.0))
@@ -359,7 +577,10 @@ def rig_glb(
     destination: str,
     clip_ids: list[str],
     spine_joints: int = 5,
+    axis_mode: str = "auto",
+    weight_falloff: float = 2.0,
     progress: ProgressFn | None = None,
+    rig_profile: str = "prop",
 ) -> dict[str, Any]:
     """Rig `source` (a GLB) into `destination` with skeleton + clips.
 
@@ -371,7 +592,14 @@ def rig_glb(
             raise ValueError(f"Unknown animation clip: {clip_id}")
     if not clip_ids:
         raise ValueError("Select at least one animation")
+    rig_profile = str(rig_profile).strip().lower()
+    if rig_profile not in RIG_PROFILES:
+        raise ValueError(f"Unknown rig profile: {rig_profile}")
     spine_joints = max(2, min(9, int(spine_joints)))
+    axis_mode = str(axis_mode).lower()
+    if axis_mode not in AXIS_MODES:
+        raise ValueError(f"Unknown skeleton axis: {axis_mode}")
+    weight_falloff = max(1.0, min(6.0, float(weight_falloff)))
 
     emit("loading", 0.1, "Reading GLB")
     gltf = GLTF2().load_binary(source)
@@ -406,7 +634,7 @@ def rig_glb(
     if len(combined) > MAX_VERTICES:
         raise ValueError(f"Mesh too large to rig ({len(combined):,} vertices, limit {MAX_VERTICES:,})")
 
-    skeleton = _build_skeleton(combined, spine_joints)
+    skeleton = _build_skeleton(combined, spine_joints, axis_mode, rig_profile)
 
     # Skeleton nodes: Rig_Root -> Spine_0 -> ... -> Spine_{n-1}.
     root_translation = skeleton["root"]
@@ -443,7 +671,7 @@ def rig_glb(
         gltf.nodes[entry["node"]].skin = len(gltf.skins) - 1
 
         for item in entry["primitives"]:
-            joints_data, weights_data = _compute_weights(item["world"], skeleton)
+            joints_data, weights_data = _compute_weights(item["world"], skeleton, weight_falloff)
             joints_accessor = _append_accessor(gltf, blob, joints_data, UNSIGNED_SHORT, "VEC4", target=ARRAY_BUFFER)
             weights_accessor = _append_accessor(gltf, blob, weights_data, FLOAT, "VEC4", target=ARRAY_BUFFER)
             item["primitive"].attributes.JOINTS_0 = joints_accessor
@@ -455,6 +683,7 @@ def rig_glb(
         "chain_indices": spine_indices,
         "root_translation": [float(v) for v in root_translation],
         "height": skeleton["height"],
+        "sway_axis": [float(value) for value in _perpendicular_sway_axis(skeleton["axis"])],
     }
     for clip_id in clip_ids:
         _build_clip(gltf, blob, clip_id, clip_target)
@@ -468,6 +697,10 @@ def rig_glb(
         "joints": spine_joints,
         "vertices": int(len(combined)),
         "mesh_nodes": len(per_node),
+        "rig_profile": rig_profile,
+        "axis_mode": axis_mode,
+        "weight_falloff": weight_falloff,
+        "resolved_axis": [float(value) for value in skeleton["axis"]],
     }
 
 
