@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Poin
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
+import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
@@ -870,11 +871,25 @@ export function SceneAnimatorPanel() {
       setSelectedKeyframeId(frames[0].id); setSelectedEventId(null); setProgress(timing.offset / Math.max(.1, Math.max(scene.duration, effectiveEnd))); setMessage(`${frames.length} keyframes pasted.`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid keyframe clipboard.') }
   }
-  const download = (name: string, data: unknown) => { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url) }
+  const exportScene = () => {
+    try {
+      const current = sceneRef.current
+      const url = URL.createObjectURL(new Blob([serializeSceneFile(current)], { type: 'application/json;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = sceneFileName(current.name)
+      link.rel = 'noopener'
+      link.style.display = 'none'
+      document.body.appendChild(link)
+      link.click()
+      window.setTimeout(() => { link.remove(); URL.revokeObjectURL(url) }, 1500)
+      const localAssets = current.layers.filter(layer => layer.type !== 'camera' && layer.source.startsWith('blob:')).length
+      setMessage(localAssets > 0 ? `Scene JSON exported. ${localAssets} local asset${localAssets === 1 ? '' : 's'} will require reassignment when imported.` : 'Scene JSON exported.')
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Scene JSON could not be exported.') }
+  }
   const importScene = (text: string) => {
     try {
-      const incoming = JSON.parse(text) as AnimatorScene
-      if (incoming.version !== 1 || !Array.isArray(incoming.layers)) throw new Error('This is not a Maestro Scene Animator scene.')
+      const incoming = parseSceneFile(text) as AnimatorScene
       const incomingIds = incoming.layers.map((layer, index) => {
         const id = (layer as { id?: unknown } | null)?.id
         if (typeof id !== 'string' || !id.trim()) throw new Error(`Layer ${index + 1} needs a valid id.`)
@@ -945,7 +960,7 @@ export function SceneAnimatorPanel() {
           parallax: isCamera ? undefined : typeof rawLayer.parallax === 'number' && Number.isFinite(rawLayer.parallax) ? Math.max(0, Math.min(2, rawLayer.parallax)) : 1,
           transform,
           animation: { ...rawLayer.animation, start, end, keyframes: undefined, events, duration, curve, clip, clipOffset, clipSpeed, clipReverse: isModel ? rawLayer.animation?.clipReverse === true : undefined, clipLoop: isModel ? rawLayer.animation?.clipLoop !== false : undefined, clipTrimStart, clipTrimEnd, shake, orbit },
-          missingAsset: isCamera ? false : Boolean(rawLayer.missingAsset || isMissing(String(rawLayer.source ?? ''))),
+          missingAsset: isCamera ? false : Boolean(rawLayer.missingAsset || !String(rawLayer.source ?? '').trim() || isMissing(String(rawLayer.source ?? ''))),
         } as AnimatorLayer
         const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
         const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
@@ -962,8 +977,24 @@ export function SceneAnimatorPanel() {
         snap: incomingComposition?.snap === true,
         safeArea: safeAreas.includes(incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea']) ? incomingComposition?.safeArea as NonNullable<Scene['composition']>['safeArea'] : 'none',
       }
-      localFilesRef.current = {}; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setMessage('Scene imported. Invalid dependency cycles were removed; reassign layers marked missing asset.'); setJsonOpen(false)
+      const previousObjectUrls = new Set(sceneRef.current.layers.flatMap(layer => [layer.source, layer.thumbnail].filter((value): value is string => Boolean(value?.startsWith('blob:')))))
+      previousObjectUrls.forEach(url => URL.revokeObjectURL(url))
+      const missingAssets = layers.filter(layer => layer.type !== 'camera' && layer.missingAsset).length
+      localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(`Scene imported: ${layers.length} layer${layers.length === 1 ? '' : 's'}.${missingAssets ? ` Reassign ${missingAssets} missing asset${missingAssets === 1 ? '' : 's'}.` : ''}`); setJsonOpen(false)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
+  }
+  const importSceneFile = async (file: File) => {
+    try {
+      if (file.size > 20 * 1024 * 1024) throw new Error('Scene JSON is unexpectedly large (maximum 20 MB).')
+      importScene(await file.text())
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'The scene file could not be read.') }
+  }
+  const loadMotionFile = async (file: File) => {
+    try {
+      if (file.size > 2 * 1024 * 1024) throw new Error('Movement JSON is unexpectedly large (maximum 2 MB).')
+      setMotionText((await file.text()).replace(/^\uFEFF/, '').trim())
+      setMessage(`Movement JSON loaded from ${file.name}.`)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'The movement file could not be read.') }
   }
   useEffect(() => {
     const pending = sessionStorage.getItem(PENDING_SCENE_KEY)
@@ -1305,10 +1336,12 @@ export function SceneAnimatorPanel() {
           <button onClick={() => void persistScene()} disabled={saving || !scene.layers.length} className="rounded bg-accent-blue py-1.5 text-[10px] text-white flex justify-center gap-1 disabled:opacity-40">{saving ? <Loader2 size={11} className="animate-spin" /> : <Film size={11} />} {saving ? 'Saving…' : 'Save scene'}</button>
         </div>
         <div className="grid grid-cols-2 gap-1.5">
-          <button onClick={() => download('maestro-scene.json', scene)} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><Download size={11} /> Export scene JSON</button>
-          <button onClick={() => setJsonOpen(value => !value)} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> Import JSON</button>
+          <button onClick={exportScene} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><Download size={11} /> Export scene</button>
+          <button onClick={() => sceneInputRef.current?.click()} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> Import scene</button>
         </div>
-        {jsonOpen && <div className="space-y-1.5"><textarea value={motionText} onChange={event => setMotionText(event.target.value)} placeholder="Paste movement JSON" rows={4} className="w-full rounded border border-border bg-bg-primary p-1.5 text-[9px] font-mono" /><div className="flex gap-1.5"><button onClick={() => { try { applyMotion(JSON.parse(motionText)); setMessage('Movement applied to selected layer.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid motion JSON.') } }} className="rounded bg-accent-blue px-2 py-1 text-[10px] text-white">Apply movement</button><button onClick={() => motionInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">Load motion file</button><button onClick={() => sceneInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">Import scene</button></div><input ref={motionInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) file.text().then(setMotionText) }} /><input ref={sceneInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) file.text().then(importScene) }} /></div>}
+        <input ref={sceneInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void importSceneFile(file) }} />
+        <button onClick={() => setJsonOpen(value => !value)} className="w-full rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> {jsonOpen ? 'Close movement JSON' : 'Movement JSON tools'}</button>
+        {jsonOpen && <div className="space-y-1.5"><textarea value={motionText} onChange={event => setMotionText(event.target.value)} placeholder="Paste movement JSON" rows={4} className="w-full rounded border border-border bg-bg-primary p-1.5 text-[9px] font-mono" /><div className="flex gap-1.5"><button disabled={!selected || !motionText.trim()} onClick={() => { try { applyMotion(JSON.parse(motionText.replace(/^\uFEFF/, '').trim())); setMessage('Movement applied to selected layer.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid motion JSON.') } }} className="rounded bg-accent-blue px-2 py-1 text-[10px] text-white disabled:opacity-40">Apply movement</button><button onClick={() => motionInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">Load movement file</button></div><input ref={motionInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void loadMotionFile(file) }} /></div>}
         <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">Return only valid Maestro Scene Animator motion JSON.{`\n`}Use start/end x and y from 0 to 100, start/end scale,{`\n`}duration in seconds, curve as linear/ease/dramatic/bounce,{`\n`}and optional spin plus rotationSpeed. For multi-step motion, add keyframes with id, time, x, y, scale, opacity, rotation and curve. Optional events use id, local time, name and a plain-text payload.{`\n`}Do not include Markdown or explanations.{`\n\n`}{'{"version":1,"motion":{"start":{"x":10,"y":70,"scale":0.2},"end":{"x":90,"y":30,"scale":0.8},"duration":3,"curve":"dramatic","spin":true,"rotationSpeed":240}}'}</div>
       </div>
       {message && <p className="text-[10px] text-text-secondary">{message}</p>}
