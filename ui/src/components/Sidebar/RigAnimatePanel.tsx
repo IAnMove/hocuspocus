@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Bone, Box, Download, Loader2, PersonStanding, Play, RefreshCw, Square } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import {
@@ -9,11 +9,70 @@ import {
   getFileUrl,
   startRigJob,
   type RigCapabilities,
+  type RigAnimation,
   type RigJob,
+  type RigProfile,
   type RigProfileId,
 } from '../../api/client'
 
 type RigSource = { name: string; thumbnail_url?: string | null }
+
+function RigPreviewCard({ asset, title, selected, onSelect, children }: { asset: string; title: string; selected: boolean; onSelect: () => void; children: ReactNode }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [hovered, setHovered] = useState(false)
+  const play = () => {
+    setHovered(true)
+    const video = videoRef.current
+    if (!video) return
+    video.currentTime = 0
+    void video.play().catch(() => {})
+  }
+  const stop = () => {
+    setHovered(false)
+    const video = videoRef.current
+    if (!video) return
+    video.pause()
+    video.currentTime = 0
+  }
+  return (
+    <button type="button" aria-pressed={selected} onClick={onSelect} onPointerEnter={play} onPointerLeave={stop} onFocus={play} onBlur={stop} className={`min-w-0 overflow-hidden rounded-lg border text-left transition-colors ${selected ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue/40' : 'border-border bg-bg-tertiary hover:border-accent-blue/70'}`}>
+      <div className="relative aspect-video overflow-hidden bg-[#07111f]">
+        <img src={`/rig-previews/${asset}.webp`} alt={`Preview of ${title}`} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+        <video ref={videoRef} src={`/rig-previews/${asset}.webm`} poster={`/rig-previews/${asset}.webp`} muted loop playsInline preload="metadata" aria-hidden="true" className={`pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`} />
+        <span className="absolute bottom-1 right-1 rounded bg-black/65 px-1 py-0.5 text-[7px] uppercase tracking-wide text-white/80">hover</span>
+      </div>
+      {children}
+    </button>
+  )
+}
+
+function RigProfilePreview({ profile, selected, onSelect }: { profile: RigProfile; selected: boolean; onSelect: () => void }) {
+  return (
+    <RigPreviewCard asset={`profile-${profile.id}`} title={profile.label} selected={selected} onSelect={onSelect}>
+      <div className="flex min-h-11 items-start justify-between gap-1 px-1.5 py-1.5">
+        <span className="line-clamp-2 text-[9px] font-medium leading-tight text-text-secondary">{profile.label}</span>
+        <span className="shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[7px] uppercase text-emerald-300">{profile.default_spine_joints} joints</span>
+      </div>
+    </RigPreviewCard>
+  )
+}
+
+function RigAnimationPreview({ animation, selected, recommended, onSelect }: { animation: RigAnimation; selected: boolean; recommended: boolean; onSelect: () => void }) {
+  return (
+    <RigPreviewCard asset={`animation-${animation.id}`} title={animation.label} selected={selected} onSelect={onSelect}>
+      <div className="space-y-1 px-1.5 py-1.5">
+        <div className="flex items-start justify-between gap-1">
+          <span className="line-clamp-2 text-[9px] font-medium leading-tight text-text-secondary">{animation.label}</span>
+          {recommended && <span className="shrink-0 rounded bg-accent-green/10 px-1 py-0.5 text-[6px] uppercase text-accent-green">recommended</span>}
+        </div>
+        <div className="flex items-center justify-between gap-1">
+          <span className="line-clamp-2 text-[8px] leading-tight text-text-muted">{animation.description}</span>
+          {animation.category && <span className="shrink-0 rounded bg-accent-blue/10 px-1 py-0.5 text-[6px] uppercase text-accent-blue">{animation.category}</span>}
+        </div>
+      </div>
+    </RigPreviewCard>
+  )
+}
 
 /** Rig & Animate: adds a procedural skeleton + looping clips to a generated
  *  3D output. Complements the 3D tab (which creates static meshes) and the
@@ -277,10 +336,8 @@ export function RigAnimatePanel() {
           </div>
 
           <div>
-            <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Rig profile</label>
-            <select value={rigProfileId} disabled={!capabilities.rig_profiles?.length} onChange={event => chooseRigProfile(event.target.value as RigProfileId)} className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary disabled:opacity-60">
-              {capabilities.rig_profiles?.length ? capabilities.rig_profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}</option>) : <option value="prop">General / legacy backend</option>}
-            </select>
+            <div className="mb-1.5 flex items-center justify-between gap-2"><label className="text-[10px] text-text-muted uppercase tracking-wider">Rig profile / skeleton</label><span className="text-[8px] text-text-muted">Hover or focus to animate</span></div>
+            {capabilities.rig_profiles?.length ? <div className="grid grid-cols-2 gap-1.5">{capabilities.rig_profiles.map(profile => <RigProfilePreview key={profile.id} profile={profile} selected={rigProfileId === profile.id} onSelect={() => chooseRigProfile(profile.id)} />)}</div> : <select value={rigProfileId} disabled className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary opacity-60"><option value="prop">General / legacy backend</option></select>}
             {selectedProfile && (
               <div className="mt-1.5 rounded-lg border border-border bg-bg-tertiary p-2.5">
                 <p className="text-[9px] leading-relaxed text-text-muted">{selectedProfile.description}</p>
@@ -313,17 +370,8 @@ export function RigAnimatePanel() {
                 <button type="button" onClick={() => setSelectedClips(new Set(profileAnimations.map(animation => animation.id)))} className="rounded border border-border px-1.5 py-0.5 text-[8px] text-text-muted hover:text-text-primary">All</button>
               </div>
             </div>
-            <div className="space-y-1">
-              {profileAnimations.map(animation => (
-                <label key={animation.id} className="flex items-start gap-2 rounded-lg border border-border bg-bg-tertiary px-2.5 py-1.5 cursor-pointer hover:border-border-light">
-                  <input type="checkbox" checked={selectedClips.has(animation.id)} onChange={() => toggleClip(animation.id)} className="mt-0.5" />
-                  <span>
-                    <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-text-primary">{animation.label}{animation.category && <span className="rounded bg-accent-blue/10 px-1 py-0.5 text-[8px] uppercase text-accent-blue">{animation.category}</span>}{selectedProfile?.recommended_animations.includes(animation.id) && <span className="rounded bg-accent-green/10 px-1 py-0.5 text-[8px] uppercase text-accent-green">recommended</span>}</span>
-                    <span className="block text-[9px] text-text-muted">{animation.description}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
+            <div className="grid max-h-[620px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{profileAnimations.map(animation => <RigAnimationPreview key={animation.id} animation={animation} selected={selectedClips.has(animation.id)} recommended={Boolean(selectedProfile?.recommended_animations.includes(animation.id))} onSelect={() => toggleClip(animation.id)} />)}</div>
+            <p className="mt-1.5 text-[8px] leading-relaxed text-text-muted">These previews visualize Maestro's generic procedural chain and its intended root motion, squash, turn and sway. They do not claim semantic limb animation.</p>
           </div>
 
           {engineId === 'procedural' && (
