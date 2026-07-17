@@ -522,55 +522,47 @@ export function ServicesSettingsPanel() {
         </div>
 
         {servicesConfig.enhance_llm_model_id && (
-          <>
-            <div>
-              <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
-                Enhance LLM Device
-              </label>
-              <select
-                value={servicesConfig.enhance_llm_device || 'cuda'}
-                onChange={e => updateConfig({ enhance_llm_device: e.target.value })}
-                className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
-              >
-                <option value="cpu">CPU</option>
-                <option value="cuda">CUDA (if available)</option>
-              </select>
-            </div>
-          </>
+          <div>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+              Enhance LLM Device
+            </label>
+            <select
+              value={servicesConfig.enhance_llm_device || 'cuda'}
+              onChange={e => updateConfig({ enhance_llm_device: e.target.value })}
+              className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+            >
+              <option value="cpu">CPU</option>
+              <option value="cuda">CUDA</option>
+            </select>
+          </div>
         )}
-      </div>
 
-      <p className="text-[10px] text-text-muted mt-4">
-        Use a separate provider/model only if you need different prompt flavor for enhancement.
-        Keep this OFF for lowest latency.
-      </p>
+        <hr className="border-border/50" />
+
+        <div>
+          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+            Wan2GP Enhancer (Alternative)
+          </label>
+          <select
+            value={systemConfig?.enhancer_enabled ?? 0}
+            onChange={e => updateSystemConfig({ enhancer_enabled: Number(e.target.value) })}
+            className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+          >
+            <option value={0}>Disabled (use LLM above)</option>
+            <option value={4}>Qwen3.5 9B Abliterated</option>
+            <option value={3}>Qwen3.5 4B Abliterated</option>
+            <option value={1}>Llama 3.2 + Florence2</option>
+            <option value={2}>LlamaJoy + Florence2</option>
+          </select>
+          <p className="text-[10px] text-text-muted mt-1">
+            When enabled, overrides the LLM enhancer above. Uses Wan2GP's built-in pipeline
+            (does NOT use our model-specific prompt guides).
+          </p>
+        </div>
+      </div>
       </>}
 
-      {/* API keys */}
       <hr className="border-border" />
-
-      <div className="space-y-4">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Provider Keys</h3>
-        <p className="text-[10px] text-text-muted">
-          API keys are stored in your services config and used only for requests to
-          the selected provider.
-        </p>
-
-        <ApiKeyField
-          label="OpenAI API Key"
-          maskedValue={servicesConfig.openai_api_key || ''}
-          isSet={Boolean(servicesConfig.openai_api_key)}
-          onSave={v => updateConfig({ openai_api_key: v })}
-        />
-
-        <ApiKeyField
-          label="Anthropic API Key"
-          maskedValue={servicesConfig.anthropic_api_key || ''}
-          isSet={Boolean(servicesConfig.anthropic_api_key)}
-          onSave={v => updateConfig({ anthropic_api_key: v })}
-        />
-      </div>
-
 
       {/* Content Mode */}
       <NsfwToggleSection />

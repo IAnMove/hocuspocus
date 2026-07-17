@@ -227,6 +227,18 @@ export interface SceneLayer {
     mask?: SceneMask
     maskRadius?: number
   }
+  /** Repeats this visual layer along one axis and scrolls the copies in a
+   * seamless loop. Useful for music-video strips, cascades and tiled props. */
+  strip?: {
+    enabled: boolean
+    count: number
+    spacing: number
+    direction: 'up' | 'down' | 'left' | 'right'
+    /** Scene-percent units travelled per second. */
+    speed: number
+    /** Initial offset along the selected axis, in scene percent. */
+    phase?: number
+  }
   transform: {
     x: number
     y: number
@@ -261,6 +273,9 @@ export interface SceneLayer {
       amount: number
       frequency: number
       seed?: number
+      /** Optional local-time window used when a shake preset is chained. */
+      startTime?: number
+      endTime?: number
     }
     spin?: boolean
     rotationSpeed?: number
@@ -280,6 +295,10 @@ export interface SceneLayer {
       radiusY: number
       turns: number
       phase: number
+      /** Number of evenly-spaced instances travelling around the target. */
+      count?: number
+      /** Keeps the original angle or points each instance toward/away from the target. */
+      facing?: 'fixed' | 'center' | 'outward'
       /** Fine adjustment from the target layer's visual center, in scene percent. */
       centerOffsetX?: number
       centerOffsetY?: number
