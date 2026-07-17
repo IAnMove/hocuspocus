@@ -5206,6 +5206,28 @@ async def llm_generate(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api.post("/api/v1/llm/test")
+async def llm_test():
+    """Send a tiny hello prompt to verify LLM connectivity and config."""
+    from services import llm_service
+
+    try:
+        _ensure_llm_loaded()
+        response = llm_service.generate(
+            prompt="Reply with only: ok",
+            max_new_tokens=12,
+            temperature=0.1,
+        )
+        return {
+            "ok": True,
+            "response": response.strip() or "(no output)",
+            "status": llm_service.get_status(),
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # --- Music: LLM song-writer (Music mode Simple) ---
 
 # The song-writer system prompts live in editable guide files (loaded via

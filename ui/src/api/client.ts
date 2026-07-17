@@ -1253,6 +1253,17 @@ export async function fetchLlmModels(): Promise<{ models: import('../types').Llm
   return res.json()
 }
 
+export async function testLlmConnection(): Promise<{ ok: boolean; response: string; status: import('../types').LlmStatus }> {
+  const res = await fetch(`${BASE}/api/v1/llm/test`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'LLM test failed' }))
+    throw new Error(err.detail || 'LLM test failed')
+  }
+  return res.json()
+}
+
 export async function llmEnhancePrompt(params: {
   prompt: string
   mode?: string
