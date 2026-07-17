@@ -347,7 +347,7 @@ def start_job(*, body: dict[str, Any], source_path: str, output_dir: str) -> dic
         "url": None,
         "engine": engine,
         "rig_profile": rig_profile,
-        "spine_joints": spine_joints,
+        **({"spine_joints": spine_joints} if engine == "procedural" else {}),
         "axis_mode": axis_mode,
         "weight_falloff": weight_falloff,
         "source_file": os.path.basename(source_path),
@@ -525,6 +525,14 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             detail = "\n".join(lines[-15:]) or f"Rig worker exited with code {exit_code}"
             raise RuntimeError(detail[-4000:])
 
+        rig_metrics = (
+            {
+                "joint_count": result_summary.get("joint_count", 0),
+                "animation_chain_joints": result_summary.get("animation_chain_joints", 0),
+            }
+            if engine == "unirig"
+            else {"spine_joints": result_summary.get("joints", request_data["spine_joints"])}
+        )
         sidecar = output_path.with_suffix(".meta.json")
         sidecar.write_text(
             json.dumps(
@@ -540,7 +548,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                         "rig_profile": request_data.get("rig_profile", DEFAULT_RIG_PROFILE),
                         "source_file": source.name,
                         "animations": result_summary.get("animations") or request_data["animations"],
-                        "spine_joints": result_summary.get("joints", request_data["spine_joints"]),
+                        **rig_metrics,
                         "axis_mode": result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
                         "weight_falloff": result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
                         "prompt": f"Rigged from {source.name}",
@@ -568,7 +576,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             size=output_path.stat().st_size,
             animations=result_summary.get("animations") or request_data["animations"],
             rig_profile=result_summary.get("rig_profile", request_data.get("rig_profile", DEFAULT_RIG_PROFILE)),
-            spine_joints=result_summary.get("joints", request_data["spine_joints"]),
+            **rig_metrics,
             axis_mode=result_summary.get("axis_mode", request_data.get("axis_mode", "auto")),
             weight_falloff=result_summary.get("weight_falloff", request_data.get("weight_falloff", 2.0)),
         )

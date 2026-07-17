@@ -130,6 +130,8 @@ def main() -> None:
         summary = procedural_rig.bake_clips_onto_existing_rig(str(merged_glb), str(output_path), clip_ids, progress=event)
 
     require_rigged_glb(output_path, "animated output", [procedural_rig.CLIPS[clip_id] for clip_id in clip_ids])
+    summary["joint_count"] = summary.pop("joints", 0)
+    summary["animation_chain_joints"] = summary.pop("chain_length", 0)
     print("MAESTRO_RESULT " + json.dumps(summary), flush=True)
     event("completed", 1.0, "AI-rigged model saved")
 
