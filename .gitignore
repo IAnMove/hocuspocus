@@ -75,6 +75,7 @@ app/services/sam/checkpoints/
 # Native Hunyuan3D runtime and official source checkouts
 app/services/hunyuan3d/env/
 app/services/hunyuan3d/vendor/
+app/services/rigging/vendor/
 
 # Retired optional content supplement pack — the download apparatus is
 # gone (nothing reads the pack anymore), but leftover local copies may
