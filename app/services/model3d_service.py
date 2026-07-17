@@ -224,6 +224,10 @@ _jobs: dict[str, dict[str, Any]] = {}
 _processes: dict[str, subprocess.Popen] = {}
 _lock = threading.RLock()
 _generation_slot = threading.Semaphore(1)
+# Public alias: any Maestro service that runs its own GPU-heavy worker
+# (e.g. rig_service's UniRig jobs) must hold this slot too, so 3D
+# generation and AI rigging never compete for the same VRAM.
+GPU_SLOT = _generation_slot
 
 _TERMINAL_STATES = {"completed", "failed", "cancelled"}
 # Job-registry hygiene: keep a short history of finished jobs for status

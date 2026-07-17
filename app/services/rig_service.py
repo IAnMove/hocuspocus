@@ -399,12 +399,33 @@ def _update_job(job_id: str, **updates: Any) -> None:
 
 def _run_job(job_id: str, output_dir: str) -> None:
     _rig_slot.acquire()
+    gpu_slot: threading.Semaphore | None = None
     try:
         with _lock:
-            if _jobs.get(job_id, {}).get("status") == "cancelled":
+            job = _jobs.get(job_id, {})
+            if job.get("status") == "cancelled":
                 return
+            request_data = job.get("request") or {}
+        if request_data.get("engine") == "unirig":
+            # Import lazily to avoid coupling service initialization. Hunyuan
+            # generation and UniRig now share one GPU slot and cannot contend
+            # for VRAM.
+            from services import model3d_service
+
+            gpu_slot = model3d_service.GPU_SLOT
+            _update_job(
+                job_id,
+                phase="queued",
+                message="Waiting for the shared 3D GPU",
+            )
+            gpu_slot.acquire()
+            with _lock:
+                if _jobs.get(job_id, {}).get("status") == "cancelled":
+                    return
         _run_job_serialized(job_id, output_dir)
     finally:
+        if gpu_slot is not None:
+            gpu_slot.release()
         _rig_slot.release()
 
 
