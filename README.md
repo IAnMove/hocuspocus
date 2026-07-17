@@ -71,6 +71,8 @@ Included geometry variants:
 
 The advanced panel exposes inference steps, guidance, octree resolution, processing chunks, seed, texture model/resolution, CPU offload, FlashVDM, Torch compilation, DMC/Marching Cubes, mesh simplification, face target, and GLB/OBJ/PLY/STL export. Four presets provide sensible Low VRAM, Balanced, Quality/PBR, and Multi-view configurations.
 
+**Retexture GLB** applies Hunyuan Paint 2.0/Turbo or Hunyuan Paint 2.1 PBR to an existing static GLB using either a reference image or a text-described material. Maestro always saves a new GLB copy and leaves the source untouched. Rigged or animated inputs are rejected because Hunyuan rebuilds the UV layout; retexture the static base first, then rig the resulting copy.
+
 Hunyuan3D is part of Maestro's normal lifecycle: **Install** prepares its isolated runtime, **Update** keeps it current, and **Reset** removes it with the rest of Maestro. There is no separate 3D installer. Model weights are downloaded lazily from Tencent's official Hugging Face repositories the first time a variant is used.
 
 The cloned source code and downloaded weights remain subject to Tencent's Hunyuan license terms. Review the `LICENSE` files in the official checkouts before redistribution or commercial use.
@@ -105,6 +107,21 @@ curl -X POST "$MAESTRO_URL/api/v1/model3d/generate" \
       "right": "right.png",
       "back": "back.png"
     }
+  }'
+```
+
+Retexture an existing gallery or uploaded GLB as a new copy:
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/model3d/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "retexture",
+    "source_model": "my-static-model.glb",
+    "model_id": "hunyuan3d-2-turbo",
+    "prompt": "weathered red steel with scratched edges",
+    "texture_mode": "v2-turbo",
+    "output_format": "glb"
   }'
 ```
 

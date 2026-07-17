@@ -220,6 +220,25 @@ def simplify_mesh(mesh, settings: dict[str, Any]):
         return mesh
 
 
+def load_retexture_mesh(source_path: str):
+    """Load a static GLB without mutating the user's original asset."""
+    from pygltflib import GLTF2
+    import trimesh
+
+    source = Path(source_path)
+    gltf = GLTF2().load(str(source))
+    if gltf.skins or gltf.animations:
+        raise ValueError(
+            "Retexturing rigged or animated GLBs is not supported because Hunyuan Paint "
+            "rebuilds UVs and would discard the rig. Retexture the static base model, then rig the new copy."
+        )
+    loaded = trimesh.load(str(source), force="scene", process=False)
+    mesh = loaded.dump(concatenate=True) if isinstance(loaded, trimesh.Scene) else loaded
+    if not isinstance(mesh, trimesh.Trimesh) or mesh.vertices.size == 0 or mesh.faces.size == 0:
+        raise ValueError("The source GLB does not contain a usable triangle mesh")
+    return mesh
+
+
 def texture_v2(mesh, image, settings: dict[str, Any]):
     from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
@@ -229,8 +248,13 @@ def texture_v2(mesh, image, settings: dict[str, Any]):
         paint = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2", subfolder=subfolder)
     except TypeError:
         paint = Hunyuan3DPaintPipeline.from_pretrained("tencent/Hunyuan3D-2")
-    if settings.get("cpu_offload") and hasattr(paint, "enable_model_cpu_offload"):
-        paint.enable_model_cpu_offload()
+    if settings.get("cpu_offload"):
+        # Hunyuan Paint 2.0's custom multiview pipeline leaves its learned
+        # prompt tensor on CPU when Diffusers offload hooks are enabled. That
+        # produces a deterministic CPU/CUDA mismatch during denoising. Keep
+        # Paint resident on CUDA; the short-lived worker still releases all
+        # VRAM immediately after export.
+        print("Hunyuan Paint 2.0 CPU offload skipped to keep custom tensors on one device", flush=True)
     event("texture", 0.8, "Generating texture maps")
     try:
         textured = paint(mesh, image=image)
@@ -288,13 +312,18 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     model = request["model"]
     settings = request["settings"]
+    operation = request.get("operation") or "generate"
 
     with tempfile.TemporaryDirectory(prefix="maestro_hy3d_") as temp_name:
         temp_dir = Path(temp_name)
         event("preparing", 0.04, "Preparing Hunyuan3D inputs")
         images, source_image_path = prepare_images(request, model["engine"], temp_dir)
-        mesh = generate_mesh(request, images)
-        mesh = simplify_mesh(mesh, settings)
+        if operation == "retexture":
+            event("source_mesh", 0.26, "Loading the source GLB as a clean static mesh")
+            mesh = load_retexture_mesh(request["source_mesh"])
+        else:
+            mesh = generate_mesh(request, images)
+            mesh = simplify_mesh(mesh, settings)
 
         texture_mode = settings["texture_mode"]
         if texture_mode == "pbr":

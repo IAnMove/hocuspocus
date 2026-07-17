@@ -4926,11 +4926,17 @@ async def generate_model3d(request: Request):
         if not resolved or not os.path.isfile(resolved):
             raise HTTPException(status_code=400, detail=f"3D {view} image not found")
         image_paths[view] = resolved
+    source_mesh_path = None
+    if str(body.get("operation") or "generate").lower() == "retexture":
+        source_mesh_path = _resolve_model3d_input_path(str(body.get("source_model") or ""))
+        if not source_mesh_path or not os.path.isfile(source_mesh_path):
+            raise HTTPException(status_code=400, detail="Source GLB not found")
     try:
         return model3d_service.start_job(
             body=body,
             image_paths=image_paths,
             output_dir=_workspace_dir(),
+            source_mesh_path=source_mesh_path,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
