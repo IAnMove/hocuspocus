@@ -213,6 +213,60 @@ def _perpendicular_sway_axis(chain_axis: list[float] | np.ndarray) -> np.ndarray
     return np.array([0.0, 1.0, 0.0])
 
 
+def _subtree_has_content(gltf: GLTF2, index: int) -> bool:
+    node = gltf.nodes[index]
+    if node.mesh is not None or node.camera is not None:
+        return True
+    return any(_subtree_has_content(gltf, child) for child in node.children or [])
+
+
+def strip_existing_rig(gltf: GLTF2) -> bool:
+    """Remove a previous rig (skins, weights, clips, skeleton roots) in place.
+
+    Re-rigging always applies to the base geometry: without this, a second
+    pass would layer new skins over stale JOINTS_0/WEIGHTS_0 data and
+    duplicate clip names. Orphaned accessor bytes are left in the buffer
+    (compacting would mean rewriting every bufferView), which is an accepted
+    size cost for the uncommon re-rig path.
+    """
+    changed = False
+    if gltf.animations:
+        gltf.animations = []
+        changed = True
+    if gltf.skins:
+        gltf.skins = []
+        changed = True
+    for node in gltf.nodes:
+        if node.skin is not None:
+            node.skin = None
+            changed = True
+    for mesh in gltf.meshes:
+        for primitive in mesh.primitives:
+            for attribute in ("JOINTS_0", "WEIGHTS_0", "JOINTS_1", "WEIGHTS_1"):
+                if getattr(primitive.attributes, attribute, None) is not None:
+                    setattr(primitive.attributes, attribute, None)
+                    changed = True
+    # Drop pure-skeleton scene roots (Rig_Root chains, imported armatures):
+    # they render nothing but would otherwise accumulate across re-rigs.
+    for scene in gltf.scenes or []:
+        if not scene.nodes:
+            continue
+        kept = [index for index in scene.nodes if _subtree_has_content(gltf, index)]
+        if kept != scene.nodes:
+            scene.nodes = kept
+            changed = True
+    return changed
+
+
+def strip_rig_to_file(source: str, destination: str) -> bool:
+    """Write a rig-free copy of `source`; returns whether anything was removed."""
+    gltf = GLTF2().load_binary(source)
+    changed = strip_existing_rig(gltf)
+    if changed:
+        gltf.save_binary(destination)
+    return changed
+
+
 def _profile_bin_edges(low: float, high: float, count: int, rig_profile: str) -> np.ndarray:
     """Profile-aware spacing for the same honest single-chain skeleton."""
     normalized = np.linspace(0.0, 1.0, count + 1)
@@ -605,6 +659,11 @@ def rig_glb(
     gltf = GLTF2().load_binary(source)
     blob = bytearray(gltf.binary_blob())
 
+    # Re-rigging always starts from the base geometry.
+    stripped_previous = strip_existing_rig(gltf)
+    if stripped_previous:
+        emit("loading", 0.18, "Removed the previous rig; re-rigging the base mesh")
+
     globals_by_node = _global_matrices(gltf)
     mesh_nodes = [index for index, node in enumerate(gltf.nodes) if node.mesh is not None and index in globals_by_node]
     if not mesh_nodes:
@@ -701,6 +760,7 @@ def rig_glb(
         "axis_mode": axis_mode,
         "weight_falloff": weight_falloff,
         "resolved_axis": [float(value) for value in skeleton["axis"]],
+        "replaced_previous_rig": stripped_previous,
     }
 
 

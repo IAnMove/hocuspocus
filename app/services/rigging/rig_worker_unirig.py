@@ -107,6 +107,14 @@ def main() -> None:
         skin_fbx = temp_dir / "skin.fbx"
         merged_glb = temp_dir / "merged.glb"
 
+        # Re-rigging always starts from the base geometry: a previously
+        # rigged source would otherwise carry its old skin and clips through
+        # UniRig's merge step into the new output.
+        clean_source = temp_dir / "base.glb"
+        if procedural_rig.strip_rig_to_file(str(source), str(clean_source)):
+            event("preparing", 0.05, "Removed the previous rig; re-rigging the base mesh")
+            source = clean_source
+
         event("skeleton", 0.1, "Predicting skeleton (first run downloads UniRig weights)")
         run_unirig("generate_skeleton.sh", ["--input", str(source), "--output", str(skeleton_fbx), "--seed", str(seed)])
         require_fbx(skeleton_fbx, "skeleton")
