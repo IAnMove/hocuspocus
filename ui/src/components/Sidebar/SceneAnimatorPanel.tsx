@@ -292,10 +292,14 @@ export function SceneAnimatorPanel() {
     setSelectedEventId(id => id && layer && getSceneEvents(layer).some(event => event.id === id) ? id : null)
   }, [selectedId])
   useEffect(() => {
+    // Playback and recording synchronize media in their own animation loops.
+    // Avoid seeking every GLB/video twice per frame, which can make otherwise
+    // smooth motion appear to vibrate.
+    if (playing || recording) return
     // The scene object intentionally resynchronizes clips after inspector edits.
     const frame = requestAnimationFrame(() => syncSceneMedia(progress * scene.duration))
     return () => cancelAnimationFrame(frame)
-  }, [progress, scene, syncSceneMedia])
+  }, [playing, progress, recording, scene, syncSceneMedia])
   // Rigged GLBs expose their baked clips through model-viewer's
   // availableAnimations; poll briefly after selection until the model loads.
   useEffect(() => {
@@ -665,17 +669,14 @@ export function SceneAnimatorPanel() {
   const resetSceneMedia = () => syncSceneMedia(0)
   const animate = (done?: () => void) => {
     const started = performance.now()
-    let renderedFrame = -1
     resetSceneMedia(); setPlaying(true)
     const frame = (now: number) => {
       const elapsed = Math.min(scene.duration, (now - started) / 1000)
-      const frameIndex = Math.floor(elapsed * fps)
       const finished = elapsed >= scene.duration
-      if (frameIndex !== renderedFrame || finished) {
-        renderedFrame = frameIndex
-        const next = finished ? 1 : frameIndex / fps / scene.duration
-        syncSceneMedia(next * scene.duration); setProgress(next)
-      }
+      // Preview follows the display refresh rate. The selected 30/60 FPS is an
+      // export cadence, not a reason to quantize interactive playback.
+      const next = finished ? 1 : elapsed / scene.duration
+      syncSceneMedia(next * scene.duration); setProgress(next)
       if (!finished) animationRef.current = requestAnimationFrame(frame)
       else { setPlaying(false); Object.values(videoRefs.current).forEach(video => video?.pause()); done?.() }
     }
