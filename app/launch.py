@@ -5173,7 +5173,16 @@ def _ensure_llm_loaded():
 
     if llm_service.is_loaded():
         status = llm_service.get_status()
-        if status.get("model_id") != desired or status.get("provider") != desired_provider:
+        remote_changed = (
+            desired_provider in ("remote", "openai")
+            and status.get("remote_url", "") != desired_remote_url
+        )
+        if (
+            status.get("model_id") != desired
+            or status.get("provider") != desired_provider
+            or status.get("device") != (desired_device if desired_provider == "local" else desired_provider)
+            or remote_changed
+        ):
             llm_service.unload_model()
             llm_service.load_model(model_id=desired, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
     else:
@@ -5212,6 +5221,11 @@ async def llm_test():
     from services import llm_service
 
     try:
+        # Remote providers are cheap to reconnect. Recreate their client state
+        # so a just-edited URL or API key is what this explicit test validates.
+        provider = wgp.server_config.get("services", {}).get("llm_provider", "local")
+        if provider in ("remote", "openai", "anthropic") and llm_service.is_loaded():
+            llm_service.unload_model()
         _ensure_llm_loaded()
         response = llm_service.generate(
             prompt="Reply with only: ok",

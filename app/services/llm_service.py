@@ -829,6 +829,7 @@ def get_status() -> dict:
         "model_id": _model_id or None,
         "device": _device if is_loaded() else None,
         "provider": _provider,
+        "remote_url": _remote_url if _provider in ("remote", "openai") else "",
     }
 
 
@@ -1373,7 +1374,16 @@ def _diagnose_llm_request_failure(exc: Exception) -> "RuntimeError":
             "or failed to start — retry, or check the Services settings."
         )
     # Server still alive (or a remote provider) — a real network/timeout issue.
-    return RuntimeError(f"LLM request failed: {exc}")
+    response = getattr(exc, "response", None)
+    response_detail = ""
+    if response is not None:
+        try:
+            body = response.text.strip()
+            if body:
+                response_detail = f" — server response: {body[:1000]}"
+        except Exception:
+            pass
+    return RuntimeError(f"LLM request failed: {exc}{response_detail}")
 
 
 def _unload_inner():
@@ -1514,6 +1524,11 @@ def generate(
         "max_tokens": total_tokens,
         "cache_prompt": False,  # Disable prompt caching — system prompt changes between calls (LoRA hints, etc.)
     }
+    # llama-server hosts one model and does not require this field, while
+    # OpenAI-compatible remote servers such as Ollama require the selected
+    # model name on every chat completion request.
+    if _provider in ("remote", "openai"):
+        payload["model"] = _model_id
     # Per-model sampling defaults (e.g. Gemma 4 wants temp=1.0, top_k=64)
     temperature, top_p = _apply_model_defaults(temperature, top_p, payload)
     payload["temperature"] = max(temperature, 0.01)
@@ -1691,6 +1706,8 @@ def generate_streaming(
         "stream": True,
         "cache_prompt": False,  # Disable prompt caching — system prompt changes between calls
     }
+    if _provider in ("remote", "openai"):
+        payload["model"] = _model_id
     # Apply caller's penalty values FIRST so they're in the payload
     # before _apply_model_defaults runs. The registry-defaults pass below
     # then overrides them when the active model has tuned values
