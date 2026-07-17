@@ -178,14 +178,38 @@ def installation_status() -> dict[str, Any]:
 
 
 UNIRIG_REPO = "VAST-AI/UniRig"
+UNIRIG_REQUIRED_CHECKPOINTS = (
+    Path("skeleton/articulation-xl_quantization_256/model.ckpt"),
+    Path("skin/articulation-xl/model.ckpt"),
+)
+_MIN_UNIRIG_CHECKPOINT_BYTES = 1024 * 1024
+
+
+def _is_complete_unirig_snapshot(snapshot: Path) -> bool:
+    """Reject partial snapshots, dangling links, and placeholder files."""
+    return all(
+        checkpoint.is_file() and checkpoint.stat().st_size >= _MIN_UNIRIG_CHECKPOINT_BYTES
+        for relative_path in UNIRIG_REQUIRED_CHECKPOINTS
+        for checkpoint in (snapshot / relative_path,)
+    )
 
 
 def is_unirig_downloaded() -> bool:
-    """Whether the UniRig weights snapshot is cached locally."""
+    """Whether a complete UniRig weights snapshot is cached locally.
+
+    An interrupted download leaves a snapshot directory with only some of
+    the files, so require the checkpoints of both model families that
+    inference actually loads (skeleton prediction + skinning).
+    """
     repo_cache = HF_CACHE_DIR / "hub" / f"models--{UNIRIG_REPO.replace('/', '--')}" / "snapshots"
     if not repo_cache.is_dir():
         return False
-    return any(path.is_dir() for path in repo_cache.iterdir())
+    for snapshot in repo_cache.iterdir():
+        if not snapshot.is_dir():
+            continue
+        if _is_complete_unirig_snapshot(snapshot):
+            return True
+    return False
 
 
 def delete_unirig_cache() -> list[str]:
