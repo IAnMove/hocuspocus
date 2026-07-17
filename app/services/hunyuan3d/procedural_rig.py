@@ -267,6 +267,36 @@ def strip_rig_to_file(source: str, destination: str) -> bool:
     return changed
 
 
+def _forward_lateral_axes(chain_axis: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Resolve stable body-relative forward and lateral directions.
+
+    Prefer glTF's conventional -Z forward, projected away from the skeleton
+    chain just like the sway axis. Lateral completes the local orthonormal
+    frame, so rotated or lying models no longer strafe on a fixed world axis.
+    """
+    direction = np.asarray(chain_axis, dtype=np.float64)
+    norm = float(np.linalg.norm(direction))
+    if norm > 1e-9:
+        direction = direction / norm
+    else:
+        direction = np.array([0.0, 1.0, 0.0])
+    for preferred in (
+        np.array([0.0, 0.0, -1.0]),
+        np.array([1.0, 0.0, 0.0]),
+        np.array([0.0, -1.0, 0.0]),
+    ):
+        projected = preferred - direction * float(preferred @ direction)
+        projected_norm = float(np.linalg.norm(projected))
+        if projected_norm <= 1e-6:
+            continue
+        forward = projected / projected_norm
+        lateral = np.cross(direction, forward)
+        lateral_norm = float(np.linalg.norm(lateral))
+        if lateral_norm > 1e-6:
+            return forward, lateral / lateral_norm
+    return np.array([0.0, 0.0, -1.0]), np.array([1.0, 0.0, 0.0])
+
+
 def _profile_bin_edges(low: float, high: float, count: int, rig_profile: str) -> np.ndarray:
     """Profile-aware spacing for the same honest single-chain skeleton."""
     normalized = np.linspace(0.0, 1.0, count + 1)
@@ -424,6 +454,10 @@ def _build_clip(
     sway_axis = target.get("sway_axis")
     if sway_axis is None:
         sway_axis = [0.0, 0.0, 1.0]
+    # Horizontal motion follows the resolved skeleton frame; vertical lift
+    # remains world +Y because it represents gravity.
+    forward = np.asarray(target.get("forward_axis") or [0.0, 0.0, -1.0], dtype=np.float64)
+    lateral = np.asarray(target.get("lateral_axis") or [1.0, 0.0, 0.0], dtype=np.float64)
     count = len(chain)
 
     def timeline(duration: float, per_second: int = 12) -> np.ndarray:
@@ -520,7 +554,7 @@ def _build_clip(
         times = timeline(duration, per_second=24)
         phase = 2 * math.pi * times / duration
         translations = np.tile(root_translation, (len(times), 1))
-        translations[:, 0] += .075 * height * np.sin(phase)
+        translations += (.075 * height * np.sin(phase))[:, None] * lateral[None, :]
         translations[:, 1] += .018 * height * (.5 - .5 * np.cos(phase * 2))
         _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
         lean = np.radians(-9.0) * np.sin(phase)
@@ -545,7 +579,7 @@ def _build_clip(
         normalized = times / duration
         strike = np.sin(math.pi * normalized) ** 2
         translations = np.tile(root_translation, (len(times), 1))
-        translations[:, 2] -= .12 * height * strike
+        translations += (.12 * height * strike)[:, None] * forward[None, :]
         translations[:, 1] += .025 * height * strike
         _add_sampler(gltf, blob, animation, times, translations, root_index, "translation")
         yaw = np.radians(24.0) * np.sin(math.pi * normalized) * np.sin(2 * math.pi * normalized)
@@ -737,12 +771,15 @@ def rig_glb(
             item["primitive"].attributes.WEIGHTS_0 = weights_accessor
 
     emit("animating", 0.8, "Baking animation clips")
+    forward_axis, lateral_axis = _forward_lateral_axes(skeleton["axis"])
     clip_target = {
         "root_index": root_index,
         "chain_indices": spine_indices,
         "root_translation": [float(v) for v in root_translation],
         "height": skeleton["height"],
         "sway_axis": [float(value) for value in _perpendicular_sway_axis(skeleton["axis"])],
+        "forward_axis": [float(value) for value in forward_axis],
+        "lateral_axis": [float(value) for value in lateral_axis],
     }
     for clip_id in clip_ids:
         _build_clip(gltf, blob, clip_id, clip_target)
