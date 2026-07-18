@@ -161,7 +161,21 @@ export interface OutputFile {
 }
 
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'
-export type SceneAtmosphereKind = 'rain' | 'snow' | 'dust' | 'embers'
+export type SceneAtmosphereKind =
+  | 'rain'
+  | 'snow'
+  | 'dust'
+  | 'embers'
+  | 'fog'
+  | 'smoke'
+  | 'ash'
+  | 'fireflies'
+  | 'confetti'
+  | 'bokeh'
+  | 'sparkles'
+  | 'bubbles'
+  | 'speedlines'
+  | 'leaves'
 export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
 export type SceneFrameRate = 30 | 60
 export type SceneBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken'
