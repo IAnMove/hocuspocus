@@ -160,7 +160,8 @@ export interface OutputFile {
   thumbnail_url?: string | null
 }
 
-export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'camera'
+export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'
+export type SceneAtmosphereKind = 'rain' | 'snow' | 'dust' | 'embers'
 export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
 export type SceneFrameRate = 30 | 60
 export type SceneBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken'
@@ -202,6 +203,16 @@ export interface SceneLayer {
   missingAsset?: boolean
   /** Image/video is cropped to cover the complete scene frame. */
   fill?: boolean
+  /** Deterministic full-frame procedural particles, shared by preview,
+   * scene JSON and browser capture. Only used by effect layers. */
+  atmosphere?: {
+    kind: SceneAtmosphereKind
+    density: number
+    speed: number
+    size: number
+    wind: number
+    color: string
+  }
   /** Camera-pan multiplier: 0 ignores camera pan, 1 follows it normally,
    *  and values above 1 create foreground parallax. Camera zoom/roll still
    *  affect every visual layer. Ignored by camera layers. */
