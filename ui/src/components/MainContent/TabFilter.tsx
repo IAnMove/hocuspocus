@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Heart, Film, Search, X, Box, PersonStanding } from 'lucide-react'
+import { Heart, Film, Search, X, Box, PersonStanding, BookOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
 
@@ -10,6 +10,7 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
   { value: 'audio', label: 'Audio', shortLabel: 'Aud' },
   { value: 'model3d', label: '3D', shortLabel: '3D', icon: 'box' },
   { value: 'scenes', label: 'Scenes', shortLabel: 'Scn', icon: 'film' },
+  { value: 'comics', label: 'Comics', shortLabel: 'Comic', icon: 'book' },
   { value: 'scene3d', label: '3D Video', shortLabel: '3DV', icon: 'film' },
   { value: 'animate3d', label: 'Animate', shortLabel: 'Anim', icon: 'person' },
   { value: 'avatars', label: 'Edits', shortLabel: 'Edit' },
@@ -54,6 +55,7 @@ export function TabFilter() {
             {tab.icon === 'film' && <Film size={11} />}
             {tab.icon === 'box' && <Box size={11} />}
             {tab.icon === 'person' && <PersonStanding size={11} />}
+            {tab.icon === 'book' && <BookOpen size={11} />}
             <span className="hidden md:inline">{tab.label}</span>
             <span className="md:hidden">{tab.shortLabel}</span>
           </button>

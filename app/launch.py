@@ -4758,6 +4758,8 @@ def get_services_config():
         "openai_api_key_set": bool(services.get("openai_api_key", "")),
         "anthropic_api_key": _mask_key(services.get("anthropic_api_key", "")),
         "anthropic_api_key_set": bool(services.get("anthropic_api_key", "")),
+        "minimax_api_key": _mask_key(services.get("minimax_api_key", "")),
+        "minimax_api_key_set": bool(services.get("minimax_api_key", "")),
         # Director v2 (layered architecture: structured shot planning,
         # mode-specific renderers, prompt validation) is now the default
         # as of 2026-05-03 after weeks of real-world validation. v1 had
@@ -4831,7 +4833,7 @@ async def update_services_config(request: Request):
     ALLOWED_KEYS = {
         "llm_model_id", "llm_device", "llm_provider", "llm_remote_url",
         "enhance_llm_model_id", "enhance_llm_device",
-        "google_api_key", "openai_api_key", "anthropic_api_key",
+        "google_api_key", "openai_api_key", "anthropic_api_key", "minimax_api_key",
         "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
         "show_experimental", "auto_performance",
@@ -10708,6 +10710,359 @@ def save_scene_output(body: dict):
     }
 
 
+# ============================================================================
+# Comics — native projects, MiniMax images, and Director planning
+# ============================================================================
+
+def _validate_comic_project(project: dict) -> None:
+    if not isinstance(project, dict) or project.get("version") != 2:
+        raise HTTPException(status_code=400, detail="A version 2 comic project is required")
+    pages = project.get("pages")
+    if not isinstance(pages, list) or not 1 <= len(pages) <= 500:
+        raise HTTPException(status_code=400, detail="Comic pages must contain between 1 and 500 pages")
+    assets = project.get("assets", {})
+    if not isinstance(assets, dict) or len(assets) > 10000:
+        raise HTTPException(status_code=400, detail="Comic assets must be an object with at most 10000 entries")
+    encoded = json.dumps(project, ensure_ascii=False)
+    if len(encoded.encode("utf-8")) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Comic project is too large")
+    # Transient browser object URLs can never survive a reload. Refuse them
+    # instead of giving the user a project that appears saved but is broken.
+    if '"blob:' in encoded:
+        raise HTTPException(status_code=400, detail="Comic contains transient blob assets; upload them before saving")
+
+
+def _decode_comic_preview(preview: str) -> bytes:
+    if not isinstance(preview, str) or not preview.startswith("data:image/png;base64,"):
+        raise HTTPException(status_code=400, detail="A PNG comic preview is required")
+    try:
+        data = base64.b64decode(preview.split(",", 1)[1], validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid PNG comic preview") from exc
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Comic preview is too large")
+    return data
+
+
+def _comic_output_response(name: str) -> dict:
+    stem = name[:-len(".comic.json")] if name.endswith(".comic.json") else os.path.splitext(name)[0]
+    preview_name = f"{stem}.comic.preview.png"
+    return {
+        "name": name,
+        "type": "comic",
+        "url": f"/api/v1/file/{name}",
+        "thumbnail_url": f"/api/v1/file/{preview_name}",
+    }
+
+
+@api.post("/api/v1/comics")
+def create_comic_output(body: dict):
+    """Create a first-class comic project in the active workspace."""
+    import re as _re_comic
+    project = body.get("project")
+    _validate_comic_project(project)
+    preview_bytes = _decode_comic_preview(body.get("preview"))
+    raw_title = str(project.get("title") or "Untitled comic").strip()
+    safe_title = _re_comic.sub(r"[^A-Za-z0-9._-]+", "-", raw_title).strip("-._")[:80] or "comic"
+    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+    name = f"{stamp}_{safe_title}_{uuid.uuid4().hex[:6]}.comic.json"
+    return _write_comic_output(name, project, preview_bytes)
+
+
+def _write_comic_output(name: str, project: dict, preview_bytes: bytes) -> dict:
+    if not name.endswith(".comic.json") or os.path.basename(name) != name:
+        raise HTTPException(status_code=400, detail="Invalid comic project name")
+    out_dir = _workspace_dir()
+    os.makedirs(out_dir, exist_ok=True)
+    stem = name[:-len(".comic.json")]
+    project_path = _safe_join(out_dir, name)
+    preview_path = _safe_join(out_dir, f"{stem}.comic.preview.png")
+    if not project_path or not preview_path:
+        raise HTTPException(status_code=400, detail="Invalid comic project path")
+    project_tmp = project_path + ".tmp"
+    preview_tmp = preview_path + ".tmp"
+    try:
+        with open(project_tmp, "w", encoding="utf-8") as handle:
+            json.dump(project, handle, ensure_ascii=False, indent=2)
+        with open(preview_tmp, "wb") as handle:
+            handle.write(preview_bytes)
+        os.replace(project_tmp, project_path)
+        os.replace(preview_tmp, preview_path)
+    except Exception as exc:
+        for stale in (project_tmp, preview_tmp):
+            try:
+                if os.path.isfile(stale):
+                    os.remove(stale)
+            except OSError:
+                pass
+        raise HTTPException(status_code=500, detail=f"Failed to save comic: {exc}") from exc
+    return _comic_output_response(name)
+
+
+@api.put("/api/v1/comics/{name}")
+def update_comic_output(name: str, body: dict):
+    """Atomically update an existing comic and its gallery preview."""
+    project = body.get("project")
+    _validate_comic_project(project)
+    preview_bytes = _decode_comic_preview(body.get("preview"))
+    current = _safe_join(_workspace_dir(), name)
+    if not current or not os.path.isfile(current):
+        raise HTTPException(status_code=404, detail="Comic project not found in the active workspace")
+    return _write_comic_output(name, project, preview_bytes)
+
+
+@api.get("/api/v1/comics/{name}")
+def get_comic_output(name: str):
+    path = _safe_join(_workspace_dir(), name)
+    if not path or not name.endswith(".comic.json") or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Comic project not found")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            project = json.load(handle)
+        _validate_comic_project(project)
+        return {"project": project, **_comic_output_response(name)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid comic project: {exc}") from exc
+
+
+def _comic_reference_data_url(source: str) -> str:
+    """Resolve a Maestro asset URL to the data URL expected by MiniMax."""
+    if source.startswith("data:image/"):
+        if len(source) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Character reference is too large")
+        return source
+    path = None
+    if source.startswith("/api/v1/file/"):
+        filename = source.split("/api/v1/file/", 1)[1]
+        from urllib.parse import unquote
+        path = _safe_join(_workspace_dir(), unquote(filename))
+    elif source.startswith("/api/v1/uploads/"):
+        filename = source.split("/api/v1/uploads/", 1)[1]
+        from urllib.parse import unquote
+        path = _safe_join(os.path.join(os.getcwd(), "uploads"), unquote(filename))
+    if not path or not os.path.isfile(path):
+        raise HTTPException(status_code=400, detail="Character reference must be a Maestro output or upload")
+    if os.path.getsize(path) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Character reference is too large")
+    import mimetypes
+    mime = mimetypes.guess_type(path)[0] or "image/png"
+    with open(path, "rb") as handle:
+        return f"data:{mime};base64,{base64.b64encode(handle.read()).decode('ascii')}"
+
+
+@api.post("/api/v1/comics/generate/minimax")
+def generate_comic_minimax(body: dict):
+    """Generate one comic panel with MiniMax image-01 and persist it."""
+    prompt = str(body.get("prompt") or "").strip()
+    if not prompt or len(prompt) > 10000:
+        raise HTTPException(status_code=400, detail="A prompt of at most 10000 characters is required")
+    services = wgp.server_config.get("services", {})
+    api_key = services.get("minimax_api_key", "")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Set the MiniMax API key in Settings → Integrations")
+    request_body = {
+        "model": "image-01",
+        "prompt": prompt,
+        "aspect_ratio": str(body.get("aspect_ratio") or "1:1"),
+        "response_format": "base64",
+        "n": 1,
+    }
+    subject = body.get("subject_reference")
+    if subject:
+        request_body["subject_reference"] = [{
+            "type": "character",
+            "image_file": _comic_reference_data_url(str(subject)),
+        }]
+    try:
+        response = requests.post(
+            "https://api.minimax.io/v1/image_generation",
+            json=request_body,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            timeout=(15, 300),
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except requests.RequestException as exc:
+        detail = ""
+        try:
+            detail = response.text[:500]
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail=f"MiniMax request failed: {detail or exc}") from exc
+    base_resp = payload.get("base_resp") or {}
+    if base_resp.get("status_code", 0) != 0:
+        raise HTTPException(status_code=502, detail=base_resp.get("status_msg") or "MiniMax returned an error")
+    encoded = (payload.get("data") or {}).get("image_base64")
+    if not isinstance(encoded, list) or not encoded:
+        raise HTTPException(status_code=502, detail="MiniMax returned no image")
+    try:
+        image_bytes = base64.b64decode(encoded[0], validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="MiniMax returned invalid image data") from exc
+    if len(image_bytes) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="MiniMax image is too large")
+    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+    name = f"{stamp}_minimax-comic_{uuid.uuid4().hex[:8]}.jpg"
+    path = os.path.join(_workspace_dir(), name)
+    with open(path + ".tmp", "wb") as handle:
+        handle.write(image_bytes)
+    os.replace(path + ".tmp", path)
+    meta_path = os.path.join(_workspace_dir(), os.path.splitext(name)[0] + ".meta.json")
+    with open(meta_path + ".tmp", "w", encoding="utf-8") as handle:
+        json.dump({
+            "generation_mode": "image",
+            "params": {"prompt": prompt, "provider": "minimax", "model_type": "image-01"},
+            "created_at": time.time(),
+        }, handle, ensure_ascii=False, indent=2)
+    os.replace(meta_path + ".tmp", meta_path)
+    return {"asset": {
+        "id": f"asset-{uuid.uuid4().hex[:12]}",
+        "name": name,
+        "kind": "minimax",
+        "source": f"/api/v1/file/{name}",
+        "thumbnail": f"/api/v1/file/{name}",
+        "prompt": prompt,
+        "provider": "minimax",
+        "model": "image-01",
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "metadata": {"subjectReference": bool(subject)},
+    }}
+
+
+_COMIC_PLAN_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["title", "logline", "synopsis", "styleBible", "characters", "pages"],
+    "properties": {
+        "title": {"type": "string"},
+        "logline": {"type": "string"},
+        "synopsis": {"type": "string"},
+        "styleBible": {"type": "string"},
+        "characters": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False,
+            "required": ["id", "name", "description", "locked"],
+            "properties": {
+                "id": {"type": "string"}, "name": {"type": "string"},
+                "description": {"type": "string"}, "locked": {"type": "boolean"},
+                "wardrobe": {"type": "string"}, "referenceAssetId": {"type": "string"},
+            },
+        }},
+        "pages": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False,
+            "required": ["pageNumber", "layoutHint", "panels"],
+            "properties": {
+                "pageNumber": {"type": "integer"}, "layoutHint": {"type": "string"},
+                "panels": {"type": "array", "items": {
+                    "type": "object", "additionalProperties": False,
+                    "required": ["id", "order", "narrativeRole", "sceneDescription", "imagePrompt",
+                                 "characters", "framing", "dialogue", "captions", "soundEffects",
+                                 "continuityNotes"],
+                    "properties": {
+                        "id": {"type": "string"}, "order": {"type": "integer"},
+                        "narrativeRole": {"type": "string"}, "sceneDescription": {"type": "string"},
+                        "imagePrompt": {"type": "string"}, "characters": {"type": "array", "items": {"type": "string"}},
+                        "framing": {"type": "string"}, "continuityNotes": {"type": "string"},
+                        "captions": {"type": "array", "items": {"type": "string"}},
+                        "soundEffects": {"type": "array", "items": {"type": "string"}},
+                        "dialogue": {"type": "array", "items": {
+                            "type": "object", "additionalProperties": False,
+                            "required": ["text", "bubbleType"],
+                            "properties": {
+                                "speakerId": {"type": "string"}, "text": {"type": "string"},
+                                "bubbleType": {"type": "string"},
+                            },
+                        }},
+                    },
+                }},
+            },
+        }},
+    },
+}
+
+
+@api.post("/api/v1/director/comic/plan")
+def director_comic_plan(body: dict):
+    """Create a strict, editable comic plan without generating images."""
+    premise = str(body.get("premise") or "").strip()
+    page_count = max(1, min(100, int(body.get("pageCount") or 1)))
+    panels_per_page = max(1, min(12, int(body.get("panelsPerPage") or 4)))
+    if not premise:
+        raise HTTPException(status_code=400, detail="Comic premise is required")
+    characters = body.get("characters") if isinstance(body.get("characters"), list) else []
+    user_prompt = f"""Create a complete sequential comic plan.
+Premise: {premise}
+Exact page count: {page_count}
+Exactly {panels_per_page} panels per page.
+Language for ALL reader-facing dialogue/captions: {body.get('language', 'English')}
+Genre: {body.get('genre', 'Adventure')}
+Tone: {body.get('tone', 'Cinematic')}
+Audience: {body.get('audience', 'General')}
+Art style: {body.get('artStyle', 'modern graphic novel')}
+Dialogue density: {body.get('dialogueDensity', 'medium')}
+Ending requirement: {body.get('ending') or 'a satisfying ending'}
+Locked character bible: {json.dumps(characters, ensure_ascii=False)}
+
+Every imagePrompt must describe only visible artwork, include framing, repeat the canonical
+visual description of every character shown, and must never ask the image model to render
+written dialogue, captions, speech bubbles, lettering, logos or watermarks. Put all readable
+text in dialogue/captions/soundEffects. Maintain continuity of wardrobe, props, locations and
+screen direction. Return exactly the requested number of pages and panels."""
+    system_prompt = """You are Maestro Comic Director, a professional comics writer, visual
+storyteller and continuity editor. Return only the JSON object required by the supplied schema.
+Use stable character IDs. Every panel must advance story, reveal character or establish place.
+Keep dialogue concise enough to fit a real speech balloon."""
+    try:
+        _ensure_llm_loaded()
+        from services import llm_service
+        raw = llm_service.generate(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_new_tokens=min(24000, max(5000, page_count * panels_per_page * 260)),
+            temperature=0.65,
+            enable_thinking=False,
+            thinking_budget=0,
+            frequency_penalty=0.25,
+            presence_penalty=0.1,
+            json_schema=_COMIC_PLAN_SCHEMA,
+        )
+        if not isinstance(raw, str):
+            raise RuntimeError("LLM returned no text")
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].lstrip()
+        planned = json.loads(cleaned)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Comic planning failed: {exc}") from exc
+    pages = planned.get("pages")
+    if not isinstance(pages, list) or len(pages) != page_count:
+        raise HTTPException(status_code=422, detail=f"Director returned {len(pages) if isinstance(pages, list) else 0} pages; expected {page_count}. Try again.")
+    for page_index, page in enumerate(pages):
+        panels = page.get("panels")
+        if not isinstance(panels, list) or len(panels) != panels_per_page:
+            raise HTTPException(status_code=422, detail=f"Page {page_index + 1} has the wrong panel count. Try again.")
+        page["pageNumber"] = page_index + 1
+        page["layoutHint"] = "dynamic" if page.get("layoutHint") == "dynamic" else "grid"
+        for panel_index, panel in enumerate(panels):
+            panel["id"] = panel.get("id") or f"p{page_index + 1}-panel{panel_index + 1}"
+            panel["order"] = panel_index + 1
+            for dialogue in panel.get("dialogue", []):
+                if dialogue.get("bubbleType") not in ("speech", "thought", "caption", "scream"):
+                    dialogue["bubbleType"] = "speech"
+    plan = {
+        "version": 1,
+        "id": f"comic-plan-{uuid.uuid4().hex[:12]}",
+        "language": str(body.get("language") or "English"),
+        **planned,
+    }
+    return {"plan": plan}
+
+
 @api.get("/api/v1/outputs")
 def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = ""):
     """List generated output files (newest first) from the active workspace.
@@ -10775,7 +11130,7 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
         if not os.path.isfile(filepath):
             continue
         ext = os.path.splitext(name)[1].lower()
-        if ext not in media_exts and not name.endswith(".scene.json"):
+        if ext not in media_exts and not name.endswith(".scene.json") and not name.endswith(".comic.json"):
             continue
         raw_entries.append((name, filepath, ext, os.path.getmtime(filepath)))
 
@@ -10823,7 +11178,8 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
     files = []
     for name, filepath, ext, mtime in raw_entries:
         is_scene = name.endswith(".scene.json")
-        ftype = "scene" if is_scene else ("video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image")))
+        is_comic = name.endswith(".comic.json")
+        ftype = "comic" if is_comic else ("scene" if is_scene else ("video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image"))))
         cached = sidecar_cache.get(name) or {}
         mode = cached.get("mode")
         edit_sub_mode = cached.get("edit_sub_mode")
@@ -10856,7 +11212,13 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
             "size": size,
             "created_at": mtime,
             "url": f"/api/v1/file/{name}",
-            "thumbnail_url": (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png" if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png")) else cached.get("thumbnail_url")),
+            "thumbnail_url": (
+                f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png"
+                if is_comic and os.path.isfile(os.path.join(out_dir, name[:-len(".comic.json")] + ".comic.preview.png"))
+                else (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png"
+                      if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png"))
+                      else cached.get("thumbnail_url"))
+            ),
         })
 
     # Special filters: return ALL matches, bypass pagination

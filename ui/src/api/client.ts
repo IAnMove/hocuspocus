@@ -35,7 +35,7 @@ export interface ApiResolution {
 
 export interface ApiOutput {
   name: string
-  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene'
+  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene' | 'comic'
   mode: string | null
   favorite?: boolean
   size: number
@@ -923,6 +923,71 @@ export async function uploadImage(file: File): Promise<{ filename: string; path:
     body: form,
   })
   if (!res.ok) throw new Error('Upload failed')
+  return res.json()
+}
+
+// --- Comics ---
+
+export async function saveComicProject(
+  project: import('../features/comics/types').ComicProject,
+  preview: string,
+  existingName?: string | null,
+): Promise<{ name: string; type: 'comic'; url: string; thumbnail_url: string }> {
+  const method = existingName ? 'PUT' : 'POST'
+  const url = existingName
+    ? `${BASE}/api/v1/comics/${encodeURIComponent(existingName)}`
+    : `${BASE}/api/v1/comics`
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project, preview }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to save comic' }))
+    throw new Error(err.detail || 'Failed to save comic')
+  }
+  return res.json()
+}
+
+export async function loadComicProject(name: string): Promise<import('../features/comics/types').ComicProject> {
+  const res = await fetch(`${BASE}/api/v1/comics/${encodeURIComponent(name)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to load comic' }))
+    throw new Error(err.detail || 'Failed to load comic')
+  }
+  const data = await res.json()
+  return data.project
+}
+
+export async function generateComicWithMiniMax(params: {
+  prompt: string
+  aspect_ratio: string
+  subject_reference?: string
+}): Promise<{ asset: import('../features/comics/types').ComicAsset }> {
+  const res = await fetch(`${BASE}/api/v1/comics/generate/minimax`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'MiniMax generation failed' }))
+    throw new Error(err.detail || 'MiniMax generation failed')
+  }
+  return res.json()
+}
+
+export async function planComic(params: import('../features/comics/types').ComicDirectorRequest): Promise<{
+  plan: import('../features/comics/types').ComicPlan
+}> {
+  const res = await fetch(`${BASE}/api/v1/director/comic/plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Comic planning failed' }))
+    throw new Error(err.detail || 'Comic planning failed')
+  }
   return res.json()
 }
 

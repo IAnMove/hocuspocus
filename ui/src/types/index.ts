@@ -146,7 +146,7 @@ export interface GenerationJob {
 export interface OutputFile {
   name: string
   url: string
-  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene'
+  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene' | 'comic'
   mode: GenerationMode | 'model3d' | null
   /** Edit sub-mode tag from the .meta.json sidecar params (set by the
    *  retake/inpaint/outpaint/restyle/edit_anything endpoints). The gallery's
@@ -348,7 +348,7 @@ export interface Scene {
   }
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'comics' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
 export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
@@ -458,6 +458,8 @@ export interface ServicesConfig {
   openai_api_key_set: boolean
   anthropic_api_key: string
   anthropic_api_key_set: boolean
+  minimax_api_key: string
+  minimax_api_key_set: boolean
   use_director_v2: boolean
   nsfw_mode: boolean
   nsfw_accepted_at: string | null
@@ -795,7 +797,7 @@ export interface DirectorImageGenProgress {
   status: 'generating' | 'polling' | 'downloading' | 'done' | 'error'
 }
 
-export type DirectorSkill = 'music_video' | 'short_film' | 'podcast' | 'viral_video'
+export type DirectorSkill = 'music_video' | 'short_film' | 'podcast' | 'viral_video' | 'comic'
 export type ShortFilmPath = 'audio' | 'story'
 
 export interface ShortFilmCharacter {

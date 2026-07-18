@@ -1361,6 +1361,8 @@ function computeFilteredOutputs(outputs: OutputFile[], mediaFilter: MediaFilter)
     _foCachedResult = outputs.filter(o => o.type === 'model3d')
   } else if (mediaFilter === 'scenes') {
     _foCachedResult = outputs.filter(o => o.type === 'scene')
+  } else if (mediaFilter === 'comics') {
+    _foCachedResult = outputs.filter(o => o.type === 'comic')
   } else if (mediaFilter === 'avatars') {
     // "Edits" filter — show outputs from any of the Edit tab sub-modes.
     // Filter by `edit_sub_mode` (set by retake/inpaint/outpaint/restyle/

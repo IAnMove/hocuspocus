@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
-import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock } from 'lucide-react'
+import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen } from 'lucide-react'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import { getFileUrl } from '../../api/client'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
@@ -371,6 +371,13 @@ export function DirectorChat() {
   const setSeamless = useStore(s => s.setDirectorSeamless)
   const skill = useStore(s => s.directorSkill)
   const setSkill = useStore(s => s.setDirectorSkill)
+  const openSkill = (next: DirectorSkill) => {
+    if (next === 'comic') {
+      useStore.getState().setMediaFilter('comics')
+      return
+    }
+    setSkill(next)
+  }
   const musicSource = useStore(s => s.directorMusicSource)
   const setMusicSource = useStore(s => s.setDirectorMusicSource)
   const songDescription = useStore(s => s.directorSongDescription)
@@ -595,7 +602,7 @@ export function DirectorChat() {
 
         {/* Skill selector */}
         {!skill ? (
-          <SkillSelector onSelect={setSkill} />
+          <SkillSelector onSelect={openSkill} />
         ) : (
           <UserBubble>
             <div className="flex items-center gap-1.5 text-xs text-text-primary">
@@ -1205,6 +1212,7 @@ function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) => void 
   const skills = [
     { id: 'music_video' as DirectorSkill, label: 'Music Video', desc: 'Automated music video from audio', icon: Music, active: true },
     { id: 'short_film' as DirectorSkill, label: 'Short Film', desc: 'Dialogue-driven scenes from audio', icon: Film, active: true },
+    { id: 'comic' as DirectorSkill, label: 'Comic', desc: 'Plan pages, panels, art and dialogue', icon: BookOpen, active: true },
     { id: 'music_video' as DirectorSkill, label: 'Video Podcast', desc: 'Coming Soon', icon: Mic, active: false },
     { id: 'music_video' as DirectorSkill, label: 'Viral Video', desc: 'Coming Soon', icon: Sparkles, active: false },
   ]

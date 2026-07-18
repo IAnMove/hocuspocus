@@ -482,6 +482,21 @@ export function ServicesSettingsPanel() {
         )}
       </div>
 
+      <hr className="border-border" />
+
+      <div className="space-y-3">
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Comic Image Providers</h3>
+        <p className="text-[10px] text-text-muted">
+          MiniMax image-01 is optional. The Comics editor can always use Maestro's local image models.
+        </p>
+        <ApiKeyField
+          label="MiniMax API Key"
+          maskedValue={servicesConfig.minimax_api_key}
+          isSet={servicesConfig.minimax_api_key_set}
+          onSave={value => updateConfig({ minimax_api_key: value })}
+        />
+      </div>
+
       {/* Studio Prompt Enhancer — experimental gate. Default UI uses
           the Director LLM for the sparkle button without exposing the
           full enhancer/Wan2GP-alternative config; advanced users opt
