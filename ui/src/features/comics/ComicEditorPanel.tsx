@@ -38,8 +38,10 @@ async function runLocalImage(prompt: string, modelType?: string): Promise<ComicA
   const maestro = useStore.getState()
   const selected = modelType || maestro.selectedModelPerMode.image || maestro.params.model_type
   if (!selected) throw new Error('Select an image model in Maestro first')
+  const imageParams = maestro.savedParamsPerMode.image || {}
   const result = await api.submitGeneration({
     ...maestro.params,
+    ...imageParams,
     prompt,
     model_type: selected,
     image_mode: 1,
@@ -367,10 +369,15 @@ const initialDirector = (): ComicDirectorRequest => ({
 
 function DirectorPanel({ notify }: { notify: (notice: Notice) => void }) {
   const project = useComicStore(state => state.project)
-  const [request, setRequest] = useState<ComicDirectorRequest>(() => ({ ...initialDirector(), characters: project.characters }))
+  const [request, setRequest] = useState<ComicDirectorRequest>(() =>
+    project.director?.input ?? { ...initialDirector(), characters: project.characters })
   const [busy, setBusy] = useState<'plan' | 'images' | null>(null)
   const [progress, setProgress] = useState('')
   const [newCharacter, setNewCharacter] = useState({ name: '', description: '' })
+  const [singleBusy, setSingleBusy] = useState<string | null>(null)
+  useEffect(() => {
+    setRequest(project.director?.input ?? { ...initialDirector(), characters: project.characters })
+  }, [project.id])
   const patch = <K extends keyof ComicDirectorRequest>(key: K, value: ComicDirectorRequest[K]) =>
     setRequest(current => ({ ...current, [key]: value }))
 
@@ -469,6 +476,63 @@ function DirectorPanel({ notify }: { notify: (notice: Notice) => void }) {
     }
   }
 
+  const updatePlanPanel = (pageIndex: number, panelIndex: number, patchValue: Partial<ComicPlanPanel>) => {
+    const state = useComicStore.getState()
+    const director = state.project.director
+    if (!director) return
+    const pages = director.plan.pages.map((page, pi) => pi !== pageIndex ? page : {
+      ...page,
+      panels: page.panels.map((panel, pj) => pj === panelIndex ? { ...panel, ...patchValue } : panel),
+    })
+    state.patchProject({ director: { ...director, plan: { ...director.plan, pages } } })
+  }
+
+  const generateSingle = async (pageIndex: number, panelIndex: number) => {
+    const state = useComicStore.getState()
+    const director = state.project.director
+    const page = state.project.pages[pageIndex]
+    const planned = director?.plan.pages[pageIndex]?.panels[panelIndex]
+    const panel = page?.elements
+      .filter((element): element is ComicPanelElement => element.type === 'panel' && !element.parentId)
+      .sort((a, b) => a.zIndex - b.zIndex)[panelIndex]
+    if (!director || !planned || !panel) return
+    setSingleBusy(planned.id)
+    try {
+      const character = director.plan.characters.find(item => planned.characters.includes(item.id))
+      const reference = character?.referenceAssetId
+        ? state.project.assets[character.referenceAssetId]?.source
+        : undefined
+      const asset = await generatePanelAsset(
+        director.provider,
+        `${planned.imagePrompt}. ${state.project.style.promptSuffix}`,
+        director.imageModel,
+        reference,
+      )
+      const latest = useComicStore.getState()
+      const currentPage = latest.project.pages[pageIndex]
+      const oldImages = currentPage.elements.filter(element => element.parentId === panel.id && element.type === 'image')
+      oldImages.forEach(element => useComicStore.getState().removeElement(currentPage.id, element.id))
+      useComicStore.getState().addAsset(asset)
+      useComicStore.getState().addElement(currentPage.id, {
+        id: comicId('image'), type: 'image', assetId: asset.id, parentId: panel.id,
+        x: 0, y: 0, width: panel.width, height: panel.height,
+        rotation: 0, zIndex: 2, objectFit: 'cover', filter: 'none', opacity: 1, visible: true,
+      })
+      const after = useComicStore.getState()
+      after.patchProject({
+        director: {
+          ...after.project.director!,
+          completedPanelIds: Array.from(new Set([...after.project.director!.completedPanelIds, planned.id])),
+        },
+      })
+      notify({ kind: 'ok', text: `Panel ${pageIndex + 1}.${panelIndex + 1} generated.` })
+    } catch (error) {
+      notify({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setSingleBusy(null)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-accent-blue/30 bg-accent-blue/5 p-3">
@@ -493,6 +557,16 @@ function DirectorPanel({ notify }: { notify: (notice: Notice) => void }) {
           <div key={character.id} className="rounded border border-border p-2 text-[10px]">
             <div className="flex justify-between"><b className="text-text-primary">{character.name}</b><button onClick={() => patch('characters', request.characters.filter(item => item.id !== character.id))}><Trash2 size={11} /></button></div>
             <p className="text-text-muted mt-1">{character.description}</p>
+            <select
+              className={`${input} mt-2`}
+              value={character.referenceAssetId || ''}
+              onChange={event => patch('characters', request.characters.map(item => item.id === character.id
+                ? { ...item, referenceAssetId: event.target.value || undefined }
+                : item))}
+            >
+              <option value="">No visual reference</option>
+              {Object.values(project.assets).map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+            </select>
           </div>
         ))}
         <input className={input} value={newCharacter.name} onChange={event => setNewCharacter(value => ({ ...value, name: event.target.value }))} placeholder="Character name" />
@@ -507,6 +581,48 @@ function DirectorPanel({ notify }: { notify: (notice: Notice) => void }) {
           {busy === 'images' ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
           {progress || `Generate images (${project.director.completedPanelIds.length} complete)`}
         </button>
+      )}
+      {project.director && (
+        <div className="border-t border-border pt-3 space-y-3">
+          <div>
+            <strong className="text-[10px] uppercase tracking-wide text-text-muted">Review plan</strong>
+            <p className="text-[9px] text-text-muted mt-1">Prompts and dialogue stay editable. Generate or regenerate any panel independently.</p>
+          </div>
+          {project.director.plan.pages.map((page, pageIndex) => (
+            <details key={page.pageNumber} open={pageIndex === 0} className="rounded-lg border border-border bg-bg-tertiary/30">
+              <summary className="cursor-pointer px-2 py-2 text-xs font-medium text-text-primary">Page {page.pageNumber} · {page.panels.length} panels</summary>
+              <div className="p-2 pt-0 space-y-2">
+                {page.panels.map((panel, panelIndex) => (
+                  <div key={panel.id} className="rounded border border-border bg-bg-secondary p-2 space-y-2">
+                    <div className="flex justify-between text-[10px]">
+                      <b className="text-text-primary">Panel {panelIndex + 1}</b>
+                      <span className="text-text-muted">{panel.framing}</span>
+                    </div>
+                    <Field label="Image prompt">
+                      <textarea className={input} rows={5} value={panel.imagePrompt}
+                        onChange={event => updatePlanPanel(pageIndex, panelIndex, { imagePrompt: event.target.value })} />
+                    </Field>
+                    <Field label="Dialogue / captions">
+                      <textarea
+                        className={input}
+                        rows={3}
+                        value={[
+                          ...panel.captions.map(text => `[Caption] ${text}`),
+                          ...panel.dialogue.map(line => `${line.speakerId ? `${line.speakerId}: ` : ''}${line.text}`),
+                        ].join('\n')}
+                        readOnly
+                      />
+                    </Field>
+                    <button className={`${button} w-full`} disabled={singleBusy !== null || busy !== null} onClick={() => generateSingle(pageIndex, panelIndex)}>
+                      {singleBusy === panel.id ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
+                      {project.director!.completedPanelIds.includes(panel.id) ? 'Regenerate panel' : 'Generate panel'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ))}
+        </div>
       )}
     </div>
   )
@@ -562,8 +678,21 @@ export function ComicEditorPanel() {
     if (!file) return
     try {
       const parsed = normalizeComicProject(JSON.parse(await file.text()))
+      // Legacy comic-generator projects embedded every library image as a
+      // data URL. Persist each one through Maestro before accepting the
+      // project so the migrated JSON remains small and reloadable.
+      for (const asset of Object.values(parsed.assets)) {
+        if (!asset.source.startsWith('data:image/')) continue
+        const response = await fetch(asset.source)
+        const blob = await response.blob()
+        const extension = blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png'
+        const uploaded = await api.uploadImage(new File([blob], `${asset.id}.${extension}`, { type: blob.type }))
+        asset.source = uploaded.url
+        asset.kind = 'upload'
+        asset.missing = false
+      }
       useComicStore.getState().setProject(parsed)
-      notify({ kind: 'ok', text: parsed.version === 2 ? 'Comic imported.' : 'Legacy comic migrated.' })
+      notify({ kind: 'ok', text: 'Comic imported; embedded legacy assets were persisted in Maestro.' })
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
     } finally {

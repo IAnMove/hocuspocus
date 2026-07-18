@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties } from 'react'
-import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Box, Film } from 'lucide-react'
+import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, BookOpen, Box, Film } from 'lucide-react'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { useStore } from '../../stores/useStore'
-import { getUploadUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage } from '../../api/client'
+import { getUploadUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
 import { modelDisplayName } from '../../lib/modelDisplay'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
+import { useComicStore } from '../../features/comics/store'
 
 interface Props {
   file: OutputFile
@@ -171,6 +172,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const isAudio = file.type === 'audio'
   const isModel3d = file.type === 'model3d'
   const isScene = file.type === 'scene'
+  const isComic = file.type === 'comic'
   const canPreviewModel3d = isModel3d && /\.(glb|gltf)$/i.test(file.name)
   // Rigged outputs carry their baked glTF clip names in the sidecar; the
   // viewer autoplays one and offers a selector to switch.
@@ -205,8 +207,17 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
         .catch(error => console.error('Failed to open scene:', error))
       return
     }
+    if (isComic) {
+      void loadComicProject(file.name)
+        .then(project => {
+          useComicStore.getState().setProject(project, file.name)
+          setMediaFilter('comics')
+        })
+        .catch(error => console.error('Failed to open comic:', error))
+      return
+    }
     setSelectedOutput(index)
-  }, [file, index, isScene, setMediaFilter, setSelectedOutput])
+  }, [file, index, isComic, isScene, setMediaFilter, setSelectedOutput])
 
   const handleLoadSettings = useCallback(() => {
     setSelectedOutput(index)
@@ -407,6 +418,10 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
           file.thumbnail_url
             ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" />
             : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
+        ) : isComic ? (
+          file.thumbnail_url
+            ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" />
+            : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
         ) : isModel3d ? (
           <div className="w-full h-full relative">
             {canPreviewModel3d ? (

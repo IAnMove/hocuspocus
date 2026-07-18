@@ -155,7 +155,7 @@ function VirtualizedThumbnailList({ activeIndex, onThumbnailClick, onMobileClick
                 </div>
               ) : file.type === 'model3d' ? (
                 <Model3dThumbnail src={file.thumbnail_url} name={file.name} />
-              ) : file.type === 'scene' ? (
+              ) : file.type === 'scene' || file.type === 'comic' ? (
                 file.thumbnail_url
                   ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-bg-active flex items-center justify-center"><Film size={14} className="text-text-muted" /></div>

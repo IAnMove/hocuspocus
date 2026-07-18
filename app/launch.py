@@ -11054,6 +11054,25 @@ Keep dialogue concise enough to fit a real speech balloon."""
             for dialogue in panel.get("dialogue", []):
                 if dialogue.get("bubbleType") not in ("speech", "thought", "caption", "scream"):
                     dialogue["bubbleType"] = "speech"
+    # User-supplied character records are the source of truth for IDs,
+    # references and locked canonical descriptions. The LLM sees them for
+    # planning but must never be allowed to silently drop a reference asset
+    # or rewrite a locked character in the persisted project.
+    if characters:
+        planned_by_id = {
+            str(item.get("id")): item
+            for item in planned.get("characters", [])
+            if isinstance(item, dict) and item.get("id")
+        }
+        merged_characters = []
+        for original in characters:
+            if not isinstance(original, dict):
+                continue
+            generated = planned_by_id.get(str(original.get("id")), {})
+            merged = {**generated, **original}
+            merged["locked"] = bool(original.get("locked", True))
+            merged_characters.append(merged)
+        planned["characters"] = merged_characters
     plan = {
         "version": 1,
         "id": f"comic-plan-{uuid.uuid4().hex[:12]}",
