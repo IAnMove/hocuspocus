@@ -1,6 +1,8 @@
 export type ComicElementType = 'panel' | 'image' | 'text'
-export type ComicBubbleType = 'none' | 'speech' | 'thought' | 'caption' | 'scream'
-export type ComicImageFilter = 'none' | 'bw' | 'sepia' | 'contrast' | 'halftone'
+export type ComicBubbleType =
+  | 'none' | 'speech' | 'ellipse' | 'rect' | 'thought' | 'whisper'
+  | 'caption' | 'scream' | 'electric' | 'burst' | 'cloud'
+export type ComicImageFilter = 'none' | 'bw' | 'sepia' | 'contrast' | 'posterize' | 'halftone'
 
 export interface ComicAsset {
   id: string
@@ -73,6 +75,22 @@ export interface ComicTextElement extends ComicBaseElement {
   bubbleBackground: string
   bubbleStrokeColor: string
   bubbleStrokeWidth: number
+  lineHeight?: number
+  letterSpacing?: number
+  autoFit?: boolean
+  textFill?: 'solid' | 'gradient'
+  gradientStart?: string
+  gradientEnd?: string
+  textStrokeWidth?: number
+  textStrokeColor?: string
+  textEffect?: 'none' | 'shadow' | 'extrude' | 'glow'
+  textEffectColor?: string
+  bubbleSecondary?: string
+  bubblePadding?: number
+  bubbleShadow?: boolean
+  bubbleStrokeStyle?: 'solid' | 'dashed' | 'rough'
+  tail?: 'none' | 'top' | 'bottom' | 'left' | 'right'
+  tailWidth?: number
 }
 
 export type ComicElement = ComicPanelElement | ComicImageElement | ComicTextElement
@@ -116,6 +134,10 @@ export interface ComicProject {
     input: ComicDirectorRequest
     plan: ComicPlan
     completedPanelIds: string[]
+    /** Maestro generation jobs keyed by planned panel ID.
+     *  Kept until the resulting image has been attached so a dropped browser
+     *  request can resume the same backend job instead of generating twice. */
+    panelJobs?: Record<string, string>
   }
   createdAt: string
   updatedAt: string
@@ -169,10 +191,13 @@ export interface ComicDirectorRequest {
   tone: string
   audience: string
   artStyle: string
+  /** Canonical year/era, place, architecture, technology and wardrobe. */
+  worldContext?: string
+  /** Visual elements the image generator must never introduce. */
+  forbiddenElements?: string
   dialogueDensity: 'low' | 'medium' | 'high'
   provider: 'maestro' | 'minimax'
   imageModel?: string
   characters: ComicCharacter[]
   ending?: string
 }
-

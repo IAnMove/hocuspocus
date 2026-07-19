@@ -598,6 +598,21 @@ def _server_url() -> str:
     return f"http://127.0.0.1:{_server_port}"
 
 
+def _is_ollama_remote() -> bool:
+    """Best-effort detection for Ollama's OpenAI-compatible endpoint."""
+    if _provider != "remote":
+        return False
+    url = (_remote_url or "").lower()
+    return "ollama" in url or ":11434" in url
+
+
+def _is_deepseek_remote() -> bool:
+    """Detect DeepSeek when it is configured through the OpenAI-compatible provider."""
+    if _provider not in ("remote", "openai"):
+        return False
+    return "deepseek.com" in (_remote_url or "").lower()
+
+
 def _api_headers() -> dict:
     """Build headers for API calls (adds auth for remote providers)."""
     headers = {"Content-Type": "application/json"}
@@ -1572,6 +1587,27 @@ def generate(
     if json_schema is not None:
         if _provider == "local":
             payload["response_format"] = {"type": "json_object", "schema": json_schema}
+        elif _is_ollama_remote():
+            # Ollama supports JSON Schema through the OpenAI-compatible
+            # response_format field.  Previously remote providers always
+            # degraded to unconstrained text, so a single stray comma from
+            # Qwen could invalidate a comic plan after minutes of work.
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "maestro_response",
+                    "strict": True,
+                    "schema": json_schema,
+                },
+            }
+            print("[LLM] Ollama structured output enabled")
+        elif _is_deepseek_remote():
+            # DeepSeek currently supports JSON Object mode rather than the
+            # OpenAI JSON-Schema envelope. The Comic Director prompt already
+            # names JSON explicitly and local validation/repair enforces the
+            # detailed schema after generation.
+            payload["response_format"] = {"type": "json_object"}
+            print("[LLM] DeepSeek JSON output enabled")
         else:
             print(f"[LLM] json_schema requested but provider={_provider} — sending unconstrained (grammar is local llama-server only)")
 
@@ -1747,6 +1783,19 @@ def generate_streaming(
     if json_schema is not None:
         if _provider == "local":
             payload["response_format"] = {"type": "json_object", "schema": json_schema}
+        elif _is_ollama_remote():
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "maestro_response",
+                    "strict": True,
+                    "schema": json_schema,
+                },
+            }
+            print("[LLM] Ollama structured streaming output enabled")
+        elif _is_deepseek_remote():
+            payload["response_format"] = {"type": "json_object"}
+            print("[LLM] DeepSeek JSON streaming output enabled")
         else:
             print(f"[LLM] json_schema requested but provider={_provider} — sending unconstrained (grammar is local llama-server only)")
 
@@ -1798,6 +1847,11 @@ def generate_streaming(
             stream=True,
         )
         resp.raise_for_status()
+        # Ollama commonly serves SSE as ``text/event-stream`` without an
+        # explicit charset. requests then falls back to ISO-8859-1, turning
+        # UTF-8 Spanish such as "océano" into "ocÃ©ano". SSE JSON is UTF-8
+        # by specification, so force the correct decoder before iter_lines.
+        resp.encoding = "utf-8"
 
         import json as _json_mod
         for line in resp.iter_lines(decode_unicode=True):

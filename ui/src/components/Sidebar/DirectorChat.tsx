@@ -4,6 +4,7 @@ import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/u
 import { getFileUrl } from '../../api/client'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
 import { DirectorSongSetup } from './DirectorSongSetup'
+import { ComicDirectorPanel } from '../../features/comics/ComicEditorPanel'
 import type { DirectorSkill, ShortFilmCharacter, ShortFilmPath } from '../../types'
 
 // AUDIO_ACCEPT lists both audio formats AND video formats. When a video
@@ -371,13 +372,7 @@ export function DirectorChat() {
   const setSeamless = useStore(s => s.setDirectorSeamless)
   const skill = useStore(s => s.directorSkill)
   const setSkill = useStore(s => s.setDirectorSkill)
-  const openSkill = (next: DirectorSkill) => {
-    if (next === 'comic') {
-      useStore.getState().setMediaFilter('comics')
-      return
-    }
-    setSkill(next)
-  }
+  const openSkill = (next: DirectorSkill) => setSkill(next)
   const musicSource = useStore(s => s.directorMusicSource)
   const setMusicSource = useStore(s => s.setDirectorMusicSource)
   const songDescription = useStore(s => s.directorSongDescription)
@@ -539,6 +534,26 @@ export function DirectorChat() {
     : step === 'structure'
     ? isShortFilm ? 'Adjust scene pacing above...' : 'Adjust clip structure above...'
     : 'Reviewing...'
+
+  if (skill === 'comic') {
+    return (
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <BookOpen size={14} className="text-accent-blue" />
+            <span className="text-xs font-medium text-text-primary">Comic Director</span>
+          </div>
+          <button
+            onClick={reset}
+            className="flex items-center gap-0.5 text-[10px] text-text-muted transition-colors hover:text-text-primary"
+          >
+            <RotateCcw size={10} /> Start Over
+          </button>
+        </div>
+        <ComicDirectorPanel createCompleteComic />
+      </div>
+    )
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">

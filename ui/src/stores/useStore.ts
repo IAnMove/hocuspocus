@@ -5,6 +5,7 @@ import { applyTheme, getStoredTheme, type ThemeId } from '../lib/theme'
 
 // --- LocalStorage persistence for per-mode settings ---
 const STORAGE_KEY = 'maestro_mode_settings'
+let _servicesConfigUpdateQueue: Promise<void> = Promise.resolve()
 
 // Persistence schema version. Bump when changing the LoRA-key strategy or
 // adding fields that need migration. Currently:
@@ -4373,9 +4374,32 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   updateServicesConfig: async (partial) => {
+    // Keep controlled settings inputs stable immediately. Previously the
+    // select stayed bound to the old server value until PUT + refetch
+    // completed, so choosing another LLM visibly snapped back to Qwen.
+    // Serialize writes as well: remote URLs are edited character-by-character
+    // and out-of-order PUT completions must never restore an older value.
+    const optimistic = Object.fromEntries(
+      Object.entries(partial).filter(([key]) => !key.endsWith('_api_key')),
+    ) as Partial<ServicesConfig>
+    if (Object.keys(optimistic).length > 0) {
+      set(state => ({
+        servicesConfig: state.servicesConfig
+          ? { ...state.servicesConfig, ...optimistic }
+          : state.servicesConfig,
+      }))
+    }
+    const updateTask = _servicesConfigUpdateQueue.then(async () => {
+      const result = await api.updateServicesConfig(partial)
+      set(state => ({
+        servicesConfig: state.servicesConfig
+          ? { ...state.servicesConfig, ...(result.updated as Partial<ServicesConfig>) }
+          : state.servicesConfig,
+      }))
+    })
+    _servicesConfigUpdateQueue = updateTask.catch(() => undefined)
     try {
-      await api.updateServicesConfig(partial)
-      get().loadServicesConfig()
+      await updateTask
       // When Mature Mode flips ON, auto-add all nsfw_only models to
       // enabledModels so they show up in selectors immediately. Without
       // this the user would have to walk Settings → System → Model
@@ -4403,7 +4427,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch (e) {
       console.error('Failed to update services config:', e)
-      get().loadServicesConfig()
+      await get().loadServicesConfig()
     }
   },
 

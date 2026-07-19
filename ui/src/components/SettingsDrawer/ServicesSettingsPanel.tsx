@@ -270,6 +270,8 @@ export function ServicesSettingsPanel() {
     status: 'idle',
     message: '',
   })
+  const pendingLlmConfig = useRef<Promise<void>>(Promise.resolve())
+  const [llmConfigSaving, setLlmConfigSaving] = useState(false)
   if (servicesConfigLoading && !servicesConfig) {
     return <div className="text-xs text-text-muted py-4 text-center">Loading...</div>
   }
@@ -292,9 +294,20 @@ export function ServicesSettingsPanel() {
     setLlmTest({ status: 'idle', message: '' })
   }
 
+  const saveLlmConfig = (partial: Partial<typeof servicesConfig>) => {
+    setLlmConfigSaving(true)
+    const request = updateConfig(partial)
+    pendingLlmConfig.current = request
+    void request.finally(() => {
+      if (pendingLlmConfig.current === request) setLlmConfigSaving(false)
+    })
+    return request
+  }
+
   const handleTestLlm = async () => {
     setLlmTest({ status: 'testing', message: 'Testing LLM connection...' })
     try {
+      await pendingLlmConfig.current
       const result = await testLlmConnection()
       const response = (result.response || '').trim()
       setLlmTest({ status: 'ok', message: `OK: ${response}` })
@@ -351,16 +364,14 @@ export function ServicesSettingsPanel() {
               if (PUBLIC_PROVIDERS.has(newProvider) && servicesConfig.nsfw_mode) {
                 updates.nsfw_mode = false
               }
-              updateConfig(updates)
-              // Refresh model list for new provider
-              setTimeout(() => loadLlmModels(), 500)
+              void saveLlmConfig(updates).then(() => loadLlmModels())
               resetLlmTest()
             }}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
             <option value="local">Local (llama-server)</option>
             <option value="remote">Remote OpenAI-Compatible (LM Studio, etc.)</option>
-            <option value="openai">OpenAI API</option>
+            <option value="openai">Hosted OpenAI-Compatible (OpenAI, DeepSeek)</option>
             <option value="anthropic">Anthropic API</option>
           </select>
         </div>
@@ -375,7 +386,7 @@ export function ServicesSettingsPanel() {
               type="text"
               value={servicesConfig.llm_remote_url}
               onChange={e => {
-                updateConfig({ llm_remote_url: e.target.value })
+                void saveLlmConfig({ llm_remote_url: e.target.value })
                 resetLlmTest()
               }}
               placeholder={isRemote ? 'http://192.168.1.100:1234' : 'https://api.openai.com'}
@@ -384,7 +395,7 @@ export function ServicesSettingsPanel() {
             <p className="text-[10px] text-text-muted mt-1">
               {isRemote
                 ? 'URL of your LM Studio, Ollama, or other OpenAI-compatible server'
-                : 'Leave blank for default OpenAI endpoint'}
+                : 'OpenAI: leave blank. DeepSeek: https://api.deepseek.com'}
             </p>
           </div>
         )}
@@ -409,7 +420,7 @@ export function ServicesSettingsPanel() {
           <select
             value={servicesConfig.llm_model_id}
             onChange={e => {
-              updateConfig({ llm_model_id: e.target.value })
+              void saveLlmConfig({ llm_model_id: e.target.value })
               resetLlmTest()
             }}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -434,13 +445,13 @@ export function ServicesSettingsPanel() {
             </label>
             <button
               onClick={handleTestLlm}
-              disabled={llmTest.status === 'testing'}
+              disabled={llmTest.status === 'testing' || llmConfigSaving}
               className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-1.5 disabled:opacity-50"
             >
-              {llmTest.status === 'testing' ? (
+              {llmTest.status === 'testing' || llmConfigSaving ? (
                 <>
                   <Loader2 size={10} className="animate-spin" />
-                  Testing
+                  {llmTest.status === 'testing' ? 'Testing' : 'Saving'}
                 </>
               ) : (
                 'Test'
@@ -807,7 +818,7 @@ export function ServicesSettingsPanel() {
             />
 
             <ApiKeyField
-              label="OpenAI API Key"
+              label="OpenAI / compatible API key"
               maskedValue={servicesConfig.openai_api_key}
               isSet={servicesConfig.openai_api_key_set}
               onSave={val => updateConfig({ openai_api_key: val })}

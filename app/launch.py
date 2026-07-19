@@ -15,11 +15,13 @@ Environment variables:
 
 import gc
 import base64
+import copy
 import sys
 import torch
 import os
 import glob
 import json
+import re
 import time
 import uuid
 import asyncio
@@ -10939,7 +10941,13 @@ _COMIC_PLAN_SCHEMA = {
         "title": {"type": "string"},
         "logline": {"type": "string"},
         "synopsis": {"type": "string"},
-        "styleBible": {"type": "string"},
+        "styleBible": {
+            "type": "string",
+            "description": (
+                "Optional visual continuity bible. Return an empty string when a dedicated "
+                "bible would not materially improve visual consistency."
+            ),
+        },
         "characters": {"type": "array", "items": {
             "type": "object", "additionalProperties": False,
             "required": ["id", "name", "description", "locked"],
@@ -10970,7 +10978,7 @@ _COMIC_PLAN_SCHEMA = {
                             "type": "object", "additionalProperties": False,
                             "required": ["text", "bubbleType"],
                             "properties": {
-                                "speakerId": {"type": "string"}, "text": {"type": "string"},
+                                "speakerId": {"type": "string"}, "text": {"type": "string", "minLength": 1},
                                 "bubbleType": {"type": "string"},
                             },
                         }},
@@ -10981,9 +10989,222 @@ _COMIC_PLAN_SCHEMA = {
     },
 }
 
+_COMIC_BIBLE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["title", "logline", "synopsis", "styleBible", "characters"],
+    "properties": {
+        key: value
+        for key, value in _COMIC_PLAN_SCHEMA["properties"].items()
+        if key != "pages"
+    },
+}
+_COMIC_PAGE_SCHEMA = _COMIC_PLAN_SCHEMA["properties"]["pages"]["items"]
+
+
+def _comic_page_problem(page, expected_panels: int) -> str | None:
+    """Return why a generated page is unsafe to checkpoint, if anything."""
+    if not isinstance(page, dict):
+        return "the page is not a JSON object"
+    panels = page.get("panels")
+    if not isinstance(panels, list):
+        return "the panels field is not an array"
+    if len(panels) != expected_panels:
+        return f"it contains {len(panels)} panels instead of {expected_panels}"
+    for panel_index, panel in enumerate(panels, 1):
+        if not isinstance(panel, dict):
+            return f"panel {panel_index} is not a JSON object"
+        dialogue = panel.get("dialogue")
+        if not isinstance(dialogue, list):
+            return f"panel {panel_index} dialogue is not an array"
+        if any(not isinstance(line, dict) for line in dialogue):
+            return f"panel {panel_index} contains malformed dialogue"
+        normalized_lines = [
+            str(line.get("text") or "").strip().casefold()
+            for line in dialogue
+            if str(line.get("text") or "").strip()
+        ]
+        if len(normalized_lines) > 2:
+            return f"panel {panel_index} contains excessive dialogue"
+        if normalized_lines and len(set(normalized_lines)) < len(normalized_lines) * 0.6:
+            return f"panel {panel_index} contains repetitive dialogue"
+    return None
+
+
+def _compact_comic_panel_copy(
+    panel: dict,
+    dialogue_limit: int = 1,
+    max_elements: int = 2,
+) -> None:
+    """Keep generated lettering readable even when the planning model overproduces."""
+    seen = set()
+
+    def unique_text(values, limit):
+        if limit <= 0:
+            return []
+        compacted = []
+        for value in values if isinstance(values, list) else []:
+            text = str(value or "").strip()
+            key = re.sub(r"\s+", " ", text).casefold()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            compacted.append(text)
+            if len(compacted) >= limit:
+                break
+        return compacted
+
+    panel["captions"] = unique_text(panel.get("captions"), min(1, max_elements))
+    dialogue = []
+    dialogue_limit = min(dialogue_limit, max(0, max_elements - len(panel["captions"])))
+    for value in panel.get("dialogue") if isinstance(panel.get("dialogue"), list) else []:
+        if not isinstance(value, dict):
+            continue
+        text = str(value.get("text") or "").strip()
+        key = re.sub(r"\s+", " ", text).casefold()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        dialogue.append({**value, "text": text})
+        if len(dialogue) >= dialogue_limit:
+            break
+    panel["dialogue"] = dialogue
+    remaining_lettering_slots = max(
+        0,
+        max_elements - len(panel["captions"]) - len(panel["dialogue"]),
+    )
+    panel["soundEffects"] = unique_text(panel.get("soundEffects"), remaining_lettering_slots)
+
+
+def _enforce_comic_page_text_budget(page: dict, dialogue_density: str) -> None:
+    panels = page.get("panels") if isinstance(page, dict) else None
+    if not isinstance(panels, list) or not panels:
+        return
+    dense_grid = len(panels) >= 7
+    for panel_index, panel in enumerate(panels):
+        if isinstance(panel, dict):
+            is_large_panel = (
+                len(panels) <= 4
+                or (page.get("layoutHint") == "dynamic" and panel_index == 0)
+            )
+            _compact_comic_panel_copy(
+                panel,
+                dialogue_limit=1 if dense_grid else (2 if dialogue_density == "high" else 1),
+                max_elements=2 if is_large_panel else 1,
+            )
+    ratio = {"low": 0.3, "medium": 0.55, "high": 0.8}.get(dialogue_density, 0.55)
+    keep_count = max(1, min(len(panels), int(len(panels) * ratio + 0.999)))
+    text_panel_indices = [
+        index
+        for index, panel in enumerate(panels)
+        if isinstance(panel, dict) and (
+            panel.get("captions") or panel.get("dialogue") or panel.get("soundEffects")
+        )
+    ]
+    if len(text_panel_indices) <= keep_count:
+        return
+    if keep_count == 1:
+        keep = {text_panel_indices[0]}
+    else:
+        keep = {
+            text_panel_indices[
+                round(position * (len(text_panel_indices) - 1) / (keep_count - 1))
+            ]
+            for position in range(keep_count)
+        }
+    for index, panel in enumerate(panels):
+        if isinstance(panel, dict) and index not in keep:
+            panel["captions"] = []
+            panel["dialogue"] = []
+            panel["soundEffects"] = []
+
+
+def _comic_page_summary(page) -> str:
+    if not isinstance(page, dict):
+        return ""
+    panels = page.get("panels")
+    if not isinstance(panels, list):
+        return ""
+    beats = []
+    for panel in panels:
+        if not isinstance(panel, dict):
+            continue
+        beat = str(
+            panel.get("continuityNotes")
+            or panel.get("sceneDescription")
+            or panel.get("narrativeRole")
+            or ""
+        ).strip()
+        if beat:
+            beats.append(beat)
+    return " ".join(beats)[-1600:]
+
+
+def _parse_comic_director_json(raw, stage: str) -> dict:
+    if not isinstance(raw, str) or not raw.strip():
+        raise RuntimeError(f"LLM returned no text while {stage}")
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:].lstrip()
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as parse_error:
+        from json_repair import repair_json
+        print(
+            f"[Comic Director] Repairing malformed {stage} JSON "
+            f"at line {parse_error.lineno}, column {parse_error.colno}"
+        )
+        parsed = repair_json(cleaned, return_objects=True)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"LLM response for {stage} is not a JSON object")
+    return _repair_comic_text_encoding(parsed)
+
+
+def _repair_comic_text_encoding(value):
+    """Repair UTF-8 bytes that an older SSE decoder treated as Latin-1."""
+    if isinstance(value, dict):
+        return {key: _repair_comic_text_encoding(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_repair_comic_text_encoding(item) for item in value]
+    if not isinstance(value, str) or not any(marker in value for marker in ("Ã", "Â", "â")):
+        return value
+    try:
+        repaired = value.encode("latin-1").decode("utf-8")
+        return repaired if repaired != value else value
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
+
+
+def _generate_comic_director_json(
+    *,
+    prompt: str,
+    system_prompt: str,
+    schema: dict,
+    max_new_tokens: int,
+    stage: str,
+) -> dict:
+    from services import llm_service
+    # A streaming HTTP response resets the read timeout on every token.
+    # This lets slow CPU-hosted Ollama models finish healthy generations
+    # instead of losing all work after one ten-minute blocking request.
+    raw = llm_service.generate_streaming(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        max_new_tokens=max_new_tokens,
+        temperature=0.2,
+        enable_thinking=False,
+        thinking_budget=0,
+        frequency_penalty=0.25,
+        presence_penalty=0.1,
+        json_schema=schema,
+    )
+    return _parse_comic_director_json(raw, stage)
+
 
 @api.post("/api/v1/director/comic/plan")
-def director_comic_plan(body: dict):
+def director_comic_plan(body: dict, job_id: str | None = None):
     """Create a strict, editable comic plan without generating images."""
     premise = str(body.get("premise") or "").strip()
     page_count = max(1, min(100, int(body.get("pageCount") or 1)))
@@ -10991,50 +11212,248 @@ def director_comic_plan(body: dict):
     if not premise:
         raise HTTPException(status_code=400, detail="Comic premise is required")
     characters = body.get("characters") if isinstance(body.get("characters"), list) else []
-    user_prompt = f"""Create a complete sequential comic plan.
-Premise: {premise}
+    dialogue_density = str(body.get("dialogueDensity") or "medium").lower()
+    manual_art_style = str(body.get("artStyle") or "").strip()
+    manual_world_context = str(body.get("worldContext") or "").strip()
+    manual_forbidden = str(body.get("forbiddenElements") or "").strip()
+    shared_brief = f"""Premise: {premise}
 Exact page count: {page_count}
 Exactly {panels_per_page} panels per page.
 Language for ALL reader-facing dialogue/captions: {body.get('language', 'English')}
 Genre: {body.get('genre', 'Adventure')}
 Tone: {body.get('tone', 'Cinematic')}
 Audience: {body.get('audience', 'General')}
-Art style: {body.get('artStyle', 'modern graphic novel')}
+User art-style preference: {manual_art_style or 'not provided; choose an appropriate treatment'}
+User world / period / location override: {manual_world_context or 'not provided'}
+User forbidden-elements override: {manual_forbidden or 'not provided'}
 Dialogue density: {body.get('dialogueDensity', 'medium')}
 Ending requirement: {body.get('ending') or 'a satisfying ending'}
-Locked character bible: {json.dumps(characters, ensure_ascii=False)}
-
-Every imagePrompt must describe only visible artwork, include framing, repeat the canonical
-visual description of every character shown, and must never ask the image model to render
-written dialogue, captions, speech bubbles, lettering, logos or watermarks. Put all readable
-text in dialogue/captions/soundEffects. Maintain continuity of wardrobe, props, locations and
-screen direction. Return exactly the requested number of pages and panels."""
+Locked character bible: {json.dumps(characters, ensure_ascii=False)}"""
     system_prompt = """You are Maestro Comic Director, a professional comics writer, visual
 storyteller and continuity editor. Return only the JSON object required by the supplied schema.
-Use stable character IDs. Every panel must advance story, reveal character or establish place.
-Keep dialogue concise enough to fit a real speech balloon."""
+Keep every field concise and use stable character IDs."""
     try:
         _ensure_llm_loaded()
-        from services import llm_service
-        raw = llm_service.generate(
-            prompt=user_prompt,
-            system_prompt=system_prompt,
-            max_new_tokens=min(24000, max(5000, page_count * panels_per_page * 260)),
-            temperature=0.65,
-            enable_thinking=False,
-            thinking_budget=0,
-            frequency_penalty=0.25,
-            presence_penalty=0.1,
-            json_schema=_COMIC_PLAN_SCHEMA,
-        )
-        if not isinstance(raw, str):
-            raise RuntimeError("LLM returned no text")
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.strip("`")
-            if cleaned.lower().startswith("json"):
-                cleaned = cleaned[4:].lstrip()
-        planned = json.loads(cleaned)
+        checkpoint = {}
+        if job_id:
+            with _comic_plan_jobs_lock:
+                checkpoint = copy.deepcopy(
+                    (_comic_plan_jobs.get(job_id) or {}).get("planningCheckpoint") or {}
+                )
+        if job_id:
+            _comic_plan_job_update(
+                job_id,
+                status="planning_bible",
+                message="Writing the story outline and character bible…",
+                current=0,
+                total=page_count,
+                stage="bible",
+            )
+        bible = checkpoint.get("bible")
+        if not isinstance(bible, dict):
+            bible = _generate_comic_director_json(
+                prompt=f"""Create the compact story and character bible for a sequential comic.
+{shared_brief}
+
+The synopsis must cover the complete arc across all {page_count} pages. Use concrete,
+repeatable visual descriptions for characters and wardrobe.
+
+Decide whether a dedicated visual continuity bible materially helps this particular story.
+It normally helps historical, period, fantasy, science-fiction and strongly art-directed work.
+When it helps, styleBible must state only applicable facts: era or year, geography,
+architecture, materials, technology, props, wardrobe, rendering medium, linework, palette,
+lighting, forbidden anachronisms and continuity anchors. Respect every user override exactly.
+Never put page count, panel count, comic-page layout, grids or lettering instructions in
+styleBible: it is sent to an image generator for one individual illustration at a time.
+When a dedicated bible is unnecessary, return styleBible as an empty string. Do not fill it
+with generic advice or invented restrictions merely because the field exists.""",
+                system_prompt=system_prompt,
+                schema=_COMIC_BIBLE_SCHEMA,
+                max_new_tokens=1200,
+                stage="the story bible",
+            )
+            if job_id:
+                _comic_plan_job_update(
+                    job_id,
+                    planningCheckpoint={"bible": bible, "pages": []},
+                    message="Story bible checkpoint saved.",
+                )
+        planned_pages = checkpoint.get("pages")
+        if not isinstance(planned_pages, list):
+            planned_pages = []
+        planned_pages = [
+            page for page in planned_pages[:page_count]
+            if isinstance(page, dict)
+        ]
+        page_schema = copy.deepcopy(_COMIC_PAGE_SCHEMA)
+        page_schema["properties"]["panels"]["minItems"] = panels_per_page
+        page_schema["properties"]["panels"]["maxItems"] = panels_per_page
+        panel_properties = page_schema["properties"]["panels"]["items"]["properties"]
+        dialogue_schema = panel_properties["dialogue"]
+        dialogue_schema["maxItems"] = 2 if dialogue_density == "high" else 1
+        panel_properties["captions"]["maxItems"] = 1
+        panel_properties["soundEffects"]["maxItems"] = 1
+        for page_index in range(page_count):
+            page_number = page_index + 1
+            text_panel_ratio = {"low": 0.3, "medium": 0.55, "high": 0.8}.get(
+                dialogue_density,
+                0.55,
+            )
+            text_panel_budget = max(
+                1,
+                min(panels_per_page, int(panels_per_page * text_panel_ratio + 0.999)),
+            )
+            per_panel_text_limit = 1 if panels_per_page >= 7 else 2
+            existing_page = planned_pages[page_index] if page_index < len(planned_pages) else None
+            existing_problem = _comic_page_problem(existing_page, panels_per_page)
+            if existing_page is not None and existing_problem is None:
+                continue
+            previous_page = planned_pages[page_index - 1] if page_index > 0 else None
+            next_page = (
+                planned_pages[page_index + 1]
+                if page_index + 1 < len(planned_pages)
+                else None
+            )
+            previous_summary = _comic_page_summary(previous_page)
+            next_summary = _comic_page_summary(next_page)
+            continuity = (
+                f"Continuity entering from page {page_number - 1}: {previous_summary}"
+                if previous_summary
+                else "Opening page; establish the premise and visual geography."
+            )
+            future_continuity = (
+                f"Already-saved page {page_number + 1} follows with these continuity anchors: "
+                f"{next_summary}. Make this repaired page lead naturally into them."
+                if next_summary
+                else "No later saved page constrains this page."
+            )
+            if job_id:
+                _comic_plan_job_update(
+                    job_id,
+                    status="planning_page",
+                    message=(
+                        f"Repairing invalid page {page_number} of {page_count}: "
+                        f"{existing_problem}…"
+                        if existing_page is not None
+                        else f"Writing page {page_number} of {page_count}…"
+                    ),
+                    current=page_index,
+                    total=page_count,
+                    stage="page",
+                    page=page_number,
+                )
+            page = None
+            page_problem = existing_problem
+            for attempt in range(1, 4):
+                page = _generate_comic_director_json(
+                    prompt=f"""Write page {page_number} of this comic.
+{shared_brief}
+Story bible: {json.dumps(bible, ensure_ascii=False)}
+{continuity}
+{future_continuity}
+
+Return one page with exactly {panels_per_page} panels and pageNumber {page_number}.
+Every imagePrompt describes exactly ONE full-bleed illustration for ONE panel, includes
+framing and repeats the canonical
+description of every character shown. Never ask the image model to render dialogue, captions,
+bubbles, lettering, logos or watermarks. Put readable text only in dialogue, captions or
+soundEffects. Never mention the comic's page count, panel count, page layout, grids, collages,
+split screens, inset panels or borders in imagePrompt. Every imagePrompt must be self-contained.
+Include the chosen art treatment and
+only the world details that visibly apply to that shot. Repeat exact era/year, architecture,
+technology and wardrobe when the premise or styleBible establishes them; do not invent a
+period constraint for contemporary, abstract or setting-neutral work. Preserve props and
+screen direction.
+Lettering budget per panel: zero or one short caption, zero or
+{"two" if dialogue_density == "high" else "one"} short dialogue lines, and zero or one short
+sound effect, with {per_panel_text_limit} reader-facing text element
+{"s" if per_panel_text_limit != 1 else ""} maximum in total. This page may use lettering in
+at most {text_panel_budget} of its {panels_per_page} panels; all remaining panels MUST be
+silent. Silence is intentional visual storytelling. Prefer caption and dialogue; include a
+sound effect only when the panel's total budget permits it.
+Never repeat or paraphrase the same line in multiple fields. Complete all
+{panels_per_page} panels before adding detail to any one panel.
+{f"A previous attempt was rejected because {page_problem}. Return a complete corrected page." if page_problem else ""}
+Dialogue may be omitted whenever silent storytelling is stronger.""",
+                    system_prompt=system_prompt,
+                    schema=page_schema,
+                    max_new_tokens=min(5000, max(1800, 700 + panels_per_page * 420)),
+                    stage=f"page {page_number}, attempt {attempt}",
+                )
+                page_problem = _comic_page_problem(page, panels_per_page)
+                if page_problem is None:
+                    break
+                if job_id:
+                    _comic_plan_job_update(
+                        job_id,
+                        status="planning_page",
+                        message=(
+                            f"Page {page_number} attempt {attempt} was incomplete "
+                            f"({page_problem}); retrying…"
+                        ),
+                        current=page_index,
+                        total=page_count,
+                        stage="page",
+                        page=page_number,
+                    )
+            if page is None or page_problem is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Page {page_number} remained invalid after 3 attempts: "
+                        f"{page_problem}. Resume to try this page again."
+                    ),
+                )
+            generated_visual_bible = str(bible.get("styleBible") or "").strip()
+            visual_context_parts = []
+            if manual_art_style:
+                visual_context_parts.append(f"Art direction: {manual_art_style}.")
+            if manual_world_context:
+                visual_context_parts.append(
+                    f"User world and period lock: {manual_world_context}."
+                )
+            if generated_visual_bible:
+                visual_context_parts.append(
+                    f"Visual continuity bible: {generated_visual_bible}."
+                )
+            if manual_forbidden:
+                visual_context_parts.append(
+                    f"Strictly forbidden: {manual_forbidden}."
+                )
+            visual_context = " ".join(visual_context_parts)
+            if visual_context:
+                visual_context += " "
+            for panel in page.get("panels", []):
+                if not isinstance(panel, dict):
+                    continue
+                prompt = str(panel.get("imagePrompt") or "").strip()
+                panel["imagePrompt"] = visual_context + prompt
+            if page_index < len(planned_pages):
+                planned_pages[page_index] = page
+            else:
+                planned_pages.append(page)
+            if job_id:
+                _comic_plan_job_update(
+                    job_id,
+                    planningCheckpoint={
+                        "bible": bible,
+                        "pages": copy.deepcopy(planned_pages),
+                    },
+                    message=f"Page {page_number} checkpoint saved.",
+                    current=page_number,
+                    total=page_count,
+                )
+            if job_id:
+                _comic_plan_job_update(
+                    job_id,
+                    status="planning_page",
+                    message=f"Page {page_number} of {page_count} completed.",
+                    current=page_number,
+                    total=page_count,
+                    stage="page",
+                    page=page_number,
+                )
+        planned = {**bible, "pages": planned_pages}
     except HTTPException:
         raise
     except Exception as exc:
@@ -11049,11 +11468,42 @@ Keep dialogue concise enough to fit a real speech balloon."""
         page["pageNumber"] = page_index + 1
         page["layoutHint"] = "dynamic" if page.get("layoutHint") == "dynamic" else "grid"
         for panel_index, panel in enumerate(panels):
+            # json_repair can salvage a response that was cut off near the end
+            # of its token budget, but the final panel may consequently be
+            # missing optional-looking fields that are required by the editor.
+            # Normalize every panel before calling the plan "validated".
+            if not isinstance(panel, dict):
+                panel = {}
+                panels[panel_index] = panel
             panel["id"] = panel.get("id") or f"p{page_index + 1}-panel{panel_index + 1}"
             panel["order"] = panel_index + 1
-            for dialogue in panel.get("dialogue", []):
+            panel["narrativeRole"] = str(panel.get("narrativeRole") or "Story beat")
+            panel["sceneDescription"] = str(panel.get("sceneDescription") or panel["narrativeRole"])
+            panel["imagePrompt"] = str(panel.get("imagePrompt") or panel["sceneDescription"])
+            panel["framing"] = str(panel.get("framing") or "Medium shot")
+            panel["continuityNotes"] = str(panel.get("continuityNotes") or "")
+            for list_key in ("characters", "captions", "soundEffects"):
+                value = panel.get(list_key)
+                panel[list_key] = value if isinstance(value, list) else []
+            dialogue_items = panel.get("dialogue")
+            panel["dialogue"] = dialogue_items if isinstance(dialogue_items, list) else []
+            normalized_dialogue = []
+            for dialogue in panel["dialogue"]:
+                if not isinstance(dialogue, dict):
+                    continue
+                dialogue["text"] = str(dialogue.get("text") or "").strip()
+                if not dialogue["text"]:
+                    continue
                 if dialogue.get("bubbleType") not in ("speech", "thought", "caption", "scream"):
                     dialogue["bubbleType"] = "speech"
+                normalized_dialogue.append(dialogue)
+            panel["dialogue"] = normalized_dialogue
+        _enforce_comic_page_text_budget(page, dialogue_density)
+        if (
+            len(panels) in (3, 4, 6, 9)
+            and page_index % 2 == 1
+        ):
+            page["layoutHint"] = "dynamic"
     # User-supplied character records are the source of truth for IDs,
     # references and locked canonical descriptions. The LLM sees them for
     # planning but must never be allowed to silently drop a reference asset
@@ -11080,6 +11530,383 @@ Keep dialogue concise enough to fit a real speech balloon."""
         **planned,
     }
     return {"plan": plan}
+
+
+_COMIC_TEXT_PAGE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["panels"],
+    "properties": {
+        "panels": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["id", "captions", "dialogue", "soundEffects"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "captions": {"type": "array", "items": {"type": "string"}},
+                    "soundEffects": {"type": "array", "items": {"type": "string"}},
+                    "dialogue": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["text", "bubbleType"],
+                            "properties": {
+                                "speakerId": {"type": "string"},
+                                "text": {"type": "string", "minLength": 1},
+                                "bubbleType": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+
+
+@api.post("/api/v1/director/comic/text/page")
+def director_comic_text_page(body: dict):
+    """Rewrite or translate one page's lettering without touching artwork or visual prompts."""
+    plan = body.get("plan")
+    page_index = int(body.get("pageIndex") or 0)
+    mode = str(body.get("mode") or "rewrite").lower()
+    instruction = str(body.get("instruction") or "").strip()[:3000]
+    target_language = str(body.get("targetLanguage") or "").strip()[:120]
+    dialogue_density = str(body.get("dialogueDensity") or "medium").lower()
+    if not isinstance(plan, dict) or not isinstance(plan.get("pages"), list):
+        raise HTTPException(status_code=400, detail="A valid comic plan is required")
+    if page_index < 0 or page_index >= len(plan["pages"]):
+        raise HTTPException(status_code=400, detail="Comic page index is out of range")
+    if mode not in ("rewrite", "translate"):
+        raise HTTPException(status_code=400, detail="Text mode must be rewrite or translate")
+    if mode == "translate" and not target_language:
+        raise HTTPException(status_code=400, detail="Choose a target language")
+    source_page = copy.deepcopy(plan["pages"][page_index])
+    source_panels = source_page.get("panels")
+    if not isinstance(source_panels, list) or not source_panels:
+        raise HTTPException(status_code=400, detail="The comic page has no panels")
+    schema = copy.deepcopy(_COMIC_TEXT_PAGE_SCHEMA)
+    schema["properties"]["panels"]["minItems"] = len(source_panels)
+    schema["properties"]["panels"]["maxItems"] = len(source_panels)
+    panel_schema = schema["properties"]["panels"]["items"]["properties"]
+    dense_grid = len(source_panels) >= 7
+    panel_schema["captions"]["maxItems"] = 1
+    panel_schema["soundEffects"]["maxItems"] = 1
+    panel_schema["dialogue"]["maxItems"] = 1 if dense_grid else 2
+    source = [{
+        "id": panel.get("id"),
+        "narrativeRole": panel.get("narrativeRole"),
+        "sceneDescription": panel.get("sceneDescription"),
+        "captions": panel.get("captions") or [],
+        "dialogue": panel.get("dialogue") or [],
+        "soundEffects": panel.get("soundEffects") or [],
+    } for panel in source_panels if isinstance(panel, dict)]
+    if mode == "translate":
+        task = f"""Translate every existing reader-facing text faithfully into {target_language}.
+Preserve which panels are silent, the number and type of text blocks, speaker IDs, meaning,
+tone, names and sound-effect intent. Do not add, remove, summarize or rewrite story content."""
+    else:
+        task = f"""Rewrite the page's lettering according to this editorial instruction:
+{instruction or "Make the text concise, natural and dramatically effective."}
+Use the comic language {plan.get("language") or "English"}. You may make panels silent."""
+    max_elements = 1 if dense_grid else 2
+    ratio = {"low": 0.3, "medium": 0.55, "high": 0.8}.get(dialogue_density, 0.55)
+    page_budget = max(1, min(len(source_panels), int(len(source_panels) * ratio + 0.999)))
+    try:
+        _ensure_llm_loaded()
+        generated = _generate_comic_director_json(
+            prompt=f"""{task}
+
+Return exactly {len(source_panels)} panel records in the original order with unchanged IDs.
+This is a text-only operation: do not return image prompts or visual changes.
+At most {max_elements} text block{"s" if max_elements != 1 else ""} may appear in one panel.
+{"Preserve the source's exact silent/text pattern." if mode == "translate" else f"At most {page_budget} panels on this page may contain text; the rest must be silent."}
+Never duplicate or paraphrase the same message across caption, dialogue and sound effect.
+Source page: {json.dumps(source, ensure_ascii=False)}""",
+            system_prompt=(
+                "You are Maestro's comic lettering editor and literary translator. "
+                "Return only the strict JSON requested by the schema."
+            ),
+            schema=schema,
+            max_new_tokens=min(3200, max(900, len(source_panels) * 260)),
+            stage=f"{mode} lettering for page {page_index + 1}",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Comic text {mode} failed: {exc}") from exc
+    generated_panels = generated.get("panels")
+    if not isinstance(generated_panels, list) or len(generated_panels) != len(source_panels):
+        raise HTTPException(status_code=422, detail="The LLM returned the wrong number of panels")
+    by_id = {
+        str(panel.get("id")): panel
+        for panel in generated_panels
+        if isinstance(panel, dict) and panel.get("id")
+    }
+    for index, panel in enumerate(source_panels):
+        candidate = by_id.get(str(panel.get("id")))
+        if not isinstance(candidate, dict):
+            candidate = generated_panels[index] if isinstance(generated_panels[index], dict) else {}
+        panel["captions"] = candidate.get("captions") if isinstance(candidate.get("captions"), list) else []
+        panel["soundEffects"] = candidate.get("soundEffects") if isinstance(candidate.get("soundEffects"), list) else []
+        panel["dialogue"] = candidate.get("dialogue") if isinstance(candidate.get("dialogue"), list) else []
+    if mode == "translate":
+        # Translation must never alter the editorial rhythm chosen in the source.
+        for source_panel, translated in zip(source, source_panels):
+            expected = (
+                len(source_panel["captions"]),
+                len(source_panel["dialogue"]),
+                len(source_panel["soundEffects"]),
+            )
+            actual = (
+                len(translated["captions"]),
+                len(translated["dialogue"]),
+                len(translated["soundEffects"]),
+            )
+            if actual != expected:
+                raise HTTPException(
+                    status_code=422,
+                    detail="The translation changed the number or type of text blocks",
+                )
+            translated["captions"] = translated["captions"][:len(source_panel["captions"])]
+            translated["dialogue"] = translated["dialogue"][:len(source_panel["dialogue"])]
+            translated["soundEffects"] = translated["soundEffects"][:len(source_panel["soundEffects"])]
+            for source_line, translated_line in zip(
+                source_panel["dialogue"],
+                translated["dialogue"],
+            ):
+                translated_line["bubbleType"] = source_line.get("bubbleType", "speech")
+                if source_line.get("speakerId"):
+                    translated_line["speakerId"] = source_line["speakerId"]
+                else:
+                    translated_line.pop("speakerId", None)
+            if not source_panel["captions"]:
+                translated["captions"] = []
+            if not source_panel["dialogue"]:
+                translated["dialogue"] = []
+            if not source_panel["soundEffects"]:
+                translated["soundEffects"] = []
+    else:
+        _enforce_comic_page_text_budget(source_page, dialogue_density)
+    return {"page": source_page}
+
+
+# Comic planning can take several minutes on CPU-hosted Ollama models.  Keep
+# the synchronous endpoint above for API compatibility, but let the WebUI use
+# a background job so it receives an immediate acknowledgement and can show
+# honest server-side state instead of waiting on one opaque HTTP request.
+_comic_plan_jobs: dict[str, dict] = {}
+_comic_plan_jobs_lock = threading.Lock()
+
+
+def _comic_plan_checkpoint_dir() -> str:
+    path = os.path.join(_workspace_dir(), ".comic-plan-checkpoints")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _comic_plan_checkpoint_path(job_id: str) -> str | None:
+    if not re.fullmatch(r"comic-plan-job-[a-f0-9]{12}", job_id or ""):
+        return None
+    return os.path.join(_comic_plan_checkpoint_dir(), f"{job_id}.json")
+
+
+def _persist_comic_plan_job(job: dict) -> None:
+    path = _comic_plan_checkpoint_path(str(job.get("jobId") or ""))
+    if not path:
+        return
+    temp_path = path + ".tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(job, handle, ensure_ascii=False, indent=2)
+        os.replace(temp_path, path)
+    except Exception as exc:
+        print(f"[Comic Director] Could not persist checkpoint {path}: {exc}")
+        try:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+        except OSError:
+            pass
+
+
+def _load_comic_plan_job(job_id: str) -> dict | None:
+    path = _comic_plan_checkpoint_path(job_id)
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            job = json.load(handle)
+        return job if isinstance(job, dict) else None
+    except Exception as exc:
+        print(f"[Comic Director] Could not load checkpoint {path}: {exc}")
+        return None
+
+
+def _comic_plan_job_update(job_id: str, **patch) -> None:
+    snapshot = None
+    with _comic_plan_jobs_lock:
+        job = _comic_plan_jobs.get(job_id)
+        if job is not None:
+            job.update(patch)
+            job["updatedAt"] = time.time()
+            snapshot = copy.deepcopy(job)
+    if snapshot is not None:
+        _persist_comic_plan_job(snapshot)
+
+
+def _run_comic_plan_job(job_id: str, body: dict) -> None:
+    services = wgp.server_config.get("services", {})
+    provider = str(services.get("llm_provider") or "local")
+    model = str(services.get("llm_model_id") or "default")
+    try:
+        print(f"[Comic Director {job_id}] Starting plan with provider={provider}, model={model}")
+        _comic_plan_job_update(
+            job_id,
+            status="loading_llm",
+            message=f"Connecting to {provider} LLM ({model})…",
+            provider=provider,
+            model=model,
+        )
+        _ensure_llm_loaded()
+        _comic_plan_job_update(
+            job_id,
+            status="planning",
+            message="The LLM is writing the page, panel and dialogue plan…",
+        )
+        result = director_comic_plan(body, job_id=job_id)
+        _comic_plan_job_update(
+            job_id,
+            status="completed",
+            message="Comic plan generated and validated.",
+            result=result,
+            finishedAt=time.time(),
+        )
+        print(f"[Comic Director {job_id}] Plan completed")
+    except HTTPException as exc:
+        print(f"[Comic Director {job_id}] Plan failed: {exc.detail}")
+        _comic_plan_job_update(
+            job_id,
+            status="failed",
+            message=str(exc.detail),
+            error=str(exc.detail),
+            finishedAt=time.time(),
+        )
+    except Exception as exc:
+        print(f"[Comic Director {job_id}] Plan failed: {exc}")
+        traceback.print_exc()
+        _comic_plan_job_update(
+            job_id,
+            status="failed",
+            message=f"Comic planning failed: {exc}",
+            error=f"Comic planning failed: {exc}",
+            finishedAt=time.time(),
+        )
+
+
+@api.post("/api/v1/director/comic/plan/start")
+def start_director_comic_plan(body: dict):
+    premise = str(body.get("premise") or "").strip()
+    if not premise:
+        raise HTTPException(status_code=400, detail="Comic premise is required")
+    job_id = f"comic-plan-job-{uuid.uuid4().hex[:12]}"
+    now = time.time()
+    with _comic_plan_jobs_lock:
+        # Bound this process-local status cache. Completed results live in
+        # the browser project after delivery, so old job records are expendable.
+        if len(_comic_plan_jobs) >= 50:
+            oldest = sorted(
+                _comic_plan_jobs,
+                key=lambda key: _comic_plan_jobs[key].get("updatedAt", 0),
+            )[:10]
+            for stale_id in oldest:
+                _comic_plan_jobs.pop(stale_id, None)
+        _comic_plan_jobs[job_id] = {
+            "jobId": job_id,
+            "status": "queued",
+            "message": "Comic Director accepted the request.",
+            "createdAt": now,
+            "updatedAt": now,
+            "request": dict(body),
+        }
+        initial_job = copy.deepcopy(_comic_plan_jobs[job_id])
+    _persist_comic_plan_job(initial_job)
+    threading.Thread(
+        target=_run_comic_plan_job,
+        args=(job_id, dict(body)),
+        name=f"comic-plan-{job_id[-6:]}",
+        daemon=True,
+    ).start()
+    return {"jobId": job_id, "status": "queued", "message": "Comic Director accepted the request."}
+
+
+@api.get("/api/v1/director/comic/plan/status/{job_id}")
+def get_director_comic_plan_status(job_id: str):
+    with _comic_plan_jobs_lock:
+        job = _comic_plan_jobs.get(job_id)
+    if job is None:
+        job = _load_comic_plan_job(job_id)
+        if job is not None:
+            with _comic_plan_jobs_lock:
+                _comic_plan_jobs[job_id] = job
+    if job is None:
+        raise HTTPException(status_code=404, detail="Comic planning job not found")
+    return dict(job)
+
+
+@api.post("/api/v1/director/comic/plan/resume/{job_id}")
+def resume_director_comic_plan(job_id: str):
+    job = get_director_comic_plan_status(job_id)
+    if job.get("status") in ("queued", "loading_llm", "planning", "planning_bible", "planning_page"):
+        return {"jobId": job_id, "status": job["status"], "message": job.get("message", "Already running")}
+    body = job.get("request")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=409, detail="This legacy checkpoint has no saved request and cannot resume planning")
+    _comic_plan_job_update(
+        job_id,
+        status="queued",
+        message="Resuming from the latest durable checkpoint…",
+        error=None,
+        result=None,
+        finishedAt=None,
+    )
+    threading.Thread(
+        target=_run_comic_plan_job,
+        args=(job_id, dict(body)),
+        name=f"comic-plan-resume-{job_id[-6:]}",
+        daemon=True,
+    ).start()
+    return {"jobId": job_id, "status": "queued", "message": "Resuming from the latest durable checkpoint…"}
+
+
+@api.get("/api/v1/director/comic/plan/recent/completed")
+def get_latest_completed_director_comic_plan():
+    """Recover the newest completed plan after a browser-side placement error."""
+    with _comic_plan_jobs_lock:
+        completed = [
+            dict(job)
+            for job in _comic_plan_jobs.values()
+            if job.get("status") == "completed"
+            and isinstance(job.get("result"), dict)
+            and isinstance(job["result"].get("plan"), dict)
+        ]
+    try:
+        for name in os.listdir(_comic_plan_checkpoint_dir()):
+            if not name.endswith(".json"):
+                continue
+            job = _load_comic_plan_job(name[:-5])
+            if (
+                isinstance(job, dict)
+                and job.get("status") == "completed"
+                and isinstance(job.get("result"), dict)
+                and isinstance(job["result"].get("plan"), dict)
+            ):
+                completed.append(job)
+    except OSError:
+        pass
+    if not completed:
+        raise HTTPException(status_code=404, detail="No completed comic plan is available to recover")
+    return max(completed, key=lambda job: job.get("finishedAt") or job.get("updatedAt") or 0)
 
 
 @api.get("/api/v1/outputs")
@@ -11495,6 +12322,228 @@ def get_group_clips(group_id: str):
             continue
     clips.sort(key=lambda c: c["index"])
     return {"group_id": group_id, "clips": clips}
+
+
+# ============================================================================
+# API Routes: lightweight video editor
+# ============================================================================
+
+_video_editor_jobs: dict[str, dict] = {}
+_VIDEO_EDITOR_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"}
+
+
+def _resolve_video_editor_source(source: str) -> str:
+    """Resolve an editor reference without allowing access outside Maestro."""
+    from urllib.parse import unquote
+
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("Video source is missing")
+    decoded = unquote(source.strip())
+    resolved = _resolve_model3d_input_path(decoded)
+    if not resolved or not os.path.isfile(resolved):
+        raise ValueError(f"Video source could not be found: {os.path.basename(decoded)}")
+    if os.path.splitext(resolved)[1].lower() not in _VIDEO_EDITOR_EXTENSIONS:
+        raise ValueError(f"Unsupported video format: {os.path.splitext(resolved)[1] or 'unknown'}")
+    return resolved
+
+
+@api.post("/api/v1/video-editor/probe")
+def probe_video_editor_source(body: dict):
+    """Read duration, dimensions, frame rate and audio presence for one clip."""
+    from services.video_editor import probe_media
+
+    try:
+        resolved = _resolve_video_editor_source(body.get("source", ""))
+        return probe_media(resolved)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not inspect video: {exc}") from exc
+
+
+def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path: str) -> None:
+    from services.video_editor import render_project
+
+    job = _video_editor_jobs[job_id]
+
+    def report(progress: int, message: str) -> None:
+        job["progress"] = max(0, min(progress, 100))
+        job["message"] = message
+        job["updated_at"] = time.time()
+
+    try:
+        job["status"] = "running"
+        report(1, "Validating source clips…")
+        resolved_clips = []
+        for clip in body["clips"]:
+            if not isinstance(clip, dict):
+                raise ValueError("Every timeline entry must be a clip object")
+            resolved = dict(clip)
+            resolved["resolved_path"] = _resolve_video_editor_source(str(clip.get("source") or ""))
+            resolved_clips.append(resolved)
+
+        result = render_project(
+            resolved_clips,
+            output_path,
+            width=int(body["width"]),
+            height=int(body["height"]),
+            fps=int(body["fps"]),
+            progress=report,
+        )
+
+        output_name = os.path.basename(output_path)
+        sidecar = {
+            "params": {
+                "video_editor": {
+                    "version": 1,
+                    "width": int(body["width"]),
+                    "height": int(body["height"]),
+                    "fps": int(body["fps"]),
+                    "clips": [
+                        {
+                            key: value
+                            for key, value in clip.items()
+                            if key in {
+                                "name",
+                                "source",
+                                "trim_start",
+                                "trim_end",
+                                "volume",
+                                "muted",
+                                "fit",
+                                "transition",
+                                "transition_duration",
+                            }
+                        }
+                        for clip in body["clips"]
+                    ],
+                },
+                "source": "video_editor",
+            },
+            "generation_mode": "video",
+            "job_id": job_id,
+            "created_at": time.time(),
+        }
+        meta_path = os.path.join(out_dir, os.path.splitext(output_name)[0] + ".meta.json")
+        with open(meta_path, "w", encoding="utf-8") as handle:
+            json.dump(sidecar, handle, indent=2, ensure_ascii=False)
+
+        job.update(
+            {
+                "status": "completed",
+                "progress": 100,
+                "message": "Video export complete",
+                "filename": output_name,
+                "url": f"/api/v1/file/{output_name}",
+                "result": result,
+                "updated_at": time.time(),
+            }
+        )
+    except Exception as exc:
+        traceback.print_exc()
+        try:
+            if os.path.isfile(output_path):
+                os.remove(output_path)
+        except OSError:
+            pass
+        job.update(
+            {
+                "status": "failed",
+                "error": str(exc),
+                "message": f"Export failed: {exc}",
+                "updated_at": time.time(),
+            }
+        )
+
+
+@api.post("/api/v1/video-editor/export")
+def start_video_editor_export(body: dict):
+    """Queue a non-blocking FFmpeg export for uploaded and/or Maestro clips."""
+    clips = body.get("clips")
+    if not isinstance(clips, list) or not clips:
+        raise HTTPException(status_code=400, detail="Add at least one video clip")
+    if len(clips) > 100:
+        raise HTTPException(status_code=400, detail="A project can contain at most 100 clips")
+
+    try:
+        width = int(body.get("width") or 1280)
+        height = int(body.get("height") or 720)
+        fps = int(body.get("fps") or 30)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid export settings") from exc
+    if width < 240 or height < 240 or width > 3840 or height > 3840 or width % 2 or height % 2:
+        raise HTTPException(status_code=400, detail="Invalid output resolution")
+    if fps not in (24, 25, 30, 50, 60):
+        raise HTTPException(status_code=400, detail="Unsupported frame rate")
+
+    supported_transitions = {
+        "none",
+        "crossfade",
+        "fade-black",
+        "wipe-left",
+        "slide-left",
+        "slide-right",
+        "circle-open",
+        "dissolve",
+        "pixelize",
+        "blur",
+        "zoom-in",
+    }
+    for index, clip in enumerate(clips):
+        if not isinstance(clip, dict):
+            raise HTTPException(status_code=400, detail=f"Clip {index + 1} is invalid")
+        transition = str(clip.get("transition") or "none")
+        if transition not in supported_transitions:
+            raise HTTPException(status_code=400, detail=f"Clip {index + 1} has an unsupported transition")
+        try:
+            transition_duration = float(clip.get("transition_duration") or 0.4)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"Clip {index + 1} has an invalid transition duration") from exc
+        if transition_duration < 0.05 or transition_duration > 5:
+            raise HTTPException(status_code=400, detail="Transition duration must be between 0.05 and 5 seconds")
+
+    safe_project_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("name") or "edited_video")).strip("_")
+    safe_project_name = safe_project_name[:60] or "edited_video"
+    timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+    out_dir = _workspace_dir()
+    os.makedirs(out_dir, exist_ok=True)
+    output_name = f"{timestamp}_{safe_project_name}.mp4"
+    output_path = os.path.join(out_dir, output_name)
+    suffix = 2
+    while os.path.exists(output_path):
+        output_name = f"{timestamp}_{safe_project_name}_{suffix}.mp4"
+        output_path = os.path.join(out_dir, output_name)
+        suffix += 1
+
+    clean_body = dict(body)
+    clean_body.update({"width": width, "height": height, "fps": fps})
+    job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
+    _video_editor_jobs[job_id] = {
+        "job_id": job_id,
+        "status": "queued",
+        "progress": 0,
+        "message": "Waiting to export…",
+        "filename": None,
+        "url": None,
+        "error": None,
+        "created_at": time.time(),
+        "updated_at": time.time(),
+    }
+    threading.Thread(
+        target=_run_video_editor_export,
+        args=(job_id, clean_body, out_dir, output_path),
+        daemon=True,
+        name=f"maestro-{job_id}",
+    ).start()
+    return {"job_id": job_id}
+
+
+@api.get("/api/v1/video-editor/export/{job_id}")
+def get_video_editor_export(job_id: str):
+    job = _video_editor_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Video editor export job not found")
+    return job
 
 
 @api.post("/api/v1/outputs/{name:path}/move")

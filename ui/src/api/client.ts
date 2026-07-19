@@ -370,6 +370,89 @@ export async function rejoinClips(groupId: string, audioFile?: string): Promise<
   return res.json()
 }
 
+export interface VideoEditorProbe {
+  duration: number
+  width: number
+  height: number
+  fps: number
+  has_audio: boolean
+  pixel_format: string
+  has_alpha: boolean
+}
+
+export interface VideoEditorExportJob {
+  job_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  progress: number
+  message: string
+  filename: string | null
+  url: string | null
+  error: string | null
+  result?: { duration: number; clip_count: number }
+}
+
+export async function probeVideoEditorClip(source: string): Promise<VideoEditorProbe> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/probe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not inspect video' }))
+    throw new Error(error.detail || 'Could not inspect video')
+  }
+  return res.json()
+}
+
+export async function startVideoEditorExport(payload: {
+  name: string
+  width: number
+  height: number
+  fps: number
+  clips: Array<{
+    name: string
+    source: string
+    trim_start: number
+    trim_end: number
+    volume: number
+    muted: boolean
+    fit: 'fit' | 'fill'
+    transition:
+      | 'none'
+      | 'crossfade'
+      | 'fade-black'
+      | 'wipe-left'
+      | 'slide-left'
+      | 'slide-right'
+      | 'circle-open'
+      | 'dissolve'
+      | 'pixelize'
+      | 'blur'
+      | 'zoom-in'
+    transition_duration: number
+  }>
+}): Promise<{ job_id: string }> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not start export' }))
+    throw new Error(error.detail || 'Could not start export')
+  }
+  return res.json()
+}
+
+export async function fetchVideoEditorExport(jobId: string): Promise<VideoEditorExportJob> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/export/${encodeURIComponent(jobId)}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not read export status' }))
+    throw new Error(error.detail || 'Could not read export status')
+  }
+  return res.json()
+}
+
 export async function fetchGroupClips(groupId: string): Promise<{ group_id: string; clips: Array<{ filename: string; index: number; total: number; prompt: string }> }> {
   const res = await fetch(`${BASE}/api/v1/outputs/group/${encodeURIComponent(groupId)}`)
   if (!res.ok) throw new Error('Failed to fetch group clips')
@@ -976,19 +1059,170 @@ export async function generateComicWithMiniMax(params: {
   return res.json()
 }
 
-export async function planComic(params: import('../features/comics/types').ComicDirectorRequest): Promise<{
-  plan: import('../features/comics/types').ComicPlan
+export type ComicPlanProgress = {
+  jobId?: string
+  status: 'queued' | 'loading_llm' | 'planning' | 'planning_bible' | 'planning_page' | 'completed' | 'failed'
+  message: string
+  provider?: string
+  model?: string
+  createdAt?: number
+  current?: number
+  total?: number
+  stage?: 'bible' | 'page'
+  page?: number
+}
+
+export async function planComic(
+  params: import('../features/comics/types').ComicDirectorRequest,
+  onProgress?: (progress: ComicPlanProgress) => void,
+  signal?: AbortSignal,
+): Promise<{ plan: import('../features/comics/types').ComicPlan }> {
+  const start = await fetch(`${BASE}/api/v1/director/comic/plan/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+    signal,
+  })
+  if (!start.ok) {
+    const err = await start.json().catch(() => ({ detail: 'Comic planning failed to start' }))
+    throw new Error(err.detail || 'Comic planning failed')
+  }
+  const accepted = await start.json() as ComicPlanProgress & { jobId: string }
+  try {
+    window.localStorage.setItem('maestro-last-comic-plan-job', accepted.jobId)
+  } catch {
+    // Recovery still works by manually entering the job ID.
+  }
+  onProgress?.(accepted)
+  for (;;) {
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        window.clearTimeout(timer)
+        reject(new DOMException('Comic planning cancelled', 'AbortError'))
+      }
+      const timer = window.setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort)
+        resolve()
+      }, 1000)
+      signal?.addEventListener('abort', onAbort, { once: true })
+    })
+    const response = await fetch(
+      `${BASE}/api/v1/director/comic/plan/status/${encodeURIComponent(accepted.jobId)}`,
+      { signal },
+    )
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: 'Could not read comic planning status' }))
+      throw new Error(err.detail || 'Could not read comic planning status')
+    }
+    const status = await response.json() as ComicPlanProgress & {
+      error?: string
+      result?: { plan: import('../features/comics/types').ComicPlan }
+    }
+    onProgress?.(status)
+    if (status.status === 'failed') throw new Error(status.error || status.message)
+    if (status.status === 'completed') {
+      if (!status.result?.plan) throw new Error('Comic Director completed without a plan')
+      try {
+        window.localStorage.setItem('maestro-last-comic-plan-result', JSON.stringify({
+          jobId: accepted.jobId,
+          plan: status.result.plan,
+        }))
+      } catch {
+        // The server job remains recoverable while Maestro is running.
+      }
+      return status.result
+    }
+  }
+}
+
+export async function fetchComicPlanJob(jobId: string): Promise<{
+  jobId: string
+  status: ComicPlanProgress['status']
+  message: string
+  error?: string
+  result?: { plan: import('../features/comics/types').ComicPlan }
 }> {
-  const res = await fetch(`${BASE}/api/v1/director/comic/plan`, {
+  const response = await fetch(
+    `${BASE}/api/v1/director/comic/plan/status/${encodeURIComponent(jobId)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Comic planning job not found' }))
+    throw new Error(error.detail || 'Comic planning job not found')
+  }
+  return response.json()
+}
+
+export async function resumeComicPlanJob(jobId: string): Promise<{
+  jobId: string
+  status: ComicPlanProgress['status']
+  message: string
+}> {
+  const response = await fetch(
+    `${BASE}/api/v1/director/comic/plan/resume/${encodeURIComponent(jobId)}`,
+    { method: 'POST' },
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not resume comic planning' }))
+    throw new Error(error.detail || 'Could not resume comic planning')
+  }
+  return response.json()
+}
+
+export async function waitForComicPlanJob(
+  jobId: string,
+  onProgress?: (progress: ComicPlanProgress) => void,
+): Promise<{ plan: import('../features/comics/types').ComicPlan }> {
+  for (;;) {
+    await new Promise(resolve => window.setTimeout(resolve, 1000))
+    const job = await fetchComicPlanJob(jobId)
+    onProgress?.(job)
+    if (job.status === 'failed') throw new Error(job.error || job.message)
+    if (job.status === 'completed') {
+      if (!job.result?.plan) throw new Error('Comic Director completed without a plan')
+      try {
+        window.localStorage.setItem('maestro-last-comic-plan-result', JSON.stringify({
+          jobId,
+          plan: job.result.plan,
+        }))
+      } catch {
+        // The durable server checkpoint remains available.
+      }
+      return job.result
+    }
+  }
+}
+
+export async function fetchLatestCompletedComicPlan(): Promise<{
+  jobId: string
+  result: { plan: import('../features/comics/types').ComicPlan }
+  finishedAt?: number
+}> {
+  const response = await fetch(`${BASE}/api/v1/director/comic/plan/recent/completed`)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'No completed comic plan is available' }))
+    throw new Error(error.detail || 'No completed comic plan is available')
+  }
+  return response.json()
+}
+
+export async function rewriteComicTextPage(params: {
+  plan: import('../features/comics/types').ComicPlan
+  pageIndex: number
+  mode: 'rewrite' | 'translate'
+  instruction?: string
+  targetLanguage?: string
+  dialogueDensity: import('../features/comics/types').ComicDirectorRequest['dialogueDensity']
+}): Promise<{ page: import('../features/comics/types').ComicPlanPage }> {
+  const response = await fetch(`${BASE}/api/v1/director/comic/text/page`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Comic planning failed' }))
-    throw new Error(err.detail || 'Comic planning failed')
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Comic text operation failed' }))
+    throw new Error(error.detail || 'Comic text operation failed')
   }
-  return res.json()
+  return response.json()
 }
 
 // --- System Config ---
@@ -1322,9 +1556,12 @@ export async function fetchLlmModels(): Promise<{ models: import('../types').Llm
 }
 
 export async function testLlmConnection(): Promise<{ ok: boolean; response: string; status: import('../types').LlmStatus }> {
-  const res = await fetch(`${BASE}/api/v1/llm/test`, {
-    method: 'POST',
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE}/api/v1/llm/test`, { method: 'POST' })
+  } catch {
+    throw new Error('Maestro backend is unreachable. Reopen the current WebUI from Pinokio and try again')
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'LLM test failed' }))
     throw new Error(err.detail || 'LLM test failed')
