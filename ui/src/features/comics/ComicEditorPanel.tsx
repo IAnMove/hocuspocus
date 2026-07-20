@@ -426,14 +426,19 @@ function InspectorPanel() {
   const addElement = useComicStore(state => state.addElement)
   const page = project.pages.find(item => item.id === pageId)
   const element = page?.elements.find(item => item.id === selectedId)
+  const parentPanel = element?.parentId
+    ? page?.elements.find(
+      (item): item is ComicPanelElement =>
+        item.id === element.parentId && item.type === 'panel',
+    )
+    : undefined
   const patch = (next: Partial<ComicElement>) => element && update(pageId, element.id, next, true)
   const detachFromPanel = () => {
     if (!page || !element?.parentId) return
-    const parent = page.elements.find(item => item.id === element.parentId && item.type === 'panel')
     update(pageId, element.id, {
       parentId: null,
-      x: element.x + (parent?.x ?? 0),
-      y: element.y + (parent?.y ?? 0),
+      x: element.x + (parentPanel?.x ?? 0),
+      y: element.y + (parentPanel?.y ?? 0),
     }, true)
   }
 
@@ -567,6 +572,64 @@ function InspectorPanel() {
           )}
           {element.type === 'image' && (
             <div className="space-y-2">
+              {parentPanel && (
+                <div className="space-y-2 rounded-lg border border-accent-blue/30 bg-accent-blue/5 p-2">
+                  <p className="text-[9px] leading-relaxed text-text-muted">
+                    Drag the image to reframe it. Hold Shift for fine movement or Ctrl-wheel over
+                    the selected image to zoom.
+                  </p>
+                  <Field label={`Crop zoom · ${Math.round(Math.max(
+                    element.width / parentPanel.width,
+                    element.height / parentPanel.height,
+                  ) * 100)}%`}>
+                    <input
+                      className={input}
+                      type="range"
+                      min={1}
+                      max={3}
+                      step={.02}
+                      value={Math.max(1, Math.min(3, Math.max(
+                        element.width / parentPanel.width,
+                        element.height / parentPanel.height,
+                      )))}
+                      onChange={event => {
+                        const scale = Number(event.target.value)
+                        const width = parentPanel.width * scale
+                        const height = parentPanel.height * scale
+                        patch({
+                          width,
+                          height,
+                          x: element.x + (element.width - width) / 2,
+                          y: element.y + (element.height - height) / 2,
+                        })
+                      }}
+                    />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-1">
+                    <button
+                      className={button}
+                      onClick={() => patch({
+                        x: (parentPanel.width - element.width) / 2,
+                        y: (parentPanel.height - element.height) / 2,
+                      })}
+                    >
+                      Center crop
+                    </button>
+                    <button
+                      className={button}
+                      onClick={() => patch({
+                        x: 0,
+                        y: 0,
+                        width: parentPanel.width,
+                        height: parentPanel.height,
+                        objectFit: 'cover',
+                      })}
+                    >
+                      Reset crop
+                    </button>
+                  </div>
+                </div>
+              )}
               <Field label="Fit"><select className={input} value={element.objectFit} onChange={event => patch({ objectFit: event.target.value as ComicImageElement['objectFit'] })}><option value="cover">Fill panel</option><option value="contain">Show entire image</option></select></Field>
               <Field label="Filter"><select className={input} value={element.filter} onChange={event => patch({ filter: event.target.value as ComicImageElement['filter'] })}><option value="none">None</option><option value="bw">Black & white</option><option value="sepia">Sepia</option><option value="contrast">Comic contrast</option><option value="posterize">Posterize</option><option value="halftone">Halftone</option></select></Field>
               <Field label="Opacity"><input className={input} type="range" min={0} max={1} step={.05} value={element.opacity ?? 1} onChange={event => patch({ opacity: Number(event.target.value) })} /></Field>
@@ -975,11 +1038,15 @@ export function ComicDirectorPanel({
     })
   }
 
-  const transformTextPlan = async (mode: 'rewrite' | 'translate'): Promise<ComicPlan> => {
+  const transformTextPlan = async (
+    mode: 'rewrite' | 'translate',
+    languageOverride?: string,
+  ): Promise<ComicPlan> => {
     const current = useComicStore.getState().project
     const captured = planWithCanvasText(current)
     if (!captured) throw new Error('This comic does not have an editable Director plan')
     const working = structuredClone(captured)
+    const translationLanguage = (languageOverride ?? targetLanguage).trim()
     for (let pageIndex = 0; pageIndex < working.pages.length; pageIndex += 1) {
       report(`${mode === 'translate' ? 'Translating' : 'Rewriting'} page ${pageIndex + 1} of ${working.pages.length}…`, {
         current: pageIndex + 1,
@@ -990,33 +1057,37 @@ export function ComicDirectorPanel({
         pageIndex,
         mode,
         instruction: textInstruction,
-        targetLanguage,
+        targetLanguage: translationLanguage,
         dialogueDensity: current.director!.input.dialogueDensity,
       })
       working.pages[pageIndex] = result.page
     }
-    if (mode === 'translate') working.language = targetLanguage.trim()
+    if (mode === 'translate') working.language = translationLanguage
     return normalizeComicPlan(working, current.director!.input.dialogueDensity)
   }
 
-  const applyTextOperation = async (mode: 'rewrite' | 'translate') => {
-    if (mode === 'translate' && !targetLanguage.trim()) return
+  const applyTextOperation = async (
+    mode: 'rewrite' | 'translate',
+    languageOverride?: string,
+  ) => {
+    const translationLanguage = (languageOverride ?? targetLanguage).trim()
+    if (mode === 'translate' && !translationLanguage) return
     setBusy(mode === 'translate' ? 'translation' : 'text')
     try {
       const state = useComicStore.getState()
-      const plan = await transformTextPlan(mode)
+      const plan = await transformTextPlan(mode, translationLanguage)
       const translated = mode === 'translate'
       const next = simplifyDirectorText({
         ...state.project,
-        language: translated ? targetLanguage.trim() : state.project.language,
+        language: translated ? translationLanguage : state.project.language,
         director: { ...state.project.director!, plan },
       })
       state.patchProject(next)
-      report(`${translated ? `Translation to ${targetLanguage.trim()}` : 'Text rewrite'} applied without changing artwork.`, {
+      report(`${translated ? `Translation to ${translationLanguage}` : 'Text rewrite'} applied without changing artwork.`, {
         state: 'complete',
       })
       notify({ kind: 'ok', text: translated
-        ? `Comic text translated to ${targetLanguage.trim()} and left editable.`
+        ? `Comic text repaired in ${translationLanguage} and left editable.`
         : 'Comic text rewritten without regenerating images.' })
     } catch (error) {
       report((error as Error).message, { state: 'error' })
@@ -1529,6 +1600,17 @@ export function ComicDirectorPanel({
               The LLM changes only captions, dialogue and effects. Images and visual prompts are untouched.
               Manual text edits below are used as the source of truth.
             </p>
+            <button
+              className={`${button} w-full border-amber-500/50 text-amber-300`}
+              disabled={busy !== null}
+              onClick={() => applyTextOperation(
+                'translate',
+                project.language || project.director?.plan.language || project.director?.input.language,
+              )}
+            >
+              {busy === 'translation' ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
+              Fix mixed-language lines · {project.language || project.director?.plan.language || project.director?.input.language}
+            </button>
             <textarea
               className={input}
               rows={2}

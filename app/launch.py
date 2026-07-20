@@ -11119,6 +11119,39 @@ def _enforce_comic_page_text_budget(page: dict, dialogue_density: str) -> None:
             panel["soundEffects"] = []
 
 
+_COMIC_ENGLISH_DRIFT_WORDS = {
+    "the", "this", "that", "these", "those", "is", "are", "was", "were",
+    "be", "been", "being", "and", "but", "with", "without", "from", "into",
+    "nothing", "everything", "silence", "absolute", "measurement", "truth",
+    "lie", "void", "world", "future", "power", "freedom", "insignificant",
+    "we", "you", "your", "our", "they", "their", "not", "never", "always",
+}
+
+
+def _comic_page_has_probable_english_drift(page: dict, target_language: str) -> bool:
+    language = str(target_language or "").strip().lower()
+    if not language or language in {"english", "ingles", "inglés", "en", "en-us", "en-gb"}:
+        return False
+    hits = 0
+    suspicious_lines = 0
+    for panel in page.get("panels") or []:
+        if not isinstance(panel, dict):
+            continue
+        reader_lines = [str(value) for value in (panel.get("captions") or [])]
+        reader_lines.extend(
+            str(item.get("text") or "")
+            for item in (panel.get("dialogue") or [])
+            if isinstance(item, dict)
+        )
+        for line in reader_lines:
+            words = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ']+", line.lower())
+            line_hits = sum(word in _COMIC_ENGLISH_DRIFT_WORDS for word in words)
+            hits += line_hits
+            if line_hits >= 2:
+                suspicious_lines += 1
+    return suspicious_lines > 0 or hits >= 4
+
+
 def _comic_page_summary(page) -> str:
     if not isinstance(page, dict):
         return ""
@@ -11213,13 +11246,14 @@ def director_comic_plan(body: dict, job_id: str | None = None):
         raise HTTPException(status_code=400, detail="Comic premise is required")
     characters = body.get("characters") if isinstance(body.get("characters"), list) else []
     dialogue_density = str(body.get("dialogueDensity") or "medium").lower()
+    requested_language = str(body.get("language") or "English").strip()
     manual_art_style = str(body.get("artStyle") or "").strip()
     manual_world_context = str(body.get("worldContext") or "").strip()
     manual_forbidden = str(body.get("forbiddenElements") or "").strip()
     shared_brief = f"""Premise: {premise}
 Exact page count: {page_count}
 Exactly {panels_per_page} panels per page.
-Language for ALL reader-facing dialogue/captions: {body.get('language', 'English')}
+Language for ALL reader-facing dialogue/captions: {requested_language}
 Genre: {body.get('genre', 'Adventure')}
 Tone: {body.get('tone', 'Cinematic')}
 Audience: {body.get('audience', 'General')}
@@ -11306,6 +11340,17 @@ with generic advice or invented restrictions merely because the field exists."""
             per_panel_text_limit = 1 if panels_per_page >= 7 else 2
             existing_page = planned_pages[page_index] if page_index < len(planned_pages) else None
             existing_problem = _comic_page_problem(existing_page, panels_per_page)
+            if (
+                existing_page is not None
+                and existing_problem is None
+                and _comic_page_has_probable_english_drift(
+                    existing_page,
+                    requested_language,
+                )
+            ):
+                existing_problem = (
+                    f"some reader-facing lines are not written in {requested_language}"
+                )
             if existing_page is not None and existing_problem is None:
                 continue
             previous_page = planned_pages[page_index - 1] if page_index > 0 else None
@@ -11373,6 +11418,9 @@ silent. Silence is intentional visual storytelling. Prefer caption and dialogue;
 sound effect only when the panel's total budget permits it.
 Never repeat or paraphrase the same line in multiple fields. Complete all
 {panels_per_page} panels before adding detail to any one panel.
+CRITICAL LANGUAGE LOCK: before returning JSON, scan every caption and dialogue line and
+ensure it is written in {requested_language}. Do not fall back to English unless the requested
+language itself is English. Keep only proper names unchanged.
 {f"A previous attempt was rejected because {page_problem}. Return a complete corrected page." if page_problem else ""}
 Dialogue may be omitted whenever silent storytelling is stronger.""",
                     system_prompt=system_prompt,
@@ -11381,6 +11429,39 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
                     stage=f"page {page_number}, attempt {attempt}",
                 )
                 page_problem = _comic_page_problem(page, panels_per_page)
+                if (
+                    page_problem is None
+                    and _comic_page_has_probable_english_drift(
+                        page,
+                        requested_language,
+                    )
+                ):
+                    if job_id:
+                        _comic_plan_job_update(
+                            job_id,
+                            status="planning_page",
+                            message=(
+                                f"Correcting page {page_number} lettering to "
+                                f"{requested_language}…"
+                            ),
+                            current=page_index,
+                            total=page_count,
+                            stage="page",
+                            page=page_number,
+                        )
+                    page = _repair_comic_page_language(
+                        page,
+                        requested_language,
+                        page_number,
+                    )
+                    if _comic_page_has_probable_english_drift(
+                        page,
+                        requested_language,
+                    ):
+                        page_problem = (
+                            f"some reader-facing lines are not written in "
+                            f"{requested_language}"
+                        )
                 if page_problem is None:
                     break
                 if job_id:
@@ -11567,6 +11648,90 @@ _COMIC_TEXT_PAGE_SCHEMA = {
 }
 
 
+def _repair_comic_page_language(
+    page: dict,
+    target_language: str,
+    page_number: int,
+) -> dict:
+    source_panels = []
+    for panel in page.get("panels") or []:
+        if not isinstance(panel, dict):
+            continue
+        source_panels.append({
+            "id": str(panel.get("id") or ""),
+            "captions": [str(value) for value in (panel.get("captions") or [])],
+            "soundEffects": [str(value) for value in (panel.get("soundEffects") or [])],
+            "dialogue": [
+                {
+                    "text": str(item.get("text") or ""),
+                    "bubbleType": str(item.get("bubbleType") or "speech"),
+                    **(
+                        {"speakerId": str(item.get("speakerId"))}
+                        if item.get("speakerId")
+                        else {}
+                    ),
+                }
+                for item in (panel.get("dialogue") or [])
+                if isinstance(item, dict)
+            ],
+        })
+    schema = copy.deepcopy(_COMIC_TEXT_PAGE_SCHEMA)
+    schema["properties"]["panels"]["minItems"] = len(source_panels)
+    schema["properties"]["panels"]["maxItems"] = len(source_panels)
+    generated = _generate_comic_director_json(
+        prompt=f"""Repair the reader-facing language of comic page {page_number}.
+TARGET LANGUAGE: {target_language}
+
+Translate every caption and dialogue line that is not in {target_language}.
+If a line is already in {target_language}, copy it exactly, character for character.
+Keep proper names unchanged. Copy sound effects exactly without translating them.
+Return the exact same panel IDs, order, array lengths, bubble types and speaker IDs.
+Never add or remove a line.
+
+Source page text: {json.dumps({"panels": source_panels}, ensure_ascii=False)}""",
+        system_prompt=(
+            "You are Maestro's meticulous comic letterer and translator. "
+            "Return only the strict JSON requested by the schema."
+        ),
+        schema=schema,
+        max_new_tokens=min(2600, max(900, len(source_panels) * 260)),
+        stage=f"language repair for page {page_number}",
+    )
+    candidate_panels = generated.get("panels")
+    if not isinstance(candidate_panels, list) or len(candidate_panels) != len(source_panels):
+        raise RuntimeError("Language repair changed the panel count")
+
+    merged = copy.deepcopy(page)
+    for index, (source, candidate) in enumerate(zip(source_panels, candidate_panels)):
+        if not isinstance(candidate, dict) or str(candidate.get("id") or "") != source["id"]:
+            raise RuntimeError("Language repair changed a panel ID")
+        candidate_captions = candidate.get("captions")
+        candidate_dialogue = candidate.get("dialogue")
+        candidate_effects = candidate.get("soundEffects")
+        if not all(isinstance(value, list) for value in (
+            candidate_captions,
+            candidate_dialogue,
+            candidate_effects,
+        )):
+            raise RuntimeError("Language repair returned invalid lettering")
+        if (
+            len(candidate_captions) != len(source["captions"])
+            or len(candidate_dialogue) != len(source["dialogue"])
+            or len(candidate_effects) != len(source["soundEffects"])
+        ):
+            raise RuntimeError("Language repair changed the lettering structure")
+        merged_panel = merged["panels"][index]
+        merged_panel["captions"] = [str(value) for value in candidate_captions]
+        for line_index, candidate_line in enumerate(candidate_dialogue):
+            if not isinstance(candidate_line, dict):
+                raise RuntimeError("Language repair returned invalid dialogue")
+            merged_panel["dialogue"][line_index]["text"] = str(
+                candidate_line.get("text") or ""
+            )
+        merged_panel["soundEffects"] = source["soundEffects"]
+    return merged
+
+
 @api.post("/api/v1/director/comic/text/page")
 def director_comic_text_page(body: dict):
     """Rewrite or translate one page's lettering without touching artwork or visual prompts."""
@@ -11607,7 +11772,8 @@ def director_comic_text_page(body: dict):
     if mode == "translate":
         task = f"""Translate every existing reader-facing text faithfully into {target_language}.
 Preserve which panels are silent, the number and type of text blocks, speaker IDs, meaning,
-tone, names and sound-effect intent. Do not add, remove, summarize or rewrite story content."""
+tone, names and sound-effect intent. If a line is already in {target_language}, copy it
+exactly, character for character. Do not add, remove, summarize or rewrite story content."""
     else:
         task = f"""Rewrite the page's lettering according to this editorial instruction:
 {instruction or "Make the text concise, natural and dramatically effective."}

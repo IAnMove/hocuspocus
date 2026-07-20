@@ -163,9 +163,13 @@ function ElementFrame({
   const move = (event: ReactPointerEvent) => {
     const current = drag.current
     if (!current || current.pointerId !== event.pointerId) return
-    const dx = (event.clientX - current.startX) / zoom
-    const dy = (event.clientY - current.startY) / zoom
-    const snap = (value: number) => snapEnabled ? Math.round(value / 10) * 10 : value
+    const precision = event.shiftKey ? 0.2 : 1
+    const dx = ((event.clientX - current.startX) / zoom) * precision
+    const dy = ((event.clientY - current.startY) / zoom) * precision
+    const snap = (value: number) =>
+      snapEnabled && !event.shiftKey && !element.parentId
+        ? Math.round(value / 10) * 10
+        : value
     if (current.mode === 'move') {
       update(pageId, element.id, { x: snap(current.x + dx), y: snap(current.y + dy) })
     } else if (current.mode !== 'rotate') {
@@ -208,7 +212,11 @@ function ElementFrame({
     if (!drag.current || drag.current.pointerId !== event.pointerId) return
     const { snapshot, mode } = drag.current
     drag.current = null
-    if (mode === 'move' && (element.type === 'image' || element.type === 'text')) {
+    if (
+      mode === 'move'
+      && !element.parentId
+      && (element.type === 'image' || element.type === 'text')
+    ) {
       useComicStore.getState().reparentElement(pageId, element.id)
     }
     useComicStore.getState().commitSnapshot(snapshot)
@@ -239,7 +247,10 @@ function ElementFrame({
     <div
       ref={frame}
       data-comic-element={element.id}
-      className={`absolute touch-none ${selected ? 'ring-2 ring-accent-blue ring-offset-1 ring-offset-transparent' : ''}`}
+      className={`absolute touch-none ${element.locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'ring-2 ring-accent-blue ring-offset-1 ring-offset-transparent' : ''}`}
+      title={element.type === 'image' && element.parentId
+        ? 'Drag to reposition inside the panel · Shift-drag for precision · Ctrl-wheel to zoom'
+        : undefined}
       style={{
         left: element.x,
         top: element.y,
