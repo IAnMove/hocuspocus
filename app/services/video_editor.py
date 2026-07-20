@@ -92,6 +92,42 @@ def probe_media(path: str) -> dict[str, Any]:
     }
 
 
+def extract_frame(
+    source: str,
+    destination: str,
+    time_seconds: float,
+) -> dict[str, Any]:
+    """Extract one accurately-seeked native-resolution PNG from a video."""
+    media = probe_media(source)
+    fps = max(float(media.get("fps") or 0), 1.0)
+    duration = float(media["duration"])
+    timestamp = max(0.0, min(float(time_seconds), duration - (1.0 / fps)))
+    _run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            source,
+            "-ss",
+            f"{timestamp:.6f}",
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-c:v",
+            "png",
+            destination,
+        ],
+        timeout=120,
+        label=f"Capturing {os.path.basename(source)} at {timestamp:.3f}s",
+    )
+    return {
+        "time": round(timestamp, 6),
+        "width": int(media["width"]),
+        "height": int(media["height"]),
+    }
+
+
 def _video_filter(width: int, height: int, fps: int, fit: str) -> str:
     if fit == "fill":
         sizing = (

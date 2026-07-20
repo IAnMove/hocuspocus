@@ -404,6 +404,31 @@ export async function probeVideoEditorClip(source: string): Promise<VideoEditorP
   return res.json()
 }
 
+export interface VideoEditorScreenshot {
+  filename: string
+  url: string
+  time: number
+  width: number
+  height: number
+}
+
+export async function captureVideoEditorFrame(payload: {
+  source: string
+  time: number
+  name: string
+}): Promise<VideoEditorScreenshot> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/screenshot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not capture video frame' }))
+    throw new Error(error.detail || 'Could not capture video frame')
+  }
+  return res.json()
+}
+
 export async function startVideoEditorExport(payload: {
   name: string
   width: number

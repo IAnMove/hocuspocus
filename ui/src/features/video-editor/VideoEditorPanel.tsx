@@ -1,6 +1,7 @@
 import {
   ArrowDown,
   ArrowUp,
+  Camera,
   Check,
   ChevronsRight,
   Copy,
@@ -181,6 +182,8 @@ export function VideoEditorPanel() {
   const [pickerLoading, setPickerLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(null)
+  const [capturingFrame, setCapturingFrame] = useState(false)
+  const [capturedFrame, setCapturedFrame] = useState<api.VideoEditorScreenshot | null>(null)
 
   const selected = clips.find(clip => clip.id === selectedId) || clips[0] || null
   const selectedIndex = selected ? clips.findIndex(clip => clip.id === selected.id) : -1
@@ -708,6 +711,35 @@ export function VideoEditorPanel() {
     }
   }
 
+  const takeScreenshot = async () => {
+    let clip = selected
+    let sourceTime = videoRef.current?.currentTime ?? previewTime
+    if (sequenceMode) {
+      const runtime = sequenceRuntimeRef.current
+      clip = clips[runtime.clipIndex] || null
+      sourceTime = sequenceRefs.current[runtime.activeSlot]?.currentTime
+        ?? clip?.trimStart
+        ?? 0
+    }
+    if (!clip || capturingFrame) return
+    setCapturingFrame(true)
+    setCapturedFrame(null)
+    setError(null)
+    try {
+      const result = await api.captureVideoEditorFrame({
+        source: clip.source,
+        time: sourceTime,
+        name: projectName,
+      })
+      setCapturedFrame(result)
+      await refreshOutputs()
+    } catch (reason) {
+      setError((reason as Error).message)
+    } finally {
+      setCapturingFrame(false)
+    }
+  }
+
   return (
     <div
       className="h-full min-h-[620px] flex flex-col bg-bg-secondary border border-border rounded-xl overflow-hidden"
@@ -887,7 +919,25 @@ export function VideoEditorPanel() {
               >
                 <Scissors size={11} /> Split
               </button>
+              <button
+                onClick={takeScreenshot}
+                disabled={!selected || capturingFrame}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-hover disabled:opacity-40"
+                title="Save the exact current source frame as a reusable PNG in Maestro Outputs"
+              >
+                {capturingFrame
+                  ? <Loader2 size={11} className="animate-spin" />
+                  : <Camera size={11} />}
+                Take screenshot
+              </button>
             </div>
+            {capturedFrame && (
+              <div className="mt-1.5 flex items-center gap-2 text-[10px] text-emerald-400">
+                <Check size={11} />
+                Saved {capturedFrame.filename} at {formatTime(capturedFrame.time)}
+                · {capturedFrame.width}×{capturedFrame.height}
+              </div>
+            )}
           </div>
         </section>
 

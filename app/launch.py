@@ -12527,6 +12527,74 @@ def probe_video_editor_source(body: dict):
         raise HTTPException(status_code=500, detail=f"Could not inspect video: {exc}") from exc
 
 
+@api.post("/api/v1/video-editor/screenshot")
+def capture_video_editor_frame(body: dict):
+    """Save the current source-video frame as a reusable Maestro image output."""
+    from services.video_editor import extract_frame
+
+    try:
+        resolved = _resolve_video_editor_source(body.get("source", ""))
+        requested_time = float(body.get("time") or 0)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    safe_name = re.sub(
+        r"[^A-Za-z0-9_-]+",
+        "_",
+        str(body.get("name") or "video_frame"),
+    ).strip("_")
+    safe_name = safe_name[:60] or "video_frame"
+    timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+    out_dir = _workspace_dir()
+    os.makedirs(out_dir, exist_ok=True)
+    output_name = f"{timestamp}_{safe_name}_frame.png"
+    output_path = os.path.join(out_dir, output_name)
+    suffix = 2
+    while os.path.exists(output_path):
+        output_name = f"{timestamp}_{safe_name}_frame_{suffix}.png"
+        output_path = os.path.join(out_dir, output_name)
+        suffix += 1
+
+    try:
+        result = extract_frame(resolved, output_path, requested_time)
+        sidecar = {
+            "params": {
+                "video_editor_screenshot": {
+                    "version": 1,
+                    "source": str(body.get("source") or ""),
+                    "source_name": os.path.basename(resolved),
+                    "time": result["time"],
+                    "width": result["width"],
+                    "height": result["height"],
+                },
+                "source": "video_editor_screenshot",
+            },
+            "generation_mode": "image",
+            "created_at": time.time(),
+        }
+        meta_path = os.path.join(
+            out_dir,
+            os.path.splitext(output_name)[0] + ".meta.json",
+        )
+        with open(meta_path, "w", encoding="utf-8") as handle:
+            json.dump(sidecar, handle, indent=2, ensure_ascii=False)
+        return {
+            "filename": output_name,
+            "url": f"/api/v1/file/{output_name}",
+            **result,
+        }
+    except Exception as exc:
+        try:
+            if os.path.isfile(output_path):
+                os.remove(output_path)
+        except OSError:
+            pass
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not capture video frame: {exc}",
+        ) from exc
+
+
 def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path: str) -> None:
     from services.video_editor import render_project
 
