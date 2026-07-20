@@ -10936,11 +10936,38 @@ def generate_comic_minimax(body: dict):
 _COMIC_PLAN_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["title", "logline", "synopsis", "styleBible", "characters", "pages"],
+    "required": [
+        "title",
+        "logline",
+        "synopsis",
+        "storyStructure",
+        "styleBible",
+        "characters",
+        "pages",
+    ],
     "properties": {
         "title": {"type": "string"},
         "logline": {"type": "string"},
         "synopsis": {"type": "string"},
+        "storyStructure": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "pageNumber",
+                    "stage",
+                    "goal",
+                    "turningPoint",
+                ],
+                "properties": {
+                    "pageNumber": {"type": "integer"},
+                    "stage": {"type": "string"},
+                    "goal": {"type": "string"},
+                    "turningPoint": {"type": "string"},
+                },
+            },
+        },
         "styleBible": {
             "type": "string",
             "description": (
@@ -11284,13 +11311,33 @@ Keep every field concise and use stable character IDs."""
                 stage="bible",
             )
         bible = checkpoint.get("bible")
-        if not isinstance(bible, dict):
+        if (
+            not isinstance(bible, dict)
+            or not isinstance(bible.get("storyStructure"), list)
+            or len(bible["storyStructure"]) != page_count
+        ):
+            bible_schema = copy.deepcopy(_COMIC_BIBLE_SCHEMA)
+            bible_schema["properties"]["storyStructure"]["minItems"] = page_count
+            bible_schema["properties"]["storyStructure"]["maxItems"] = page_count
             bible = _generate_comic_director_json(
                 prompt=f"""Create the compact story and character bible for a sequential comic.
 {shared_brief}
 
 The synopsis must cover the complete arc across all {page_count} pages. Use concrete,
 repeatable visual descriptions for characters and wardrobe.
+
+Create exactly one storyStructure entry for every page. Together they must form a causal,
+readable dramatic arc rather than a collection of unrelated scenes. Cover these fundamental
+stages, combining adjacent stages when the comic is short and distributing development across
+multiple pages when it is long:
+1. Setup: protagonist, normal world, concrete desire and stakes.
+2. Inciting incident: a visible event breaks the status quo and forces a choice.
+3. Rising action: attempts, obstacles and consequences escalate through cause and effect.
+4. Midpoint or reversal: new information or a costly decision changes the direction.
+5. Crisis and climax: the central conflict reaches an irreversible decisive action.
+6. Resolution: show the consequence, emotional change and a clear final image.
+Each page beat must advance the same conflict, specify its dramatic goal, and end with a
+turning point that motivates the following page. Do not repeat the same revelation or climax.
 
 Decide whether a dedicated visual continuity bible materially helps this particular story.
 It normally helps historical, period, fantasy, science-fiction and strongly art-directed work.
@@ -11302,8 +11349,8 @@ styleBible: it is sent to an image generator for one individual illustration at 
 When a dedicated bible is unnecessary, return styleBible as an empty string. Do not fill it
 with generic advice or invented restrictions merely because the field exists.""",
                 system_prompt=system_prompt,
-                schema=_COMIC_BIBLE_SCHEMA,
-                max_new_tokens=1200,
+                schema=bible_schema,
+                max_new_tokens=max(1400, 900 + page_count * 120),
                 stage="the story bible",
             )
             if job_id:
@@ -11372,6 +11419,11 @@ with generic advice or invented restrictions merely because the field exists."""
                 if next_summary
                 else "No later saved page constrains this page."
             )
+            assigned_beat = (
+                bible.get("storyStructure", [])[page_index]
+                if page_index < len(bible.get("storyStructure", []))
+                else {}
+            )
             if job_id:
                 _comic_plan_job_update(
                     job_id,
@@ -11394,10 +11446,14 @@ with generic advice or invented restrictions merely because the field exists."""
                     prompt=f"""Write page {page_number} of this comic.
 {shared_brief}
 Story bible: {json.dumps(bible, ensure_ascii=False)}
+MANDATORY STORY BEAT FOR THIS PAGE: {json.dumps(assigned_beat, ensure_ascii=False)}
 {continuity}
 {future_continuity}
 
 Return one page with exactly {panels_per_page} panels and pageNumber {page_number}.
+Every panel must causally develop this page's assigned beat. Establish the page goal early,
+escalate or complicate it in the middle, and land on its turningPoint in the final panel.
+Do not jump ahead to a later page's climax or repeat an earlier page's resolution.
 Every imagePrompt describes exactly ONE full-bleed illustration for ONE panel, includes
 framing and repeats the canonical
 description of every character shown. Never ask the image model to render dialogue, captions,

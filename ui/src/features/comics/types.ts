@@ -175,6 +175,12 @@ export interface ComicPlan {
   title: string
   logline: string
   synopsis: string
+  storyStructure?: Array<{
+    pageNumber: number
+    stage: string
+    goal: string
+    turningPoint: string
+  }>
   language: string
   styleBible: string
   characters: ComicCharacter[]

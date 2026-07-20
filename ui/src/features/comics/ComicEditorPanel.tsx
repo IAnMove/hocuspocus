@@ -277,6 +277,112 @@ function insertAssetIntoPage(asset: ComicAsset) {
   state.addElement(page.id, image)
 }
 
+const TRANSLATION_LANGUAGES = [
+  'Español',
+  'English',
+  'Français',
+  'Deutsch',
+  'Italiano',
+  'Português',
+  'Català',
+  '日本語',
+  '한국어',
+  '中文',
+  'العربية',
+  'हिन्दी',
+]
+
+function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
+  const projectLanguage = useComicStore(state => state.project.language)
+  const hasDirectorPlan = useComicStore(state => Boolean(state.project.director?.plan))
+  const [language, setLanguage] = useState(projectLanguage || 'Español')
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
+
+  const exportTranslated = async () => {
+    const target = language.trim()
+    if (!target || !hasDirectorPlan || busy) return
+    const state = useComicStore.getState()
+    const sourcePlan = planWithCanvasText(state.project)
+    if (!sourcePlan) {
+      notify({ kind: 'error', text: 'This comic does not have an editable Director plan.' })
+      return
+    }
+    const originalPageId = state.currentPageId
+    let temporaryApplied = false
+    setBusy(true)
+    try {
+      const working = structuredClone(sourcePlan)
+      for (let pageIndex = 0; pageIndex < working.pages.length; pageIndex += 1) {
+        setProgress(`Translating ${pageIndex + 1}/${working.pages.length}`)
+        const result = await api.rewriteComicTextPage({
+          plan: working,
+          pageIndex,
+          mode: 'translate',
+          instruction: '',
+          targetLanguage: target,
+          dialogueDensity: state.project.director!.input.dialogueDensity,
+        })
+        working.pages[pageIndex] = result.page
+      }
+      working.language = target
+      const translatedProject = simplifyDirectorText({
+        ...state.project,
+        title: `${state.project.title} — ${target}`,
+        language: target,
+        director: {
+          ...state.project.director!,
+          plan: normalizeComicPlan(working, state.project.director!.input.dialogueDensity),
+        },
+      })
+      state.patchProject(translatedProject)
+      temporaryApplied = true
+      await wait(100)
+      await exportComicPdf((current, total) => setProgress(`PDF ${current}/${total}`))
+      notify({
+        kind: 'ok',
+        text: `PDF exported in ${target}; the editable original was preserved.`,
+      })
+    } catch (error) {
+      notify({ kind: 'error', text: (error as Error).message })
+    } finally {
+      if (temporaryApplied) {
+        useComicStore.getState().undo()
+        if (originalPageId) useComicStore.getState().setCurrentPage(originalPageId)
+      }
+      setBusy(false)
+      setProgress('')
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        className={`${input} w-28`}
+        list="comic-toolbar-languages"
+        value={language}
+        onChange={event => setLanguage(event.target.value)}
+        placeholder="Language"
+        title="Choose or type any export language"
+      />
+      <datalist id="comic-toolbar-languages">
+        {TRANSLATION_LANGUAGES.map(item => <option key={item} value={item} />)}
+      </datalist>
+      <button
+        className={`${button} whitespace-nowrap border-emerald-500/50 text-emerald-400`}
+        disabled={busy || !hasDirectorPlan || !language.trim()}
+        onClick={exportTranslated}
+        title={hasDirectorPlan
+          ? 'Translate only the lettering, export a PDF, then restore the editable original'
+          : 'Generate the comic with Director before using translated export'}
+      >
+        {busy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+        {progress || `Export in ${language.trim() || 'language'}`}
+      </button>
+    </div>
+  )
+}
+
 function PagesRail() {
   const project = useComicStore(state => state.project)
   const current = useComicStore(state => state.currentPageId)
@@ -1634,8 +1740,7 @@ export function ComicDirectorPanel({
               placeholder="Target language — type any language"
             />
             <datalist id="comic-export-languages">
-              {['Español', 'English', 'Français', 'Deutsch', 'Italiano', 'Português', 'Català',
-                '日本語', '한국어', '中文', 'العربية', 'हिन्दी'].map(language =>
+              {TRANSLATION_LANGUAGES.map(language =>
                 <option key={language} value={language} />)}
             </datalist>
             <div className="grid grid-cols-2 gap-2">
@@ -1660,6 +1765,24 @@ export function ComicDirectorPanel({
             <strong className="text-[10px] uppercase tracking-wide text-text-muted">Review plan</strong>
             <p className="text-[9px] text-text-muted mt-1">The queue submits one panel at a time, preserves completed artwork and resumes from the first missing panel.</p>
           </div>
+          {project.director.plan.storyStructure?.length ? (
+            <details className="rounded-lg border border-border bg-bg-tertiary/30 p-2" open>
+              <summary className="cursor-pointer text-[10px] font-medium text-text-secondary">
+                Dramatic structure · {project.director.plan.storyStructure.length} page beats
+              </summary>
+              <ol className="mt-2 space-y-2">
+                {project.director.plan.storyStructure.map(beat => (
+                  <li key={beat.pageNumber} className="text-[9px] leading-relaxed text-text-muted">
+                    <strong className="text-text-secondary">
+                      {beat.pageNumber}. {beat.stage}
+                    </strong>
+                    <span className="block">{beat.goal}</span>
+                    <span className="block text-amber-300/80">Turn: {beat.turningPoint}</span>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          ) : null}
           <details className="rounded-lg border border-border bg-bg-tertiary/30 p-2">
             <summary className="cursor-pointer text-[10px] font-medium text-text-secondary">
               {project.director.plan.styleBible.trim()
@@ -1740,6 +1863,14 @@ export function ComicEditorPanel() {
   const canvasViewportRef = useRef<HTMLDivElement>(null)
   const maestroOutputs = useStore(state => state.outputs)
   const comicOutputs = maestroOutputs.filter(output => output.type === 'comic')
+  const currentPageIndex = Math.max(
+    0,
+    project.pages.findIndex(page => page.id === currentPageId),
+  )
+  const goToPage = (index: number) => {
+    const page = project.pages[Math.max(0, Math.min(project.pages.length - 1, index))]
+    if (page) useComicStore.getState().setCurrentPage(page.id)
+  }
   const notify = (value: Notice) => {
     setNotice(value)
     if (value) setTimeout(() => setNotice(null), 5000)
@@ -1959,6 +2090,7 @@ export function ComicEditorPanel() {
               <button className={`${button} border-accent-blue/50`} disabled={!!exporting} onClick={() => runExport('pdf')}>
                 {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} {exporting || 'PDF'}
               </button>
+              <TranslatedPdfExport notify={notify} />
               <button className={button} onClick={() => setToolbarCollapsed(true)} title="Collapse comic toolbar">
                 <ChevronUp size={13} />
               </button>
@@ -1973,6 +2105,33 @@ export function ComicEditorPanel() {
         <PagesRail />
         <section className="flex-1 min-w-0 flex flex-col bg-[#15171b]">
           <div className="shrink-0 border-b border-border p-2 flex items-center justify-center gap-2 text-xs text-text-muted">
+            <button
+              className={button}
+              disabled={currentPageIndex === 0}
+              onClick={() => goToPage(currentPageIndex - 1)}
+              title="Previous page"
+            >
+              <ChevronLeft size={12} />
+            </button>
+            <select
+              className={`${input} w-28`}
+              value={currentPageId}
+              onChange={event => useComicStore.getState().setCurrentPage(event.target.value)}
+              aria-label="Current comic page"
+            >
+              {project.pages.map((page, index) => (
+                <option key={page.id} value={page.id}>Page {index + 1} / {project.pages.length}</option>
+              ))}
+            </select>
+            <button
+              className={button}
+              disabled={currentPageIndex >= project.pages.length - 1}
+              onClick={() => goToPage(currentPageIndex + 1)}
+              title="Next page"
+            >
+              <ChevronRight size={12} />
+            </button>
+            <div className="h-5 border-l border-border mx-1" />
             <button className={button} onClick={() => { setFitMode(false); setZoom(zoom - .1) }}>-</button>
             <span className="w-12 text-center">{Math.round(zoom * 100)}%</span>
             <button className={button} onClick={() => { setFitMode(false); setZoom(zoom + .1) }}>+</button>
