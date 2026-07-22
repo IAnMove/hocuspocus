@@ -1856,6 +1856,7 @@ export function ComicEditorPanel() {
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false)
   const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
   const [fitMode, setFitMode] = useState(true)
+  const [fitRequest, setFitRequest] = useState(0)
   const [notice, setNotice] = useState<Notice>(null)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState('')
@@ -1920,23 +1921,32 @@ export function ComicEditorPanel() {
     const page = project.pages.find(item => item.id === currentPageId)
     if (!viewport || !page) return
     const fit = () => {
+      const bounds = viewport.getBoundingClientRect()
       const horizontalPadding = 32
       const verticalPadding = 32
       const nextZoom = Math.min(
         1.5,
-        Math.max(.2, (viewport.clientWidth - horizontalPadding) / page.width),
-        Math.max(.2, (viewport.clientHeight - verticalPadding) / page.height),
+        Math.max(.2, (bounds.width - horizontalPadding) / page.width),
+        Math.max(.2, (bounds.height - verticalPadding) / page.height),
       )
       setZoom(nextZoom)
+      viewport.scrollTo({ left: 0, top: 0 })
     }
-    const frame = window.requestAnimationFrame(fit)
+    let secondFrame = 0
+    const frame = window.requestAnimationFrame(() => {
+      fit()
+      // Collapsing toolbars/sidebars is animated by CSS. Measuring once more
+      // after layout settles keeps the full page visible on the first click.
+      secondFrame = window.requestAnimationFrame(fit)
+    })
     const observer = new ResizeObserver(fit)
     observer.observe(viewport)
     return () => {
       window.cancelAnimationFrame(frame)
+      window.cancelAnimationFrame(secondFrame)
       observer.disconnect()
     }
-  }, [fitMode, currentPageId, project.pages, setZoom, toolbarCollapsed, sidePanelCollapsed])
+  }, [fitMode, fitRequest, currentPageId, project.pages, setZoom, toolbarCollapsed, sidePanelCollapsed])
   const applyLayout = (name: string) => {
     const state = useComicStore.getState()
     const page = state.project.pages.find(item => item.id === state.currentPageId)
@@ -2137,7 +2147,10 @@ export function ComicEditorPanel() {
             <button className={button} onClick={() => { setFitMode(false); setZoom(zoom + .1) }}>+</button>
             <button
               className={`${button} ${fitMode ? 'border-accent-blue text-accent-blue' : ''}`}
-              onClick={() => setFitMode(true)}
+              onClick={() => {
+                setFitMode(true)
+                setFitRequest(value => value + 1)
+              }}
               title="Fit the full comic page in the available space"
             >
               <Maximize2 size={12} /> Fit
