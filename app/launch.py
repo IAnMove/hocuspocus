@@ -11796,6 +11796,21 @@ def director_comic_text_page(body: dict):
     mode = str(body.get("mode") or "rewrite").lower()
     instruction = str(body.get("instruction") or "").strip()[:3000]
     target_language = str(body.get("targetLanguage") or "").strip()[:120]
+    raw_glossary = body.get("glossary")
+    glossary = []
+    if isinstance(raw_glossary, list):
+        for item in raw_glossary[:100]:
+            if not isinstance(item, dict):
+                continue
+            source_term = str(item.get("source") or "").strip()[:160]
+            translated_term = str(item.get("translation") or "").strip()[:160]
+            note = str(item.get("note") or "").strip()[:240]
+            if source_term and translated_term:
+                glossary.append({
+                    "source": source_term,
+                    "translation": translated_term,
+                    "note": note,
+                })
     dialogue_density = str(body.get("dialogueDensity") or "medium").lower()
     if not isinstance(plan, dict) or not isinstance(plan.get("pages"), list):
         raise HTTPException(status_code=400, detail="A valid comic plan is required")
@@ -11829,7 +11844,9 @@ def director_comic_text_page(body: dict):
         task = f"""Translate every existing reader-facing text faithfully into {target_language}.
 Preserve which panels are silent, the number and type of text blocks, speaker IDs, meaning,
 tone, names and sound-effect intent. If a line is already in {target_language}, copy it
-exactly, character for character. Do not add, remove, summarize or rewrite story content."""
+exactly, character for character. Do not add, remove, summarize or rewrite story content.
+Mandatory terminology glossary (use these exact target forms when applicable):
+{json.dumps(glossary, ensure_ascii=False) if glossary else "No custom glossary."}"""
     else:
         task = f"""Rewrite the page's lettering according to this editorial instruction:
 {instruction or "Make the text concise, natural and dramatically effective."}
@@ -11912,6 +11929,69 @@ Source page: {json.dumps(source, ensure_ascii=False)}""",
     else:
         _enforce_comic_page_text_budget(source_page, dialogue_density)
     return {"page": source_page}
+
+
+@api.post("/api/v1/director/comic/story/revise")
+def director_comic_story_revise(body: dict):
+    """Improve an existing editable script while preserving its exact production shape."""
+    plan = body.get("plan")
+    instruction = str(body.get("instruction") or "").strip()[:4000]
+    dialogue_density = str(body.get("dialogueDensity") or "medium").lower()
+    if not isinstance(plan, dict) or not isinstance(plan.get("pages"), list) or not plan["pages"]:
+        raise HTTPException(status_code=400, detail="A valid comic plan is required")
+    page_count = len(plan["pages"])
+    panel_counts = [len(page.get("panels") or []) for page in plan["pages"] if isinstance(page, dict)]
+    if len(panel_counts) != page_count or not panel_counts or len(set(panel_counts)) != 1:
+        raise HTTPException(status_code=400, detail="Story revision currently requires a consistent panel count per page")
+    panel_count = panel_counts[0]
+    schema = copy.deepcopy(_COMIC_PLAN_SCHEMA)
+    schema["properties"]["pages"]["minItems"] = page_count
+    schema["properties"]["pages"]["maxItems"] = page_count
+    schema["properties"]["pages"]["items"]["properties"]["panels"]["minItems"] = panel_count
+    schema["properties"]["pages"]["items"]["properties"]["panels"]["maxItems"] = panel_count
+    try:
+        _ensure_llm_loaded()
+        revised = _generate_comic_director_json(
+            prompt=f"""Revise this complete comic script as a professional story editor.
+Editorial instruction: {instruction or "Strengthen causality, escalation, character agency, midpoint reversal, climax payoff and a concise ending."}
+
+Keep exactly {page_count} pages and {panel_count} panels on every page.
+Keep every pageNumber, panel id and panel order unchanged.
+Keep the same language: {plan.get("language") or "English"}.
+Return a complete plan. Improve storyStructure, logline, synopsis, narrativeRole,
+sceneDescription, dialogue, captions and continuityNotes. Update imagePrompt only when
+the revised action requires it. Do not introduce unexplained characters. Prefer silent
+visual storytelling; never use dialogue to repeat what the image already shows.
+
+Existing plan: {json.dumps(plan, ensure_ascii=False)}""",
+            system_prompt=(
+                "You are Maestro's senior comics editor. Build clear setup, inciting incident, "
+                "progressive complications, reversal, crisis, climax and resolution. Return only strict JSON."
+            ),
+            schema=schema,
+            max_new_tokens=min(16000, max(5000, page_count * panel_count * 420)),
+            stage="revising comic story",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Comic story revision failed: {exc}") from exc
+    pages = revised.get("pages")
+    if not isinstance(pages, list) or len(pages) != page_count:
+        raise HTTPException(status_code=422, detail="Story revision changed the page count")
+    for page_index, page in enumerate(pages):
+        source_page = plan["pages"][page_index]
+        if not isinstance(page, dict) or len(page.get("panels") or []) != panel_count:
+            raise HTTPException(status_code=422, detail=f"Story revision changed page {page_index + 1} panel count")
+        page["pageNumber"] = source_page.get("pageNumber", page_index + 1)
+        for panel_index, panel in enumerate(page["panels"]):
+            source_panel = source_page["panels"][panel_index]
+            panel["id"] = source_panel.get("id")
+            panel["order"] = source_panel.get("order", panel_index + 1)
+        _enforce_comic_page_text_budget(page, dialogue_density)
+    revised["characters"] = copy.deepcopy(plan.get("characters") or [])
+    revised["version"] = 1
+    revised["id"] = plan.get("id") or f"comic-plan-{uuid.uuid4().hex[:12]}"
+    revised["language"] = plan.get("language") or "English"
+    return {"plan": revised}
 
 
 # Comic planning can take several minutes on CPU-hosted Ollama models.  Keep
@@ -12552,6 +12632,7 @@ def get_group_clips(group_id: str):
 
 _video_editor_jobs: dict[str, dict] = {}
 _VIDEO_EDITOR_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"}
+_COMIC_ANIMATIC_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 def _resolve_video_editor_source(source: str) -> str:
@@ -12566,6 +12647,19 @@ def _resolve_video_editor_source(source: str) -> str:
         raise ValueError(f"Video source could not be found: {os.path.basename(decoded)}")
     if os.path.splitext(resolved)[1].lower() not in _VIDEO_EDITOR_EXTENSIONS:
         raise ValueError(f"Unsupported video format: {os.path.splitext(resolved)[1] or 'unknown'}")
+    return resolved
+
+
+def _resolve_comic_animatic_image(source: str) -> str:
+    """Resolve a captured panel image using Maestro's existing safe path rules."""
+    from urllib.parse import unquote
+
+    decoded = unquote(str(source or "").strip())
+    resolved = _resolve_model3d_input_path(decoded)
+    if not resolved or not os.path.isfile(resolved):
+        raise ValueError(f"Comic panel image could not be found: {os.path.basename(decoded)}")
+    if os.path.splitext(resolved)[1].lower() not in _COMIC_ANIMATIC_IMAGE_EXTENSIONS:
+        raise ValueError("Comic animatics require PNG, JPEG or WebP panel images")
     return resolved
 
 
@@ -12825,6 +12919,95 @@ def start_video_editor_export(body: dict):
         daemon=True,
         name=f"maestro-{job_id}",
     ).start()
+    return {"job_id": job_id}
+
+
+def _run_comic_animatic(job_id: str, body: dict, output_path: str) -> None:
+    from services.video_editor import render_comic_animatic
+
+    job = _video_editor_jobs[job_id]
+
+    def report(progress: int, message: str) -> None:
+        job.update(progress=max(0, min(progress, 100)), message=message, updated_at=time.time())
+
+    try:
+        job["status"] = "running"
+        panels = []
+        for panel in body["panels"]:
+            resolved = dict(panel)
+            resolved["resolved_path"] = _resolve_comic_animatic_image(panel.get("source", ""))
+            panels.append(resolved)
+        result = render_comic_animatic(
+            panels,
+            output_path,
+            width=body["width"],
+            height=body["height"],
+            fps=body["fps"],
+            transition=body["transition"],
+            transition_duration=body["transition_duration"],
+            progress=report,
+        )
+        output_name = os.path.basename(output_path)
+        with open(os.path.splitext(output_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
+            json.dump({
+                "params": {
+                    "source": "comic_animatic",
+                    "comic_animatic": {
+                        "version": 1,
+                        "comic_id": body.get("comic_id"),
+                        "comic_title": body.get("comic_title"),
+                        "width": body["width"], "height": body["height"], "fps": body["fps"],
+                        "panels": [{key: value for key, value in panel.items() if key != "resolved_path"} for panel in panels],
+                    },
+                },
+                "generation_mode": "video",
+                "job_id": job_id,
+                "created_at": time.time(),
+            }, handle, indent=2, ensure_ascii=False)
+        job.update(status="completed", progress=100, message="Comic animatic complete", filename=output_name, url=f"/api/v1/file/{output_name}", result=result, updated_at=time.time())
+    except Exception as exc:
+        traceback.print_exc()
+        try:
+            if os.path.isfile(output_path):
+                os.remove(output_path)
+        except OSError:
+            pass
+        job.update(status="failed", error=str(exc), message=f"Animatic failed: {exc}", updated_at=time.time())
+
+
+@api.post("/api/v1/comics/animatic")
+def start_comic_animatic(body: dict):
+    """Create a video storyboard from the comic's final, lettered panels."""
+    panels = body.get("panels")
+    if not isinstance(panels, list) or not panels:
+        raise HTTPException(status_code=400, detail="The comic has no captured panels")
+    if len(panels) > 200:
+        raise HTTPException(status_code=400, detail="An animatic can contain at most 200 panels")
+    try:
+        width = int(body.get("width") or 1920)
+        height = int(body.get("height") or 1080)
+        fps = int(body.get("fps") or 30)
+        transition_duration = float(body.get("transition_duration") or .35)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid animatic settings") from exc
+    if width < 240 or height < 240 or width > 3840 or height > 3840 or width % 2 or height % 2:
+        raise HTTPException(status_code=400, detail="Invalid animatic resolution")
+    if fps not in (24, 25, 30, 50, 60):
+        raise HTTPException(status_code=400, detail="Unsupported animatic frame rate")
+    transition = str(body.get("transition") or "crossfade")
+    if transition not in {"none", "crossfade", "fade-black", "wipe-left", "slide-left", "slide-right", "circle-open", "dissolve", "pixelize", "blur", "zoom-in"}:
+        raise HTTPException(status_code=400, detail="Unsupported animatic transition")
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("comic_title") or "comic")).strip("_")[:60] or "comic"
+    output_name = f"{time.strftime('%Y-%m-%d-%Hh%Mm%Ss')}_{safe_name}_animatic.mp4"
+    output_path = os.path.join(_workspace_dir(), output_name)
+    job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
+    clean = dict(body, width=width, height=height, fps=fps, transition=transition, transition_duration=transition_duration)
+    _video_editor_jobs[job_id] = {
+        "job_id": job_id, "status": "queued", "progress": 0,
+        "message": "Capturing comic panels…", "filename": None, "url": None,
+        "error": None, "created_at": time.time(), "updated_at": time.time(),
+    }
+    threading.Thread(target=_run_comic_animatic, args=(job_id, clean, output_path), daemon=True, name=f"maestro-{job_id}").start()
     return {"job_id": job_id}
 
 

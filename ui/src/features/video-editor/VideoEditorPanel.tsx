@@ -84,6 +84,7 @@ const RESOLUTIONS: ResolutionOption[] = [
 ]
 
 const VIDEO_ACCEPT = '.mp4,.webm,.mov,.mkv,.avi,.m4v'
+const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
 const TRANSITIONS: Array<{ value: Transition; label: string; description: string }> = [
   { value: 'none', label: 'Hard cut', description: 'Immediate cut with no overlap.' },
   { value: 'crossfade', label: 'Crossfade', description: 'One shot dissolves smoothly into the next.' },
@@ -146,7 +147,32 @@ function wait(ms: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
+function loadEditorDraft(): {
+  clips: EditorClip[]
+  projectName: string
+  resolution: ResolutionOption
+  fps: number
+} {
+  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30 }
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(VIDEO_EDITOR_DRAFT_KEY) || 'null')
+    if (!saved || !Array.isArray(saved.clips)) return fallback
+    const resolution = RESOLUTIONS.find(option =>
+      option.width === saved.resolution?.width && option.height === saved.resolution?.height,
+    ) || RESOLUTIONS[0]
+    return {
+      clips: saved.clips.filter((clip: EditorClip) => typeof clip?.source === 'string'),
+      projectName: typeof saved.projectName === 'string' ? saved.projectName : fallback.projectName,
+      resolution,
+      fps: [24, 25, 30, 50, 60].includes(saved.fps) ? saved.fps : 30,
+    }
+  } catch {
+    return fallback
+  }
+}
+
 export function VideoEditorPanel() {
+  const [draft] = useState(loadEditorDraft)
   const refreshOutputs = useStore(s => s.refreshOutputs)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -158,13 +184,13 @@ export function VideoEditorPanel() {
   const sequenceSlotSeekRef = useRef<Array<number | null>>([null, null])
   const mountedRef = useRef(true)
 
-  const [clips, setClips] = useState<EditorClip[]>([])
+  const [clips, setClips] = useState<EditorClip[]>(draft.clips)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
-  const [projectName, setProjectName] = useState('my_video')
-  const [resolution, setResolution] = useState(RESOLUTIONS[0])
-  const [fps, setFps] = useState(30)
+  const [projectName, setProjectName] = useState(draft.projectName)
+  const [resolution, setResolution] = useState(draft.resolution)
+  const [fps, setFps] = useState(draft.fps)
   const [previewTime, setPreviewTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [sequenceMode, setSequenceMode] = useState(false)
@@ -203,6 +229,19 @@ export function VideoEditorPanel() {
       if (sequenceFrameRef.current !== null) cancelAnimationFrame(sequenceFrameRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(VIDEO_EDITOR_DRAFT_KEY, JSON.stringify({
+          clips, projectName, resolution, fps, savedAt: new Date().toISOString(),
+        }))
+      } catch {
+        // A full browser quota must not interrupt editing.
+      }
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [clips, projectName, resolution, fps])
 
   useEffect(() => {
     if (!selectedId && clips[0]) setSelectedId(clips[0].id)
@@ -246,6 +285,26 @@ export function VideoEditorPanel() {
     setClips(current => [...current, clip])
     setSelectedId(clip.id)
   }
+
+  useEffect(() => {
+    let pending: { name?: string; url?: string } | null = null
+    try {
+      pending = JSON.parse(window.localStorage.getItem('maestro-video-editor-pending-source') || 'null')
+      if (pending?.url) window.localStorage.removeItem('maestro-video-editor-pending-source')
+    } catch {
+      pending = null
+    }
+    if (!pending?.url) return
+    setAdding(true)
+    setAddProgress(`Opening ${pending.name || 'comic animatic'}`)
+    void addSource(pending.url, pending.url, pending.name || 'Comic animatic')
+      .catch(reason => setError((reason as Error).message))
+      .finally(() => {
+        setAdding(false)
+        setAddProgress('')
+      })
+    // The hand-off is intentionally consumed once when the editor mounts.
+  }, [])
 
   const addFiles = async (files: File[]) => {
     const videos = files.filter(file => file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v)$/i.test(file.name))

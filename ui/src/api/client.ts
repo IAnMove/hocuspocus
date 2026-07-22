@@ -478,6 +478,35 @@ export async function fetchVideoEditorExport(jobId: string): Promise<VideoEditor
   return res.json()
 }
 
+export async function startComicAnimatic(payload: {
+  comic_id: string
+  comic_title: string
+  width: number
+  height: number
+  fps: number
+  transition: string
+  transition_duration: number
+  panels: Array<{
+    source: string
+    page_number: number
+    panel_number: number
+    duration: number
+    motion: string
+    script: string
+  }>
+}): Promise<{ job_id: string }> {
+  const res = await fetch(`${BASE}/api/v1/comics/animatic`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not start comic animatic' }))
+    throw new Error(error.detail || 'Could not start comic animatic')
+  }
+  return res.json()
+}
+
 export async function fetchGroupClips(groupId: string): Promise<{ group_id: string; clips: Array<{ filename: string; index: number; total: number; prompt: string }> }> {
   const res = await fetch(`${BASE}/api/v1/outputs/group/${encodeURIComponent(groupId)}`)
   if (!res.ok) throw new Error('Failed to fetch group clips')
@@ -1237,6 +1266,7 @@ export async function rewriteComicTextPage(params: {
   instruction?: string
   targetLanguage?: string
   dialogueDensity: import('../features/comics/types').ComicDirectorRequest['dialogueDensity']
+  glossary?: import('../features/comics/types').ComicGlossaryEntry[]
 }): Promise<{ page: import('../features/comics/types').ComicPlanPage }> {
   const response = await fetch(`${BASE}/api/v1/director/comic/text/page`, {
     method: 'POST',
@@ -1246,6 +1276,23 @@ export async function rewriteComicTextPage(params: {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Comic text operation failed' }))
     throw new Error(error.detail || 'Comic text operation failed')
+  }
+  return response.json()
+}
+
+export async function reviseComicStory(params: {
+  plan: import('../features/comics/types').ComicPlan
+  instruction?: string
+  dialogueDensity: import('../features/comics/types').ComicDirectorRequest['dialogueDensity']
+}): Promise<{ plan: import('../features/comics/types').ComicPlan }> {
+  const response = await fetch(`${BASE}/api/v1/director/comic/story/revise`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Comic story revision failed' }))
+    throw new Error(error.detail || 'Comic story revision failed')
   }
   return response.json()
 }

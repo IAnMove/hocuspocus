@@ -314,6 +314,8 @@ if (typeof window !== 'undefined') {
       } catch (error) {
         console.warn('[Comic autosave] Could not persist checkpoint:', error)
       }
-    }, 250)
+    // Large comics contain many prompts and asset records. A longer debounce
+    // avoids serialising the complete project on every drag frame or keystroke.
+    }, 900)
   })
 }

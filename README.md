@@ -32,6 +32,14 @@ Direct access to every model and every knob:
 - **Sliding window** for arbitrarily long generations
 - **Spatial upsampling, film grain, codec selection** as post-processing options
 
+### 💬 Comic Studio — script, characters, pages, translation and animatics
+Build a comic as an editable production rather than a single flattened generation. Comic Director creates a causal page structure and a full script that can be revised and approved before image credits are spent. The editor includes varied layouts, restrained automatic lettering, per-panel image regeneration, page navigation, zoom/Fit, PDF/CBZ/PNG export, and text-only rewriting or translation without changing artwork.
+
+- **Characters** stores personality, motivation, dialogue voice, wardrobe, visual invariants, exclusions, and multiple generated or uploaded identity references.
+- **Quality** checks text density, duplicated lines, missing continuity notes, unknown characters, unapproved scripts, and missing references. Translation glossaries lock names and terminology across languages.
+- **Video** turns the final lettered panels into a 1080p landscape, portrait, or square animatic with per-shot timing, camera movement, and transitions. The MP4 is handed to the Video Editor automatically for further cutting.
+- Comic and Video Editor drafts autosave locally; saved comics remain backward-compatible with older version-2 project JSON.
+
 ### 🤖 Local LLM — built-in, no setup
 Maestro auto-downloads `llama-server` (~600 MB one-time) and your chosen GGUF model on first use. Defaults to **Gemma 4 4B (Recommended)** — fast, capable, and runs comfortably on smaller GPUs. Auto-detects CUDA and binds the LLM to GPU when available.
 

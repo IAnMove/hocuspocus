@@ -7,6 +7,7 @@ import {
 import { getModelMode, useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 import { ComicCanvas } from './ComicCanvas'
+import { ComicCharactersPanel, ComicQualityPanel, ComicScriptPanel, ComicVideoPanel } from './ComicWorkflowPanels'
 import {
   comicId, COMIC_FORMATS, createComicProject, normalizeComicProject, panelsForCount,
   normalizeComicPlan, planWithCanvasText, projectFromPlan, repairComicText, repairMojibake,
@@ -18,9 +19,10 @@ import { captureComicPage, exportComicCbz, exportComicJson, exportComicPagePng, 
 import type {
   ComicAsset, ComicCharacter, ComicDirectorRequest, ComicElement, ComicImageElement,
   ComicPanelElement, ComicPlan, ComicPlanPanel, ComicProject, ComicTextElement,
+  ComicPlanPage,
 } from './types'
 
-type SideTab = 'assets' | 'inspector' | 'director'
+type SideTab = 'assets' | 'inspector' | 'script' | 'characters' | 'quality' | 'video' | 'director'
 type Notice = { kind: 'ok' | 'error'; text: string } | null
 type DirectorActivity = {
   state: 'idle' | 'running' | 'complete' | 'error'
@@ -35,6 +37,14 @@ const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5
 
 const fileName = (path: string) => path.split(/[\\/]/).pop() || path
 const wait = (milliseconds: number) => new Promise(resolve => window.setTimeout(resolve, milliseconds))
+const comicTranslationCache = new Map<string, ComicPlanPage>()
+const translationCacheKey = (
+  page: ComicPlanPage,
+  language: string,
+  glossary: ComicProject['translationGlossary'],
+) => JSON.stringify({ language: language.trim().toLocaleLowerCase(), glossary, panels: page.panels.map(panel => ({
+  id: panel.id, captions: panel.captions, dialogue: panel.dialogue, soundEffects: panel.soundEffects,
+})) })
 
 function panelScript(panel: ComicPlanPanel): string {
   return [
@@ -90,6 +100,7 @@ function buildDirectorImagePrompt(
   director: ComicProject['director'],
   panelPrompt: string,
   promptSuffix: string,
+  plannedPanel?: ComicPlanPanel,
 ): string {
   const input = director?.input
   const removePageLayoutInstructions = (value: string) => repairMojibake(value)
@@ -100,6 +111,16 @@ function buildDirectorImagePrompt(
     .trim()
   const visualBible = removePageLayoutInstructions(director?.plan.styleBible || '')
   const repairedPanelPrompt = removePageLayoutInstructions(panelPrompt)
+  const characterLocks = plannedPanel?.characters.map(characterId => {
+    const character = director?.plan.characters.find(item => item.id === characterId)
+    if (!character) return ''
+    return [
+      `${character.name}: ${character.description}`,
+      character.visualNotes,
+      character.wardrobe,
+      character.negativePrompt ? `Never alter or add: ${character.negativePrompt}` : '',
+    ].filter(Boolean).join('. ')
+  }).filter(Boolean).join(' | ')
   return [
     'SINGLE IMAGE LOCK: Create exactly one full-bleed illustration for one comic panel. No comic page, panel grid, collage, split screen, inset panels, frames, borders, speech bubbles, captions, sound effects, text, logos, watermarks or lettering.',
     input?.artStyle ? `VISUAL STYLE LOCK: ${removePageLayoutInstructions(input.artStyle)}.` : '',
@@ -110,6 +131,8 @@ function buildDirectorImagePrompt(
     input?.forbiddenElements
       ? `STRICTLY FORBIDDEN: ${repairMojibake(input.forbiddenElements)}. No anachronisms.`
       : '',
+    characterLocks ? `CHARACTER IDENTITY LOCKS: ${characterLocks}. Keep face, body, scale, palette, wardrobe and invariant accessories identical to every prior appearance.` : '',
+    plannedPanel?.continuityNotes ? `SHOT CONTINUITY: ${plannedPanel.continuityNotes}.` : '',
     repairedPanelPrompt,
     removePageLayoutInstructions(promptSuffix),
   ].filter(Boolean).join(' ')
@@ -315,6 +338,12 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
       const working = structuredClone(sourcePlan)
       for (let pageIndex = 0; pageIndex < working.pages.length; pageIndex += 1) {
         setProgress(`Translating ${pageIndex + 1}/${working.pages.length}`)
+        const cacheKey = translationCacheKey(working.pages[pageIndex], target, state.project.translationGlossary)
+        const cached = comicTranslationCache.get(cacheKey)
+        if (cached) {
+          working.pages[pageIndex] = structuredClone(cached)
+          continue
+        }
         const result = await api.rewriteComicTextPage({
           plan: working,
           pageIndex,
@@ -322,8 +351,10 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
           instruction: '',
           targetLanguage: target,
           dialogueDensity: state.project.director!.input.dialogueDensity,
+          glossary: state.project.translationGlossary,
         })
         working.pages[pageIndex] = result.page
+        comicTranslationCache.set(cacheKey, structuredClone(result.page))
       }
       working.language = target
       const translatedProject = simplifyDirectorText({
@@ -1006,6 +1037,9 @@ export function ComicDirectorPanel({
     const state = useComicStore.getState()
     const director = state.project.director
     if (!director) return false
+    if (!director.scriptApprovedAt && !window.confirm(
+      'This script version has not been approved in the Script tab. Generate artwork anyway?',
+    )) return false
     const tasks: Array<{ pageId: string; panel: ComicPanelElement; plan: ComicPlanPanel }> = []
     director.plan.pages.forEach((planPage, pageIndex) => {
       const page = state.project.pages[pageIndex]
@@ -1039,6 +1073,7 @@ export function ComicDirectorPanel({
           currentDirector,
           task.plan.imagePrompt,
           state.project.style.promptSuffix,
+          task.plan,
         )
         const existingJobId = currentDirector.panelJobs?.[task.plan.id]
         let asset: ComicAsset | null = null
@@ -1158,6 +1193,14 @@ export function ComicDirectorPanel({
         current: pageIndex + 1,
         total: working.pages.length,
       })
+      const cacheKey = mode === 'translate'
+        ? translationCacheKey(working.pages[pageIndex], translationLanguage, current.translationGlossary)
+        : ''
+      const cached = cacheKey ? comicTranslationCache.get(cacheKey) : undefined
+      if (cached) {
+        working.pages[pageIndex] = structuredClone(cached)
+        continue
+      }
       const result = await api.rewriteComicTextPage({
         plan: working,
         pageIndex,
@@ -1165,8 +1208,10 @@ export function ComicDirectorPanel({
         instruction: textInstruction,
         targetLanguage: translationLanguage,
         dialogueDensity: current.director!.input.dialogueDensity,
+        glossary: current.translationGlossary,
       })
       working.pages[pageIndex] = result.page
+      if (cacheKey) comicTranslationCache.set(cacheKey, structuredClone(result.page))
     }
     if (mode === 'translate') working.language = translationLanguage
     return normalizeComicPlan(working, current.director!.input.dialogueDensity)
@@ -1286,6 +1331,7 @@ export function ComicDirectorPanel({
         plan,
         completedPanelIds: [],
         panelJobs: {},
+        scriptVersion: 1,
       }
       const comicStore = useComicStore.getState()
       comicStore.setProject(next)
@@ -1392,6 +1438,9 @@ export function ComicDirectorPanel({
       .filter((element): element is ComicPanelElement => element.type === 'panel' && !element.parentId)
       .sort((a, b) => a.zIndex - b.zIndex)[panelIndex]
     if (!director || !planned || !panel) return
+    if (!director.scriptApprovedAt && !window.confirm(
+      'This script version has not been approved in the Script tab. Generate this panel anyway?',
+    )) return
     setSingleBusy(planned.id)
     try {
       const character = director.plan.characters.find(item => planned.characters.includes(item.id))
@@ -1403,7 +1452,7 @@ export function ComicDirectorPanel({
         : director.panelJobs?.[planned.id]
       const asset = await generatePanelAsset(
         director.provider,
-        buildDirectorImagePrompt(director, planned.imagePrompt, state.project.style.promptSuffix),
+        buildDirectorImagePrompt(director, planned.imagePrompt, state.project.style.promptSuffix, planned),
         director.imageModel,
         reference,
         {
@@ -1876,6 +1925,45 @@ export function ComicEditorPanel() {
     setNotice(value)
     if (value) setTimeout(() => setNotice(null), 5000)
   }
+  const notifyWorkflow = (kind: 'ok' | 'error', text: string) => notify({ kind, text })
+  const generateCharacterReference = async (character: ComicCharacter) => {
+    const state = useComicStore.getState()
+    const director = state.project.director
+    const provider = director?.provider || 'maestro'
+    const model = director?.imageModel || useStore.getState().selectedModelPerMode.image
+    const prompt = [
+      'CHARACTER REFERENCE SHEET: one single character, neutral full-body three-quarter pose and a clean head-and-shoulders inset, plain unobtrusive background, no text, no labels, no comic panels.',
+      `Identity: ${character.name}.`,
+      character.role ? `Story role: ${character.role}.` : '',
+      character.description,
+      character.visualNotes,
+      character.wardrobe,
+      character.personality ? `Expression must communicate: ${character.personality}.` : '',
+      character.negativePrompt ? `Strictly avoid: ${character.negativePrompt}.` : '',
+      state.project.style.promptSuffix,
+    ].filter(Boolean).join(' ')
+    const primary = character.referenceAssetId
+      ? state.project.assets[character.referenceAssetId]?.source
+      : undefined
+    const asset = await generatePanelAsset(provider, prompt, model, primary)
+    asset.characterIds = [character.id]
+    state.addAsset(asset)
+    const latest = useComicStore.getState()
+    const characters = latest.project.characters.map(item => item.id === character.id ? {
+      ...item,
+      referenceAssetId: asset.id,
+      referenceAssetIds: Array.from(new Set([...(item.referenceAssetIds || []), asset.id])),
+    } : item)
+    const currentDirector = latest.project.director
+    latest.patchProject({
+      characters,
+      ...(currentDirector ? { director: {
+        ...currentDirector,
+        input: { ...currentDirector.input, characters },
+        plan: { ...currentDirector.plan, characters },
+      } } : {}),
+    })
+  }
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
@@ -1886,7 +1974,8 @@ export function ComicEditorPanel() {
       const modifier = event.ctrlKey || event.metaKey
       if (modifier && event.key.toLowerCase() === 'z') {
         event.preventDefault()
-        event.shiftKey ? state.redo() : state.undo()
+        if (event.shiftKey) state.redo()
+        else state.undo()
         return
       }
       if (modifier && event.key.toLowerCase() === 'd' && element) {
@@ -2175,7 +2264,7 @@ export function ComicEditorPanel() {
               title="Expand assets and inspector"
             >
               <ChevronLeft size={15} />
-              <span className="[writing-mode:vertical-rl]">Assets · Inspector · Director</span>
+              <span className="[writing-mode:vertical-rl]">Comic tools</span>
             </button>
           ) : (
             <>
@@ -2184,6 +2273,10 @@ export function ComicEditorPanel() {
                   {([
                     ['assets', 'Assets'],
                     ['inspector', 'Inspector'],
+                    ['script', 'Script'],
+                    ['characters', 'Characters'],
+                    ['quality', 'Quality'],
+                    ['video', 'Video'],
                     ['director', 'Director'],
                   ] as const).map(([id, label]) => (
                     <button key={id} className={`py-2 text-[11px] ${sideTab === id ? 'text-accent-blue border-b-2 border-accent-blue' : 'text-text-muted'}`} onClick={() => setSideTab(id)}>{label}</button>
@@ -2200,6 +2293,10 @@ export function ComicEditorPanel() {
               <div className="flex-1 overflow-y-auto p-3">
                 {sideTab === 'assets' && <AssetsPanel />}
                 {sideTab === 'inspector' && <InspectorPanel />}
+                {sideTab === 'script' && <ComicScriptPanel notify={notifyWorkflow} />}
+                {sideTab === 'characters' && <ComicCharactersPanel generateReference={generateCharacterReference} notify={notifyWorkflow} />}
+                {sideTab === 'quality' && <ComicQualityPanel notify={notifyWorkflow} />}
+                {sideTab === 'video' && <ComicVideoPanel notify={notifyWorkflow} />}
                 {sideTab === 'director' && <ComicDirectorPanel notify={notify} />}
               </div>
             </>

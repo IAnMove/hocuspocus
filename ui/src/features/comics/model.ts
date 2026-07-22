@@ -113,7 +113,13 @@ export function normalizeComicPlan(
   const repaired = repairComicText(plan)
   const normalized: ComicPlan = {
     ...repaired,
-    characters: Array.isArray(repaired.characters) ? repaired.characters : [],
+    characters: (Array.isArray(repaired.characters) ? repaired.characters : []).map(character => ({
+      ...character,
+      referenceAssetIds: Array.from(new Set([
+        ...(Array.isArray(character.referenceAssetIds) ? character.referenceAssetIds : []),
+        ...(character.referenceAssetId ? [character.referenceAssetId] : []),
+      ])),
+    })),
     pages: (Array.isArray(repaired.pages) ? repaired.pages : []).map((page, pageIndex) => ({
       ...page,
       pageNumber: Number(page.pageNumber) || pageIndex + 1,
@@ -183,6 +189,7 @@ export function createComicProject(): ComicProject {
     },
     pageNumbering: { style: 'plain' },
     characters: [],
+    translationGlossary: [],
     pages: [createComicPage()],
     assets: {},
     createdAt: now,
@@ -311,22 +318,28 @@ export function textElement(
   bubble: ComicTextElement['bubble'],
   order: number,
 ): ComicTextElement {
-  const width = Math.max(120, panel.width * 0.76)
   const compact = panel.width < 280 || panel.height < 260
-  const height = Math.max(compact ? 48 : 64, Math.min(compact ? 100 : 140, 44 + content.length * 0.38))
+  const width = Math.max(110, panel.width * (compact ? 0.72 : 0.66))
+  const height = Math.max(compact ? 46 : 60, Math.min(compact ? 92 : 126, 40 + content.length * 0.34))
+  const baseSize = compact ? (bubble === 'caption' ? 14 : 15) : (bubble === 'caption' ? 17 : 19)
+  const fontSize = content.length > 90 ? baseSize - 3 : content.length > 58 ? baseSize - 2 : baseSize
   return {
     id: comicId('text'),
     type: 'text',
     parentId: panel.id,
-    x: panel.width * 0.12,
-    y: bubble === 'caption' ? 10 + order * 76 : panel.height - height - 18 - order * 18,
+    x: bubble === 'caption'
+      ? panel.width * 0.05
+      : panel.width - width - panel.width * 0.05,
+    y: bubble === 'caption'
+      ? 10 + order * (height + 8)
+      : panel.height - height - 14 - order * (height + 8),
     width,
     height,
     rotation: 0,
     zIndex: 20 + order,
     visible: true,
     content,
-    fontSize: compact ? (bubble === 'caption' ? 14 : 15) : (bubble === 'caption' ? 17 : 19),
+    fontSize,
     fontFamily: '"Comic Sans MS", "Trebuchet MS", sans-serif',
     color: '#111111',
     bold: false,
@@ -542,7 +555,21 @@ export function normalizeComicProject(raw: unknown): ComicProject {
   if (!raw || typeof raw !== 'object') throw new Error('Invalid comic project')
   const doc = raw as Record<string, unknown>
   if (doc.version === 2 && Array.isArray(doc.pages)) {
-    return repairComicText(doc as unknown as ComicProject)
+    const project = repairComicText(doc as unknown as ComicProject)
+    project.characters = (Array.isArray(project.characters) ? project.characters : []).map(character => ({
+      ...character,
+      referenceAssetIds: Array.from(new Set([
+        ...(Array.isArray(character.referenceAssetIds) ? character.referenceAssetIds : []),
+        ...(character.referenceAssetId ? [character.referenceAssetId] : []),
+      ])),
+    }))
+    project.translationGlossary = Array.isArray(project.translationGlossary)
+      ? project.translationGlossary
+      : []
+    if (project.director) {
+      project.director.scriptVersion = Number(project.director.scriptVersion || 1)
+    }
+    return project
   }
   if (doc.version !== 1 || !Array.isArray(doc.pages)) throw new Error('Unsupported comic project')
 

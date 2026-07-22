@@ -482,3 +482,47 @@ job.cancel()
 ```
 
 Cancellation is cooperative and forwards WanGP's normal abort signal to the active model. A cancelled run completes with `result.success == False` and a cancellation entry in `result.errors`.
+
+## Comic preproduction and animatics
+
+Comic Director planning is asynchronous: start with `POST /api/v1/director/comic/plan/start`, then poll `GET /api/v1/director/comic/plan/status/{job_id}`. Existing plans can be story-edited without regenerating artwork through `POST /api/v1/director/comic/story/revise`, or lettered/translated one page at a time through `POST /api/v1/director/comic/text/page`.
+
+`POST /api/v1/comics/animatic` accepts ordered, uploaded lettered-panel images and queues a 1080p MP4 render. Poll the returned job with the Video Editor status endpoint.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/comics/animatic" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "comic_id": "comic-123",
+    "comic_title": "My comic",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "transition": "crossfade",
+    "transition_duration": 0.35,
+    "panels": [
+      {"source": "/api/v1/uploads/panel.png", "page_number": 1, "panel_number": 1, "duration": 3, "motion": "push-in", "script": "[Caption] Opening"}
+    ]
+  }'
+```
+
+```python
+import requests
+
+base = "http://127.0.0.1:7860"
+job = requests.post(f"{base}/api/v1/comics/animatic", json={
+    "comic_title": "My comic", "width": 1080, "height": 1920, "fps": 30,
+    "transition": "dissolve", "transition_duration": 0.35,
+    "panels": [{"source": "/api/v1/uploads/panel.png", "duration": 3, "motion": "pan-right"}],
+}).json()
+status = requests.get(f"{base}/api/v1/video-editor/export/{job['job_id']}").json()
+```
+
+```javascript
+const job = await fetch('/api/v1/comics/animatic', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ comic_title: 'My comic', width: 1920, height: 1080, fps: 30,
+    transition: 'crossfade', transition_duration: 0.35,
+    panels: [{ source: '/api/v1/uploads/panel.png', duration: 3, motion: 'pull-out' }] }),
+}).then(response => response.json());
+```

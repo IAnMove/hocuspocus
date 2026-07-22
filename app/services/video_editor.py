@@ -393,3 +393,108 @@ def render_project(
         "clip_count": len(clips),
         "transitions": transitions,
     }
+
+
+def _render_still_segment(
+    source: str,
+    destination: str,
+    *,
+    duration: float,
+    width: int,
+    height: int,
+    fps: int,
+    motion: str,
+) -> None:
+    """Turn one lettered comic panel into a silent animated video shot."""
+    frames = max(2, round(duration * fps))
+    progress = f"on/{max(frames - 1, 1)}"
+    if motion == "pull-out":
+        zoom = f"1.10-0.10*{progress}"
+        x = "iw/2-(iw/zoom/2)"
+        y = "ih/2-(ih/zoom/2)"
+    elif motion == "pan-left":
+        zoom = "1.08"
+        x = f"(iw-iw/zoom)*(1-{progress})"
+        y = "ih/2-(ih/zoom/2)"
+    elif motion == "pan-right":
+        zoom = "1.08"
+        x = f"(iw-iw/zoom)*{progress}"
+        y = "ih/2-(ih/zoom/2)"
+    elif motion == "none":
+        zoom = "1"
+        x = "0"
+        y = "0"
+    else:
+        zoom = f"1+0.10*{progress}"
+        x = "iw/2-(iw/zoom/2)"
+        y = "ih/2-(ih/zoom/2)"
+    video_filter = (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},"
+        f"zoompan=z='{zoom}':x='{x}':y='{y}':d={frames}:s={width}x{height}:fps={fps},"
+        "setsar=1,format=yuv420p"
+    )
+    _run(
+        [
+            "ffmpeg", "-y", "-loop", "1", "-i", source,
+            "-f", "lavfi", "-t", f"{duration:.6f}",
+            "-i", "anullsrc=r=48000:cl=stereo",
+            "-t", f"{duration:.6f}", "-map", "0:v:0", "-map", "1:a:0",
+            "-vf", video_filter,
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+            "-c:a", "aac", "-b:a", "128k", "-shortest", destination,
+        ],
+        timeout=max(180, int(duration * 30)),
+        label=f"Animating {os.path.basename(source)}",
+    )
+
+
+def render_comic_animatic(
+    panels: list[dict[str, Any]],
+    output_path: str,
+    *,
+    width: int,
+    height: int,
+    fps: int = 30,
+    transition: str = "crossfade",
+    transition_duration: float = 0.35,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    """Render ordered, already-lettered comic panels as a cinematic animatic."""
+    if not panels:
+        raise ValueError("The comic has no panels to animate")
+    if width < 240 or height < 240 or width > 3840 or height > 3840 or width % 2 or height % 2:
+        raise ValueError("Invalid animatic resolution")
+    if fps not in (24, 25, 30, 50, 60):
+        raise ValueError("Unsupported animatic frame rate")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".comic_animatic_", dir=os.path.dirname(output_path)) as temp_dir:
+        segments: list[str] = []
+        durations: list[float] = []
+        for index, panel in enumerate(panels):
+            if progress:
+                progress(round(index / (len(panels) + 1) * 100), f"Animating panel {index + 1} of {len(panels)}…")
+            duration = max(0.8, min(float(panel.get("duration") or 3.0), 20.0))
+            destination = os.path.join(temp_dir, f"panel_{index:04d}.mp4")
+            _render_still_segment(
+                str(panel["resolved_path"]), destination, duration=duration,
+                width=width, height=height, fps=fps,
+                motion=str(panel.get("motion") or "push-in"),
+            )
+            segments.append(destination)
+            durations.append(duration)
+        transitions = []
+        for index in range(max(0, len(segments) - 1)):
+            duration = max(0.05, min(transition_duration, durations[index] * .45, durations[index + 1] * .45)) if transition != "none" else 0
+            transitions.append({"type": transition, "duration": duration})
+        if len(segments) == 1 or transition == "none":
+            _concat_without_transition(segments, output_path)
+        else:
+            _concat_with_transitions(segments, durations, output_path, transitions)
+    if progress:
+        progress(100, "Comic animatic complete")
+    return {
+        "duration": round(sum(durations) - sum(item["duration"] for item in transitions), 3),
+        "clip_count": len(segments),
+        "transitions": transitions,
+    }

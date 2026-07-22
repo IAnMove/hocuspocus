@@ -24,9 +24,22 @@ export interface ComicCharacter {
   id: string
   name: string
   description: string
+  role?: string
+  personality?: string
+  motivation?: string
+  voice?: string
   wardrobe?: string
+  visualNotes?: string
+  negativePrompt?: string
   referenceAssetId?: string
+  referenceAssetIds?: string[]
   locked: boolean
+}
+
+export interface ComicGlossaryEntry {
+  source: string
+  translation: string
+  note?: string
 }
 
 export interface ComicBaseElement {
@@ -125,6 +138,7 @@ export interface ComicProject {
   style: ComicStyle
   pageNumbering: { style: 'none' | 'plain' | 'circle' }
   characters: ComicCharacter[]
+  translationGlossary?: ComicGlossaryEntry[]
   pages: ComicPage[]
   assets: Record<string, ComicAsset>
   director?: {
@@ -134,6 +148,8 @@ export interface ComicProject {
     input: ComicDirectorRequest
     plan: ComicPlan
     completedPanelIds: string[]
+    scriptApprovedAt?: string
+    scriptVersion?: number
     /** Maestro generation jobs keyed by planned panel ID.
      *  Kept until the resulting image has been attached so a dropped browser
      *  request can resume the same backend job instead of generating twice. */
@@ -161,6 +177,8 @@ export interface ComicPlanPanel {
   captions: string[]
   soundEffects: string[]
   continuityNotes: string
+  durationSeconds?: number
+  cameraMove?: 'none' | 'push-in' | 'pull-out' | 'pan-left' | 'pan-right'
 }
 
 export interface ComicPlanPage {

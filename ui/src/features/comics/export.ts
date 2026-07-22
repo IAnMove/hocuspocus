@@ -2,6 +2,7 @@ import { toPng } from 'html-to-image'
 import { jsPDF } from 'jspdf'
 import JSZip from 'jszip'
 import { useComicStore } from './store'
+import type { ComicPanelElement } from './types'
 
 const nextPaint = () => new Promise<void>(resolve =>
   requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
@@ -65,6 +66,54 @@ async function captureAllPages(onProgress?: (current: number, total: number) => 
   return images
 }
 
+export async function captureComicPanels(
+  onProgress?: (current: number, total: number) => void,
+): Promise<Array<{ dataUrl: string; pageNumber: number; panelNumber: number; panelId: string }>> {
+  const state = useComicStore.getState()
+  const originalPage = state.currentPageId
+  const originalZoom = state.zoom
+  const originalSelection = state.selectedId
+  const total = state.project.pages.reduce((sum, page) => sum + page.elements.filter(element => element.type === 'panel' && !element.parentId).length, 0)
+  const captures: Array<{ dataUrl: string; pageNumber: number; panelNumber: number; panelId: string }> = []
+  let current = 0
+  state.setSelected(null)
+  state.setZoom(1)
+  try {
+    for (let pageIndex = 0; pageIndex < state.project.pages.length; pageIndex += 1) {
+      const page = state.project.pages[pageIndex]
+      useComicStore.getState().setCurrentPage(page.id)
+      await nextPaint()
+      const panels = page.elements
+        .filter((element): element is ComicPanelElement => element.type === 'panel' && !element.parentId)
+        .sort((a, b) => a.zIndex - b.zIndex)
+      for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) {
+        const panel = panels[panelIndex]
+        const node = document.querySelector<HTMLElement>(`[data-comic-element="${CSS.escape(panel.id)}"]`)
+        if (!node) throw new Error(`Comic panel ${pageIndex + 1}.${panelIndex + 1} is not mounted`)
+        current += 1
+        onProgress?.(current, total)
+        captures.push({
+          dataUrl: await toPng(node, {
+            pixelRatio: 2,
+            cacheBust: true,
+            width: Math.round(panel.width),
+            height: Math.round(panel.height),
+            style: { left: '0', top: '0', transform: 'none', boxShadow: 'none' },
+          }),
+          pageNumber: pageIndex + 1,
+          panelNumber: panelIndex + 1,
+          panelId: panel.id,
+        })
+      }
+    }
+  } finally {
+    useComicStore.getState().setCurrentPage(originalPage)
+    useComicStore.getState().setZoom(originalZoom)
+    useComicStore.getState().setSelected(originalSelection)
+  }
+  return captures
+}
+
 export async function exportComicPdf(onProgress?: (current: number, total: number) => void) {
   const project = useComicStore.getState().project
   const pages = await captureAllPages(onProgress)
@@ -102,4 +151,3 @@ export function exportComicJson() {
     `${safeName(project.title)}.comic.json`,
   )
 }
-
