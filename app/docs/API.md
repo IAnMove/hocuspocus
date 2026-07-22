@@ -487,6 +487,8 @@ Cancellation is cooperative and forwards WanGP's normal abort signal to the acti
 
 Comic Director planning is asynchronous: start with `POST /api/v1/director/comic/plan/start`, then poll `GET /api/v1/director/comic/plan/status/{job_id}`. Existing plans can be story-edited without regenerating artwork through `POST /api/v1/director/comic/story/revise`, or lettered/translated one page at a time through `POST /api/v1/director/comic/text/page`.
 
+All three narrative endpoints accept the optional fields `writingProvider`, `writingModel`, and `writingBaseUrl`. Set `writingProvider` to `openai-compatible` (for example `writingModel: "deepseek-chat"`, `writingBaseUrl: "https://api.deepseek.com"`) to override the LLM only for that comic operation. The OpenAI-compatible key is read from Settings → Services and must not be included in the request or project JSON. Omitting these fields uses Maestro's internal/default LLM. DeepSeek and OpenAI hosts are trusted directly; any other base URL must first exactly match the Remote URL explicitly saved in Settings, preventing an imported comic from redirecting the stored key.
+
 `POST /api/v1/comics/animatic` accepts ordered, uploaded lettered-panel images and queues a 1080p MP4 render. Poll the returned job with the Video Editor status endpoint.
 
 ```bash

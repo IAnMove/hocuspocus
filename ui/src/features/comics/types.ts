@@ -220,6 +220,10 @@ export interface ComicDirectorRequest {
   /** Visual elements the image generator must never introduce. */
   forbiddenElements?: string
   dialogueDensity: 'low' | 'medium' | 'high'
+  /** LLM used only for this comic's planning, revision and translation. */
+  writingProvider?: 'maestro' | 'openai-compatible'
+  writingModel?: string
+  writingBaseUrl?: string
   provider: 'maestro' | 'minimax'
   imageModel?: string
   characters: ComicCharacter[]

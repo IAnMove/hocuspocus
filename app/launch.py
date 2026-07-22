@@ -11244,23 +11244,77 @@ def _generate_comic_director_json(
     schema: dict,
     max_new_tokens: int,
     stage: str,
+    llm_override: dict | None = None,
 ) -> dict:
     from services import llm_service
     # A streaming HTTP response resets the read timeout on every token.
     # This lets slow CPU-hosted Ollama models finish healthy generations
     # instead of losing all work after one ten-minute blocking request.
-    raw = llm_service.generate_streaming(
-        prompt=prompt,
-        system_prompt=system_prompt,
-        max_new_tokens=max_new_tokens,
-        temperature=0.2,
-        enable_thinking=False,
-        thinking_budget=0,
-        frequency_penalty=0.25,
-        presence_penalty=0.1,
-        json_schema=schema,
-    )
+    common = {
+        "prompt": prompt,
+        "system_prompt": system_prompt,
+        "max_new_tokens": max_new_tokens,
+        "temperature": 0.2,
+        "frequency_penalty": 0.25,
+        "presence_penalty": 0.1,
+        "json_schema": schema,
+    }
+    if llm_override:
+        raw = llm_service.generate_openai_compatible(
+            **common,
+            model_id=llm_override["model"],
+            base_url=llm_override["base_url"],
+            api_key=llm_override["api_key"],
+        )
+    else:
+        raw = llm_service.generate_streaming(
+            **common,
+            enable_thinking=False,
+            thinking_budget=0,
+        )
     return _parse_comic_director_json(raw, stage)
+
+
+def _comic_writing_llm(body: dict) -> dict | None:
+    """Resolve a comic-only LLM override without changing global LLM state."""
+    provider = str(body.get("writingProvider") or "maestro").strip().lower()
+    if provider in ("", "maestro", "internal", "local"):
+        return None
+    if provider != "openai-compatible":
+        raise HTTPException(status_code=400, detail="Unsupported comic writing provider")
+    model = str(body.get("writingModel") or "deepseek-chat").strip()[:200]
+    base_url = str(body.get("writingBaseUrl") or "https://api.deepseek.com").strip()[:1000]
+    if not base_url.startswith(("http://", "https://")):
+        raise HTTPException(
+            status_code=400,
+            detail="OpenAI-compatible URL must start with http:// or https://",
+        )
+    services = wgp.server_config.get("services", {})
+    # A comic JSON is importable and therefore untrusted. Never let an
+    # imported project redirect the user's stored API key to an arbitrary
+    # host. Known hosted APIs are allowed directly; every other compatible
+    # endpoint must exactly match the URL the user trusted in Settings.
+    from urllib.parse import urlparse
+    host = (urlparse(base_url).hostname or "").lower()
+    configured_url = str(services.get("llm_remote_url") or "").strip().rstrip("/")
+    known_hosts = {"api.deepseek.com", "api.openai.com"}
+    if host not in known_hosts and base_url.rstrip("/") != configured_url:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "For security, custom OpenAI-compatible URLs must first be trusted "
+                "as the Remote URL in Settings → Services"
+            ),
+        )
+    api_key = str(services.get("openai_api_key") or "")
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Configure the OpenAI / compatible API key in Settings → Services first",
+        )
+    if not model:
+        raise HTTPException(status_code=400, detail="Choose an OpenAI-compatible model")
+    return {"model": model, "base_url": base_url.rstrip("/"), "api_key": api_key}
 
 
 @api.post("/api/v1/director/comic/plan")
@@ -11277,6 +11331,7 @@ def director_comic_plan(body: dict, job_id: str | None = None):
     manual_art_style = str(body.get("artStyle") or "").strip()
     manual_world_context = str(body.get("worldContext") or "").strip()
     manual_forbidden = str(body.get("forbiddenElements") or "").strip()
+    writing_llm = _comic_writing_llm(body)
     shared_brief = f"""Premise: {premise}
 Exact page count: {page_count}
 Exactly {panels_per_page} panels per page.
@@ -11294,7 +11349,8 @@ Locked character bible: {json.dumps(characters, ensure_ascii=False)}"""
 storyteller and continuity editor. Return only the JSON object required by the supplied schema.
 Keep every field concise and use stable character IDs."""
     try:
-        _ensure_llm_loaded()
+        if not writing_llm:
+            _ensure_llm_loaded()
         checkpoint = {}
         if job_id:
             with _comic_plan_jobs_lock:
@@ -11352,6 +11408,7 @@ with generic advice or invented restrictions merely because the field exists."""
                 schema=bible_schema,
                 max_new_tokens=max(1400, 900 + page_count * 120),
                 stage="the story bible",
+                llm_override=writing_llm,
             )
             if job_id:
                 _comic_plan_job_update(
@@ -11483,6 +11540,7 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
                     schema=page_schema,
                     max_new_tokens=min(5000, max(1800, 700 + panels_per_page * 420)),
                     stage=f"page {page_number}, attempt {attempt}",
+                    llm_override=writing_llm,
                 )
                 page_problem = _comic_page_problem(page, panels_per_page)
                 if (
@@ -11509,6 +11567,7 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
                         page,
                         requested_language,
                         page_number,
+                        writing_llm,
                     )
                     if _comic_page_has_probable_english_drift(
                         page,
@@ -11708,6 +11767,7 @@ def _repair_comic_page_language(
     page: dict,
     target_language: str,
     page_number: int,
+    llm_override: dict | None = None,
 ) -> dict:
     source_panels = []
     for panel in page.get("panels") or []:
@@ -11752,6 +11812,7 @@ Source page text: {json.dumps({"panels": source_panels}, ensure_ascii=False)}"""
         schema=schema,
         max_new_tokens=min(2600, max(900, len(source_panels) * 260)),
         stage=f"language repair for page {page_number}",
+        llm_override=llm_override,
     )
     candidate_panels = generated.get("panels")
     if not isinstance(candidate_panels, list) or len(candidate_panels) != len(source_panels):
@@ -11812,6 +11873,7 @@ def director_comic_text_page(body: dict):
                     "note": note,
                 })
     dialogue_density = str(body.get("dialogueDensity") or "medium").lower()
+    writing_llm = _comic_writing_llm(body)
     if not isinstance(plan, dict) or not isinstance(plan.get("pages"), list):
         raise HTTPException(status_code=400, detail="A valid comic plan is required")
     if page_index < 0 or page_index >= len(plan["pages"]):
@@ -11855,7 +11917,8 @@ Use the comic language {plan.get("language") or "English"}. You may make panels 
     ratio = {"low": 0.3, "medium": 0.55, "high": 0.8}.get(dialogue_density, 0.55)
     page_budget = max(1, min(len(source_panels), int(len(source_panels) * ratio + 0.999)))
     try:
-        _ensure_llm_loaded()
+        if not writing_llm:
+            _ensure_llm_loaded()
         generated = _generate_comic_director_json(
             prompt=f"""{task}
 
@@ -11872,6 +11935,7 @@ Source page: {json.dumps(source, ensure_ascii=False)}""",
             schema=schema,
             max_new_tokens=min(3200, max(900, len(source_panels) * 260)),
             stage=f"{mode} lettering for page {page_index + 1}",
+            llm_override=writing_llm,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Comic text {mode} failed: {exc}") from exc
@@ -11937,6 +12001,7 @@ def director_comic_story_revise(body: dict):
     plan = body.get("plan")
     instruction = str(body.get("instruction") or "").strip()[:4000]
     dialogue_density = str(body.get("dialogueDensity") or "medium").lower()
+    writing_llm = _comic_writing_llm(body)
     if not isinstance(plan, dict) or not isinstance(plan.get("pages"), list) or not plan["pages"]:
         raise HTTPException(status_code=400, detail="A valid comic plan is required")
     page_count = len(plan["pages"])
@@ -11950,7 +12015,8 @@ def director_comic_story_revise(body: dict):
     schema["properties"]["pages"]["items"]["properties"]["panels"]["minItems"] = panel_count
     schema["properties"]["pages"]["items"]["properties"]["panels"]["maxItems"] = panel_count
     try:
-        _ensure_llm_loaded()
+        if not writing_llm:
+            _ensure_llm_loaded()
         revised = _generate_comic_director_json(
             prompt=f"""Revise this complete comic script as a professional story editor.
 Editorial instruction: {instruction or "Strengthen causality, escalation, character agency, midpoint reversal, climax payoff and a concise ending."}
@@ -11971,6 +12037,7 @@ Existing plan: {json.dumps(plan, ensure_ascii=False)}""",
             schema=schema,
             max_new_tokens=min(16000, max(5000, page_count * panel_count * 420)),
             stage="revising comic story",
+            llm_override=writing_llm,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Comic story revision failed: {exc}") from exc
@@ -12059,8 +12126,13 @@ def _comic_plan_job_update(job_id: str, **patch) -> None:
 
 def _run_comic_plan_job(job_id: str, body: dict) -> None:
     services = wgp.server_config.get("services", {})
-    provider = str(services.get("llm_provider") or "local")
-    model = str(services.get("llm_model_id") or "default")
+    external = str(body.get("writingProvider") or "maestro") == "openai-compatible"
+    provider = "openai-compatible" if external else str(services.get("llm_provider") or "local")
+    model = (
+        str(body.get("writingModel") or "deepseek-chat")
+        if external
+        else str(services.get("llm_model_id") or "default")
+    )
     try:
         print(f"[Comic Director {job_id}] Starting plan with provider={provider}, model={model}")
         _comic_plan_job_update(
@@ -12070,7 +12142,8 @@ def _run_comic_plan_job(job_id: str, body: dict) -> None:
             provider=provider,
             model=model,
         )
-        _ensure_llm_loaded()
+        if not external:
+            _ensure_llm_loaded()
         _comic_plan_job_update(
             job_id,
             status="planning",

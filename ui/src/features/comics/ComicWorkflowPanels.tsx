@@ -7,10 +7,53 @@ import { useStore } from '../../stores/useStore'
 import { captureComicPanels } from './export'
 import { comicId, normalizeComicPlan, simplifyDirectorText } from './model'
 import { useComicStore } from './store'
-import type { ComicAsset, ComicCharacter, ComicGlossaryEntry, ComicPlanPanel } from './types'
+import type { ComicAsset, ComicCharacter, ComicDirectorRequest, ComicGlossaryEntry, ComicPlanPanel } from './types'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
+
+export function ComicWritingProviderFields({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: ComicDirectorRequest
+  onChange: <K extends keyof ComicDirectorRequest>(key: K, value: ComicDirectorRequest[K]) => void
+  disabled?: boolean
+}) {
+  const apiKeySet = useStore(state => Boolean(state.servicesConfig?.openai_api_key_set))
+  const external = value.writingProvider === 'openai-compatible'
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5">
+      <label className="block text-[10px] text-text-muted">Writing LLM
+        <select
+          className={`${input} mt-1`}
+          disabled={disabled}
+          value={value.writingProvider || 'maestro'}
+          onChange={event => onChange('writingProvider', event.target.value as ComicDirectorRequest['writingProvider'])}
+        >
+          <option value="maestro">Maestro internal · default</option>
+          <option value="openai-compatible">DeepSeek / OpenAI-compatible · only this comic</option>
+        </select>
+      </label>
+      {external && <>
+        <label className="block text-[10px] text-text-muted">Model
+          <input className={`${input} mt-1`} disabled={disabled} value={value.writingModel || 'deepseek-chat'} onChange={event => onChange('writingModel', event.target.value)} placeholder="deepseek-chat" />
+        </label>
+        <label className="block text-[10px] text-text-muted">OpenAI-compatible base URL
+          <input className={`${input} mt-1`} disabled={disabled} value={value.writingBaseUrl || 'https://api.deepseek.com'} onChange={event => onChange('writingBaseUrl', event.target.value)} placeholder="https://api.deepseek.com" />
+        </label>
+        <p className={`text-[9px] ${apiKeySet ? 'text-emerald-400' : 'text-amber-300'}`}>
+          {apiKeySet
+            ? 'Compatible API key configured. The internal LLM remains loaded and unchanged.'
+            : 'Add your OpenAI / compatible API key in Settings → Services before running this operation.'}
+        </p>
+        <p className="text-[9px] text-text-muted">DeepSeek and OpenAI hosts work directly. For any other URL, trust the same Remote URL first in Settings → Services.</p>
+      </>}
+      {!external && <p className="text-[9px] text-text-muted">Uses Maestro's configured internal LLM. External selection never changes the global provider.</p>}
+    </div>
+  )
+}
 
 function scriptForPanel(panel: ComicPlanPanel): string {
   return [
@@ -193,6 +236,9 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
         plan: director.plan,
         instruction: revisionInstruction,
         dialogueDensity: director.input.dialogueDensity,
+        writingProvider: director.input.writingProvider,
+        writingModel: director.input.writingModel,
+        writingBaseUrl: director.input.writingBaseUrl,
       })
       const state = useComicStore.getState()
       const current = state.project.director!
@@ -220,6 +266,15 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
         <div className="flex items-center gap-2 text-xs font-semibold text-text-primary">{director.scriptApprovedAt ? <Check size={14} className="text-emerald-400" /> : <Sparkles size={14} className="text-amber-300" />} Script v{director.scriptVersion || 1}</div>
         <p className="mt-1 text-[10px] text-text-muted">Review the dramatic beats and complete lettering before generating expensive artwork.</p>
       </div>
+      <ComicWritingProviderFields
+        value={director.input}
+        disabled={revising}
+        onChange={(key, value) => {
+          const state = useComicStore.getState()
+          const current = state.project.director!
+          state.patchProject({ director: { ...current, input: { ...current.input, [key]: value } } })
+        }}
+      />
       <input className={input} value={director.plan.title} onChange={event => patchPlan({ title: event.target.value })} placeholder="Title" />
       <textarea className={input} rows={2} value={director.plan.logline} onChange={event => patchPlan({ logline: event.target.value })} placeholder="Logline" />
       <textarea className={input} rows={4} value={director.plan.synopsis} onChange={event => patchPlan({ synopsis: event.target.value })} placeholder="Synopsis" />

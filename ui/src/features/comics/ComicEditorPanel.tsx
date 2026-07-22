@@ -7,7 +7,7 @@ import {
 import { getModelMode, useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 import { ComicCanvas } from './ComicCanvas'
-import { ComicCharactersPanel, ComicQualityPanel, ComicScriptPanel, ComicVideoPanel } from './ComicWorkflowPanels'
+import { ComicCharactersPanel, ComicQualityPanel, ComicScriptPanel, ComicVideoPanel, ComicWritingProviderFields } from './ComicWorkflowPanels'
 import {
   comicId, COMIC_FORMATS, createComicProject, normalizeComicProject, panelsForCount,
   normalizeComicPlan, planWithCanvasText, projectFromPlan, repairComicText, repairMojibake,
@@ -42,7 +42,8 @@ const translationCacheKey = (
   page: ComicPlanPage,
   language: string,
   glossary: ComicProject['translationGlossary'],
-) => JSON.stringify({ language: language.trim().toLocaleLowerCase(), glossary, panels: page.panels.map(panel => ({
+  writing?: Pick<ComicDirectorRequest, 'writingProvider' | 'writingModel' | 'writingBaseUrl'>,
+) => JSON.stringify({ language: language.trim().toLocaleLowerCase(), glossary, writing, panels: page.panels.map(panel => ({
   id: panel.id, captions: panel.captions, dialogue: panel.dialogue, soundEffects: panel.soundEffects,
 })) })
 
@@ -338,7 +339,12 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
       const working = structuredClone(sourcePlan)
       for (let pageIndex = 0; pageIndex < working.pages.length; pageIndex += 1) {
         setProgress(`Translating ${pageIndex + 1}/${working.pages.length}`)
-        const cacheKey = translationCacheKey(working.pages[pageIndex], target, state.project.translationGlossary)
+        const cacheKey = translationCacheKey(
+          working.pages[pageIndex],
+          target,
+          state.project.translationGlossary,
+          state.project.director!.input,
+        )
         const cached = comicTranslationCache.get(cacheKey)
         if (cached) {
           working.pages[pageIndex] = structuredClone(cached)
@@ -352,6 +358,9 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
           targetLanguage: target,
           dialogueDensity: state.project.director!.input.dialogueDensity,
           glossary: state.project.translationGlossary,
+          writingProvider: state.project.director!.input.writingProvider,
+          writingModel: state.project.director!.input.writingModel,
+          writingBaseUrl: state.project.director!.input.writingBaseUrl,
         })
         working.pages[pageIndex] = result.page
         comicTranslationCache.set(cacheKey, structuredClone(result.page))
@@ -818,6 +827,9 @@ const initialDirector = (): ComicDirectorRequest => ({
   worldContext: '',
   forbiddenElements: '',
   dialogueDensity: 'medium',
+  writingProvider: 'maestro',
+  writingModel: 'deepseek-chat',
+  writingBaseUrl: 'https://api.deepseek.com',
   provider: 'maestro',
   imageModel: useStore.getState().selectedModelPerMode.image || 'flux2_klein_9b',
   characters: [],
@@ -944,6 +956,7 @@ export function ComicDirectorPanel({
     && llmStatus.model_id === planningLlmModel
     && (!llmStatus.provider || llmStatus.provider === planningLlmProvider),
   )
+  const externalWritingLlm = request.writingProvider === 'openai-compatible'
   useEffect(() => {
     setRequest(project.director?.input ?? { ...initialDirector(), characters: project.characters })
   }, [project.id])
@@ -1194,7 +1207,12 @@ export function ComicDirectorPanel({
         total: working.pages.length,
       })
       const cacheKey = mode === 'translate'
-        ? translationCacheKey(working.pages[pageIndex], translationLanguage, current.translationGlossary)
+        ? translationCacheKey(
+          working.pages[pageIndex],
+          translationLanguage,
+          current.translationGlossary,
+          current.director!.input,
+        )
         : ''
       const cached = cacheKey ? comicTranslationCache.get(cacheKey) : undefined
       if (cached) {
@@ -1209,6 +1227,9 @@ export function ComicDirectorPanel({
         targetLanguage: translationLanguage,
         dialogueDensity: current.director!.input.dialogueDensity,
         glossary: current.translationGlossary,
+        writingProvider: current.director!.input.writingProvider,
+        writingModel: current.director!.input.writingModel,
+        writingBaseUrl: current.director!.input.writingBaseUrl,
       })
       working.pages[pageIndex] = result.page
       if (cacheKey) comicTranslationCache.set(cacheKey, structuredClone(result.page))
@@ -1499,16 +1520,21 @@ export function ComicDirectorPanel({
       <div className="rounded-lg border border-border bg-bg-tertiary/30 p-2.5">
         <div className="text-[9px] uppercase tracking-wide text-text-muted">Planning LLM</div>
         <div className="mt-1 text-[11px] text-text-primary">
-          Maestro default · {planningLlmProviderLabel[planningLlmProvider] || planningLlmProvider} · {planningLlmModel}
+          {externalWritingLlm
+            ? `Comic override · OpenAI-compatible · ${request.writingModel || 'deepseek-chat'}`
+            : `Maestro default · ${planningLlmProviderLabel[planningLlmProvider] || planningLlmProvider} · ${planningLlmModel}`}
         </div>
         <div className="mt-0.5 text-[9px] text-text-muted">
-          {planningLlmIsActive
-            ? 'Active now'
-            : llmStatus?.loaded
-              ? `Will switch from ${llmStatus.model_id || 'the currently loaded model'} when planning starts`
-              : 'Auto-loads when planning starts'}
+          {externalWritingLlm
+            ? `${request.writingBaseUrl || 'https://api.deepseek.com'} · internal LLM is left untouched`
+            : planningLlmIsActive
+              ? 'Active now'
+              : llmStatus?.loaded
+                ? `Will switch from ${llmStatus.model_id || 'the currently loaded model'} when planning starts`
+                : 'Auto-loads when planning starts'}
         </div>
       </div>
+      <ComicWritingProviderFields value={request} onChange={patch} disabled={busy !== null} />
       <Field label="Story premise"><textarea className={input} rows={5} value={request.premise} onChange={event => patch('premise', event.target.value)} placeholder="What happens in the comic?" /></Field>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Pages"><input className={input} type="number" min={1} max={100} value={request.pageCount} onChange={event => patch('pageCount', Math.max(1, Number(event.target.value)))} /></Field>

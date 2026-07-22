@@ -1652,6 +1652,100 @@ def generate(
     return content.strip()
 
 
+def generate_openai_compatible(
+    *,
+    prompt: str,
+    system_prompt: str = "",
+    model_id: str,
+    base_url: str,
+    api_key: str,
+    max_new_tokens: int = 256,
+    temperature: float = 0.2,
+    top_p: float = 0.9,
+    frequency_penalty: float = 0.0,
+    presence_penalty: float = 0.0,
+    json_schema: Optional[dict] = None,
+) -> str:
+    """Run one isolated OpenAI-compatible text request.
+
+    Unlike :func:`load_model`, this helper never mutates Maestro's singleton
+    provider or unloads the local llama-server.  It is intended for scoped
+    overrides such as asking DeepSeek to revise one comic while keeping the
+    application's normal internal LLM active.
+    """
+    model_id = (model_id or "").strip()
+    base_url = (base_url or "").strip().rstrip("/")
+    if not model_id:
+        raise RuntimeError("An OpenAI-compatible model name is required")
+    if not base_url.startswith(("http://", "https://")):
+        raise RuntimeError("The OpenAI-compatible base URL must start with http:// or https://")
+    if not api_key:
+        raise RuntimeError("Configure the OpenAI / compatible API key in Settings → Services")
+
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    payload = {
+        "model": model_id,
+        "messages": messages,
+        "max_tokens": max_new_tokens,
+        "temperature": max(temperature, 0.01),
+        "top_p": top_p,
+    }
+    if frequency_penalty > 0:
+        payload["frequency_penalty"] = frequency_penalty
+    if presence_penalty > 0:
+        payload["presence_penalty"] = presence_penalty
+    if json_schema is not None:
+        if "deepseek.com" in base_url.lower():
+            payload["response_format"] = {"type": "json_object"}
+        else:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "maestro_comic_response",
+                    "strict": True,
+                    "schema": json_schema,
+                },
+            }
+
+    endpoint = (
+        f"{base_url}/chat/completions"
+        if base_url.endswith("/v1")
+        else f"{base_url}/v1/chat/completions"
+    )
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    try:
+        response = requests.post(endpoint, json=payload, headers=headers, timeout=(10, 600))
+        # Some otherwise-compatible APIs do not implement OpenAI's structured
+        # response envelope. Retry once without it; Maestro still validates
+        # the returned JSON against the comic schema locally.
+        if response.status_code in (400, 404, 422) and "response_format" in payload:
+            payload.pop("response_format", None)
+            response = requests.post(endpoint, json=payload, headers=headers, timeout=(10, 600))
+        response.raise_for_status()
+    except requests.exceptions.RequestException as exc:
+        detail = ""
+        if getattr(exc, "response", None) is not None:
+            detail = str(exc.response.text or "")[:500]
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
+
+    try:
+        message = response.json()["choices"][0]["message"]
+        content = message.get("content") or ""
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise RuntimeError("OpenAI-compatible provider returned an invalid response") from exc
+    content = _strip_thinking_tags(str(content)).strip()
+    if not content:
+        raise RuntimeError("OpenAI-compatible provider returned an empty response")
+    return content
+
+
 def get_stream_status() -> dict:
     """Return current streaming state for polling."""
     with _stream_lock:

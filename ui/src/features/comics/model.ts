@@ -568,6 +568,9 @@ export function normalizeComicProject(raw: unknown): ComicProject {
       : []
     if (project.director) {
       project.director.scriptVersion = Number(project.director.scriptVersion || 1)
+      project.director.input.writingProvider = project.director.input.writingProvider || 'maestro'
+      project.director.input.writingModel = project.director.input.writingModel || 'deepseek-chat'
+      project.director.input.writingBaseUrl = project.director.input.writingBaseUrl || 'https://api.deepseek.com'
     }
     return project
   }

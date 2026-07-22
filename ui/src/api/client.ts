@@ -1267,6 +1267,9 @@ export async function rewriteComicTextPage(params: {
   targetLanguage?: string
   dialogueDensity: import('../features/comics/types').ComicDirectorRequest['dialogueDensity']
   glossary?: import('../features/comics/types').ComicGlossaryEntry[]
+  writingProvider?: import('../features/comics/types').ComicDirectorRequest['writingProvider']
+  writingModel?: string
+  writingBaseUrl?: string
 }): Promise<{ page: import('../features/comics/types').ComicPlanPage }> {
   const response = await fetch(`${BASE}/api/v1/director/comic/text/page`, {
     method: 'POST',
@@ -1284,6 +1287,9 @@ export async function reviseComicStory(params: {
   plan: import('../features/comics/types').ComicPlan
   instruction?: string
   dialogueDensity: import('../features/comics/types').ComicDirectorRequest['dialogueDensity']
+  writingProvider?: import('../features/comics/types').ComicDirectorRequest['writingProvider']
+  writingModel?: string
+  writingBaseUrl?: string
 }): Promise<{ plan: import('../features/comics/types').ComicPlan }> {
   const response = await fetch(`${BASE}/api/v1/director/comic/story/revise`, {
     method: 'POST',

@@ -37,6 +37,7 @@ Build a comic as an editable production rather than a single flattened generatio
 
 - **Characters** stores personality, motivation, dialogue voice, wardrobe, visual invariants, exclusions, and multiple generated or uploaded identity references.
 - **Quality** checks text density, duplicated lines, missing continuity notes, unknown characters, unapproved scripts, and missing references. Translation glossaries lock names and terminology across languages.
+- **Writing LLM override** keeps Maestro's internal model as the default, but lets one comic use DeepSeek or another OpenAI-compatible endpoint for planning, story revision, lettering, and translation. The API key remains in Settings and is never embedded in the comic JSON.
 - **Video** turns the final lettered panels into a 1080p landscape, portrait, or square animatic with per-shot timing, camera movement, and transitions. The MP4 is handed to the Video Editor automatically for further cutting.
 - Comic and Video Editor drafts autosave locally; saved comics remain backward-compatible with older version-2 project JSON.
 
