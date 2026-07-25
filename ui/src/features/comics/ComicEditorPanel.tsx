@@ -68,6 +68,39 @@ const translationCacheKey = (
   id: panel.id, captions: panel.captions, dialogue: panel.dialogue, soundEffects: panel.soundEffects,
 })) })
 
+function panelIdentityReference(
+  director: NonNullable<ComicProject['director']>,
+  panel: ComicPlanPanel,
+  assets: ComicProject['assets'],
+): { source?: string; characterId?: string } {
+  const characters = new Map(director.plan.characters.map(character => [character.id, character]))
+  for (const characterId of panel.characters) {
+    const character = characters.get(characterId)
+    if (!character) continue
+    const referenceIds = Array.from(new Set([
+      character.referenceAssetId,
+      ...(character.referenceAssetIds || []),
+    ].filter((value): value is string => Boolean(value))))
+    const asset = referenceIds.map(id => assets[id]).find(Boolean)
+    if (asset?.source) return { source: asset.source, characterId }
+  }
+  return {}
+}
+
+function miniMaxAspectRatio(
+  width: number,
+  height: number,
+): NonNullable<Parameters<typeof generateImageAsset>[5]>['aspectRatio'] {
+  const target = Math.max(0.01, width / Math.max(1, height))
+  const ratios = [
+    ['1:1', 1], ['16:9', 16 / 9], ['4:3', 4 / 3], ['3:2', 3 / 2],
+    ['2:3', 2 / 3], ['3:4', 3 / 4], ['9:16', 9 / 16], ['21:9', 21 / 9],
+  ] as const
+  return ratios.reduce((best, candidate) =>
+    Math.abs(Math.log(candidate[1] / target)) < Math.abs(Math.log(best[1] / target))
+      ? candidate : best)[0]
+}
+
 function panelScript(panel: ComicPlanPanel): string {
   return [
     ...panel.captions.map(text => `[Caption] ${text}`),
@@ -1052,11 +1085,12 @@ export function ComicDirectorPanel({
           director.provider === 'minimax' ? 'MiniMax' : 'Maestro'
         }…`, { current: index + 1, total: tasks.length })
         setProgress(`Generating panel ${index + 1} / ${tasks.length}`)
-        const character = director.plan.characters.find(item => task.plan.characters.includes(item.id))
-        const characterReference = character?.referenceAssetId
-          ? useComicStore.getState().project.assets[character.referenceAssetId]?.source
-          : undefined
         const currentDirector = useComicStore.getState().project.director!
+        const identityReference = panelIdentityReference(
+          currentDirector,
+          task.plan,
+          useComicStore.getState().project.assets,
+        )
         const maestroState = useStore.getState()
         const selectedImageModel = maestroState.models.find(model =>
           model.model_type === currentDirector.imageModel)
@@ -1067,7 +1101,7 @@ export function ComicDirectorPanel({
               && maestroState.modelOptions?.image_ref_choices),
           )
         const worldReferenceId = currentDirector.input.worldReferenceAssetIds?.[0]
-        const reference = characterReference || (localSupportsReferences && worldReferenceId
+        const reference = identityReference.source || (localSupportsReferences && worldReferenceId
           ? useComicStore.getState().project.assets[worldReferenceId]?.source
           : undefined)
         const prompt = buildDirectorImagePrompt(
@@ -1124,8 +1158,12 @@ export function ComicDirectorPanel({
                 `MiniMax temporarily failed on panel ${index + 1}; retrying (${attempt}/2)…`,
                 { current: index + 1, total: tasks.length },
               ),
+              aspectRatio: miniMaxAspectRatio(task.panel.width, task.panel.height),
             },
           )
+        }
+        if (identityReference.characterId) {
+          asset.characterIds = [identityReference.characterId]
         }
         const latest = useComicStore.getState()
         const latestPage = latest.project.pages.find(page => page.id === task.pageId)
@@ -1339,14 +1377,15 @@ export function ComicDirectorPanel({
       } panels.`)
       const currentProject = useComicStore.getState().project
       const freshProject = createComicProject()
-      const characterReferenceIds = new Set(
+      const preservedReferenceIds = new Set(
         [...request.characters, ...plan.characters].flatMap(character => [
           character.referenceAssetId,
           ...(character.referenceAssetIds || []),
-        ]).filter((assetId): assetId is string => Boolean(assetId)),
+        ]).concat(request.worldReferenceAssetIds || [])
+          .filter((assetId): assetId is string => Boolean(assetId)),
       )
       freshProject.assets = Object.fromEntries(
-        [...characterReferenceIds]
+        [...preservedReferenceIds]
           .map(assetId => currentProject.assets[assetId])
           .filter((asset): asset is ComicAsset => Boolean(asset))
           .map(asset => [asset.id, asset]),
@@ -1494,10 +1533,7 @@ export function ComicDirectorPanel({
     )) return
     setSingleBusy(planned.id)
     try {
-      const character = director.plan.characters.find(item => planned.characters.includes(item.id))
-      const characterReference = character?.referenceAssetId
-        ? state.project.assets[character.referenceAssetId]?.source
-        : undefined
+      const identityReference = panelIdentityReference(director, planned, state.project.assets)
       const maestroState = useStore.getState()
       const selectedImageModel = maestroState.models.find(model =>
         model.model_type === director.imageModel)
@@ -1508,7 +1544,7 @@ export function ComicDirectorPanel({
             && maestroState.modelOptions?.image_ref_choices),
         )
       const worldReferenceId = director.input.worldReferenceAssetIds?.[0]
-      const reference = characterReference || (localSupportsReferences && worldReferenceId
+      const reference = identityReference.source || (localSupportsReferences && worldReferenceId
         ? state.project.assets[worldReferenceId]?.source
         : undefined)
       const existingJobId = director.completedPanelIds.includes(planned.id)
@@ -1524,8 +1560,12 @@ export function ComicDirectorPanel({
           panelId: planned.id,
           existingJobId,
           onJobSubmitted: jobId => rememberPanelJob(planned.id, jobId),
+          aspectRatio: miniMaxAspectRatio(panel.width, panel.height),
         },
       )
+      if (identityReference.characterId) {
+        asset.characterIds = [identityReference.characterId]
+      }
       const latest = useComicStore.getState()
       const currentPage = latest.project.pages[pageIndex]
       const oldImages = currentPage.elements.filter(element => element.parentId === panel.id && element.type === 'image')
@@ -1580,6 +1620,21 @@ export function ComicDirectorPanel({
       </div>
       <ComicWritingProviderFields value={request} onChange={patch} disabled={busy !== null} />
       <Field label="Story premise"><textarea className={input} rows={5} value={request.premise} onChange={event => patch('premise', event.target.value)} placeholder="What happens in the comic?" /></Field>
+      {request.sourceStory && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-[10px] text-emerald-200">
+          Loaded from Story Lab: <b>{request.sourceStory.title}</b> · revision {request.sourceStory.revision}.
+          The complete adaptation brief below is editable before planning.
+        </div>
+      )}
+      <Field label="Story bible / adaptation brief (optional, editable)">
+        <textarea
+          className={input}
+          rows={8}
+          value={request.storyContext || ''}
+          onChange={event => patch('storyContext', event.target.value)}
+          placeholder="Characters, relationships, dramatic beats, theme and adaptation constraints. Story Lab fills this automatically."
+        />
+      </Field>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Pages"><input className={input} type="number" min={1} max={100} value={request.pageCount} onChange={event => patch('pageCount', Math.max(1, Number(event.target.value)))} /></Field>
         <Field label="Panels / page"><input className={input} type="number" min={1} max={12} value={request.panelsPerPage} onChange={event => patch('panelsPerPage', Math.max(1, Number(event.target.value)))} /></Field>
@@ -1692,7 +1747,9 @@ export function ComicDirectorPanel({
       </Field>
       {request.provider === 'minimax' && (
         <p className="text-[9px] text-text-muted">
-          MiniMax references preserve a character's identity; they are not a general style-reference control.
+          MiniMax image-01 accepts one character identity reference per request. In a group panel,
+          Director anchors the first listed character that has an available reference and describes
+          every other character from the locked visual bible.
         </p>
       )}
       {project.director && (
@@ -1721,7 +1778,8 @@ export function ComicDirectorPanel({
               {Object.values(project.assets).map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
             </select>
             <p className="mt-1 text-[9px] text-text-muted">
-              MiniMax uses this image as a subject reference when the character appears in a panel.
+              MiniMax can use this as the panel's single identity anchor. Other characters remain
+              controlled by their canonical written descriptions.
             </p>
           </div>
         ))}

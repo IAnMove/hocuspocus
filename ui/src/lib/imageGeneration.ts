@@ -10,6 +10,7 @@ export type LocalImageOptions = {
   onPollRetry?: (attempt: number, error: string) => void
   onProviderRetry?: (attempt: number, error: string) => void
   strictReference?: boolean
+  aspectRatio?: '1:1' | '16:9' | '4:3' | '3:2' | '2:3' | '3:4' | '9:16' | '21:9'
 }
 
 const wait = (milliseconds: number) =>
@@ -167,7 +168,7 @@ export async function generateImageAsset(
       try {
         const result = await api.generateComicWithMiniMax({
           prompt: providerPrompt,
-          aspect_ratio: '1:1',
+          aspect_ratio: options?.aspectRatio || '1:1',
           subject_reference: reference,
         })
         return result.asset

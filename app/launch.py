@@ -10994,11 +10994,27 @@ def get_comic_output(name: str):
         raise HTTPException(status_code=400, detail=f"Invalid comic project: {exc}") from exc
 
 
-def _comic_reference_data_url(source: str) -> str:
-    """Resolve a Maestro asset URL to the data URL expected by MiniMax."""
+def _comic_reference_image_file(source: str) -> str:
+    """Resolve a local asset to base64, or preserve a validated public URL."""
     if source.startswith("data:image/"):
         if len(source) > 25 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="Character reference is too large")
+        return source
+    if source.startswith(("https://", "http://")):
+        from urllib.parse import urlparse
+        import ipaddress
+        parsed = urlparse(source)
+        hostname = (parsed.hostname or "").strip().lower()
+        if not hostname or hostname == "localhost":
+            raise HTTPException(status_code=400, detail="Character reference URL must be public")
+        try:
+            address = ipaddress.ip_address(hostname)
+            if not address.is_global:
+                raise HTTPException(status_code=400, detail="Character reference URL must be public")
+        except ValueError:
+            pass
+        if len(source) > 4096:
+            raise HTTPException(status_code=400, detail="Character reference URL is too long")
         return source
     path = None
     if source.startswith("/api/v1/file/"):
@@ -11036,18 +11052,22 @@ def generate_comic_minimax(body: dict):
     api_key = services.get("minimax_api_key", "")
     if not api_key:
         raise HTTPException(status_code=400, detail="Set the MiniMax API key in Settings → Services")
+    aspect_ratio = str(body.get("aspect_ratio") or "1:1")
+    if aspect_ratio not in {"1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9"}:
+        raise HTTPException(status_code=400, detail="Unsupported MiniMax image aspect ratio")
     request_body = {
         "model": "image-01",
         "prompt": prompt,
-        "aspect_ratio": str(body.get("aspect_ratio") or "1:1"),
+        "aspect_ratio": aspect_ratio,
         "response_format": "base64",
         "n": 1,
+        "prompt_optimizer": False,
     }
     subject = body.get("subject_reference")
     if subject:
         request_body["subject_reference"] = [{
             "type": "character",
-            "image_file": _comic_reference_data_url(str(subject)),
+            "image_file": _comic_reference_image_file(str(subject)),
         }]
     try:
         response = requests.post(
@@ -11087,7 +11107,12 @@ def generate_comic_minimax(body: dict):
     with open(meta_path + ".tmp", "w", encoding="utf-8") as handle:
         json.dump({
             "generation_mode": "image",
-            "params": {"prompt": prompt, "provider": "minimax", "model_type": "image-01"},
+            "params": {
+                "prompt": prompt,
+                "provider": "minimax",
+                "model_type": "image-01",
+                "aspect_ratio": aspect_ratio,
+            },
             "created_at": time.time(),
         }, handle, ensure_ascii=False, indent=2)
     os.replace(meta_path + ".tmp", meta_path)
@@ -11101,7 +11126,10 @@ def generate_comic_minimax(body: dict):
         "provider": "minimax",
         "model": "image-01",
         "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "metadata": {"subjectReference": bool(subject)},
+        "metadata": {
+            "subjectReference": bool(subject),
+            "aspectRatio": aspect_ratio,
+        },
     }}
 
 
@@ -11229,6 +11257,39 @@ def _normalize_comic_panel_arrays(panel: dict) -> None:
         for item in items
         if isinstance(item, dict) or (isinstance(item, str) and item.strip())
     ]
+
+
+def _normalize_comic_panel_character_ids(panel: dict, characters: list) -> None:
+    """Resolve harmless LLM name/ID drift while preserving visual priority order."""
+    lookup: dict[str, str] = {}
+    canonical_ids: set[str] = set()
+    for character in characters:
+        if not isinstance(character, dict):
+            continue
+        canonical = str(character.get("id") or "").strip()
+        if not canonical:
+            continue
+        canonical_ids.add(canonical)
+        for alias in (character.get("id"), character.get("name")):
+            value = str(alias or "").strip()
+            if value:
+                lookup.setdefault(value.casefold(), canonical)
+                token = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
+                if token:
+                    lookup.setdefault(token, canonical)
+
+    normalized: list[str] = []
+    for value in panel.get("characters", []):
+        stripped = str(value or "").strip()
+        token = re.sub(r"[^a-z0-9]+", "-", stripped.casefold()).strip("-")
+        canonical = (
+            stripped
+            if stripped in canonical_ids
+            else lookup.get(stripped.casefold()) or lookup.get(token)
+        )
+        if canonical and canonical not in normalized:
+            normalized.append(canonical)
+    panel["characters"] = normalized
 
 
 def _comic_page_problem(page, expected_panels: int) -> str | None:
@@ -12323,8 +12384,13 @@ def director_comic_plan(body: dict, job_id: str | None = None):
     manual_art_style = str(body.get("artStyle") or "").strip()
     manual_world_context = str(body.get("worldContext") or "").strip()
     manual_forbidden = str(body.get("forbiddenElements") or "").strip()
+    story_context = str(body.get("storyContext") or "").strip()[:50000]
+    source_story = body.get("sourceStory") if isinstance(body.get("sourceStory"), dict) else {}
     writing_llm = _comic_writing_llm(body)
     shared_brief = f"""Premise: {premise}
+Source Story Lab project: {json.dumps(source_story, ensure_ascii=False) if source_story else 'not supplied'}
+Source story bible / adaptation brief:
+{story_context or 'not supplied'}
 Exact page count: {page_count}
 Exactly {panels_per_page} panels per page.
 Language for ALL reader-facing dialogue/captions: {requested_language}
@@ -12370,6 +12436,10 @@ Keep every field concise and use stable character IDs."""
             bible = _generate_comic_director_json(
                 prompt=f"""Create the compact story and character bible for a sequential comic.
 {shared_brief}
+
+When a source story bible is supplied, treat its plot, causal beats, character arcs,
+relationships, theme and ending as canon. Adapt them to sequential-comic pacing without
+silently replacing the story with a new one. User edits in this brief override inferred details.
 
 The synopsis must cover the complete arc across all {page_count} pages. Use concrete,
 repeatable visual descriptions for characters and wardrobe.
@@ -12516,6 +12586,9 @@ only the world details that visibly apply to that shot. Repeat exact era/year, a
 technology and wardrobe when the premise or styleBible establishes them; do not invent a
 period constraint for contemporary, abstract or setting-neutral work. Preserve props and
 screen direction.
+List panel character IDs in visual-priority order. The first ID is the identity anchor for
+image providers that accept only one character reference, so place the dominant or closest
+character first while still describing every visible character in imagePrompt.
 Lettering budget per panel: zero or one short caption, zero or
 {"two" if dialogue_density == "high" else "one"} short dialogue lines, and zero or one short
 sound effect, with {per_panel_text_limit} reader-facing text element
@@ -12655,6 +12728,7 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
             panel["framing"] = str(panel.get("framing") or "Medium shot")
             panel["continuityNotes"] = str(panel.get("continuityNotes") or "")
             _normalize_comic_panel_arrays(panel)
+            _normalize_comic_panel_character_ids(panel, characters)
             normalized_dialogue = []
             for dialogue in panel["dialogue"]:
                 if not isinstance(dialogue, dict):

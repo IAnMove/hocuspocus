@@ -205,8 +205,18 @@ export interface ComicPlan {
   pages: ComicPlanPage[]
 }
 
+export interface ComicSourceStory {
+  id: string
+  revision: number
+  title: string
+}
+
 export interface ComicDirectorRequest {
   premise: string
+  /** Complete, editable adaptation brief imported from Story Lab. */
+  storyContext?: string
+  /** Identifies the Story Lab revision used to stage this adaptation. */
+  sourceStory?: ComicSourceStory
   pageCount: number
   language: string
   format: ComicProject['format']['preset']

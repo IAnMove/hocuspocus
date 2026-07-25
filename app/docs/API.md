@@ -574,6 +574,22 @@ start/status workflow.
 
 Comic Director planning is asynchronous: start with `POST /api/v1/director/comic/plan/start`, then poll `GET /api/v1/director/comic/plan/status/{job_id}`. Existing plans can be story-edited without regenerating artwork through `POST /api/v1/director/comic/story/revise`, or lettered/translated one page at a time through `POST /api/v1/director/comic/text/page`.
 
+Story Lab adaptations may also supply `storyContext`, an editable plain-text
+bible containing the canonical plot, beats, relationships, character arcs and
+locations, plus `sourceStory: {id, revision, title}` for provenance. Comic
+Director treats this material as canon while still allowing the user to edit it
+before starting the plan. Character records and their reference asset IDs remain
+the source of truth when the writing LLM returns the plan.
+
+`POST /api/v1/comics/generate/minimax` follows MiniMax's official `image-01`
+image-to-image request shape. Send one optional `subject_reference` source; the
+backend resolves a Maestro output/upload to a base64 `image_file` and sends
+`subject_reference: [{"type": "character", "image_file": "..."}]`. MiniMax
+supports one identity reference per image request, so group panels use the first
+visually prioritised character with an available reference and describe the
+remaining cast from the locked character bible. `aspect_ratio` accepts `1:1`,
+`16:9`, `4:3`, `3:2`, `2:3`, `3:4`, `9:16`, or `21:9`.
+
 Comic recovery checkpoints are workspace-scoped and durable. Create one with
 `POST /api/v1/comics/history`, list versions with
 `GET /api/v1/comics/history` (optionally `?comic_id=...`), and load a version

@@ -8,9 +8,9 @@ import * as api from '../../api/client'
 import { getModelMode, useStore } from '../../stores/useStore'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
 import { generateImageAsset } from '../../lib/imageGeneration'
-import { createComicProject } from '../comics/model'
 import { useComicStore } from '../comics/store'
-import type { ComicAsset, ComicCharacter, ComicDirectorRequest, ComicProject } from '../comics/types'
+import type { ComicProject } from '../comics/types'
+import { buildComicAdaptation } from './adaptations'
 import { normalizeStoryProject, storyId, useStoryStore } from './store'
 import { normalizeStoryCharacter } from './model'
 import type {
@@ -948,57 +948,13 @@ export function StoryLabPanel() {
   }
 
   const stageComic = () => {
-    const comic = createComicProject()
     if (useComicStore.getState().dirty && !window.confirm(
       'Create a new comic from this story? Unsaved changes in the current comic will be lost.',
     )) return
-    comic.title = project.title
-    comic.synopsis = project.synopsis
-    comic.language = project.language
-    comic.assets = Object.fromEntries(Object.values(project.assets).map(asset => [asset.id, {
-      id: asset.id, name: asset.name, kind: asset.provider === 'minimax' ? 'minimax' : asset.provider === 'upload' ? 'upload' : 'local',
-      source: asset.source, prompt: asset.prompt, provider: asset.provider, model: asset.model,
-      createdAt: asset.createdAt,
-    } satisfies ComicAsset]))
-    comic.characters = project.characters.map(character => ({
-      id: character.id, name: character.name, description: character.appearance,
-      role: character.role, personality: character.personality, motivation: character.desire,
-      voice: character.voice, wardrobe: character.wardrobe,
-      visualNotes: character.visualPrompt, negativePrompt: character.negativePrompt,
-      referenceAssetIds: character.referenceAssetIds,
-      referenceAssetId: character.primaryReferenceAssetId, locked: true,
-    } satisfies ComicCharacter))
+    const { comic, request } = buildComicAdaptation(project)
     useComicStore.getState().setProject(comic)
     window.localStorage.removeItem('maestro-last-comic-plan-result')
     window.localStorage.removeItem('maestro-last-comic-plan-job')
-    const request: Partial<ComicDirectorRequest> = {
-      premise: [
-        project.logline || project.premise,
-        project.synopsis,
-        project.beats.map(beat => `${beat.stage}: ${beat.summary} Turn: ${beat.turn}`).join('\n'),
-      ].filter(Boolean).join('\n\n'),
-      language: project.language,
-      genre: project.genre,
-      tone: project.tone,
-      audience: project.audience,
-      worldContext: [
-        project.world.summary, project.world.period, project.world.geography,
-        project.world.society, project.world.technology, project.world.rules.join('; '),
-      ].filter(Boolean).join('\n'),
-      artStyle: project.world.visualLanguage,
-      forbiddenElements: project.world.negativePrompt,
-      worldReferenceAssetIds: Array.from(new Set([
-        ...project.world.referenceAssetIds,
-        ...project.world.locations.flatMap(location => location.referenceAssetIds),
-      ])),
-      writingProvider: project.provider.writingProvider,
-      writingModel: project.provider.writingModel,
-      writingBaseUrl: project.provider.writingBaseUrl,
-      provider: project.provider.imageProvider,
-      imageModel: project.provider.imageModel,
-      characters: comic.characters,
-      ending: project.ending,
-    }
     window.localStorage.setItem('maestro-story-comic-draft', JSON.stringify(request))
     window.dispatchEvent(new Event('maestro:comic-staged'))
     patch({
@@ -1010,7 +966,7 @@ export function StoryLabPanel() {
         targetName: comic.title,
         targetSnapshot: {
           comic: structuredClone(comic) as unknown as Record<string, unknown>,
-          request: structuredClone(request) as Record<string, unknown>,
+          request: structuredClone(request) as unknown as Record<string, unknown>,
         },
         status: 'staged',
       }],
@@ -1444,7 +1400,7 @@ export function StoryLabPanel() {
                   <div className={`${panel} space-y-3`}>
                     <BookOpen size={26} className="text-accent-blue" />
                     <h3 className="font-semibold text-text-primary">Comic adaptation</h3>
-                    <p className="text-xs text-text-muted">Stages the premise, world, cast, references and dramatic beats in Comic Studio. You still choose page count and panel rhythm there.</p>
+                    <p className="text-xs text-text-muted">Loads the complete editable bible into Comic Director, including arcs, relationships, locations, beats and approved identity images. You can change every field before planning.</p>
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={stageComic}><ChevronRight size={13} /> Open in Comic Studio</button>
                   </div>
                   <div className={`${panel} space-y-3`}>
