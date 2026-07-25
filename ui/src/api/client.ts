@@ -1,3 +1,5 @@
+import { rememberPrompt } from '../lib/promptHistory'
+
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
 
 export interface ApiModel {
@@ -117,7 +119,16 @@ export async function submitGeneration(params: Record<string, unknown>): Promise
     const err = await res.json().catch(() => ({ detail: 'Generation failed' }))
     throw new Error(err.detail || 'Generation failed')
   }
-  return res.json()
+  const result = await res.json()
+  rememberPrompt({
+    prompt: params.prompt,
+    negativePrompt: params.negative_prompt,
+    mode: params.generation_mode,
+    model: params.model_type,
+    workspace: params.workspace,
+    source: 'generation',
+  })
+  return result
 }
 
 export async function fetchJobStatus(jobId: string): Promise<ApiJobStatus> {
@@ -1067,7 +1078,7 @@ export async function uploadImage(file: File): Promise<{ filename: string; path:
 
 export async function saveComicProject(
   project: import('../features/comics/types').ComicProject,
-  preview: string,
+  preview?: string,
   existingName?: string | null,
 ): Promise<{ name: string; type: 'comic'; url: string; thumbnail_url: string }> {
   const method = existingName ? 'PUT' : 'POST'
@@ -1096,6 +1107,57 @@ export async function loadComicProject(name: string): Promise<import('../feature
   return data.project
 }
 
+export interface ComicHistoryEntry {
+  id: string
+  comicId: string
+  title: string
+  createdAt: string
+  reason: string
+  persistedName: string | null
+  pageCount: number
+  assetCount: number
+}
+
+export async function createComicHistory(
+  project: import('../features/comics/types').ComicProject,
+  reason = 'Automatic checkpoint',
+  persistedName?: string | null,
+): Promise<ComicHistoryEntry> {
+  const res = await fetch(`${BASE}/api/v1/comics/history`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project, reason, persisted_name: persistedName || null }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to back up comic' }))
+    throw new Error(err.detail || 'Failed to back up comic')
+  }
+  return res.json()
+}
+
+export async function listComicHistory(comicId?: string): Promise<ComicHistoryEntry[]> {
+  const query = comicId ? `?comic_id=${encodeURIComponent(comicId)}` : ''
+  const res = await fetch(`${BASE}/api/v1/comics/history${query}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to load comic history' }))
+    throw new Error(err.detail || 'Failed to load comic history')
+  }
+  const data = await res.json()
+  return data.history || []
+}
+
+export async function loadComicHistory(id: string): Promise<{
+  project: import('../features/comics/types').ComicProject
+  entry: ComicHistoryEntry
+}> {
+  const res = await fetch(`${BASE}/api/v1/comics/history/${encodeURIComponent(id)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to restore comic backup' }))
+    throw new Error(err.detail || 'Failed to restore comic backup')
+  }
+  return res.json()
+}
+
 export async function generateComicWithMiniMax(params: {
   prompt: string
   aspect_ratio: string
@@ -1108,9 +1170,151 @@ export async function generateComicWithMiniMax(params: {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'MiniMax generation failed' }))
-    throw new Error(err.detail || 'MiniMax generation failed')
+    throw new Error(`HTTP ${res.status}: ${err.detail || 'MiniMax generation failed'}`)
   }
   return res.json()
+}
+
+export async function generateStorySection(params: {
+  scope: import('../features/stories/types').StoryGenerationScope
+  premise: string
+  language: string
+  genre: string
+  tone: string
+  audience: string
+  instruction?: string
+  project: import('../features/stories/types').StoryProject
+  writingProvider: import('../features/stories/types').StoryWritingProvider
+  writingModel?: string
+  writingBaseUrl?: string
+  workspace?: string
+}, onProgress?: (progress: {
+  jobId: string
+  status: string
+  message: string
+  stage: string
+  current: number
+  total: number
+}) => void, signal?: AbortSignal): Promise<{ result: Record<string, unknown> }> {
+  const res = await fetch(`${BASE}/api/v1/stories/generate/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+    signal,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Story generation failed' }))
+    throw new Error(err.detail || 'Story generation failed')
+  }
+  const accepted = await res.json()
+  rememberPrompt({
+    prompt: params.premise,
+    mode: `story-${params.scope}`,
+    model: params.writingModel || params.writingProvider,
+    workspace: params.workspace,
+    source: 'generation',
+  })
+  window.localStorage.setItem('maestro-last-story-plan-job', accepted.jobId)
+  onProgress?.(accepted)
+  const cancelRemote = () => {
+    void fetch(
+      `${BASE}/api/v1/stories/generate/cancel/${encodeURIComponent(accepted.jobId)}`,
+      { method: 'POST', keepalive: true },
+    )
+  }
+  signal?.addEventListener('abort', cancelRemote, { once: true })
+  try {
+    for (;;) {
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          window.clearTimeout(timer)
+          reject(new DOMException('Story generation cancelled', 'AbortError'))
+        }
+        const timer = window.setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve()
+        }, 1000)
+        signal?.addEventListener('abort', onAbort, { once: true })
+      })
+      const statusResponse = await fetch(
+        `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(accepted.jobId)}`,
+        { signal },
+      )
+      if (!statusResponse.ok) {
+        const err = await statusResponse.json().catch(() => ({ detail: 'Could not read Story Lab job' }))
+        throw new Error(err.detail || 'Could not read Story Lab job')
+      }
+      const status = await statusResponse.json()
+      onProgress?.(status)
+      if (status.status === 'failed' || status.status === 'cancelled') {
+        throw new Error(`${status.error || status.message} Resume job: ${accepted.jobId}`)
+      }
+      if (status.status === 'completed') {
+        if (!status.result?.result) throw new Error('Story Lab job completed without a draft')
+        window.localStorage.setItem('maestro-last-story-plan-result', JSON.stringify({
+          jobId: accepted.jobId,
+          projectId: params.project.id,
+          scope: params.scope,
+          result: status.result.result,
+        }))
+        return status.result
+      }
+    }
+  } finally {
+    signal?.removeEventListener('abort', cancelRemote)
+  }
+}
+
+export async function cancelStoryGeneration(jobId: string): Promise<void> {
+  const response = await fetch(
+    `${BASE}/api/v1/stories/generate/cancel/${encodeURIComponent(jobId)}`,
+    { method: 'POST' },
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not cancel Story Lab job' }))
+    throw new Error(error.detail || 'Could not cancel Story Lab job')
+  }
+}
+
+export async function resumeStoryGeneration(
+  jobId: string,
+  onProgress?: (progress: {
+    jobId: string
+    status: string
+    message: string
+    stage: string
+    current: number
+    total: number
+  }) => void,
+): Promise<{ result: Record<string, unknown> }> {
+  const resumed = await fetch(
+    `${BASE}/api/v1/stories/generate/resume/${encodeURIComponent(jobId)}`,
+    { method: 'POST' },
+  )
+  if (!resumed.ok) {
+    const err = await resumed.json().catch(() => ({ detail: 'Could not resume Story Lab job' }))
+    throw new Error(err.detail || 'Could not resume Story Lab job')
+  }
+  for (;;) {
+    await new Promise(resolve => window.setTimeout(resolve, 1000))
+    const response = await fetch(
+      `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(jobId)}`,
+    )
+    if (!response.ok) throw new Error('Could not read resumed Story Lab job')
+    const status = await response.json()
+    onProgress?.(status)
+    if (status.status === 'failed' || status.status === 'cancelled') {
+      throw new Error(status.error || status.message)
+    }
+    if (status.status === 'completed') {
+      if (!status.result?.result) throw new Error('Story Lab job completed without a draft')
+      window.localStorage.setItem('maestro-last-story-plan-result', JSON.stringify({
+        jobId,
+        result: status.result.result,
+      }))
+      return status.result
+    }
+  }
 }
 
 export type ComicPlanProgress = {

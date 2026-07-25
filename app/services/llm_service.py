@@ -7,6 +7,7 @@ Runs on CPU by default to avoid VRAM conflicts with WanGP.
 
 import os
 import gc
+import json
 import time
 import subprocess
 import threading
@@ -1679,26 +1680,50 @@ def generate_openai_compatible(
         raise RuntimeError("An OpenAI-compatible model name is required")
     if not base_url.startswith(("http://", "https://")):
         raise RuntimeError("The OpenAI-compatible base URL must start with http:// or https://")
-    if not api_key:
-        raise RuntimeError("Configure the OpenAI / compatible API key in Settings → Services")
-
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
+    if json_schema is not None:
+        compact_schema = json.dumps(
+            json_schema,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        messages.append({
+            "role": "system",
+            "content": (
+                "Return only one valid JSON object matching this JSON Schema. "
+                f"Do not wrap it in markdown:\n{compact_schema}"
+            ),
+        })
     messages.append({"role": "user", "content": prompt})
+    is_deepseek = "deepseek.com" in base_url.lower()
+    is_minimax = "minimax.io" in base_url.lower()
     payload = {
         "model": model_id,
         "messages": messages,
-        "max_tokens": max_new_tokens,
         "temperature": max(temperature, 0.01),
         "top_p": top_p,
     }
+    if is_minimax:
+        # MiniMax's current OpenAI-compatible API deprecates max_tokens.
+        # M-series models spend part of this budget on reasoning, so a short
+        # structured response needs more headroom than its visible JSON.
+        payload["max_completion_tokens"] = max(max_new_tokens, 4096)
+        payload["temperature"] = 1.0
+        payload["reasoning_split"] = True
+        # M3 supports disabling thinking; comic planning benefits more from a
+        # complete schema-valid answer than from a long hidden chain of thought.
+        if model_id == "MiniMax-M3":
+            payload["thinking"] = {"type": "disabled"}
+    else:
+        payload["max_tokens"] = max_new_tokens
     if frequency_penalty > 0:
         payload["frequency_penalty"] = frequency_penalty
     if presence_penalty > 0:
         payload["presence_penalty"] = presence_penalty
-    if json_schema is not None:
-        if "deepseek.com" in base_url.lower():
+    if json_schema is not None and not is_minimax:
+        if is_deepseek:
             payload["response_format"] = {"type": "json_object"}
         else:
             payload["response_format"] = {
@@ -1715,35 +1740,75 @@ def generate_openai_compatible(
         if base_url.endswith("/v1")
         else f"{base_url}/v1/chat/completions"
     )
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
-    try:
-        response = requests.post(endpoint, json=payload, headers=headers, timeout=(10, 600))
-        # Some otherwise-compatible APIs do not implement OpenAI's structured
-        # response envelope. Retry once without it; Maestro still validates
-        # the returned JSON against the comic schema locally.
-        if response.status_code in (400, 404, 422) and "response_format" in payload:
-            payload.pop("response_format", None)
-            response = requests.post(endpoint, json=payload, headers=headers, timeout=(10, 600))
-        response.raise_for_status()
-    except requests.exceptions.RequestException as exc:
-        detail = ""
-        if getattr(exc, "response", None) is not None:
-            detail = str(exc.response.text or "")[:500]
-        suffix = f": {detail}" if detail else ""
-        raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    # DeepSeek documents that JSON mode can occasionally return an empty
+    # content field. MiniMax reasoning models can likewise exhaust their first
+    # completion budget before emitting visible content. Retry only a confirmed
+    # successful HTTP response with an empty content field; never retry
+    # timeouts or transport failures.
+    provider_name = "MiniMax" if is_minimax else "DeepSeek" if is_deepseek else "OpenAI-compatible provider"
+    attempts = 2 if json_schema is not None and (is_deepseek or is_minimax) else 1
+    for content_attempt in range(attempts):
+        request_payload = dict(payload)
+        if is_minimax and content_attempt > 0:
+            request_payload["max_completion_tokens"] = max(
+                int(request_payload["max_completion_tokens"]) * 2,
+                8192,
+            )
+        try:
+            response = requests.post(
+                endpoint, json=request_payload, headers=headers, timeout=(10, 600),
+            )
+            # Some otherwise-compatible APIs do not implement OpenAI's
+            # structured response envelope. Retry once without it; Maestro
+            # still validates and repairs the returned JSON locally.
+            if response.status_code in (400, 422) and "response_format" in request_payload:
+                fallback_payload = dict(request_payload)
+                fallback_payload.pop("response_format", None)
+                response = requests.post(
+                    endpoint, json=fallback_payload, headers=headers, timeout=(10, 600),
+                )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            detail = ""
+            if getattr(exc, "response", None) is not None:
+                detail = str(exc.response.text or "")[:500]
+            suffix = f": {detail}" if detail else ""
+            raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
 
-    try:
-        message = response.json()["choices"][0]["message"]
-        content = message.get("content") or ""
-    except (KeyError, IndexError, TypeError, ValueError) as exc:
-        raise RuntimeError("OpenAI-compatible provider returned an invalid response") from exc
-    content = _strip_thinking_tags(str(content)).strip()
-    if not content:
-        raise RuntimeError("OpenAI-compatible provider returned an empty response")
-    return content
+        try:
+            response_data = response.json()
+            base_response = response_data.get("base_resp") or {}
+            if base_response.get("status_code") not in (None, 0):
+                detail = str(base_response.get("status_msg") or "MiniMax returned an error")
+                raise RuntimeError(detail)
+            choice = response_data["choices"][0]
+            message = choice["message"]
+            content = _strip_thinking_tags(str(message.get("content") or "")).strip()
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise RuntimeError("OpenAI-compatible provider returned an invalid response") from exc
+        if content:
+            return content
+        usage = response_data.get("usage") or {}
+        token_details = usage.get("completion_tokens_details") or {}
+        logger.warning(
+            "%s returned empty content for %s (finish=%s, completion_tokens=%s, "
+            "reasoning_tokens=%s)%s",
+            provider_name,
+            model_id,
+            choice.get("finish_reason", "unknown"),
+            usage.get("completion_tokens", "unknown"),
+            token_details.get("reasoning_tokens", "unknown"),
+            "; retrying once with more output headroom" if content_attempt + 1 < attempts else "",
+        )
+        if content_attempt + 1 < attempts:
+            time.sleep(0.4)
+    raise RuntimeError(
+        f"{provider_name} returned empty content after {attempts} "
+        f"{'attempts' if attempts != 1 else 'attempt'}"
+    )
 
 
 def get_stream_status() -> dict:

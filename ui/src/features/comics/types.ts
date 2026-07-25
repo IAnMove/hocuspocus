@@ -219,9 +219,11 @@ export interface ComicDirectorRequest {
   worldContext?: string
   /** Visual elements the image generator must never introduce. */
   forbiddenElements?: string
+  /** Reusable world/location reference assets supplied by Story Lab. */
+  worldReferenceAssetIds?: string[]
   dialogueDensity: 'low' | 'medium' | 'high'
   /** LLM used only for this comic's planning, revision and translation. */
-  writingProvider?: 'maestro' | 'openai-compatible'
+  writingProvider?: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible'
   writingModel?: string
   writingBaseUrl?: string
   provider: 'maestro' | 'minimax'

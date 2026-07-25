@@ -7,6 +7,7 @@ import { SceneAnimatorPanel } from '../Sidebar/SceneAnimatorPanel'
 import { RigAnimatePanel } from '../Sidebar/RigAnimatePanel'
 import { ComicEditorPanel } from '../../features/comics/ComicEditorPanel'
 import { VideoEditorPanel } from '../../features/video-editor/VideoEditorPanel'
+import { StoryLabPanel } from '../../features/stories/StoryLabPanel'
 import { useStore } from '../../stores/useStore'
 import type { GenerationJob } from '../../types'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
@@ -518,6 +519,7 @@ export function MainContent() {
             {mediaFilter === 'scene3d' ? '3D Video editor'
               : mediaFilter === 'animate3d' ? 'Rig & Animate'
               : mediaFilter === 'comics' ? 'Comic Studio'
+              : mediaFilter === 'stories' ? 'Story Lab'
               : mediaFilter === 'videoeditor' ? 'Video Editor'
               : outputsTotal > outputs.length
               ? `${outputs.length} / ${outputsTotal} items`
@@ -539,6 +541,12 @@ export function MainContent() {
           <div className="flex-1 overflow-y-auto p-4 md:p-8">
             <div className="max-w-2xl mx-auto">
               <RigAnimatePanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'stories' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <StoryLabPanel />
             </div>
           </div>
         ) : mediaFilter === 'comics' ? (

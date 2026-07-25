@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { Heart, Film, Search, X, Box, PersonStanding, BookOpen } from 'lucide-react'
+import { Heart, Film, Search, X, Box, PersonStanding, BookOpen, Library } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
+import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
 
 const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: string }[] = [
   { value: 'all', label: 'All', shortLabel: 'All' },
@@ -10,6 +11,7 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
   { value: 'audio', label: 'Audio', shortLabel: 'Aud' },
   { value: 'model3d', label: '3D', shortLabel: '3D', icon: 'box' },
   { value: 'scenes', label: 'Scenes', shortLabel: 'Scn', icon: 'film' },
+  { value: 'stories', label: 'Stories', shortLabel: 'Story', icon: 'library' },
   { value: 'comics', label: 'Comics', shortLabel: 'Comic', icon: 'book' },
   { value: 'videoeditor', label: 'Video Editor', shortLabel: 'Edit', icon: 'film' },
   { value: 'scene3d', label: '3D Video', shortLabel: '3DV', icon: 'film' },
@@ -38,11 +40,20 @@ export function TabFilter() {
   }
 
   return (
-    <div className="flex items-center gap-1 shrink-0">
-      <div className="flex gap-0.5 bg-bg-tertiary rounded-lg p-0.5 border border-border overflow-x-auto shrink-0">
+    <div className="flex min-w-0 flex-1 items-center gap-1">
+      <HorizontalScrollTabs
+        activeKey={mediaFilter}
+        ariaLabel="Workspace sections"
+        className="flex-1"
+        viewportClassName="flex gap-0.5 bg-bg-tertiary rounded-lg p-0.5 border border-border"
+      >
         {tabs.map(tab => (
           <button
             key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={mediaFilter === tab.value}
+            data-scroll-key={tab.value}
             onClick={() => setMediaFilter(tab.value)}
             className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-xs font-medium transition-all flex items-center gap-1 whitespace-nowrap shrink-0 ${
               mediaFilter === tab.value
@@ -57,11 +68,12 @@ export function TabFilter() {
             {tab.icon === 'box' && <Box size={11} />}
             {tab.icon === 'person' && <PersonStanding size={11} />}
             {tab.icon === 'book' && <BookOpen size={11} />}
+            {tab.icon === 'library' && <Library size={11} />}
             <span className="hidden md:inline">{tab.label}</span>
             <span className="md:hidden">{tab.shortLabel}</span>
           </button>
         ))}
-      </div>
+      </HorizontalScrollTabs>
 
       {/* Search */}
       {searchOpen ? (

@@ -1,4 +1,4 @@
-import { useMemo, useRef, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
 import { Lock } from 'lucide-react'
 import { useComicStore } from './store'
 import type {
@@ -19,6 +19,9 @@ const FILTERS: Record<ComicImageElement['filter'], string | undefined> = {
 }
 
 function TextView({ element }: { element: ComicTextElement }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLSpanElement>(null)
+  const [fittedFontSize, setFittedFontSize] = useState(element.fontSize)
   const bubble = element.bubble
   const radius = bubble === 'thought' || bubble === 'ellipse' || bubble === 'cloud'
     ? '50%'
@@ -34,18 +37,40 @@ function TextView({ element }: { element: ComicTextElement }) {
       : element.textEffect === 'shadow'
         ? `3px 4px 0 ${effectColor}`
         : bubble === 'none' ? '0 1px 2px #fff, 0 0 2px #fff' : undefined
+  const padding = element.bubblePadding ?? 12
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    const content = contentRef.current
+    if (!container || !content || bubble === 'none' || element.autoFit === false) {
+      setFittedFontSize(element.fontSize)
+      return
+    }
+    let size = element.fontSize
+    content.style.fontSize = `${size}px`
+    const availableHeight = Math.max(1, container.clientHeight - padding * 2)
+    const availableWidth = Math.max(1, container.clientWidth - padding * 2)
+    while (
+      size > 8
+      && (content.scrollHeight > availableHeight + 1 || content.scrollWidth > availableWidth + 1)
+    ) {
+      size -= 1
+      content.style.fontSize = `${size}px`
+    }
+    setFittedFontSize(size)
+  }, [bubble, element.autoFit, element.content, element.fontFamily, element.fontSize, element.height, element.lineHeight, element.width, padding])
   return (
     <div
+      ref={containerRef}
       className="relative w-full h-full flex items-center justify-center whitespace-pre-wrap break-words overflow-hidden"
       style={{
         fontFamily: element.fontFamily,
-        fontSize: element.fontSize,
+        fontSize: fittedFontSize,
         fontWeight: element.bold ? 800 : 500,
         fontStyle: element.italic ? 'italic' : 'normal',
         textAlign: element.align,
         lineHeight: element.lineHeight ?? 1.08,
         letterSpacing: element.letterSpacing ?? 0,
-        padding: element.bubblePadding ?? 12,
+        padding,
         background: bubble === 'none' ? 'transparent' : element.bubbleBackground,
         border: bubble === 'none' ? undefined : `${element.bubbleStrokeWidth}px ${element.bubbleStrokeStyle === 'dashed' ? 'dashed' : 'solid'} ${element.bubbleStrokeColor}`,
         borderRadius: radius,
@@ -53,7 +78,8 @@ function TextView({ element }: { element: ComicTextElement }) {
         boxShadow: element.bubbleShadow ? '0 8px 16px #0006' : undefined,
       }}
     >
-      <span style={{
+      <span ref={contentRef} className="block w-full" style={{
+        fontSize: fittedFontSize,
         color: element.textFill === 'gradient' ? 'transparent' : element.color,
         backgroundImage: element.textFill === 'gradient'
           ? `linear-gradient(${element.gradientStart ?? '#fff45c'}, ${element.gradientEnd ?? '#ff7a00'})`
@@ -125,13 +151,15 @@ type DragState = {
 function ElementFrame({
   element,
   pageId,
+  readOnly = false,
   children,
 }: {
   element: ComicElement
   pageId: string
+  readOnly?: boolean
   children: React.ReactNode
 }) {
-  const selected = useComicStore(state => state.selectedId === element.id)
+  const selected = useComicStore(state => !readOnly && state.selectedId === element.id)
   const zoom = useComicStore(state => state.zoom)
   const select = useComicStore(state => state.setSelected)
   const update = useComicStore(state => state.updateElement)
@@ -142,6 +170,7 @@ function ElementFrame({
   const wheelTimer = useRef<number | null>(null)
 
   const start = (event: ReactPointerEvent, mode: DragState['mode']) => {
+    if (readOnly) return
     event.stopPropagation()
     select(element.id)
     if (element.locked || event.button !== 0) return
@@ -222,7 +251,7 @@ function ElementFrame({
     useComicStore.getState().commitSnapshot(snapshot)
   }
   const scaleImage = (event: ReactWheelEvent) => {
-    if (!event.ctrlKey || element.type !== 'image' || !selected || element.locked) return
+    if (readOnly || !event.ctrlKey || element.type !== 'image' || !selected || element.locked) return
     event.preventDefault()
     event.stopPropagation()
     if (!wheelSnapshot.current) wheelSnapshot.current = structuredClone(useComicStore.getState().project)
@@ -247,8 +276,8 @@ function ElementFrame({
     <div
       ref={frame}
       data-comic-element={element.id}
-      className={`absolute touch-none ${element.locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'ring-2 ring-accent-blue ring-offset-1 ring-offset-transparent' : ''}`}
-      title={element.type === 'image' && element.parentId
+      className={`absolute touch-none ${readOnly ? '' : element.locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'ring-2 ring-accent-blue ring-offset-1 ring-offset-transparent' : ''}`}
+      title={!readOnly && element.type === 'image' && element.parentId
         ? 'Drag to reposition inside the panel · Shift-drag for precision · Ctrl-wheel to zoom'
         : undefined}
       style={{
@@ -301,12 +330,13 @@ function ElementFrame({
   )
 }
 
-function PanelFrame({ panel, pageId, children }: {
+function PanelFrame({ panel, pageId, children, readOnly = false }: {
   panel: ComicPanelElement
   pageId: string
   children: ComicElement[]
+  readOnly?: boolean
 }) {
-  const selected = useComicStore(state => state.selectedId === panel.id)
+  const selected = useComicStore(state => !readOnly && state.selectedId === panel.id)
   const zoom = useComicStore(state => state.zoom)
   const update = useComicStore(state => state.updateElement)
   const vertexDrag = useRef<{
@@ -321,7 +351,7 @@ function PanelFrame({ panel, pageId, children }: {
     ? `polygon(${panel.points.map(([x, y]) => `${x * 100}% ${y * 100}%`).join(',')})`
     : undefined
   const startVertex = (event: ReactPointerEvent, index: number) => {
-    if (!panel.points) return
+    if (readOnly || !panel.points) return
     event.stopPropagation()
     vertexDrag.current = {
       pointerId: event.pointerId,
@@ -350,7 +380,7 @@ function PanelFrame({ panel, pageId, children }: {
     useComicStore.getState().commitSnapshot(drag.snapshot)
   }
   return (
-    <ElementFrame element={panel} pageId={pageId}>
+    <ElementFrame element={panel} pageId={pageId} readOnly={readOnly}>
       <div
         className="absolute inset-0 overflow-hidden"
         style={{
@@ -360,7 +390,7 @@ function PanelFrame({ panel, pageId, children }: {
         }}
       >
         {children.sort((a, b) => a.zIndex - b.zIndex).map(child => (
-          <ElementFrame key={child.id} element={child} pageId={pageId}>
+          <ElementFrame key={child.id} element={child} pageId={pageId} readOnly={readOnly}>
             <ElementContent element={child} />
           </ElementFrame>
         ))}
@@ -404,13 +434,22 @@ function PanelFrame({ panel, pageId, children }: {
   )
 }
 
-export function ComicCanvas() {
+export function ComicCanvas({
+  readOnly = false,
+  zoomOverride,
+  domId = 'maestro-comic-page',
+}: {
+  readOnly?: boolean
+  zoomOverride?: number
+  domId?: string
+} = {}) {
   const project = useComicStore(state => state.project)
   const pageId = useComicStore(state => state.currentPageId)
-  const zoom = useComicStore(state => state.zoom)
+  const editorZoom = useComicStore(state => state.zoom)
   const snapEnabled = useComicStore(state => state.snapEnabled)
   const select = useComicStore(state => state.setSelected)
   const page = project.pages.find(item => item.id === pageId)
+  const zoom = zoomOverride ?? editorZoom
   const { parents, loose } = useMemo(() => {
     if (!page) return { parents: [] as ComicPanelElement[], loose: [] as ComicElement[] }
     return {
@@ -425,20 +464,21 @@ export function ComicCanvas() {
     <div
       className="relative shrink-0 shadow-2xl"
       style={{ width: page.width * zoom, height: page.height * zoom }}
-      onPointerDown={() => select(null)}
+      onPointerDown={() => { if (!readOnly) select(null) }}
     >
       <div
-        id="maestro-comic-page"
+        id={domId}
         className="absolute origin-top-left overflow-hidden"
         style={{
           width: page.width,
           height: page.height,
           transform: `scale(${zoom})`,
           background: page.background,
-          backgroundImage: snapEnabled
+          backgroundImage: snapEnabled && !readOnly
             ? 'linear-gradient(#00000012 1px, transparent 1px), linear-gradient(90deg, #00000012 1px, transparent 1px)'
             : undefined,
-          backgroundSize: snapEnabled ? '10px 10px' : undefined,
+          backgroundSize: snapEnabled && !readOnly ? '10px 10px' : undefined,
+          pointerEvents: readOnly ? 'none' : undefined,
         }}
       >
         {parents.map(panel => (
@@ -447,10 +487,11 @@ export function ComicCanvas() {
             panel={panel}
             pageId={page.id}
             children={page.elements.filter(element => element.parentId === panel.id)}
+            readOnly={readOnly}
           />
         ))}
         {loose.map(element => (
-          <ElementFrame key={element.id} element={element} pageId={page.id}>
+          <ElementFrame key={element.id} element={element} pageId={page.id} readOnly={readOnly}>
             <ElementContent element={element} />
           </ElementFrame>
         ))}

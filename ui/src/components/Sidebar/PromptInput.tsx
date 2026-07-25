@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { Sparkles, Loader2, ChevronUp, Brain, PenLine } from 'lucide-react'
+import { Sparkles, Loader2, ChevronUp, Brain, PenLine, History, Save, Trash2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import {
+  getPromptHistory, PROMPT_HISTORY_EVENT, rememberPrompt, removePromptHistoryEntry,
+  type PromptHistoryEntry,
+} from '../../lib/promptHistory'
 
 const placeholders: Record<string, string> = {
   image: 'Describe your image...',
@@ -13,11 +17,14 @@ function useEnhanceStatus(isEnhancing: boolean) {
   const [status, setStatus] = useState<{ phase: 'loading' | 'thinking' | 'writing' | 'idle'; chars: number }>({ phase: 'idle', chars: 0 })
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setStatus(isEnhancing
+        ? { phase: 'loading', chars: 0 }
+        : { phase: 'idle', chars: 0 })
+    })
     if (!isEnhancing) {
-      setStatus({ phase: 'idle', chars: 0 })
-      return
+      return () => window.cancelAnimationFrame(frame)
     }
-    setStatus({ phase: 'loading', chars: 0 })
     let active = true
     const poll = async () => {
       let streamStarted = false
@@ -56,7 +63,10 @@ function useEnhanceStatus(isEnhancing: boolean) {
       }
     }
     poll()
-    return () => { active = false }
+    return () => {
+      active = false
+      window.cancelAnimationFrame(frame)
+    }
   }, [isEnhancing])
 
   return status
@@ -73,8 +83,14 @@ export function PromptInput() {
   const slidingWindowOverlap = useStore(s => s.slidingWindowOverlap)
   const modelOptions = useStore(s => s.modelOptions)
   const imageMode = useStore(s => s.params.image_mode)
+  const negativePrompt = useStore(s => s.params.negative_prompt)
+  const activeWorkspace = useStore(s => s.activeWorkspace)
+  const modelType = useStore(s => s.params.model_type)
   const [ttsMenuOpen, setTtsMenuOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [promptHistory, setPromptHistory] = useState<PromptHistoryEntry[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
+  const historyRef = useRef<HTMLDivElement>(null)
 
   const isAudioOnly = modelOptions?.audio_only
   const voiceCount = useStore(s => s.ttsVoiceCount)
@@ -113,12 +129,121 @@ export function PromptInput() {
     return () => document.removeEventListener('mousedown', handler)
   }, [ttsMenuOpen])
 
+  useEffect(() => {
+    const refresh = () => setPromptHistory(getPromptHistory(activeWorkspace))
+    refresh()
+    window.addEventListener(PROMPT_HISTORY_EVENT, refresh)
+    return () => window.removeEventListener(PROMPT_HISTORY_EVENT, refresh)
+  }, [activeWorkspace])
+
+  useEffect(() => {
+    if (!historyOpen) return
+    const handler = (event: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(event.target as Node)) {
+        setHistoryOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [historyOpen])
+
+  const saveCurrentPrompt = () => {
+    rememberPrompt({
+      prompt,
+      negativePrompt,
+      mode: generationMode,
+      model: modelType,
+      workspace: activeWorkspace,
+      source: 'manual',
+    })
+  }
+
+  const restorePrompt = (entry: PromptHistoryEntry) => {
+    setParam('prompt', entry.prompt)
+    setParam('negative_prompt', entry.negativePrompt)
+    setHistoryOpen(false)
+  }
+
   // grow shrink-0: fill spare vertical space when the sidebar is roomy, but
   // never shrink below the textarea's min-height. Dropping the old
   // `flex-1 min-h-0` stops the wrapper from collapsing under the textarea
   // (which made it overflow and overlap the section below).
   return (
     <div className="relative grow shrink-0 flex flex-col">
+      <div
+        ref={historyRef}
+        className={`absolute right-2 z-40 ${isEnhancing ? 'top-8' : 'top-2'}`}
+      >
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(value => !value)}
+          className={`rounded-md p-1.5 transition-colors ${
+            historyOpen
+              ? 'bg-accent-blue/15 text-accent-blue'
+              : 'bg-bg-secondary/80 text-text-muted hover:bg-bg-hover hover:text-text-primary'
+          }`}
+          title="Prompt history"
+          aria-label="Open prompt history"
+        >
+          <History size={14} />
+        </button>
+        {historyOpen && (
+          <div className="absolute right-0 top-full mt-1 w-[min(330px,calc(100vw-32px))] overflow-hidden rounded-lg border border-border bg-bg-secondary shadow-2xl">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+              <div>
+                <div className="text-xs font-semibold text-text-primary">Prompt history</div>
+                <div className="text-[9px] text-text-muted">{activeWorkspace} · newest first</div>
+              </div>
+              <button
+                type="button"
+                disabled={!prompt.trim()}
+                onClick={saveCurrentPrompt}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-bg-hover disabled:opacity-40"
+              >
+                <Save size={11} /> Save current
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              {promptHistory.length === 0 ? (
+                <div className="px-3 py-6 text-center text-[11px] text-text-muted">
+                  Submitted and manually saved prompts will appear here.
+                </div>
+              ) : promptHistory.map(entry => (
+                <div key={entry.id} className="group border-b border-border/70 p-2.5 last:border-b-0 hover:bg-bg-hover">
+                  <div className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => restorePrompt(entry)}
+                      className="min-w-0 flex-1 text-left"
+                      title="Restore this prompt"
+                    >
+                      <span className="line-clamp-3 whitespace-pre-wrap text-[11px] leading-relaxed text-text-primary">
+                        {entry.prompt}
+                      </span>
+                      <span className="mt-1 block truncate text-[9px] text-text-muted">
+                        {entry.source === 'manual' ? 'Saved' : 'Generated'}
+                        {entry.mode ? ` · ${entry.mode}` : ''}
+                        {entry.model ? ` · ${entry.model}` : ''}
+                        {' · '}
+                        {new Date(entry.createdAt).toLocaleString()}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removePromptHistoryEntry(activeWorkspace, entry.id)}
+                      className="rounded p-1 text-text-muted opacity-40 hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                      title="Remove from history"
+                      aria-label="Remove prompt from history"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       {/* Enhance status indicator */}
       {isEnhancing && enhanceStatus.phase !== 'idle' && (
         <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-text-muted bg-bg-tertiary/80 rounded-t-lg border border-b-0 border-border">

@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Eye, EyeOff, FileJson,
-  ImagePlus, Loader2, Lock, PanelTop, Plus, Redo2, Save, Sparkles, Trash2,
-  Maximize2, Type, Undo2, Unlock, Upload, WandSparkles,
+  History as HistoryIcon, ImagePlus, Loader2, Lock, PanelTop, Plus, Redo2, Save, Sparkles, Trash2,
+  Maximize2, Type, Undo2, Unlock, Upload, WandSparkles, X,
 } from 'lucide-react'
 import { getModelMode, useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
+import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
+import { findCompletedLocalImage, generateImageAsset } from '../../lib/imageGeneration'
+import { rememberPrompt } from '../../lib/promptHistory'
 import { ComicCanvas } from './ComicCanvas'
 import { ComicCharactersPanel, ComicQualityPanel, ComicScriptPanel, ComicVideoPanel, ComicWritingProviderFields } from './ComicWorkflowPanels'
 import {
@@ -35,9 +38,27 @@ type DirectorActivity = {
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
 
-const fileName = (path: string) => path.split(/[\\/]/).pop() || path
 const wait = (milliseconds: number) => new Promise(resolve => window.setTimeout(resolve, milliseconds))
 const comicTranslationCache = new Map<string, ComicPlanPage>()
+const writingForOperation = (
+  input: ComicDirectorRequest,
+  mode: 'rewrite' | 'translate',
+): Pick<ComicDirectorRequest, 'writingProvider' | 'writingModel' | 'writingBaseUrl'> => {
+  const legacyDeepSeek = input.writingProvider === 'openai-compatible'
+    && /api\.deepseek\.com/i.test(input.writingBaseUrl || '')
+  if (mode === 'translate' && (input.writingProvider === 'deepseek' || legacyDeepSeek)) {
+    return {
+      writingProvider: 'deepseek',
+      writingModel: 'deepseek-v4-flash',
+      writingBaseUrl: 'https://api.deepseek.com',
+    }
+  }
+  return {
+    writingProvider: input.writingProvider,
+    writingModel: input.writingModel,
+    writingBaseUrl: input.writingBaseUrl,
+  }
+}
 const translationCacheKey = (
   page: ComicPlanPage,
   language: string,
@@ -83,15 +104,15 @@ function PanelScriptEditor({
   onCommit: (value: string) => void
 }) {
   const canonical = panelScript(panel)
-  const [value, setValue] = useState(canonical)
-  useEffect(() => setValue(canonical), [canonical])
+  const [draft, setDraft] = useState({ canonical, value: canonical })
+  const value = draft.canonical === canonical ? draft.value : canonical
   return (
     <textarea
       className={input}
       rows={3}
       value={value}
       placeholder="Leave empty for a silent panel. Use [Caption], [Dialogue], [SFX] or [Character]."
-      onChange={event => setValue(event.target.value)}
+      onChange={event => setDraft({ canonical, value: event.target.value })}
       onBlur={() => value !== canonical && onCommit(value)}
     />
   )
@@ -111,7 +132,21 @@ function buildDirectorImagePrompt(
     .replace(/\s+/g, ' ')
     .trim()
   const visualBible = removePageLayoutInstructions(director?.plan.styleBible || '')
-  const repairedPanelPrompt = removePageLayoutInstructions(panelPrompt)
+  let repairedPanelPrompt = removePageLayoutInstructions(panelPrompt)
+  // Older plans embedded the complete bible into every panel prompt. Keep the
+  // reusable bible separate so a compact provider-specific excerpt can be used.
+  if (visualBible) {
+    const bibleTextIndex = repairedPanelPrompt.indexOf(visualBible)
+    const bibleLabelIndex = repairedPanelPrompt
+      .slice(0, Math.max(0, bibleTextIndex))
+      .toLocaleLowerCase()
+      .lastIndexOf('visual continuity bible:')
+    if (bibleTextIndex >= 0 && bibleLabelIndex >= 0) {
+      repairedPanelPrompt = `${repairedPanelPrompt.slice(0, bibleLabelIndex)} ${
+        repairedPanelPrompt.slice(bibleTextIndex + visualBible.length).replace(/^[.\s]+/, '')
+      }`.replace(/\s+/g, ' ').trim()
+    }
+  }
   const characterLocks = plannedPanel?.characters.map(characterId => {
     const character = director?.plan.characters.find(item => item.id === characterId)
     if (!character) return ''
@@ -122,7 +157,7 @@ function buildDirectorImagePrompt(
       character.negativePrompt ? `Never alter or add: ${character.negativePrompt}` : '',
     ].filter(Boolean).join('. ')
   }).filter(Boolean).join(' | ')
-  return [
+  const fullPrompt = [
     'SINGLE IMAGE LOCK: Create exactly one full-bleed illustration for one comic panel. No comic page, panel grid, collage, split screen, inset panels, frames, borders, speech bubbles, captions, sound effects, text, logos, watermarks or lettering.',
     input?.artStyle ? `VISUAL STYLE LOCK: ${removePageLayoutInstructions(input.artStyle)}.` : '',
     input?.worldContext ? `WORLD AND PERIOD LOCK: ${removePageLayoutInstructions(input.worldContext)}.` : '',
@@ -137,6 +172,34 @@ function buildDirectorImagePrompt(
     repairedPanelPrompt,
     removePageLayoutInstructions(promptSuffix),
   ].filter(Boolean).join(' ')
+  if (director?.provider !== 'minimax' || fullPrompt.length < 1500) return fullPrompt
+
+  const trimSection = (value: string, limit: number) => {
+    if (value.length <= limit) return value
+    const prefix = value.slice(0, limit)
+    const lastSpace = prefix.lastIndexOf(' ')
+    const clipped = (lastSpace > limit * 0.6 ? prefix.slice(0, lastSpace) : prefix)
+      .replace(/[\s,;:-]+$/, '')
+    return `${clipped}.`
+  }
+  const compactSections = [
+    'One full-bleed comic-panel illustration only. No grid, collage, border, bubbles, captions, text, logo or watermark.',
+    trimSection(repairedPanelPrompt, 780),
+    characterLocks ? `Character locks: ${trimSection(characterLocks, 260)}.` : '',
+    input?.artStyle ? `Style: ${trimSection(removePageLayoutInstructions(input.artStyle), 140)}.` : '',
+    input?.worldContext ? `World: ${trimSection(removePageLayoutInstructions(input.worldContext), 140)}.` : '',
+    input?.forbiddenElements ? `Avoid: ${trimSection(repairMojibake(input.forbiddenElements), 120)}.` : '',
+    plannedPanel?.continuityNotes ? `Continuity: ${trimSection(plannedPanel.continuityNotes, 120)}.` : '',
+    visualBible ? `Visual continuity: ${trimSection(visualBible, 220)}.` : '',
+    trimSection(removePageLayoutInstructions(promptSuffix), 100),
+  ].filter(Boolean)
+  let compactPrompt = ''
+  for (const section of compactSections) {
+    const available = 1450 - compactPrompt.length - (compactPrompt ? 1 : 0)
+    if (available < 24) break
+    compactPrompt += `${compactPrompt ? ' ' : ''}${trimSection(section, available)}`
+  }
+  return compactPrompt
 }
 
 function assetFromOutput(output: { name: string; url: string; thumbnail_url?: string | null }): ComicAsset {
@@ -148,129 +211,6 @@ function assetFromOutput(output: { name: string; url: string; thumbnail_url?: st
     thumbnail: output.thumbnail_url || output.url,
     createdAt: new Date().toISOString(),
   }
-}
-
-type LocalImageOptions = {
-  panelId?: string
-  existingJobId?: string
-  onJobSubmitted?: (jobId: string) => void
-  onPollRetry?: (attempt: number, error: string) => void
-}
-
-function localAsset(
-  name: string,
-  prompt: string,
-  model: string,
-  jobId?: string,
-): ComicAsset {
-  return {
-    id: comicId('asset'),
-    name,
-    kind: 'local',
-    source: `/api/v1/file/${encodeURIComponent(name)}`,
-    prompt,
-    provider: 'maestro',
-    model,
-    createdAt: new Date().toISOString(),
-    metadata: jobId ? { jobId } : undefined,
-  }
-}
-
-async function findCompletedLocalImage(
-  prompt: string,
-  model: string,
-  excludedNames: Set<string>,
-): Promise<ComicAsset | null> {
-  const { outputs } = await api.fetchOutputs(50, 0)
-  const candidates = outputs.filter(output =>
-    output.type === 'image' && !excludedNames.has(output.name))
-  for (const output of candidates) {
-    try {
-      const metadata = await api.fetchOutputMetadata(output.name)
-      if (
-        metadata.params?.prompt === prompt &&
-        metadata.params?.model_type === model
-      ) {
-        return localAsset(output.name, prompt, model, metadata.job_id)
-      }
-    } catch {
-      // One unreadable gallery sidecar must not prevent recovery from the rest.
-    }
-  }
-  return null
-}
-
-async function runLocalImage(
-  prompt: string,
-  modelType?: string,
-  options: LocalImageOptions = {},
-): Promise<ComicAsset> {
-  const maestro = useStore.getState()
-  const selected = modelType || maestro.selectedModelPerMode.image || maestro.params.model_type
-  if (!selected) throw new Error('Select an image model in Maestro first')
-  const model = maestro.models.find(item => item.model_type === selected)
-  if (model && getModelMode(model.model_type, model.family) !== 'image') {
-    throw new Error(`"${selected}" is a video model. Select a Maestro image model or MiniMax for comic panels`)
-  }
-  const imageParams = maestro.savedParamsPerMode.image || {}
-  const jobId = options.existingJobId || (await api.submitGeneration({
-      ...maestro.params,
-      ...imageParams,
-      prompt,
-      model_type: selected,
-      image_mode: 1,
-      generation_mode: 'image',
-      comic_panel: true,
-      comic_panel_id: options.panelId,
-      provider: 'maestro',
-      repeat_generation: 1,
-      workspace: maestro.activeWorkspace,
-    })).job_id
-  if (!options.existingJobId) options.onJobSubmitted?.(jobId)
-  let consecutivePollFailures = 0
-  for (;;) {
-    await wait(consecutivePollFailures ? Math.min(10000, 1500 * consecutivePollFailures) : 1500)
-    let status: api.ApiJobStatus
-    try {
-      status = await api.fetchJobStatus(jobId)
-      consecutivePollFailures = 0
-    } catch (error) {
-      consecutivePollFailures += 1
-      options.onPollRetry?.(consecutivePollFailures, (error as Error).message)
-      if (consecutivePollFailures >= 20) {
-        throw new Error(`Could not reconnect to Maestro job ${jobId}; the job ID was preserved`)
-      }
-      continue
-    }
-    if (status.status === 'failed' || status.status === 'cancelled') {
-      throw new Error(status.error || status.message || 'Local image generation failed')
-    }
-    if (status.status === 'completed') {
-      const path = status.output_files.find(value => /\.(png|jpe?g|webp)$/i.test(value))
-      if (!path) throw new Error('Image job completed without an image')
-      const name = fileName(path)
-      maestro.loadOutputs()
-      return localAsset(name, prompt, selected, jobId)
-    }
-  }
-}
-
-async function generatePanelAsset(
-  provider: 'maestro' | 'minimax',
-  prompt: string,
-  model?: string,
-  reference?: string,
-  options?: LocalImageOptions,
-): Promise<ComicAsset> {
-  if (provider === 'minimax') {
-    const result = await api.generateComicWithMiniMax({
-      prompt,
-      aspect_ratio: '1:1',
-      subject_reference: reference,
-    })
-    return result.asset
-  }
-  return runLocalImage(prompt, model, options)
 }
 
 function insertAssetIntoPage(asset: ComicAsset) {
@@ -333,6 +273,7 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
       return
     }
     const originalPageId = state.currentPageId
+    const translationWriting = writingForOperation(state.project.director!.input, 'translate')
     let temporaryApplied = false
     setBusy(true)
     try {
@@ -343,7 +284,7 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
           working.pages[pageIndex],
           target,
           state.project.translationGlossary,
-          state.project.director!.input,
+          translationWriting,
         )
         const cached = comicTranslationCache.get(cacheKey)
         if (cached) {
@@ -358,9 +299,7 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
           targetLanguage: target,
           dialogueDensity: state.project.director!.input.dialogueDensity,
           glossary: state.project.translationGlossary,
-          writingProvider: state.project.director!.input.writingProvider,
-          writingModel: state.project.director!.input.writingModel,
-          writingBaseUrl: state.project.director!.input.writingBaseUrl,
+          ...translationWriting,
         })
         working.pages[pageIndex] = result.page
         comicTranslationCache.set(cacheKey, structuredClone(result.page))
@@ -505,7 +444,7 @@ function AssetsPanel() {
     setGenerationError('')
     try {
       const model = useStore.getState().selectedModelPerMode.image
-      insertAssetIntoPage(await generatePanelAsset(provider, prompt.trim(), model))
+      insertAssetIntoPage(await generateImageAsset(provider, prompt.trim(), model))
       await useStore.getState().loadOutputs()
       setPrompt('')
     } catch (error) {
@@ -828,12 +767,22 @@ const initialDirector = (): ComicDirectorRequest => ({
   forbiddenElements: '',
   dialogueDensity: 'medium',
   writingProvider: 'maestro',
-  writingModel: 'deepseek-chat',
+  writingModel: 'deepseek-v4-pro',
   writingBaseUrl: 'https://api.deepseek.com',
   provider: 'maestro',
   imageModel: useStore.getState().selectedModelPerMode.image || 'flux2_klein_9b',
   characters: [],
 })
+
+function stagedStoryDirectorRequest(): ComicDirectorRequest | null {
+  try {
+    const staged = JSON.parse(window.localStorage.getItem('maestro-story-comic-draft') || 'null')
+    if (!staged || typeof staged !== 'object') return null
+    return { ...initialDirector(), ...staged }
+  } catch {
+    return null
+  }
+}
 
 const COMIC_GENRES = [
   'Adventure', 'Action', 'Comedy', 'Drama', 'Fantasy', 'Science fiction',
@@ -891,7 +840,9 @@ export function ComicDirectorPanel({
 }) {
   const project = useComicStore(state => state.project)
   const [request, setRequest] = useState<ComicDirectorRequest>(() =>
-    project.director?.input ?? { ...initialDirector(), characters: project.characters })
+    project.director?.input
+      ?? stagedStoryDirectorRequest()
+      ?? { ...initialDirector(), characters: project.characters })
   const [busy, setBusy] = useState<'plan' | 'images' | 'text' | 'translation' | null>(null)
   const [progress, setProgress] = useState('')
   const [textInstruction, setTextInstruction] = useState('')
@@ -920,6 +871,7 @@ export function ComicDirectorPanel({
       return ''
     }
   })
+  const previousProjectId = useRef(project.id)
   const maestroModels = useStore(state => state.models)
   const servicesConfig = useStore(state => state.servicesConfig)
   const llmStatus = useStore(state => state.llmStatus)
@@ -956,10 +908,33 @@ export function ComicDirectorPanel({
     && llmStatus.model_id === planningLlmModel
     && (!llmStatus.provider || llmStatus.provider === planningLlmProvider),
   )
-  const externalWritingLlm = request.writingProvider === 'openai-compatible'
+  const externalWritingLlm = Boolean(request.writingProvider && request.writingProvider !== 'maestro')
   useEffect(() => {
-    setRequest(project.director?.input ?? { ...initialDirector(), characters: project.characters })
+    const changedProject = previousProjectId.current !== project.id
+    previousProjectId.current = project.id
+    if (changedProject) {
+      setPendingPlan(null)
+      setRecoveryJobId('')
+    }
+    const staged = stagedStoryDirectorRequest()
+    setRequest(project.director?.input ?? staged ?? { ...initialDirector(), characters: project.characters })
+    if (staged) {
+      try { window.localStorage.removeItem('maestro-story-comic-draft') } catch { /* no-op */ }
+    }
+    // A project switch resets the form. Director edits inside the same project
+    // are already applied through patch() and must not reset in-progress input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id])
+  useEffect(() => {
+    const receiveStagedStory = () => {
+      const staged = stagedStoryDirectorRequest()
+      if (!staged) return
+      setRequest(staged)
+      try { window.localStorage.removeItem('maestro-story-comic-draft') } catch { /* no-op */ }
+    }
+    window.addEventListener('maestro:comic-staged', receiveStagedStory)
+    return () => window.removeEventListener('maestro:comic-staged', receiveStagedStory)
+  }, [])
   useEffect(() => {
     if (!startedAt || busy === null) return
     const updateElapsed = () => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000))
@@ -1078,10 +1053,23 @@ export function ComicDirectorPanel({
         }…`, { current: index + 1, total: tasks.length })
         setProgress(`Generating panel ${index + 1} / ${tasks.length}`)
         const character = director.plan.characters.find(item => task.plan.characters.includes(item.id))
-        const reference = character?.referenceAssetId
+        const characterReference = character?.referenceAssetId
           ? useComicStore.getState().project.assets[character.referenceAssetId]?.source
           : undefined
         const currentDirector = useComicStore.getState().project.director!
+        const maestroState = useStore.getState()
+        const selectedImageModel = maestroState.models.find(model =>
+          model.model_type === currentDirector.imageModel)
+        const localSupportsReferences = currentDirector.provider === 'maestro'
+          && Boolean(
+            selectedImageModel?.supports_ref_images
+            || (currentDirector.imageModel === maestroState.params.model_type
+              && maestroState.modelOptions?.image_ref_choices),
+          )
+        const worldReferenceId = currentDirector.input.worldReferenceAssetIds?.[0]
+        const reference = characterReference || (localSupportsReferences && worldReferenceId
+          ? useComicStore.getState().project.assets[worldReferenceId]?.source
+          : undefined)
         const prompt = buildDirectorImagePrompt(
           currentDirector,
           task.plan.imagePrompt,
@@ -1118,17 +1106,22 @@ export function ComicDirectorPanel({
               total: tasks.length,
             })
           }
-          asset = await generatePanelAsset(
+          asset = await generateImageAsset(
             currentDirector.provider,
             prompt,
             currentDirector.imageModel,
             reference,
+            '',
             {
               panelId: task.plan.id,
               existingJobId,
               onJobSubmitted: jobId => rememberPanelJob(task.plan.id, jobId),
               onPollRetry: attempt => report(
                 `Connection interrupted while checking panel ${index + 1}; retrying (${attempt}/20)…`,
+                { current: index + 1, total: tasks.length },
+              ),
+              onProviderRetry: attempt => report(
+                `MiniMax temporarily failed on panel ${index + 1}; retrying (${attempt}/2)…`,
                 { current: index + 1, total: tasks.length },
               ),
             },
@@ -1201,6 +1194,7 @@ export function ComicDirectorPanel({
     if (!captured) throw new Error('This comic does not have an editable Director plan')
     const working = structuredClone(captured)
     const translationLanguage = (languageOverride ?? targetLanguage).trim()
+    const operationWriting = writingForOperation(current.director!.input, mode)
     for (let pageIndex = 0; pageIndex < working.pages.length; pageIndex += 1) {
       report(`${mode === 'translate' ? 'Translating' : 'Rewriting'} page ${pageIndex + 1} of ${working.pages.length}…`, {
         current: pageIndex + 1,
@@ -1211,7 +1205,7 @@ export function ComicDirectorPanel({
           working.pages[pageIndex],
           translationLanguage,
           current.translationGlossary,
-          current.director!.input,
+          operationWriting,
         )
         : ''
       const cached = cacheKey ? comicTranslationCache.get(cacheKey) : undefined
@@ -1227,9 +1221,7 @@ export function ComicDirectorPanel({
         targetLanguage: translationLanguage,
         dialogueDensity: current.director!.input.dialogueDensity,
         glossary: current.translationGlossary,
-        writingProvider: current.director!.input.writingProvider,
-        writingModel: current.director!.input.writingModel,
-        writingBaseUrl: current.director!.input.writingBaseUrl,
+        ...operationWriting,
       })
       working.pages[pageIndex] = result.page
       if (cacheKey) comicTranslationCache.set(cacheKey, structuredClone(result.page))
@@ -1329,6 +1321,16 @@ export function ComicDirectorPanel({
     await generateAll(true)
   }
 
+  const confirmNewComic = (withImages: boolean) => {
+    const estimatedPanels = Math.max(1, request.pageCount * request.panelsPerPage)
+    const artworkNotice = withImages
+      ? ` After the script is ready, up to ${estimatedPanels} panel images will be generated and may use provider credits.`
+      : ''
+    return window.confirm(
+      `Create a new comic? When planning succeeds, it will replace the comic currently open and any unsaved changes will be lost.${artworkNotice}\n\nThe current comic will remain untouched if planning fails or is cancelled.`,
+    )
+  }
+
   const placePlan = async (rawPlan: ComicPlan, withImages: boolean) => {
       const plan = normalizeComicPlan(rawPlan, request.dialogueDensity)
       setPendingPlan(plan)
@@ -1336,14 +1338,31 @@ export function ComicDirectorPanel({
         plan.pages.reduce((total, page) => total + page.panels.length, 0)
       } panels.`)
       const currentProject = useComicStore.getState().project
-      const next = projectFromPlan(plan, {
-        ...currentProject,
-        format: {
-          ...currentProject.format,
-          preset: request.format,
-          ...(request.format !== 'custom' ? COMIC_FORMATS[request.format] : {}),
-        },
-      })
+      const freshProject = createComicProject()
+      const characterReferenceIds = new Set(
+        [...request.characters, ...plan.characters].flatMap(character => [
+          character.referenceAssetId,
+          ...(character.referenceAssetIds || []),
+        ]).filter((assetId): assetId is string => Boolean(assetId)),
+      )
+      freshProject.assets = Object.fromEntries(
+        [...characterReferenceIds]
+          .map(assetId => currentProject.assets[assetId])
+          .filter((asset): asset is ComicAsset => Boolean(asset))
+          .map(asset => [asset.id, asset]),
+      )
+      freshProject.style = structuredClone(currentProject.style)
+      freshProject.pageNumbering = structuredClone(currentProject.pageNumbering)
+      freshProject.format = {
+        ...freshProject.format,
+        preset: request.format,
+        ...(request.format !== 'custom' ? COMIC_FORMATS[request.format] : {
+          width: currentProject.format.width,
+          height: currentProject.format.height,
+          dpi: currentProject.format.dpi,
+        }),
+      }
+      const next = projectFromPlan(plan, freshProject)
       next.director = {
         planId: plan.id,
         provider: request.provider,
@@ -1353,6 +1372,7 @@ export function ComicDirectorPanel({
         completedPanelIds: [],
         panelJobs: {},
         scriptVersion: 1,
+        scriptApprovedAt: withImages ? new Date().toISOString() : undefined,
       }
       const comicStore = useComicStore.getState()
       comicStore.setProject(next)
@@ -1377,6 +1397,14 @@ export function ComicDirectorPanel({
 
   const makePlan = async (withImages = false) => {
     if (!request.premise.trim()) return
+    if (!confirmNewComic(withImages)) return
+    rememberPrompt({
+      prompt: request.premise,
+      mode: 'comic-plan',
+      model: request.writingModel || request.writingProvider,
+      workspace: useStore.getState().activeWorkspace,
+      source: 'generation',
+    })
     setBusy('plan')
     setStartedAt(Date.now())
     setElapsedSeconds(0)
@@ -1404,6 +1432,7 @@ export function ComicDirectorPanel({
   }
 
   const recoverPlan = async () => {
+    if (!confirmNewComic(createCompleteComic)) return
     setBusy('plan')
     setStartedAt(Date.now())
     try {
@@ -1412,9 +1441,10 @@ export function ComicDirectorPanel({
       // An explicitly entered durable job is authoritative. A stale browser
       // result from an older session must never shadow the ID visible here.
       if (jobId) {
-        report(`Recovering completed plan ${jobId} without calling the LLM again…`)
+        report(`Checking the saved state of ${jobId}…`)
         const job = await api.fetchComicPlanJob(jobId)
         if (job.status === 'completed' && job.result?.plan) {
+          report(`Recovered completed plan ${jobId} without calling the LLM again.`)
           plan = job.result.plan
         } else {
           report(`Resuming ${jobId} from its last saved page checkpoint…`)
@@ -1465,17 +1495,31 @@ export function ComicDirectorPanel({
     setSingleBusy(planned.id)
     try {
       const character = director.plan.characters.find(item => planned.characters.includes(item.id))
-      const reference = character?.referenceAssetId
+      const characterReference = character?.referenceAssetId
         ? state.project.assets[character.referenceAssetId]?.source
         : undefined
+      const maestroState = useStore.getState()
+      const selectedImageModel = maestroState.models.find(model =>
+        model.model_type === director.imageModel)
+      const localSupportsReferences = director.provider === 'maestro'
+        && Boolean(
+          selectedImageModel?.supports_ref_images
+          || (director.imageModel === maestroState.params.model_type
+            && maestroState.modelOptions?.image_ref_choices),
+        )
+      const worldReferenceId = director.input.worldReferenceAssetIds?.[0]
+      const reference = characterReference || (localSupportsReferences && worldReferenceId
+        ? state.project.assets[worldReferenceId]?.source
+        : undefined)
       const existingJobId = director.completedPanelIds.includes(planned.id)
         ? undefined
         : director.panelJobs?.[planned.id]
-      const asset = await generatePanelAsset(
+      const asset = await generateImageAsset(
         director.provider,
         buildDirectorImagePrompt(director, planned.imagePrompt, state.project.style.promptSuffix, planned),
         director.imageModel,
         reference,
+        '',
         {
           panelId: planned.id,
           existingJobId,
@@ -1521,12 +1565,12 @@ export function ComicDirectorPanel({
         <div className="text-[9px] uppercase tracking-wide text-text-muted">Planning LLM</div>
         <div className="mt-1 text-[11px] text-text-primary">
           {externalWritingLlm
-            ? `Comic override · OpenAI-compatible · ${request.writingModel || 'deepseek-chat'}`
+            ? `Comic override · ${request.writingProvider === 'deepseek' ? 'DeepSeek' : request.writingProvider === 'minimax' ? 'MiniMax' : request.writingProvider === 'openai' ? 'OpenAI' : 'Custom compatible'} · ${request.writingModel || 'Choose a model'}`
             : `Maestro default · ${planningLlmProviderLabel[planningLlmProvider] || planningLlmProvider} · ${planningLlmModel}`}
         </div>
         <div className="mt-0.5 text-[9px] text-text-muted">
           {externalWritingLlm
-            ? `${request.writingBaseUrl || 'https://api.deepseek.com'} · internal LLM is left untouched`
+            ? `${request.writingProvider === 'deepseek' ? 'https://api.deepseek.com' : request.writingProvider === 'minimax' ? 'https://api.minimax.io/v1' : request.writingProvider === 'openai' ? 'https://api.openai.com' : request.writingBaseUrl || 'Configure the custom profile'} · internal LLM is left untouched`
             : planningLlmIsActive
               ? 'Active now'
               : llmStatus?.loaded
@@ -1539,7 +1583,9 @@ export function ComicDirectorPanel({
       <div className="grid grid-cols-2 gap-2">
         <Field label="Pages"><input className={input} type="number" min={1} max={100} value={request.pageCount} onChange={event => patch('pageCount', Math.max(1, Number(event.target.value)))} /></Field>
         <Field label="Panels / page"><input className={input} type="number" min={1} max={12} value={request.panelsPerPage} onChange={event => patch('panelsPerPage', Math.max(1, Number(event.target.value)))} /></Field>
-        <Field label="Language"><input className={input} value={request.language} onChange={event => patch('language', event.target.value)} /></Field>
+        <Field label="Language">
+          <EditableLanguageInput className={input} value={request.language} onChange={value => patch('language', value)} />
+        </Field>
         <Field label="Format"><select className={input} value={request.format} onChange={event => patch('format', event.target.value as ComicDirectorRequest['format'])}>{Object.entries(COMIC_FORMATS).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select></Field>
         <Field label="Genre">
           <SuggestedChoice
@@ -1860,11 +1906,11 @@ export function ComicDirectorPanel({
           ) : null}
           <details className="rounded-lg border border-border bg-bg-tertiary/30 p-2">
             <summary className="cursor-pointer text-[10px] font-medium text-text-secondary">
-              {project.director.plan.styleBible.trim()
+              {(project.director.plan.styleBible || '').trim()
                 ? 'Visual continuity bible created by the LLM'
                 : 'No separate visual bible needed'}
             </summary>
-            {project.director.plan.styleBible.trim() ? (
+            {(project.director.plan.styleBible || '').trim() ? (
               <p className="mt-2 whitespace-pre-wrap text-[9px] leading-relaxed text-text-muted">
                 {project.director.plan.styleBible}
               </p>
@@ -1930,14 +1976,18 @@ export function ComicEditorPanel() {
   const [sideTab, setSideTab] = useState<SideTab>('assets')
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false)
   const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
-  const [fitMode, setFitMode] = useState(true)
-  const [fitRequest, setFitRequest] = useState(0)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewZoom, setPreviewZoom] = useState(1)
   const [notice, setNotice] = useState<Notice>(null)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [comicHistory, setComicHistory] = useState<api.ComicHistoryEntry[]>([])
   const importRef = useRef<HTMLInputElement>(null)
-  const canvasViewportRef = useRef<HTMLDivElement>(null)
+  const previewViewportRef = useRef<HTMLDivElement>(null)
   const maestroOutputs = useStore(state => state.outputs)
+  const activeWorkspace = useStore(state => state.activeWorkspace)
   const comicOutputs = maestroOutputs.filter(output => output.type === 'comic')
   const currentPageIndex = Math.max(
     0,
@@ -1952,6 +2002,48 @@ export function ComicEditorPanel() {
     if (value) setTimeout(() => setNotice(null), 5000)
   }
   const notifyWorkflow = (kind: 'ok' | 'error', text: string) => notify({ kind, text })
+  const checkpointCurrent = async (
+    reason: string,
+    snapshot = useComicStore.getState(),
+  ) => {
+    try {
+      return await api.createComicHistory(snapshot.project, reason, snapshot.persistedName)
+    } catch (error) {
+      console.warn('[Comic history] Could not create checkpoint:', error)
+      return null
+    }
+  }
+  const refreshComicHistory = async () => {
+    setHistoryLoading(true)
+    try {
+      setComicHistory(await api.listComicHistory())
+    } catch (error) {
+      notify({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+  const openComicHistory = () => {
+    setHistoryOpen(true)
+    void refreshComicHistory()
+  }
+  const restoreComicHistory = async (entry: api.ComicHistoryEntry) => {
+    if (dirty && !confirm('Restore this checkpoint as a new editable copy? Your current comic will be backed up first.')) return
+    setHistoryLoading(true)
+    try {
+      await checkpointCurrent('Before history restore')
+      const restored = await api.loadComicHistory(entry.id)
+      const state = useComicStore.getState()
+      state.setProject(restored.project, null)
+      useComicStore.getState().patchProject({})
+      setHistoryOpen(false)
+      notify({ kind: 'ok', text: `Restored “${entry.title}” as an unsaved editable copy.` })
+    } catch (error) {
+      notify({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
   const generateCharacterReference = async (character: ComicCharacter) => {
     const state = useComicStore.getState()
     const director = state.project.director
@@ -1971,7 +2063,7 @@ export function ComicEditorPanel() {
     const primary = character.referenceAssetId
       ? state.project.assets[character.referenceAssetId]?.source
       : undefined
-    const asset = await generatePanelAsset(provider, prompt, model, primary)
+    const asset = await generateImageAsset(provider, prompt, model, primary)
     asset.characterIds = [character.id]
     state.addAsset(asset)
     const latest = useComicStore.getState()
@@ -1992,6 +2084,7 @@ export function ComicEditorPanel() {
   }
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
+      if (previewOpen) return
       const target = event.target as HTMLElement | null
       if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
       const state = useComicStore.getState()
@@ -2029,39 +2122,55 @@ export function ComicEditorPanel() {
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [])
+  }, [previewOpen])
   useEffect(() => {
-    if (!fitMode) return
-    const viewport = canvasViewportRef.current
+    if (!previewOpen) return
+    const viewport = previewViewportRef.current
     const page = project.pages.find(item => item.id === currentPageId)
     if (!viewport || !page) return
     const fit = () => {
       const bounds = viewport.getBoundingClientRect()
-      const horizontalPadding = 32
-      const verticalPadding = 32
+      const horizontalPadding = 48
+      const verticalPadding = 48
       const nextZoom = Math.min(
-        1.5,
-        Math.max(.2, (bounds.width - horizontalPadding) / page.width),
-        Math.max(.2, (bounds.height - verticalPadding) / page.height),
+        2,
+        Math.max(.05, (bounds.width - horizontalPadding) / page.width),
+        Math.max(.05, (bounds.height - verticalPadding) / page.height),
       )
-      setZoom(nextZoom)
-      viewport.scrollTo({ left: 0, top: 0 })
+      setPreviewZoom(nextZoom)
     }
-    let secondFrame = 0
-    const frame = window.requestAnimationFrame(() => {
-      fit()
-      // Collapsing toolbars/sidebars is animated by CSS. Measuring once more
-      // after layout settles keeps the full page visible on the first click.
-      secondFrame = window.requestAnimationFrame(fit)
-    })
+    const frame = window.requestAnimationFrame(fit)
     const observer = new ResizeObserver(fit)
     observer.observe(viewport)
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreviewOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
     return () => {
       window.cancelAnimationFrame(frame)
-      window.cancelAnimationFrame(secondFrame)
       observer.disconnect()
+      window.removeEventListener('keydown', closeOnEscape)
     }
-  }, [fitMode, fitRequest, currentPageId, project.pages, setZoom, toolbarCollapsed, sidePanelCollapsed])
+  }, [previewOpen, currentPageId, project.pages])
+
+  useEffect(() => {
+    const snapshot = useComicStore.getState()
+    const timer = window.setTimeout(() => {
+      void checkpointCurrent('Comic opened or created', snapshot)
+    }, 2500)
+    return () => window.clearTimeout(timer)
+    // The project identity is the intended boundary for this checkpoint.
+  }, [project.id, activeWorkspace])
+
+  useEffect(() => {
+    if (!dirty) return
+    const snapshot = useComicStore.getState()
+    const timer = window.setTimeout(() => {
+      void checkpointCurrent('Automatic editing checkpoint', snapshot)
+    }, 12000)
+    return () => window.clearTimeout(timer)
+    // updatedAt resets the inactivity window without serialising drag frames.
+  }, [dirty, project.updatedAt, activeWorkspace])
   const applyLayout = (name: string) => {
     const state = useComicStore.getState()
     const page = state.project.pages.find(item => item.id === state.currentPageId)
@@ -2083,15 +2192,18 @@ export function ComicEditorPanel() {
     if (page && preset) state.addElement(page.id, createEffect(page, preset))
   }
 
-  const save = async () => {
+  const save = async (withPreview = true) => {
     setSaving(true)
     try {
-      const preview = await captureComicPage(0.35)
+      const preview = withPreview ? await captureComicPage(0.35) : undefined
       const result = await api.saveComicProject(useComicStore.getState().project, preview, persistedName)
       useComicStore.getState().setPersistedName(result.name)
       useComicStore.getState().markSaved()
-      useStore.getState().loadOutputs()
-      notify({ kind: 'ok', text: 'Comic saved in the active Maestro workspace.' })
+      if (withPreview) {
+        await checkpointCurrent('Manual save', useComicStore.getState())
+        useStore.getState().loadOutputs()
+        notify({ kind: 'ok', text: 'Comic saved in the active Maestro workspace.' })
+      }
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
     } finally {
@@ -2101,7 +2213,7 @@ export function ComicEditorPanel() {
 
   useEffect(() => {
     if (!persistedName || !dirty || saving) return
-    const timer = window.setTimeout(save, 5000)
+    const timer = window.setTimeout(() => save(false), 5000)
     return () => window.clearTimeout(timer)
     // save intentionally reads the current store snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2109,7 +2221,12 @@ export function ComicEditorPanel() {
 
   const importProject = async (file?: File) => {
     if (!file) return
+    if (dirty && !confirm('Import this comic and replace the current unsaved work? A recovery checkpoint will be created first.')) {
+      if (importRef.current) importRef.current.value = ''
+      return
+    }
     try {
+      await checkpointCurrent('Before comic import')
       const parsed = normalizeComicProject(JSON.parse(await file.text()))
       // Legacy comic-generator projects embedded every library image as a
       // data URL. Persist each one through Maestro before accepting the
@@ -2137,6 +2254,7 @@ export function ComicEditorPanel() {
     if (!name) return
     if (dirty && !confirm('Open this saved comic and discard unsaved changes?')) return
     try {
+      await checkpointCurrent('Before opening saved comic')
       useComicStore.getState().setProject(await api.loadComicProject(name), name)
       notify({ kind: 'ok', text: 'Comic opened from the active workspace.' })
     } catch (error) {
@@ -2157,8 +2275,9 @@ export function ComicEditorPanel() {
     }
   }
 
-  const newProject = () => {
+  const newProject = async () => {
     if (dirty && !confirm('Create a new comic and discard unsaved changes?')) return
+    await checkpointCurrent('Before creating a new comic')
     useComicStore.getState().setProject(createComicProject())
   }
 
@@ -2189,7 +2308,7 @@ export function ComicEditorPanel() {
             />
             {dirty && <span className="text-[10px] text-yellow-400">Unsaved</span>}
             <div className="h-5 border-l border-border mx-1" />
-            <button className={button} onClick={newProject}><Plus size={13} /> New</button>
+            <button className={button} onClick={() => void newProject()}><Plus size={13} /> New</button>
             <select className={`${input} w-36`} value="" onChange={event => applyLayout(event.target.value)} title="Apply a panel layout">
               <option value="">Layouts…</option>
               {COMIC_LAYOUTS.map(layout => <option key={layout.name} value={layout.name}>{layout.name}</option>)}
@@ -2202,9 +2321,12 @@ export function ComicEditorPanel() {
               <option value="">Open saved…</option>
               {comicOutputs.map(output => <option key={output.name} value={output.name}>{output.name}</option>)}
             </select>
+            <button className={button} onClick={openComicHistory} title="Browse recoverable comic versions">
+              <HistoryIcon size={13} /> History
+            </button>
             <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button>
             <input ref={importRef} type="file" accept=".json,.comic.json" className="hidden" onChange={event => importProject(event.target.files?.[0])} />
-            <button className={button} disabled={saving} onClick={save}>{saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save</button>
+            <button className={button} disabled={saving} onClick={() => save(true)}>{saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save</button>
             <button className={button} disabled={!history.past.length} onClick={undo}><Undo2 size={13} /></button>
             <button className={button} disabled={!history.future.length} onClick={redo}><Redo2 size={13} /></button>
             <button className={`${button} ${snapEnabled ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSnapEnabled(!snapEnabled)}>Grid</button>
@@ -2223,6 +2345,78 @@ export function ComicEditorPanel() {
           </>
         )}
       </header>
+      {historyOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4" onMouseDown={() => setHistoryOpen(false)}>
+          <div
+            className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary shadow-2xl"
+            onMouseDown={event => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold text-text-primary">Comic history</h2>
+                <p className="text-[10px] text-text-muted">
+                  Durable recovery checkpoints in workspace “{activeWorkspace}”. Restoring creates a new unsaved copy.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button className={button} disabled={historyLoading} onClick={() => void refreshComicHistory()}>
+                  {historyLoading ? <Loader2 size={13} className="animate-spin" /> : <HistoryIcon size={13} />} Refresh
+                </button>
+                <button className={button} onClick={() => setHistoryOpen(false)} aria-label="Close comic history">
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              {historyLoading && comicHistory.length === 0 ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-xs text-text-muted">
+                  <Loader2 size={14} className="animate-spin" /> Loading checkpoints…
+                </div>
+              ) : comicHistory.length === 0 ? (
+                <div className="py-12 text-center text-xs text-text-muted">
+                  No comic checkpoints yet. A checkpoint is created after editing pauses and before destructive actions.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {comicHistory.map(entry => (
+                    <div
+                      key={entry.id}
+                      className={`flex items-center gap-3 rounded-lg border p-3 ${
+                        entry.comicId === project.id
+                          ? 'border-accent-blue/40 bg-accent-blue/5'
+                          : 'border-border bg-bg-tertiary'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-xs font-medium text-text-primary">{entry.title}</span>
+                          {entry.comicId === project.id && (
+                            <span className="shrink-0 rounded bg-accent-blue/15 px-1.5 py-0.5 text-[9px] text-accent-blue">Current comic</span>
+                          )}
+                        </div>
+                        <div className="mt-1 truncate text-[10px] text-text-muted">
+                          {entry.reason} · {entry.pageCount} pages · {entry.assetCount} assets
+                          {entry.persistedName ? ` · ${entry.persistedName}` : ''}
+                        </div>
+                        <div className="mt-0.5 text-[9px] text-text-muted">
+                          {new Date(entry.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                      <button
+                        className={button}
+                        disabled={historyLoading}
+                        onClick={() => void restoreComicHistory(entry)}
+                      >
+                        Restore copy
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {notice && (
         <div className={`shrink-0 px-3 py-1.5 text-xs ${notice.kind === 'ok' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>{notice.text}</div>
       )}
@@ -2257,22 +2451,22 @@ export function ComicEditorPanel() {
               <ChevronRight size={12} />
             </button>
             <div className="h-5 border-l border-border mx-1" />
-            <button className={button} onClick={() => { setFitMode(false); setZoom(zoom - .1) }}>-</button>
+            <button className={button} onClick={() => setZoom(zoom - .1)}>-</button>
             <span className="w-12 text-center">{Math.round(zoom * 100)}%</span>
-            <button className={button} onClick={() => { setFitMode(false); setZoom(zoom + .1) }}>+</button>
+            <button className={button} onClick={() => setZoom(zoom + .1)}>+</button>
             <button
-              className={`${button} ${fitMode ? 'border-accent-blue text-accent-blue' : ''}`}
+              className={button}
               onClick={() => {
-                setFitMode(true)
-                setFitRequest(value => value + 1)
+                useComicStore.getState().setSelected(null)
+                setPreviewOpen(true)
               }}
-              title="Fit the full comic page in the available space"
+              title="Open a full-screen, read-only page preview"
             >
               <Maximize2 size={12} /> Fit
             </button>
             <span className="ml-2">{project.format.width} × {project.format.height}</span>
           </div>
-          <div ref={canvasViewportRef} className="flex-1 min-h-0 overflow-auto">
+          <div className="flex-1 min-h-0 overflow-auto">
             <div className="min-w-full min-h-full flex p-4">
               <div className="m-auto">
                 <ComicCanvas />
@@ -2329,6 +2523,22 @@ export function ComicEditorPanel() {
           )}
         </aside>
       </div>
+      {previewOpen && (
+        <div className="fixed inset-0 z-[2000] flex flex-col bg-[#090a0d]/95 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Read-only comic preview">
+          <div className="shrink-0 flex items-center gap-2 border-b border-white/10 bg-black/40 px-3 py-2 text-xs text-white/70">
+            <span className="font-medium text-white">Read-only preview</span>
+            <span>Page {currentPageIndex + 1} / {project.pages.length}</span>
+            <div className="ml-auto flex items-center gap-1.5">
+              <button className={button} disabled={currentPageIndex === 0} onClick={() => goToPage(currentPageIndex - 1)}><ChevronLeft size={13} /> Previous</button>
+              <button className={button} disabled={currentPageIndex >= project.pages.length - 1} onClick={() => goToPage(currentPageIndex + 1)}>Next <ChevronRight size={13} /></button>
+              <button className={button} onClick={() => setPreviewOpen(false)}><X size={13} /> Close</button>
+            </div>
+          </div>
+          <div ref={previewViewportRef} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6">
+            <ComicCanvas readOnly zoomOverride={previewZoom} domId="maestro-comic-preview-page" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

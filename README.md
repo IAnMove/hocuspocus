@@ -32,13 +32,22 @@ Direct access to every model and every knob:
 - **Sliding window** for arbitrarily long generations
 - **Spatial upsampling, film grain, codec selection** as post-processing options
 
+### 📚 Story Lab — reusable stories, worlds and characters
+Story Lab is a production bible that sits before Comic Studio and Director. Write a premise once, then generate or manually edit the logline, synopsis, world rules, locations, character psychology and appearance, relationships, dramatic beats, and ending. Every generated field stays editable.
+
+- **Guided mode** creates reviewable field-level drafts and locks production until the relevant story, world, cast identities, relationships, and structure are approved. **Automatic mode** runs the same checkpointed pipeline, then offers first-look world, location, and character concepts.
+- Choose Maestro internal, DeepSeek V4 Pro/Flash, MiniMax M3/M2.7/M2.7 Highspeed, OpenAI, or a custom compatible writing agent inside the story itself. Concept-art generation has its own independent Maestro/MiniMax selector.
+- Character cards combine role, desire, need, flaw, arc, dialogue voice, wardrobe, visual invariants, negative prompts, multiple references, and a selected primary identity image.
+- Export/import a `.storypack` with the editable JSON and available visual assets. Each workspace has a multi-story autosaved library; generated plans and local concept jobs can resume from durable checkpoints after interruption.
+- **Open in Comic Studio** stages the story, world, cast, world/location/character references and beats while leaving pagination and panel rhythm to Comic Director. **Open in Director** creates a clean short-film staging with the same character and location references. Adaptation history can reopen the staged target or restore its exact source as a new editable copy.
+
 ### 💬 Comic Studio — script, characters, pages, translation and animatics
-Build a comic as an editable production rather than a single flattened generation. Comic Director creates a causal page structure and a full script that can be revised and approved before image credits are spent. The editor includes varied layouts, restrained automatic lettering, per-panel image regeneration, page navigation, zoom/Fit, PDF/CBZ/PNG export, and text-only rewriting or translation without changing artwork.
+Build a comic as an editable production rather than a single flattened generation. Comic Director creates a causal page structure and a full script that can be revised and approved before image credits are spent. The editor includes varied layouts, restrained automatic lettering, per-panel image regeneration, page navigation, zoom, a full-screen read-only Fit preview, PDF/CBZ/PNG export, and text-only rewriting or translation without changing artwork.
 
 - **Characters** stores personality, motivation, dialogue voice, wardrobe, visual invariants, exclusions, and multiple generated or uploaded identity references.
 - **Quality** checks text density, duplicated lines, missing continuity notes, unknown characters, unapproved scripts, and missing references. Translation glossaries lock names and terminology across languages.
-- **Writing LLM override** keeps Maestro's internal model as the default, but lets one comic use DeepSeek or another OpenAI-compatible endpoint for planning, story revision, lettering, and translation. The API key remains in Settings and is never embedded in the comic JSON.
-- **Video** turns the final lettered panels into a 1080p landscape, portrait, or square animatic with per-shot timing, camera movement, and transitions. The MP4 is handed to the Video Editor automatically for further cutting.
+- **Writing LLM override** keeps Maestro's internal model as the default, with separate DeepSeek, MiniMax, OpenAI, and custom-compatible profiles. DeepSeek offers V4 Pro or V4 Flash and automatically uses Flash for translation. MiniMax offers M3, M2.7, and M2.7 Highspeed, sharing its saved API key with image generation while keeping the writing and image model selectors independent. Provider keys remain in Settings and are never embedded in comic JSON.
+- **Video** captures, uploads, and releases one final lettered panel at a time before rendering a 1080p landscape, portrait, or square animatic with per-shot timing, camera movement, and transitions. The MP4 is handed to the Video Editor automatically for further cutting.
 - Comic and Video Editor drafts autosave locally; saved comics remain backward-compatible with older version-2 project JSON.
 
 ### 🤖 Local LLM — built-in, no setup

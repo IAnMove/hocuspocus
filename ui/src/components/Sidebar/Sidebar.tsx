@@ -1,4 +1,5 @@
-import { Settings, X, Globe, BookMarked } from 'lucide-react'
+import { useState } from 'react'
+import { Settings, X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { GenerationModeSelector } from './GenerationModeSelector'
@@ -32,6 +33,8 @@ import { Hunyuan3DPanel } from './Hunyuan3DPanel'
 import { HardwareStatusBar } from './HardwareStatusBar'
 
 export function Sidebar() {
+  const [directorCollapsed, setDirectorCollapsed] = useState(() =>
+    window.localStorage.getItem('maestro-director-sidebar-collapsed') === 'true')
   const toggleSettings = useStore(s => s.toggleSettings)
   const generationMode = useStore(s => s.generationMode)
   const imageMode = useStore(s => s.params.image_mode)
@@ -62,6 +65,10 @@ export function Sidebar() {
   const isBlend = isVideo && imageMode === 4
   const isDirector = sidebarMode === 'director'
   const isI2vOnly = modelOptions?.i2v_class && !modelOptions?.t2v_class
+  const setDirectorSidebarCollapsed = (collapsed: boolean) => {
+    setDirectorCollapsed(collapsed)
+    window.localStorage.setItem('maestro-director-sidebar-collapsed', String(collapsed))
+  }
 
   const modeToggle = (size: 'sm' | 'md') => (
     <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
@@ -279,6 +286,24 @@ export function Sidebar() {
     )
   }
 
+  if (isDirector && directorCollapsed) {
+    return (
+      <aside className="w-11 h-full bg-bg-secondary border-r border-border flex flex-col items-center shrink-0">
+        <button
+          onClick={() => setDirectorSidebarCollapsed(false)}
+          className="m-1.5 p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
+          title="Expand Director panel"
+          aria-label="Expand Director panel"
+        >
+          <PanelLeftOpen size={17} />
+        </button>
+        <span className="mt-2 text-[10px] uppercase tracking-[0.2em] text-text-muted [writing-mode:vertical-rl]">
+          Director
+        </span>
+      </aside>
+    )
+  }
+
   // Desktop: static sidebar
   return (
     <aside className="w-[420px] h-full bg-bg-secondary border-r border-border flex flex-col shrink-0">
@@ -292,6 +317,16 @@ export function Sidebar() {
         </div>
         <div className="flex items-center gap-2">
           {modeToggle('md')}
+          {isDirector && (
+            <button
+              onClick={() => setDirectorSidebarCollapsed(true)}
+              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
+              title="Collapse Director panel"
+              aria-label="Collapse Director panel"
+            >
+              <PanelLeftClose size={16} />
+            </button>
+          )}
           <button
             onClick={toggleSettings}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"

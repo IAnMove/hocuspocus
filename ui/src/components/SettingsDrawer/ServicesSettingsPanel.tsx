@@ -371,7 +371,7 @@ export function ServicesSettingsPanel() {
           >
             <option value="local">Local (llama-server)</option>
             <option value="remote">Remote OpenAI-Compatible (LM Studio, etc.)</option>
-            <option value="openai">Hosted OpenAI-Compatible (OpenAI, DeepSeek)</option>
+            <option value="openai">OpenAI API</option>
             <option value="anthropic">Anthropic API</option>
           </select>
         </div>
@@ -395,7 +395,7 @@ export function ServicesSettingsPanel() {
             <p className="text-[10px] text-text-muted mt-1">
               {isRemote
                 ? 'URL of your LM Studio, Ollama, or other OpenAI-compatible server'
-                : 'OpenAI: leave blank. DeepSeek: https://api.deepseek.com'}
+                : 'OpenAI API base URL; leave blank to use the default.'}
             </p>
           </div>
         )}
@@ -496,9 +496,9 @@ export function ServicesSettingsPanel() {
       <hr className="border-border" />
 
       <div className="space-y-3">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Comic Image Providers</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">MiniMax API</h3>
         <p className="text-[10px] text-text-muted">
-          MiniMax image-01 is optional. The Comics editor can always use Maestro's local image models.
+          One MiniMax key is shared by its text and image APIs. Writing and image models remain independently selectable in the Comics editor.
         </p>
         <ApiKeyField
           label="MiniMax API Key"
@@ -793,21 +793,56 @@ export function ServicesSettingsPanel() {
 
       <hr className="border-border" />
 
-      {/* API Keys.
-          The three external-AI provider keys (Google / OpenAI /
-          Anthropic) are gated by the experimental toggle — non-power
-          users running the local LLM exclusively never need them, and
-          surfacing them in the default UI invites confused calls about
-          "do I need these to use Maestro?"
-          The CivitAI key stays visible always since LoRA download
-          rate-limit relief is broadly useful, not a power-user feature. */}
+      {/* Named comic-writing profiles stay visible because the comic editor
+          exposes these providers outside the experimental feature gate. */}
       <div className="space-y-4">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">API Keys</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Comic writing providers</h3>
+        <p className="text-[10px] text-text-muted">
+          Credentials remain in Maestro settings and are never embedded in an exported comic.
+        </p>
+
+        <ApiKeyField
+          label="DeepSeek API key"
+          maskedValue={servicesConfig.deepseek_api_key}
+          isSet={servicesConfig.deepseek_api_key_set}
+          onSave={val => updateConfig({ deepseek_api_key: val })}
+        />
+
+        <ApiKeyField
+          label="OpenAI API key"
+          maskedValue={servicesConfig.openai_api_key}
+          isSet={servicesConfig.openai_api_key_set}
+          onSave={val => updateConfig({ openai_api_key: val })}
+        />
+
+        <div className="rounded-lg border border-border bg-bg-tertiary/20 p-3 space-y-3">
+          <div>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+              Custom compatible base URL
+            </label>
+            <input
+              type="url"
+              value={servicesConfig.compatible_base_url || ''}
+              onChange={event => updateConfig({ compatible_base_url: event.target.value })}
+              placeholder="http://127.0.0.1:1234"
+              className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+            />
+          </div>
+          <ApiKeyField
+            label="Custom compatible API key (optional)"
+            maskedValue={servicesConfig.compatible_api_key}
+            isSet={servicesConfig.compatible_api_key_set}
+            onSave={val => updateConfig({ compatible_api_key: val })}
+          />
+          <p className="text-[10px] text-text-muted">
+            Used only by the custom comic-writing profile. Local servers may leave the key empty.
+          </p>
+        </div>
 
         {servicesConfig.show_experimental && (
           <>
             <p className="text-[10px] text-text-muted">
-              Required for their respective providers. Also used for external AI services in Director mode.
+              Additional experimental service credentials.
             </p>
 
             <ApiKeyField
@@ -815,13 +850,6 @@ export function ServicesSettingsPanel() {
               maskedValue={servicesConfig.google_api_key}
               isSet={servicesConfig.google_api_key_set}
               onSave={val => updateConfig({ google_api_key: val })}
-            />
-
-            <ApiKeyField
-              label="OpenAI / compatible API key"
-              maskedValue={servicesConfig.openai_api_key}
-              isSet={servicesConfig.openai_api_key_set}
-              onSave={val => updateConfig({ openai_api_key: val })}
             />
 
             <ApiKeyField

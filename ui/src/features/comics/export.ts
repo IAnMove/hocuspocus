@@ -66,15 +66,22 @@ async function captureAllPages(onProgress?: (current: number, total: number) => 
   return images
 }
 
-export async function captureComicPanels(
+export type ComicPanelCapture = {
+  dataUrl: string
+  pageNumber: number
+  panelNumber: number
+  panelId: string
+}
+
+export async function forEachComicPanelCapture(
+  consume: (capture: ComicPanelCapture, current: number, total: number) => Promise<void>,
   onProgress?: (current: number, total: number) => void,
-): Promise<Array<{ dataUrl: string; pageNumber: number; panelNumber: number; panelId: string }>> {
+): Promise<void> {
   const state = useComicStore.getState()
   const originalPage = state.currentPageId
   const originalZoom = state.zoom
   const originalSelection = state.selectedId
   const total = state.project.pages.reduce((sum, page) => sum + page.elements.filter(element => element.type === 'panel' && !element.parentId).length, 0)
-  const captures: Array<{ dataUrl: string; pageNumber: number; panelNumber: number; panelId: string }> = []
   let current = 0
   state.setSelected(null)
   state.setZoom(1)
@@ -92,7 +99,7 @@ export async function captureComicPanels(
         if (!node) throw new Error(`Comic panel ${pageIndex + 1}.${panelIndex + 1} is not mounted`)
         current += 1
         onProgress?.(current, total)
-        captures.push({
+        const capture = {
           dataUrl: await toPng(node, {
             pixelRatio: 2,
             cacheBust: true,
@@ -103,7 +110,11 @@ export async function captureComicPanels(
           pageNumber: pageIndex + 1,
           panelNumber: panelIndex + 1,
           panelId: panel.id,
-        })
+        }
+        // Wait for the consumer (normally upload) before capturing the next
+        // panel. Once this callback resolves the large data URL can be
+        // garbage-collected instead of accumulating for the whole comic.
+        await consume(capture, current, total)
       }
     }
   } finally {
@@ -111,7 +122,6 @@ export async function captureComicPanels(
     useComicStore.getState().setZoom(originalZoom)
     useComicStore.getState().setSelected(originalSelection)
   }
-  return captures
 }
 
 export async function exportComicPdf(onProgress?: (current: number, total: number) => void) {

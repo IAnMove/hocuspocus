@@ -4,7 +4,7 @@ import {
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
-import { captureComicPanels } from './export'
+import { forEachComicPanelCapture } from './export'
 import { comicId, normalizeComicPlan, simplifyDirectorText } from './model'
 import { useComicStore } from './store'
 import type { ComicAsset, ComicCharacter, ComicDirectorRequest, ComicGlossaryEntry, ComicPlanPanel } from './types'
@@ -21,8 +21,34 @@ export function ComicWritingProviderFields({
   onChange: <K extends keyof ComicDirectorRequest>(key: K, value: ComicDirectorRequest[K]) => void
   disabled?: boolean
 }) {
-  const apiKeySet = useStore(state => Boolean(state.servicesConfig?.openai_api_key_set))
-  const external = value.writingProvider === 'openai-compatible'
+  const services = useStore(state => state.servicesConfig)
+  const provider = value.writingProvider || 'maestro'
+  const external = provider !== 'maestro'
+  const apiKeySet = provider === 'deepseek'
+    ? Boolean(services?.deepseek_api_key_set)
+    : provider === 'minimax'
+      ? Boolean(services?.minimax_api_key_set)
+    : provider === 'openai'
+      ? Boolean(services?.openai_api_key_set)
+      : provider === 'openai-compatible'
+        ? Boolean(services?.compatible_api_key_set) || Boolean(services?.compatible_base_url)
+        : true
+  const selectProvider = (next: ComicDirectorRequest['writingProvider']) => {
+    onChange('writingProvider', next)
+    if (next === 'deepseek') {
+      onChange('writingModel', 'deepseek-v4-pro')
+      onChange('writingBaseUrl', 'https://api.deepseek.com')
+    } else if (next === 'minimax') {
+      onChange('writingModel', 'MiniMax-M3')
+      onChange('writingBaseUrl', 'https://api.minimax.io/v1')
+    } else if (next === 'openai') {
+      onChange('writingModel', 'gpt-4.1')
+      onChange('writingBaseUrl', 'https://api.openai.com')
+    } else if (next === 'openai-compatible') {
+      onChange('writingModel', '')
+      onChange('writingBaseUrl', services?.compatible_base_url || '')
+    }
+  }
   return (
     <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5">
       <label className="block text-[10px] text-text-muted">Writing LLM
@@ -30,25 +56,48 @@ export function ComicWritingProviderFields({
           className={`${input} mt-1`}
           disabled={disabled}
           value={value.writingProvider || 'maestro'}
-          onChange={event => onChange('writingProvider', event.target.value as ComicDirectorRequest['writingProvider'])}
+          onChange={event => selectProvider(event.target.value as ComicDirectorRequest['writingProvider'])}
         >
           <option value="maestro">Maestro internal · default</option>
-          <option value="openai-compatible">DeepSeek / OpenAI-compatible · only this comic</option>
+          <option value="deepseek">DeepSeek · only this comic</option>
+          <option value="minimax">MiniMax · only this comic</option>
+          <option value="openai">OpenAI · only this comic</option>
+          <option value="openai-compatible">Custom OpenAI-compatible · only this comic</option>
         </select>
       </label>
       {external && <>
         <label className="block text-[10px] text-text-muted">Model
-          <input className={`${input} mt-1`} disabled={disabled} value={value.writingModel || 'deepseek-chat'} onChange={event => onChange('writingModel', event.target.value)} placeholder="deepseek-chat" />
+          {provider === 'deepseek' ? (
+            <select className={`${input} mt-1`} disabled={disabled} value={value.writingModel || 'deepseek-v4-pro'} onChange={event => onChange('writingModel', event.target.value)}>
+              <option value="deepseek-v4-pro">DeepSeek V4 Pro · best story quality</option>
+              <option value="deepseek-v4-flash">DeepSeek V4 Flash · faster and cheaper</option>
+            </select>
+          ) : provider === 'minimax' ? (
+            <select className={`${input} mt-1`} disabled={disabled} value={value.writingModel || 'MiniMax-M3'} onChange={event => onChange('writingModel', event.target.value)}>
+              <option value="MiniMax-M3">MiniMax M3 · multimodal, 1M context</option>
+              <option value="MiniMax-M2.7">MiniMax M2.7 · character-rich interaction</option>
+              <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed · lower latency</option>
+            </select>
+          ) : (
+            <input className={`${input} mt-1`} disabled={disabled} value={value.writingModel || ''} onChange={event => onChange('writingModel', event.target.value)} placeholder={provider === 'openai' ? 'gpt-4.1' : 'Model name exposed by your server'} />
+          )}
         </label>
-        <label className="block text-[10px] text-text-muted">OpenAI-compatible base URL
-          <input className={`${input} mt-1`} disabled={disabled} value={value.writingBaseUrl || 'https://api.deepseek.com'} onChange={event => onChange('writingBaseUrl', event.target.value)} placeholder="https://api.deepseek.com" />
-        </label>
+        <div className="rounded border border-border px-2 py-1.5 text-[9px] text-text-muted">
+          {provider === 'deepseek'
+            ? 'https://api.deepseek.com · Translation always uses V4 Flash, even when Pro is selected here.'
+            : provider === 'minimax'
+              ? 'https://api.minimax.io/v1 · Shares the MiniMax key with image generation, but not its model selection.'
+            : provider === 'openai'
+              ? 'https://api.openai.com'
+              : services?.compatible_base_url || 'Set the custom compatible URL in Settings → Services.'}
+        </div>
         <p className={`text-[9px] ${apiKeySet ? 'text-emerald-400' : 'text-amber-300'}`}>
           {apiKeySet
-            ? 'Compatible API key configured. The internal LLM remains loaded and unchanged.'
-            : 'Add your OpenAI / compatible API key in Settings → Services before running this operation.'}
+            ? provider === 'openai-compatible' && !services?.compatible_api_key_set
+              ? 'Custom endpoint configured without authentication. The internal LLM remains unchanged.'
+              : 'Provider credential configured. The internal LLM remains loaded and unchanged.'
+            : `Add your ${provider === 'deepseek' ? 'DeepSeek' : provider === 'minimax' ? 'MiniMax' : provider === 'openai' ? 'OpenAI' : 'custom compatible'} credential in Settings → Services.`}
         </p>
-        <p className="text-[9px] text-text-muted">DeepSeek and OpenAI hosts work directly. For any other URL, trust the same Remote URL first in Settings → Services.</p>
       </>}
       {!external && <p className="text-[9px] text-text-muted">Uses Maestro's configured internal LLM. External selection never changes the global provider.</p>}
     </div>
@@ -303,10 +352,10 @@ export function ComicQualityPanel({ notify }: { notify: (kind: 'ok' | 'error', t
       page.panels.forEach((panel, panelIndex) => {
         const blocks = panel.captions.length + panel.dialogue.length + panel.soundEffects.length
         if (blocks > (page.panels.length >= 7 ? 1 : 2)) found.push({ level: 'error', text: `Page ${pageIndex + 1}, panel ${panelIndex + 1} has ${blocks} text blocks.` })
-        if (!panel.continuityNotes.trim()) found.push({ level: 'tip', text: `Page ${pageIndex + 1}, panel ${panelIndex + 1} has no continuity note.` })
+        if (!(panel.continuityNotes || '').trim()) found.push({ level: 'tip', text: `Page ${pageIndex + 1}, panel ${panelIndex + 1} has no continuity note.` })
         panel.characters.filter(id => !known.has(id)).forEach(id => found.push({ level: 'error', text: `Unknown character “${id}” in page ${pageIndex + 1}.` }))
         ;[...panel.captions, ...panel.dialogue.map(line => line.text)].forEach(line => {
-          const key = line.trim().toLocaleLowerCase()
+          const key = String(line || '').trim().toLocaleLowerCase()
           if (key && seen.has(key)) found.push({ level: 'warning', text: `Repeated line on page ${pageIndex + 1}: “${line}”.` })
           seen.add(key)
         })
@@ -336,6 +385,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [result, setResult] = useState<{ name: string; url: string } | null>(null)
+  const panelCount = project.pages.reduce(
+    (total, page) => total + page.elements.filter(element => element.type === 'panel' && !element.parentId).length,
+    0,
+  )
   const resolution = aspect === 'portrait'
     ? { width: 1080, height: 1920 }
     : aspect === 'square' ? { width: 1080, height: 1080 } : { width: 1920, height: 1080 }
@@ -348,14 +401,23 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     state.patchProject({ director: { ...director, plan } })
   }
   const create = async () => {
+    if (panelCount > 200) {
+      notify('error', `This animatic has ${panelCount} panels; the safe limit is 200.`)
+      return
+    }
     setBusy(true)
     setResult(null)
     try {
-      const captures = await captureComicPanels((current, total) => setProgress(`Capturing panel ${current}/${total}`))
-      const panels = []
-      for (let index = 0; index < captures.length; index += 1) {
-        const capture = captures[index]
-        setProgress(`Uploading shot ${index + 1}/${captures.length}`)
+      const panels: Array<{
+        source: string
+        page_number: number
+        panel_number: number
+        duration: number
+        motion: string
+        script: string
+      }> = []
+      await forEachComicPanelCapture(async (capture, current, total) => {
+        setProgress(`Uploading shot ${current}/${total}`)
         const blob = await (await fetch(capture.dataUrl)).blob()
         const upload = await api.uploadImage(new File(
           [blob],
@@ -368,10 +430,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           page_number: capture.pageNumber,
           panel_number: capture.panelNumber,
           duration: planned?.durationSeconds || defaultDuration,
-          motion: planned?.cameraMove || (index % 4 === 1 ? 'pan-right' : index % 4 === 2 ? 'pull-out' : index % 4 === 3 ? 'pan-left' : 'push-in'),
+          motion: planned?.cameraMove || ((current - 1) % 4 === 1 ? 'pan-right' : (current - 1) % 4 === 2 ? 'pull-out' : (current - 1) % 4 === 3 ? 'pan-left' : 'push-in'),
           script: planned ? scriptForPanel(planned) : '',
         })
-      }
+      }, (current, total) => setProgress(`Capturing panel ${current}/${total}`))
       setProgress('Starting FFmpeg animatic…')
       const started = await api.startComicAnimatic({
         comic_id: project.id,
@@ -403,5 +465,5 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       setProgress('')
     }
   }
-  return <div className="space-y-3"><div className="rounded-lg border border-cyan-400/30 bg-cyan-400/5 p-3"><div className="text-xs font-semibold text-text-primary">Comic to video</div><p className="mt-1 text-[10px] text-text-muted">Each final lettered panel becomes a shot. The comic remains the script; motion, timing and transitions create an editable animatic.</p></div><label className="block text-[10px] text-text-muted">Format<select className={`${input} mt-1`} value={aspect} onChange={event => setAspect(event.target.value as typeof aspect)}><option value="landscape">Landscape 1080p</option><option value="portrait">Portrait 1080p</option><option value="square">Square 1080p</option></select></label><label className="block text-[10px] text-text-muted">Default seconds per panel<input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} /></label><label className="block text-[10px] text-text-muted">Transition<select className={`${input} mt-1`} value={transition} onChange={event => setTransition(event.target.value)}><option value="crossfade">Crossfade</option><option value="fade-black">Fade through black</option><option value="wipe-left">Wipe left</option><option value="dissolve">Dissolve</option><option value="zoom-in">Zoom portal</option><option value="none">Hard cuts</option></select></label>{project.director && <details className="rounded border border-border bg-bg-tertiary/30"><summary className="cursor-pointer p-2 text-xs text-text-primary">Shot timing and camera moves</summary><div className="space-y-2 p-2 pt-0">{project.director.plan.pages.flatMap((page, pageIndex) => page.panels.map((panel, panelIndex) => <div key={panel.id} className="grid grid-cols-[1fr_70px] gap-1.5 rounded border border-border p-1.5"><span className="text-[10px] text-text-muted">{pageIndex + 1}.{panelIndex + 1} · {panel.narrativeRole}</span><input className={input} type="number" min={.8} max={20} step={.1} value={panel.durationSeconds || defaultDuration} onChange={event => updateShot(pageIndex, panelIndex, { durationSeconds: Number(event.target.value) })} /><select className={`${input} col-span-2`} value={panel.cameraMove || 'push-in'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}><option value="none">Static</option><option value="push-in">Slow push-in</option><option value="pull-out">Slow pull-out</option><option value="pan-left">Pan left</option><option value="pan-right">Pan right</option></select></div>))}</div></details>}<button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={busy || project.pages.every(page => !page.elements.some(element => element.type === 'panel'))} onClick={create}>{busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {progress || 'Create video animatic'}</button>{result && <div className="space-y-2 rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><video src={result.url} controls className="w-full rounded" /><button className={`${button} w-full border-emerald-500/40 text-emerald-300`} onClick={() => useStore.getState().setMediaFilter('videoeditor')}>Open in Video Editor</button></div>}</div>
+  return <div className="space-y-3"><div className="rounded-lg border border-cyan-400/30 bg-cyan-400/5 p-3"><div className="text-xs font-semibold text-text-primary">Comic to video</div><p className="mt-1 text-[10px] text-text-muted">Each final lettered panel becomes a shot. Panels are captured and uploaded one at a time to keep memory stable. The comic remains the script; motion, timing and transitions create an editable animatic.</p></div><label className="block text-[10px] text-text-muted">Format<select className={`${input} mt-1`} value={aspect} onChange={event => setAspect(event.target.value as typeof aspect)}><option value="landscape">Landscape 1080p</option><option value="portrait">Portrait 1080p</option><option value="square">Square 1080p</option></select></label><label className="block text-[10px] text-text-muted">Default seconds per panel<input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} /></label><label className="block text-[10px] text-text-muted">Transition<select className={`${input} mt-1`} value={transition} onChange={event => setTransition(event.target.value)}><option value="crossfade">Crossfade</option><option value="fade-black">Fade through black</option><option value="wipe-left">Wipe left</option><option value="dissolve">Dissolve</option><option value="zoom-in">Zoom portal</option><option value="none">Hard cuts</option></select></label>{project.director && <details className="rounded border border-border bg-bg-tertiary/30"><summary className="cursor-pointer p-2 text-xs text-text-primary">Shot timing and camera moves</summary><div className="space-y-2 p-2 pt-0">{project.director.plan.pages.flatMap((page, pageIndex) => page.panels.map((panel, panelIndex) => <div key={panel.id} className="grid grid-cols-[1fr_70px] gap-1.5 rounded border border-border p-1.5"><span className="text-[10px] text-text-muted">{pageIndex + 1}.{panelIndex + 1} · {panel.narrativeRole}</span><input className={input} type="number" min={.8} max={20} step={.1} value={panel.durationSeconds || defaultDuration} onChange={event => updateShot(pageIndex, panelIndex, { durationSeconds: Number(event.target.value) })} /><select className={`${input} col-span-2`} value={panel.cameraMove || 'push-in'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}><option value="none">Static</option><option value="push-in">Slow push-in</option><option value="pull-out">Slow pull-out</option><option value="pan-left">Pan left</option><option value="pan-right">Pan right</option></select></div>))}</div></details>}<button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={busy || panelCount === 0} onClick={create}>{busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {progress || 'Create video animatic'}</button>{result && <div className="space-y-2 rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><video src={result.url} controls className="w-full rounded" /><button className={`${button} w-full border-emerald-500/40 text-emerald-300`} onClick={() => useStore.getState().setMediaFilter('videoeditor')}>Open in Video Editor</button></div>}</div>
 }

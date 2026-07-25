@@ -348,7 +348,7 @@ export interface Scene {
   }
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
 export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
@@ -456,6 +456,11 @@ export interface ServicesConfig {
   google_api_key_set: boolean
   openai_api_key: string
   openai_api_key_set: boolean
+  deepseek_api_key: string
+  deepseek_api_key_set: boolean
+  compatible_api_key: string
+  compatible_api_key_set: boolean
+  compatible_base_url: string
   anthropic_api_key: string
   anthropic_api_key_set: boolean
   minimax_api_key: string

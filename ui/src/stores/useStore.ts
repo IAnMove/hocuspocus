@@ -5253,6 +5253,7 @@ export const useStore = create<AppState>((set, get) => ({
         seed: -1,
         settings_version: 2.52,
         generation_mode: 'image',
+        workspace: get().activeWorkspace,
         repeat_generation: 1,
         negative_prompt: '',
         video_length: 1,

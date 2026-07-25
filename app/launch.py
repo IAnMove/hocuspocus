@@ -20,6 +20,7 @@ import sys
 import torch
 import os
 import glob
+import hashlib
 import json
 import re
 import time
@@ -4758,6 +4759,11 @@ def get_services_config():
         "google_api_key_set": bool(services.get("google_api_key", "")),
         "openai_api_key": _mask_key(services.get("openai_api_key", "")),
         "openai_api_key_set": bool(services.get("openai_api_key", "")),
+        "deepseek_api_key": _mask_key(services.get("deepseek_api_key", "")),
+        "deepseek_api_key_set": bool(services.get("deepseek_api_key", "")),
+        "compatible_api_key": _mask_key(services.get("compatible_api_key", "")),
+        "compatible_api_key_set": bool(services.get("compatible_api_key", "")),
+        "compatible_base_url": services.get("compatible_base_url", ""),
         "anthropic_api_key": _mask_key(services.get("anthropic_api_key", "")),
         "anthropic_api_key_set": bool(services.get("anthropic_api_key", "")),
         "minimax_api_key": _mask_key(services.get("minimax_api_key", "")),
@@ -4835,7 +4841,8 @@ async def update_services_config(request: Request):
     ALLOWED_KEYS = {
         "llm_model_id", "llm_device", "llm_provider", "llm_remote_url",
         "enhance_llm_model_id", "enhance_llm_device",
-        "google_api_key", "openai_api_key", "anthropic_api_key", "minimax_api_key",
+        "google_api_key", "openai_api_key", "deepseek_api_key", "compatible_api_key",
+        "compatible_base_url", "anthropic_api_key", "minimax_api_key",
         "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
         "show_experimental", "auto_performance",
@@ -4854,6 +4861,8 @@ async def update_services_config(request: Request):
             continue
         services[key] = value
         updated[key] = _mask_key(value) if key.endswith("_api_key") else value
+        if key.endswith("_api_key"):
+            updated[f"{key}_set"] = bool(value)
 
     # Enforce: cannot enable NSFW with a public LLM provider
     provider = services.get("llm_provider", "local")
@@ -10757,6 +10766,50 @@ def _comic_output_response(name: str) -> dict:
     }
 
 
+def _comic_history_dir() -> str:
+    path = os.path.join(_workspace_dir(), ".comic-history")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _comic_history_entry(snapshot: dict, snapshot_id: str) -> dict:
+    project = snapshot.get("project") if isinstance(snapshot.get("project"), dict) else {}
+    return {
+        "id": snapshot_id,
+        "comicId": str(snapshot.get("comicId") or project.get("id") or ""),
+        "title": str(snapshot.get("title") or project.get("title") or "Untitled comic"),
+        "createdAt": str(snapshot.get("createdAt") or ""),
+        "reason": str(snapshot.get("reason") or "Automatic checkpoint"),
+        "persistedName": snapshot.get("persistedName") if isinstance(snapshot.get("persistedName"), str) else None,
+        "pageCount": int(snapshot.get("pageCount") or (
+            len(project.get("pages", [])) if isinstance(project.get("pages"), list) else 0
+        )),
+        "assetCount": int(snapshot.get("assetCount") or (
+            len(project.get("assets", {})) if isinstance(project.get("assets"), dict) else 0
+        )),
+    }
+
+
+def _read_comic_history_snapshot(path: str) -> dict | None:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            snapshot = json.load(handle)
+        if not isinstance(snapshot, dict) or not isinstance(snapshot.get("project"), dict):
+            return None
+        return snapshot
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _read_comic_history_metadata(path: str) -> dict | None:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            metadata = json.load(handle)
+        return metadata if isinstance(metadata, dict) and metadata.get("comicId") else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 @api.post("/api/v1/comics")
 def create_comic_output(body: dict):
     """Create a first-class comic project in the active workspace."""
@@ -10771,7 +10824,116 @@ def create_comic_output(body: dict):
     return _write_comic_output(name, project, preview_bytes)
 
 
-def _write_comic_output(name: str, project: dict, preview_bytes: bytes) -> dict:
+@api.post("/api/v1/comics/history")
+def create_comic_history(body: dict):
+    """Store a durable, de-duplicated recovery checkpoint in the workspace."""
+    project = body.get("project")
+    _validate_comic_project(project)
+    comic_id_value = str(project.get("id") or "").strip()
+    if not comic_id_value or len(comic_id_value) > 200:
+        raise HTTPException(status_code=400, detail="Comic history requires a valid comic id")
+    reason = str(body.get("reason") or "Automatic checkpoint").strip()[:120]
+    persisted_name = body.get("persisted_name")
+    if persisted_name is not None:
+        if (
+            not isinstance(persisted_name, str)
+            or os.path.basename(persisted_name) != persisted_name
+            or not persisted_name.endswith(".comic.json")
+        ):
+            raise HTTPException(status_code=400, detail="Invalid persisted comic name")
+    encoded = json.dumps(project, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    history_dir = _comic_history_dir()
+    matching: list[tuple[float, str, dict]] = []
+    for path in glob.glob(os.path.join(history_dir, "*.meta.json")):
+        metadata = _read_comic_history_metadata(path)
+        if metadata and metadata.get("comicId") == comic_id_value:
+            matching.append((os.path.getmtime(path), path, metadata))
+    matching.sort(reverse=True, key=lambda item: item[0])
+    if matching and matching[0][2].get("digest") == digest:
+        snapshot_id = os.path.basename(matching[0][1])[:-len(".meta.json")]
+        return _comic_history_entry(matching[0][2], snapshot_id)
+
+    snapshot_id = f"{int(time.time() * 1000)}-{uuid.uuid4().hex[:10]}"
+    snapshot = {
+        "version": 1,
+        "comicId": comic_id_value,
+        "title": str(project.get("title") or "Untitled comic"),
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "reason": reason,
+        "persistedName": persisted_name,
+        "digest": digest,
+        "pageCount": len(project.get("pages", [])),
+        "assetCount": len(project.get("assets", {})),
+        "project": project,
+    }
+    metadata = {key: value for key, value in snapshot.items() if key != "project"}
+    target = os.path.join(history_dir, f"{snapshot_id}.json")
+    metadata_target = os.path.join(history_dir, f"{snapshot_id}.meta.json")
+    temporary = target + ".tmp"
+    metadata_temporary = metadata_target + ".tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(snapshot, handle, ensure_ascii=False, indent=2)
+        with open(metadata_temporary, "w", encoding="utf-8") as handle:
+            json.dump(metadata, handle, ensure_ascii=False, indent=2)
+        os.replace(temporary, target)
+        os.replace(metadata_temporary, metadata_target)
+    except Exception as exc:
+        for stale in (temporary, metadata_temporary, target, metadata_target):
+            try:
+                if os.path.isfile(stale):
+                    os.remove(stale)
+            except OSError:
+                pass
+        raise HTTPException(status_code=500, detail=f"Failed to back up comic: {exc}") from exc
+
+    # Keep enough recovery depth without allowing continuous editing to grow
+    # the workspace forever. The current checkpoint is included in the limit.
+    stale = matching[39:]
+    for _, metadata_path, _ in stale:
+        stale_id = os.path.basename(metadata_path)[:-len(".meta.json")]
+        for path in (metadata_path, os.path.join(history_dir, f"{stale_id}.json")):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+    return _comic_history_entry(snapshot, snapshot_id)
+
+
+@api.get("/api/v1/comics/history")
+def list_comic_history(comic_id: str | None = None):
+    history_dir = _comic_history_dir()
+    history = []
+    for path in glob.glob(os.path.join(history_dir, "*.meta.json")):
+        metadata = _read_comic_history_metadata(path)
+        if not metadata:
+            continue
+        if comic_id and metadata.get("comicId") != comic_id:
+            continue
+        snapshot_id = os.path.basename(path)[:-len(".meta.json")]
+        history.append(_comic_history_entry(metadata, snapshot_id))
+    history.sort(key=lambda entry: entry.get("createdAt", ""), reverse=True)
+    return {"history": history[:500]}
+
+
+@api.get("/api/v1/comics/history/{snapshot_id}")
+def get_comic_history(snapshot_id: str):
+    if not re.fullmatch(r"[A-Za-z0-9-]{8,80}", snapshot_id):
+        raise HTTPException(status_code=400, detail="Invalid comic history id")
+    path = os.path.join(_comic_history_dir(), f"{snapshot_id}.json")
+    snapshot = _read_comic_history_snapshot(path)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Comic history checkpoint not found")
+    project = snapshot["project"]
+    _validate_comic_project(project)
+    return {
+        "project": project,
+        "entry": _comic_history_entry(snapshot, snapshot_id),
+    }
+
+
+def _write_comic_output(name: str, project: dict, preview_bytes: bytes | None) -> dict:
     if not name.endswith(".comic.json") or os.path.basename(name) != name:
         raise HTTPException(status_code=400, detail="Invalid comic project name")
     out_dir = _workspace_dir()
@@ -10782,18 +10944,20 @@ def _write_comic_output(name: str, project: dict, preview_bytes: bytes) -> dict:
     if not project_path or not preview_path:
         raise HTTPException(status_code=400, detail="Invalid comic project path")
     project_tmp = project_path + ".tmp"
-    preview_tmp = preview_path + ".tmp"
+    preview_tmp = preview_path + ".tmp" if preview_bytes is not None else None
     try:
         with open(project_tmp, "w", encoding="utf-8") as handle:
             json.dump(project, handle, ensure_ascii=False, indent=2)
-        with open(preview_tmp, "wb") as handle:
-            handle.write(preview_bytes)
+        if preview_tmp is not None:
+            with open(preview_tmp, "wb") as handle:
+                handle.write(preview_bytes)
         os.replace(project_tmp, project_path)
-        os.replace(preview_tmp, preview_path)
+        if preview_tmp is not None:
+            os.replace(preview_tmp, preview_path)
     except Exception as exc:
         for stale in (project_tmp, preview_tmp):
             try:
-                if os.path.isfile(stale):
+                if stale and os.path.isfile(stale):
                     os.remove(stale)
             except OSError:
                 pass
@@ -10803,10 +10967,11 @@ def _write_comic_output(name: str, project: dict, preview_bytes: bytes) -> dict:
 
 @api.put("/api/v1/comics/{name}")
 def update_comic_output(name: str, body: dict):
-    """Atomically update an existing comic and its gallery preview."""
+    """Atomically update a comic, preserving its preview when omitted."""
     project = body.get("project")
     _validate_comic_project(project)
-    preview_bytes = _decode_comic_preview(body.get("preview"))
+    preview = body.get("preview")
+    preview_bytes = _decode_comic_preview(preview) if preview is not None else None
     current = _safe_join(_workspace_dir(), name)
     if not current or not os.path.isfile(current):
         raise HTTPException(status_code=404, detail="Comic project not found in the active workspace")
@@ -10860,10 +11025,17 @@ def generate_comic_minimax(body: dict):
     prompt = str(body.get("prompt") or "").strip()
     if not prompt or len(prompt) > 10000:
         raise HTTPException(status_code=400, detail="A prompt of at most 10000 characters is required")
+    # MiniMax Image rejects prompts of 1,500 characters or more. The editor
+    # normally sends a prioritized shorter prompt; keep this safeguard for
+    # imported projects and clients created before that limit was enforced.
+    if len(prompt) >= 1500:
+        head = prompt[:480].rsplit(" ", 1)[0].rstrip(" ,;:-")
+        tail = prompt[-960:].split(" ", 1)[-1].lstrip(" ,;:-")
+        prompt = f"{head}. {tail}"
     services = wgp.server_config.get("services", {})
     api_key = services.get("minimax_api_key", "")
     if not api_key:
-        raise HTTPException(status_code=400, detail="Set the MiniMax API key in Settings → Integrations")
+        raise HTTPException(status_code=400, detail="Set the MiniMax API key in Settings → Services")
     request_body = {
         "model": "image-01",
         "prompt": prompt,
@@ -10970,6 +11142,7 @@ _COMIC_PLAN_SCHEMA = {
         },
         "styleBible": {
             "type": "string",
+            "maxLength": 900,
             "description": (
                 "Optional visual continuity bible. Return an empty string when a dedicated "
                 "bible would not materially improve visual consistency."
@@ -10997,7 +11170,7 @@ _COMIC_PLAN_SCHEMA = {
                     "properties": {
                         "id": {"type": "string"}, "order": {"type": "integer"},
                         "narrativeRole": {"type": "string"}, "sceneDescription": {"type": "string"},
-                        "imagePrompt": {"type": "string"}, "characters": {"type": "array", "items": {"type": "string"}},
+                        "imagePrompt": {"type": "string", "maxLength": 700}, "characters": {"type": "array", "items": {"type": "string"}},
                         "framing": {"type": "string"}, "continuityNotes": {"type": "string"},
                         "captions": {"type": "array", "items": {"type": "string"}},
                         "soundEffects": {"type": "array", "items": {"type": "string"}},
@@ -11029,6 +11202,35 @@ _COMIC_BIBLE_SCHEMA = {
 _COMIC_PAGE_SCHEMA = _COMIC_PLAN_SCHEMA["properties"]["pages"]["items"]
 
 
+def _normalize_comic_panel_arrays(panel: dict) -> None:
+    """Repair common single-item JSON shortcuts without discarding copy."""
+    for key in ("characters", "captions", "soundEffects"):
+        value = panel.get(key)
+        if isinstance(value, list):
+            continue
+        if isinstance(value, str) and value.strip():
+            panel[key] = [value.strip()]
+        else:
+            panel[key] = []
+
+    value = panel.get("dialogue")
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, dict):
+        items = [value]
+    elif isinstance(value, str) and value.strip():
+        items = [{"text": value.strip(), "bubbleType": "speech"}]
+    else:
+        items = []
+    panel["dialogue"] = [
+        {"text": item.strip(), "bubbleType": "speech"}
+        if isinstance(item, str) and item.strip()
+        else item
+        for item in items
+        if isinstance(item, dict) or (isinstance(item, str) and item.strip())
+    ]
+
+
 def _comic_page_problem(page, expected_panels: int) -> str | None:
     """Return why a generated page is unsafe to checkpoint, if anything."""
     if not isinstance(page, dict):
@@ -11041,6 +11243,7 @@ def _comic_page_problem(page, expected_panels: int) -> str | None:
     for panel_index, panel in enumerate(panels, 1):
         if not isinstance(panel, dict):
             return f"panel {panel_index} is not a JSON object"
+        _normalize_comic_panel_arrays(panel)
         dialogue = panel.get("dialogue")
         if not isinstance(dialogue, list):
             return f"panel {panel_index} dialogue is not an array"
@@ -11200,7 +11403,12 @@ def _comic_page_summary(page) -> str:
     return " ".join(beats)[-1600:]
 
 
-def _parse_comic_director_json(raw, stage: str) -> dict:
+def _parse_comic_director_json(
+    raw,
+    stage: str,
+    *,
+    root_array_key: str | None = None,
+) -> dict:
     if not isinstance(raw, str) or not raw.strip():
         raise RuntimeError(f"LLM returned no text while {stage}")
     cleaned = raw.strip()
@@ -11217,6 +11425,23 @@ def _parse_comic_director_json(raw, stage: str) -> dict:
             f"at line {parse_error.lineno}, column {parse_error.colno}"
         )
         parsed = repair_json(cleaned, return_objects=True)
+    # Some OpenAI-compatible providers occasionally honor an object schema by
+    # returning either its sole array directly or JSON encoded as a JSON
+    # string. Both forms preserve all lettering, so normalize them before the
+    # strict structural validation instead of spending another generation.
+    if isinstance(parsed, str):
+        nested = parsed.strip()
+        if nested and nested != cleaned:
+            try:
+                parsed = json.loads(nested)
+            except json.JSONDecodeError:
+                pass
+    if root_array_key and isinstance(parsed, list):
+        print(
+            f"[Comic Director] Wrapped top-level array as "
+            f"{root_array_key!r} while {stage}"
+        )
+        parsed = {root_array_key: parsed}
     if not isinstance(parsed, dict):
         raise ValueError(f"LLM response for {stage} is not a JSON object")
     return _repair_comic_text_encoding(parsed)
@@ -11245,6 +11470,7 @@ def _generate_comic_director_json(
     max_new_tokens: int,
     stage: str,
     llm_override: dict | None = None,
+    root_array_key: str | None = None,
 ) -> dict:
     from services import llm_service
     # A streaming HTTP response resets the read timeout on every token.
@@ -11272,7 +11498,11 @@ def _generate_comic_director_json(
             enable_thinking=False,
             thinking_budget=0,
         )
-    return _parse_comic_director_json(raw, stage)
+    return _parse_comic_director_json(
+        raw,
+        stage,
+        root_array_key=root_array_key,
+    )
 
 
 def _comic_writing_llm(body: dict) -> dict | None:
@@ -11280,41 +11510,803 @@ def _comic_writing_llm(body: dict) -> dict | None:
     provider = str(body.get("writingProvider") or "maestro").strip().lower()
     if provider in ("", "maestro", "internal", "local"):
         return None
-    if provider != "openai-compatible":
+    if provider not in ("deepseek", "minimax", "openai", "openai-compatible"):
         raise HTTPException(status_code=400, detail="Unsupported comic writing provider")
-    model = str(body.get("writingModel") or "deepseek-chat").strip()[:200]
-    base_url = str(body.get("writingBaseUrl") or "https://api.deepseek.com").strip()[:1000]
+
+    services = wgp.server_config.get("services", {})
+    requested_url = str(body.get("writingBaseUrl") or "").strip()[:1000]
+    # Projects created before provider profiles existed stored DeepSeek/OpenAI
+    # as a generic compatible endpoint. Route those projects to the matching
+    # named profile, but never migrate or copy credentials between providers.
+    if provider == "openai-compatible":
+        from urllib.parse import urlparse
+        legacy_host = (urlparse(requested_url).hostname or "").lower()
+        if legacy_host == "api.deepseek.com":
+            provider = "deepseek"
+        elif legacy_host == "api.openai.com":
+            provider = "openai"
+
+    if provider == "deepseek":
+        model = str(body.get("writingModel") or "deepseek-v4-pro").strip()[:200]
+        if model in ("", "deepseek-chat", "deepseek-reasoner"):
+            model = "deepseek-v4-pro"
+        if str(body.get("mode") or "").lower() == "translate":
+            model = "deepseek-v4-flash"
+        if model not in {"deepseek-v4-pro", "deepseek-v4-flash"}:
+            raise HTTPException(status_code=400, detail="Choose DeepSeek V4 Pro or V4 Flash")
+        base_url = "https://api.deepseek.com"
+        api_key = str(services.get("deepseek_api_key") or "")
+        if not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Configure the DeepSeek API key in Settings → Services first",
+            )
+    elif provider == "minimax":
+        model = str(body.get("writingModel") or "MiniMax-M3").strip()[:200]
+        allowed_models = {"MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"}
+        if model not in allowed_models:
+            raise HTTPException(
+                status_code=400,
+                detail="Choose MiniMax M3, M2.7, or M2.7 Highspeed",
+            )
+        base_url = "https://api.minimax.io/v1"
+        api_key = str(services.get("minimax_api_key") or "")
+        if not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Configure the MiniMax API key in Settings → Services first",
+            )
+    elif provider == "openai":
+        model = str(body.get("writingModel") or "gpt-4.1").strip()[:200]
+        base_url = "https://api.openai.com"
+        api_key = str(services.get("openai_api_key") or "")
+        if not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Configure the OpenAI API key in Settings → Services first",
+            )
+    else:
+        model = str(body.get("writingModel") or "").strip()[:200]
+        base_url = str(services.get("compatible_base_url") or "").strip()[:1000].rstrip("/")
+        if not base_url:
+            raise HTTPException(
+                status_code=400,
+                detail="Configure the custom compatible URL in Settings → Services first",
+            )
+        if requested_url and requested_url.rstrip("/") != base_url:
+            raise HTTPException(
+                status_code=400,
+                detail="The comic's custom URL does not match the trusted compatible profile",
+            )
+        api_key = str(services.get("compatible_api_key") or "")
+
     if not base_url.startswith(("http://", "https://")):
         raise HTTPException(
             status_code=400,
             detail="OpenAI-compatible URL must start with http:// or https://",
         )
-    services = wgp.server_config.get("services", {})
-    # A comic JSON is importable and therefore untrusted. Never let an
-    # imported project redirect the user's stored API key to an arbitrary
-    # host. Known hosted APIs are allowed directly; every other compatible
-    # endpoint must exactly match the URL the user trusted in Settings.
-    from urllib.parse import urlparse
-    host = (urlparse(base_url).hostname or "").lower()
-    configured_url = str(services.get("llm_remote_url") or "").strip().rstrip("/")
-    known_hosts = {"api.deepseek.com", "api.openai.com"}
-    if host not in known_hosts and base_url.rstrip("/") != configured_url:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "For security, custom OpenAI-compatible URLs must first be trusted "
-                "as the Remote URL in Settings → Services"
-            ),
-        )
-    api_key = str(services.get("openai_api_key") or "")
-    if not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Configure the OpenAI / compatible API key in Settings → Services first",
-        )
     if not model:
         raise HTTPException(status_code=400, detail="Choose an OpenAI-compatible model")
-    return {"model": model, "base_url": base_url.rstrip("/"), "api_key": api_key}
+    return {
+        "provider": provider,
+        "model": model,
+        "base_url": base_url.rstrip("/"),
+        "api_key": api_key,
+    }
+
+
+def _story_lab_schema(scope: str) -> dict:
+    """Return the strict editable Story Lab payload requested for one stage."""
+    string = {"type": "string"}
+    string_array = {"type": "array", "items": string, "maxItems": 12}
+    location = {
+        "type": "object",
+        "properties": {
+            "id": string, "name": string, "purpose": string, "description": string,
+            "visualPrompt": string, "negativePrompt": string,
+        },
+        "required": [
+            "id", "name", "purpose", "description", "visualPrompt", "negativePrompt",
+        ],
+        "additionalProperties": False,
+    }
+    world = {
+        "type": "object",
+        "properties": {
+            "summary": string, "period": string, "geography": string,
+            "society": string, "technology": string, "rules": string_array,
+            "visualLanguage": string, "visualPrompt": string, "negativePrompt": string,
+            "locations": {"type": "array", "items": location, "maxItems": 8},
+        },
+        "required": [
+            "summary", "period", "geography", "society", "technology", "rules",
+            "visualLanguage", "visualPrompt", "negativePrompt", "locations",
+        ],
+        "additionalProperties": False,
+    }
+    character = {
+        "type": "object",
+        "properties": {
+            "id": string, "name": string, "role": string, "age": string,
+            "pronouns": string, "personality": string, "desire": string,
+            "need": string, "flaw": string, "conflict": string, "arc": string,
+            "voice": string, "appearance": string, "wardrobe": string,
+            "visualPrompt": string, "negativePrompt": string,
+        },
+        "required": [
+            "id", "name", "role", "age", "pronouns", "personality", "desire",
+            "need", "flaw", "conflict", "arc", "voice", "appearance", "wardrobe",
+            "visualPrompt", "negativePrompt",
+        ],
+        "additionalProperties": False,
+    }
+    relationship = {
+        "type": "object",
+        "properties": {
+            "id": string, "fromCharacterId": string, "toCharacterId": string,
+            "label": string, "dynamic": string, "evolution": string,
+        },
+        "required": [
+            "id", "fromCharacterId", "toCharacterId", "label", "dynamic", "evolution",
+        ],
+        "additionalProperties": False,
+    }
+    beat = {
+        "type": "object",
+        "properties": {
+            "id": string, "stage": string, "title": string, "summary": string,
+            "goal": string, "conflict": string, "turn": string,
+        },
+        "required": ["id", "stage", "title", "summary", "goal", "conflict", "turn"],
+        "additionalProperties": False,
+    }
+    properties = {
+        "overview": {
+            "type": "object",
+            "properties": {
+                "title": string, "logline": string, "synopsis": string,
+                "theme": string, "ending": string,
+            },
+            "required": ["title", "logline", "synopsis", "theme", "ending"],
+            "additionalProperties": False,
+        },
+        "world": world,
+        "characters": {"type": "array", "items": character, "minItems": 1, "maxItems": 12},
+        "relationships": {"type": "array", "items": relationship, "maxItems": 24},
+        "beats": {"type": "array", "items": beat, "minItems": 6, "maxItems": 14},
+    }
+    keys = list(properties) if scope == "all" else [scope]
+    return {
+        "type": "object",
+        "properties": {key: properties[key] for key in keys},
+        "required": keys,
+        "additionalProperties": False,
+    }
+
+
+def _story_id_token(value) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().casefold()).strip("-")
+
+
+def _normalize_story_stage_ids(
+    result: dict,
+    scope: str,
+    project: dict,
+    *,
+    drop_unknown_relationships: bool = False,
+) -> dict:
+    """Repair harmless LLM ID drift while keeping canonical project IDs stable."""
+    normalized = copy.deepcopy(result)
+    if scope == "characters" and isinstance(normalized.get("characters"), list):
+        used: set[str] = set()
+        for index, character in enumerate(normalized["characters"]):
+            if not isinstance(character, dict):
+                continue
+            candidate = str(character.get("id") or "").strip()
+            if not candidate:
+                candidate = _story_id_token(character.get("name")) or f"character-{index + 1}"
+            base = candidate
+            suffix = 2
+            while candidate in used:
+                candidate = f"{base}-{suffix}"
+                suffix += 1
+            character["id"] = candidate
+            used.add(candidate)
+        return normalized
+
+    if scope != "relationships" or not isinstance(normalized.get("relationships"), list):
+        return normalized
+    characters = [
+        character for character in project.get("characters", [])
+        if isinstance(character, dict) and str(character.get("id") or "").strip()
+    ]
+    canonical_ids = {str(character["id"]).strip() for character in characters}
+    lookup: dict[str, str] = {}
+    for character in characters:
+        canonical = str(character["id"]).strip()
+        for alias in (character.get("id"), character.get("name")):
+            stripped = str(alias or "").strip()
+            if stripped:
+                lookup.setdefault(stripped.casefold(), canonical)
+                token = _story_id_token(stripped)
+                if token:
+                    lookup.setdefault(token, canonical)
+
+    def resolve(value) -> str:
+        stripped = str(value or "").strip()
+        if stripped in canonical_ids:
+            return stripped
+        return lookup.get(stripped.casefold()) or lookup.get(_story_id_token(stripped)) or stripped
+
+    relationships = []
+    used_ids: set[str] = set()
+    for index, relationship in enumerate(normalized["relationships"]):
+        if not isinstance(relationship, dict):
+            relationships.append(relationship)
+            continue
+        relationship["fromCharacterId"] = resolve(relationship.get("fromCharacterId"))
+        relationship["toCharacterId"] = resolve(relationship.get("toCharacterId"))
+        relation_id = str(relationship.get("id") or "").strip()
+        if not relation_id:
+            relation_id = f"relationship-{index + 1}"
+        base = relation_id
+        suffix = 2
+        while relation_id in used_ids:
+            relation_id = f"{base}-{suffix}"
+            suffix += 1
+        relationship["id"] = relation_id
+        used_ids.add(relation_id)
+        valid = (
+            relationship["fromCharacterId"] in canonical_ids
+            and relationship["toCharacterId"] in canonical_ids
+            and relationship["fromCharacterId"] != relationship["toCharacterId"]
+        )
+        if valid or not drop_unknown_relationships:
+            relationships.append(relationship)
+    normalized["relationships"] = relationships
+    return normalized
+
+
+def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
+    if not isinstance(result, dict):
+        return "response root is not a JSON object"
+    key = "beats" if scope == "structure" else scope
+    value = result.get(key)
+    if scope in {"overview", "world"} and not isinstance(value, dict):
+        return f"{key} is not an object"
+    if scope in {"characters", "relationships", "structure"} and not isinstance(value, list):
+        return f"{key} is not an array"
+    required = {
+        "overview": {"title", "logline", "synopsis", "theme", "ending"},
+        "world": {
+            "summary", "period", "geography", "society", "technology", "rules",
+            "visualLanguage", "visualPrompt", "negativePrompt", "locations",
+        },
+        "characters": {
+            "id", "name", "role", "age", "pronouns", "personality", "desire",
+            "need", "flaw", "conflict", "arc", "voice", "appearance", "wardrobe",
+            "visualPrompt", "negativePrompt",
+        },
+        "relationships": {
+            "id", "fromCharacterId", "toCharacterId", "label", "dynamic", "evolution",
+        },
+        "structure": {"id", "stage", "title", "summary", "goal", "conflict", "turn"},
+    }
+    if scope == "overview":
+        missing = required["overview"] - set(value)
+        if missing:
+            return f"overview is missing {', '.join(sorted(missing))}"
+        for field in required["overview"]:
+            if not isinstance(value.get(field), str):
+                return f"overview field {field} is not a string"
+        return None
+    if scope == "world":
+        missing = required["world"] - set(value)
+        if missing:
+            return f"world is missing {', '.join(sorted(missing))}"
+        if not isinstance(value.get("rules"), list) or not isinstance(value.get("locations"), list):
+            return "world rules and locations must be arrays"
+        if len(value["rules"]) > 12 or not all(isinstance(item, str) for item in value["rules"]):
+            return "world rules must contain at most twelve strings"
+        if len(value["locations"]) > 8:
+            return "world has more than eight locations"
+        for field in required["world"] - {"rules", "locations"}:
+            if not isinstance(value.get(field), str):
+                return f"world field {field} is not a string"
+        for index, location in enumerate(value["locations"]):
+            if not isinstance(location, dict):
+                return f"location {index + 1} is not an object"
+            location_missing = {
+                "id", "name", "purpose", "description", "visualPrompt", "negativePrompt",
+            } - set(location)
+            if location_missing:
+                return (
+                    f"location {index + 1} is missing "
+                    f"{', '.join(sorted(location_missing))}"
+                )
+            for field in {
+                "id", "name", "purpose", "description", "visualPrompt", "negativePrompt",
+            }:
+                if not isinstance(location.get(field), str):
+                    return f"location {index + 1} field {field} is not a string"
+        return None
+    if not value and scope != "relationships":
+        return f"{key} is empty"
+    limits = {
+        "characters": (1, 12),
+        "relationships": (0, 24),
+        "structure": (6, 14),
+    }
+    minimum, maximum = limits[scope]
+    if len(value) < minimum or len(value) > maximum:
+        return f"{key} must contain between {minimum} and {maximum} items"
+    item_required = required[scope]
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            return f"{key} item {index + 1} is not an object"
+        missing = item_required - set(item)
+        if missing:
+            return f"{key} item {index + 1} is missing {', '.join(sorted(missing))}"
+        for field in item_required:
+            if not isinstance(item.get(field), str):
+                return f"{key} item {index + 1} field {field} is not a string"
+    ids = [item.get("id") for item in value]
+    if len(ids) != len(set(ids)):
+        return f"{key} contains duplicate IDs"
+    if scope == "relationships":
+        character_ids = {
+            str(item.get("id") or "") for item in project.get("characters", [])
+            if isinstance(item, dict)
+        }
+        for item in value:
+            if (
+                item.get("fromCharacterId") not in character_ids
+                or item.get("toCharacterId") not in character_ids
+            ):
+                return "a relationship references an unknown character ID"
+    return None
+
+
+def _story_project_prompt_context(project: dict, scope: str) -> str:
+    """Return bounded, valid JSON with editorial facts but no heavy runtime data."""
+    overview_keys = (
+        "title", "language", "genre", "tone", "audience", "premise",
+        "logline", "synopsis", "theme", "ending",
+    )
+    compact = {key: project.get(key) for key in overview_keys if key in project}
+    # Characters are useful grounding for every downstream phase and are
+    # required for relationship IDs. The active section keeps its full facts;
+    # other stages only need a concise identity summary.
+    raw_characters = project.get("characters")
+    if isinstance(raw_characters, list):
+        if scope == "characters":
+            compact["characters"] = raw_characters
+        else:
+            compact["characters"] = [
+                {
+                    key: item.get(key)
+                    for key in ("id", "name", "role", "personality", "desire", "arc", "appearance")
+                    if key in item
+                }
+                for item in raw_characters if isinstance(item, dict)
+            ]
+    if scope in {"world", "relationships", "structure"} and isinstance(project.get("world"), dict):
+        compact["world"] = project["world"]
+    if scope in {"relationships", "structure"} and isinstance(project.get("relationships"), list):
+        compact["relationships"] = project["relationships"]
+    if scope == "structure" and isinstance(project.get("beats"), list):
+        compact["beats"] = project["beats"]
+
+    def bounded(value, string_limit: int):
+        if isinstance(value, str):
+            return value if len(value) <= string_limit else value[:string_limit] + "…"
+        if isinstance(value, list):
+            return [bounded(item, string_limit) for item in value[:24]]
+        if isinstance(value, dict):
+            return {
+                str(key): bounded(item, string_limit)
+                for key, item in value.items()
+                if key not in {
+                    "assets", "productions", "approvals", "sectionVersions",
+                    "visualJobs", "packedAssets", "approval",
+                }
+            }
+        if value is None or isinstance(value, (bool, int, float)):
+            return value
+        return str(value)
+
+    bounded_context = bounded(compact, 2000)
+    encoded = json.dumps(bounded_context, ensure_ascii=False)
+    if len(encoded) > 24000:
+        encoded = json.dumps(bounded(compact, 600), ensure_ascii=False)
+    return encoded
+
+
+def _story_checkpoint_request(body: dict) -> dict:
+    """Keep durable writing checkpoints small and free of editor/runtime history."""
+    request = copy.deepcopy(body)
+    project = request.get("project")
+    if isinstance(project, dict):
+        for key in (
+            "assets", "productions", "approvals", "sectionVersions",
+            "visualJobs", "packedAssets",
+        ):
+            project.pop(key, None)
+        for character in project.get("characters", []):
+            if isinstance(character, dict):
+                character.pop("referenceAssetIds", None)
+                character.pop("primaryReferenceAssetId", None)
+                character.pop("approval", None)
+        world = project.get("world")
+        if isinstance(world, dict):
+            world.pop("referenceAssetIds", None)
+            for location in world.get("locations", []):
+                if isinstance(location, dict):
+                    location.pop("referenceAssetIds", None)
+    return request
+
+
+def _generate_story_lab_stage(body: dict, scope: str) -> dict:
+    """Generate and validate one replaceable Story Lab stage."""
+    schema_scope = "beats" if scope == "structure" else scope
+    premise = str(body.get("premise") or "").strip()
+    project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    if not premise:
+        premise = str(project.get("premise") or "").strip()
+    if not premise:
+        raise HTTPException(status_code=400, detail="Write a premise before generating the story")
+    instruction = str(body.get("instruction") or "").strip()[:4000]
+    language = str(body.get("language") or project.get("language") or "English").strip()
+    genre = str(body.get("genre") or project.get("genre") or "Adventure").strip()
+    tone = str(body.get("tone") or project.get("tone") or "Cinematic").strip()
+    audience = str(body.get("audience") or project.get("audience") or "General").strip()
+    llm_override = _comic_writing_llm(body)
+    if not llm_override:
+        _ensure_llm_loaded()
+    current = _story_project_prompt_context(project, scope)
+    base_prompt = f"""Create the requested editable Story Lab material.
+Generation scope: {scope}
+Premise: {premise}
+Language for every reader-facing field: {language}
+Genre: {genre}
+Tone: {tone}
+Audience: {audience}
+Optional user instruction: {instruction or 'none'}
+Current manually edited project (preserve useful established facts and stable IDs):
+{current}
+
+Return only the JSON required by the schema. This is a reusable story bible, not a comic
+page plan and not a screenplay. Build one causal dramatic arc with setup, inciting incident,
+rising complications, midpoint/reversal, crisis, climax and resolution. Characters need
+distinct desire, need, flaw, voice, visual silhouette and a change caused by their choices.
+Visual prompts describe one neutral concept-art subject or environment only: no contact
+sheets, no grids, no comic panels, no lettering, no captions, no UI and no multiple views.
+Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instruction asks."""
+    result = None
+    problem = None
+    for attempt in range(1, 4):
+        repair = (
+            f"\nYour previous attempt was invalid: {problem}. Correct it completely."
+            if problem else ""
+        )
+        try:
+            result = _generate_comic_director_json(
+                prompt=base_prompt + repair,
+                system_prompt=(
+                    "You are Maestro Story Architect: a professional story editor, character "
+                    "designer and production bible author. Return strict JSON only."
+                ),
+                schema=_story_lab_schema(schema_scope),
+                max_new_tokens=2600,
+                stage=f"Story Lab {scope}, attempt {attempt}",
+                llm_override=llm_override,
+            )
+        except Exception as exc:
+            problem = str(exc)
+            if attempt >= 3:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Story generation failed after three attempts: {problem}",
+                ) from exc
+            continue
+        result = _normalize_story_stage_ids(result, scope, project)
+        problem = _story_stage_problem(result, scope, project)
+        if problem is None:
+            break
+    if result is not None and problem and scope == "relationships":
+        # A provider can still invent a third name after retries. Preserve all
+        # valid relationships and discard only irreparable references instead
+        # of failing the entire multi-stage Story Bible.
+        salvaged = _normalize_story_stage_ids(
+            result,
+            scope,
+            project,
+            drop_unknown_relationships=True,
+        )
+        salvage_problem = _story_stage_problem(salvaged, scope, project)
+        if salvage_problem is None:
+            result = salvaged
+            problem = None
+    if result is None or problem:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Story generation remained incomplete after three attempts: {problem}",
+        )
+    if scope == "structure" and "beats" in result:
+        result = {"structure": result["beats"]}
+    return result
+
+
+def _merge_story_stage_project(project: dict, result: dict) -> dict:
+    merged = copy.deepcopy(project)
+    overview = result.get("overview")
+    if isinstance(overview, dict):
+        merged.update(overview)
+    for key in ("world", "characters", "relationships"):
+        if key in result:
+            merged[key] = copy.deepcopy(result[key])
+    if "structure" in result:
+        merged["beats"] = copy.deepcopy(result["structure"])
+    return merged
+
+
+_story_plan_jobs: dict[str, dict] = {}
+_story_plan_jobs_lock = threading.Lock()
+_story_plan_active_jobs: set[str] = set()
+
+
+def _story_plan_checkpoint_dir(workspace: str | None = None) -> str:
+    path = os.path.join(_workspace_dir(workspace), ".story-plan-jobs")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _story_plan_checkpoint_path(job_id: str, workspace: str | None = None) -> str:
+    return os.path.join(_story_plan_checkpoint_dir(workspace), f"{job_id}.json")
+
+
+def _persist_story_plan_job(job: dict) -> None:
+    path = _story_plan_checkpoint_path(job["jobId"], job.get("workspace"))
+    temporary = f"{path}.{uuid.uuid4().hex}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(job, handle, ensure_ascii=False)
+        os.replace(temporary, path)
+    finally:
+        try:
+            if os.path.isfile(temporary):
+                os.remove(temporary)
+        except OSError:
+            pass
+
+
+def _story_job_update(job_id: str, **patch) -> None:
+    with _story_plan_jobs_lock:
+        job = _story_plan_jobs.get(job_id)
+        if not job:
+            return
+        job.update(patch)
+        job["updatedAt"] = time.time()
+        snapshot = copy.deepcopy(job)
+        # Persist while the job lock still establishes update order. Writing
+        # after releasing it allowed an older thread to overwrite a newer
+        # cancel/resume checkpoint even when both writes were individually
+        # atomic.
+        _persist_story_plan_job(snapshot)
+
+
+def _load_story_plan_job(job_id: str) -> dict | None:
+    with _story_plan_jobs_lock:
+        job = _story_plan_jobs.get(job_id)
+        if job:
+            return copy.deepcopy(job)
+    paths = [
+        _story_plan_checkpoint_path(job_id, item["name"])
+        for item in _list_workspaces()
+    ]
+    path = next((candidate for candidate in paths if os.path.isfile(candidate)), None)
+    if not path:
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            job = json.load(handle)
+        if not isinstance(job, dict):
+            return None
+        with _story_plan_jobs_lock:
+            _story_plan_jobs[job_id] = job
+        return copy.deepcopy(job)
+    except Exception:
+        return None
+
+
+def _run_story_plan_job_inner(job_id: str) -> None:
+    job = _load_story_plan_job(job_id)
+    if not job:
+        return
+    body = copy.deepcopy(job.get("request") or {})
+    requested_scope = str(body.get("scope") or "all")
+    stages = (
+        ["overview", "characters", "world", "relationships", "structure"]
+        if requested_scope == "all" else [requested_scope]
+    )
+    completed = job.get("completedStages")
+    completed = completed if isinstance(completed, dict) else {}
+    working_project = copy.deepcopy(body.get("project") or {})
+    combined = {}
+    try:
+        for index, stage in enumerate(stages):
+            latest = _load_story_plan_job(job_id)
+            if latest and latest.get("status") == "cancelled":
+                return
+            if stage in completed:
+                original_result = completed[stage]
+                result = _normalize_story_stage_ids(original_result, stage, working_project)
+                if result != original_result:
+                    completed[stage] = result
+                    _story_job_update(job_id, completedStages=completed)
+            else:
+                _story_job_update(
+                    job_id,
+                    status="running",
+                    stage=stage,
+                    current=index,
+                    total=len(stages),
+                    message=f"Generating {stage}…",
+                )
+                stage_body = {
+                    **body,
+                    "scope": stage,
+                    "project": working_project,
+                }
+                result = _generate_story_lab_stage(stage_body, stage)
+                latest = _load_story_plan_job(job_id)
+                if latest and latest.get("status") == "cancelled":
+                    return
+                completed[stage] = result
+                _story_job_update(job_id, completedStages=completed)
+            combined.update(result)
+            working_project = _merge_story_stage_project(working_project, result)
+        _story_job_update(
+            job_id,
+            status="completed",
+            stage="completed",
+            current=len(stages),
+            total=len(stages),
+            message="Story draft generated and ready for review.",
+            result={"result": combined},
+            finishedAt=time.time(),
+            error=None,
+        )
+    except Exception as exc:
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        _story_job_update(
+            job_id,
+            status="failed",
+            message="Story generation stopped. Completed stages were preserved.",
+            error=str(detail),
+            finishedAt=time.time(),
+        )
+
+
+def _run_story_plan_job(job_id: str) -> None:
+    with _story_plan_jobs_lock:
+        if job_id in _story_plan_active_jobs:
+            return
+        _story_plan_active_jobs.add(job_id)
+    try:
+        _run_story_plan_job_inner(job_id)
+    finally:
+        with _story_plan_jobs_lock:
+            _story_plan_active_jobs.discard(job_id)
+
+
+@api.post("/api/v1/stories/generate")
+def generate_story_lab_section(body: dict):
+    """Compatibility synchronous endpoint; new clients should use durable jobs."""
+    scope = str(body.get("scope") or "all").strip().lower()
+    allowed = {"overview", "world", "characters", "relationships", "structure"}
+    if scope == "all":
+        raise HTTPException(
+            status_code=400,
+            detail="Full Story Lab generation must use /api/v1/stories/generate/start",
+        )
+    if scope not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported Story Lab generation scope")
+    return {"result": _generate_story_lab_stage(body, scope)}
+
+
+@api.post("/api/v1/stories/generate/start")
+def start_story_lab_generation(body: dict):
+    scope = str(body.get("scope") or "all").strip().lower()
+    allowed = {"all", "overview", "world", "characters", "relationships", "structure"}
+    if scope not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported Story Lab generation scope")
+    if not str(body.get("premise") or "").strip():
+        raise HTTPException(status_code=400, detail="Write a premise before generating the story")
+    job_id = f"story-plan-{uuid.uuid4().hex[:12]}"
+    job = {
+        "jobId": job_id,
+        "status": "queued",
+        "message": "Story generation queued.",
+        "stage": "queued",
+        "current": 0,
+        "total": 5 if scope == "all" else 1,
+        "request": _story_checkpoint_request(body),
+        "completedStages": {},
+        "result": None,
+        "error": None,
+        "createdAt": time.time(),
+        "updatedAt": time.time(),
+        "workspace": _get_active_workspace(),
+    }
+    with _story_plan_jobs_lock:
+        _story_plan_jobs[job_id] = job
+    _persist_story_plan_job(job)
+    threading.Thread(target=_run_story_plan_job, args=(job_id,), daemon=True).start()
+    return {
+        key: job[key] for key in (
+            "jobId", "status", "message", "stage", "current", "total", "createdAt",
+        )
+    }
+
+
+@api.get("/api/v1/stories/generate/status/{job_id}")
+def get_story_lab_generation(job_id: str):
+    job = _load_story_plan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Story generation job not found")
+    return {
+        key: job.get(key) for key in (
+            "jobId", "status", "message", "stage", "current", "total",
+            "createdAt", "updatedAt", "finishedAt", "result", "error",
+        )
+    }
+
+
+@api.post("/api/v1/stories/generate/resume/{job_id}")
+def resume_story_lab_generation(job_id: str):
+    job = _load_story_plan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Story generation job not found")
+    if job.get("status") == "completed":
+        return {"jobId": job_id, "status": "completed", "message": job.get("message")}
+    with _story_plan_jobs_lock:
+        active = job_id in _story_plan_active_jobs
+    if active:
+        return {
+            "jobId": job_id,
+            "status": job.get("status"),
+            "message": "Story generation is already running.",
+        }
+    _story_job_update(
+        job_id,
+        status="queued",
+        message="Resuming from the last completed Story Lab stage…",
+        error=None,
+        finishedAt=None,
+    )
+    threading.Thread(target=_run_story_plan_job, args=(job_id,), daemon=True).start()
+    return {"jobId": job_id, "status": "queued", "message": "Story generation resumed."}
+
+
+@api.post("/api/v1/stories/generate/cancel/{job_id}")
+def cancel_story_lab_generation(job_id: str):
+    job = _load_story_plan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Story generation job not found")
+    if job.get("status") == "completed":
+        return {"jobId": job_id, "status": "completed", "message": job.get("message")}
+    _story_job_update(
+        job_id,
+        status="cancelled",
+        message="Story generation cancelled. Completed stages remain recoverable.",
+        finishedAt=time.time(),
+    )
+    return {
+        "jobId": job_id,
+        "status": "cancelled",
+        "message": "Story generation cancelled. Completed stages remain recoverable.",
+    }
 
 
 @api.post("/api/v1/director/comic/plan")
@@ -11515,7 +12507,9 @@ Every imagePrompt describes exactly ONE full-bleed illustration for ONE panel, i
 framing and repeats the canonical
 description of every character shown. Never ask the image model to render dialogue, captions,
 bubbles, lettering, logos or watermarks. Put readable text only in dialogue, captions or
-soundEffects. Never mention the comic's page count, panel count, page layout, grids, collages,
+soundEffects. Keep each imagePrompt concise and below 700 characters. Never copy the complete
+styleBible into imagePrompt; include only details visibly needed for that shot. Never mention
+the comic's page count, panel count, page layout, grids, collages,
 split screens, inset panels or borders in imagePrompt. Every imagePrompt must be self-contained.
 Include the chosen art treatment and
 only the world details that visibly apply to that shot. Repeat exact era/year, architecture,
@@ -11600,30 +12594,12 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
                         f"{page_problem}. Resume to try this page again."
                     ),
                 )
-            generated_visual_bible = str(bible.get("styleBible") or "").strip()
-            visual_context_parts = []
-            if manual_art_style:
-                visual_context_parts.append(f"Art direction: {manual_art_style}.")
-            if manual_world_context:
-                visual_context_parts.append(
-                    f"User world and period lock: {manual_world_context}."
-                )
-            if generated_visual_bible:
-                visual_context_parts.append(
-                    f"Visual continuity bible: {generated_visual_bible}."
-                )
-            if manual_forbidden:
-                visual_context_parts.append(
-                    f"Strictly forbidden: {manual_forbidden}."
-                )
-            visual_context = " ".join(visual_context_parts)
-            if visual_context:
-                visual_context += " "
+            # Keep reusable art direction separate from each shot. The image
+            # client adds only the compact context its provider can accept.
             for panel in page.get("panels", []):
                 if not isinstance(panel, dict):
                     continue
-                prompt = str(panel.get("imagePrompt") or "").strip()
-                panel["imagePrompt"] = visual_context + prompt
+                panel["imagePrompt"] = str(panel.get("imagePrompt") or "").strip()
             if page_index < len(planned_pages):
                 planned_pages[page_index] = page
             else:
@@ -11678,11 +12654,7 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
             panel["imagePrompt"] = str(panel.get("imagePrompt") or panel["sceneDescription"])
             panel["framing"] = str(panel.get("framing") or "Medium shot")
             panel["continuityNotes"] = str(panel.get("continuityNotes") or "")
-            for list_key in ("characters", "captions", "soundEffects"):
-                value = panel.get(list_key)
-                panel[list_key] = value if isinstance(value, list) else []
-            dialogue_items = panel.get("dialogue")
-            panel["dialogue"] = dialogue_items if isinstance(dialogue_items, list) else []
+            _normalize_comic_panel_arrays(panel)
             normalized_dialogue = []
             for dialogue in panel["dialogue"]:
                 if not isinstance(dialogue, dict):
@@ -11813,6 +12785,7 @@ Source page text: {json.dumps({"panels": source_panels}, ensure_ascii=False)}"""
         max_new_tokens=min(2600, max(900, len(source_panels) * 260)),
         stage=f"language repair for page {page_number}",
         llm_override=llm_override,
+        root_array_key="panels",
     )
     candidate_panels = generated.get("panels")
     if not isinstance(candidate_panels, list) or len(candidate_panels) != len(source_panels):
@@ -11936,6 +12909,7 @@ Source page: {json.dumps(source, ensure_ascii=False)}""",
             max_new_tokens=min(3200, max(900, len(source_panels) * 260)),
             stage=f"{mode} lettering for page {page_index + 1}",
             llm_override=writing_llm,
+            root_array_key="panels",
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Comic text {mode} failed: {exc}") from exc
@@ -12126,10 +13100,15 @@ def _comic_plan_job_update(job_id: str, **patch) -> None:
 
 def _run_comic_plan_job(job_id: str, body: dict) -> None:
     services = wgp.server_config.get("services", {})
-    external = str(body.get("writingProvider") or "maestro") == "openai-compatible"
-    provider = "openai-compatible" if external else str(services.get("llm_provider") or "local")
+    requested_provider = str(body.get("writingProvider") or "maestro").strip().lower()
+    external = requested_provider not in ("", "maestro", "internal", "local")
+    provider = requested_provider if external else str(services.get("llm_provider") or "local")
     model = (
-        str(body.get("writingModel") or "deepseek-chat")
+        str(body.get("writingModel") or (
+            "deepseek-v4-pro" if provider == "deepseek"
+            else "MiniMax-M3" if provider == "minimax"
+            else "default"
+        ))
         if external
         else str(services.get("llm_model_id") or "default")
     )

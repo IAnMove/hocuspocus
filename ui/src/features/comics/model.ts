@@ -3,6 +3,7 @@ import type {
   ComicPage,
   ComicPanelElement,
   ComicPlan,
+  ComicPlanPanel,
   ComicProject,
   ComicTextElement,
 } from './types'
@@ -53,11 +54,12 @@ export function repairComicText<T>(value: T): T {
   return value
 }
 
-const copyKey = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
+const copyKey = (value: unknown) =>
+  String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase()
 
 function compactUnique<T>(
   values: T[],
-  text: (value: T) => string,
+  text: (value: T) => unknown,
   limit: number,
   seen = new Set<string>(),
 ): T[] {
@@ -111,34 +113,83 @@ export function normalizeComicPlan(
   dialogueDensity: 'low' | 'medium' | 'high' = 'medium',
 ): ComicPlan {
   const repaired = repairComicText(plan)
+  const storyStructure = (Array.isArray(repaired.storyStructure)
+    ? repaired.storyStructure
+    : []).map((beat, index) => ({
+      ...beat,
+      pageNumber: Number(beat?.pageNumber) || index + 1,
+      stage: String(beat?.stage || ''),
+      goal: String(beat?.goal || ''),
+      turningPoint: String(beat?.turningPoint || ''),
+    }))
   const normalized: ComicPlan = {
     ...repaired,
+    version: 1,
+    id: String(repaired.id || comicId('comic-plan')),
+    title: String(repaired.title || 'Untitled comic'),
+    logline: String(repaired.logline || ''),
+    synopsis: String(repaired.synopsis || ''),
+    language: String(repaired.language || 'English'),
+    styleBible: String(repaired.styleBible || ''),
+    storyStructure,
     characters: (Array.isArray(repaired.characters) ? repaired.characters : []).map(character => ({
       ...character,
+      id: String(character?.id || comicId('character')),
+      name: String(character?.name || 'Unnamed character'),
+      description: String(character?.description || ''),
+      locked: Boolean(character?.locked),
       referenceAssetIds: Array.from(new Set([
         ...(Array.isArray(character.referenceAssetIds) ? character.referenceAssetIds : []),
         ...(character.referenceAssetId ? [character.referenceAssetId] : []),
-      ])),
+      ].map(value => String(value)).filter(Boolean))),
     })),
     pages: (Array.isArray(repaired.pages) ? repaired.pages : []).map((page, pageIndex) => ({
       ...page,
       pageNumber: Number(page.pageNumber) || pageIndex + 1,
       layoutHint: page.layoutHint === 'dynamic' ? 'dynamic' as const : 'grid' as const,
       panels: (Array.isArray(page.panels) ? page.panels : []).map((panel, panelIndex) => {
-        const copy = compactPanelCopy(panel, page.panels.length, panelIndex, page.layoutHint)
-        return {
+        const safePanel: ComicPlanPanel = {
           ...panel,
-          id: panel.id || `p${pageIndex + 1}-panel${panelIndex + 1}`,
-          order: Number(panel.order) || panelIndex + 1,
-          narrativeRole: panel.narrativeRole || 'Story beat',
-          sceneDescription: panel.sceneDescription || panel.narrativeRole || 'Comic panel',
-          imagePrompt: panel.imagePrompt || panel.sceneDescription || 'Comic panel',
-          characters: Array.isArray(panel.characters) ? panel.characters : [],
-          framing: panel.framing || 'Medium shot',
+          id: String(panel?.id || `p${pageIndex + 1}-panel${panelIndex + 1}`),
+          order: Number(panel?.order) || panelIndex + 1,
+          narrativeRole: String(panel?.narrativeRole || 'Story beat'),
+          sceneDescription: String(
+            panel?.sceneDescription || panel?.narrativeRole || 'Comic panel',
+          ),
+          imagePrompt: String(
+            panel?.imagePrompt || panel?.sceneDescription || 'Comic panel',
+          ),
+          characters: (Array.isArray(panel?.characters) ? panel.characters : [])
+            .map(value => String(value))
+            .filter(Boolean),
+          framing: String(panel?.framing || 'Medium shot'),
+          dialogue: (Array.isArray(panel?.dialogue) ? panel.dialogue : [])
+            .filter(line => line && typeof line === 'object')
+            .map(line => ({
+              ...line,
+              text: String(line.text || ''),
+              bubbleType: line.bubbleType || 'speech',
+            }))
+            .filter(line => line.text.trim()),
+          captions: (Array.isArray(panel?.captions) ? panel.captions : [])
+            .map(value => String(value))
+            .filter(value => value.trim()),
+          soundEffects: (Array.isArray(panel?.soundEffects) ? panel.soundEffects : [])
+            .map(value => String(value))
+            .filter(value => value.trim()),
+          continuityNotes: String(panel?.continuityNotes || ''),
+        }
+        const copy = compactPanelCopy(
+          safePanel,
+          page.panels.length,
+          panelIndex,
+          page.layoutHint,
+        )
+        return {
+          ...safePanel,
           dialogue: copy.dialogue,
           captions: copy.captions,
           soundEffects: copy.soundEffects,
-          continuityNotes: panel.continuityNotes || '',
         }
       }),
     })),
@@ -319,10 +370,38 @@ export function textElement(
   order: number,
 ): ComicTextElement {
   const compact = panel.width < 280 || panel.height < 260
-  const width = Math.max(110, panel.width * (compact ? 0.72 : 0.66))
-  const height = Math.max(compact ? 46 : 60, Math.min(compact ? 92 : 126, 40 + content.length * 0.34))
+  const width = Math.max(110, panel.width * (compact ? 0.8 : 0.72))
   const baseSize = compact ? (bubble === 'caption' ? 14 : 15) : (bubble === 'caption' ? 17 : 19)
-  const fontSize = content.length > 90 ? baseSize - 3 : content.length > 58 ? baseSize - 2 : baseSize
+  let fontSize = content.length > 90 ? baseSize - 3 : content.length > 58 ? baseSize - 2 : baseSize
+  const padding = compact ? 9 : 12
+  const availableTextWidth = Math.max(60, width - padding * 2 - 6)
+  const wrappedLineCount = (size: number) => {
+    const charactersPerLine = Math.max(8, Math.floor(availableTextWidth / (size * 0.54)))
+    return content.split('\n').reduce((total, paragraph) => {
+      const words = paragraph.trim().split(/\s+/).filter(Boolean)
+      if (!words.length) return total + 1
+      let lines = 1
+      let used = 0
+      words.forEach(word => {
+        const length = Math.max(1, word.length)
+        if (used && used + 1 + length > charactersPerLine) {
+          lines += 1
+          used = length
+        } else {
+          used += (used ? 1 : 0) + length
+        }
+      })
+      return total + lines
+    }, 0)
+  }
+  const requiredHeight = (size: number) =>
+    Math.ceil(wrappedLineCount(size) * size * 1.12 + padding * 2 + 8)
+  const preferredMaxHeight = panel.height * (compact ? 0.48 : 0.42)
+  while (fontSize > 10 && requiredHeight(fontSize) > preferredMaxHeight) fontSize -= 1
+  const height = Math.min(
+    Math.max(40, panel.height - 16),
+    Math.max(compact ? 50 : 64, requiredHeight(fontSize)),
+  )
   return {
     id: comicId('text'),
     type: 'text',
@@ -349,6 +428,8 @@ export function textElement(
     bubbleBackground: bubble === 'caption' ? '#fff4a3' : '#ffffff',
     bubbleStrokeColor: '#111111',
     bubbleStrokeWidth: 3,
+    bubblePadding: padding,
+    autoFit: true,
   }
 }
 
@@ -568,9 +649,27 @@ export function normalizeComicProject(raw: unknown): ComicProject {
       : []
     if (project.director) {
       project.director.scriptVersion = Number(project.director.scriptVersion || 1)
+      project.director.plan = normalizeComicPlan(
+        project.director.plan,
+        project.director.input?.dialogueDensity || 'medium',
+      )
       project.director.input.writingProvider = project.director.input.writingProvider || 'maestro'
-      project.director.input.writingModel = project.director.input.writingModel || 'deepseek-chat'
-      project.director.input.writingBaseUrl = project.director.input.writingBaseUrl || 'https://api.deepseek.com'
+      if (project.director.input.writingProvider === 'openai-compatible') {
+        const legacyUrl = project.director.input.writingBaseUrl || ''
+        if (/api\.deepseek\.com/i.test(legacyUrl)) project.director.input.writingProvider = 'deepseek'
+        else if (/api\.openai\.com/i.test(legacyUrl)) project.director.input.writingProvider = 'openai'
+      }
+      if (project.director.input.writingProvider === 'deepseek') {
+        if (!project.director.input.writingModel || ['deepseek-chat', 'deepseek-reasoner'].includes(project.director.input.writingModel)) {
+          project.director.input.writingModel = 'deepseek-v4-pro'
+        }
+        project.director.input.writingBaseUrl = 'https://api.deepseek.com'
+      } else if (project.director.input.writingProvider === 'minimax') {
+        if (!['MiniMax-M3', 'MiniMax-M2.7', 'MiniMax-M2.7-highspeed'].includes(project.director.input.writingModel || '')) {
+          project.director.input.writingModel = 'MiniMax-M3'
+        }
+        project.director.input.writingBaseUrl = 'https://api.minimax.io/v1'
+      }
     }
     return project
   }

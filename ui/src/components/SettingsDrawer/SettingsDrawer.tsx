@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { SystemSettingsPanel } from './SystemSettingsPanel'
 import { ServicesSettingsPanel } from './ServicesSettingsPanel'
+import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
 
 /**
  * Settings drawer — global panel for hardware/perf and external-service
@@ -62,12 +63,20 @@ export function SettingsDrawer() {
 
         {/* Tab Bar */}
         <div className="px-5 pt-3">
-          <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
+          <HorizontalScrollTabs
+            activeKey={settingsTab}
+            ariaLabel="Settings sections"
+            viewportClassName="flex bg-bg-tertiary rounded-lg p-0.5 border border-border"
+          >
             {tabs.map(tab => (
               <button
                 key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={settingsTab === tab.id}
+                data-scroll-key={tab.id}
                 onClick={() => setSettingsTab(tab.id)}
-                className={`flex-1 text-xs py-1.5 rounded-md transition-all ${
+                className={`min-w-32 flex-1 text-xs py-1.5 rounded-md transition-all ${
                   settingsTab === tab.id
                     ? 'bg-bg-active text-text-primary'
                     : 'text-text-secondary hover:text-text-primary'
@@ -76,7 +85,7 @@ export function SettingsDrawer() {
                 {tab.label}
               </button>
             ))}
-          </div>
+          </HorizontalScrollTabs>
         </div>
 
         {/* Content */}
