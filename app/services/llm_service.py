@@ -1692,7 +1692,7 @@ def generate_openai_compatible(
         messages.append({
             "role": "system",
             "content": (
-                "Return only one valid JSON object matching this JSON Schema. "
+                "Return only valid JSON matching this JSON Schema. "
                 f"Do not wrap it in markdown:\n{compact_schema}"
             ),
         })
@@ -1723,9 +1723,10 @@ def generate_openai_compatible(
     if presence_penalty > 0:
         payload["presence_penalty"] = presence_penalty
     if json_schema is not None and not is_minimax:
-        if is_deepseek:
+        schema_root = str(json_schema.get("type") or "") if isinstance(json_schema, dict) else ""
+        if is_deepseek and schema_root == "object":
             payload["response_format"] = {"type": "json_object"}
-        else:
+        elif not is_deepseek:
             payload["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
@@ -4072,6 +4073,10 @@ def plan_short_film_prompts(
     lyrics: Optional[list] = None,
     max_new_tokens: int = 512,
     reference_image_path: Optional[str] = None,
+    character_ref_paths: Optional[list] = None,
+    character_ref_labels: Optional[list] = None,
+    location_ref_paths: Optional[list] = None,
+    location_ref_labels: Optional[list] = None,
     speaker_mappings: Optional[dict] = None,
     characters: Optional[list] = None,
     prompt_type: str = "both",
@@ -4099,7 +4104,22 @@ def plan_short_film_prompts(
             if info.get("name"):
                 speaker_names[spk_id] = info["name"]
 
-    has_image = reference_image_path and os.path.isfile(reference_image_path)
+    reference_images = []
+    reference_labels = []
+    if reference_image_path and os.path.isfile(reference_image_path):
+        reference_images.append(reference_image_path)
+    for paths, labels in (
+        (character_ref_paths or [], character_ref_labels or []),
+        (location_ref_paths or [], location_ref_labels or []),
+    ):
+        for index, path in enumerate(paths):
+            if not path or not os.path.isfile(path):
+                continue
+            reference_images.append(path)
+            reference_labels.append(
+                labels[index] if index < len(labels) else ""
+            )
+    has_image = bool(reference_images)
 
     # ── Character context for system prompt ──────────────────────
     char_context = ""
@@ -4112,11 +4132,20 @@ def plan_short_film_prompts(
                 char_lines.append(f"  - {name}" + (f": {desc}" if desc else ""))
         if char_lines:
             char_context = "Characters:\n" + "\n".join(char_lines) + "\n\n"
+    if reference_labels:
+        char_context += (
+            "Additional reference images, in attachment order after the main image: "
+            + "; ".join(
+                f"{index + 1}. {label or 'unlabelled reference'}"
+                for index, label in enumerate(reference_labels)
+            )
+            + "\n\n"
+        )
 
     # ── Build system prompt ──────────────────────────────────────
     photo_line = (
-        "You are given a REFERENCE PHOTO showing the characters. "
-        "Use it to identify the people, their appearance, clothing, and setting.\n"
+        "You are given one or more VISUAL REFERENCES for characters and locations. "
+        "Use them to preserve appearance, clothing, setting, and visual continuity.\n"
     ) if has_image else ""
 
     char_rule = (
@@ -4271,7 +4300,7 @@ def plan_short_film_prompts(
             "Format: '1V. prompt' then '1I. prompt'. Output ONLY numbered prompts."
         )
 
-    batch_images = [reference_image_path] if has_image else None
+    batch_images = reference_images or None
 
     print(f"[LLM] Short film prompts: prompt_type={prompt_type}, {len(clips)} clips")
 
@@ -4389,6 +4418,10 @@ def plan_short_film_from_story(
     story_description: str,
     characters: Optional[list] = None,
     reference_image_path: Optional[str] = None,
+    character_ref_paths: Optional[list] = None,
+    character_ref_labels: Optional[list] = None,
+    location_ref_paths: Optional[list] = None,
+    location_ref_labels: Optional[list] = None,
     target_duration: int = 30,
     target_scenes: Optional[int] = None,
     narrative_mode: bool = True,
@@ -4416,7 +4449,22 @@ def plan_short_film_from_story(
         # ~15 seconds per scene, cap at 30 scenes
         target_scenes = max(2, min(30, target_duration // 15))
 
-    has_image = reference_image_path and os.path.isfile(reference_image_path)
+    reference_images = []
+    reference_labels = []
+    if reference_image_path and os.path.isfile(reference_image_path):
+        reference_images.append(reference_image_path)
+    for paths, labels in (
+        (character_ref_paths or [], character_ref_labels or []),
+        (location_ref_paths or [], location_ref_labels or []),
+    ):
+        for index, path in enumerate(paths):
+            if not path or not os.path.isfile(path):
+                continue
+            reference_images.append(path)
+            reference_labels.append(
+                labels[index] if index < len(labels) else ""
+            )
+    has_image = bool(reference_images)
 
     # ── Character context ─────────────────────────────────────────
     char_context = ""
@@ -4429,10 +4477,19 @@ def plan_short_film_from_story(
                 char_lines.append(f"  - {name}" + (f": {desc}" if desc else ""))
         if char_lines:
             char_context = "Characters:\n" + "\n".join(char_lines) + "\n\n"
+    if reference_labels:
+        char_context += (
+            "Additional reference images, in attachment order after the main image: "
+            + "; ".join(
+                f"{index + 1}. {label or 'unlabelled reference'}"
+                for index, label in enumerate(reference_labels)
+            )
+            + "\n\n"
+        )
 
     photo_line = (
-        "You are given a REFERENCE PHOTO showing the characters. "
-        "Use it to identify the people, their appearance, clothing, and setting.\n"
+        "You are given one or more VISUAL REFERENCES for characters and locations. "
+        "Use them to preserve appearance, clothing, setting, and visual continuity.\n"
     ) if has_image else ""
 
     char_rule = (
@@ -4620,7 +4677,7 @@ def plan_short_film_from_story(
 
     user_prompt = f"Story Concept: {story_description}"
 
-    batch_images = [reference_image_path] if has_image else None
+    batch_images = reference_images or None
 
     print(f"[LLM] Planning short film from story: {target_scenes} scenes, {target_duration}s")
     print(f"[LLM] Story: {story_description}")

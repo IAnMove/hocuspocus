@@ -228,7 +228,11 @@ class ShortFilmPlanner(BasePlanner):
         If `clips` are provided → audio-driven mode (scenes follow audio structure).
         If no clips → story-driven mode (LLM plans scene structure from scratch).
         """
-        has_reference = bool(reference_image_path)
+        has_reference = bool(
+            reference_image_path
+            or kwargs.get("character_ref_paths")
+            or kwargs.get("location_ref_paths")
+        )
         is_audio_mode = bool(clips)
         # Store extra ref info for use in private methods
         self._num_character_refs = len(kwargs.get("character_ref_paths", []) or [])
@@ -261,7 +265,10 @@ class ShortFilmPlanner(BasePlanner):
 
         # Build reference assets
         ref_assets = ReferenceAssets(
-            start_image=AssetRef(id="ref_image", type="image", uri=reference_image_path) if has_reference else None,
+            # Additional character/location references still make this a
+            # reference-guided plan, but they are not a synthetic start frame.
+            start_image=AssetRef(id="ref_image", type="image", uri=reference_image_path)
+            if reference_image_path else None,
             audio=AssetRef(id="audio", type="audio", uri=audio_path) if audio_path else None,
             transcript="\n".join(l.get("text", "") for l in (lyrics or []) if l.get("text", "").strip()),
         )
@@ -1463,6 +1470,27 @@ SCREENPLAY:
             image_paths=image_paths,
             json_schema=pass2_schema,
         )
+        if not shot_dicts:
+            # Remote OpenAI-compatible servers are allowed to ignore
+            # response_format/json_schema. In production we have seen a
+            # provider return a perfectly usable Spanish visual treatment
+            # twice instead of the requested array; the old behavior then
+            # reported "Planning produced no clip plans" and discarded the
+            # successful screenplay pass. Preserve that creative work and
+            # build a conservative shot list locally. This is deliberately
+            # deterministic: retrying the same provider a third time only
+            # adds latency and can fail in the same way.
+            print(
+                "[ShortFilmPlanner] Pass 2 returned no structured shots; "
+                "recovering a deterministic shot list from the screenplay"
+            )
+            shot_dicts = self._fallback_shots_from_screenplay(
+                screenplay=screenplay,
+                story_description=story_description,
+                char_profiles=char_profiles,
+                target_duration=target_duration,
+                target_scenes=max(shot_count_low, min(shot_count_high, target_scenes or shot_count_low)),
+            )
 
         # ── POST-PASS-2 SAFETY SCAN ─────────────────────────────────────
         # Defense in depth — Pass 2's structured output (image/video
@@ -2388,6 +2416,147 @@ SCREENPLAY:
 
         return shots, title
 
+    @staticmethod
+    def _fallback_shots_from_screenplay(
+        screenplay: str,
+        story_description: str,
+        char_profiles: list[CharacterProfile],
+        target_duration: int,
+        target_scenes: int,
+    ) -> list[dict]:
+        """Turn a valid screenplay into usable I2V shots without another LLM call.
+
+        This is the final recovery path for remote providers that return prose
+        while ignoring JSON schema requests. It keeps every screenplay section
+        in order, distributes the requested runtime across the shots, and emits
+        the same fields as Pass 2 so all normal validation/rendering continues.
+        """
+        import math
+
+        source = (screenplay or story_description or "").strip()
+        if not source:
+            source = "A concise visual incident unfolds, reaches a decision, and resolves."
+
+        paragraphs = [
+            re.sub(r"\s+", " ", part).strip()
+            for part in re.split(r"\n\s*\n+", source)
+            if re.sub(r"\s+", " ", part).strip()
+        ]
+        if len(paragraphs) < 2:
+            sentences = [
+                item.strip()
+                for item in re.split(r"(?<=[.!?])\s+", source)
+                if item.strip()
+            ]
+            paragraphs = sentences or [source]
+
+        scene_count = max(1, min(20, int(target_scenes or 1)))
+        scene_count = min(scene_count, max(1, len(paragraphs)))
+        chunks: list[str] = []
+        for index in range(scene_count):
+            start = math.floor(index * len(paragraphs) / scene_count)
+            end = math.floor((index + 1) * len(paragraphs) / scene_count)
+            chunk = " ".join(paragraphs[start:max(start + 1, end)]).strip()
+            chunks.append(chunk[:2400])
+
+        base_duration = max(3, int(target_duration) // scene_count)
+        remainder = max(0, int(target_duration) - (base_duration * scene_count))
+        roles = ["setup", "rising_action", "climax", "resolution"]
+        camera_moves = ["slow push-in", "subtle lateral track", "measured handheld drift", "slow pull-out"]
+
+        shots: list[dict] = []
+        for index, chunk in enumerate(chunks):
+            duration = base_duration + (1 if index < remainder else 0)
+            if scene_count == 1:
+                role = "resolution"
+            else:
+                role_index = round(index * (len(roles) - 1) / (scene_count - 1))
+                role = roles[role_index]
+
+            lower_chunk = chunk.casefold()
+            subjects = []
+            for character in char_profiles or []:
+                display_name = (character.display_name or character.id or "").strip()
+                if display_name and display_name.casefold() in lower_chunk:
+                    subjects.append({
+                        "visual_description": character.physical_description or display_name,
+                        "character_id": character.id,
+                        "speaker_name": display_name,
+                    })
+            if not subjects and char_profiles:
+                character = char_profiles[min(index, len(char_profiles) - 1)]
+                subjects.append({
+                    "visual_description": character.physical_description or character.display_name or character.id,
+                    "character_id": character.id,
+                    "speaker_name": character.display_name or character.id,
+                })
+
+            static_subject = subjects[0]["visual_description"] if subjects else "the principal subject"
+            opening = re.split(r"(?<=[.!?])\s+", chunk, maxsplit=1)[0][:500]
+            image_prompt = (
+                f"Cinematic first frame before the action: {static_subject} in the established "
+                f"story world, composed for scene {index + 1}; {opening}. "
+                "Static initial pose, coherent environment, no captions, no speech bubbles, no written text."
+            )
+            video_prompt = (
+                f"Animate the supplied first frame as a continuous cinematic shot. "
+                f"Scene purpose: {role}. Preserve the characters, wardrobe, environment and composition. "
+                f"Action and dialogue to portray: {chunk}. Camera: {camera_moves[index % len(camera_moves)]}. "
+                "Natural motion, readable acting, stable identities, no new captions or on-screen text."
+            )
+
+            window_prompts: list[str] = []
+            if duration > 20:
+                window_count = max(2, math.ceil(duration / 20))
+                sentences = [
+                    item.strip()
+                    for item in re.split(r"(?<=[.!?])\s+", chunk)
+                    if item.strip()
+                ] or [chunk]
+                for window_index in range(window_count):
+                    start = math.floor(window_index * len(sentences) / window_count)
+                    end = math.floor((window_index + 1) * len(sentences) / window_count)
+                    beat = " ".join(sentences[start:max(start + 1, end)])
+                    window_prompts.append(
+                        f"Continue scene {index + 1}, part {window_index + 1} of {window_count}, "
+                        f"from the supplied preceding frames. Preserve all identities and geography. "
+                        f"Portray this chronological beat: {beat}. "
+                        f"Camera remains {camera_moves[index % len(camera_moves)]}; natural continuous motion, no text."
+                    )
+
+            shots.append({
+                "title": f"Recovered scene {index + 1}",
+                "duration_sec": duration,
+                "scene_goal": f"{role.replace('_', ' ').title()}: {opening[:180]}",
+                "narrative_role": role,
+                "scene_type": "dialogue" if '"' in chunk or "—" in chunk else "action",
+                "subjects_on_screen": subjects,
+                "environment": "The canonical setting described by the screenplay and master story.",
+                "visual_style": "Cinematic visual continuity matching the supplied story world.",
+                "lighting": "Motivated cinematic lighting consistent with the location.",
+                "mood": role.replace("_", " "),
+                "action_beats": [chunk],
+                "dialogue_beats": [],
+                "camera_plan": {
+                    "framing": "medium wide shot" if index == 0 else "medium shot",
+                    "movement": camera_moves[index % len(camera_moves)],
+                    "movement_intensity": "subtle",
+                },
+                "audio_plan": {
+                    "mode": "dialogue_driven" if '"' in chunk or "—" in chunk else "ambient_only",
+                    "ambience": "Natural ambience appropriate to the canonical location.",
+                },
+                "ending_beat": opening,
+                "image_source": "original" if index == 0 else "previous",
+                "image_prompt": image_prompt,
+                "visual_changes": [],
+                "video_prompt": "" if window_prompts else video_prompt,
+                "multishot": False,
+                "window_prompts": window_prompts,
+                "keyframe_prompts": [],
+            })
+        return shots
+
     def _convert_story_shots(
         self,
         shot_dicts: list[dict],
@@ -2555,6 +2724,18 @@ Go:"""
             image_paths=image_paths,
             json_schema=fallback_schema,
         )
+        if not shot_dicts:
+            print(
+                "[ShortFilmPlanner] Single-pass structured output was empty; "
+                "building a deterministic plan from the original story"
+            )
+            shot_dicts = self._fallback_shots_from_screenplay(
+                screenplay=story_description,
+                story_description=story_description,
+                char_profiles=char_profiles,
+                target_duration=target_duration,
+                target_scenes=target_scenes,
+            )
 
         assert_no_minor_content(
             collect_pass2_text(shot_dicts), source="shot list (single-pass fallback)"

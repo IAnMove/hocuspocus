@@ -342,6 +342,10 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
     fps = 25  # LTX-2 default
     video_length = int(duration_sec * fps)
 
+    resolution = _normalize_video_resolution(
+        video_model,
+        video_params.get("resolution", "1280x720"),
+    )
     gen_params = {
         "model_type": video_model,
         "prompt": prompt,
@@ -349,7 +353,7 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         "image_prompt_type": "S" if has_start else "",
         "num_inference_steps": video_params.get("num_inference_steps", 8),
         "guidance_scale": video_params.get("guidance_scale", 1),
-        "resolution": video_params.get("resolution", "1280x720"),
+        "resolution": resolution,
         "video_length": video_length,
         "seed": -1,
         "settings_version": 2.52,
@@ -364,6 +368,23 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
     }
     if has_start:
         gen_params["image_start"] = start_path
+        gen_params["input_video_strength"] = video_params.get(
+            "input_video_strength",
+            0.7 if "distilled" in str(video_model).lower() else 1.0,
+        )
+    for runtime_key in (
+        "single_stage_pipeline",
+        "progressive_pipeline",
+        "stage2_steps",
+        "progressive_stage1_image_weight",
+        "progressive_stage2_steps",
+        "progressive_stage2_sigma",
+        "progressive_stage3_steps",
+        "progressive_stage3_sigma",
+        "progressive_stage3_image_weight",
+    ):
+        if runtime_key in video_params:
+            gen_params[runtime_key] = video_params[runtime_key]
 
     output_files = _submit_and_wait(gen_params, timeout_s=3600, out_dir=clip_out_dir)
     new_filename = output_files[0] if output_files else ""
@@ -744,8 +765,16 @@ def _run_pipeline(pid: str, resume: bool = False):
                     "thinking_text": getattr(llm_service, '_last_thinking_text', None),
                 }]
             llm_log = {
-                "provider": params.get("llm_provider", "local"),
-                "model_id": params.get("llm_model_id", ""),
+                "provider": (
+                    params.get("writing_provider")
+                    if params.get("writing_provider") not in (None, "", "maestro")
+                    else params.get("llm_provider", "local")
+                ),
+                "model_id": (
+                    params.get("writing_model")
+                    if params.get("writing_provider") not in (None, "", "maestro")
+                    else params.get("llm_model_id", "")
+                ),
                 "passes": accumulated,
                 # Keep flat fields for backward compat — use last pass
                 "system_prompt": accumulated[-1].get("system_prompt", "") if accumulated else "",
@@ -774,9 +803,17 @@ def _run_pipeline(pid: str, resume: bool = False):
 
         # On resume the saved clip_plans are ALREADY polished — re-polishing
         # would compound edits and drift the prompts, so skip the whole block.
+        scoped_writing_provider = str(
+            params.get("writing_provider") or "maestro"
+        ).strip().lower() not in ("", "maestro", "internal", "local")
         if resume_plans:
             pass
-        elif polish_mode == "third_pass" and clip_plans:
+        elif (
+            polish_mode == "third_pass"
+            and clip_plans
+            and pipeline_type != "comic_movie"
+            and not scoped_writing_provider
+        ):
             _update_pipeline(pid, phase="polishing_prompts", llm_streaming=False,
                              progress={"current": 0, "total": len(clip_plans), "message": "Polishing prompts (3rd pass)...", "step": 0, "total_steps": 0})
             try:
@@ -815,6 +852,10 @@ def _run_pipeline(pid: str, resume: bool = False):
         elif polish_mode in ("full_guide", "light_guide"):
             # For inject modes, polish happened inside the planner — note it in the log
             _update_pipeline(pid, _polish_mode_used=polish_mode)
+        elif scoped_writing_provider:
+            # The selected Story/Comic provider already wrote the final prompts.
+            # Do not silently run the global Maestro LLM as a second author.
+            _update_pipeline(pid, _polish_mode_used="scoped_writing_provider")
 
         _update_pipeline(pid, clip_plans=clip_plans, llm_streaming=False)
         _save_pipeline_state(pid)  # Save after planning
@@ -834,13 +875,20 @@ def _run_pipeline(pid: str, resume: bool = False):
             # Reload clip_plans in case user edited them
             clip_plans = _pipelines[pid]["clip_plans"]
 
-        # ── Phase 2: Generate Start Images ──────────────────────────────
-        # Always generate start images. When no reference image was provided,
-        # _run_image_generation creates an establishing/anchor image first and
-        # adopts it as the shared reference, so every clip shares a look —
-        # instead of skipping image gen and going straight to text-to-video.
+        # ── Phase 2: Prepare or Generate Start Images ────────────────────
+        # Normal Director productions generate start frames here. Comic
+        # movies already have one approved artwork image per shot, so those
+        # files are copied into the recoverable pipeline output directory and
+        # fed directly to I2V without spending image-generation credits.
+        provided_clip_image_paths = params.get("provided_clip_image_paths") or []
         _update_pipeline(pid, phase="generating_images",
-                         progress={"current": 0, "total": len(clip_plans), "message": "Generating start images...", "step": 0, "total_steps": 0})
+                         progress={
+                             "current": 0,
+                             "total": len(clip_plans),
+                             "message": "Preparing comic panels..." if provided_clip_image_paths else "Generating start images...",
+                             "step": 0,
+                             "total_steps": 0,
+                         })
 
         # Unload LLM to free VRAM
         from services import llm_service
@@ -861,6 +909,22 @@ def _run_pipeline(pid: str, resume: bool = False):
             clip_images = resume_images
             clip_keyframes = p.get("_clip_keyframes") or [[] for _ in clip_images]
             print(f"[Pipeline {pid}] Resume: reusing {len(clip_images)} start images — skipping image generation")
+        elif provided_clip_image_paths:
+            video_params = dict(params.get("video_params") or {})
+            video_params["resolution"] = _normalize_video_resolution(
+                params.get("video_model", ""),
+                video_params.get("resolution", "1280x720"),
+            )
+            params["video_params"] = video_params
+            clip_images = _prepare_provided_clip_images(
+                pid,
+                provided_clip_image_paths,
+                expected_count=len(clip_plans),
+                out_dir=pipeline_out_dir,
+                resolution=video_params["resolution"],
+                fit_mode=params.get("video_image_fit", "smart"),
+            )
+            clip_keyframes = [[] for _ in clip_images]
         else:
             if resume_images:
                 print(f"[Pipeline {pid}] Resume: saved start images missing on disk — regenerating")
@@ -1007,6 +1071,93 @@ def _ensure_llm_loaded(params: dict):
         llm_service.load_model(model_id=desired_model, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
 
 
+def _scoped_writing_llm(params: dict) -> dict | None:
+    """Resolve a Story/Comic production-only writing provider.
+
+    Credentials always come from the trusted server settings.  The browser
+    sends only the profile name, model and (for the custom profile) the URL it
+    expects; this keeps API keys out of comic/story files and pipeline state.
+    """
+    provider = str(
+        params.get("writing_provider")
+        or params.get("writingProvider")
+        or "maestro"
+    ).strip().lower()
+    if provider in ("", "maestro", "internal", "local"):
+        return None
+    if provider not in ("deepseek", "minimax", "openai", "openai-compatible"):
+        raise RuntimeError("Unsupported production writing provider")
+
+    services = _wgp.server_config.get("services", {}) if _wgp else {}
+    requested_url = str(
+        params.get("writing_base_url")
+        or params.get("writingBaseUrl")
+        or ""
+    ).strip()[:1000]
+    requested_model = str(
+        params.get("writing_model")
+        or params.get("writingModel")
+        or ""
+    ).strip()[:200]
+
+    if provider == "openai-compatible":
+        from urllib.parse import urlparse
+        legacy_host = (urlparse(requested_url).hostname or "").lower()
+        if legacy_host == "api.deepseek.com":
+            provider = "deepseek"
+        elif legacy_host == "api.openai.com":
+            provider = "openai"
+
+    if provider == "deepseek":
+        model = requested_model or "deepseek-v4-pro"
+        if model in ("deepseek-chat", "deepseek-reasoner"):
+            model = "deepseek-v4-pro"
+        if model not in {"deepseek-v4-pro", "deepseek-v4-flash"}:
+            raise RuntimeError("Choose DeepSeek V4 Pro or V4 Flash")
+        base_url = "https://api.deepseek.com"
+        api_key = str(services.get("deepseek_api_key") or "")
+        missing = "Configure the DeepSeek API key in Settings → Services first"
+    elif provider == "minimax":
+        model = requested_model or "MiniMax-M3"
+        if model not in {"MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"}:
+            raise RuntimeError("Choose MiniMax M3, M2.7, or M2.7 Highspeed")
+        base_url = "https://api.minimax.io/v1"
+        api_key = str(services.get("minimax_api_key") or "")
+        missing = "Configure the MiniMax API key in Settings → Services first"
+    elif provider == "openai":
+        model = requested_model or "gpt-4.1"
+        base_url = "https://api.openai.com"
+        api_key = str(services.get("openai_api_key") or "")
+        missing = "Configure the OpenAI API key in Settings → Services first"
+    else:
+        model = requested_model
+        base_url = str(services.get("compatible_base_url") or "").strip().rstrip("/")
+        configured_key = str(services.get("compatible_api_key") or "")
+        if not base_url:
+            raise RuntimeError(
+                "Configure the custom compatible URL in Settings → Services first"
+            )
+        if requested_url and requested_url.rstrip("/") != base_url:
+            raise RuntimeError(
+                "The production's custom URL does not match the trusted compatible profile"
+            )
+        api_key = configured_key
+        missing = ""
+
+    if not model:
+        raise RuntimeError("Choose an OpenAI-compatible writing model")
+    if not base_url.startswith(("http://", "https://")):
+        raise RuntimeError("OpenAI-compatible URL must start with http:// or https://")
+    if provider != "openai-compatible" and not api_key:
+        raise RuntimeError(missing)
+    return {
+        "provider": provider,
+        "model": model,
+        "base_url": base_url,
+        "api_key": api_key,
+    }
+
+
 def _capture_llm_pass(pid: str, pass_name: str):
     """Capture the current LLM state as a pass and append to the pipeline's log.
 
@@ -1041,19 +1192,37 @@ def _run_planning(pid: str, params: dict, pipeline_type: str):
     Uses the new DirectorOrchestrator when use_director_v2 flag is set,
     otherwise falls back to legacy llm_service calls.
     """
-    _ensure_llm_loaded(params)
+    writing_llm = _scoped_writing_llm(params)
+    if not writing_llm:
+        _ensure_llm_loaded(params)
 
     # Default v2 — see launch.py services-config comment for rationale.
     # The params dict is built from servicesConfig in the frontend, so
     # this default only fires for direct API callers that didn't pass
     # the flag at all. Keeping it consistent with the services-config
     # default here so the legacy path isn't accidentally hit.
-    use_v2 = params.get("use_director_v2", True)
+    # Comic-movie is implemented only in the layered planner and always uses
+    # that path even when a legacy global toggle is off.
+    use_v2 = (
+        True
+        if pipeline_type == "comic_movie" or writing_llm
+        else params.get("use_director_v2", True)
+    )
 
     if use_v2:
         return _run_planning_v2(pid, params, pipeline_type)
     else:
         return _run_planning_legacy(pid, params, pipeline_type)
+
+
+def _has_visual_references(params: dict) -> bool:
+    """True for a main frame or any labelled character/location reference."""
+    return bool(
+        params.get("reference_image_path")
+        or params.get("character_ref_paths")
+        or params.get("location_ref_paths")
+        or params.get("provided_clip_image_paths")
+    )
 
 
 def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
@@ -1065,8 +1234,60 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     flags_dict = params.get("director_flags", {})
     flags = DirectorFlags.from_dict(flags_dict) if flags_dict else DirectorFlags()
 
+    writing_llm = _scoped_writing_llm(params)
+
     # Wrap LLM functions to capture each pass for the dashboard log
     _pass_counter = [0]
+    def _capture_external(
+        pass_name: str,
+        prompt: str,
+        system_prompt: str,
+        response_text: str,
+    ):
+        with _pipeline_lock:
+            pipeline = _pipelines.get(pid)
+            if not pipeline:
+                return
+            passes = pipeline.get("_llm_passes", [])
+            passes.append({
+                "pass": pass_name,
+                "provider": writing_llm["provider"] if writing_llm else "",
+                "model_id": writing_llm["model"] if writing_llm else "",
+                "system_prompt": system_prompt,
+                "user_prompt": prompt,
+                "response_text": response_text,
+                "thinking_text": None,
+            })
+            pipeline["_llm_passes"] = passes
+
+    def _external_generate(*args, **kwargs):
+        # Director planners share the local-LLM signature.  The isolated
+        # compatible client intentionally ignores local-only controls such as
+        # thinking_budget, enable_thinking and image_paths.
+        prompt = str(kwargs.get("prompt") or (args[0] if args else ""))
+        system_prompt = str(kwargs.get("system_prompt") or "")
+        response = llm_service.generate_openai_compatible(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model_id=writing_llm["model"],
+            base_url=writing_llm["base_url"],
+            api_key=writing_llm["api_key"],
+            max_new_tokens=int(kwargs.get("max_new_tokens") or 4096),
+            temperature=float(kwargs.get("temperature") or 0.2),
+            top_p=float(kwargs.get("top_p") or 0.9),
+            frequency_penalty=float(kwargs.get("frequency_penalty") or 0.0),
+            presence_penalty=float(kwargs.get("presence_penalty") or 0.0),
+            json_schema=kwargs.get("json_schema"),
+        )
+        _pass_counter[0] += 1
+        _capture_external(
+            f"scoped_{writing_llm['provider']}_{_pass_counter[0]}",
+            prompt,
+            system_prompt,
+            response,
+        )
+        return response
+
     def _logged_generate(*args, **kwargs):
         result = llm_service.generate(*args, **kwargs)
         _pass_counter[0] += 1
@@ -1080,9 +1301,11 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         return result
 
     # Create orchestrator with logged LLM functions
+    selected_generate = _external_generate if writing_llm else _logged_generate
+    selected_streaming = _external_generate if writing_llm else _logged_streaming
     director = DirectorOrchestrator(
-        llm_generate=_logged_generate,
-        llm_generate_streaming=_logged_streaming,
+        llm_generate=selected_generate,
+        llm_generate_streaming=selected_streaming,
         flags=flags,
     )
 
@@ -1093,6 +1316,7 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         "short_film_story": "short_film",
         "podcast": "podcast",
         "viral_video": "viral_video",
+        "comic_movie": "comic_movie",
     }
     skill_type = skill_map.get(pipeline_type, "music_video")
 
@@ -1127,7 +1351,12 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         "multishot_lora_mode": multishot_lora_mode,
     }
 
-    if pipeline_type == "short_film_story":
+    if pipeline_type == "comic_movie":
+        planner_kwargs.update({
+            "comic_context": scene_description,
+            "comic_shots": params.get("comic_shots", []),
+        })
+    elif pipeline_type == "short_film_story":
         planner_kwargs.update({
             "story_description": scene_description,
             "target_duration": params.get("target_duration", 60),
@@ -1198,12 +1427,12 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     _update_pipeline(pid, production_plan=plan.to_dict())
 
     # Render prompts
-    has_reference = bool(reference_image_path)
+    has_reference = _has_visual_references(params)
     rendered = director.render_plan(plan, prompt_type="both", has_reference=has_reference)
     clip_plans = director.plan_to_clip_plans(rendered)
 
     # Build planned_clips from shot data (for story mode which creates clips)
-    if pipeline_type == "short_film_story":
+    if pipeline_type in ("short_film_story", "comic_movie"):
         cumulative = 0.0
         # Get FPS from model definition for accurate frame count
         fps = params.get("fps", 16)
@@ -1266,6 +1495,10 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
             story_description=scene_description,
             characters=characters,
             reference_image_path=reference_image_path,
+            character_ref_paths=params.get("character_ref_paths"),
+            character_ref_labels=params.get("character_ref_labels"),
+            location_ref_paths=params.get("location_ref_paths"),
+            location_ref_labels=params.get("location_ref_labels"),
             target_duration=target_duration,
             narrative_mode=narrative_mode,
             fps=fps,
@@ -1282,6 +1515,10 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
             scene_description=scene_description,
             lyrics=params.get("lyrics", ""),
             reference_image_path=reference_image_path,
+            character_ref_paths=params.get("character_ref_paths"),
+            character_ref_labels=params.get("character_ref_labels"),
+            location_ref_paths=params.get("location_ref_paths"),
+            location_ref_labels=params.get("location_ref_labels"),
             speaker_mappings=speaker_mappings,
             characters=characters,
             prompt_type="both",
@@ -1309,6 +1546,164 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
 
 
 # ── Image Generation Phase ──────────────────────────────────────────────
+
+def _normalize_video_resolution(video_model: str, resolution: str) -> str:
+    """Return the effective canvas size the video backend will actually use.
+
+    LTX's local VAE works on 64-pixel blocks.  Passing common display sizes
+    such as 1280x720 silently became 1280x704 later in wgp.py, after Director
+    had already prepared its source image and persisted misleading metadata.
+    Normalize it once at the Director boundary so fitting, generation and
+    saved state all agree.
+    """
+    value = str(resolution or "1280x720").lower().replace("×", "x")
+    parts = value.split("x")
+    if len(parts) != 2:
+        return value
+    try:
+        width, height = int(parts[0]), int(parts[1])
+    except (TypeError, ValueError):
+        return value
+
+    is_ltx = "ltx2" in str(video_model or "").lower()
+    if not is_ltx and _wgp is not None:
+        try:
+            model_def = _wgp.get_model_def(video_model) or {}
+            is_ltx = str(model_def.get("architecture") or "").lower().startswith("ltx2")
+        except Exception:
+            pass
+    if not is_ltx:
+        return f"{width}x{height}"
+
+    block = 64
+    normalized_width = max(256, width // block * block)
+    normalized_height = max(256, height // block * block)
+    normalized = f"{normalized_width}x{normalized_height}"
+    if normalized != f"{width}x{height}":
+        print(
+            f"[Director] LTX canvas aligned {width}x{height} → {normalized} "
+            "(64-pixel VAE blocks)"
+        )
+    return normalized
+
+
+def _fit_i2v_image(source: str, destination: str, resolution: str, fit_mode: str) -> None:
+    """Prepare a first frame without stretching it.
+
+    ``smart`` keeps every source pixel visible and fills unused canvas space
+    with a subdued blurred copy. ``crop`` fills the canvas by cropping its
+    edges. ``source`` copies the image untouched for callers that deliberately
+    want the model/backend to choose the output aspect.
+    """
+    import shutil
+    from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+
+    fit_mode = str(fit_mode or "smart").strip().lower()
+    if fit_mode == "source":
+        shutil.copy2(source, destination)
+        return
+
+    try:
+        target_width, target_height = (
+            int(part) for part in str(resolution).lower().split("x", 1)
+        )
+    except (TypeError, ValueError):
+        shutil.copy2(source, destination)
+        return
+
+    with Image.open(source) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+        if image.size == (target_width, target_height):
+            image.save(destination, format="PNG")
+            return
+
+        if fit_mode == "crop":
+            result = ImageOps.fit(
+                image,
+                (target_width, target_height),
+                method=Image.Resampling.LANCZOS,
+                centering=(0.5, 0.5),
+            )
+        else:
+            # No-loss foreground + edge-filled background.  A blurred/dimmed
+            # copy avoids black bars while keeping the full comic panel or
+            # source photograph visible in the exact requested video canvas.
+            background = ImageOps.fit(
+                image,
+                (target_width, target_height),
+                method=Image.Resampling.LANCZOS,
+                centering=(0.5, 0.5),
+            )
+            radius = max(8.0, max(target_width, target_height) / 32.0)
+            background = ImageEnhance.Brightness(
+                background.filter(ImageFilter.GaussianBlur(radius=radius))
+            ).enhance(0.58)
+            foreground = ImageOps.contain(
+                image,
+                (target_width, target_height),
+                method=Image.Resampling.LANCZOS,
+            )
+            result = background
+            result.paste(
+                foreground,
+                (
+                    (target_width - foreground.width) // 2,
+                    (target_height - foreground.height) // 2,
+                ),
+            )
+        result.save(destination, format="PNG")
+
+
+def _prepare_provided_clip_images(
+    pid: str,
+    image_paths: list[str],
+    expected_count: int,
+    out_dir: str,
+    resolution: str = "1280x720",
+    fit_mode: str = "smart",
+) -> list[str]:
+    """Stage caller-supplied I2V frames in one consistent video canvas."""
+
+    if len(image_paths) != expected_count:
+        raise RuntimeError(
+            f"Comic movie received {len(image_paths)} panel images for "
+            f"{expected_count} planned shots. Reopen the comic and try again."
+        )
+    os.makedirs(out_dir, exist_ok=True)
+    staged: list[str] = []
+    for index, source in enumerate(image_paths):
+        source = str(source or "")
+        if not source or not os.path.isfile(source):
+            raise RuntimeError(
+                f"Comic panel image {index + 1} is missing. "
+                "The completed panels are still preserved in the comic."
+            )
+        extension = (
+            os.path.splitext(source)[1].lower()
+            if str(fit_mode).lower() == "source"
+            else ".png"
+        )
+        if extension not in (".png", ".jpg", ".jpeg", ".webp"):
+            extension = ".png"
+        filename = f"comic_panel_{index + 1:04d}_{uuid.uuid4().hex[:8]}{extension}"
+        destination = os.path.join(out_dir, filename)
+        _fit_i2v_image(source, destination, resolution, fit_mode)
+        staged.append(filename)
+        _update_pipeline(
+            pid,
+            progress={
+                "current": index + 1,
+                "total": expected_count,
+                "message": f"Preparing comic panel {index + 1}/{expected_count}",
+                "step": 0,
+                "total_steps": 0,
+            },
+        )
+    print(
+        f"[Pipeline {pid}] Prepared {len(staged)} supplied comic panel start "
+        f"images at {resolution} (fit={fit_mode})"
+    )
+    return staged
 
 def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_dir: str = None, workspace: str = None) -> tuple[list[str], list[list[str]]]:
     """Generate start images and keyframe images per clip.
@@ -1428,6 +1823,10 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
         """Generate a single image using source_ref + optional extra refs."""
         nonlocal image_count
         all_refs = [r for r in ([source_ref] + (extra_refs if include_extra_refs else [])) if r]
+        # WanGP treats newlines as separate queue prompts. Director prompts are
+        # prose and may contain a multi-line story bible, so flatten them
+        # before submission to guarantee one requested image means one job.
+        prompt = " ".join(str(prompt or "").split())
         print(f"[Pipeline {pid}] _gen_image: {len(all_refs)} refs: {[os.path.basename(r) for r in all_refs]}")
         gen_params: dict = {
             "model_type": image_model,
@@ -1460,26 +1859,39 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
         image_count += 1
         return output_files[0] if output_files else ""
 
-    # If no reference image was provided, generate a single establishing /
-    # "anchor" image from the scene description and adopt it as the shared
-    # reference, so every clip's start image keeps a consistent look instead of
-    # each being generated independently with no visual through-line.
+    # If no reference image was provided, generate the first shot as the
+    # establishing anchor and reuse that exact file for clip 1. Previously the
+    # entire multi-line production brief was sent as a separate image prompt,
+    # then clip 1 was generated again: one redundant GPU generation and, since
+    # WanGP splits newline prompts, potentially dozens of accidental prompts.
+    first_clip_anchor = ""
+    first_clip_anchor_elapsed = 0.0
     if not (ref_image_path and os.path.isfile(ref_image_path)):
-        scene_desc = (params.get("scene_description") or "").strip()
-        anchor_prompt = scene_desc or (clip_plans[0].get("image_prompt", "") if clip_plans else "") or "cinematic establishing shot"
-        total_images += 1
+        scene_desc = " ".join(str(params.get("scene_description") or "").split())
+        anchor_prompt = (
+            (clip_plans[0].get("image_prompt", "") if clip_plans else "")
+            or scene_desc[:1800]
+            or "cinematic establishing shot"
+        )
         _update_pipeline(pid, progress={
             "current": 0,
             "total": total_images,
-            "message": "Generating establishing image",
+            "message": "Generating first shot and visual anchor",
             "step": 0, "total_steps": 0,
         })
-        print(f"[Pipeline {pid}] No reference image — generating establishing/anchor image first.")
-        anchor_file = _gen_image(anchor_prompt, "", include_extra_refs=False)
+        print(f"[Pipeline {pid}] No reference image — generating clip 1 as the shared visual anchor.")
+        anchor_started = time.time()
+        anchor_file = _gen_image(anchor_prompt, "", include_extra_refs=True)
+        first_clip_anchor_elapsed = time.time() - anchor_started
         anchor_path = os.path.join(out_dir, anchor_file) if anchor_file else ""
         if anchor_path and os.path.isfile(anchor_path):
             ref_image_path = anchor_path
+            first_clip_anchor = anchor_file
             print(f"[Pipeline {pid}] Adopted establishing image as shared reference: {anchor_file}")
+        else:
+            # The normal per-shot loop will retry clip 1, so do not count a
+            # missing anchor as a completed image in progress reporting.
+            image_count = max(0, image_count - 1)
 
     for i, plan in enumerate(clip_plans):
         if _pipelines[pid]["status"] == "cancelled":
@@ -1502,13 +1914,19 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
             "step": 0, "total_steps": 0,
         })
 
-        prompt = plan.get("image_prompt", "")
+        prompt = str(plan.get("image_prompt") or "")
         ref_exists = os.path.isfile(source_ref) if source_ref else False
         print(f"[Pipeline {pid}] Shot {i+1} start image: source={image_source}, ref={source_ref} (exists={ref_exists}), prompt='{prompt[:60]}...'")
 
         img_t0 = time.time()
         try:
-            if image_source == "previous" and source_ref != ref_image_path:
+            if i == 0 and first_clip_anchor:
+                start_img = first_clip_anchor
+                print(
+                    f"[Pipeline {pid}] Shot 1: reusing its establishing "
+                    f"image ({first_clip_anchor})"
+                )
+            elif image_source == "previous" and source_ref != ref_image_path:
                 # Dual reference: previous scene output as primary + original reference for character identity
                 # _gen_image puts source_ref first, then extra_refs (which includes character/location refs).
                 # We temporarily prepend the original ref to extra_refs so the model sees both.
@@ -1524,7 +1942,12 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
             clip_images.append("")
         # Record per-clip image timing
         timings = _pipelines.get(pid, {}).get("_clip_timings", {})
-        timings[f"image_{i}"] = round(time.time() - img_t0, 2)
+        timings[f"image_{i}"] = round(
+            first_clip_anchor_elapsed
+            if i == 0 and first_clip_anchor
+            else time.time() - img_t0,
+            2,
+        )
         _update_pipeline(pid, _clip_timings=timings)
 
         # ── Generate keyframes (chained from previous output) ──
@@ -1663,7 +2086,14 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         pass
     print(f"[Pipeline] Video gen: fps={fps}, video_model={video_model}")
 
-    resolution = video_params.get("resolution", "1280x720")
+    resolution = _normalize_video_resolution(
+        video_model,
+        video_params.get("resolution", "1280x720"),
+    )
+    if video_params.get("resolution") != resolution:
+        video_params = dict(video_params)
+        video_params["resolution"] = resolution
+        params["video_params"] = video_params
     steps = video_params.get("num_inference_steps", 8)
     guidance = video_params.get("guidance_scale", 1)
     spatial_upsampling = params.get("video_spatial_upsampling", "")
@@ -1976,6 +2406,33 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 print(f"[Pipeline {pid}] Keyframe injection: {[len(p) for p in per_clip_kf_paths]} keyframes per clip")
 
     # Common params
+    # Forward LTX pipeline controls selected in Studio/Advanced settings.
+    # Director previously copied these into video_params and then silently
+    # dropped them while constructing gen_params, so changing Stage 2 steps or
+    # pipeline mode had no effect on Director/comic-movie jobs.
+    for runtime_key in (
+        "single_stage_pipeline",
+        "progressive_pipeline",
+        "stage2_steps",
+        "input_video_strength",
+        "progressive_stage1_image_weight",
+        "progressive_stage2_steps",
+        "progressive_stage2_sigma",
+        "progressive_stage3_steps",
+        "progressive_stage3_sigma",
+        "progressive_stage3_image_weight",
+    ):
+        if runtime_key in video_params:
+            gen_params[runtime_key] = video_params[runtime_key]
+
+    has_i2v_start = bool(first_start) if seamless else bool(has_any_start)
+    if has_i2v_start and "input_video_strength" not in gen_params:
+        # Match Studio's tested LTX distilled I2V default: enough anchoring to
+        # preserve the frame/style, but not the motion-killing 1.0 default.
+        gen_params["input_video_strength"] = (
+            0.7 if "distilled" in str(video_model).lower() else 1.0
+        )
+
     voice_ref = params.get("voice_reference")
     if voice_ref:
         gen_params["voice_reference"] = voice_ref

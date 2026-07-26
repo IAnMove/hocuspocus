@@ -177,6 +177,9 @@ export interface ComicPlanPanel {
   captions: string[]
   soundEffects: string[]
   continuityNotes: string
+  /** Ready-to-render chronological I2V prompt. Storyboards generate this
+   *  alongside the first-frame image instead of waiting for movie conversion. */
+  videoPrompt?: string
   durationSeconds?: number
   cameraMove?: 'none' | 'push-in' | 'pull-out' | 'pan-left' | 'pan-right'
 }
@@ -213,6 +216,11 @@ export interface ComicSourceStory {
 
 export interface ComicDirectorRequest {
   premise: string
+  /** Comic keeps printable lettering/layout; storyboard creates one clean,
+   *  video-ready first frame and motion prompt per shot. */
+  productionMode?: 'comic' | 'storyboard'
+  storyboardAspect?: 'landscape' | 'portrait'
+  storyboardQuality?: 'draft' | 'final'
   /** Complete, editable adaptation brief imported from Story Lab. */
   storyContext?: string
   /** Identifies the Story Lab revision used to stage this adaptation. */

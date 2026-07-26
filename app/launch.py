@@ -6275,6 +6275,10 @@ async def director_plan_short_film_prompts(request: Request):
             reference_image_path=body.get("reference_image_path"),
             speaker_mappings=body.get("speaker_mappings"),
             characters=body.get("characters"),
+            character_ref_paths=body.get("character_ref_paths"),
+            character_ref_labels=body.get("character_ref_labels"),
+            location_ref_paths=body.get("location_ref_paths"),
+            location_ref_labels=body.get("location_ref_labels"),
             prompt_type=body.get("prompt_type", "both"),
             existing_image_prompts=body.get("existing_image_prompts"),
         )
@@ -6305,6 +6309,10 @@ async def director_plan_short_film_script(request: Request):
             story_description=story_description,
             characters=body.get("characters"),
             reference_image_path=body.get("reference_image_path"),
+            character_ref_paths=body.get("character_ref_paths"),
+            character_ref_labels=body.get("character_ref_labels"),
+            location_ref_paths=body.get("location_ref_paths"),
+            location_ref_labels=body.get("location_ref_labels"),
             target_duration=body.get("target_duration", 30),
             target_scenes=body.get("target_scenes"),
             narrative_mode=body.get("narrative_mode", True),
@@ -6470,6 +6478,21 @@ async def rejoin_pipeline_clips(pid: str):
 
 # ── Director V2 Planning ─────────────────────────────────────────────────
 
+_DIRECTOR_V2_PLANNER_KEYS = (
+    "clips", "scene_description", "story_description", "lyrics", "bpm",
+    "reference_image_path", "character_ref_paths", "character_ref_labels",
+    "location_ref_paths", "location_ref_labels", "speaker_mappings", "characters",
+    "audio_path", "target_duration", "target_scenes", "narrative_mode",
+    "fps", "frames_steps", "frames_minimum", "concept", "visual_style",
+    "platform", "style", "transcript", "prompt_type", "image_model",
+    "video_model", "seamless", "multishot_lora_mode",
+)
+
+
+def _director_v2_planner_kwargs(body: dict) -> dict:
+    """Keep every supported Director input, including Story Lab visual refs."""
+    return {key: body[key] for key in _DIRECTOR_V2_PLANNER_KEYS if key in body}
+
 @api.post("/api/v1/director/v2/plan")
 async def director_v2_plan(request: Request):
     """Plan using the new Director v2 architecture (planners + renderers + validators).
@@ -6503,14 +6526,7 @@ async def director_v2_plan(request: Request):
         )
 
         # Build planner kwargs from request body
-        planner_kwargs = {}
-        for key in ["clips", "scene_description", "story_description", "lyrics", "bpm",
-                     "reference_image_path", "speaker_mappings", "characters",
-                     "audio_path", "target_duration", "target_scenes", "narrative_mode",
-                     "fps", "frames_steps", "frames_minimum",
-                     "concept", "visual_style", "platform", "style", "transcript"]:
-            if key in body:
-                planner_kwargs[key] = body[key]
+        planner_kwargs = _director_v2_planner_kwargs(body)
 
         # NSFW from server config (enforced: never with public providers)
         services = wgp.server_config.get("services", {})
@@ -6543,7 +6559,11 @@ async def director_v2_plan(request: Request):
         )
 
         # Render
-        has_reference = bool(body.get("reference_image_path"))
+        has_reference = bool(
+            body.get("reference_image_path")
+            or body.get("character_ref_paths")
+            or body.get("location_ref_paths")
+        )
         prompt_type = body.get("prompt_type", "both")
         rendered = director.render_plan(plan, prompt_type=prompt_type, has_reference=has_reference)
         clip_plans = director.plan_to_clip_plans(rendered)
@@ -11200,6 +11220,12 @@ _COMIC_PLAN_SCHEMA = {
                         "narrativeRole": {"type": "string"}, "sceneDescription": {"type": "string"},
                         "imagePrompt": {"type": "string", "maxLength": 700}, "characters": {"type": "array", "items": {"type": "string"}},
                         "framing": {"type": "string"}, "continuityNotes": {"type": "string"},
+                        "videoPrompt": {"type": "string", "maxLength": 1400},
+                        "durationSeconds": {"type": "number", "minimum": 0.8, "maximum": 20},
+                        "cameraMove": {
+                            "type": "string",
+                            "enum": ["none", "push-in", "pull-out", "pan-left", "pan-right"],
+                        },
                         "captions": {"type": "array", "items": {"type": "string"}},
                         "soundEffects": {"type": "array", "items": {"type": "string"}},
                         "dialogue": {"type": "array", "items": {
@@ -11319,6 +11345,34 @@ def _comic_page_problem(page, expected_panels: int) -> str | None:
             return f"panel {panel_index} contains excessive dialogue"
         if normalized_lines and len(set(normalized_lines)) < len(normalized_lines) * 0.6:
             return f"panel {panel_index} contains repetitive dialogue"
+    return None
+
+
+def _storyboard_page_problem(page, expected_panels: int = 1) -> str | None:
+    """Validate video-specific fields after the shared comic shape is safe."""
+    problem = _comic_page_problem(page, expected_panels)
+    if problem:
+        return problem
+    for panel_index, panel in enumerate(page["panels"], 1):
+        if not str(panel.get("imagePrompt") or "").strip():
+            return f"shot {panel_index} has no first-frame image prompt"
+        video_prompt = str(panel.get("videoPrompt") or "").strip()
+        if not video_prompt:
+            return f"shot {panel_index} has no video motion prompt"
+        if len(video_prompt) > 1400:
+            return f"shot {panel_index} video prompt is too long"
+        try:
+            duration = float(panel.get("durationSeconds"))
+        except (TypeError, ValueError):
+            return f"shot {panel_index} durationSeconds is not a number"
+        if duration < 0.8 or duration > 20:
+            return f"shot {panel_index} durationSeconds is outside 0.8–20 seconds"
+        if panel.get("cameraMove") not in {
+            "none", "push-in", "pull-out", "pan-left", "pan-right",
+        }:
+            return f"shot {panel_index} cameraMove is invalid"
+        if panel.get("captions") or panel.get("dialogue") or panel.get("soundEffects"):
+            return f"shot {panel_index} contains lettering instead of a clean video frame"
     return None
 
 
@@ -12375,7 +12429,33 @@ def director_comic_plan(body: dict, job_id: str | None = None):
     """Create a strict, editable comic plan without generating images."""
     premise = str(body.get("premise") or "").strip()
     page_count = max(1, min(100, int(body.get("pageCount") or 1)))
-    panels_per_page = max(1, min(12, int(body.get("panelsPerPage") or 4)))
+    production_mode = (
+        "storyboard"
+        if str(body.get("productionMode") or "").strip().lower() == "storyboard"
+        else "comic"
+    )
+    is_storyboard = production_mode == "storyboard"
+    panels_per_page = (
+        1
+        if is_storyboard
+        else max(1, min(12, int(body.get("panelsPerPage") or 4)))
+    )
+    storyboard_aspect = (
+        "portrait"
+        if str(body.get("storyboardAspect") or "").strip().lower() == "portrait"
+        else "landscape"
+    )
+    storyboard_quality = (
+        "final"
+        if str(body.get("storyboardQuality") or "").strip().lower() == "final"
+        else "draft"
+    )
+    storyboard_resolution = {
+        ("landscape", "draft"): "832x448",
+        ("landscape", "final"): "1280x704",
+        ("portrait", "draft"): "448x832",
+        ("portrait", "final"): "704x1280",
+    }[(storyboard_aspect, storyboard_quality)]
     if not premise:
         raise HTTPException(status_code=400, detail="Comic premise is required")
     characters = body.get("characters") if isinstance(body.get("characters"), list) else []
@@ -12387,12 +12467,14 @@ def director_comic_plan(body: dict, job_id: str | None = None):
     story_context = str(body.get("storyContext") or "").strip()[:50000]
     source_story = body.get("sourceStory") if isinstance(body.get("sourceStory"), dict) else {}
     writing_llm = _comic_writing_llm(body)
-    shared_brief = f"""Premise: {premise}
+    shared_brief = f"""Production mode: {production_mode}
+Premise: {premise}
 Source Story Lab project: {json.dumps(source_story, ensure_ascii=False) if source_story else 'not supplied'}
 Source story bible / adaptation brief:
 {story_context or 'not supplied'}
-Exact page count: {page_count}
-Exactly {panels_per_page} panels per page.
+{"Exact storyboard shot count" if is_storyboard else "Exact page count"}: {page_count}
+{"Exactly one clean first-frame image per shot." if is_storyboard else f"Exactly {panels_per_page} panels per page."}
+{f"Video canvas: {storyboard_aspect}, {storyboard_quality}, {storyboard_resolution}. Every generated frame must use this same aspect ratio." if is_storyboard else ""}
 Language for ALL reader-facing dialogue/captions: {requested_language}
 Genre: {body.get('genre', 'Adventure')}
 Tone: {body.get('tone', 'Cinematic')}
@@ -12434,17 +12516,20 @@ Keep every field concise and use stable character IDs."""
             bible_schema["properties"]["storyStructure"]["minItems"] = page_count
             bible_schema["properties"]["storyStructure"]["maxItems"] = page_count
             bible = _generate_comic_director_json(
-                prompt=f"""Create the compact story and character bible for a sequential comic.
+                prompt=f"""Create the compact story and character bible for a {"video storyboard" if is_storyboard else "sequential comic"}.
 {shared_brief}
 
-When a source story bible is supplied, treat its plot, causal beats, character arcs,
-relationships, theme and ending as canon. Adapt them to sequential-comic pacing without
-silently replacing the story with a new one. User edits in this brief override inferred details.
+When a source story bible is supplied, its facts, character identities, relationships,
+world rules, long-term arcs, theme and eventual ending are canon. The Premise above is the
+production brief for THIS comic. If it asks for a self-contained chapter or side incident,
+invent one compact conflict that fits the canon: do not summarize every master beat, replay
+the complete source plot, finish the long-term arcs or reach the master ending. User edits in
+the production brief override inferred details but never silently rewrite the supplied canon.
 
-The synopsis must cover the complete arc across all {page_count} pages. Use concrete,
+The synopsis must cover the complete arc across all {page_count} {"shots" if is_storyboard else "pages"}. Use concrete,
 repeatable visual descriptions for characters and wardrobe.
 
-Create exactly one storyStructure entry for every page. Together they must form a causal,
+Create exactly one storyStructure entry for every {"shot" if is_storyboard else "page"}. Together they must form a causal,
 readable dramatic arc rather than a collection of unrelated scenes. Cover these fundamental
 stages, combining adjacent stages when the comic is short and distributing development across
 multiple pages when it is long:
@@ -12454,8 +12539,8 @@ multiple pages when it is long:
 4. Midpoint or reversal: new information or a costly decision changes the direction.
 5. Crisis and climax: the central conflict reaches an irreversible decisive action.
 6. Resolution: show the consequence, emotional change and a clear final image.
-Each page beat must advance the same conflict, specify its dramatic goal, and end with a
-turning point that motivates the following page. Do not repeat the same revelation or climax.
+Each beat must advance the same conflict, specify its dramatic goal, and end with a
+turning point that motivates the following {"shot" if is_storyboard else "page"}. Do not repeat the same revelation or climax.
 
 Decide whether a dedicated visual continuity bible materially helps this particular story.
 It normally helps historical, period, fantasy, science-fiction and strongly art-directed work.
@@ -12489,10 +12574,19 @@ with generic advice or invented restrictions merely because the field exists."""
         page_schema["properties"]["panels"]["minItems"] = panels_per_page
         page_schema["properties"]["panels"]["maxItems"] = panels_per_page
         panel_properties = page_schema["properties"]["panels"]["items"]["properties"]
+        panel_required = page_schema["properties"]["panels"]["items"]["required"]
         dialogue_schema = panel_properties["dialogue"]
-        dialogue_schema["maxItems"] = 2 if dialogue_density == "high" else 1
-        panel_properties["captions"]["maxItems"] = 1
-        panel_properties["soundEffects"]["maxItems"] = 1
+        if is_storyboard:
+            for required_field in ("videoPrompt", "durationSeconds", "cameraMove"):
+                if required_field not in panel_required:
+                    panel_required.append(required_field)
+            dialogue_schema["maxItems"] = 0
+            panel_properties["captions"]["maxItems"] = 0
+            panel_properties["soundEffects"]["maxItems"] = 0
+        else:
+            dialogue_schema["maxItems"] = 2 if dialogue_density == "high" else 1
+            panel_properties["captions"]["maxItems"] = 1
+            panel_properties["soundEffects"]["maxItems"] = 1
         for page_index in range(page_count):
             page_number = page_index + 1
             text_panel_ratio = {"low": 0.3, "medium": 0.55, "high": 0.8}.get(
@@ -12503,9 +12597,13 @@ with generic advice or invented restrictions merely because the field exists."""
                 1,
                 min(panels_per_page, int(panels_per_page * text_panel_ratio + 0.999)),
             )
-            per_panel_text_limit = 1 if panels_per_page >= 7 else 2
+            per_panel_text_limit = 0 if is_storyboard else (1 if panels_per_page >= 7 else 2)
             existing_page = planned_pages[page_index] if page_index < len(planned_pages) else None
-            existing_problem = _comic_page_problem(existing_page, panels_per_page)
+            existing_problem = (
+                _storyboard_page_problem(existing_page, panels_per_page)
+                if is_storyboard
+                else _comic_page_problem(existing_page, panels_per_page)
+            )
             if (
                 existing_page is not None
                 and existing_problem is None
@@ -12543,49 +12641,40 @@ with generic advice or invented restrictions merely because the field exists."""
                 if page_index < len(bible.get("storyStructure", []))
                 else {}
             )
-            if job_id:
-                _comic_plan_job_update(
-                    job_id,
-                    status="planning_page",
-                    message=(
-                        f"Repairing invalid page {page_number} of {page_count}: "
-                        f"{existing_problem}…"
-                        if existing_page is not None
-                        else f"Writing page {page_number} of {page_count}…"
-                    ),
-                    current=page_index,
-                    total=page_count,
-                    stage="page",
-                    page=page_number,
-                )
-            page = None
-            page_problem = existing_problem
-            for attempt in range(1, 4):
-                page = _generate_comic_director_json(
-                    prompt=f"""Write page {page_number} of this comic.
-{shared_brief}
-Story bible: {json.dumps(bible, ensure_ascii=False)}
-MANDATORY STORY BEAT FOR THIS PAGE: {json.dumps(assigned_beat, ensure_ascii=False)}
-{continuity}
-{future_continuity}
+            if is_storyboard:
+                production_rules = f"""This page is storyboard shot {page_number} and contains exactly one panel.
+The panel is a clean, full-bleed FIRST FRAME for a {storyboard_aspect} {storyboard_resolution}
+video. imagePrompt must describe a frozen initial state before any action begins, use the
+canonical appearance of every visible character, preserve screen direction, and describe
+only the held pose at the instant before the shot's action—not the later motion. It must
+request one image only: never a storyboard sheet, page, grid, collage,
+split screen, inset, frame, border, speech bubble, caption, subtitle, logo or watermark.
 
-Return one page with exactly {panels_per_page} panels and pageNumber {page_number}.
-Every panel must causally develop this page's assigned beat. Establish the page goal early,
-escalate or complicate it in the middle, and land on its turningPoint in the final panel.
-Do not jump ahead to a later page's climax or repeat an earlier page's resolution.
-Every imagePrompt describes exactly ONE full-bleed illustration for ONE panel, includes
-framing and repeats the canonical
-description of every character shown. Never ask the image model to render dialogue, captions,
-bubbles, lettering, logos or watermarks. Put readable text only in dialogue, captions or
-soundEffects. Keep each imagePrompt concise and below 700 characters. Never copy the complete
-styleBible into imagePrompt; include only details visibly needed for that shot. Never mention
-the comic's page count, panel count, page layout, grids, collages,
-split screens, inset panels or borders in imagePrompt. Every imagePrompt must be self-contained.
-Include the chosen art treatment and
-only the world details that visibly apply to that shot. Repeat exact era/year, architecture,
-technology and wardrobe when the premise or styleBible establishes them; do not invent a
-period constraint for contemporary, abstract or setting-neutral work. Preserve props and
-screen direction.
+videoPrompt is the actual prompt that will be sent to LTX image-to-video. Write one literal,
+chronological continuous shot under 180 words. Start from the supplied first frame and specify
+character performance and gestures, environmental motion, camera movement, timing, any spoken
+dialogue in quotation marks, and the final visual beat. No montage, cuts, alternate angles,
+new written text or redesign of the opening composition. Keep the established rendering
+medium—including anime or cel shading—throughout; never drift to photorealism or 3D.
+
+Choose durationSeconds between 2 and 10 seconds according to the amount of visible action.
+Choose cameraMove from none, push-in, pull-out, pan-left or pan-right. Keep captions, dialogue
+and soundEffects as empty arrays: spoken dialogue belongs inside videoPrompt for performance
+and audio generation, never as lettering on the first frame. List character IDs in visual
+priority order and make imagePrompt self-contained and shorter than 700 characters."""
+            else:
+                production_rules = f"""Every imagePrompt describes exactly ONE full-bleed
+illustration for ONE panel, includes framing and repeats the canonical description of every
+character shown. Never ask the image model to render dialogue, captions, bubbles, lettering,
+logos or watermarks. Put readable text only in dialogue, captions or soundEffects. Keep each
+imagePrompt concise and below 700 characters. Never copy the complete styleBible into
+imagePrompt; include only details visibly needed for that shot. Never mention the comic's
+page count, panel count, page layout, grids, collages, split screens, inset panels or borders
+in imagePrompt. Every imagePrompt must be self-contained. Include the chosen art treatment
+and only the world details that visibly apply to that shot. Repeat exact era/year,
+architecture, technology and wardrobe when the premise or styleBible establishes them; do
+not invent a period constraint for contemporary, abstract or setting-neutral work. Preserve
+props and screen direction.
 List panel character IDs in visual-priority order. The first ID is the identity anchor for
 image providers that accept only one character reference, so place the dominant or closest
 character first while still describing every visible character in imagePrompt.
@@ -12601,15 +12690,50 @@ Never repeat or paraphrase the same line in multiple fields. Complete all
 CRITICAL LANGUAGE LOCK: before returning JSON, scan every caption and dialogue line and
 ensure it is written in {requested_language}. Do not fall back to English unless the requested
 language itself is English. Keep only proper names unchanged.
+Dialogue may be omitted whenever silent storytelling is stronger."""
+            if job_id:
+                _comic_plan_job_update(
+                    job_id,
+                    status="planning_page",
+                    message=(
+                        f"Repairing invalid {'shot' if is_storyboard else 'page'} {page_number} of {page_count}: "
+                        f"{existing_problem}…"
+                        if existing_page is not None
+                        else f"Writing {'shot' if is_storyboard else 'page'} {page_number} of {page_count}…"
+                    ),
+                    current=page_index,
+                    total=page_count,
+                    stage="page",
+                    page=page_number,
+                )
+            page = None
+            page_problem = existing_problem
+            for attempt in range(1, 4):
+                page = _generate_comic_director_json(
+                    prompt=f"""Write {"storyboard shot" if is_storyboard else "page"} {page_number} of this {"video storyboard" if is_storyboard else "comic"}.
+{shared_brief}
+Story bible: {json.dumps(bible, ensure_ascii=False)}
+MANDATORY STORY BEAT FOR THIS {"SHOT" if is_storyboard else "PAGE"}: {json.dumps(assigned_beat, ensure_ascii=False)}
+{continuity}
+{future_continuity}
+
+Return one page with exactly {panels_per_page} panels and pageNumber {page_number}.
+Every panel must causally develop this assigned beat and land on its turningPoint.
+Do not jump ahead to a later climax or repeat an earlier resolution.
+{production_rules}
 {f"A previous attempt was rejected because {page_problem}. Return a complete corrected page." if page_problem else ""}
-Dialogue may be omitted whenever silent storytelling is stronger.""",
+""",
                     system_prompt=system_prompt,
                     schema=page_schema,
                     max_new_tokens=min(5000, max(1800, 700 + panels_per_page * 420)),
                     stage=f"page {page_number}, attempt {attempt}",
                     llm_override=writing_llm,
                 )
-                page_problem = _comic_page_problem(page, panels_per_page)
+                page_problem = (
+                    _storyboard_page_problem(page, panels_per_page)
+                    if is_storyboard
+                    else _comic_page_problem(page, panels_per_page)
+                )
                 if (
                     page_problem is None
                     and _comic_page_has_probable_english_drift(
@@ -12684,7 +12808,7 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
                         "bible": bible,
                         "pages": copy.deepcopy(planned_pages),
                     },
-                    message=f"Page {page_number} checkpoint saved.",
+                    message=f"{'Shot' if is_storyboard else 'Page'} {page_number} checkpoint saved.",
                     current=page_number,
                     total=page_count,
                 )
@@ -12692,7 +12816,7 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
                 _comic_plan_job_update(
                     job_id,
                     status="planning_page",
-                    message=f"Page {page_number} of {page_count} completed.",
+                    message=f"{'Shot' if is_storyboard else 'Page'} {page_number} of {page_count} completed.",
                     current=page_number,
                     total=page_count,
                     stage="page",
@@ -12727,6 +12851,18 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
             panel["imagePrompt"] = str(panel.get("imagePrompt") or panel["sceneDescription"])
             panel["framing"] = str(panel.get("framing") or "Medium shot")
             panel["continuityNotes"] = str(panel.get("continuityNotes") or "")
+            panel["videoPrompt"] = str(panel.get("videoPrompt") or "").strip()
+            try:
+                panel["durationSeconds"] = max(
+                    0.8,
+                    min(20.0, float(panel.get("durationSeconds") or 3)),
+                )
+            except (TypeError, ValueError):
+                panel["durationSeconds"] = 3
+            if panel.get("cameraMove") not in {
+                "none", "push-in", "pull-out", "pan-left", "pan-right",
+            }:
+                panel["cameraMove"] = "push-in"
             _normalize_comic_panel_arrays(panel)
             _normalize_comic_panel_character_ids(panel, characters)
             normalized_dialogue = []
@@ -12740,8 +12876,17 @@ Dialogue may be omitted whenever silent storytelling is stronger.""",
                     dialogue["bubbleType"] = "speech"
                 normalized_dialogue.append(dialogue)
             panel["dialogue"] = normalized_dialogue
-        _enforce_comic_page_text_budget(page, dialogue_density)
+        if is_storyboard:
+            for panel in panels:
+                panel["captions"] = []
+                panel["dialogue"] = []
+                panel["soundEffects"] = []
+            page["layoutHint"] = "grid"
+        else:
+            _enforce_comic_page_text_budget(page, dialogue_density)
         if (
+            not is_storyboard
+            and
             len(panels) in (3, 4, 6, 9)
             and page_index % 2 == 1
         ):
@@ -13049,6 +13194,7 @@ def director_comic_story_revise(body: dict):
     plan = body.get("plan")
     instruction = str(body.get("instruction") or "").strip()[:4000]
     dialogue_density = str(body.get("dialogueDensity") or "medium").lower()
+    is_storyboard = str(body.get("productionMode") or "").lower() == "storyboard"
     writing_llm = _comic_writing_llm(body)
     if not isinstance(plan, dict) or not isinstance(plan.get("pages"), list) or not plan["pages"]:
         raise HTTPException(status_code=400, detail="A valid comic plan is required")
@@ -13062,6 +13208,14 @@ def director_comic_story_revise(body: dict):
     schema["properties"]["pages"]["maxItems"] = page_count
     schema["properties"]["pages"]["items"]["properties"]["panels"]["minItems"] = panel_count
     schema["properties"]["pages"]["items"]["properties"]["panels"]["maxItems"] = panel_count
+    if is_storyboard:
+        panel_schema = schema["properties"]["pages"]["items"]["properties"]["panels"]["items"]
+        for field in ("videoPrompt", "durationSeconds", "cameraMove"):
+            if field not in panel_schema["required"]:
+                panel_schema["required"].append(field)
+        panel_schema["properties"]["captions"]["maxItems"] = 0
+        panel_schema["properties"]["dialogue"]["maxItems"] = 0
+        panel_schema["properties"]["soundEffects"]["maxItems"] = 0
     try:
         if not writing_llm:
             _ensure_llm_loaded()
@@ -13074,7 +13228,8 @@ Keep every pageNumber, panel id and panel order unchanged.
 Keep the same language: {plan.get("language") or "English"}.
 Return a complete plan. Improve storyStructure, logline, synopsis, narrativeRole,
 sceneDescription, dialogue, captions and continuityNotes. Update imagePrompt only when
-the revised action requires it. Do not introduce unexplained characters. Prefer silent
+the revised action requires it. {"For every shot, also improve and preserve videoPrompt, durationSeconds and cameraMove; keep captions, dialogue and soundEffects empty because the clean first frame contains no lettering." if is_storyboard else ""}
+Do not introduce unexplained characters. Prefer silent
 visual storytelling; never use dialogue to repeat what the image already shows.
 
 Existing plan: {json.dumps(plan, ensure_ascii=False)}""",
@@ -13101,7 +13256,13 @@ Existing plan: {json.dumps(plan, ensure_ascii=False)}""",
             source_panel = source_page["panels"][panel_index]
             panel["id"] = source_panel.get("id")
             panel["order"] = source_panel.get("order", panel_index + 1)
-        _enforce_comic_page_text_budget(page, dialogue_density)
+        if is_storyboard:
+            for panel in page["panels"]:
+                panel["captions"] = []
+                panel["dialogue"] = []
+                panel["soundEffects"] = []
+        else:
+            _enforce_comic_page_text_budget(page, dialogue_density)
     revised["characters"] = copy.deepcopy(plan.get("characters") or [])
     revised["version"] = 1
     revised["id"] = plan.get("id") or f"comic-plan-{uuid.uuid4().hex[:12]}"

@@ -746,6 +746,10 @@ export interface DirectorV2PlanRequest {
   lyrics?: unknown[]
   bpm?: number
   reference_image_path?: string
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
   speaker_mappings?: Record<string, unknown>
   characters?: Array<{ name: string; description: string }>
   audio_path?: string
@@ -760,6 +764,10 @@ export interface DirectorV2PlanRequest {
   platform?: string
   style?: string
   prompt_type?: string
+  image_model?: string
+  video_model?: string
+  seamless?: boolean
+  multishot_lora_mode?: boolean
   director_flags?: Record<string, boolean>
 }
 
@@ -1398,6 +1406,7 @@ export async function fetchComicPlanJob(jobId: string): Promise<{
   status: ComicPlanProgress['status']
   message: string
   error?: string
+  request?: import('../features/comics/types').ComicDirectorRequest
   result?: { plan: import('../features/comics/types').ComicPlan }
 }> {
   const response = await fetch(
@@ -1452,6 +1461,7 @@ export async function waitForComicPlanJob(
 
 export async function fetchLatestCompletedComicPlan(): Promise<{
   jobId: string
+  request?: import('../features/comics/types').ComicDirectorRequest
   result: { plan: import('../features/comics/types').ComicPlan }
   finishedAt?: number
 }> {
@@ -1491,6 +1501,7 @@ export async function reviseComicStory(params: {
   plan: import('../features/comics/types').ComicPlan
   instruction?: string
   dialogueDensity: import('../features/comics/types').ComicDirectorRequest['dialogueDensity']
+  productionMode?: import('../features/comics/types').ComicDirectorRequest['productionMode']
   writingProvider?: import('../features/comics/types').ComicDirectorRequest['writingProvider']
   writingModel?: string
   writingBaseUrl?: string
@@ -2031,6 +2042,10 @@ export async function planClipPromptsAndImages(params: {
   lyrics?: import('../types').LyricSegment[]
   bpm: number
   reference_image_path?: string | null
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
   speaker_mappings?: Record<string, { name: string; role: string }>
   prompt_type?: 'image' | 'video' | 'both'
   existing_image_prompts?: string[]
@@ -2073,6 +2088,10 @@ export async function planShortFilmPrompts(params: {
   scene_description: string
   lyrics?: import('../types').LyricSegment[]
   reference_image_path?: string | null
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
   speaker_mappings?: Record<string, { name: string; role: string }>
   characters?: { name: string; description: string }[]
   prompt_type?: 'image' | 'video' | 'both'
@@ -2100,6 +2119,10 @@ export async function planShortFilmScript(params: {
   story_description: string
   characters?: { name: string; description: string }[]
   reference_image_path?: string | null
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
   target_duration?: number
   target_scenes?: number
   narrative_mode?: boolean

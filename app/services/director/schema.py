@@ -247,7 +247,7 @@ class AudioPlan:
 
 # ── ShotPlan — the core unit ─────────────────────────────────────────
 
-VALID_SKILL_TYPES = {"music_video", "short_film", "podcast", "viral_video"}
+VALID_SKILL_TYPES = {"music_video", "short_film", "podcast", "viral_video", "comic_movie"}
 VALID_SOURCE_MODES = {"t2v", "i2v", "a2v", "retake", "extend"}
 VALID_IMAGE_STRATEGIES = {"reference_edit", "reference_inspired", "fresh_generation", "none"}
 VALID_CONTINUITY_STRATEGIES = {"independent", "continuous", "extend_previous"}

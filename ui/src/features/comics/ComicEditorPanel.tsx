@@ -190,8 +190,12 @@ function buildDirectorImagePrompt(
       character.negativePrompt ? `Never alter or add: ${character.negativePrompt}` : '',
     ].filter(Boolean).join('. ')
   }).filter(Boolean).join(' | ')
+  const storyboard = input?.productionMode === 'storyboard'
+  const singleImageLock = storyboard
+    ? 'STORYBOARD FRAME LOCK: Create exactly one full-bleed cinematic first frame in the requested video aspect ratio. No storyboard sheet, comic page, panel grid, collage, split screen, inset frame, border, speech bubble, caption, sound effect, subtitle, logo, watermark or lettering.'
+    : 'SINGLE IMAGE LOCK: Create exactly one full-bleed illustration for one comic panel. No comic page, panel grid, collage, split screen, inset panels, frames, borders, speech bubbles, captions, sound effects, text, logos, watermarks or lettering.'
   const fullPrompt = [
-    'SINGLE IMAGE LOCK: Create exactly one full-bleed illustration for one comic panel. No comic page, panel grid, collage, split screen, inset panels, frames, borders, speech bubbles, captions, sound effects, text, logos, watermarks or lettering.',
+    singleImageLock,
     input?.artStyle ? `VISUAL STYLE LOCK: ${removePageLayoutInstructions(input.artStyle)}.` : '',
     input?.worldContext ? `WORLD AND PERIOD LOCK: ${removePageLayoutInstructions(input.worldContext)}.` : '',
     visualBible && !repairedPanelPrompt.includes(visualBible)
@@ -216,7 +220,9 @@ function buildDirectorImagePrompt(
     return `${clipped}.`
   }
   const compactSections = [
-    'One full-bleed comic-panel illustration only. No grid, collage, border, bubbles, captions, text, logo or watermark.',
+    storyboard
+      ? 'One full-bleed cinematic first frame only. No storyboard sheet, grid, collage, border, bubbles, captions, subtitles, text, logo or watermark.'
+      : 'One full-bleed comic-panel illustration only. No grid, collage, border, bubbles, captions, text, logo or watermark.',
     trimSection(repairedPanelPrompt, 780),
     characterLocks ? `Character locks: ${trimSection(characterLocks, 260)}.` : '',
     input?.artStyle ? `Style: ${trimSection(removePageLayoutInstructions(input.artStyle), 140)}.` : '',
@@ -788,6 +794,9 @@ function InspectorPanel() {
 
 const initialDirector = (): ComicDirectorRequest => ({
   premise: '',
+  productionMode: 'comic',
+  storyboardAspect: 'landscape',
+  storyboardQuality: 'draft',
   pageCount: 4,
   language: 'English',
   format: 'a4',
@@ -950,20 +959,25 @@ export function ComicDirectorPanel({
       setRecoveryJobId('')
     }
     const staged = stagedStoryDirectorRequest()
-    setRequest(project.director?.input ?? staged ?? { ...initialDirector(), characters: project.characters })
-    if (staged) {
-      try { window.localStorage.removeItem('maestro-story-comic-draft') } catch { /* no-op */ }
+    if (project.director?.input) {
+      setRequest(project.director.input)
+    } else if (staged) {
+      setRequest(staged)
+    } else if (changedProject) {
+      setRequest({ ...initialDirector(), characters: project.characters })
     }
     // A project switch resets the form. Director edits inside the same project
     // are already applied through patch() and must not reset in-progress input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id])
   useEffect(() => {
-    const receiveStagedStory = () => {
-      const staged = stagedStoryDirectorRequest()
+    const receiveStagedStory = (event: Event) => {
+      const detail = (event as CustomEvent<ComicDirectorRequest>).detail
+      const staged = detail && typeof detail === 'object'
+        ? { ...initialDirector(), ...detail }
+        : stagedStoryDirectorRequest()
       if (!staged) return
       setRequest(staged)
-      try { window.localStorage.removeItem('maestro-story-comic-draft') } catch { /* no-op */ }
     }
     window.addEventListener('maestro:comic-staged', receiveStagedStory)
     return () => window.removeEventListener('maestro:comic-staged', receiveStagedStory)
@@ -1360,28 +1374,40 @@ export function ComicDirectorPanel({
   }
 
   const confirmNewComic = (withImages: boolean) => {
-    const estimatedPanels = Math.max(1, request.pageCount * request.panelsPerPage)
+    const storyboard = request.productionMode === 'storyboard'
+    const estimatedPanels = Math.max(
+      1,
+      request.pageCount * (storyboard ? 1 : request.panelsPerPage),
+    )
     const artworkNotice = withImages
-      ? ` After the script is ready, up to ${estimatedPanels} panel images will be generated and may use provider credits.`
+      ? ` After the plan is ready, up to ${estimatedPanels} ${storyboard ? 'shot images' : 'panel images'} will be generated and may use provider credits.`
       : ''
     return window.confirm(
-      `Create a new comic? When planning succeeds, it will replace the comic currently open and any unsaved changes will be lost.${artworkNotice}\n\nThe current comic will remain untouched if planning fails or is cancelled.`,
+      `Create a new ${storyboard ? 'video storyboard' : 'comic'}? When planning succeeds, it will replace the project currently open and any unsaved changes will be lost.${artworkNotice}\n\nThe current project will remain untouched if planning fails or is cancelled.`,
     )
   }
 
-  const placePlan = async (rawPlan: ComicPlan, withImages: boolean) => {
-      const plan = normalizeComicPlan(rawPlan, request.dialogueDensity)
+  const placePlan = async (
+    rawPlan: ComicPlan,
+    withImages: boolean,
+    placementRequest: ComicDirectorRequest = request,
+  ) => {
+      const plan = normalizeComicPlan(rawPlan, placementRequest.dialogueDensity)
       setPendingPlan(plan)
-      report(`Plan received: ${plan.pages.length} pages and ${
-        plan.pages.reduce((total, page) => total + page.panels.length, 0)
-      } panels.`)
+      const plannedImageCount = plan.pages.reduce(
+        (total, page) => total + page.panels.length,
+        0,
+      )
+      report(placementRequest.productionMode === 'storyboard'
+        ? `Plan received: ${plannedImageCount} video shots.`
+        : `Plan received: ${plan.pages.length} pages and ${plannedImageCount} panels.`)
       const currentProject = useComicStore.getState().project
       const freshProject = createComicProject()
       const preservedReferenceIds = new Set(
-        [...request.characters, ...plan.characters].flatMap(character => [
+        [...placementRequest.characters, ...plan.characters].flatMap(character => [
           character.referenceAssetId,
           ...(character.referenceAssetIds || []),
-        ]).concat(request.worldReferenceAssetIds || [])
+        ]).concat(placementRequest.worldReferenceAssetIds || [])
           .filter((assetId): assetId is string => Boolean(assetId)),
       )
       freshProject.assets = Object.fromEntries(
@@ -1391,22 +1417,40 @@ export function ComicDirectorPanel({
           .map(asset => [asset.id, asset]),
       )
       freshProject.style = structuredClone(currentProject.style)
-      freshProject.pageNumbering = structuredClone(currentProject.pageNumbering)
-      freshProject.format = {
-        ...freshProject.format,
-        preset: request.format,
-        ...(request.format !== 'custom' ? COMIC_FORMATS[request.format] : {
-          width: currentProject.format.width,
-          height: currentProject.format.height,
-          dpi: currentProject.format.dpi,
-        }),
+      const storyboard = placementRequest.productionMode === 'storyboard'
+      freshProject.pageNumbering = storyboard
+        ? { style: 'none' }
+        : structuredClone(currentProject.pageNumbering)
+      if (storyboard) {
+        const finalQuality = placementRequest.storyboardQuality === 'final'
+        const portrait = placementRequest.storyboardAspect === 'portrait'
+        freshProject.format = {
+          preset: 'custom',
+          width: portrait ? (finalQuality ? 704 : 448) : (finalQuality ? 1280 : 832),
+          height: portrait ? (finalQuality ? 1280 : 832) : (finalQuality ? 704 : 448),
+          dpi: 96,
+        }
+      } else {
+        freshProject.format = {
+          ...freshProject.format,
+          preset: placementRequest.format,
+          ...(placementRequest.format !== 'custom' ? COMIC_FORMATS[placementRequest.format] : {
+            width: currentProject.format.width,
+            height: currentProject.format.height,
+            dpi: currentProject.format.dpi,
+          }),
+        }
       }
-      const next = projectFromPlan(plan, freshProject)
+      const next = projectFromPlan(
+        plan,
+        freshProject,
+        placementRequest.productionMode || 'comic',
+      )
       next.director = {
         planId: plan.id,
-        provider: request.provider,
-        imageModel: request.imageModel,
-        input: request,
+        provider: placementRequest.provider,
+        imageModel: placementRequest.imageModel,
+        input: placementRequest,
         plan,
         completedPanelIds: [],
         panelJobs: {},
@@ -1420,11 +1464,17 @@ export function ComicDirectorPanel({
       setPendingPlan(null)
       try {
         window.localStorage.removeItem('maestro-last-comic-plan-result')
+        window.localStorage.removeItem('maestro-story-comic-draft')
+        window.localStorage.removeItem('maestro-story-comic-auto-start')
       } catch {
         // Private browsing may block storage; the in-memory state is enough.
       }
-      report('Pages, panels, dialogue and captions placed in the editor.')
-      notify({ kind: 'ok', text: `Director created ${plan.pages.length} editable pages.` })
+      report(storyboard
+        ? 'Video-ready frames, camera notes and I2V prompts placed in the editor.'
+        : 'Pages, panels, dialogue and captions placed in the editor.')
+      notify({ kind: 'ok', text: storyboard
+        ? `Director created ${plan.pages.length} editable storyboard shots.`
+        : `Director created ${plan.pages.length} editable pages.` })
       if (withImages) {
         report('Opening the comic canvas and starting panel artwork…')
         await new Promise(resolve => window.setTimeout(resolve, 0))
@@ -1434,9 +1484,9 @@ export function ComicDirectorPanel({
       }
   }
 
-  const makePlan = async (withImages = false) => {
+  const makePlan = async (withImages = false, skipConfirmation = false) => {
     if (!request.premise.trim()) return
-    if (!confirmNewComic(withImages)) return
+    if (!skipConfirmation && !confirmNewComic(withImages)) return
     rememberPrompt({
       prompt: request.premise,
       mode: 'comic-plan',
@@ -1470,6 +1520,33 @@ export function ComicDirectorPanel({
     }
   }
 
+  useEffect(() => {
+    if (busy !== null || !request.sourceStory?.id) return
+    let staged: { id?: string; revision?: number } | null = null
+    try {
+      staged = JSON.parse(
+        window.localStorage.getItem('maestro-story-comic-auto-start') || 'null',
+      )
+    } catch {
+      window.localStorage.removeItem('maestro-story-comic-auto-start')
+      return
+    }
+    if (
+      staged?.id !== request.sourceStory.id
+      || staged.revision !== request.sourceStory.revision
+    ) return
+
+    // Remove the hand-off before starting so React StrictMode, a remount or a
+    // failed request cannot submit the same paid generation twice.
+    window.localStorage.removeItem('maestro-story-comic-auto-start')
+    window.setTimeout(() => {
+      void makePlan(true, true)
+    }, 0)
+    // makePlan intentionally reads the current staged request. Re-running this
+    // effect for every activity/render update could submit duplicate jobs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request.sourceStory?.id, request.sourceStory?.revision])
+
   const recoverPlan = async () => {
     if (!confirmNewComic(createCompleteComic)) return
     setBusy('plan')
@@ -1477,11 +1554,13 @@ export function ComicDirectorPanel({
     try {
       const jobId = recoveryJobId.trim()
       let plan: ComicPlan | null = null
+      let placementRequest: ComicDirectorRequest | undefined
       // An explicitly entered durable job is authoritative. A stale browser
       // result from an older session must never shadow the ID visible here.
       if (jobId) {
         report(`Checking the saved state of ${jobId}…`)
         const job = await api.fetchComicPlanJob(jobId)
+        placementRequest = job.request
         if (job.status === 'completed' && job.result?.plan) {
           report(`Recovered completed plan ${jobId} without calling the LLM again.`)
           plan = job.result.plan
@@ -1498,7 +1577,7 @@ export function ComicDirectorPanel({
         plan = pendingPlan
       }
       if (!plan) throw new Error('Enter the comic planning job ID to recover')
-      await placePlan(plan, createCompleteComic)
+      await placePlan(plan, createCompleteComic, placementRequest)
     } catch (error) {
       const message = (error as Error).message
       report(message, { state: 'error' })
@@ -1598,9 +1677,38 @@ export function ComicDirectorPanel({
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-accent-blue/30 bg-accent-blue/5 p-3">
-        <div className="flex items-center gap-2 text-xs font-medium text-text-primary"><WandSparkles size={14} /> Comic Director</div>
-        <p className="text-[10px] text-text-muted mt-1">Plan exact pages, editable dialogue and image prompts, then generate every panel locally or with MiniMax.</p>
+        <div className="flex items-center gap-2 text-xs font-medium text-text-primary"><WandSparkles size={14} /> {request.productionMode === 'storyboard' ? 'Storyboard Director' : 'Comic Director'}</div>
+        <p className="text-[10px] text-text-muted mt-1">
+          {request.productionMode === 'storyboard'
+            ? 'Plan clean video first frames plus editable motion, camera and timing prompts, then render every shot locally or with MiniMax.'
+            : 'Plan exact pages, editable dialogue and image prompts, then generate every panel locally or with MiniMax.'}
+        </p>
       </div>
+      <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-tertiary/30 p-1">
+        <button
+          className={`${button} ${request.productionMode !== 'storyboard' ? 'border-accent-blue text-accent-blue' : ''}`}
+          disabled={busy !== null}
+          onClick={() => patch('productionMode', 'comic')}
+        >
+          Comic
+        </button>
+        <button
+          className={`${button} ${request.productionMode === 'storyboard' ? 'border-purple-400 text-purple-300' : ''}`}
+          disabled={busy !== null}
+          onClick={() => {
+            patch('productionMode', 'storyboard')
+            patch('panelsPerPage', 1)
+          }}
+        >
+          Storyboard / pre-video
+        </button>
+      </div>
+      {request.productionMode === 'storyboard' && (
+        <div className="rounded-lg border border-purple-400/30 bg-purple-400/5 p-2.5 text-[10px] text-text-muted">
+          One page becomes one clean video shot. Dialogue may guide acting inside the motion
+          prompt, but no lettering is drawn over the generated frame.
+        </div>
+      )}
       <div className="rounded-lg border border-border bg-bg-tertiary/30 p-2.5">
         <div className="text-[9px] uppercase tracking-wide text-text-muted">Planning LLM</div>
         <div className="mt-1 text-[11px] text-text-primary">
@@ -1636,12 +1744,38 @@ export function ComicDirectorPanel({
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Pages"><input className={input} type="number" min={1} max={100} value={request.pageCount} onChange={event => patch('pageCount', Math.max(1, Number(event.target.value)))} /></Field>
-        <Field label="Panels / page"><input className={input} type="number" min={1} max={12} value={request.panelsPerPage} onChange={event => patch('panelsPerPage', Math.max(1, Number(event.target.value)))} /></Field>
+        <Field label={request.productionMode === 'storyboard' ? 'Shots' : 'Pages'}><input className={input} type="number" min={1} max={100} value={request.pageCount} onChange={event => patch('pageCount', Math.max(1, Number(event.target.value)))} /></Field>
+        {request.productionMode === 'storyboard' ? (
+          <Field label="Screen">
+            <select
+              className={input}
+              value={request.storyboardAspect || 'landscape'}
+              onChange={event => patch('storyboardAspect', event.target.value as ComicDirectorRequest['storyboardAspect'])}
+            >
+              <option value="landscape">TV / desktop · landscape</option>
+              <option value="portrait">Mobile / social · portrait</option>
+            </select>
+          </Field>
+        ) : (
+          <Field label="Panels / page"><input className={input} type="number" min={1} max={12} value={request.panelsPerPage} onChange={event => patch('panelsPerPage', Math.max(1, Number(event.target.value)))} /></Field>
+        )}
         <Field label="Language">
           <EditableLanguageInput className={input} value={request.language} onChange={value => patch('language', value)} />
         </Field>
-        <Field label="Format"><select className={input} value={request.format} onChange={event => patch('format', event.target.value as ComicDirectorRequest['format'])}>{Object.entries(COMIC_FORMATS).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select></Field>
+        {request.productionMode === 'storyboard' ? (
+          <Field label="Frame quality">
+            <select
+              className={input}
+              value={request.storyboardQuality || 'draft'}
+              onChange={event => patch('storyboardQuality', event.target.value as ComicDirectorRequest['storyboardQuality'])}
+            >
+              <option value="draft">Draft · 832×448 / 448×832</option>
+              <option value="final">Final · 1280×704 / 704×1280</option>
+            </select>
+          </Field>
+        ) : (
+          <Field label="Format"><select className={input} value={request.format} onChange={event => patch('format', event.target.value as ComicDirectorRequest['format'])}>{Object.entries(COMIC_FORMATS).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select></Field>
+        )}
         <Field label="Genre">
           <SuggestedChoice
             value={request.genre}
@@ -1658,7 +1792,7 @@ export function ComicDirectorPanel({
             customPlaceholder="Write a custom tone"
           />
         </Field>
-        <Field label="Dialogue density">
+        {request.productionMode !== 'storyboard' && <Field label="Dialogue density">
           <select
             className={input}
             value={request.dialogueDensity}
@@ -1668,7 +1802,7 @@ export function ComicDirectorPanel({
             <option value="medium">Medium — text in about 55%, with silent beats</option>
             <option value="high">High — text in about 80%, still readable</option>
           </select>
-        </Field>
+        </Field>}
       </div>
       <Field label="Art style override (optional)"><input
         className={input}
@@ -1997,12 +2131,57 @@ export function ComicDirectorPanel({
                       <textarea className={input} rows={5} value={panel.imagePrompt}
                         onChange={event => updatePlanPanel(pageIndex, panelIndex, { imagePrompt: event.target.value })} />
                     </Field>
-                    <Field label="Dialogue / captions">
-                      <PanelScriptEditor
-                        panel={panel}
-                        onCommit={value => commitPanelText(pageIndex, panelIndex, value)}
-                      />
-                    </Field>
+                    {project.director?.input.productionMode === 'storyboard' ? (
+                      <>
+                        <Field label="Video motion / performance prompt">
+                          <textarea
+                            className={input}
+                            rows={7}
+                            value={panel.videoPrompt || ''}
+                            onChange={event => updatePlanPanel(pageIndex, panelIndex, {
+                              videoPrompt: event.target.value,
+                            })}
+                          />
+                        </Field>
+                        <div className="grid grid-cols-[1fr_90px] gap-2">
+                          <Field label="Camera">
+                            <select
+                              className={input}
+                              value={panel.cameraMove || 'push-in'}
+                              onChange={event => updatePlanPanel(pageIndex, panelIndex, {
+                                cameraMove: event.target.value as ComicPlanPanel['cameraMove'],
+                              })}
+                            >
+                              <option value="none">Static</option>
+                              <option value="push-in">Push in</option>
+                              <option value="pull-out">Pull out</option>
+                              <option value="pan-left">Pan left</option>
+                              <option value="pan-right">Pan right</option>
+                            </select>
+                          </Field>
+                          <Field label="Seconds">
+                            <input
+                              className={input}
+                              type="number"
+                              min={.8}
+                              max={20}
+                              step={.1}
+                              value={panel.durationSeconds || 3}
+                              onChange={event => updatePlanPanel(pageIndex, panelIndex, {
+                                durationSeconds: Number(event.target.value),
+                              })}
+                            />
+                          </Field>
+                        </div>
+                      </>
+                    ) : (
+                      <Field label="Dialogue / captions">
+                        <PanelScriptEditor
+                          panel={panel}
+                          onCommit={value => commitPanelText(pageIndex, panelIndex, value)}
+                        />
+                      </Field>
+                    )}
                     <button className={`${button} w-full`} disabled={singleBusy !== null || busy !== null} onClick={() => generateSingle(pageIndex, panelIndex)}>
                       {singleBusy === panel.id ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
                       {project.director!.completedPanelIds.includes(panel.id) ? 'Regenerate panel' : 'Generate panel'}
@@ -2336,6 +2515,8 @@ export function ComicEditorPanel() {
   const newProject = async () => {
     if (dirty && !confirm('Create a new comic and discard unsaved changes?')) return
     await checkpointCurrent('Before creating a new comic')
+    window.localStorage.removeItem('maestro-story-comic-draft')
+    window.localStorage.removeItem('maestro-story-comic-auto-start')
     useComicStore.getState().setProject(createComicProject())
   }
 

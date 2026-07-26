@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Settings, X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
@@ -69,6 +69,12 @@ export function Sidebar() {
     setDirectorCollapsed(collapsed)
     window.localStorage.setItem('maestro-director-sidebar-collapsed', String(collapsed))
   }
+
+  useEffect(() => {
+    const openDirector = () => setDirectorSidebarCollapsed(false)
+    window.addEventListener('maestro:director-open', openDirector)
+    return () => window.removeEventListener('maestro:director-open', openDirector)
+  }, [])
 
   const modeToggle = (size: 'sm' | 'md') => (
     <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">

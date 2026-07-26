@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Check, ImagePlus, Loader2, Plus, ShieldCheck, Sparkles, Trash2, Upload,
+  Check, Film, ImagePlus, Loader2, Plus, ShieldCheck, Sparkles, Trash2, Upload,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
+import type { PlannedClip } from '../../types'
 import { forEachComicPanelCapture } from './export'
 import { comicId, normalizeComicPlan, simplifyDirectorText } from './model'
 import { useComicStore } from './store'
@@ -106,9 +107,9 @@ export function ComicWritingProviderFields({
 
 function scriptForPanel(panel: ComicPlanPanel): string {
   return [
-    ...panel.captions.map(text => `[Caption] ${text}`),
-    ...panel.dialogue.map(line => `[${line.speakerId || 'Dialogue'}] ${line.text}`),
-    ...panel.soundEffects.map(text => `[SFX] ${text}`),
+    ...(panel.captions || []).map(text => `[Caption] ${text}`),
+    ...(panel.dialogue || []).map(line => `[${line.speakerId || 'Dialogue'}] ${line.text}`),
+    ...(panel.soundEffects || []).map(text => `[SFX] ${text}`),
   ].join('\n')
 }
 
@@ -240,6 +241,7 @@ export function ComicCharactersPanel({
 export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', text: string) => void }) {
   const project = useComicStore(state => state.project)
   const director = project.director
+  const storyboard = director?.input.productionMode === 'storyboard'
   const [revisionInstruction, setRevisionInstruction] = useState('')
   const [revising, setRevising] = useState(false)
   if (!director) return <p className="text-xs text-text-muted">Create an editable Director plan first.</p>
@@ -285,6 +287,7 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
         plan: director.plan,
         instruction: revisionInstruction,
         dialogueDensity: director.input.dialogueDensity,
+        productionMode: director.input.productionMode,
         writingProvider: director.input.writingProvider,
         writingModel: director.input.writingModel,
         writingBaseUrl: director.input.writingBaseUrl,
@@ -313,7 +316,11 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
     <div className="space-y-3">
       <div className={`rounded-lg border p-3 ${director.scriptApprovedAt ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-amber-500/40 bg-amber-500/5'}`}>
         <div className="flex items-center gap-2 text-xs font-semibold text-text-primary">{director.scriptApprovedAt ? <Check size={14} className="text-emerald-400" /> : <Sparkles size={14} className="text-amber-300" />} Script v{director.scriptVersion || 1}</div>
-        <p className="mt-1 text-[10px] text-text-muted">Review the dramatic beats and complete lettering before generating expensive artwork.</p>
+        <p className="mt-1 text-[10px] text-text-muted">
+          {storyboard
+            ? 'Review dramatic beats, first-frame prompts and ready-to-render I2V prompts before generating expensive artwork.'
+            : 'Review the dramatic beats and complete lettering before generating expensive artwork.'}
+        </p>
       </div>
       <ComicWritingProviderFields
         value={director.input}
@@ -329,7 +336,60 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
       <textarea className={input} rows={4} value={director.plan.synopsis} onChange={event => patchPlan({ synopsis: event.target.value })} placeholder="Synopsis" />
       {!!director.plan.storyStructure?.length && <div className="space-y-2"><strong className="text-[10px] uppercase tracking-wide text-text-muted">Page beats</strong>{director.plan.storyStructure.map((beat, index) => <div key={beat.pageNumber} className="space-y-1.5 rounded border border-border p-2"><input className={input} value={beat.stage} onChange={event => patchBeat(index, { stage: event.target.value })} /><textarea className={input} rows={2} value={beat.goal} onChange={event => patchBeat(index, { goal: event.target.value })} /><textarea className={input} rows={2} value={beat.turningPoint} onChange={event => patchBeat(index, { turningPoint: event.target.value })} /></div>)}</div>}
       <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5"><strong className="text-[10px] uppercase tracking-wide text-text-muted">Improve story with the LLM</strong><textarea className={input} rows={3} value={revisionInstruction} onChange={event => setRevisionInstruction(event.target.value)} placeholder="Optional direction: clarify the protagonist's goal, make the midpoint reverse the plan, pay off the opening image…" /><button className={`${button} w-full border-purple-400/40 text-purple-300`} disabled={revising} onClick={improveStory}>{revising ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Revise full story</button></div>
-      <div className="space-y-2"><strong className="text-[10px] uppercase tracking-wide text-text-muted">Full script</strong>{director.plan.pages.map((page, pageIndex) => <details key={`${page.pageNumber}-${director.scriptVersion || 1}`} className="rounded border border-border bg-bg-tertiary/30" style={{ contentVisibility: 'auto', containIntrinsicSize: '400px' }} open={pageIndex === 0}><summary className="cursor-pointer p-2 text-xs text-text-primary">Page {page.pageNumber} · {page.panels.length} panels</summary><div className="space-y-2 p-2 pt-0">{page.panels.map((panel, panelIndex) => <label key={`${panel.id}-${director.scriptVersion || 1}`} className="block text-[10px] text-text-muted">Panel {panelIndex + 1} · {panel.narrativeRole}<textarea className={`${input} mt-1`} rows={3} defaultValue={scriptForPanel(panel)} onBlur={event => patchPanel(pageIndex, panelIndex, event.target.value)} placeholder="Silent panel" /></label>)}</div></details>)}</div>
+      <div className="space-y-2">
+        <strong className="text-[10px] uppercase tracking-wide text-text-muted">
+          {storyboard ? 'Shot list and video prompts' : 'Full script'}
+        </strong>
+        {director.plan.pages.map((page, pageIndex) => (
+          <details
+            key={`${page.pageNumber}-${director.scriptVersion || 1}`}
+            className="rounded border border-border bg-bg-tertiary/30"
+            style={{ contentVisibility: 'auto', containIntrinsicSize: '400px' }}
+            open={pageIndex === 0}
+          >
+            <summary className="cursor-pointer p-2 text-xs text-text-primary">
+              {storyboard ? `Shot ${page.pageNumber}` : `Page ${page.pageNumber} · ${page.panels.length} panels`}
+            </summary>
+            <div className="space-y-2 p-2 pt-0">
+              {page.panels.map((panel, panelIndex) => storyboard ? (
+                <div key={`${panel.id}-${director.scriptVersion || 1}`} className="space-y-2 rounded border border-border p-2">
+                  <label className="block text-[10px] text-text-muted">
+                    First-frame image prompt
+                    <textarea
+                      className={`${input} mt-1`}
+                      rows={4}
+                      value={panel.imagePrompt}
+                      onChange={event => {
+                        const plan = structuredClone(useComicStore.getState().project.director!.plan)
+                        plan.pages[pageIndex].panels[panelIndex].imagePrompt = event.target.value
+                        patchPlan({ pages: plan.pages })
+                      }}
+                    />
+                  </label>
+                  <label className="block text-[10px] text-text-muted">
+                    I2V motion / performance prompt
+                    <textarea
+                      className={`${input} mt-1`}
+                      rows={6}
+                      value={panel.videoPrompt || ''}
+                      onChange={event => {
+                        const plan = structuredClone(useComicStore.getState().project.director!.plan)
+                        plan.pages[pageIndex].panels[panelIndex].videoPrompt = event.target.value
+                        patchPlan({ pages: plan.pages })
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : (
+                <label key={`${panel.id}-${director.scriptVersion || 1}`} className="block text-[10px] text-text-muted">
+                  Panel {panelIndex + 1} · {panel.narrativeRole}
+                  <textarea className={`${input} mt-1`} rows={3} defaultValue={scriptForPanel(panel)} onBlur={event => patchPanel(pageIndex, panelIndex, event.target.value)} placeholder="Silent panel" />
+                </label>
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
       <button className={`${button} w-full border-emerald-500/50 text-emerald-300`} onClick={approve}><ShieldCheck size={13} /> Approve this script</button>
     </div>
   )
@@ -379,12 +439,28 @@ export function ComicQualityPanel({ notify }: { notify: (kind: 'ok' | 'error', t
 export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', text: string) => void }) {
   const project = useComicStore(state => state.project)
   const refreshOutputs = useStore(state => state.refreshOutputs)
-  const [aspect, setAspect] = useState<'landscape' | 'portrait' | 'square'>('landscape')
+  const selectedVideoModel = useStore(state => state.selectedModelPerMode.video)
+  const storyboard = project.director?.input.productionMode === 'storyboard'
+  const [aspect, setAspect] = useState<'landscape' | 'portrait' | 'square'>(() =>
+    project.director?.input.storyboardAspect || 'landscape')
   const [defaultDuration, setDefaultDuration] = useState(3)
   const [transition, setTransition] = useState('crossfade')
-  const [busy, setBusy] = useState(false)
+  const [movieQuality, setMovieQuality] = useState<'480p' | '720p'>(() =>
+    project.director?.input.storyboardQuality === 'final' ? '720p' : '480p')
+  const [movieImageFit, setMovieImageFit] = useState<'smart' | 'crop'>('smart')
+  const [busy, setBusy] = useState<'animatic' | 'movie' | null>(null)
   const [progress, setProgress] = useState('')
   const [result, setResult] = useState<{ name: string; url: string } | null>(null)
+  useEffect(() => {
+    setAspect(project.director?.input.storyboardAspect || 'landscape')
+    setMovieQuality(
+      project.director?.input.storyboardQuality === 'final' ? '720p' : '480p',
+    )
+  }, [
+    project.id,
+    project.director?.input.storyboardAspect,
+    project.director?.input.storyboardQuality,
+  ])
   const panelCount = project.pages.reduce(
     (total, page) => total + page.elements.filter(element => element.type === 'panel' && !element.parentId).length,
     0,
@@ -405,7 +481,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       notify('error', `This animatic has ${panelCount} panels; the safe limit is 200.`)
       return
     }
-    setBusy(true)
+    setBusy('animatic')
     setResult(null)
     try {
       const panels: Array<{
@@ -461,9 +537,313 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     } catch (error) {
       notify('error', (error as Error).message)
     } finally {
-      setBusy(false)
+      setBusy(null)
       setProgress('')
     }
   }
-  return <div className="space-y-3"><div className="rounded-lg border border-cyan-400/30 bg-cyan-400/5 p-3"><div className="text-xs font-semibold text-text-primary">Comic to video</div><p className="mt-1 text-[10px] text-text-muted">Each final lettered panel becomes a shot. Panels are captured and uploaded one at a time to keep memory stable. The comic remains the script; motion, timing and transitions create an editable animatic.</p></div><label className="block text-[10px] text-text-muted">Format<select className={`${input} mt-1`} value={aspect} onChange={event => setAspect(event.target.value as typeof aspect)}><option value="landscape">Landscape 1080p</option><option value="portrait">Portrait 1080p</option><option value="square">Square 1080p</option></select></label><label className="block text-[10px] text-text-muted">Default seconds per panel<input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} /></label><label className="block text-[10px] text-text-muted">Transition<select className={`${input} mt-1`} value={transition} onChange={event => setTransition(event.target.value)}><option value="crossfade">Crossfade</option><option value="fade-black">Fade through black</option><option value="wipe-left">Wipe left</option><option value="dissolve">Dissolve</option><option value="zoom-in">Zoom portal</option><option value="none">Hard cuts</option></select></label>{project.director && <details className="rounded border border-border bg-bg-tertiary/30"><summary className="cursor-pointer p-2 text-xs text-text-primary">Shot timing and camera moves</summary><div className="space-y-2 p-2 pt-0">{project.director.plan.pages.flatMap((page, pageIndex) => page.panels.map((panel, panelIndex) => <div key={panel.id} className="grid grid-cols-[1fr_70px] gap-1.5 rounded border border-border p-1.5"><span className="text-[10px] text-text-muted">{pageIndex + 1}.{panelIndex + 1} · {panel.narrativeRole}</span><input className={input} type="number" min={.8} max={20} step={.1} value={panel.durationSeconds || defaultDuration} onChange={event => updateShot(pageIndex, panelIndex, { durationSeconds: Number(event.target.value) })} /><select className={`${input} col-span-2`} value={panel.cameraMove || 'push-in'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}><option value="none">Static</option><option value="push-in">Slow push-in</option><option value="pull-out">Slow pull-out</option><option value="pan-left">Pan left</option><option value="pan-right">Pan right</option></select></div>))}</div></details>}<button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={busy || panelCount === 0} onClick={create}>{busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {progress || 'Create video animatic'}</button>{result && <div className="space-y-2 rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><video src={result.url} controls className="w-full rounded" /><button className={`${button} w-full border-emerald-500/40 text-emerald-300`} onClick={() => useStore.getState().setMediaFilter('videoeditor')}>Open in Video Editor</button></div>}</div>
+
+  const convertToMovie = async () => {
+    if (panelCount > 200) {
+      notify('error', `This comic has ${panelCount} panels; the safe conversion limit is 200.`)
+      return
+    }
+    const totalSeconds = Math.round(project.director?.plan.pages.reduce(
+      (sum, page) => sum + page.panels.reduce(
+        (pageSum, planned) => pageSum + (planned.durationSeconds || defaultDuration),
+        0,
+      ),
+      0,
+    ) || panelCount * defaultDuration)
+    if (!window.confirm(
+      `Convert ${panelCount} comic panels into about ${totalSeconds}s of generated video? `
+      + 'The existing artwork will be reused, so no new panel images are generated, but this starts one image-to-video shot per panel and may consume substantial video credits/time.',
+    )) return
+
+    setBusy('movie')
+    setResult(null)
+    try {
+      const comicShots: Array<{
+        comic_title: string
+        image_path: string
+        page_number: number
+        panel_number: number
+        duration: number
+        camera_move: string
+        narrative_role: string
+        scene_description: string
+        image_prompt: string
+        framing: string
+        characters: string[]
+        script: string
+        visual_style: string
+        video_prompt: string
+      }> = []
+      await forEachComicPanelCapture(async (capture, current, total) => {
+        setProgress(`Preparing artwork ${current}/${total}`)
+        const blob = await (await fetch(capture.dataUrl)).blob()
+        const upload = await api.uploadImage(new File(
+          [blob],
+          `comic-movie-${capture.pageNumber}-${capture.panelNumber}.png`,
+          { type: 'image/png' },
+        ))
+        const planned = project.director?.plan.pages[capture.pageNumber - 1]?.panels[capture.panelNumber - 1]
+        comicShots.push({
+          comic_title: project.title,
+          image_path: upload.path,
+          page_number: capture.pageNumber,
+          panel_number: capture.panelNumber,
+          duration: planned?.durationSeconds || defaultDuration,
+          camera_move: planned?.cameraMove || 'push-in',
+          narrative_role: planned?.narrativeRole || `Panel ${capture.pageNumber}.${capture.panelNumber}`,
+          scene_description: planned?.sceneDescription || '',
+          image_prompt: planned?.imagePrompt || '',
+          framing: planned?.framing || 'match comic panel',
+          characters: planned?.characters || [],
+          script: planned ? scriptForPanel(planned) : '',
+          video_prompt: planned?.videoPrompt || '',
+          visual_style: [
+            project.style.name,
+            project.style.promptSuffix,
+            project.director?.plan.styleBible || '',
+          ].filter(Boolean).join('. '),
+        })
+      }, (current, total) => setProgress(`Capturing clean artwork ${current}/${total}`), {
+        // Lettering remains in the comic/script but is removed from I2V first
+        // frames so the video model cannot warp speech bubbles or captions.
+        includeLettering: false,
+      })
+
+      const movieContext = [
+        `TITLE: ${project.title}`,
+        `SYNOPSIS: ${project.synopsis}`,
+        `LANGUAGE: ${project.language}`,
+        `COMIC STYLE: ${project.style.name}. ${project.style.promptSuffix}`,
+        project.director?.plan.logline ? `LOGLINE: ${project.director.plan.logline}` : '',
+        project.director?.plan.synopsis ? `DIRECTOR SYNOPSIS: ${project.director.plan.synopsis}` : '',
+        project.director?.plan.styleBible ? `STYLE BIBLE: ${project.director.plan.styleBible}` : '',
+        project.director?.input.storyContext ? `MASTER STORY CANON:\n${project.director.input.storyContext}` : '',
+        project.director?.input.worldContext ? `WORLD CONTINUITY:\n${project.director.input.worldContext}` : '',
+        project.director?.input.forbiddenElements ? `NEVER INTRODUCE: ${project.director.input.forbiddenElements}` : '',
+        `CHARACTERS:\n${project.characters.map(character => [
+          character.id,
+          character.name,
+          character.description,
+          character.personality,
+          character.motivation,
+          character.voice,
+          character.wardrobe,
+          character.visualNotes,
+        ].filter(Boolean).join(' · ')).join('\n')}`,
+        project.director?.plan.storyStructure?.length
+          ? `STORY STRUCTURE:\n${JSON.stringify(project.director.plan.storyStructure)}`
+          : '',
+      ].filter(Boolean).join('\n\n')
+
+      const before = useStore.getState()
+      const videoModel = before.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
+      await before.loadModelOptions(videoModel)
+      const state = useStore.getState()
+      const qualityResolution = movieQuality === '720p'
+        ? (aspect === 'portrait' ? '704x1280' : aspect === 'square' ? '1024x1024' : '1280x704')
+        : (aspect === 'portrait' ? '448x832' : aspect === 'square' ? '640x640' : '832x448')
+      const fps = state.modelOptions?.fps || 16
+      const plannedClips = comicShots.reduce<PlannedClip[]>((clips, shot, index) => {
+        const start = index === 0 ? 0 : Number(clips[index - 1].end)
+        clips.push({
+          start,
+          end: start + shot.duration,
+          section_label: `${shot.page_number}.${shot.panel_number}`,
+          energy: 0.5,
+          suggested_prompt_hint: shot.narrative_role,
+          beat_count: 0,
+          duration_frames: Math.max(1, Math.round(shot.duration * fps)),
+        })
+        return clips
+      }, [])
+
+      setProgress('Submitting comic movie to Director…')
+      const { pipeline_id } = await api.startPipeline({
+        pipeline_type: 'comic_movie',
+        auto_mode: true,
+        workspace: state.activeWorkspace,
+        scene_description: movieContext,
+        comic_shots: comicShots,
+        provided_clip_image_paths: comicShots.map(shot => shot.image_path),
+        video_image_fit: movieImageFit,
+        planned_clips: plannedClips,
+        seamless: false,
+        fps,
+        frames_steps: state.modelOptions?.frames_steps || 8,
+        frames_minimum: state.modelOptions?.frames_minimum || 41,
+        use_director_v2: true,
+        llm_model_id: state.servicesConfig?.llm_model_id || state.llmStatus?.model_id,
+        llm_device: state.servicesConfig?.llm_device || state.llmStatus?.device,
+        llm_provider: state.servicesConfig?.llm_provider || 'local',
+        writing_provider: project.director?.input.writingProvider || 'maestro',
+        writing_model: project.director?.input.writingModel || '',
+        writing_base_url: project.director?.input.writingBaseUrl || '',
+        characters: project.characters.map(character => ({
+          name: character.name,
+          description: character.description,
+        })),
+        target_duration: totalSeconds,
+        narrative_mode: true,
+        image_model: state.selectedModelPerMode.image || 'flux2_klein_9b',
+        image_params: {
+          ...(state.savedParamsPerMode.image || { num_inference_steps: 4, guidance_scale: 1 }),
+          resolution: qualityResolution,
+        },
+        image_loras: state.savedLoraPerMode.image || {},
+        video_model: videoModel,
+        video_params: {
+          ...(state.savedParamsPerMode.video || { num_inference_steps: 8, guidance_scale: 1 }),
+          resolution: qualityResolution,
+        },
+        video_loras: state.savedLoraPerMode.video || {},
+        video_spatial_upsampling: state.directorVideoSpatialUpsampling,
+        video_film_grain_intensity: state.directorVideoFilmGrainIntensity,
+        video_film_grain_saturation: state.directorVideoFilmGrainSaturation,
+        video_self_refiner: state.directorVideoSelfRefiner,
+        audio_scale: state.directorAudioScale,
+      })
+
+      state.setGenerationMode('video')
+      state.setSidebarMode('director')
+      state.setDirectorSkill('short_film')
+      state.setMediaFilter('all')
+      useStore.setState({
+        pipelineId: pipeline_id,
+        pipelineStatus: null,
+        pipelinePolling: true,
+        directorStep: 'plan',
+        directorLoading: true,
+        directorError: null,
+        directorSceneDescription: movieContext,
+        directorPlannedClips: plannedClips,
+        directorClipPlans: [],
+        directorClipImages: [],
+        directorAutoMode: true,
+        directorSeamless: false,
+        shortFilmPath: 'story',
+        shortFilmTargetDuration: totalSeconds,
+      })
+      useStore.getState().pollPipelineStatus()
+      window.dispatchEvent(new Event('maestro:director-open'))
+      notify('ok', 'Comic movie started in Director. Every shot will reuse its panel artwork as the I2V first frame.')
+    } catch (error) {
+      notify('error', (error as Error).message)
+    } finally {
+      setBusy(null)
+      setProgress('')
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-purple-400/30 bg-purple-400/5 p-3">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
+          <Film size={14} className="text-purple-300" /> Convert {storyboard ? 'storyboard' : 'comic'} to AI film
+        </div>
+        <p className="mt-1 text-[10px] text-text-muted">
+          {storyboard
+            ? 'Each approved first frame and its editable I2V prompt go directly to Director. Missing prompts alone are completed by the LLM.'
+            : 'The LLM reads the comic canon and every scene, then writes one motion/performance prompt per panel. Clean panel artwork becomes the real first frame of each I2V shot; speech bubbles stay in the script instead of being distorted by the video model.'}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block text-[10px] text-text-muted">Movie format
+          <select className={`${input} mt-1`} value={aspect} onChange={event => setAspect(event.target.value as typeof aspect)}>
+            <option value="landscape">Landscape</option>
+            <option value="portrait">Portrait</option>
+            <option value="square">Square</option>
+          </select>
+        </label>
+        <label className="block text-[10px] text-text-muted">I2V quality
+          <select className={`${input} mt-1`} value={movieQuality} onChange={event => setMovieQuality(event.target.value as typeof movieQuality)}>
+            <option value="480p">480p · faster test</option>
+            <option value="720p">720p · final</option>
+          </select>
+        </label>
+      </div>
+      <label className="block text-[10px] text-text-muted">Panel fit
+        <select className={`${input} mt-1`} value={movieImageFit} onChange={event => setMovieImageFit(event.target.value as typeof movieImageFit)}>
+          <option value="smart">Smart fill · keep the whole panel</option>
+          <option value="crop">Crop to fill · no borders</option>
+        </select>
+        <span className="mt-1 block text-[9px] text-text-muted">
+          Smart fill preserves the complete panel and fills spare space with a subdued blurred edge copy. Every shot keeps one fixed movie resolution, which is required for reliable joining.
+        </span>
+      </label>
+      {selectedVideoModel?.includes('gguf') && (
+        <div className="rounded border border-amber-400/30 bg-amber-400/5 px-2 py-1.5 text-[10px] text-amber-200">
+          GGUF saves VRAM, but can be much slower on Linux without a native GGUF CUDA kernel. On an RTX 4090, prefer LTX-2.3 Distilled 1.1 (INT8) or Distilled FP8 for speed.
+        </div>
+      )}
+      <label className="block text-[10px] text-text-muted">Default seconds per panel
+        <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} />
+      </label>
+      {project.director && (
+        <details className="rounded border border-border bg-bg-tertiary/30">
+          <summary className="cursor-pointer p-2 text-xs text-text-primary">Shot timing and camera moves</summary>
+          <div className="space-y-2 p-2 pt-0">
+            {project.director.plan.pages.flatMap((page, pageIndex) => page.panels.map((planned, panelIndex) => (
+              <div key={planned.id} className="grid grid-cols-[1fr_70px] gap-1.5 rounded border border-border p-1.5">
+                <span className="text-[10px] text-text-muted">{pageIndex + 1}.{panelIndex + 1} · {planned.narrativeRole}</span>
+                <input className={input} type="number" min={.8} max={20} step={.1} value={planned.durationSeconds || defaultDuration} onChange={event => updateShot(pageIndex, panelIndex, { durationSeconds: Number(event.target.value) })} />
+                <select className={`${input} col-span-2`} value={planned.cameraMove || 'push-in'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}>
+                  <option value="none">Static</option>
+                  <option value="push-in">Slow push-in</option>
+                  <option value="pull-out">Slow pull-out</option>
+                  <option value="pan-left">Pan left</option>
+                  <option value="pan-right">Pan right</option>
+                </select>
+                {storyboard && (
+                  <textarea
+                    className={`${input} col-span-2`}
+                    rows={5}
+                    value={planned.videoPrompt || ''}
+                    onChange={event => updateShot(pageIndex, panelIndex, {
+                      videoPrompt: event.target.value,
+                    })}
+                    placeholder="Chronological motion, performance, camera and final beat…"
+                  />
+                )}
+              </div>
+            )))}
+          </div>
+        </details>
+      )}
+      <button className={`${button} w-full border-purple-400/50 text-purple-300`} disabled={Boolean(busy) || panelCount === 0} onClick={convertToMovie}>
+        {busy === 'movie' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
+        {busy === 'movie' && progress
+          ? progress
+          : `Convert ${panelCount} ${storyboard ? 'shots' : 'panels'} to AI film`}
+      </button>
+
+      <div className="border-t border-border pt-3">
+        <div className="text-xs font-semibold text-text-primary">Quick animatic · no generative video</div>
+        <p className="mt-1 text-[10px] text-text-muted">Captures final lettered panels and adds FFmpeg camera moves and transitions. Fast, deterministic and editable in Video Editor.</p>
+      </div>
+      <label className="block text-[10px] text-text-muted">Animatic transition
+        <select className={`${input} mt-1`} value={transition} onChange={event => setTransition(event.target.value)}>
+          <option value="crossfade">Crossfade</option>
+          <option value="fade-black">Fade through black</option>
+          <option value="wipe-left">Wipe left</option>
+          <option value="dissolve">Dissolve</option>
+          <option value="zoom-in">Zoom portal</option>
+          <option value="none">Hard cuts</option>
+        </select>
+      </label>
+      <button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={Boolean(busy) || panelCount === 0} onClick={create}>
+        {busy === 'animatic' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+        {busy === 'animatic' && progress ? progress : 'Create video animatic'}
+      </button>
+      {result && (
+        <div className="space-y-2 rounded border border-emerald-500/30 bg-emerald-500/5 p-2">
+          <video src={result.url} controls className="w-full rounded" />
+          <button className={`${button} w-full border-emerald-500/40 text-emerald-300`} onClick={() => useStore.getState().setMediaFilter('videoeditor')}>Open in Video Editor</button>
+        </div>
+      )}
+    </div>
+  )
 }

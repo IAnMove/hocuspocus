@@ -10,7 +10,12 @@ import { EditableLanguageInput } from '../../components/common/EditableLanguageI
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
-import { buildComicAdaptation } from './adaptations'
+import {
+  buildComicAdaptation,
+  buildShortFilmAdaptation,
+  DEFAULT_COMIC_CHAPTER_DIRECTION,
+  DEFAULT_SHORT_FILM_DIRECTION,
+} from './adaptations'
 import { normalizeStoryProject, storyId, useStoryStore } from './store'
 import { normalizeStoryCharacter } from './model'
 import type {
@@ -338,7 +343,13 @@ export function StoryLabPanel() {
   const [tab, setTab] = useState<StoryTab>('overview')
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
   const [imageBusy, setImageBusy] = useState('')
+  const [productionBusy, setProductionBusy] = useState<'film' | null>(null)
   const [instruction, setInstruction] = useState('')
+  const [comicDirection, setComicDirection] = useState(DEFAULT_COMIC_CHAPTER_DIRECTION)
+  const [comicPageCount, setComicPageCount] = useState(4)
+  const [comicPanelsPerPage, setComicPanelsPerPage] = useState(4)
+  const [filmDirection, setFilmDirection] = useState(DEFAULT_SHORT_FILM_DIRECTION)
+  const [filmDuration, setFilmDuration] = useState(45)
   const [jobProgress, setJobProgress] = useState('')
   const [recoveryJobId, setRecoveryJobId] = useState(() =>
     window.localStorage.getItem(storyJobKey(activeWorkspace, project.id)) || '')
@@ -368,6 +379,11 @@ export function StoryLabPanel() {
 
   useEffect(() => {
     setRecoveryJobId(window.localStorage.getItem(storyJobKey(activeWorkspace, project.id)) || '')
+    setComicDirection(DEFAULT_COMIC_CHAPTER_DIRECTION)
+    setComicPageCount(4)
+    setComicPanelsPerPage(4)
+    setFilmDirection(DEFAULT_SHORT_FILM_DIRECTION)
+    setFilmDuration(45)
     try {
       const saved = JSON.parse(window.localStorage.getItem(storyResultKey(activeWorkspace, project.id)) || 'null')
       setPendingDraft(saved?.result ? {
@@ -947,19 +963,39 @@ export function StoryLabPanel() {
     }
   }
 
-  const stageComic = () => {
-    if (useComicStore.getState().dirty && !window.confirm(
-      'Create a new comic from this story? Unsaved changes in the current comic will be lost.',
-    )) return
-    const { comic, request } = buildComicAdaptation(project)
+  const stageComic = (autoStart = false) => {
+    const existingDirty = useComicStore.getState().dirty
+    const pageCount = Math.max(1, Math.min(100, Math.round(comicPageCount || 4)))
+    const panelsPerPage = Math.max(1, Math.min(12, Math.round(comicPanelsPerPage || 4)))
+    const estimatedPanels = pageCount * panelsPerPage
+    const confirmed = autoStart
+      ? window.confirm(
+        `Generate a complete ${pageCount}-page, ${estimatedPanels}-panel comic chapter from this story? The current comic will be replaced and image generation may use provider credits.`,
+      )
+      : !existingDirty || window.confirm(
+        'Open a new comic chapter in Director? Unsaved changes in the current comic will be lost.',
+      )
+    if (!confirmed) return
+    const { comic, request } = buildComicAdaptation(project, comicDirection, {
+      pageCount,
+      panelsPerPage,
+    })
     useComicStore.getState().setProject(comic)
     window.localStorage.removeItem('maestro-last-comic-plan-result')
     window.localStorage.removeItem('maestro-last-comic-plan-job')
     window.localStorage.setItem('maestro-story-comic-draft', JSON.stringify(request))
-    window.dispatchEvent(new Event('maestro:comic-staged'))
+    if (autoStart) {
+      window.localStorage.setItem('maestro-story-comic-auto-start', JSON.stringify({
+        id: project.id,
+        revision: project.revision,
+      }))
+    } else {
+      window.localStorage.removeItem('maestro-story-comic-auto-start')
+    }
+    window.dispatchEvent(new CustomEvent('maestro:comic-staged', { detail: request }))
     patch({
       productions: [...project.productions, {
-        id: storyId('production'), kind: 'comic', title: project.title,
+        id: storyId('production'), kind: 'comic', title: `${project.title} · comic chapter`,
         createdAt: new Date().toISOString(), sourceVersion: project.revision,
         sourceSnapshot: { ...structuredClone(project), productions: [] },
         targetId: comic.id,
@@ -971,52 +1007,59 @@ export function StoryLabPanel() {
         status: 'staged',
       }],
     })
-    useStore.getState().setMediaFilter('comics')
+    const maestro = useStore.getState()
+    maestro.setMediaFilter('comics')
+    maestro.setSidebarMode('director')
+    maestro.setDirectorSkill('comic')
+    window.dispatchEvent(new Event('maestro:director-open'))
   }
 
-  const loadFilmProduction = async (source: StoryProject) => {
+  const loadFilmProduction = async (
+    source: StoryProject,
+    direction = DEFAULT_SHORT_FILM_DIRECTION,
+    autoStart = false,
+    targetDuration = filmDuration,
+  ) => {
+    const adaptation = buildShortFilmAdaptation(source, direction, targetDuration)
     const director = useStore.getState()
     director.directorReset()
-    const description = [
-      `Title: ${source.title}`,
-      `Genre / tone: ${source.genre} / ${source.tone}`,
-      `Logline: ${source.logline || source.premise}`,
-      `Story: ${source.synopsis}`,
-      `World: ${source.world.summary}`,
-      'Dramatic beats:',
-      ...source.beats.map(beat => `${beat.stage} — ${beat.title}: ${beat.summary}. Turn: ${beat.turn}`),
-      'Characters:',
-      ...source.characters.map(character => `${character.name} (${character.role}): ${character.personality}. Wants ${character.desire}. Arc: ${character.arc}. Visual: ${character.appearance}, ${character.wardrobe}.`),
-    ].join('\n')
     const store = useStore.getState()
-    store.directorSetSceneDescription(description)
+    store.setGenerationMode('video')
+    // setSidebarMode normally sends a fresh Director session to its route
+    // chooser. Open it before restoring the Story Lab payload, otherwise it
+    // overwrites the preloaded `style` step with `upload`.
+    store.setSidebarMode('director')
+    const selectedVideoModel = useStore.getState().selectedModelPerMode.video
+    if (selectedVideoModel) await useStore.getState().loadModelOptions(selectedVideoModel)
+    store.directorSetSceneDescription(adaptation.sceneDescription)
     store.setDirectorSkill('short_film')
-    store.setDirectorAutoMode(source.workflowMode === 'automatic')
-    for (const character of source.characters) {
-      const asset = source.assets[character.primaryReferenceAssetId || '']
+    store.shortFilmSetPath('story')
+    store.shortFilmSetCharacters(adaptation.characters)
+    store.shortFilmSetTargetDuration(adaptation.targetDuration)
+    store.shortFilmSetNarrative(adaptation.narrative)
+    store.setDirectorAutoMode(autoStart)
+    useStore.setState({
+      directorWritingProvider: source.provider.writingProvider,
+      directorWritingModel: source.provider.writingModel,
+      directorWritingBaseUrl: source.provider.writingBaseUrl,
+    })
+    for (const reference of adaptation.characterReferences) {
+      const asset = source.assets[reference.assetId]
       if (!asset) continue
       try {
         const blob = await fetch(asset.source).then(response => {
           if (!response.ok) throw new Error('Reference unavailable')
           return response.blob()
         })
-        const file = new File([blob], asset.name || `${character.id}.png`, { type: blob.type })
+        const file = new File([blob], asset.name || `${reference.assetId}.png`, { type: blob.type })
         store.directorAddCharacterRef(file)
         const index = useStore.getState().directorCharacterRefs.length - 1
-        useStore.getState().directorSetCharacterRefLabel(index, character.name)
+        useStore.getState().directorSetCharacterRefLabel(index, reference.label)
       } catch {
         // The written bible is still staged if an older reference disappeared.
       }
     }
-    const locationReferences: Array<{ assetId: string; label: string }> = [
-      ...source.world.referenceAssetIds.map(assetId => ({
-        assetId,
-        label: source.world.summary ? `${source.title} · world` : 'World',
-      })),
-      ...source.world.locations.flatMap(location =>
-        location.referenceAssetIds.map(assetId => ({ assetId, label: location.name }))),
-    ]
-    for (const reference of locationReferences) {
+    for (const reference of adaptation.locationReferences) {
       const asset = source.assets[reference.assetId]
       if (!asset) continue
       try {
@@ -1035,12 +1078,14 @@ export function StoryLabPanel() {
         // Keep staging the production; the missing asset remains visible in Story Lab.
       }
     }
-    store.setSidebarMode('director')
+    useStore.setState({ directorStep: 'style' })
     store.setMediaFilter('all')
-    return description
+    window.dispatchEvent(new Event('maestro:director-open'))
+    if (autoStart) await useStore.getState().startDirectorPipeline()
+    return adaptation
   }
 
-  const stageFilm = async () => {
+  const stageFilm = async (autoStart = false) => {
     const director = useStore.getState()
     const hasDirectorWork = Boolean(
       director.directorSceneDescription.trim()
@@ -1048,20 +1093,47 @@ export function StoryLabPanel() {
       || director.directorCharacterRefs.length
       || director.directorLocationRefs.length,
     )
-    if (hasDirectorWork && !window.confirm(
-      'Create a clean Director production from this story? The current Director draft will be replaced.',
-    )) return
-    const description = await loadFilmProduction(project)
-    patch({
-      productions: [...project.productions, {
-        id: storyId('production'), kind: 'film', title: project.title,
-        createdAt: new Date().toISOString(), sourceVersion: project.revision,
-        sourceSnapshot: { ...structuredClone(project), productions: [] },
-        targetName: project.title,
-        targetSnapshot: { sceneDescription: description },
-        status: 'staged',
-      }],
-    })
+    const confirmed = autoStart
+      ? window.confirm(
+        'Generate a complete short-film episode from this story? The current Director draft will be replaced and image/video generation may use provider credits.',
+      )
+      : !hasDirectorWork || window.confirm(
+        'Open a clean short-film episode in Director? The current Director draft will be replaced.',
+    )
+    if (!confirmed) return
+    setProductionBusy('film')
+    try {
+      const adaptation = await loadFilmProduction(project, filmDirection, autoStart, filmDuration)
+      patch({
+        productions: [...project.productions, {
+          id: storyId('production'), kind: 'film', title: `${project.title} · short episode`,
+          createdAt: new Date().toISOString(), sourceVersion: project.revision,
+          sourceSnapshot: { ...structuredClone(project), productions: [] },
+          targetName: `${project.title} · short episode`,
+          targetSnapshot: {
+            direction: filmDirection,
+            sceneDescription: adaptation.sceneDescription,
+            characters: adaptation.characters,
+            targetDuration: adaptation.targetDuration,
+            narrative: adaptation.narrative,
+          },
+          status: 'staged',
+        }],
+      })
+      setNotice({
+        kind: 'ok',
+        text: autoStart
+          ? 'The short-film episode is running in Director; its pipeline remains recoverable from the Dashboard.'
+          : 'The complete story canon and approved visual references are loaded in Short Film Director.',
+      })
+    } catch (error) {
+      setNotice({
+        kind: 'error',
+        text: `The short-film episode could not be staged: ${(error as Error).message}`,
+      })
+    } finally {
+      setProductionBusy(null)
+    }
   }
 
   const reopenProduction = async (productionId: string) => {
@@ -1082,9 +1154,13 @@ export function StoryLabPanel() {
       window.localStorage.removeItem('maestro-last-comic-plan-job')
       if (request && typeof request === 'object') {
         window.localStorage.setItem('maestro-story-comic-draft', JSON.stringify(request))
-        window.dispatchEvent(new Event('maestro:comic-staged'))
+        window.dispatchEvent(new CustomEvent('maestro:comic-staged', { detail: request }))
       }
-      useStore.getState().setMediaFilter('comics')
+      const maestro = useStore.getState()
+      maestro.setMediaFilter('comics')
+      maestro.setSidebarMode('director')
+      maestro.setDirectorSkill('comic')
+      window.dispatchEvent(new Event('maestro:director-open'))
       return
     }
     const source = normalizeStoryProject(production.sourceSnapshot)
@@ -1098,7 +1174,11 @@ export function StoryLabPanel() {
     if (hasWork && !window.confirm(
       'Reopen this film staging? The current Director draft will be replaced.',
     )) return
-    await loadFilmProduction(source)
+    const direction = typeof production.targetSnapshot?.direction === 'string'
+      ? production.targetSnapshot.direction
+      : DEFAULT_SHORT_FILM_DIRECTION
+    const targetDuration = Number(production.targetSnapshot?.targetDuration) || 45
+    await loadFilmProduction(source, direction, false, targetDuration)
   }
 
   const restoreProductionSource = (productionId: string) => {
@@ -1400,14 +1480,68 @@ export function StoryLabPanel() {
                   <div className={`${panel} space-y-3`}>
                     <BookOpen size={26} className="text-accent-blue" />
                     <h3 className="font-semibold text-text-primary">Comic adaptation</h3>
-                    <p className="text-xs text-text-muted">Loads the complete editable bible into Comic Director, including arcs, relationships, locations, beats and approved identity images. You can change every field before planning.</p>
-                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={stageComic}><ChevronRight size={13} /> Open in Comic Studio</button>
+                    <p className="text-xs text-text-muted">Creates a self-contained chapter inside the master canon. Director receives every arc, relationship, location and approved identity image.</p>
+                    <textarea className={input} rows={4} value={comicDirection} onChange={event => setComicDirection(event.target.value)} aria-label="Comic chapter direction" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="block text-[10px] text-text-muted">Pages
+                        <input
+                          className={`${input} mt-1`}
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={comicPageCount}
+                          onChange={event => setComicPageCount(Math.max(1, Math.min(100, Number(event.target.value) || 1)))}
+                        />
+                      </label>
+                      <label className="block text-[10px] text-text-muted">Panels per page
+                        <input
+                          className={`${input} mt-1`}
+                          type="number"
+                          min={1}
+                          max={12}
+                          value={comicPanelsPerPage}
+                          onChange={event => setComicPanelsPerPage(Math.max(1, Math.min(12, Number(event.target.value) || 1)))}
+                        />
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {[4, 12, 24].map(count => (
+                        <button
+                          key={count}
+                          type="button"
+                          className={`${button} ${comicPageCount === count ? 'border-accent-blue text-accent-blue' : ''}`}
+                          onClick={() => setComicPageCount(count)}
+                        >
+                          {count === 4 ? '4 · quick test' : `${count} pages`}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[9px] text-text-muted">
+                      Planned size: {comicPageCount * comicPanelsPerPage} panels. Longer chapters take proportionally more planning time and image credits.
+                    </p>
+                    <button className={`${button} w-full border-accent-blue text-accent-blue`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={() => stageComic(true)}><Sparkles size={13} /> Generate complete comic chapter</button>
+                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={() => stageComic(false)}><ChevronRight size={13} /> Open in Comic Director</button>
+                    <p className="text-[9px] text-text-muted">Complete generation creates the plan and artwork and may consume provider credits. Director mode lets you review every field first.</p>
                   </div>
                   <div className={`${panel} space-y-3`}>
                     <Film size={26} className="text-purple-400" />
                     <h3 className="font-semibold text-text-primary">Film adaptation</h3>
-                    <p className="text-xs text-text-muted">Loads the story, beats and approved character images into Director. Guided/automatic follows this Story Lab project.</p>
-                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={stageFilm}><ChevronRight size={13} /> Open in Director</button>
+                    <p className="text-xs text-text-muted">Creates a short narrative episode instead of compressing the whole story. The cast, world and visual references remain attached.</p>
+                    <textarea className={input} rows={4} value={filmDirection} onChange={event => setFilmDirection(event.target.value)} aria-label="Short-film episode direction" />
+                    <label className="block text-[10px] text-text-muted">Target duration · seconds
+                      <input
+                        className={`${input} mt-1`}
+                        type="number"
+                        min={10}
+                        max={1800}
+                        step={5}
+                        value={filmDuration}
+                        onChange={event => setFilmDuration(Math.max(10, Math.min(1800, Number(event.target.value) || 45)))}
+                      />
+                    </label>
+                    <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate complete short film</button>
+                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> Open in Short Film Director</button>
+                    <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
                   </div>
                 </div>
                 {productionIssues.length > 0 && (

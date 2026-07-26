@@ -1187,6 +1187,9 @@ interface AppState {
   shortFilmCharacters: ShortFilmCharacter[]
   shortFilmPath: ShortFilmPath | null
   shortFilmTargetDuration: number
+  directorWritingProvider: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible'
+  directorWritingModel: string
+  directorWritingBaseUrl: string
   shortFilmNarrative: boolean
   shortFilmSetCharacters: (characters: ShortFilmCharacter[]) => void
   shortFilmSetPath: (path: ShortFilmPath) => void
@@ -3659,6 +3662,28 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
+    // Image conditioning alone does not guarantee that a video model will
+    // retain an illustrated medium. Prefix every I2V prompt with a compact,
+    // deterministic style anchor by default. This is deliberately applied at
+    // submit time so it also covers direct Studio jobs, re-rolls and
+    // multi-clip generations; Director applies the same policy server-side.
+    const hasI2VStart = state.generationMode === 'video'
+      && String(params.image_prompt_type || '').includes('S')
+      && Boolean(params.image_start)
+    if (hasI2VStart && params.preserve_source_style !== false) {
+      const anchor = 'Use the supplied image as the exact first frame. Preserve its visual medium, palette, linework, shading and character design throughout, including anime or cel shading when visible; do not restyle it or make an illustrated source photorealistic.'
+      const rawPrompt = String(params.prompt || '')
+      if (!rawPrompt.toLowerCase().includes('preserve its visual medium')) {
+        params.prompt = rawPrompt
+          .split('\n')
+          .map(line => line.trim() ? `${anchor} ${line.trim()}` : anchor)
+          .join('\n')
+      }
+    }
+    // UI-only policy flag: the backend receives the resulting prompt, not an
+    // unknown generation parameter.
+    delete params.preserve_source_style
+
     // Voice reference (ID-LoRA) — upload if present, add to params
     if (state.directorVoiceRef) {
       let vrPath = state.directorVoiceRefPath
@@ -4608,6 +4633,9 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmCharacters: [],
   shortFilmPath: null,
   shortFilmTargetDuration: 30,
+  directorWritingProvider: 'maestro',
+  directorWritingModel: '',
+  directorWritingBaseUrl: '',
   shortFilmNarrative: false,
   llmStreamText: '',
   llmStreamDone: true,
@@ -5110,6 +5138,8 @@ export const useStore = create<AppState>((set, get) => ({
           reference_image_path: refImagePath ?? undefined,
           ...extraRefs,
           speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
+          image_model: get().selectedModelPerMode.image || undefined,
+          video_model: get().selectedModelPerMode.video || undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -5554,7 +5584,16 @@ export const useStore = create<AppState>((set, get) => ({
       shortFilmCharacters: [],
       shortFilmPath: null,
       shortFilmTargetDuration: 30,
+      directorWritingProvider: 'maestro',
+      directorWritingModel: '',
+      directorWritingBaseUrl: '',
       shortFilmNarrative: false,
+      // Detach this editor session from any prior recoverable pipeline. The
+      // backend job is intentionally not cancelled and remains in Dashboard,
+      // but its poller must not overwrite the next story loaded into Director.
+      pipelineId: null,
+      pipelineStatus: null,
+      pipelinePolling: false,
     })
   },
 
@@ -5705,6 +5744,8 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
           characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
+          image_model: get().selectedModelPerMode.image || undefined,
+          video_model: get().selectedModelPerMode.video || undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -5763,14 +5804,19 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       const existingImagePrompts = directorClipPlans.map(p => p.image_prompt || '')
-      const { directorCharacterRefPaths: crp2, directorLocationRefPaths: lrp2 } = get()
+      const {
+        directorCharacterRefPaths: crp2,
+        directorCharacterRefLabels: crl2,
+        directorLocationRefPaths: lrp2,
+        directorLocationRefLabels: lrl2,
+      } = get()
       const result = await api.planShortFilmPrompts({
         clips: directorPlannedClips,
         scene_description: directorSceneDescription,
         lyrics: directorAnalysis?.lyrics ?? undefined,
         reference_image_path: directorReferenceImagePath,
-        ...(crp2.length > 0 ? { character_ref_paths: crp2 } : {}),
-        ...(lrp2.length > 0 ? { location_ref_paths: lrp2 } : {}),
+        ...(crp2.length > 0 ? { character_ref_paths: crp2, character_ref_labels: crl2 } : {}),
+        ...(lrp2.length > 0 ? { location_ref_paths: lrp2, location_ref_labels: lrl2 } : {}),
         speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
         characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
         prompt_type: 'video',
@@ -5830,6 +5876,8 @@ export const useStore = create<AppState>((set, get) => ({
           fps: get().modelOptions?.fps ?? 24,
           frames_steps: get().modelOptions?.frames_steps ?? 4,
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
+          image_model: get().selectedModelPerMode.image || undefined,
+          video_model: get().selectedModelPerMode.video || undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -6733,7 +6781,13 @@ export const useStore = create<AppState>((set, get) => ({
       try {
         const uploaded = await api.uploadImage(state.directorCharacterRefs[i])
         charPaths.push(uploaded.path)
-      } catch { /* skip failed uploads */ }
+      } catch (error) {
+        // Paths are a compact prefix aligned with labels. Continuing after a
+        // failed middle upload would attach the next character's image to the
+        // wrong name, which is worse than omitting the remaining references.
+        console.error('Failed to upload a character reference for pipeline:', error)
+        break
+      }
     }
     if (charPaths.length > state.directorCharacterRefPaths.length) {
       set({ directorCharacterRefPaths: charPaths })
@@ -6744,7 +6798,10 @@ export const useStore = create<AppState>((set, get) => ({
       try {
         const uploaded = await api.uploadImage(state.directorLocationRefs[i])
         locPaths.push(uploaded.path)
-      } catch { /* skip failed uploads */ }
+      } catch (error) {
+        console.error('Failed to upload a location reference for pipeline:', error)
+        break
+      }
     }
     if (locPaths.length > state.directorLocationRefPaths.length) {
       set({ directorLocationRefPaths: locPaths })
@@ -6790,6 +6847,9 @@ export const useStore = create<AppState>((set, get) => ({
       llm_model_id: state.servicesConfig?.llm_model_id || state.llmStatus?.model_id,
       llm_device: state.servicesConfig?.llm_device || state.llmStatus?.device,
       llm_provider: state.servicesConfig?.llm_provider || 'local',
+      writing_provider: state.directorWritingProvider,
+      writing_model: state.directorWritingModel,
+      writing_base_url: state.directorWritingBaseUrl,
       lyrics: directorAnalysis?.lyrics || '',
       bpm: directorAnalysis?.bpm,
       speaker_mappings: directorSpeakerMappings,

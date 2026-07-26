@@ -665,7 +665,7 @@ export function DirectorChat() {
                     setReferenceImage={setReferenceImage}
                   />
                   {<AdditionalRefsSection />}
-                  {isShortFilm && referenceImage && (
+                  {isShortFilm && (
                     <CharacterNaming
                       characters={shortFilmCharacters}
                       setCharacters={shortFilmSetCharacters}
@@ -844,12 +844,10 @@ export function DirectorChat() {
                     setReferenceImage={setReferenceImage}
                   />
                   {<AdditionalRefsSection />}
-                  {referenceImage && (
-                    <CharacterNaming
-                      characters={shortFilmCharacters}
-                      setCharacters={shortFilmSetCharacters}
-                    />
-                  )}
+                  <CharacterNaming
+                    characters={shortFilmCharacters}
+                    setCharacters={shortFilmSetCharacters}
+                  />
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[10px] text-text-muted flex items-center gap-1">

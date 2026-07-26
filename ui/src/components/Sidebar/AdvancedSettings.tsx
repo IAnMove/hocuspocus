@@ -128,6 +128,8 @@ export function useAdvancedActiveItems(): string[] {
   // badge with nothing visibly active in the panel.
   const refCount = Array.isArray(params.image_refs) ? params.image_refs.length : (params.image_refs ? 1 : 0)
   if (params.injection_strength != null && params.injection_strength !== 1.0 && refCount > 0) items.push('Injection strength')
+  if (params.preserve_source_style === false) items.push('Source restyling allowed')
+  if (params.image_fit_mode === 'crop') items.push('I2V crop to canvas')
   // Process letter codes persist by design (the dropdown remembers the
   // user's choice across sessions), but their REQUIRED inputs are
   // ephemeral and stripped from persistence: frames injection ("F")
@@ -417,6 +419,41 @@ export function AdvancedSettings() {
                     <option value={1}>Enabled with P1-Norm</option>
                     <option value={2}>Enabled with P2-Norm</option>
                   </select>
+                </div>
+              )}
+
+              {/* I2V style anchoring. The start frame carries much of the
+                  appearance, but an explicit prompt anchor materially reduces
+                  anime/comic inputs drifting toward photorealism. */}
+              {isVideo && (hasStartImage || params.image_mode === 2) && (
+                <div className="space-y-2">
+                  <label className="block text-[10px] text-text-muted">
+                    Start image fit
+                    <select
+                      value={params.image_fit_mode || 'source'}
+                      onChange={e => setParam('image_fit_mode', e.target.value as 'source' | 'crop')}
+                      className="mt-1 w-full rounded-lg border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:border-accent-blue focus:outline-none"
+                    >
+                      <option value="source">Match source aspect · no content loss</option>
+                      <option value="crop">Crop to selected video canvas</option>
+                    </select>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={params.preserve_source_style !== false}
+                      onChange={e => setParam('preserve_source_style', e.target.checked)}
+                      className="accent-accent-blue"
+                    />
+                    <span className="text-[11px] uppercase tracking-wider text-text-muted">
+                      Preserve source image style
+                    </span>
+                  </label>
+                  <p className="text-[9px] text-text-muted/60">
+                    Adds a short I2V instruction to retain the original medium,
+                    including anime linework and cel shading. Disable it only
+                    when you deliberately want to restyle the image.
+                  </p>
                 </div>
               )}
 

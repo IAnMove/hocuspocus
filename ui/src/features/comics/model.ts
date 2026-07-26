@@ -178,6 +178,14 @@ export function normalizeComicPlan(
             .map(value => String(value))
             .filter(value => value.trim()),
           continuityNotes: String(panel?.continuityNotes || ''),
+          videoPrompt: String(panel?.videoPrompt || ''),
+          durationSeconds: Number.isFinite(Number(panel?.durationSeconds))
+            ? Math.max(.8, Math.min(20, Number(panel.durationSeconds)))
+            : undefined,
+          cameraMove: ['none', 'push-in', 'pull-out', 'pan-left', 'pan-right']
+            .includes(String(panel?.cameraMove))
+            ? panel.cameraMove
+            : undefined,
         }
         const copy = compactPanelCopy(
           safePanel,
@@ -433,17 +441,28 @@ export function textElement(
   }
 }
 
-export function projectFromPlan(plan: ComicPlan, base?: ComicProject): ComicProject {
+export function projectFromPlan(
+  plan: ComicPlan,
+  base?: ComicProject,
+  productionMode: 'comic' | 'storyboard' = base?.director?.input.productionMode || 'comic',
+): ComicProject {
   plan = normalizeComicPlan(plan, base?.director?.input.dialogueDensity)
   const project = base ?? createComicProject()
+  const storyboard = productionMode === 'storyboard'
   const pages = plan.pages.map(planPage => {
     const page = createComicPage(project.format.width, project.format.height)
-    const panels = planPage.layoutHint === 'dynamic'
-      ? dynamicPanelsForCount(page, Math.max(1, planPage.panels.length))
-      : panelsForCount(page, Math.max(1, planPage.panels.length))
+    const panels = storyboard
+      ? [customPanel(0, 0, page.width, page.height, 0)].map(panel => ({
+          ...panel,
+          borderWidth: 0,
+        }))
+      : planPage.layoutHint === 'dynamic'
+        ? dynamicPanelsForCount(page, Math.max(1, planPage.panels.length))
+        : panelsForCount(page, Math.max(1, planPage.panels.length))
     const elements: ComicElement[] = [...panels]
     planPage.panels.forEach((planned, index) => {
       const panel = panels[index]
+      if (!panel || storyboard) return
       planned.captions.forEach((caption, i) => elements.push(textElement(panel, caption, 'caption', i)))
       planned.dialogue.forEach((dialogue, i) => elements.push(textElement(panel, dialogue.text, dialogue.bubbleType, i)))
       planned.soundEffects.forEach((sfx, i) => {

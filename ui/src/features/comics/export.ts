@@ -76,6 +76,7 @@ export type ComicPanelCapture = {
 export async function forEachComicPanelCapture(
   consume: (capture: ComicPanelCapture, current: number, total: number) => Promise<void>,
   onProgress?: (current: number, total: number) => void,
+  options: { includeLettering?: boolean } = {},
 ): Promise<void> {
   const state = useComicStore.getState()
   const originalPage = state.currentPageId
@@ -97,6 +98,11 @@ export async function forEachComicPanelCapture(
         const panel = panels[panelIndex]
         const node = document.querySelector<HTMLElement>(`[data-comic-element="${CSS.escape(panel.id)}"]`)
         if (!node) throw new Error(`Comic panel ${pageIndex + 1}.${panelIndex + 1} is not mounted`)
+        const letteringIds = new Set(
+          page.elements
+            .filter(element => element.type === 'text' && element.parentId === panel.id)
+            .map(element => element.id),
+        )
         current += 1
         onProgress?.(current, total)
         const capture = {
@@ -106,6 +112,12 @@ export async function forEachComicPanelCapture(
             width: Math.round(panel.width),
             height: Math.round(panel.height),
             style: { left: '0', top: '0', transform: 'none', boxShadow: 'none' },
+            ...(options.includeLettering === false ? {
+              filter: child => !(
+                child instanceof HTMLElement
+                && letteringIds.has(child.dataset.comicElement || '')
+              ),
+            } : {}),
           }),
           pageNumber: pageIndex + 1,
           panelNumber: panelIndex + 1,

@@ -17,7 +17,13 @@ import os
 from typing import Optional, Any
 
 from .schema import ProductionPlan, ShotPlan, RenderedPrompts
-from .planners import MusicVideoPlanner, ShortFilmPlanner, PodcastPlanner, ViralVideoPlanner
+from .planners import (
+    ComicMoviePlanner,
+    MusicVideoPlanner,
+    PodcastPlanner,
+    ShortFilmPlanner,
+    ViralVideoPlanner,
+)
 from .renderers import (
     LtxT2VRenderer, LtxI2VRenderer, LtxA2VRenderer,
     LtxRetakeRenderer, LtxExtendRenderer, ImageGenRenderer,
@@ -63,6 +69,7 @@ _PLANNER_MAP = {
     "short_film": ShortFilmPlanner,
     "podcast": PodcastPlanner,
     "viral_video": ViralVideoPlanner,
+    "comic_movie": ComicMoviePlanner,
 }
 
 # ── Renderer Registry ───────────────────────────────────────────────
@@ -279,6 +286,12 @@ class DirectorOrchestrator:
         else:
             # Fallback: deterministic render from structured fields
             prompt = renderer.render(shot, plan, **context)
+
+        # I2V needs an immutable source-style anchor even when the planner has
+        # supplied its own final prompt.  Without this, anime/comic first
+        # frames can drift toward photorealism despite being image-conditioned.
+        if mode == "i2v" and isinstance(renderer, LtxI2VRenderer):
+            prompt = renderer.ensure_source_style(prompt, shot)
 
         # Validate
         if self.flags.use_prompt_validation:

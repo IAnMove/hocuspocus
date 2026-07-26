@@ -6519,6 +6519,7 @@ def generate_video(
     model_type,
     mode,
     plugin_data=None,
+    image_fit_mode="",
     audio_frame_offset=0,
     multi_clip_info=None,
     trim_tail_frames=0,
@@ -7043,7 +7044,11 @@ def generate_video(
     # video preprocessing.
     video_guide_outpainting_ratio = ""
     fit_canvas = server_config.get("fit_canvas", 1)  # Default to fit (preserve aspect ratio)
-    if fit_canvas == 0:
+    if image_fit_mode == "crop":
+        fit_canvas = 2
+    elif image_fit_mode == "source":
+        fit_canvas = 1
+    elif fit_canvas in (None, 0):
         fit_canvas = 1  # Never stretch — always fit to preserve aspect ratio
     fit_crop = fit_canvas == 2
     if fit_crop and outpainting_dims is not None:

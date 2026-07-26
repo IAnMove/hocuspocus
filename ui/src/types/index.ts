@@ -61,6 +61,10 @@ export interface GenerateParams {
   audio_prompt_type?: string
   image_prompt_type?: string
   input_video_strength?: number
+  /** Keep an I2V start image's medium and rendering style in the motion prompt. */
+  preserve_source_style?: boolean
+  /** Match source aspect or crop it to the explicitly selected video canvas. */
+  image_fit_mode?: 'source' | 'crop'
   flow_shift?: number
   audio_guide?: string
   audio_scale?: number
