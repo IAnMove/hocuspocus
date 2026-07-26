@@ -878,8 +878,13 @@ class LTX2:
                         try:
                             os.makedirs(lora_dir, exist_ok=True)
                             import shutil
-                            shutil.move(legacy_path, target_path)
-                            print(f"[LTX2] Migrated ID-LoRA: {legacy_path} → {target_path} "
+                            if fl.is_read_only_path(legacy_path):
+                                shutil.copy2(legacy_path, target_path)
+                                migration_action = "Copied"
+                            else:
+                                shutil.move(legacy_path, target_path)
+                                migration_action = "Migrated"
+                            print(f"[LTX2] {migration_action} ID-LoRA: {legacy_path} → {target_path} "
                                   f"(LoRA must be in lora_dir for MMGP to apply weights)")
                             id_lora_path = target_path
                         except Exception as e:

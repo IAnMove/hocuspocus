@@ -1,8 +1,8 @@
 const path = require('path')
 module.exports = {
   version: "8.0",
-  title: "Maestro",
-  description: "An all-in-one, 100% local AI video, image, music & 3D studio. Its Director mode turns a single prompt into a full music video or short film — LLM-planned, shot by shot. Includes native Hunyuan3D generation alongside WanGP models. Requires an NVIDIA GPU (6GB+ VRAM).",
+  title: "Maestro Next — Experimental",
+  description: "An isolated Linux-first experimental Maestro channel for newer LTX/WanGP runtimes. It keeps its own environment, settings and outputs while reusing an adjacent stable Maestro model library as a lookup-only source.",
   icon: "maestro_simplified_icon_alpha.png",
   menu: async (kernel, info) => {
     if (kernel.gpu === "amd" || kernel.platform === "darwin") {

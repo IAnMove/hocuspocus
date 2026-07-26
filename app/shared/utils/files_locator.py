@@ -1,17 +1,87 @@
 from __future__ import annotations
 import os
-from pathlib import Path
-from typing import Iterable, List, Optional, Union
 
 default_checkpoints_paths = ["ckpts", "."]
+READ_ONLY_CHECKPOINTS_ENV = "MAESTRO_READ_ONLY_CHECKPOINTS"
 
-_checkpoints_paths = default_checkpoints_paths
+_writable_checkpoints_paths = list(default_checkpoints_paths)
+_read_only_checkpoints_paths = []
+_checkpoints_paths = list(default_checkpoints_paths)
+
+
+def _path_key(path):
+    return os.path.normcase(os.path.realpath(os.path.abspath(os.path.expanduser(path))))
+
+
+def _configured_read_only_paths():
+    raw = os.environ.get(READ_ONLY_CHECKPOINTS_ENV, "")
+    paths = []
+    seen = set()
+    for item in raw.split(os.pathsep):
+        item = item.strip()
+        if not item:
+            continue
+        expanded = os.path.abspath(os.path.expanduser(item))
+        key = _path_key(expanded)
+        if key in seen or not os.path.isdir(expanded):
+            continue
+        seen.add(key)
+        paths.append(expanded)
+    return paths
+
 
 def set_checkpoints_paths(checkpoints_paths):
+    """Configure writable roots plus optional lookup-only model libraries.
+
+    WanGP historically treats every configured checkpoint root as writable:
+    ``get_smart_download_root`` selects whichever root already contains a
+    requested model family. Maestro Next also needs to reuse the stable
+    installation's large checkpoint library without letting downloads,
+    cleanup migrations, or resets modify it. Paths supplied through
+    ``MAESTRO_READ_ONLY_CHECKPOINTS`` therefore participate in lookup only.
+    """
+
     global _checkpoints_paths
-    _checkpoints_paths = [path.strip() for path in checkpoints_paths if len(path.strip()) > 0 ]
-    if len(checkpoints_paths) == 0:
-        _checkpoints_paths = default_checkpoints_paths
+    global _writable_checkpoints_paths
+    global _read_only_checkpoints_paths
+
+    configured = [
+        os.fspath(path).strip()
+        for path in (checkpoints_paths or [])
+        if os.fspath(path).strip()
+    ]
+    if not configured:
+        configured = list(default_checkpoints_paths)
+
+    writable_keys = {_path_key(path) for path in configured}
+    read_only = [
+        path
+        for path in _configured_read_only_paths()
+        if _path_key(path) not in writable_keys
+    ]
+
+    _writable_checkpoints_paths = configured
+    _read_only_checkpoints_paths = read_only
+    _checkpoints_paths = configured + read_only
+
+
+def get_read_only_checkpoints_paths():
+    return list(_read_only_checkpoints_paths)
+
+
+def is_read_only_path(path):
+    if path is None:
+        return False
+    candidate = _path_key(os.fspath(path))
+    for root in _read_only_checkpoints_paths:
+        root_key = _path_key(root)
+        try:
+            if os.path.commonpath([candidate, root_key]) == root_key:
+                return True
+        except ValueError:
+            # Different Windows drives cannot share a common path.
+            continue
+    return False
 
 def _normalize_force_path(force_path):
     if force_path is not None and isinstance(force_path, list) and len(force_path):
@@ -29,26 +99,26 @@ def get_download_location(file_name = None, force_path= None):
     if force_path is not None and isinstance(force_path, list) and len(force_path): force_path = force_path[0]
     if file_name is not None:
         if force_path is None:
-            return os.path.join(_checkpoints_paths[0], file_name)
+            return os.path.join(_writable_checkpoints_paths[0], file_name)
         else:
-            return os.path.join(_checkpoints_paths[0], force_path, file_name)
+            return os.path.join(_writable_checkpoints_paths[0], force_path, file_name)
     else:
         if force_path is None:
-            return _checkpoints_paths[0]
+            return _writable_checkpoints_paths[0]
         else:
-            return os.path.join(_checkpoints_paths[0])
+            return os.path.join(_writable_checkpoints_paths[0])
 
 def get_smart_download_root(force_path = None):
     force_path = _normalize_force_path(force_path)
     if force_path is None:
-        return _checkpoints_paths[0]
+        return _writable_checkpoints_paths[0]
     if os.path.isabs(force_path):
         return force_path
-    for folder in _checkpoints_paths:
+    for folder in _writable_checkpoints_paths:
         candidate = os.path.join(folder, force_path)
         if os.path.isdir(candidate):
             return folder
-    return _checkpoints_paths[0]
+    return _writable_checkpoints_paths[0]
 
 def get_smart_download_location(file_name = None, force_path = None):
     if file_name is not None and os.path.isabs(file_name):
@@ -95,4 +165,3 @@ def locate_file(file_name, create_path_if_none = False, error_if_none = True, ex
         return get_download_location(file_name)
     if error_if_none: raise Exception(f"Unable to locate file '{file_name}', tried {searched_locations}")
     return None
-

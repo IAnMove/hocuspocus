@@ -1,0 +1,11 @@
+{
+  "title": "Maestro Next — Experimental",
+  "description": "Isolated Linux-first experimental Maestro channel. Uses separate dependencies, settings and outputs while safely reusing models from a sibling Maestro.git installation.",
+  "icon": "maestro_simplified_icon_alpha.png",
+  "links": [
+    {
+      "title": "Experimental source branch",
+      "value": "https://github.com/IAnMove/Maestro/tree/experiment/linux-ltx-next"
+    }
+  ]
+}

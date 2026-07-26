@@ -122,6 +122,12 @@ def migrate_matanyone_install(server_config=None):
         return None
 
     target_name = MATANYONE_WEIGHT_FILES[legacy_version]
+    if fl.is_read_only_path(legacy_path):
+        return (
+            f"Using shared read-only MatAnyone {legacy_version} weights; "
+            f"leaving the stable model library unchanged."
+        )
+
     target_path = fl.get_download_location(_mask_relpath(target_name))
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
 

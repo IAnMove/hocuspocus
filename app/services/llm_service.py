@@ -856,6 +856,27 @@ def _download_gguf(repo_id: str, filename: str, cache_dir: str) -> str:
         print(f"[LLM] GGUF file already cached: {local_path}")
         return local_path
 
+    # Maestro Next may expose the stable sibling's checkpoint tree as a
+    # lookup-only model library. Local LLM files live below ckpts/llm instead
+    # of going through WanGP's normal model loader, so resolve that same
+    # relative path explicitly before downloading a duplicate.
+    try:
+        try:
+            from shared.utils import files_locator as fl
+        except ModuleNotFoundError:
+            # Package-style imports used by the test/API harness.
+            from app.shared.utils import files_locator as fl
+
+        checkpoints_root = os.path.abspath(os.path.join(_BASE_DIR, "..", "ckpts"))
+        relative_path = os.path.relpath(os.path.abspath(local_path), checkpoints_root)
+        if relative_path != os.pardir and not relative_path.startswith(os.pardir + os.sep):
+            shared_path = fl.locate_file(relative_path, error_if_none=False)
+            if shared_path and fl.is_read_only_path(shared_path):
+                print(f"[LLM] Reusing shared read-only GGUF: {shared_path}")
+                return shared_path
+    except Exception as exc:
+        print(f"[LLM] Shared GGUF lookup skipped: {exc}")
+
     print(f"[LLM] Downloading {filename} from {repo_id}...")
     from huggingface_hub import hf_hub_download
     downloaded = hf_hub_download(

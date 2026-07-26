@@ -19,7 +19,10 @@ module.exports = async (kernel) => {
         params: {
           venv: "env",
           env: {
-            SERVER_PORT: port
+            SERVER_PORT: port,
+            // Match the canonical UI: stable weights are visible, while all
+            // writes remain inside Maestro Next's own checkpoint directory.
+            MAESTRO_READ_ONLY_CHECKPOINTS: "{{envs.MAESTRO_READ_ONLY_CHECKPOINTS || path.resolve(cwd, '..', 'Maestro.git', 'app', 'ckpts')}}"
           },
           path: "app",
           message: [

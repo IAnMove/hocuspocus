@@ -20,7 +20,11 @@ module.exports = async (kernel) => {
         params: {
           venv: "env",
           env: {
-            SERVER_PORT: port
+            SERVER_PORT: port,
+            // Reuse the stable sibling's large model library for lookup only.
+            // files_locator.py guarantees that missing/new files are still
+            // downloaded into this experimental app's own app/ckpts folder.
+            MAESTRO_READ_ONLY_CHECKPOINTS: "{{envs.MAESTRO_READ_ONLY_CHECKPOINTS || path.resolve(cwd, '..', 'Maestro.git', 'app', 'ckpts')}}"
           },
           path: "app",
           message: [

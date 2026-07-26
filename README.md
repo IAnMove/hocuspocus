@@ -1,8 +1,39 @@
 # Maestro
 
-A one-click AI **video, image, and audio studio** for creators. Maestro pairs a modern React UI with a powerful generation backend and adds a **Director mode** that uses an LLM to plan music videos and short films from a single prompt. Optimized for the latest LTX-2.3 models & LoRAs, with support for virtually all open weight models.  
+A one-click AI **video, image, and audio studio** for creators. Maestro pairs a modern React UI with a powerful generation backend and adds a **Director mode** that uses an LLM to plan music videos and short films from a single prompt. Optimized for the latest LTX-2.3 models & LoRAs, with support for virtually all open weight models.
 
 ![Maestro UI](Maestro_UI_02.jpg)
+
+> [!IMPORTANT]
+> This branch is **Maestro Next — Experimental**, an isolated Linux-first
+> development channel. Install it beside the stable launcher as
+> `PINOKIO_HOME/api/Maestro-next.git`; do not replace the stable
+> `Maestro.git` folder.
+
+## Parallel experimental installation
+
+Maestro Next deliberately keeps its Python environments, UI dependencies,
+settings, API credentials, logs and generated outputs inside its own project
+folder. It can run at the same time as stable Maestro because Pinokio assigns
+each launcher its own available port.
+
+When the stable installation is the sibling folder `../Maestro.git`, both
+launchers expose its `app/ckpts` model collection to Maestro Next automatically.
+That shared collection is **lookup-only**:
+
+- existing weights can be loaded without a second download;
+- missing or upgraded weights are written to `Maestro-next.git/app/ckpts`;
+- cleanup migrations and Reset never modify the stable model library;
+- runtime jobs, caches, configuration and outputs are never shared.
+
+This lookup covers WanGP/LTX checkpoints and Maestro's local GGUF writing
+models. Hunyuan3D and UniRig keep private Hugging Face caches because those
+caches contain mutable revision and lock metadata as well as weights.
+
+To use another model library, set `MAESTRO_READ_ONLY_CHECKPOINTS` in this
+launcher's Pinokio environment. Multiple paths use the operating system path
+separator (`:` on Linux/macOS, `;` on Windows). Keep the first normal
+`checkpoints_paths` entry writable; automatic downloads always use it.
 
 ## What it does
 

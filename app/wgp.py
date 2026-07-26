@@ -2489,7 +2489,7 @@ src_move = [ "ltx-2-19b-dev-fp4_diffusion_model.safetensors" ]
 tgt_move = [ "ltx-2-19b-dev-nvfp4_diffusion_model.safetensors" ]
 for src_name, tgt_name in zip(src_move, tgt_move):
     src = fl.locate_file(src_name, error_if_none=False)
-    if src is not None:
+    if src is not None and not fl.is_read_only_path(src):
         tgt = os.path.join(os.path.dirname(src), tgt_name)
         try:
             if os.path.isfile(tgt):
@@ -2677,9 +2677,10 @@ for path in  ["wan2.1_Vace_1.3B_preview_bf16.safetensors", "sky_reels2_diffusion
 "wan2.1_Vace_14B_mbf16.safetensors", "wan2.1_Vace_14B_quanto_mbf16_int8.safetensors", "wan2.1_FLF2V_720p_14B_quanto_int8.safetensors", "wan2.1_FLF2V_720p_14B_bf16.safetensors",  "wan2.1_FLF2V_720p_14B_fp16.safetensors", "wan2.1_Vace_1.3B_mbf16.safetensors", "wan2.1_text2video_1.3B_bf16.safetensors",
 "ltxv_0.9.7_13B_dev_bf16.safetensors", "ltx-2-19b-distilled-fp8.safetensors", "ltx-2-19b-dev-fp8.safetensors", "ltx-2-19b-distilled.safetensors", "ltx-2-19b-dev.safetensors"
 ]:
-    if fl.locate_file(path, error_if_none= False) is not None:
+    located_path = fl.locate_file(path, error_if_none=False)
+    if located_path is not None and not fl.is_read_only_path(located_path):
         print(f"Removing old version of model '{path}'. A new version of this model will be downloaded next time you use it.")
-        os.remove( fl.locate_file(path))
+        os.remove(located_path)
 
 models_def = {}
 
