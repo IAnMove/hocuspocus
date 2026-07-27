@@ -51,6 +51,7 @@ from .utils.helpers import (
 from .utils.media_io import encode_video
 from .utils.types import PipelineComponents
 from shared.utils.loras_mutipliers import update_loras_slists
+from shared.utils.ltx_prompt_queue import format_ltx_prompt_progress
 from shared.utils.self_refiner import create_self_refiner_handler, normalize_self_refiner_plan
 from shared.utils.text_encoder_cache import TextEncoderCache
 
@@ -183,6 +184,8 @@ class TI2VidTwoStagesPipeline:
         stg_schedule: list[float] | None = None,
         text_attention_amplifier: dict | None = None,
         prefetch_prompts: list[str] | None = None,
+        prefetch_window: dict[str, int] | None = None,
+        phase_callback: Callable[[str], None] | None = None,
     ) -> tuple[Iterator[torch.Tensor], torch.Tensor]:
         assert_resolution(height=height, width=width, is_two_stage=True)
 
@@ -276,6 +279,9 @@ class TI2VidTwoStagesPipeline:
         if prefetch_prompts:
             requested_prompts.extend(str(item) for item in prefetch_prompts if item)
         requested_prompts = list(dict.fromkeys(requested_prompts))
+        progress_label = format_ltx_prompt_progress(prefetch_window)
+        if progress_label and phase_callback is not None:
+            phase_callback(progress_label)
         encoded_contexts = self.text_encoder_cache.encode(
             encode_fn,
             requested_prompts,

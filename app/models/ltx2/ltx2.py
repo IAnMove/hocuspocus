@@ -1999,6 +1999,8 @@ class LTX2:
                 stg_schedule=stg_schedule,
                 text_attention_amplifier=text_attention_amplifier,
                 prefetch_prompts=kwargs.get("ltx2_prefetch_prompts"),
+                prefetch_window=kwargs.get("ltx2_prefetch_window"),
+                phase_callback=kwargs.get("set_progress_status"),
             )
         else:
             # Select pipeline: progressive 3-stage or standard distilled 2-stage
@@ -2062,6 +2064,8 @@ class LTX2:
                     NAG_alpha=float(NAG_alpha),
                     single_stage=bool(kwargs.get("single_stage_pipeline", False)),
                     prefetch_prompts=kwargs.get("ltx2_prefetch_prompts"),
+                    prefetch_window=kwargs.get("ltx2_prefetch_window"),
+                    phase_callback=kwargs.get("set_progress_status"),
                 )
             else:
                 # Progressive params only for the progressive pipeline

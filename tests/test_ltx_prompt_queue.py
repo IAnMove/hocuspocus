@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import unittest
 
-from app.shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
+from app.shared.utils.ltx_prompt_queue import (
+    format_ltx_prompt_progress,
+    schedule_ltx_prompt_windows,
+)
 
 
 def _task(prompt: str, model: str = "ltx2_22B_distilled_1_1"):
@@ -57,8 +60,19 @@ class TestLTXPromptQueue(unittest.TestCase):
             queue[8]["params"]["ltx2_prefetch_prompts"],
             ["panel-10"],
         )
+        self.assertEqual(
+            queue[4]["params"]["ltx2_prefetch_window"],
+            {"start": 5, "end": 8, "total": 10},
+        )
         for index in (1, 2, 3, 5, 6, 7, 9):
             self.assertNotIn("ltx2_prefetch_prompts", queue[index]["params"])
+
+    def test_progress_label_uses_panel_range_and_total(self):
+        label = format_ltx_prompt_progress(
+            {"start": 1, "end": 4, "total": 24}
+        )
+
+        self.assertEqual(label, "Preparando textos 1–4 de 24")
 
 
 if __name__ == "__main__":

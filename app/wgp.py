@@ -6570,6 +6570,7 @@ def generate_video(
     # Internal lookahead for compatible LTX-2 queue prompts. The REST queue
     # runner populates this field; it is not a user-facing generation option.
     ltx2_prefetch_prompts=None,
+    ltx2_prefetch_window=None,
 ):
 
 
@@ -7926,12 +7927,10 @@ def generate_video(
                     progressive_stage3_sigma=progressive_stage3_sigma,
                     progressive_stage1_image_weight=progressive_stage1_image_weight,
                     progressive_stage3_image_weight=progressive_stage3_image_weight,
-                    **(
-                        {"ltx2_prefetch_prompts": ltx2_prefetch_prompts}
-                        if str(base_model_type).startswith("ltx2_")
-                        and ltx2_prefetch_prompts
-                        else {}
-                    ),
+                    **({
+                        "ltx2_prefetch_prompts": ltx2_prefetch_prompts,
+                        "ltx2_prefetch_window": ltx2_prefetch_window,
+                    } if str(base_model_type).startswith("ltx2_") else {}),
                     # Motion suffix: only passed when the loaded suffix video
                     # is available. Other model handlers (Wan / Flux / Qwen /
                     # Hunyuan) don't accept these kwargs, so we omit them
