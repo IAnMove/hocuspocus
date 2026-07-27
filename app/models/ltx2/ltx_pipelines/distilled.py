@@ -138,6 +138,7 @@ class DistilledPipeline:
         fp8transformer: bool = False,
         model_device: torch.device | None = None,
         models: object | None = None,
+        cache_namespace: object | None = None,
     ):
         self.device = device
         self.dtype = torch.bfloat16
@@ -163,7 +164,7 @@ class DistilledPipeline:
             device=device,
         )
         self.pipeline_components._pipeline_name = 'distilled'
-        self.text_encoder_cache = TextEncoderCache()
+        self.text_encoder_cache = TextEncoderCache(namespace=cache_namespace)
 
     def _get_model(self, name: str):
         if self.models is not None:

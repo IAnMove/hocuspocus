@@ -640,12 +640,28 @@ class LTX2:
             self.pipeline = DistilledPipeline(
                 device=self.device,
                 models=pipeline_models,
+                cache_namespace={
+                    "schema": 1,
+                    "pipeline": "distilled",
+                    "model_type": model_type,
+                    "base_model_type": base_model_type,
+                    "gemma_root": os.path.realpath(str(gemma_root)),
+                    "dtype": str(dtype),
+                },
             )
         else:
             self.pipeline = TI2VidTwoStagesPipeline(
                 device=self.device,
                 stage_1_models=pipeline_models,
                 stage_2_models=pipeline_models,
+                cache_namespace={
+                    "schema": 1,
+                    "pipeline": "dev_two_stage",
+                    "model_type": model_type,
+                    "base_model_type": base_model_type,
+                    "gemma_root": os.path.realpath(str(gemma_root)),
+                    "dtype": str(dtype),
+                },
             )
         self._build_diffuser_model()
 

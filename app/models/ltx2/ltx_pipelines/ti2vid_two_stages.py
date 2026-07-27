@@ -77,6 +77,7 @@ class TI2VidTwoStagesPipeline:
         model_device: torch.device | None = None,
         stage_1_models: object | None = None,
         stage_2_models: object | None = None,
+        cache_namespace: object | None = None,
     ):
         self.device = device
         self.dtype = torch.bfloat16
@@ -111,7 +112,7 @@ class TI2VidTwoStagesPipeline:
             dtype=self.dtype,
             device=device,
         )
-        self.text_encoder_cache = TextEncoderCache()
+        self.text_encoder_cache = TextEncoderCache(namespace=cache_namespace)
 
     def _get_stage_model(self, stage: int, name: str):
         if stage == 1:
