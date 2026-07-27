@@ -5,21 +5,34 @@ from __future__ import annotations
 from typing import Any
 
 
-def prefetch_next_ltx_prompt(queue: list[dict[str, Any]]) -> int:
-    """Attach the next compatible prompt to the first LTX queue task."""
+DEFAULT_LTX_PROMPT_BATCH_SIZE = 4
 
-    if len(queue) < 2:
+
+def prefetch_first_ltx_prompt_batch(
+    queue: list[dict[str, Any]],
+    max_prompts: int = DEFAULT_LTX_PROMPT_BATCH_SIZE,
+) -> int:
+    """Attach at most the first four compatible panel prompts to task one."""
+
+    if len(queue) < 2 or max_prompts < 2:
         return 0
     first_params = queue[0].get("params", {})
     first_model = str(first_params.get("model_type") or "")
-    second_model = str(queue[1].get("params", {}).get("model_type") or "")
-    if not first_model.startswith("ltx2_") or second_model != first_model:
+    queue_models = {
+        str(item.get("params", {}).get("model_type") or "")
+        for item in queue
+    }
+    if not first_model.startswith("ltx2_") or queue_models != {first_model}:
         return 0
 
     first_prompt = str(queue[0].get("prompt") or "").strip()
-    next_prompt = str(queue[1].get("prompt") or "").strip()
-    if not next_prompt or next_prompt == first_prompt:
+    upcoming = []
+    for item in queue[1:max_prompts]:
+        prompt = str(item.get("prompt") or "").strip()
+        if prompt and prompt != first_prompt and prompt not in upcoming:
+            upcoming.append(prompt)
+    if not upcoming:
         return 0
 
-    first_params["ltx2_prefetch_prompts"] = [next_prompt]
-    return 1
+    first_params["ltx2_prefetch_prompts"] = upcoming
+    return len(upcoming)

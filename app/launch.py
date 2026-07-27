@@ -92,7 +92,7 @@ if _hf_token_path:
 print("[Maestro] Importing WanGP engine...")
 import wgp
 from services import model3d_service
-from shared.utils.ltx_prompt_queue import prefetch_next_ltx_prompt
+from shared.utils.ltx_prompt_queue import prefetch_first_ltx_prompt_batch
 print(f"[Maestro] WanGP loaded: {len(wgp.displayed_model_types)} models available")
 # Base save path always comes from server_config["save_path"] (never from wgp.save_path which gets workspace-modified)
 
@@ -9906,7 +9906,7 @@ def _run_generation(job_id: str):
 
             state["gen"]["queue"] = queue
 
-            prefetched = prefetch_next_ltx_prompt(queue)
+            prefetched = prefetch_first_ltx_prompt_batch(queue)
             if prefetched:
                 print(
                     f"[LTX2][queue-prefetch] prepared {prefetched} upcoming "

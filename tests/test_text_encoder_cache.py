@@ -43,6 +43,23 @@ class TestTextEncoderCache(unittest.TestCase):
         self.assertEqual(cached.device.type, "cpu")
         self.assertFalse(cached.requires_grad)
 
+    def test_parallel_encoding_uses_microbatches_of_at_most_four(self):
+        calls = []
+
+        def encode(prompts):
+            calls.append(list(prompts))
+            return [torch.tensor([index]) for index, _ in enumerate(prompts)]
+
+        cache = TextEncoderCache(max_batch_size=4)
+        cache.encode(
+            encode,
+            [f"panel-{index}" for index in range(9)],
+            parallel=True,
+        )
+
+        self.assertEqual([len(batch) for batch in calls], [4, 4, 1])
+        self.assertEqual(cache.last_report["batch_sizes"], [4, 4, 1])
+
 
 if __name__ == "__main__":
     unittest.main()

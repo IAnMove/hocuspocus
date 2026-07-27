@@ -17,9 +17,17 @@ class _CacheEntry:
 
 
 class TextEncoderCache:
-    def __init__(self, max_size_mb: float = 100, namespace: Any = None) -> None:
+    def __init__(
+        self,
+        max_size_mb: float = 100,
+        namespace: Any = None,
+        max_batch_size: int = 4,
+    ) -> None:
+        if max_batch_size < 1:
+            raise ValueError("max_batch_size must be at least 1.")
         self.max_size_bytes = int(max_size_mb * 1024 * 1024)
         self.namespace = namespace
+        self.max_batch_size = int(max_batch_size)
         self._entries: "OrderedDict[Hashable, _CacheEntry]" = OrderedDict()
         self._size_bytes = 0
         self.last_report: dict[str, Any] = {}
@@ -108,13 +116,19 @@ class TextEncoderCache:
             self._entries.move_to_end(cache_key)
             results[idx] = self._to_device(cached.value, device)
 
-        if missing_prompts:
-            encoded_batch = encode_fn(missing_prompts)
+        batch_sizes = []
+        for start in range(0, len(missing_prompts), self.max_batch_size):
+            stop = start + self.max_batch_size
+            prompt_batch = missing_prompts[start:stop]
+            key_batch = missing_keys[start:stop]
+            index_batch = missing_indices[start:stop]
+            encoded_batch = encode_fn(prompt_batch)
             if not isinstance(encoded_batch, list):
                 encoded_batch = list(encoded_batch)
-            if len(encoded_batch) != len(missing_prompts):
+            if len(encoded_batch) != len(prompt_batch):
                 raise ValueError("encode_fn returned unexpected number of embeddings.")
-            for cache_key, idx, encoded in zip(missing_keys, missing_indices, encoded_batch):
+            batch_sizes.append(len(prompt_batch))
+            for cache_key, idx, encoded in zip(key_batch, index_batch, encoded_batch):
                 results[idx] = self._store(cache_key, encoded, device)
 
         self.last_report = {
@@ -123,6 +137,7 @@ class TextEncoderCache:
             "misses": misses,
             "seconds": time.perf_counter() - started,
             "parallel": True,
+            "batch_sizes": batch_sizes,
         }
         return results
 
