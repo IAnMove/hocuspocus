@@ -6567,6 +6567,9 @@ def generate_video(
     # progressive_pipeline. Read by ltx2.py and forwarded into
     # DistilledPipeline via kwargs.
     single_stage_pipeline=False,
+    # Internal lookahead for compatible LTX-2 queue prompts. The REST queue
+    # runner populates this field; it is not a user-facing generation option.
+    ltx2_prefetch_prompts=None,
 ):
 
 
@@ -7923,6 +7926,12 @@ def generate_video(
                     progressive_stage3_sigma=progressive_stage3_sigma,
                     progressive_stage1_image_weight=progressive_stage1_image_weight,
                     progressive_stage3_image_weight=progressive_stage3_image_weight,
+                    **(
+                        {"ltx2_prefetch_prompts": ltx2_prefetch_prompts}
+                        if str(base_model_type).startswith("ltx2_")
+                        and ltx2_prefetch_prompts
+                        else {}
+                    ),
                     # Motion suffix: only passed when the loaded suffix video
                     # is available. Other model handlers (Wan / Flux / Qwen /
                     # Hunyuan) don't accept these kwargs, so we omit them

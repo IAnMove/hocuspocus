@@ -213,6 +213,7 @@ class DistilledPipeline:
         single_stage: bool = False,
         keyframe_conditioning_mode: str = "replace",
         keyframe_inject_mode: str = "additive",
+        prefetch_prompts: list[str] | None = None,
     ) -> tuple[Iterator[torch.Tensor], torch.Tensor]:
         assert_resolution(height=height, width=width, is_two_stage=True)
         alt_guidance_scale = 1.0
@@ -303,15 +304,22 @@ class DistilledPipeline:
         enable_audio_text_nag = False
         video_NAG = None
         audio_NAG = None
+        requested_prompts = [prompt]
         if float(NAG_scale) > 1.0 and negative_prompt:
-            contexts = self.text_encoder_cache.encode(
-                encode_fn,
-                [prompt, negative_prompt],
-                device=self.device,
-                parallel=True,
-            )
-        else:
-            contexts = self.text_encoder_cache.encode(encode_fn, [prompt], device=self.device, parallel=True)
+            requested_prompts.append(negative_prompt)
+        if prefetch_prompts:
+            requested_prompts.extend(str(item) for item in prefetch_prompts if item)
+        requested_prompts = list(dict.fromkeys(requested_prompts))
+        encoded_contexts = self.text_encoder_cache.encode(
+            encode_fn,
+            requested_prompts,
+            device=self.device,
+            parallel=True,
+        )
+        context_by_prompt = dict(zip(requested_prompts, encoded_contexts))
+        contexts = [context_by_prompt[prompt]]
+        if float(NAG_scale) > 1.0 and negative_prompt:
+            contexts.append(context_by_prompt[negative_prompt])
 
         torch.cuda.synchronize()
         del text_encoder

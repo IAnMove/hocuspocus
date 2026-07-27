@@ -182,6 +182,7 @@ class TI2VidTwoStagesPipeline:
         sample_solver: str = "euler",
         stg_schedule: list[float] | None = None,
         text_attention_amplifier: dict | None = None,
+        prefetch_prompts: list[str] | None = None,
     ) -> tuple[Iterator[torch.Tensor], torch.Tensor]:
         assert_resolution(height=height, width=width, is_two_stage=True)
 
@@ -271,12 +272,18 @@ class TI2VidTwoStagesPipeline:
             video_connector,
             audio_connector,
         )
-        contexts = self.text_encoder_cache.encode(
+        requested_prompts = [prompt, negative_prompt]
+        if prefetch_prompts:
+            requested_prompts.extend(str(item) for item in prefetch_prompts if item)
+        requested_prompts = list(dict.fromkeys(requested_prompts))
+        encoded_contexts = self.text_encoder_cache.encode(
             encode_fn,
-            [prompt, negative_prompt],
+            requested_prompts,
             device=self.device,
             parallel=True,
         )
+        context_by_prompt = dict(zip(requested_prompts, encoded_contexts))
+        contexts = [context_by_prompt[prompt], context_by_prompt[negative_prompt]]
 
         torch.cuda.synchronize()
         del text_encoder
