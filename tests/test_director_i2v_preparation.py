@@ -4,6 +4,10 @@ from PIL import Image
 
 from app.services import director_pipeline
 from app.services.director.renderers.ltx_i2v import LtxI2VRenderer
+from app.services.director.policies import (
+    apply_visual_style_lock,
+    enforce_visual_style_on_clip_plans,
+)
 from app.services.hardware_detect import _classify_vram_tier
 
 
@@ -86,6 +90,69 @@ def test_i2v_prompt_always_anchors_illustrated_source_style():
     assert "do not restyle" in prompt
     assert "photorealistic" in prompt
     assert "2D anime, clean cel shading" in prompt
+
+
+def test_story_anime_style_lock_rejects_live_action_recasting():
+    prompt = apply_visual_style_lock(
+        "The heroine turns toward the crystal tower.",
+        "2D anime, clean cel shading, watercolor backgrounds",
+        mode="video",
+        preserve=True,
+        has_reference=True,
+    )
+
+    assert prompt.startswith("VISUAL STYLE LOCK:")
+    assert "2D anime" in prompt
+    assert "no live action" in prompt
+    assert "photorealistic people" in prompt
+    assert "approved Story reference artwork" in prompt
+
+
+def test_photoreal_story_lock_does_not_add_illustration_negative():
+    prompt = apply_visual_style_lock(
+        "A woman crosses the room.",
+        "Photorealistic 35mm live-action drama",
+        mode="video",
+        preserve=True,
+        has_reference=True,
+    )
+
+    assert "Photorealistic 35mm" in prompt
+    assert "no live action" not in prompt
+    assert "no 3D CGI" not in prompt
+
+
+def test_story_style_lock_covers_images_windows_and_keyframes():
+    plans = [{
+        "image_prompt": "Opening frame.",
+        "video_prompt": "",
+        "window_prompts": ["First movement.", "Second movement."],
+        "keyframe_prompts": ["Changed pose."],
+    }]
+    enforce_visual_style_on_clip_plans(
+        plans,
+        "European comic art, ink lines and flat color",
+        preserve=True,
+        has_reference=True,
+    )
+
+    assert "VISUAL STYLE LOCK:" in plans[0]["image_prompt"]
+    assert plans[0]["video_prompt"] == ""
+    assert all("VISUAL STYLE LOCK:" in item for item in plans[0]["window_prompts"])
+    assert all("VISUAL STYLE LOCK:" in item for item in plans[0]["keyframe_prompts"])
+
+
+def test_story_image_style_lock_respects_minimax_prompt_limit():
+    prompt = apply_visual_style_lock(
+        "Detailed opening-frame instruction " * 100,
+        "2D anime, clean cel shading, watercolor backgrounds",
+        mode="image",
+        preserve=True,
+        has_reference=True,
+    )
+
+    assert len(prompt) < 1500
+    assert prompt.startswith("VISUAL STYLE LOCK:")
 
 
 def test_nominal_24gb_gpu_is_not_misclassified_as_low_vram():

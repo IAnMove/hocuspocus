@@ -857,6 +857,16 @@ def _run_pipeline(pid: str, resume: bool = False):
             # Do not silently run the global Maestro LLM as a second author.
             _update_pipeline(pid, _polish_mode_used="scoped_writing_provider")
 
+        # Prompt polish is allowed to improve model dialect, never to erase the
+        # Story's authored medium.  This deterministic final pass also covers
+        # remote writing providers, for which third-pass polish is skipped.
+        from services.director.policies import enforce_visual_style_on_clip_plans
+        clip_plans = enforce_visual_style_on_clip_plans(
+            clip_plans,
+            params.get("visual_style", ""),
+            preserve=bool(params.get("preserve_visual_style", False)),
+            has_reference=_has_visual_references(params),
+        )
         _update_pipeline(pid, clip_plans=clip_plans, llm_streaming=False)
         _save_pipeline_state(pid)  # Save after planning
 
@@ -874,6 +884,13 @@ def _run_pipeline(pid: str, resume: bool = False):
                 return
             # Reload clip_plans in case user edited them
             clip_plans = _pipelines[pid]["clip_plans"]
+            clip_plans = enforce_visual_style_on_clip_plans(
+                clip_plans,
+                params.get("visual_style", ""),
+                preserve=bool(params.get("preserve_visual_style", False)),
+                has_reference=_has_visual_references(params),
+            )
+            _update_pipeline(pid, clip_plans=clip_plans)
 
         # ── Phase 2: Prepare or Generate Start Images ────────────────────
         # Normal Director productions generate start frames here. Comic
@@ -1349,6 +1366,8 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         "video_model": params.get("video_model", ""),
         "image_model": params.get("image_model", ""),
         "multishot_lora_mode": multishot_lora_mode,
+        "visual_style": params.get("visual_style", ""),
+        "preserve_visual_style": params.get("preserve_visual_style", False),
     }
 
     if pipeline_type == "comic_movie":
@@ -1504,6 +1523,8 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
             fps=fps,
             frames_steps=frames_steps,
             frames_minimum=frames_minimum,
+            visual_style=params.get("visual_style", ""),
+            preserve_visual_style=params.get("preserve_visual_style", False),
         )
         planned_clips = result.get("clips", [])
         clip_plans = result.get("clip_plans", [])
@@ -1542,6 +1563,13 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
     if clip_plans and isinstance(clip_plans[0], str):
         clip_plans = [{"video_prompt": p, "image_prompt": ""} for p in clip_plans]
 
+    from services.director.policies import enforce_visual_style_on_clip_plans
+    clip_plans = enforce_visual_style_on_clip_plans(
+        clip_plans,
+        params.get("visual_style", ""),
+        preserve=bool(params.get("preserve_visual_style", False)),
+        has_reference=_has_visual_references(params),
+    )
     return clip_plans, planned_clips
 
 

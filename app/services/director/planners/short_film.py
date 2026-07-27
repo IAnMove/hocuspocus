@@ -17,7 +17,13 @@ from ..schema import (
     ProductionPlan, ShotPlan, CharacterProfile, ReferenceAssets,
     AssetRef, SubjectRef, DialogueBeat, CameraPlan, AudioPlan,
 )
-from ..policies import build_character_rules_block, build_camera_style_block
+from ..policies import (
+    apply_visual_style_lock,
+    build_camera_style_block,
+    build_character_rules_block,
+    build_visual_style_contract,
+    compact_visual_style,
+)
 from ..guide_loader import load_guide as _load_guide_helper
 from .base import BasePlanner
 
@@ -221,6 +227,8 @@ class ShortFilmPlanner(BasePlanner):
         fps: int = 24,
         frames_steps: int = 8,
         frames_minimum: int = 41,
+        visual_style: str = "",
+        preserve_visual_style: bool = True,
         **kwargs,
     ) -> ProductionPlan:
         """Create a ProductionPlan for a short film.
@@ -249,6 +257,10 @@ class ShortFilmPlanner(BasePlanner):
         # flux_image_edit_pass2.md for Flux.2 Klein, etc.).
         self._video_model = kwargs.get("video_model", "") or ""
         self._image_model = kwargs.get("image_model", "") or ""
+        self._visual_style = compact_visual_style(visual_style)
+        self._preserve_visual_style = bool(
+            preserve_visual_style and self._visual_style
+        )
 
         # Normalize speaker_mappings: frontend sends list, we need dict
         if isinstance(speaker_mappings, list):
@@ -310,12 +322,13 @@ class ShortFilmPlanner(BasePlanner):
                 multishot_lora_mode=multishot_lora_mode,
             )
 
+        self._enforce_story_visual_style(shots, has_reference=has_reference)
         total_duration = sum(s.duration_sec for s in shots) if shots else target_duration
 
         return ProductionPlan(
             skill_type="short_film",
             title=getattr(self, '_last_title', None),
-            global_style=story_description,
+            global_style=self._visual_style or story_description,
             total_duration_sec=total_duration,
             reference_assets=ref_assets,
             characters=char_profiles if char_profiles else None,
@@ -324,6 +337,10 @@ class ShortFilmPlanner(BasePlanner):
                 "Short film — maintain visual and narrative continuity across shots",
                 "Match camera complexity to emotional content",
                 "Dialogue must appear in video prompts with speaker cues",
+                *(
+                    ["The Story visual medium is locked across every generated frame"]
+                    if self._preserve_visual_style else []
+                ),
             ],
         )
 
@@ -341,6 +358,63 @@ class ShortFilmPlanner(BasePlanner):
             if lp and os.path.isfile(lp):
                 paths.append(lp)
         return paths if paths else None
+
+    def _enforce_story_visual_style(
+        self,
+        shots: list[ShotPlan],
+        *,
+        has_reference: bool,
+    ) -> None:
+        """Attach and apply the Story style contract to every shot field."""
+        if not self._preserve_visual_style:
+            return
+        for shot in shots:
+            shot.visual_style = self._visual_style
+            shot.metadata = {
+                **(shot.metadata or {}),
+                "canonical_visual_style": self._visual_style,
+                "preserve_visual_style": True,
+            }
+            if str(shot.image_prompt or "").strip():
+                shot.image_prompt = apply_visual_style_lock(
+                    shot.image_prompt,
+                    self._visual_style,
+                    mode="image",
+                    preserve=True,
+                    has_reference=has_reference,
+                )
+            if str(shot.video_prompt or "").strip():
+                shot.video_prompt = apply_visual_style_lock(
+                    shot.video_prompt,
+                    self._visual_style,
+                    mode="video",
+                    preserve=True,
+                    has_reference=has_reference,
+                )
+            if shot.window_prompts:
+                shot.window_prompts = [
+                    apply_visual_style_lock(
+                        prompt.get("prompt", prompt.get("text", ""))
+                        if isinstance(prompt, dict) else prompt,
+                        self._visual_style,
+                        mode="video",
+                        preserve=True,
+                        has_reference=has_reference,
+                    )
+                    for prompt in shot.window_prompts
+                ]
+            if shot.keyframe_prompts:
+                shot.keyframe_prompts = [
+                    apply_visual_style_lock(
+                        prompt.get("prompt", prompt.get("text", ""))
+                        if isinstance(prompt, dict) else prompt,
+                        self._visual_style,
+                        mode="image",
+                        preserve=True,
+                        has_reference=has_reference,
+                    )
+                    for prompt in shot.keyframe_prompts
+                ]
 
     # ── Character Building ───────────────────────────────────────────
 
@@ -741,6 +815,11 @@ Shots to plan:
             target_scenes = max(2, min(20, target_duration // 20))
 
         image_paths = self._build_all_image_paths(reference_image_path, has_reference)
+        style_contract = build_visual_style_contract(
+            getattr(self, "_visual_style", ""),
+            preserve=getattr(self, "_preserve_visual_style", False),
+            has_reference=has_reference,
+        )
 
         # ── PRE-PASS-1 SAFETY SCAN: user concept ────────────────────────
         # Scan the user's input concept BEFORE running Pass 1. Catches
@@ -841,6 +920,7 @@ WHY THIS MATTERS:
 {f"You are given a REFERENCE PHOTO of the characters. Use their visible appearance in the script." if has_reference else ""}
 {char_block}
 {narrative_block}
+{style_contract}
 
 {screenplay_rules}
 {length_budget_block}"""
@@ -971,6 +1051,8 @@ WHY THIS MATTERS:
         pass2_system = f"""You are a film director breaking a screenplay into shots. Output ONLY the JSON array.
 
 {char_rules}
+
+{style_contract}
 
 {shot_structure}
 
@@ -1490,6 +1572,9 @@ SCREENPLAY:
                 char_profiles=char_profiles,
                 target_duration=target_duration,
                 target_scenes=max(shot_count_low, min(shot_count_high, target_scenes or shot_count_low)),
+                visual_style=getattr(self, "_visual_style", ""),
+                preserve_visual_style=getattr(self, "_preserve_visual_style", False),
+                has_reference=has_reference,
             )
 
         # ── POST-PASS-2 SAFETY SCAN ─────────────────────────────────────
@@ -2423,6 +2508,9 @@ SCREENPLAY:
         char_profiles: list[CharacterProfile],
         target_duration: int,
         target_scenes: int,
+        visual_style: str = "",
+        preserve_visual_style: bool = True,
+        has_reference: bool = False,
     ) -> list[dict]:
         """Turn a valid screenplay into usable I2V shots without another LLM call.
 
@@ -2463,6 +2551,7 @@ SCREENPLAY:
         remainder = max(0, int(target_duration) - (base_duration * scene_count))
         roles = ["setup", "rising_action", "climax", "resolution"]
         camera_moves = ["slow push-in", "subtle lateral track", "measured handheld drift", "slow pull-out"]
+        canonical_style = compact_visual_style(visual_style)
 
         shots: list[dict] = []
         for index, chunk in enumerate(chunks):
@@ -2504,6 +2593,20 @@ SCREENPLAY:
                 f"Action and dialogue to portray: {chunk}. Camera: {camera_moves[index % len(camera_moves)]}. "
                 "Natural motion, readable acting, stable identities, no new captions or on-screen text."
             )
+            image_prompt = apply_visual_style_lock(
+                image_prompt,
+                canonical_style,
+                mode="image",
+                preserve=preserve_visual_style,
+                has_reference=has_reference,
+            )
+            video_prompt = apply_visual_style_lock(
+                video_prompt,
+                canonical_style,
+                mode="video",
+                preserve=preserve_visual_style,
+                has_reference=has_reference,
+            )
 
             window_prompts: list[str] = []
             if duration > 20:
@@ -2517,12 +2620,16 @@ SCREENPLAY:
                     start = math.floor(window_index * len(sentences) / window_count)
                     end = math.floor((window_index + 1) * len(sentences) / window_count)
                     beat = " ".join(sentences[start:max(start + 1, end)])
-                    window_prompts.append(
+                    window_prompts.append(apply_visual_style_lock(
                         f"Continue scene {index + 1}, part {window_index + 1} of {window_count}, "
                         f"from the supplied preceding frames. Preserve all identities and geography. "
                         f"Portray this chronological beat: {beat}. "
-                        f"Camera remains {camera_moves[index % len(camera_moves)]}; natural continuous motion, no text."
-                    )
+                        f"Camera remains {camera_moves[index % len(camera_moves)]}; natural continuous motion, no text.",
+                        canonical_style,
+                        mode="video",
+                        preserve=preserve_visual_style,
+                        has_reference=has_reference,
+                    ))
 
             shots.append({
                 "title": f"Recovered scene {index + 1}",
@@ -2532,7 +2639,7 @@ SCREENPLAY:
                 "scene_type": "dialogue" if '"' in chunk or "—" in chunk else "action",
                 "subjects_on_screen": subjects,
                 "environment": "The canonical setting described by the screenplay and master story.",
-                "visual_style": "Cinematic visual continuity matching the supplied story world.",
+                "visual_style": canonical_style or "Cinematic visual continuity matching the supplied story world.",
                 "lighting": "Motivated cinematic lighting consistent with the location.",
                 "mood": role.replace("_", " "),
                 "action_beats": [chunk],

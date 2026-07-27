@@ -223,8 +223,14 @@ export interface ShortFilmAdaptation {
   characters: ShortFilmCharacter[]
   targetDuration: number
   narrative: boolean
+  visualStyle: string
+  preserveVisualStyle: boolean
   characterReferences: Array<{ assetId: string; label: string }>
   locationReferences: Array<{ assetId: string; label: string }>
+}
+
+export interface ShortFilmAdaptationOptions {
+  preserveVisualStyle?: boolean
 }
 
 /** Build an editable, self-contained Director episode without flattening the master story. */
@@ -232,7 +238,14 @@ export function buildShortFilmAdaptation(
   project: StoryProject,
   direction = DEFAULT_SHORT_FILM_DIRECTION,
   targetDuration = 45,
+  options: ShortFilmAdaptationOptions = {},
 ): ShortFilmAdaptation {
+  const preserveVisualStyle = options.preserveVisualStyle ?? true
+  const visualStyle = [
+    project.world.visualLanguage,
+    project.world.visualPrompt,
+  ].map(value => value.trim()).filter(Boolean).join('. ')
+    || 'Match the approved Story reference artwork exactly, preserving its authored visual medium and character design; if it is anime, comic or illustration, keep it illustrated and never reinterpret it as live action.'
   const characterReferences = project.characters.flatMap(character => {
     const assetId = character.primaryReferenceAssetId || character.referenceAssetIds[0]
     return assetId ? [{ assetId, label: character.name }] : []
@@ -262,6 +275,7 @@ export function buildShortFilmAdaptation(
         project.world.negativePrompt,
         ...project.world.locations.map(location => location.negativePrompt),
       ].filter(Boolean).join('; ')),
+      preserveVisualStyle ? '' : 'Visual medium may be reinterpreted for this adaptation.',
     ].filter(Boolean).join('\n'),
     characters: project.characters.map(character => ({
       name: character.name,
@@ -273,6 +287,8 @@ export function buildShortFilmAdaptation(
     })),
     targetDuration: Math.max(10, Math.min(1800, Math.round(targetDuration || 45))),
     narrative: true,
+    visualStyle,
+    preserveVisualStyle,
     characterReferences: Array.from(
       new Map(characterReferences.map(reference => [reference.assetId, reference])).values(),
     ),

@@ -350,6 +350,7 @@ export function StoryLabPanel() {
   const [comicPanelsPerPage, setComicPanelsPerPage] = useState(4)
   const [filmDirection, setFilmDirection] = useState(DEFAULT_SHORT_FILM_DIRECTION)
   const [filmDuration, setFilmDuration] = useState(45)
+  const [filmPreserveVisualStyle, setFilmPreserveVisualStyle] = useState(true)
   const [jobProgress, setJobProgress] = useState('')
   const [recoveryJobId, setRecoveryJobId] = useState(() =>
     window.localStorage.getItem(storyJobKey(activeWorkspace, project.id)) || '')
@@ -1019,8 +1020,11 @@ export function StoryLabPanel() {
     direction = DEFAULT_SHORT_FILM_DIRECTION,
     autoStart = false,
     targetDuration = filmDuration,
+    preserveVisualStyle = filmPreserveVisualStyle,
   ) => {
-    const adaptation = buildShortFilmAdaptation(source, direction, targetDuration)
+    const adaptation = buildShortFilmAdaptation(source, direction, targetDuration, {
+      preserveVisualStyle,
+    })
     const director = useStore.getState()
     director.directorReset()
     const store = useStore.getState()
@@ -1037,6 +1041,8 @@ export function StoryLabPanel() {
     store.shortFilmSetCharacters(adaptation.characters)
     store.shortFilmSetTargetDuration(adaptation.targetDuration)
     store.shortFilmSetNarrative(adaptation.narrative)
+    store.shortFilmSetVisualStyle(adaptation.visualStyle)
+    store.shortFilmSetPreserveVisualStyle(adaptation.preserveVisualStyle)
     store.setDirectorAutoMode(autoStart)
     useStore.setState({
       directorWritingProvider: source.provider.writingProvider,
@@ -1103,7 +1109,13 @@ export function StoryLabPanel() {
     if (!confirmed) return
     setProductionBusy('film')
     try {
-      const adaptation = await loadFilmProduction(project, filmDirection, autoStart, filmDuration)
+      const adaptation = await loadFilmProduction(
+        project,
+        filmDirection,
+        autoStart,
+        filmDuration,
+        filmPreserveVisualStyle,
+      )
       patch({
         productions: [...project.productions, {
           id: storyId('production'), kind: 'film', title: `${project.title} · short episode`,
@@ -1116,6 +1128,8 @@ export function StoryLabPanel() {
             characters: adaptation.characters,
             targetDuration: adaptation.targetDuration,
             narrative: adaptation.narrative,
+            visualStyle: adaptation.visualStyle,
+            preserveVisualStyle: adaptation.preserveVisualStyle,
           },
           status: 'staged',
         }],
@@ -1178,7 +1192,8 @@ export function StoryLabPanel() {
       ? production.targetSnapshot.direction
       : DEFAULT_SHORT_FILM_DIRECTION
     const targetDuration = Number(production.targetSnapshot?.targetDuration) || 45
-    await loadFilmProduction(source, direction, false, targetDuration)
+    const preserveVisualStyle = production.targetSnapshot?.preserveVisualStyle !== false
+    await loadFilmProduction(source, direction, false, targetDuration, preserveVisualStyle)
   }
 
   const restoreProductionSource = (productionId: string) => {
@@ -1538,6 +1553,20 @@ export function StoryLabPanel() {
                         value={filmDuration}
                         onChange={event => setFilmDuration(Math.max(10, Math.min(1800, Number(event.target.value) || 45)))}
                       />
+                    </label>
+                    <label className="flex items-start gap-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filmPreserveVisualStyle}
+                        onChange={event => setFilmPreserveVisualStyle(event.target.checked)}
+                        className="mt-0.5 accent-purple-400"
+                      />
+                      <span>
+                        <span className="block text-[10px] font-medium text-purple-200">Preserve Story visual style</span>
+                        <span className="block text-[9px] leading-relaxed text-text-muted">
+                          Keeps anime, comic, illustration, palette and character design across generated frames and video. Disable only to intentionally reinterpret the adaptation.
+                        </span>
+                      </span>
                     </label>
                     <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate complete short film</button>
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> Open in Short Film Director</button>

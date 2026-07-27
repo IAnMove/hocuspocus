@@ -4429,6 +4429,8 @@ def plan_short_film_from_story(
     frames_steps: int = 4,
     frames_minimum: int = 5,
     max_new_tokens: int = 1024,
+    visual_style: str = "",
+    preserve_visual_style: bool = False,
 ) -> dict:
     """Plan a short film scene structure from a story description.
 
@@ -4465,6 +4467,15 @@ def plan_short_film_from_story(
                 labels[index] if index < len(labels) else ""
             )
     has_image = bool(reference_images)
+    from services.director.policies import (
+        build_visual_style_contract,
+        enforce_visual_style_on_clip_plans,
+    )
+    style_contract = build_visual_style_contract(
+        visual_style,
+        preserve=preserve_visual_style,
+        has_reference=has_image,
+    )
 
     # ── Character context ─────────────────────────────────────────
     char_context = ""
@@ -4532,7 +4543,7 @@ def plan_short_film_from_story(
         "Actions belong ONLY in video_prompt, never in image_prompt. "
         "NEVER use character names or meta-instructions.\n"
     ) if has_image else (
-        "- image_prompt: the FIRST FRAME BEFORE action begins — a frozen still photograph. "
+        "- image_prompt: the FIRST FRAME BEFORE action begins — a frozen still image. "
         "Show the INITIAL STATE: if clothing will be removed, it's still on; if someone enters, "
         "the room is empty. Describe static poses only (standing, seated, leaning). "
         "No motion verbs (walking, running, reaching, heaving, turning). "
@@ -4575,6 +4586,7 @@ def plan_short_film_from_story(
 
     system_prompt = (
         f"{role_section}"
+        f"{style_contract}\n\n"
         f"Break the concept into scenes within {target_duration} seconds total. "
         f"YOU decide how many scenes based on the story — let pacing dictate the cuts.\n"
         "For each scene, write a video_prompt and image_prompt.\n\n"
@@ -4889,4 +4901,10 @@ def plan_short_film_from_story(
 
         current_time += scene_dur
 
+    clip_plans = enforce_visual_style_on_clip_plans(
+        clip_plans,
+        visual_style,
+        preserve=preserve_visual_style,
+        has_reference=has_image,
+    )
     return {"clips": clips, "clip_plans": clip_plans}

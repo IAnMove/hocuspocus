@@ -6321,6 +6321,8 @@ async def director_plan_short_film_script(request: Request):
             fps=body.get("fps", 24),
             frames_steps=body.get("frames_steps", 4),
             frames_minimum=body.get("frames_minimum", 5),
+            visual_style=body.get("visual_style", ""),
+            preserve_visual_style=body.get("preserve_visual_style", False),
         )
         return result
     except Exception as e:
@@ -6486,6 +6488,7 @@ _DIRECTOR_V2_PLANNER_KEYS = (
     "location_ref_paths", "location_ref_labels", "speaker_mappings", "characters",
     "audio_path", "target_duration", "target_scenes", "narrative_mode",
     "fps", "frames_steps", "frames_minimum", "concept", "visual_style",
+    "preserve_visual_style",
     "platform", "style", "transcript", "prompt_type", "image_model",
     "video_model", "seamless", "multishot_lora_mode",
 )
@@ -6586,6 +6589,13 @@ async def director_v2_plan(request: Request):
                 )
             )
 
+        from services.director.policies import enforce_visual_style_on_clip_plans
+        clip_plans = enforce_visual_style_on_clip_plans(
+            clip_plans,
+            body.get("visual_style", ""),
+            preserve=bool(body.get("preserve_visual_style", False)),
+            has_reference=has_reference,
+        )
         return {
             "clip_plans": clip_plans,
             "production_plan": plan.to_dict(),

@@ -29,6 +29,7 @@ from .renderers import (
     LtxRetakeRenderer, LtxExtendRenderer, ImageGenRenderer,
 )
 from .validators import validate_shot_plan, validate_prompt_for_mode, compress_prompt
+from .policies import apply_visual_style_lock
 
 
 # ── Feature Flags ────────────────────────────────────────────────────
@@ -215,7 +216,14 @@ class DirectorOrchestrator:
                         # LLM may return dicts instead of strings
                         if isinstance(wp, dict):
                             wp = wp.get("prompt", wp.get("text", str(wp)))
-                        validated_windows.append(str(wp).strip())
+                        metadata = shot.metadata or {}
+                        validated_windows.append(apply_visual_style_lock(
+                            str(wp).strip(),
+                            metadata.get("canonical_visual_style") or shot.visual_style,
+                            mode=video_mode,
+                            preserve=bool(metadata.get("preserve_visual_style", False)),
+                            has_reference=has_reference,
+                        ))
                     result["video_prompt"] = "\n".join(validated_windows)
                     result["window_count"] = len(validated_windows)
                 else:
@@ -242,7 +250,18 @@ class DirectorOrchestrator:
 
             # Pass through keyframe prompts if present
             if shot.keyframe_prompts:
-                result["keyframe_prompts"] = shot.keyframe_prompts
+                metadata = shot.metadata or {}
+                result["keyframe_prompts"] = [
+                    apply_visual_style_lock(
+                        prompt.get("prompt", prompt.get("text", ""))
+                        if isinstance(prompt, dict) else prompt,
+                        metadata.get("canonical_visual_style") or shot.visual_style,
+                        mode="image",
+                        preserve=bool(metadata.get("preserve_visual_style", False)),
+                        has_reference=has_reference,
+                    )
+                    for prompt in shot.keyframe_prompts
+                ]
 
             results.append(result)
 
@@ -313,6 +332,20 @@ class DirectorOrchestrator:
                       f"{compression.chars_removed} chars removed "
                       f"({compression.compression_ratio:.1%})")
             prompt = compression.compressed
+
+        # Story adaptations carry an explicit style contract in shot metadata.
+        # Re-apply it after validation/compression so no planner, remote LLM or
+        # prompt-polish pass can silently turn illustrated artwork into live
+        # action.  Direct Studio I2V remains covered by ensure_source_style()
+        # even when no Story contract exists.
+        metadata = shot.metadata or {}
+        prompt = apply_visual_style_lock(
+            prompt,
+            metadata.get("canonical_visual_style") or shot.visual_style,
+            mode=mode,
+            preserve=bool(metadata.get("preserve_visual_style", False)),
+            has_reference=bool(context.get("has_reference", False)),
+        )
 
         return prompt
 

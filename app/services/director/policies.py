@@ -316,13 +316,13 @@ def build_character_rules_block(has_reference: bool, characters: Optional[list[C
         # selfie tagged 'man in black', screenplay turns him into a
         # knight, future shot prompts keep saying 'man in black' and
         # the image generator never renders armor" bug. The reference
-        # photo supplies IDENTITY (face, body type, gender). The
+        # image supplies IDENTITY (face, body type, gender). The
         # CURRENT shot's costume/role/state comes from the screenplay.
-        # Telling the LLM to "base descriptions on the reference photo"
+        # Telling the LLM to "base descriptions on the reference image"
         # without this distinction made it freeze the user's reference
         # outfit into every downstream prompt.
         lines.append(
-            "- The reference photo supplies IDENTITY (face, build, gender, "
+            "- The visual reference supplies IDENTITY (face, build, gender, "
             "approximate age). It does NOT freeze the character's costume "
             "or role for the rest of the story."
         )
@@ -330,10 +330,10 @@ def build_character_rules_block(has_reference: bool, characters: Optional[list[C
             "- Describe each character's APPEARANCE in each shot based on "
             "what the SCREENPLAY says they look like in that scene — costume, "
             "armor, props, state (wet hair, torn clothing, etc.). The "
-            "screenplay overrides the reference photo's costume."
+            "screenplay overrides the visual reference's costume."
         )
         lines.append(
-            "- Example: reference photo shows 'man in black t-shirt'. "
+            "- Example: reference image shows 'man in black t-shirt'. "
             "Screenplay says character is a knight. Shot descriptions: "
             "'tall man in gleaming silver plate armor' (NOT 'man in black')."
         )
@@ -344,10 +344,10 @@ def build_character_rules_block(has_reference: bool, characters: Optional[list[C
             # Do NOT include display_name — LLMs parrot names into prompts despite instructions
             lines.append(f"  * {c.id}: {desc}")
         lines.append(
-            "- The descriptions above are REFERENCE-PHOTO descriptions. "
+            "- The descriptions above are VISUAL-REFERENCE descriptions. "
             "If the screenplay transforms a character (e.g. into a knight, "
             "wizard, vampire, queen), describe them as transformed in shot "
-            "prompts. The reference photo is for IDENTITY only."
+            "prompts. The reference image is for IDENTITY and visual-medium continuity."
         )
     return "\n".join(lines)
 
@@ -362,3 +362,161 @@ def build_camera_style_block() -> str:
     """Build the adaptive camera style guidance."""
     from .guide_loader import load_guide
     return load_guide("camera_style_guidance.md") or "CAMERA STYLE:\n- Match complexity to content."
+
+
+# ── Story visual-style continuity ─────────────────────────────────────
+
+_ILLUSTRATED_STYLE_TERMS = (
+    "anime", "manga", "comic", "illustrat", "cel shad", "cell shad",
+    "2d", "line art", "inked", "graphic novel", "watercolor",
+    "watercolour", "gouache", "painted", "cartoon", "moebius",
+    "cómic", "ilustración", "acuarela", "dibujo", "animación",
+)
+
+
+def compact_visual_style(visual_style: str, max_chars: int = 360) -> str:
+    """Normalize a Story visual bible into a prompt-sized style statement.
+
+    Story world prompts can be intentionally rich, while some image providers
+    reject prompts above a small hard limit.  Keep the canonical statement
+    useful but bounded before it is repeated across every generated shot.
+    """
+    style = re.sub(r"\s+", " ", str(visual_style or "")).strip(" .;,")
+    if len(style) <= max_chars:
+        return style
+    shortened = style[:max_chars].rsplit(" ", 1)[0].rstrip(" .;,")
+    return shortened or style[:max_chars]
+
+
+def is_illustrated_visual_style(visual_style: str) -> bool:
+    """Return whether the authored style clearly describes non-live-action art."""
+    lowered = compact_visual_style(visual_style).casefold()
+    return any(term in lowered for term in _ILLUSTRATED_STYLE_TERMS)
+
+
+def build_visual_style_contract(
+    visual_style: str,
+    *,
+    preserve: bool = True,
+    has_reference: bool = False,
+) -> str:
+    """Build the planner-facing, non-optional Story style contract."""
+    style = compact_visual_style(visual_style)
+    if not preserve or not style:
+        return ""
+    lines = [
+        "VISUAL STYLE CONTRACT — STRICT:",
+        f"- Canonical medium and rendering: {style}.",
+        "- This contract is the source of truth for this adaptation and "
+        "overrides any conflicting generic style wording in the story concept.",
+        "- Apply this same medium, linework, palette, shading, character "
+        "proportions and design language to every start frame, keyframe and "
+        "video prompt.",
+        "- Camera language, lighting, location and costume may change; the "
+        "authored visual medium may not.",
+    ]
+    if has_reference:
+        lines.append(
+            "- Approved Story reference images are authoritative for both "
+            "identity AND visual medium; do not reinterpret them in another medium."
+        )
+    if is_illustrated_visual_style(style):
+        lines.append(
+            "- This is illustrated artwork. Never recast it as live action, "
+            "photorealistic people or skin, or 3D CGI."
+        )
+    return "\n".join(lines)
+
+
+def apply_visual_style_lock(
+    prompt: str,
+    visual_style: str,
+    *,
+    mode: str,
+    preserve: bool = True,
+    has_reference: bool = False,
+) -> str:
+    """Deterministically anchor a final image/video prompt to Story style.
+
+    This runs after LLM planning (and again after optional prompt polish), so
+    providers cannot silently replace anime/comic artwork with live action.
+    The marker makes the operation idempotent across resume/retry paths.
+    """
+    text = str(prompt or "").strip()
+    style = compact_visual_style(visual_style)
+    if not preserve or not style or "visual style lock:" in text.casefold():
+        return text
+
+    medium = (
+        f"VISUAL STYLE LOCK: {style}. Match this authored medium, linework, "
+        "palette, shading, proportions and character design"
+    )
+    if has_reference:
+        medium += " and the approved Story reference artwork"
+    medium += " exactly throughout."
+    if is_illustrated_visual_style(style):
+        medium += (
+            " Illustrated rendering only; no live action, photorealistic "
+            "people or skin, and no 3D CGI."
+        )
+    if mode in {"video", "i2v", "a2v", "t2v", "extend", "retake"}:
+        medium += " Animate the artwork without changing its visual medium."
+    combined = f"{medium} {text}".strip()
+    # MiniMax Image currently rejects prompts at 1500 characters.  Story
+    # prompts can be verbose, so reserve a small transport margin while
+    # keeping the style lock at the front (the most important instruction).
+    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
+        remaining = max(0, 1449 - len(medium))
+        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
+        combined = f"{medium} {shortened}".strip()
+    return combined
+
+
+def enforce_visual_style_on_clip_plans(
+    clip_plans: list[dict],
+    visual_style: str,
+    *,
+    preserve: bool = True,
+    has_reference: bool = False,
+) -> list[dict]:
+    """Apply the final style lock to all still and moving prompt fields."""
+    if not preserve or not compact_visual_style(visual_style):
+        return clip_plans
+    for plan in clip_plans or []:
+        if not isinstance(plan, dict):
+            continue
+        if str(plan.get("image_prompt") or "").strip():
+            plan["image_prompt"] = apply_visual_style_lock(
+                plan["image_prompt"],
+                visual_style,
+                mode="image",
+                preserve=preserve,
+                has_reference=has_reference,
+            )
+        if str(plan.get("video_prompt") or "").strip():
+            plan["video_prompt"] = apply_visual_style_lock(
+                plan["video_prompt"],
+                visual_style,
+                mode="video",
+                preserve=preserve,
+                has_reference=has_reference,
+            )
+        for field, mode in (
+            ("window_prompts", "video"),
+            ("keyframe_prompts", "image"),
+        ):
+            values = plan.get(field)
+            if not isinstance(values, list):
+                continue
+            plan[field] = [
+                apply_visual_style_lock(
+                    value.get("prompt", value.get("text", ""))
+                    if isinstance(value, dict) else value,
+                    visual_style,
+                    mode=mode,
+                    preserve=preserve,
+                    has_reference=has_reference,
+                )
+                for value in values
+            ]
+    return clip_plans

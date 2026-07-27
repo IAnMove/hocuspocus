@@ -393,6 +393,10 @@ export function DirectorChat() {
   const shortFilmSetTargetDuration = useStore(s => s.shortFilmSetTargetDuration)
   const shortFilmNarrative = useStore(s => s.shortFilmNarrative)
   const shortFilmSetNarrative = useStore(s => s.shortFilmSetNarrative)
+  const shortFilmVisualStyle = useStore(s => s.shortFilmVisualStyle)
+  const shortFilmSetVisualStyle = useStore(s => s.shortFilmSetVisualStyle)
+  const shortFilmPreserveVisualStyle = useStore(s => s.shortFilmPreserveVisualStyle)
+  const shortFilmSetPreserveVisualStyle = useStore(s => s.shortFilmSetPreserveVisualStyle)
   const startDirectorPipeline = useStore(s => s.startDirectorPipeline)
   const pipelinePhase = useStore(s => s.pipelineStatus?.phase)
 
@@ -655,8 +659,8 @@ export function DirectorChat() {
               <SystemBubble>
                 <p className="text-xs text-text-secondary mb-2">
                   {isShortFilm
-                    ? 'Upload a reference photo of your characters and dialogue audio to get started.'
-                    : 'Add a reference photo (optional), then upload a track or generate one.'}
+                    ? 'Upload reference images or artwork for your characters and dialogue audio to get started.'
+                    : 'Add a reference image (optional), then upload a track or generate one.'}
                 </p>
                 <div className="space-y-3">
                   <ReferenceImageUpload
@@ -835,7 +839,7 @@ export function DirectorChat() {
             {isStoryPath && atStep('style') && (
               <SystemBubble>
                 <p className="text-xs text-text-secondary mb-2">
-                  Set up your short film. Upload a reference photo, name your characters, and set the target duration.
+                  Set up your short film. Add reference images or artwork, name your characters, and set the target duration.
                 </p>
                 <div className="space-y-3">
                   <ReferenceImageUpload
@@ -882,6 +886,34 @@ export function DirectorChat() {
                         Structure scenes around a character arc with rising tension and emotional resolution
                       </p>
                     </div>
+                  </label>
+                  <label className="flex items-start gap-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={shortFilmPreserveVisualStyle}
+                      onChange={e => shortFilmSetPreserveVisualStyle(e.target.checked)}
+                      className="mt-0.5 accent-purple-400"
+                    />
+                    <div>
+                      <span className="text-[10px] text-purple-200">Preserve Story visual style</span>
+                      <p className="text-[9px] text-text-muted leading-tight">
+                        Locks the authored medium and reference artwork across start frames, keyframes and video.
+                      </p>
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] text-text-muted">Canonical visual style</span>
+                    <AutoResizeTextarea
+                      value={shortFilmVisualStyle}
+                      onChange={e => shortFilmSetVisualStyle(e.target.value)}
+                      disabled={!shortFilmPreserveVisualStyle}
+                      rows={3}
+                      className="mt-1 w-full resize-none rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] leading-relaxed text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
+                      placeholder="e.g. 2D anime, clean cel shading, restrained linework, watercolor backgrounds"
+                    />
+                    <p className="mt-1 text-[9px] text-text-muted">
+                      Loaded from the Story world bible. You can edit it for this film without changing the master Story.
+                    </p>
                   </label>
                 </div>
               </SystemBubble>
@@ -1146,7 +1178,7 @@ function CharacterNaming({
         + Add character
       </button>
       <span className="text-[10px] text-text-muted block mt-1">
-        Name the people visible in the reference photo so the AI can identify them.
+        Name the characters visible in the reference image so the AI can identify them.
       </span>
     </div>
   )
@@ -1378,7 +1410,7 @@ function ReferenceImageUpload({
               />
             </label>
             <div className="flex-1 min-w-0">
-              <span className="text-[10px] text-text-muted">Reference photo</span>
+              <span className="text-[10px] text-text-muted">Reference image</span>
             </div>
             <button
               onClick={() => setReferenceImage(null)}
@@ -1391,7 +1423,7 @@ function ReferenceImageUpload({
         ) : (
           <label className="cursor-pointer flex items-center gap-2 border border-dashed border-border rounded px-2 py-1.5 hover:border-accent-blue transition-colors">
             <ImageIcon size={12} className="text-text-muted" />
-            <span className="text-[10px] text-text-muted">Add reference photo</span>
+            <span className="text-[10px] text-text-muted">Add reference image</span>
             <input
               type="file"
               accept={IMAGE_ACCEPT}
@@ -1425,7 +1457,7 @@ function ReferenceImageUpload({
               src={refImagePreview}
               alt="Reference"
               className="w-full h-24 object-cover rounded-lg border border-border hover:border-accent-blue transition-colors"
-              title="Click to change photo"
+              title="Click to change image"
             />
             <input
               type="file"
@@ -1442,7 +1474,7 @@ function ReferenceImageUpload({
             <X size={12} className="text-text-muted" />
           </button>
           <span className="absolute bottom-1.5 left-1.5 text-[9px] text-white/80 bg-black/50 px-1.5 py-0.5 rounded">
-            Reference photo &middot; click to change
+            Reference image &middot; click to change
           </span>
         </div>
       ) : (
@@ -1456,7 +1488,7 @@ function ReferenceImageUpload({
         >
           <div className="flex flex-col items-center gap-1.5">
             <ImageIcon size={20} className="text-accent-blue/60" />
-            <span className="text-xs text-text-secondary">Drop reference photo or click to upload</span>
+            <span className="text-xs text-text-secondary">Drop a reference image or artwork, or click to upload</span>
             <span className="text-[10px] text-text-muted">Creates start images for each clip</span>
           </div>
           <input

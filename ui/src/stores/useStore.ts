@@ -1191,10 +1191,14 @@ interface AppState {
   directorWritingModel: string
   directorWritingBaseUrl: string
   shortFilmNarrative: boolean
+  shortFilmVisualStyle: string
+  shortFilmPreserveVisualStyle: boolean
   shortFilmSetCharacters: (characters: ShortFilmCharacter[]) => void
   shortFilmSetPath: (path: ShortFilmPath) => void
   shortFilmSetTargetDuration: (duration: number) => void
   shortFilmSetNarrative: (v: boolean) => void
+  shortFilmSetVisualStyle: (style: string) => void
+  shortFilmSetPreserveVisualStyle: (v: boolean) => void
   shortFilmUploadAndAnalyze: (file: File) => Promise<void>
   shortFilmSetPacingBias: (bias: number) => Promise<void>
   shortFilmPlanPrompts: () => Promise<void>
@@ -4640,6 +4644,8 @@ export const useStore = create<AppState>((set, get) => ({
   directorWritingModel: '',
   directorWritingBaseUrl: '',
   shortFilmNarrative: false,
+  shortFilmVisualStyle: '',
+  shortFilmPreserveVisualStyle: true,
   llmStreamText: '',
   llmStreamDone: true,
   pipelineId: null,
@@ -5591,6 +5597,8 @@ export const useStore = create<AppState>((set, get) => ({
       directorWritingModel: '',
       directorWritingBaseUrl: '',
       shortFilmNarrative: false,
+      shortFilmVisualStyle: '',
+      shortFilmPreserveVisualStyle: true,
       // Detach this editor session from any prior recoverable pipeline. The
       // backend job is intentionally not cancelled and remains in Dashboard,
       // but its poller must not overwrite the next story loaded into Director.
@@ -5606,6 +5614,8 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmSetPath: (path) => set({ shortFilmPath: path }),
   shortFilmSetTargetDuration: (duration) => set({ shortFilmTargetDuration: duration }),
   shortFilmSetNarrative: (v) => set({ shortFilmNarrative: v }),
+  shortFilmSetVisualStyle: (style) => set({ shortFilmVisualStyle: style }),
+  shortFilmSetPreserveVisualStyle: (v) => set({ shortFilmPreserveVisualStyle: v }),
 
   shortFilmUploadAndAnalyze: async (file) => {
     set({
@@ -5847,7 +5857,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   shortFilmPlanFromStory: async () => {
     const { directorSceneDescription,
-            shortFilmCharacters, shortFilmTargetDuration, shortFilmNarrative } = get()
+            shortFilmCharacters, shortFilmTargetDuration, shortFilmNarrative,
+            shortFilmVisualStyle, shortFilmPreserveVisualStyle } = get()
     if (!directorSceneDescription.trim()) return
     set({ directorLoading: true, directorError: null, directorStep: 'plan', llmStreamText: '', llmStreamDone: false })
     try {
@@ -5876,6 +5887,8 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           target_duration: shortFilmTargetDuration,
           narrative_mode: shortFilmNarrative,
+          visual_style: shortFilmVisualStyle || undefined,
+          preserve_visual_style: shortFilmPreserveVisualStyle,
           fps: get().modelOptions?.fps ?? 24,
           frames_steps: get().modelOptions?.frames_steps ?? 4,
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
@@ -5914,6 +5927,8 @@ export const useStore = create<AppState>((set, get) => ({
           fps: get().modelOptions?.fps ?? 24,
           frames_steps: get().modelOptions?.frames_steps ?? 4,
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
+          visual_style: shortFilmVisualStyle || undefined,
+          preserve_visual_style: shortFilmPreserveVisualStyle,
         })
         storyClips = result.clips
         plans = result.clip_plans.map(p => ({
@@ -6762,7 +6777,8 @@ export const useStore = create<AppState>((set, get) => ({
             directorVideoSpatialUpsampling, directorVideoFilmGrainIntensity,
             directorVideoFilmGrainSaturation, directorVideoSelfRefiner,
             shortFilmPath, shortFilmCharacters, shortFilmTargetDuration,
-            shortFilmNarrative, modelOptions } = state
+            shortFilmNarrative, shortFilmVisualStyle,
+            shortFilmPreserveVisualStyle, modelOptions } = state
 
     const fps = modelOptions?.fps ?? 16
     const directorRes = resolutionMap[directorResolution]?.[directorAspectRatio] || resolutionMap[directorResolution]['16:9']
@@ -6859,6 +6875,8 @@ export const useStore = create<AppState>((set, get) => ({
       characters: shortFilmCharacters,
       target_duration: shortFilmTargetDuration,
       narrative_mode: shortFilmNarrative,
+      visual_style: shortFilmVisualStyle || undefined,
+      preserve_visual_style: shortFilmPreserveVisualStyle,
 
       // Image gen settings
       image_model: selectedModelPerMode.image || 'flux2_klein_9b',

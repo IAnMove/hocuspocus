@@ -51,6 +51,8 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             "location_ref_labels": ["Sunken city"],
             "image_model": "flux2_klein_9b",
             "video_model": "ltx2_22B_distilled_1_1",
+            "visual_style": "2D anime, clean cel shading",
+            "preserve_visual_style": True,
         }
         self.assertEqual(_director_v2_planner_kwargs(body), body)
 
@@ -142,9 +144,15 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             fps=24,
             frames_steps=8,
             frames_minimum=41,
+            visual_style="2D anime, clean cel shading",
+            preserve_visual_style=True,
         )
         self.assertEqual(len(plan.shots), 2)
         self.assertTrue(all(shot.video_prompt for shot in plan.shots))
+        self.assertTrue(all(shot.visual_style == "2D anime, clean cel shading" for shot in plan.shots))
+        self.assertTrue(all(shot.metadata["preserve_visual_style"] for shot in plan.shots))
+        self.assertTrue(all("VISUAL STYLE LOCK:" in shot.image_prompt for shot in plan.shots))
+        self.assertTrue(all("no live action" in shot.video_prompt for shot in plan.shots))
 
     def test_comic_movie_falls_back_per_panel_when_provider_returns_prose(self):
         responses = iter([

@@ -74,8 +74,13 @@ IMAGE PROMPTS DESCRIBE A FROZEN FRAME:
 - Describe EXPRESSIONS as physical states: "mouth open, brow furrowed" not "looking angry".
 
 STYLE CONSISTENCY:
-- Match the visual style of the reference image. If the reference is photorealistic,
-  every prompt is photorealistic. Do NOT introduce cartoon, anime, or illustration styles.
+- Match the exact visual medium of the reference image in both directions.
+  Photorealistic references stay photorealistic; anime, comic, cel-shaded,
+  painted, cartoon, and other illustrated references stay illustrated.
+- NEVER convert illustrated reference artwork into live action, realistic
+  people/skin, photography, or 3D CGI unless the user explicitly requests it.
+- A Story visual-style contract, when present, overrides generic examples in
+  this guide and must appear consistently in every generated frame.
 
 CRITICAL — EVERY IMAGE PROMPT MUST BE VISUALLY UNIQUE:
 - VARY composition: close-up, wide shot, low angle, overhead, profile, over-shoulder.
@@ -90,6 +95,7 @@ GOOD EXAMPLES:
 BAD EXAMPLES:
 - "create new scene, same environment. Blonde man playing guitar." — no reference anchoring, no lighting.
 - "the woman in the red dress with curly hair" — names a garment.
-- "cartoon style illustration of..." — introduces a style not in the reference.
+- "photorealistic woman..." for an anime/comic reference — changes the authored medium.
+- "cartoon style illustration of..." for a photorealistic reference — changes the authored medium.
 
 ALWAYS end every image_prompt with: "Preserve character identity, attire, and body attributes from the reference image."

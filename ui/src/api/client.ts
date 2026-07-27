@@ -771,6 +771,7 @@ export interface DirectorV2PlanRequest {
   frames_minimum?: number
   concept?: string
   visual_style?: string
+  preserve_visual_style?: boolean
   platform?: string
   style?: string
   prompt_type?: string
@@ -2139,6 +2140,8 @@ export async function planShortFilmScript(params: {
   fps?: number
   frames_steps?: number
   frames_minimum?: number
+  visual_style?: string
+  preserve_visual_style?: boolean
 }): Promise<{ clips: import('../types').PlannedClip[]; clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-short-film-script`, {
     method: 'POST',
