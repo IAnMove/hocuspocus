@@ -112,13 +112,137 @@ def _save_pipeline_state(pid: str):
         "_params_snapshot": params,
     }
 
+    filepath = os.path.join(out_dir, f"{_PIPELINE_FILE_PREFIX}{pid}.json")
+    temp_path = f"{filepath}.{uuid.uuid4().hex[:8]}.tmp"
     try:
         os.makedirs(out_dir, exist_ok=True)
-        filepath = os.path.join(out_dir, f"{_PIPELINE_FILE_PREFIX}{pid}.json")
-        with open(filepath, "w", encoding="utf-8") as f:
+        with open(temp_path, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False, default=str)
+        os.replace(temp_path, filepath)
     except Exception as e:
         print(f"[Pipeline] Failed to save state for {pid}: {e}")
+    finally:
+        try:
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
+        except OSError:
+            pass
+
+
+def _pipeline_media_for_job(pid: str, out_dir: str, expected_clips: int) -> Optional[dict]:
+    """Find a finished multi-clip job that belongs to a Director pipeline.
+
+    A generation job writes one metadata sidecar per output.  The Director
+    supervisor used to time out independently of the still-running generation
+    thread, so a valid final movie could exist while the pipeline checkpoint
+    still said ``failed``.  Grouping sidecars by generation job lets us adopt
+    that completed work instead of submitting every clip again.
+    """
+    if not os.path.isdir(out_dir):
+        return None
+
+    groups: dict[str, list[tuple[float, str]]] = {}
+    for filename in os.listdir(out_dir):
+        if not filename.endswith(".meta.json"):
+            continue
+        meta_path = os.path.join(out_dir, filename)
+        try:
+            with open(meta_path, "r", encoding="utf-8") as handle:
+                metadata = json.load(handle)
+        except Exception:
+            continue
+        if metadata.get("director_pipeline_id") != pid:
+            continue
+
+        stem = filename[:-len(".meta.json")]
+        media_name = next(
+            (
+                f"{stem}{extension}"
+                for extension in (".mp4", ".webm", ".mkv", ".mov")
+                if os.path.isfile(os.path.join(out_dir, f"{stem}{extension}"))
+                and os.path.getsize(os.path.join(out_dir, f"{stem}{extension}")) > 1024
+            ),
+            None,
+        )
+        if not media_name:
+            continue
+        job_id = str(metadata.get("job_id") or "")
+        if not job_id:
+            continue
+        created_at = float(metadata.get("created_at") or 0)
+        groups.setdefault(job_id, []).append((created_at, media_name))
+
+    candidates = []
+    for job_id, entries in groups.items():
+        final_entries = [entry for entry in entries if "_multiclip" in entry[1]]
+        clip_entries = [entry for entry in entries if "_multiclip" not in entry[1]]
+        if not final_entries or len(clip_entries) < expected_clips:
+            continue
+        final_created, final_name = max(final_entries)
+        clip_names = [
+            name for _, name in sorted(clip_entries, key=lambda item: (item[0], item[1]))
+        ][:expected_clips]
+        candidates.append({
+            "job_id": job_id,
+            "created_at": final_created,
+            "final": final_name,
+            "clips": clip_names,
+        })
+
+    return max(candidates, key=lambda item: item["created_at"]) if candidates else None
+
+
+def _reconcile_pipeline_state_file(filepath: str, data: dict) -> dict:
+    """Promote a timed-out checkpoint when its generation actually finished."""
+    pid = str(data.get("pipeline_id") or "")
+    clips = data.get("clips") if isinstance(data.get("clips"), list) else []
+    if not pid or not clips:
+        return data
+    recovered = _pipeline_media_for_job(pid, os.path.dirname(filepath), len(clips))
+    if not recovered:
+        return data
+
+    already_reconciled = (
+        data.get("status") == "completed"
+        and recovered["final"] in (data.get("output_files") or [])
+        and all(
+            clip.get("video_filename") == recovered["clips"][index]
+            for index, clip in enumerate(clips)
+        )
+    )
+    if already_reconciled:
+        return data
+
+    for index, clip in enumerate(clips):
+        clip["video_filename"] = recovered["clips"][index]
+    data["status"] = "completed"
+    data["output_files"] = [recovered["final"]]
+    data["completed_at"] = max(
+        float(data.get("completed_at") or 0),
+        float(recovered["created_at"] or 0),
+    )
+    data["recovered_at"] = time.time()
+    data["recovery_note"] = (
+        "Recovered completed generation outputs after the Director supervisor "
+        "timed out."
+    )
+
+    temp_path = f"{filepath}.{uuid.uuid4().hex[:8]}.tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, ensure_ascii=False, default=str)
+        os.replace(temp_path, filepath)
+        print(
+            f"[Pipeline {pid}] Recovered {len(clips)} clip videos and final "
+            f"movie {recovered['final']} from job {recovered['job_id']}"
+        )
+    finally:
+        try:
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
+        except OSError:
+            pass
+    return data
 
 
 def list_pipeline_states(out_dir: str) -> list[dict]:
@@ -140,6 +264,7 @@ def list_pipeline_states(out_dir: str) -> list[dict]:
                     filepath = os.path.join(scan_dir, fname)
                     with open(filepath, "r", encoding="utf-8") as f:
                         data = json.load(f)
+                    data = _reconcile_pipeline_state_file(filepath, data)
                     # Detect stale "running" pipelines — if the JSON says running
                     # but there's no active in-memory pipeline, it crashed
                     status = data.get("status", "unknown")
@@ -176,14 +301,14 @@ def load_pipeline_state(out_dir: str, pid: str) -> Optional[dict]:
     filepath = os.path.join(out_dir, target)
     if os.path.isfile(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return _reconcile_pipeline_state_file(filepath, json.load(f))
     # Search subdirectories (workspaces)
     if os.path.isdir(out_dir):
         for name in os.listdir(out_dir):
             sub = os.path.join(out_dir, name, target)
             if os.path.isfile(sub):
                 with open(sub, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    return _reconcile_pipeline_state_file(sub, json.load(f))
     return None
 
 
@@ -453,6 +578,10 @@ def init(jobs_dict, run_gen_fn, wgp_module, gen_lock=None):
 def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None, out_dir: str = None) -> list[str]:
     """Submit a generation job and block until it completes.
 
+    ``timeout_s`` is an inactivity timeout, not an absolute wall-clock limit.
+    A 96-panel comic can legitimately take longer than two hours; it should
+    only fail when the underlying job has stopped reporting progress.
+
     Returns list of output filenames. Raises on failure/timeout.
     """
     job_id = uuid.uuid4().hex[:8]
@@ -470,6 +599,7 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
         "error": None,
         "workspace": workspace,
         "out_dir": out_dir,
+        "last_progress_at": time.time(),
     }
     _jobs[job_id] = job
 
@@ -479,12 +609,48 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
     thread.start()
 
     # Wait for completion, mirroring job progress to pipeline status
-    deadline = time.time() + timeout_s
     _dir_pid = params.get("_director_pipeline_id")
-    while time.time() < deadline:
+    last_activity_at = time.time()
+    last_signature = None
+    last_saved_clip_outputs: tuple = ()
+    while True:
         j = _jobs.get(job_id)
         if not j:
             raise RuntimeError("Job disappeared")
+
+        signature = (
+            j.get("status"),
+            j.get("progress"),
+            j.get("step"),
+            j.get("total_steps"),
+            j.get("phase"),
+            j.get("message"),
+            tuple(j.get("clip_output_files") or ()),
+        )
+        if signature != last_signature:
+            last_signature = signature
+            last_activity_at = time.time()
+        progress_at = float(j.get("last_progress_at") or 0)
+        if progress_at > last_activity_at:
+            last_activity_at = progress_at
+
+        clip_outputs = tuple(j.get("clip_output_files") or ())
+        if _dir_pid and clip_outputs and clip_outputs != last_saved_clip_outputs:
+            last_saved_clip_outputs = clip_outputs
+            with _pipeline_lock:
+                pipeline = _pipelines.get(_dir_pid)
+                if pipeline:
+                    expected = len(pipeline.get("clip_plans") or [])
+                    pipeline["_clip_video_files"] = list(clip_outputs[:expected])
+                    completed = sum(bool(name) for name in clip_outputs[:expected])
+                    if "progress" in pipeline:
+                        pipeline["progress"]["current"] = completed
+                        pipeline["progress"]["total"] = expected
+                        pipeline["progress"]["message"] = (
+                            f"Generated clip {completed}/{expected}; checkpoint saved"
+                        )
+            _save_pipeline_state(_dir_pid)
+
         if j["status"] == "completed":
             return j.get("output_files", [])
         if j["status"] == "failed":
@@ -500,9 +666,12 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
                     p["progress"]["step"] = j.get("step", 0)
                     p["progress"]["total_steps"] = j.get("total_steps", 0)
                     p["progress"]["message"] = j.get("phase") or j.get("message") or "Generating..."
+        if time.time() - last_activity_at >= timeout_s:
+            raise RuntimeError(
+                f"Generation stalled: no progress was reported for "
+                f"{max(1, round(timeout_s / 60))} minutes"
+            )
         time.sleep(1)
-
-    raise RuntimeError("Generation timed out")
 
 
 def _update_pipeline(pid: str, **kwargs):
@@ -616,6 +785,7 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
             data = json.load(f)
     except Exception as e:
         return False, f"Could not read saved pipeline state: {e}"
+    data = _reconcile_pipeline_state_file(state_path, data)
 
     params = data.get("_params_snapshot")
     if not isinstance(params, dict):
@@ -638,6 +808,7 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
     planned_clips = [c.get("planned_clip") for c in saved_clips]
     clip_images = [c.get("start_image_filename") for c in saved_clips]
     clip_keyframes = [c.get("keyframe_filenames", []) or [] for c in saved_clips]
+    clip_video_files = [c.get("video_filename") for c in saved_clips]
 
     workspace = data.get("workspace") if data.get("workspace") not in ("default", None) else None
     resume_out_dir = os.path.dirname(state_path)
@@ -652,6 +823,7 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         "_planned_clips": planned_clips,
         "clip_images": clip_images,
         "_clip_keyframes": clip_keyframes,
+        "_clip_video_files": clip_video_files,
         "output_files": data.get("output_files", []) or [],
         "_llm_log": data.get("llm_log"),
         "error": None,
@@ -664,6 +836,22 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
     }
     with _pipeline_lock:
         _pipelines[pid] = pipeline
+
+    if data.get("status") == "completed" and data.get("output_files"):
+        _update_pipeline(
+            pid,
+            status="completed",
+            phase="completed",
+            _completed_at=data.get("completed_at") or time.time(),
+            progress={
+                "current": len(saved_clips),
+                "total": len(saved_clips),
+                "message": "Recovered completed movie",
+                "step": 0,
+                "total_steps": 0,
+            },
+        )
+        return True, "recovered"
 
     thread = threading.Thread(target=_run_pipeline, args=(pid,), kwargs={"resume": True}, daemon=False)
     thread.start()
@@ -1692,6 +1880,8 @@ def _prepare_provided_clip_images(
 ) -> list[str]:
     """Stage caller-supplied I2V frames in one consistent video canvas."""
 
+    from PIL import Image, ImageOps, ImageStat
+
     if len(image_paths) != expected_count:
         raise RuntimeError(
             f"Comic movie received {len(image_paths)} panel images for "
@@ -1705,6 +1895,29 @@ def _prepare_provided_clip_images(
             raise RuntimeError(
                 f"Comic panel image {index + 1} is missing. "
                 "The completed panels are still preserved in the comic."
+            )
+        try:
+            with Image.open(source) as opened:
+                sample = ImageOps.exif_transpose(opened).convert("RGB")
+                sample.thumbnail((96, 96))
+                extrema = sample.getextrema()
+                statistics = ImageStat.Stat(sample)
+                maximum = max(high for _low, high in extrema)
+                dynamic_range = max(high - low for low, high in extrema)
+                mean = sum(statistics.mean) / len(statistics.mean)
+                effectively_black = maximum <= 3 or (
+                    dynamic_range <= 2 and mean <= 5
+                )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Comic panel image {index + 1} could not be read: {exc}. "
+                "The comic and its completed artwork are still preserved."
+            ) from exc
+        if effectively_black:
+            raise RuntimeError(
+                f"Comic panel {index + 1} was captured as a blank black image. "
+                "Video generation was stopped before using it. Reopen the comic "
+                "and convert it to a movie again; the artwork itself is preserved."
             )
         extension = (
             os.path.splitext(source)[1].lower()

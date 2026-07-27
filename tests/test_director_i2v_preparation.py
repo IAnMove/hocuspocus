@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
 from app.services import director_pipeline
@@ -78,6 +79,40 @@ def test_crop_fit_fills_requested_canvas(tmp_path):
 
     with Image.open(destination) as fitted:
         assert fitted.size == (320, 192)
+
+
+def test_blank_black_comic_capture_is_rejected_before_video_generation(tmp_path):
+    source = tmp_path / "black-panel.png"
+    Image.new("RGB", (320, 192), (0, 0, 0)).save(source)
+
+    with pytest.raises(RuntimeError, match="captured as a blank black image"):
+        director_pipeline._prepare_provided_clip_images(
+            "test-pipeline",
+            [str(source)],
+            expected_count=1,
+            out_dir=str(tmp_path / "outputs"),
+            resolution="320x192",
+        )
+
+
+def test_dark_but_detailed_comic_capture_is_not_rejected(tmp_path):
+    source = tmp_path / "dark-panel.png"
+    image = Image.new("RGB", (320, 192), (1, 1, 1))
+    for x in range(100, 220):
+        for y in range(60, 132):
+            image.putpixel((x, y), (18, 12, 8))
+    image.save(source)
+
+    staged = director_pipeline._prepare_provided_clip_images(
+        "test-pipeline",
+        [str(source)],
+        expected_count=1,
+        out_dir=str(tmp_path / "outputs"),
+        resolution="320x192",
+    )
+
+    assert len(staged) == 1
+    assert (tmp_path / "outputs" / staged[0]).is_file()
 
 
 def test_i2v_prompt_always_anchors_illustrated_source_style():

@@ -9945,10 +9945,13 @@ def _run_generation(job_id: str):
             completed = 0
             skipped = 0
             job["task_timings"] = []
+            job["clip_output_files"] = [None] * total_tasks
+            job["last_progress_at"] = time.time()
 
             is_multiclip = total_tasks > 1 and any(t.get('params', {}).get('multi_clip_info') for t in queue)
 
             for task_idx, task in enumerate(queue):
+                task_before = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
                 task_no = task_idx + 1
                 prompt_preview = (task.get('prompt', '') or '')[:60]
                 print(f"\n[Task {task_no}/{total_tasks}] {prompt_preview}...")
@@ -10012,6 +10015,7 @@ def _run_generation(job_id: str):
                         task_error = True
                         job["message"] = f"Error: {data}"
                     elif cmd == "progress":
+                        job["last_progress_at"] = time.time()
                         if isinstance(data, list) and len(data) >= 2:
                             if isinstance(data[0], tuple):
                                 step, total = data[0]
@@ -10060,6 +10064,7 @@ def _run_generation(job_id: str):
                             last_msg_len = len(status_line)
                             in_status_line = True
                     elif cmd == "status":
+                        job["last_progress_at"] = time.time()
                         job["message"] = str(data)
                         job["phase"] = str(data)
                         active_task_timer.phase(data)
@@ -10076,12 +10081,24 @@ def _run_generation(job_id: str):
                             last_msg_len = len(status_line)
                             in_status_line = True
                     elif cmd == "info":
+                        job["last_progress_at"] = time.time()
                         print(f"\n  [INFO] {data}")
                         in_status_line = False
 
                 if not task_error:
                     completed += 1
                     active_task_timer.finish("completed")
+                    job["last_progress_at"] = time.time()
+                    current_after = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
+                    task_outputs = sorted(
+                        filename
+                        for filename in current_after - task_before
+                        if os.path.splitext(filename)[1].lower() in {".mp4", ".webm", ".mkv", ".mov"}
+                        and "_tmp." not in filename
+                        and "_multiclip." not in filename
+                    )
+                    if task_outputs:
+                        job["clip_output_files"][task_idx] = task_outputs[-1]
                     print(f"\n  Task {task_no} completed")
 
                     # Free VRAM between clips to prevent OOM on long pipelines

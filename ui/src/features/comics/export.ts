@@ -7,6 +7,62 @@ import type { ComicPanelElement } from './types'
 const nextPaint = () => new Promise<void>(resolve =>
   requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
 
+async function waitForComicMedia(node: HTMLElement) {
+  if (document.fonts?.ready) await document.fonts.ready
+  await Promise.all(
+    Array.from(node.querySelectorAll('img')).map(async image => {
+      if (!image.complete) {
+        await new Promise<void>(resolve => {
+          image.addEventListener('load', () => resolve(), { once: true })
+          image.addEventListener('error', () => resolve(), { once: true })
+        })
+      }
+      if (typeof image.decode === 'function') {
+        await image.decode().catch(() => undefined)
+      }
+    }),
+  )
+  await nextPaint()
+}
+
+async function loadCapturedImage(dataUrl: string) {
+  const image = new Image()
+  image.decoding = 'sync'
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('Could not decode the captured comic page'))
+    image.src = dataUrl
+  })
+  return image
+}
+
+function cropPanelFromPage(
+  pageImage: HTMLImageElement,
+  pageWidth: number,
+  pageHeight: number,
+  panel: ComicPanelElement,
+) {
+  const scaleX = pageImage.naturalWidth / pageWidth
+  const scaleY = pageImage.naturalHeight / pageHeight
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(panel.width * scaleX))
+  canvas.height = Math.max(1, Math.round(panel.height * scaleY))
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Canvas is unavailable while capturing the comic')
+  context.drawImage(
+    pageImage,
+    Math.round(panel.x * scaleX),
+    Math.round(panel.y * scaleY),
+    canvas.width,
+    canvas.height,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  )
+  return canvas.toDataURL('image/png')
+}
+
 const safeName = (name: string) =>
   name.trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() || 'comic'
 
@@ -94,31 +150,35 @@ export async function forEachComicPanelCapture(
       const panels = page.elements
         .filter((element): element is ComicPanelElement => element.type === 'panel' && !element.parentId)
         .sort((a, b) => a.zIndex - b.zIndex)
+      const pageNode = document.getElementById('maestro-comic-page')
+      if (!pageNode) throw new Error(`Comic page ${pageIndex + 1} is not mounted`)
+      await waitForComicMedia(pageNode)
+      const letteringIds = new Set(
+        page.elements
+          .filter(element => element.type === 'text')
+          .map(element => element.id),
+      )
+      // Capture the rendered page once, then crop every panel from that stable
+      // bitmap. Repeated html-to-image calls on detached panel subtrees could
+      // return black after the first panel on each page.
+      const pageCapture = await toPng(pageNode, {
+        pixelRatio: 2,
+        cacheBust: true,
+        style: { transform: 'none', boxShadow: 'none' },
+        ...(options.includeLettering === false ? {
+          filter: child => !(
+            child instanceof HTMLElement
+            && letteringIds.has(child.dataset.comicElement || '')
+          ),
+        } : {}),
+      })
+      const pageImage = await loadCapturedImage(pageCapture)
       for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) {
         const panel = panels[panelIndex]
-        const node = document.querySelector<HTMLElement>(`[data-comic-element="${CSS.escape(panel.id)}"]`)
-        if (!node) throw new Error(`Comic panel ${pageIndex + 1}.${panelIndex + 1} is not mounted`)
-        const letteringIds = new Set(
-          page.elements
-            .filter(element => element.type === 'text' && element.parentId === panel.id)
-            .map(element => element.id),
-        )
         current += 1
         onProgress?.(current, total)
         const capture = {
-          dataUrl: await toPng(node, {
-            pixelRatio: 2,
-            cacheBust: true,
-            width: Math.round(panel.width),
-            height: Math.round(panel.height),
-            style: { left: '0', top: '0', transform: 'none', boxShadow: 'none' },
-            ...(options.includeLettering === false ? {
-              filter: child => !(
-                child instanceof HTMLElement
-                && letteringIds.has(child.dataset.comicElement || '')
-              ),
-            } : {}),
-          }),
+          dataUrl: cropPanelFromPage(pageImage, page.width, page.height, panel),
           pageNumber: pageIndex + 1,
           panelNumber: panelIndex + 1,
           panelId: panel.id,
