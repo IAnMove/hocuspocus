@@ -1,8 +1,8 @@
 {
     "model": {
-        "name": "LTX-2.3 Dev FP8 22B",
+        "name": "LTX-2.3 Dev FP8 22B (Quality Experimental)",
         "architecture": "ltx2_22B",
-        "description": "Official Lightricks FP8 mixed-precision LTX-2.3 dev checkpoint (22B). Higher-quality development variant; slower than distilled.",
+        "description": "Experimental quality profile using the official Lightricks FP8 mixed-precision LTX-2.3 dev checkpoint (22B), 30-step CFG pipeline, and distilled refiner LoRA. It is not a speed peer of Distilled and requires a conservative low-RAM offload profile on a 64 GB host.",
         "URLs": [
             "https://huggingface.co/Lightricks/LTX-2.3-fp8/resolve/main/ltx-2.3-22b-dev-fp8.safetensors"
         ],

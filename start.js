@@ -24,7 +24,10 @@ module.exports = async (kernel) => {
             // Reuse the stable sibling's large model library for lookup only.
             // files_locator.py guarantees that missing/new files are still
             // downloaded into this experimental app's own app/ckpts folder.
-            MAESTRO_READ_ONLY_CHECKPOINTS: "{{envs.MAESTRO_READ_ONLY_CHECKPOINTS || path.resolve(cwd, '..', 'Maestro.git', 'app', 'ckpts')}}"
+            MAESTRO_READ_ONLY_CHECKPOINTS: "{{envs.MAESTRO_READ_ONLY_CHECKPOINTS || path.resolve(cwd, '..', 'Maestro.git', 'app', 'ckpts')}}",
+            // Reuse stable LoRAs for lookup only. New LoRAs always go to
+            // this launcher's own app/loras tree.
+            MAESTRO_READ_ONLY_LORAS: "{{envs.MAESTRO_READ_ONLY_LORAS || path.resolve(cwd, '..', 'Maestro.git', 'app', 'loras')}}"
           },
           path: "app",
           message: [

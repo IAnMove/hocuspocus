@@ -1,8 +1,8 @@
 {
     "model": {
-        "name": "LTX-2.3 Distilled GGUF Q6_K Light 22B",
+        "name": "LTX-2.3 Distilled GGUF Q6_K Light 22B (Low VRAM / Compatibility)",
         "architecture": "ltx2_22B",
-        "description": "Memory-saving LTX-2.3 distilled GGUF Q6_K light checkpoint (22B). On Linux it is slower unless a compatible GGUF CUDA kernel is installed; RTX 40-series users should prefer Distilled 1.1 INT8 or the FP8 variant for speed.",
+        "description": "Memory-saving LTX-2.3 distilled GGUF Q6_K light checkpoint (22B). On Linux it is slower unless a compatible GGUF CUDA kernel is installed; RTX 40-series users should prefer Distilled 1.1 INT8 for speed. FP8 remains a slower experimental quality profile.",
         "URLs": [
             "https://huggingface.co/DeepBeepMeep/LTX-2/resolve/main/ltx-2.3-22b-distilled-Q6_K_light.gguf"
         ],

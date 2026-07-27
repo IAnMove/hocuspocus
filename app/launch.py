@@ -95,6 +95,15 @@ from services import model3d_service
 print(f"[Maestro] WanGP loaded: {len(wgp.displayed_model_types)} models available")
 # Base save path always comes from server_config["save_path"] (never from wgp.save_path which gets workspace-modified)
 
+
+def _local_lora_root() -> str:
+    """Return Maestro Next's only writable LoRA root as an absolute path."""
+
+    roots = wgp.fl.get_writable_loras_paths()
+    root = roots[0] if roots else "loras"
+    return root if os.path.isabs(root) else os.path.join(_app_dir, root)
+
+
 # Apply active workspace on startup
 _startup_ws = wgp.server_config.get("services", {}).get("active_workspace", "default")
 if _startup_ws != "default":
@@ -505,7 +514,7 @@ def scan_status(scan_id: str):
 @api.get("/api/v1/loras/directories")
 def list_lora_directories():
     """Return all available LoRA directories for target selection during download."""
-    lora_root = wgp.server_config.get("loras_root", "loras") if hasattr(wgp, 'server_config') else "loras"
+    lora_root = _local_lora_root()
     candidates = [lora_root]
     if not os.path.isabs(lora_root):
         candidates.append(os.path.join(os.path.dirname(__file__), lora_root))
@@ -530,7 +539,7 @@ def serve_lora_preview(filename: str):
     # Reject any traversal markers up front; only basenames are valid here.
     if filename != os.path.basename(filename) or filename.startswith("."):
         raise HTTPException(status_code=400, detail="Invalid filename")
-    lora_root = wgp.server_config.get("loras_root", "loras") if hasattr(wgp, 'server_config') else "loras"
+    lora_root = _local_lora_root()
     app_dir = os.path.dirname(os.path.abspath(__file__))
     base = os.path.join(app_dir, lora_root)
     # Search all subdirectories for the preview file
@@ -924,7 +933,7 @@ def _build_lora_max_version_map(root: str) -> dict[str, int]:
 @api.get("/api/v1/loras/installed")
 def list_all_installed_loras():
     """List ALL installed LoRAs across all directories with CivitAI metadata."""
-    lora_root = wgp.server_config.get("loras_root", "loras") if hasattr(wgp, 'server_config') else "loras"
+    lora_root = _local_lora_root()
     candidates = [lora_root]
     if not os.path.isabs(lora_root):
         candidates.append(os.path.join(os.path.dirname(__file__), lora_root))
@@ -1068,18 +1077,22 @@ def list_loras(model_type: str):
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
 
     try:
-        lora_dir = wgp.get_lora_dir(model_type)
+        lookup_dirs = wgp.get_lora_lookup_dirs(model_type)
     except Exception:
         return {"loras": [], "guidance_max_phases": md.get("guidance_max_phases", 1)}
 
-    if lora_dir is None or not os.path.isdir(lora_dir):
-        return {"loras": [], "guidance_max_phases": md.get("guidance_max_phases", 1)}
-
-    files = sorted(
-        glob.glob(os.path.join(lora_dir, "*.safetensors"))
-        + glob.glob(os.path.join(lora_dir, "*.sft"))
-    )
-    loras = [os.path.basename(f) for f in files]
+    loras = []
+    seen = set()
+    for lora_dir in lookup_dirs:
+        files = sorted(
+            glob.glob(os.path.join(lora_dir, "*.safetensors"))
+            + glob.glob(os.path.join(lora_dir, "*.sft"))
+        )
+        for path in files:
+            basename = os.path.basename(path)
+            if basename not in seen:
+                seen.add(basename)
+                loras.append(basename)
 
     return {
         "loras": loras,
@@ -1973,7 +1986,7 @@ LORA_CHANGELOG_MAX_LEN = 800
 
 def _resolve_lora_root() -> str | None:
     """Resolve the LoRA root directory the same way list_all_installed_loras does."""
-    lora_root = wgp.server_config.get("loras_root", "loras") if hasattr(wgp, "server_config") else "loras"
+    lora_root = _local_lora_root()
     candidates = [lora_root]
     if not os.path.isabs(lora_root):
         candidates.append(os.path.join(os.path.dirname(__file__), lora_root))
@@ -2385,7 +2398,7 @@ async def civitai_download(request: Request):
         target_dir = _checkpoint_download_dir()
     else:
         # LoRA — user override takes priority
-        lora_root = wgp.server_config.get("loras_root", "loras") if hasattr(wgp, 'server_config') else "loras"
+        lora_root = _local_lora_root()
         if not os.path.isabs(lora_root):
             lora_root = os.path.join(os.path.dirname(__file__), lora_root)
         if target_dir_name:
@@ -2874,7 +2887,7 @@ def _import_civitai_lora_by_url(url: str, target_dir_override: str = "") -> JSON
         base_model = chosen.get("baseModel", "") or ""
         target_arch = CIVIT_TO_LOCAL_ARCH.get(base_model, "")
 
-        lora_root = wgp.server_config.get("loras_root", "loras") if hasattr(wgp, "server_config") else "loras"
+        lora_root = _local_lora_root()
         if not os.path.isabs(lora_root):
             lora_root = os.path.join(os.path.dirname(__file__), lora_root)
 
@@ -3876,7 +3889,7 @@ async def scan_and_generate_guides(request: Request):
     force_regenerate = body.get("force", False)
 
     # Find the LoRA root directory
-    lora_root = wgp.server_config.get("loras_root", "loras") if hasattr(wgp, 'server_config') else "loras"
+    lora_root = _local_lora_root()
     candidates = [lora_root]
     if not os.path.isabs(lora_root):
         candidates.append(os.path.join(os.path.dirname(__file__), lora_root))
@@ -6930,7 +6943,7 @@ def _ensure_managed_loras_present(activated_loras, model_type, progress=None):
     except Exception:
         # Fall back to the configured loras_root if the model dir can't be
         # resolved (shouldn't happen for the ltx2 models these LoRAs target).
-        lora_root = wgp.server_config.get("loras_root", "loras") if hasattr(wgp, "server_config") else "loras"
+        lora_root = _local_lora_root()
         if not os.path.isabs(lora_root):
             lora_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), lora_root)
         target_dir = os.path.join(lora_root, "ltx2")
@@ -9902,6 +9915,36 @@ def _run_generation(job_id: str):
 
             state["gen"]["queue"] = queue
 
+            # LTX-2 queue lookahead: encode distinct upcoming prompts in one
+            # Gemma batch before clip 1 starts denoising. The pipeline keeps
+            # the resulting CPU embeddings in its model-scoped LRU, so later
+            # clips are exact cache hits without overlapping Gemma and the
+            # diffusion transformer on the same GPU.
+            if len(queue) > 1:
+                first_params = queue[0].get("params", {})
+                queue_model = str(first_params.get("model_type") or "")
+                queue_models = {
+                    str(item.get("params", {}).get("model_type") or "")
+                    for item in queue
+                }
+                queue_prompts = [
+                    str(item.get("prompt") or "").strip()
+                    for item in queue
+                    if str(item.get("prompt") or "").strip()
+                ]
+                if (
+                    queue_model.startswith("ltx2_")
+                    and queue_models == {queue_model}
+                    and len(set(queue_prompts)) > 1
+                ):
+                    first_params["ltx2_prefetch_prompts"] = list(
+                        dict.fromkeys(queue_prompts)
+                    )
+                    print(
+                        f"[LTX2][queue-prefetch] prepared {len(first_params['ltx2_prefetch_prompts'])} "
+                        "distinct prompts for the first task"
+                    )
+
             # Track existing outputs to detect new files
             # Use workspace captured at submission time, not current global save_path
             out_dir = job.get("out_dir") or wgp.save_path
@@ -9928,6 +9971,29 @@ def _run_generation(job_id: str):
                 task_no = task_idx + 1
                 prompt_preview = (task.get('prompt', '') or '')[:60]
                 print(f"\n[Task {task_no}/{total_tasks}] {prompt_preview}...")
+                task_started_at = time.monotonic()
+                task_metric = {
+                    "task_no": task_no,
+                    "prompt": task.get("prompt", "") or "",
+                    "events": [],
+                }
+                job.setdefault("task_timings", []).append(task_metric)
+                last_metric_phase = None
+
+                def record_metric_phase(value):
+                    nonlocal last_metric_phase
+                    phase = str(value or "").strip()
+                    if not phase or phase == last_metric_phase:
+                        return
+                    last_metric_phase = phase
+                    task_metric["events"].append(
+                        {
+                            "phase": phase,
+                            "elapsed_seconds": round(
+                                time.monotonic() - task_started_at, 3
+                            ),
+                        }
+                    )
                 if is_multiclip:
                     job["message"] = f"Clip {task_no}/{total_tasks}"
                     job["phase"] = f"Clip {task_no}/{total_tasks}"
@@ -10022,6 +10088,7 @@ def _run_generation(job_id: str):
                                 job["total_steps"] = 0
                             job["message"] = msg
                             job["phase"] = msg
+                            record_metric_phase(msg)
                             status_line = f"\r  [{step}/{total}] {msg}" if total > 0 else f"\r  {msg}"
                             print(status_line.ljust(max(last_msg_len, len(status_line))), end="", flush=True)
                             last_msg_len = len(status_line)
@@ -10029,6 +10096,7 @@ def _run_generation(job_id: str):
                     elif cmd == "status":
                         job["message"] = str(data)
                         job["phase"] = str(data)
+                        record_metric_phase(data)
                         job["step"] = 0
                         job["total_steps"] = 0
                         job["progress"] = 0
@@ -10047,6 +10115,10 @@ def _run_generation(job_id: str):
 
                 if not task_error:
                     completed += 1
+                    task_metric["total_seconds"] = round(
+                        time.monotonic() - task_started_at, 3
+                    )
+                    task_metric["status"] = "completed"
                     print(f"\n  Task {task_no} completed")
 
                     # Free VRAM between clips to prevent OOM on long pipelines
@@ -10088,6 +10160,11 @@ def _run_generation(job_id: str):
                                     print(f"  [Continuation] Extracted last frame for clip {task_no + 1}")
                                 except Exception as e:
                                     print(f"  [Continuation] Failed to extract frame: {e}")
+                else:
+                    task_metric["total_seconds"] = round(
+                        time.monotonic() - task_started_at, 3
+                    )
+                    task_metric["status"] = "failed"
 
             elapsed = time.time() - start_time
             print(f"\n{'='*50}")
@@ -10566,6 +10643,10 @@ def get_status(job_id: str):
         "message": j["message"],
         "output_files": j["output_files"],
         "error": j["error"],
+        # Structured per-clip timings are populated for multi-clip queues.
+        # Kept in the status payload so benchmark/Director clients can
+        # distinguish load, prompt, diffusion, VAE, and write latency.
+        "task_timings": j.get("task_timings", []),
         # Present only on failed jobs that look like CUDA OOMs. UI
         # renders the OOM recovery banner when this is non-null.
         "oom_info": j.get("oom_info"),

@@ -386,10 +386,39 @@ def encode_text(text_encoder: GemmaTextEncoderModelBase, prompts: list[str]) -> 
     """
     Encode prompts with the Gemma text encoder, returning raw embeddings for later post-processing.
     """
-    result = []
-    for prompt in prompts:
-        result.append(text_encoder.encode_raw(prompt))
-    return result
+    if len(prompts) <= 1:
+        return [text_encoder.encode_raw(prompt) for prompt in prompts]
+
+    token_pairs = [
+        text_encoder.tokenizer.tokenize_with_weights(prompt)["gemma"]
+        for prompt in prompts
+    ]
+    input_ids = torch.tensor(
+        [[token_id for token_id, _ in pairs] for pairs in token_pairs],
+        device=text_encoder.model.device,
+    )
+    attention_mask = torch.tensor(
+        [[weight for _, weight in pairs] for pairs in token_pairs],
+        device=text_encoder.model.device,
+    )
+    try:
+        outputs = text_encoder.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+        )
+        return [
+            RawTextEmbeddings(
+                tuple(layer[index : index + 1] for layer in outputs.hidden_states),
+                attention_mask[index : index + 1],
+                "left",
+            )
+            for index in range(len(prompts))
+        ]
+    except torch.OutOfMemoryError:
+        # Queue prefetch is an optimization, never a reason to lose a job.
+        torch.cuda.empty_cache()
+        return [text_encoder.encode_raw(prompt) for prompt in prompts]
 
 
 def postprocess_text_embeddings(

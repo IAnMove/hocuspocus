@@ -77,6 +77,7 @@ class TI2VidTwoStagesPipeline:
         model_device: torch.device | None = None,
         stage_1_models: object | None = None,
         stage_2_models: object | None = None,
+        cache_namespace: object | None = None,
     ):
         self.device = device
         self.dtype = torch.bfloat16
@@ -111,7 +112,7 @@ class TI2VidTwoStagesPipeline:
             dtype=self.dtype,
             device=device,
         )
-        self.text_encoder_cache = TextEncoderCache()
+        self.text_encoder_cache = TextEncoderCache(namespace=cache_namespace)
 
     def _get_stage_model(self, stage: int, name: str):
         if stage == 1:
@@ -181,6 +182,8 @@ class TI2VidTwoStagesPipeline:
         sample_solver: str = "euler",
         stg_schedule: list[float] | None = None,
         text_attention_amplifier: dict | None = None,
+        prefetch_prompts: list[str] | None = None,
+        phase_callback: Callable[[str], None] | None = None,
     ) -> tuple[Iterator[torch.Tensor], torch.Tensor]:
         assert_resolution(height=height, width=width, is_two_stage=True)
 
@@ -270,11 +273,26 @@ class TI2VidTwoStagesPipeline:
             video_connector,
             audio_connector,
         )
-        contexts = self.text_encoder_cache.encode(
+        requested_prompts = [prompt, negative_prompt]
+        if prefetch_prompts:
+            requested_prompts.extend(str(item) for item in prefetch_prompts if item)
+        requested_prompts = list(dict.fromkeys(requested_prompts))
+        if phase_callback is not None and len(requested_prompts) > 2:
+            phase_callback(f"Prefetching Text Embeddings (batch {len(requested_prompts)})")
+        encoded_contexts = self.text_encoder_cache.encode(
             encode_fn,
-            [prompt, negative_prompt],
+            requested_prompts,
             device=self.device,
             parallel=True,
+        )
+        context_by_prompt = dict(zip(requested_prompts, encoded_contexts))
+        contexts = [context_by_prompt[prompt], context_by_prompt[negative_prompt]]
+        report = self.text_encoder_cache.last_report
+        print(
+            "[LTX2][text-cache] "
+            f"pipeline=dev prompts={report.get('prompts', 0)} "
+            f"hits={report.get('hits', 0)} misses={report.get('misses', 0)} "
+            f"batch={bool(report.get('parallel'))} seconds={report.get('seconds', 0.0):.3f}"
         )
 
         torch.cuda.synchronize()

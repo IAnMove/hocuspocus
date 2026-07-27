@@ -2413,13 +2413,14 @@ def get_lora_dir(model_type):
     if get_dir is None:
         raise Exception("loras unknown")
 
-    cli_lora_root = getattr(args, "loras", "")
-    if isinstance(cli_lora_root, str):
-        cli_lora_root = cli_lora_root.strip()
-    config_lora_root = None
-    if "server_config" in globals():
-        config_lora_root = server_config.get("loras_root", DEFAULT_LORA_ROOT)
-    lora_root = cli_lora_root or config_lora_root or DEFAULT_LORA_ROOT
+    # files_locator has already filtered out roots declared through
+    # MAESTRO_READ_ONLY_LORAS. Always derive creation/download paths from its
+    # writable list so a CLI or persisted config cannot make the stable
+    # library writable.
+    writable_lora_roots = fl.get_writable_loras_paths()
+    lora_root = (
+        writable_lora_roots[0] if writable_lora_roots else DEFAULT_LORA_ROOT
+    )
 
     lora_dir = get_dir(base_model_type, args, lora_root)
     if lora_dir is None:
@@ -2429,6 +2430,42 @@ def get_lora_dir(model_type):
     if not os.path.isdir(lora_dir):
         os.makedirs(lora_dir, exist_ok=True)
     return lora_dir
+
+
+def get_lora_lookup_dirs(model_type):
+    """Return local-first LoRA directories for a model family."""
+
+    local_dir = get_lora_dir(model_type)
+    writable_roots = fl.get_writable_loras_paths()
+    relative_dir = os.path.basename(os.path.normpath(local_dir))
+    if writable_roots:
+        try:
+            candidate = os.path.relpath(
+                os.path.abspath(local_dir), os.path.abspath(writable_roots[0])
+            )
+            if candidate != os.pardir and not candidate.startswith(os.pardir + os.sep):
+                relative_dir = candidate
+        except ValueError:
+            pass
+    return fl.get_lora_lookup_dirs(relative_dir)
+
+
+def locate_lora_file(model_type, filename, error_if_none=True):
+    local_dir = get_lora_dir(model_type)
+    relative_dir = os.path.basename(os.path.normpath(local_dir))
+    writable_roots = fl.get_writable_loras_paths()
+    if writable_roots:
+        try:
+            candidate = os.path.relpath(
+                os.path.abspath(local_dir), os.path.abspath(writable_roots[0])
+            )
+            if candidate != os.pardir and not candidate.startswith(os.pardir + os.sep):
+                relative_dir = candidate
+        except ValueError:
+            pass
+    return fl.locate_lora_file(
+        filename, relative_dir=relative_dir, error_if_none=error_if_none
+    )
 
 attention_modes_installed = get_attention_modes()
 attention_modes_supported = get_supported_attention_modes()
@@ -2576,6 +2613,9 @@ server_config.setdefault("prompt_enhancer_quantization", "quanto_int8")
 checkpoints_paths = server_config.get("checkpoints_paths", None)
 if checkpoints_paths is None: checkpoints_paths = server_config["checkpoints_paths"] = fl.default_checkpoints_paths
 fl.set_checkpoints_paths(checkpoints_paths)
+# Maestro Next keeps every new LoRA under app/loras. Additional libraries are
+# lookup-only and may be supplied only through MAESTRO_READ_ONLY_LORAS.
+fl.set_loras_paths([DEFAULT_LORA_ROOT])
 three_levels_hierarchy = server_config.get("model_hierarchy_type", 1) == 1
 
 MMAUDIO_MODE_OFF = 0
@@ -3644,8 +3684,10 @@ def download_models(model_filename = None, model_type= None, file_type = 0, subm
 
     model_loras = get_model_recursive_prop(model_type, "loras", return_list= True)
     for url in model_loras:
-        filename = os.path.join(get_lora_dir(model_type), url.split("/")[-1])
-        if not os.path.isfile(filename ): 
+        filename = locate_lora_file(model_type, url, error_if_none=False)
+        if filename is None:
+            filename = os.path.join(get_lora_dir(model_type), url.split("/")[-1])
+            fl.assert_writable_lora_path(filename, "download")
             if not url.startswith("http"):
                 raise Exception(f"Lora '{filename}' was not found in the Loras Folder and no URL was provided to download it. Please add an URL in the model definition file.")
             try:
@@ -3670,8 +3712,10 @@ def check_loras_exist(model_type, loras_choices_files, download = False, send_cm
     missing_local_loras = []
     missing_remote_loras = []
     for lora_file in loras_choices_files:
-        local_path = os.path.join(lora_dir, os.path.basename(lora_file))
-        if not os.path.isfile(local_path):
+        local_path = locate_lora_file(model_type, lora_file, error_if_none=False)
+        if local_path is None:
+            local_path = os.path.join(lora_dir, os.path.basename(lora_file))
+            fl.assert_writable_lora_path(local_path, "download")
             url = loras_url_cache.get(local_path, None)         
             if url is not None:
                 if download:
@@ -3737,9 +3781,16 @@ def setup_loras(model_type, transformer,  lora_dir, lora_preselected_preset, spl
 
 
     if lora_dir != None:
-        dir_loras =  glob.glob( os.path.join(lora_dir , "*.sft") ) + glob.glob( os.path.join(lora_dir , "*.safetensors") ) 
-        dir_loras.sort()
-        loras += [element for element in dir_loras if element not in loras ]
+        seen_lora_names = set()
+        for lookup_dir in get_lora_lookup_dirs(base_model_type):
+            dir_loras = glob.glob(os.path.join(lookup_dir, "*.sft"))
+            dir_loras += glob.glob(os.path.join(lookup_dir, "*.safetensors"))
+            dir_loras.sort()
+            for element in dir_loras:
+                basename = os.path.basename(element)
+                if basename not in seen_lora_names:
+                    seen_lora_names.add(basename)
+                    loras.append(element)
 
         dir_presets_settings = glob.glob( os.path.join(lora_dir , "*.json") ) 
         dir_presets_settings.sort()
@@ -5787,8 +5838,10 @@ def get_overridden_attention(model_type):
 def get_transformer_loras(model_type):
     model_def = get_model_def(model_type)
     transformer_loras_filenames = get_model_recursive_prop(model_type, "loras", return_list=True)
-    lora_dir = get_lora_dir(model_type)
-    transformer_loras_filenames = [ os.path.join(lora_dir, os.path.basename(filename)) for filename in transformer_loras_filenames]
+    transformer_loras_filenames = [
+        locate_lora_file(model_type, filename)
+        for filename in transformer_loras_filenames
+    ]
     transformer_loras_multipliers = get_model_recursive_prop(model_type, "loras_multipliers", return_list=True) + [1.] * len(transformer_loras_filenames)
     transformer_loras_multipliers = transformer_loras_multipliers[:len(transformer_loras_filenames)]
     return transformer_loras_filenames, transformer_loras_multipliers
@@ -6568,6 +6621,9 @@ def generate_video(
     # progressive_pipeline. Read by ltx2.py and forwarded into
     # DistilledPipeline via kwargs.
     single_stage_pipeline=False,
+    # Internal queue lookahead for LTX-2. The API runner populates this only
+    # on the first task of a compatible multi-clip queue.
+    ltx2_prefetch_prompts=None,
 ):
 
 
@@ -6714,6 +6770,7 @@ def generate_video(
     if args.test:
         send_cmd("info", "Test mode: model loaded, skipping generation.")
         return True
+    set_progress_status("Preparing Images")
     overridden_attention = override_attention if len(override_attention) else get_overridden_attention(model_type)
     # if overridden_attention is not None and overridden_attention !=  attention_mode: print(f"Attention mode has been overriden to {overridden_attention} for model type '{model_type}'")
     attn = overridden_attention if overridden_attention is not None else attention_mode
@@ -6903,7 +6960,10 @@ def generate_video(
         lora_dir = get_lora_dir(model_type)
         errors = check_loras_exist(model_type, activated_loras, True, send_cmd)
         if len(errors) > 0 : raise gr.Error(errors)
-        loras_selected += [ os.path.join(lora_dir, os.path.basename(lora)) for lora in activated_loras]
+        loras_selected += [
+            locate_lora_file(model_type, lora)
+            for lora in activated_loras
+        ]
     else:
         print(f"[LoRA] No LoRAs activated for this generation (model_type={model_type})")
 
@@ -7924,6 +7984,12 @@ def generate_video(
                     progressive_stage3_sigma=progressive_stage3_sigma,
                     progressive_stage1_image_weight=progressive_stage1_image_weight,
                     progressive_stage3_image_weight=progressive_stage3_image_weight,
+                    **(
+                        {"ltx2_prefetch_prompts": ltx2_prefetch_prompts}
+                        if str(base_model_type).startswith("ltx2_")
+                        and ltx2_prefetch_prompts
+                        else {}
+                    ),
                     # Motion suffix: only passed when the loaded suffix video
                     # is available. Other model handlers (Wan / Flux / Qwen /
                     # Hunyuan) don't accept these kwargs, so we omit them
@@ -8133,6 +8199,7 @@ def generate_video(
                     any_mmaudio = MMAudio_setting != 0 and mmaudio_enabled and output_frame_count >= fps
                 time_flag = datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d-%Hh%Mm%Ss")
                 save_prompt = original_prompts[0]
+                set_progress_status("Writing Output")
                 if audio_only:
                     audio_codec = server_config.get("audio_stand_alone_output_codec", "wav")
                     extension = get_audio_codec_extension(audio_codec)

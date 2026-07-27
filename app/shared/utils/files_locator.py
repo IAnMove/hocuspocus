@@ -3,18 +3,22 @@ import os
 
 default_checkpoints_paths = ["ckpts", "."]
 READ_ONLY_CHECKPOINTS_ENV = "MAESTRO_READ_ONLY_CHECKPOINTS"
+READ_ONLY_LORAS_ENV = "MAESTRO_READ_ONLY_LORAS"
 
 _writable_checkpoints_paths = list(default_checkpoints_paths)
 _read_only_checkpoints_paths = []
 _checkpoints_paths = list(default_checkpoints_paths)
+_writable_loras_paths = ["loras"]
+_read_only_loras_paths = []
+_loras_paths = ["loras"]
 
 
 def _path_key(path):
     return os.path.normcase(os.path.realpath(os.path.abspath(os.path.expanduser(path))))
 
 
-def _configured_read_only_paths():
-    raw = os.environ.get(READ_ONLY_CHECKPOINTS_ENV, "")
+def _configured_read_only_paths(env_name=READ_ONLY_CHECKPOINTS_ENV):
+    raw = os.environ.get(env_name, "")
     paths = []
     seen = set()
     for item in raw.split(os.pathsep):
@@ -28,6 +32,114 @@ def _configured_read_only_paths():
         seen.add(key)
         paths.append(expanded)
     return paths
+
+
+def set_loras_paths(loras_paths):
+    """Configure writable LoRA roots and lookup-only shared libraries."""
+
+    global _writable_loras_paths
+    global _read_only_loras_paths
+    global _loras_paths
+
+    configured_read_only = _configured_read_only_paths(READ_ONLY_LORAS_ENV)
+    configured = [
+        os.fspath(path).strip()
+        for path in (loras_paths or [])
+        if os.fspath(path).strip()
+    ]
+    safe_configured = []
+    for path in configured:
+        candidate = _path_key(path)
+        inside_read_only = False
+        for read_only_root in configured_read_only:
+            root_key = _path_key(read_only_root)
+            try:
+                inside_read_only = os.path.commonpath([candidate, root_key]) == root_key
+            except ValueError:
+                continue
+            if inside_read_only:
+                break
+        if not inside_read_only:
+            safe_configured.append(path)
+    configured = safe_configured or ["loras"]
+    read_only = configured_read_only
+    _writable_loras_paths = configured
+    _read_only_loras_paths = read_only
+    _loras_paths = configured + read_only
+
+
+def get_read_only_loras_paths():
+    return list(_read_only_loras_paths)
+
+
+def get_writable_loras_paths():
+    return list(_writable_loras_paths)
+
+
+def is_read_only_lora_path(path):
+    if path is None:
+        return False
+    candidate = _path_key(os.fspath(path))
+    for root in _read_only_loras_paths:
+        root_key = _path_key(root)
+        try:
+            if os.path.commonpath([candidate, root_key]) == root_key:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def assert_writable_lora_path(path, operation="modify"):
+    if is_read_only_lora_path(path):
+        raise PermissionError(f"Refusing to {operation} read-only LoRA path: {path}")
+    return os.fspath(path)
+
+
+def get_lora_lookup_dirs(relative_dir=None):
+    relative_dir = _normalize_force_path(relative_dir)
+    return [
+        root if relative_dir is None else os.path.join(root, relative_dir)
+        for root in _loras_paths
+    ]
+
+
+def get_lora_download_location(file_name=None, relative_dir=None):
+    relative_dir = _normalize_force_path(relative_dir)
+    base = _writable_loras_paths[0]
+    if relative_dir is not None:
+        base = os.path.join(base, relative_dir)
+    return base if file_name is None else os.path.join(base, os.path.basename(file_name))
+
+
+def locate_lora_file(
+    file_name,
+    relative_dir=None,
+    create_path_if_none=False,
+    error_if_none=True,
+):
+    """Locate a LoRA with local-first precedence and no shared-library writes."""
+
+    if file_name.startswith("http"):
+        file_name = os.path.basename(file_name)
+    searched_locations = []
+    if os.path.isabs(file_name):
+        if os.path.isfile(file_name):
+            return file_name
+        searched_locations.append(file_name)
+    else:
+        for folder in get_lora_lookup_dirs(relative_dir):
+            candidate = os.path.join(folder, os.path.basename(file_name))
+            if os.path.isfile(candidate):
+                return candidate
+            searched_locations.append(os.path.abspath(candidate))
+    if create_path_if_none:
+        return get_lora_download_location(file_name, relative_dir)
+    if error_if_none:
+        raise Exception(
+            f"Unable to locate LoRA '{file_name}', tried {searched_locations}"
+        )
+    return None
 
 
 def set_checkpoints_paths(checkpoints_paths):

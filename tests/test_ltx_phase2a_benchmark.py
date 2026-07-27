@@ -7,6 +7,7 @@ from pathlib import Path
 from PIL import Image
 
 from scripts.benchmark_ltx_phase2a import _adapt_reference, derive_phase_timings
+from scripts.benchmark_ltx_phase2b_queue import derive_task_timings
 
 
 class TestPhase2ABenchmarkTimings(unittest.TestCase):
@@ -83,6 +84,29 @@ class TestPhase2ABenchmarkTimings(unittest.TestCase):
 
             with Image.open(result) as adapted:
                 self.assertEqual(adapted.size, (512, 768))
+
+    def test_phase2b_queue_timings_are_split_by_task(self):
+        result = derive_task_timings(
+            {
+                "total_seconds": 20,
+                "events": [
+                    {"elapsed_seconds": 1, "phase": "Loading model X"},
+                    {"elapsed_seconds": 4, "phase": "Model loaded"},
+                    {"elapsed_seconds": 5, "phase": "Preparing Images"},
+                    {"elapsed_seconds": 6, "phase": "Encoding Prompt"},
+                    {"elapsed_seconds": 9, "phase": "Denoising First Pass"},
+                    {"elapsed_seconds": 12, "phase": "Denoising Second Pass"},
+                    {"elapsed_seconds": 16, "phase": "VAE Decoding"},
+                    {"elapsed_seconds": 18, "phase": "Writing Output"},
+                ],
+            }
+        )
+        self.assertEqual(result["model_load_seconds"], 3)
+        self.assertEqual(result["image_preparation_seconds"], 1)
+        self.assertEqual(result["text_encoding_seconds"], 3)
+        self.assertEqual(result["diffusion_seconds"], 7)
+        self.assertEqual(result["vae_seconds"], 2)
+        self.assertEqual(result["write_seconds"], 2)
 
 
 if __name__ == "__main__":

@@ -230,6 +230,15 @@ def main() -> int:
     parser.add_argument("--frames", default=17, type=int)
     parser.add_argument("--steps", required=True, type=int)
     parser.add_argument("--guidance", required=True, type=float)
+    parser.add_argument(
+        "--profile",
+        default=-1,
+        type=float,
+        help=(
+            "Per-job WanGP/MMGP memory profile override. Use 3.5 for the "
+            "VeryLowRAM/HighVRAM fallback without reserved pinned memory."
+        ),
+    )
     parser.add_argument("--seed", default=424242, type=int)
     parser.add_argument(
         "--prompt",
@@ -263,6 +272,7 @@ def main() -> int:
         "num_inference_steps": args.steps,
         "guidance_scale": args.guidance,
         "guidance_phases": 2 if args.guidance > 1.0 else 1,
+        "override_profile": args.profile,
         "seed": args.seed,
         "image_mode": 0,
         "negative_prompt": "",

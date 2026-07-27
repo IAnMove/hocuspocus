@@ -3,6 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 import gradio as gr
+from .utils import files_locator as fl
 
 
 MODEL_FILE_STATUS_MISSING = 0
@@ -197,13 +198,19 @@ def get_expected_secondary_file_entries_for_status(deps, model_type):
     if not isinstance(model_loras, list):
         model_loras = [model_loras]
     lora_dir = deps.get_lora_dir(model_type)
+    relative_dir = os.path.basename(os.path.normpath(lora_dir))
     for url in model_loras:
         if not isinstance(url, str) or len(url) == 0:
             continue
         basename = os.path.basename(url)
         if len(basename) == 0:
             continue
-        _append_expected_local_path_entry(entries, seen, os.path.join(lora_dir, basename))
+        resolved = fl.locate_lora_file(
+            basename, relative_dir=relative_dir, error_if_none=False
+        )
+        _append_expected_local_path_entry(
+            entries, seen, resolved or os.path.join(lora_dir, basename)
+        )
 
     return entries
 
@@ -242,10 +249,15 @@ def has_secondary_model_files_for_status(deps, model_type, quantization, dtype_p
     if not isinstance(model_loras, list):
         model_loras = [model_loras]
     lora_dir = deps.get_lora_dir(model_type)
+    relative_dir = os.path.basename(os.path.normpath(lora_dir))
     for url in model_loras:
         if not isinstance(url, str) or len(url) == 0:
             continue
-        if not os.path.isfile(os.path.join(lora_dir, os.path.basename(url))):
+        if fl.locate_lora_file(
+            os.path.basename(url),
+            relative_dir=relative_dir,
+            error_if_none=False,
+        ) is None:
             return False
 
     module_files = _get_module_files_for_status(deps, model_type, quantization, dtype_policy)

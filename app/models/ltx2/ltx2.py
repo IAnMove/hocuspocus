@@ -640,12 +640,28 @@ class LTX2:
             self.pipeline = DistilledPipeline(
                 device=self.device,
                 models=pipeline_models,
+                cache_namespace={
+                    "schema": 1,
+                    "pipeline": "distilled",
+                    "model_type": model_type,
+                    "base_model_type": base_model_type,
+                    "gemma_root": os.path.realpath(gemma_root),
+                    "dtype": str(dtype),
+                },
             )
         else:
             self.pipeline = TI2VidTwoStagesPipeline(
                 device=self.device,
                 stage_1_models=pipeline_models,
                 stage_2_models=pipeline_models,
+                cache_namespace={
+                    "schema": 1,
+                    "pipeline": "dev_two_stage",
+                    "model_type": model_type,
+                    "base_model_type": base_model_type,
+                    "gemma_root": os.path.realpath(gemma_root),
+                    "dtype": str(dtype),
+                },
             )
         self._build_diffuser_model()
 
@@ -1987,6 +2003,8 @@ class LTX2:
                 sample_solver=sample_solver,
                 stg_schedule=stg_schedule,
                 text_attention_amplifier=text_attention_amplifier,
+                prefetch_prompts=kwargs.get("ltx2_prefetch_prompts"),
+                phase_callback=kwargs.get("set_progress_status"),
             )
         else:
             # Select pipeline: progressive 3-stage or standard distilled 2-stage
@@ -2059,6 +2077,11 @@ class LTX2:
                     progressive_stage3_sigma=progressive_stage3_sigma,
                     progressive_stage1_image_weight=progressive_stage1_image_weight,
                     progressive_stage3_image_weight=progressive_stage3_image_weight,
+                )
+            if active_pipeline is self.pipeline:
+                _pipeline_kwargs.update(
+                    prefetch_prompts=kwargs.get("ltx2_prefetch_prompts"),
+                    phase_callback=kwargs.get("set_progress_status"),
                 )
             pipeline_output = active_pipeline(**_pipeline_kwargs)
 
