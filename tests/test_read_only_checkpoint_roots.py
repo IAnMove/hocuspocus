@@ -54,6 +54,38 @@ class TestReadOnlyCheckpointRoots(unittest.TestCase):
             str(self.local / "ltx" / "new.safetensors"),
         )
 
+    def test_absolute_shared_download_destination_is_redirected_locally(self):
+        shared_target = self.shared / "ltx" / "new.safetensors"
+
+        self.assertEqual(
+            files_locator.get_download_location(str(shared_target)),
+            str(self.local / "ltx" / "new.safetensors"),
+        )
+        self.assertEqual(
+            files_locator.get_smart_download_location(
+                "new.safetensors",
+                str(self.shared / "ltx"),
+            ),
+            str(self.local / "ltx" / "new.safetensors"),
+        )
+
+    def test_destructive_operation_rejects_shared_checkpoint(self):
+        weight = self.shared / "model.safetensors"
+        weight.write_bytes(b"shared")
+
+        with self.assertRaisesRegex(PermissionError, "read-only checkpoint"):
+            files_locator.assert_writable_path(weight, operation="delete")
+        self.assertTrue(weight.exists())
+
+    def test_destructive_operation_allows_local_checkpoint(self):
+        weight = self.local / "model.safetensors"
+        weight.write_bytes(b"local")
+
+        self.assertEqual(
+            files_locator.assert_writable_path(weight, operation="delete"),
+            str(weight),
+        )
+
     def test_missing_shared_root_is_not_added(self):
         missing = Path(self.temp_dir.name) / "missing"
         with mock.patch.dict(

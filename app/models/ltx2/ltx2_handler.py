@@ -163,6 +163,8 @@ class family_handler:
                 build_hf_url("DeepBeepMeep/LTX-2", _GEMMA_FOLDER, _GEMMA_QUANTO_FILENAME),
             ],
             "dtype": "bf16",
+            "i2v_class": True,
+            "t2v_class": True,
             "fps": 25 if base_model_type == "ltx2_22B" else 24,
             "frames_minimum": 17,
             "frames_steps": 8,

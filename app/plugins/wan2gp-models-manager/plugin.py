@@ -675,6 +675,7 @@ class modelsManagerPlugin(WAN2GPPlugin):
                 missing.append(path)
                 continue
             try:
+                fl.assert_writable_path(path, operation="delete")
                 os.remove(path)
                 removed.append(path)
             except OSError as exc:

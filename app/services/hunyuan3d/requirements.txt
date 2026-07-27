@@ -1,6 +1,6 @@
 # Isolated Hunyuan3D runtime. Versions follow Tencent's tested 2.1 stack;
 # torch itself is installed by hunyuan3d_install.js before this file.
-ninja==1.11.1.1
+ninja==1.13.0
 pybind11==2.13.6
 diffusers==0.30.3
 transformers==4.46.3

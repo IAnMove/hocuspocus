@@ -53,9 +53,12 @@ class SafetyViolationError(RuntimeError):
 _MINOR_TERMS: tuple[str, ...] = (
     # Direct age vocabulary
     "child", "children", "kid", "kids", "minor", "minors", "underage",
-    "adolescent", "youngster", "juvenile",
+    "adolescent", "youngster", "juvenile", "pre-teen", "preteen", "teen",
+    "teenager", "girl", "boy", "little girl", "little boy",
     # Very young
     "baby", "babies", "infant", "toddler", "newborn",
+    # Familial roles can identify a minor in an otherwise sexual scene.
+    "daughter", "son", "niece", "nephew",
     # School-age contexts
     "elementary student", "middle schooler", "high schooler",
     "middle school student", "high school student",

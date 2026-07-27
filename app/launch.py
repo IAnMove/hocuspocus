@@ -285,10 +285,6 @@ def _check_model_downloaded(model_type: str) -> bool:
         if not md:
             return False
 
-        # Get the ckpts directory (absolute)
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-        ckpts_dir = os.path.join(app_dir, "ckpts")
-
         # Collect all URLs from the model definition
         urls = md.get("URLs", [])
         if not urls:
@@ -303,7 +299,7 @@ def _check_model_downloaded(model_type: str) -> bool:
             if not isinstance(url_str, str) or not url_str:
                 continue
             filename = url_str.rstrip("/").split("/")[-1]
-            if os.path.isfile(os.path.join(ckpts_dir, filename)):
+            if wgp.fl.locate_file(filename, error_if_none=False) is not None:
                 return True
 
         return False
@@ -456,6 +452,7 @@ def delete_model(model_type: str):
         filepath = wgp.fl.locate_file(filename, error_if_none=False)
         if filepath and os.path.isfile(filepath):
             try:
+                wgp.fl.assert_writable_path(filepath, operation="delete")
                 os.remove(filepath)
                 deleted.append(filename)
                 print(f"[Models] Deleted checkpoint: {filepath}")

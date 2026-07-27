@@ -83,6 +83,36 @@ def is_read_only_path(path):
             continue
     return False
 
+
+def assert_writable_path(path, operation="modify"):
+    """Reject destructive operations against a lookup-only checkpoint root."""
+
+    if is_read_only_path(path):
+        raise PermissionError(
+            f"Refusing to {operation} read-only checkpoint path: {path}"
+        )
+    return os.fspath(path)
+
+
+def _redirect_read_only_destination(path):
+    """Map an absolute destination inside a read-only root to the local root."""
+
+    if path is None or not os.path.isabs(path) or not is_read_only_path(path):
+        return path
+    candidate = _path_key(path)
+    for root in _read_only_checkpoints_paths:
+        root_key = _path_key(root)
+        try:
+            relative = os.path.relpath(candidate, root_key)
+        except ValueError:
+            continue
+        if relative == os.pardir or relative.startswith(os.pardir + os.sep):
+            continue
+        if relative == ".":
+            return _writable_checkpoints_paths[0]
+        return os.path.join(_writable_checkpoints_paths[0], relative)
+    return path
+
 def _normalize_force_path(force_path):
     if force_path is not None and isinstance(force_path, list) and len(force_path):
         force_path = force_path[0]
@@ -95,7 +125,8 @@ def _normalize_force_path(force_path):
     return None if normalized in ("", ".") else normalized
 
 def get_download_location(file_name = None, force_path= None):
-    if file_name is not None and os.path.isabs(file_name): return file_name
+    if file_name is not None and os.path.isabs(file_name):
+        return _redirect_read_only_destination(file_name)
     if force_path is not None and isinstance(force_path, list) and len(force_path): force_path = force_path[0]
     if file_name is not None:
         if force_path is None:
@@ -113,7 +144,7 @@ def get_smart_download_root(force_path = None):
     if force_path is None:
         return _writable_checkpoints_paths[0]
     if os.path.isabs(force_path):
-        return force_path
+        return _redirect_read_only_destination(force_path)
     for folder in _writable_checkpoints_paths:
         candidate = os.path.join(folder, force_path)
         if os.path.isdir(candidate):
@@ -122,11 +153,12 @@ def get_smart_download_root(force_path = None):
 
 def get_smart_download_location(file_name = None, force_path = None):
     if file_name is not None and os.path.isabs(file_name):
-        return file_name
+        return _redirect_read_only_destination(file_name)
     force_path = _normalize_force_path(force_path)
     if force_path is None:
         return get_download_location(file_name)
     if os.path.isabs(force_path):
+        force_path = _redirect_read_only_destination(force_path)
         return force_path if file_name is None else os.path.join(force_path, file_name)
     root = get_smart_download_root(force_path)
     base_path = os.path.join(root, force_path)

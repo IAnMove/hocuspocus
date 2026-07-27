@@ -861,11 +861,14 @@ def _download_gguf(repo_id: str, filename: str, cache_dir: str) -> str:
     # of going through WanGP's normal model loader, so resolve that same
     # relative path explicitly before downloading a duplicate.
     try:
-        try:
-            from shared.utils import files_locator as fl
-        except ModuleNotFoundError:
-            # Package-style imports used by the test/API harness.
+        if (__package__ or "").startswith("app."):
+            # Package-style imports used by the test/API harness. Avoid a
+            # second `shared.utils.files_locator` module with independent
+            # checkpoint-root state when another test has added app/ to
+            # sys.path.
             from app.shared.utils import files_locator as fl
+        else:
+            from shared.utils import files_locator as fl
 
         checkpoints_root = os.path.abspath(os.path.join(_BASE_DIR, "..", "ckpts"))
         relative_path = os.path.relpath(os.path.abspath(local_path), checkpoints_root)
