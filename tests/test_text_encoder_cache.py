@@ -60,6 +60,38 @@ class TestTextEncoderCache(unittest.TestCase):
         self.assertEqual([len(batch) for batch in calls], [4, 4, 1])
         self.assertEqual(cache.last_report["batch_sizes"], [4, 4, 1])
 
+    def test_cuda_oom_retries_with_smaller_batches(self):
+        attempts = []
+
+        def encode(prompts):
+            attempts.append(list(prompts))
+            if len(prompts) > 2:
+                raise torch.OutOfMemoryError("simulated CUDA out of memory")
+            return [torch.tensor([len(prompt)]) for prompt in prompts]
+
+        cache = TextEncoderCache(max_batch_size=4)
+        results = cache.encode(
+            encode,
+            ["one", "two", "three", "four"],
+            parallel=True,
+        )
+
+        self.assertEqual([len(batch) for batch in attempts], [4, 2, 2])
+        self.assertEqual([int(value.item()) for value in results], [3, 3, 5, 4])
+        self.assertEqual(cache.last_report["attempted_batch_sizes"], [4, 2, 2])
+        self.assertEqual(cache.last_report["batch_sizes"], [2, 2])
+        self.assertEqual(cache.last_report["oom_retries"], 1)
+
+    def test_non_oom_runtime_errors_are_not_retried(self):
+        cache = TextEncoderCache(max_batch_size=4)
+
+        with self.assertRaisesRegex(RuntimeError, "broken encoder"):
+            cache.encode(
+                lambda _prompts: (_ for _ in ()).throw(RuntimeError("broken encoder")),
+                ["one", "two"],
+                parallel=True,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

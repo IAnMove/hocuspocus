@@ -117,17 +117,38 @@ class TextEncoderCache:
             results[idx] = self._to_device(cached.value, device)
 
         batch_sizes = []
+        attempted_batch_sizes = []
+        oom_retries = 0
+
+        def encode_batch(prompt_batch: list[str]) -> list[Any]:
+            nonlocal oom_retries
+            attempted_batch_sizes.append(len(prompt_batch))
+            try:
+                encoded = encode_fn(prompt_batch)
+                if not isinstance(encoded, list):
+                    encoded = list(encoded)
+                if len(encoded) != len(prompt_batch):
+                    raise ValueError("encode_fn returned unexpected number of embeddings.")
+                batch_sizes.append(len(prompt_batch))
+                return encoded
+            except RuntimeError as error:
+                if not self._is_cuda_oom(error) or len(prompt_batch) == 1:
+                    raise
+                oom_retries += 1
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                midpoint = max(1, len(prompt_batch) // 2)
+                return (
+                    encode_batch(prompt_batch[:midpoint])
+                    + encode_batch(prompt_batch[midpoint:])
+                )
+
         for start in range(0, len(missing_prompts), self.max_batch_size):
             stop = start + self.max_batch_size
             prompt_batch = missing_prompts[start:stop]
             key_batch = missing_keys[start:stop]
             index_batch = missing_indices[start:stop]
-            encoded_batch = encode_fn(prompt_batch)
-            if not isinstance(encoded_batch, list):
-                encoded_batch = list(encoded_batch)
-            if len(encoded_batch) != len(prompt_batch):
-                raise ValueError("encode_fn returned unexpected number of embeddings.")
-            batch_sizes.append(len(prompt_batch))
+            encoded_batch = encode_batch(prompt_batch)
             for cache_key, idx, encoded in zip(key_batch, index_batch, encoded_batch):
                 results[idx] = self._store(cache_key, encoded, device)
 
@@ -138,8 +159,17 @@ class TextEncoderCache:
             "seconds": time.perf_counter() - started,
             "parallel": True,
             "batch_sizes": batch_sizes,
+            "attempted_batch_sizes": attempted_batch_sizes,
+            "oom_retries": oom_retries,
         }
         return results
+
+    @staticmethod
+    def _is_cuda_oom(error: RuntimeError) -> bool:
+        if isinstance(error, torch.OutOfMemoryError):
+            return True
+        message = str(error).lower()
+        return "out of memory" in message and ("cuda" in message or "gpu" in message)
 
     def _store(self, cache_key: Hashable, encoded: Any, device: torch.device | str | None) -> Any:
         cached_value = self._detach_to_cpu(encoded)
