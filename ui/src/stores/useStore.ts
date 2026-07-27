@@ -3749,6 +3749,7 @@ export const useStore = create<AppState>((set, get) => ({
               outputFiles: status.output_files,
               error: status.error,
               oomInfo: status.oom_info ?? null,
+              taskTimings: status.task_timings ?? [],
             }),
           }))
 
@@ -3843,6 +3844,7 @@ export const useStore = create<AppState>((set, get) => ({
             outputFiles: j.output_files,
             error: j.error,
             oomInfo: (j as { oom_info?: import('../types').OomInfo | null }).oom_info ?? null,
+            taskTimings: j.task_timings ?? [],
           }))
         if (newJobs.length > 0) {
           set(s => ({
@@ -3866,6 +3868,7 @@ export const useStore = create<AppState>((set, get) => ({
                     outputFiles: status.output_files,
                     error: status.error,
                     oomInfo: status.oom_info ?? null,
+                    taskTimings: status.task_timings ?? [],
                   }),
                 }))
                 if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {

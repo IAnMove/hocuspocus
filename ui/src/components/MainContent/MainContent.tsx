@@ -132,6 +132,9 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
   const phase = stripTimeSuffix(job.phase || job.message)
   const isFailed = job.status === 'failed' || job.status === 'cancelled'
   const errorText = job.error || job.message || (job.status === 'cancelled' ? 'Cancelled' : 'Generation failed')
+  const completedPanelTimings = (job.taskTimings ?? [])
+    .filter(item => typeof item.total_seconds === 'number')
+    .slice(-4)
 
   return (
     <div className={`rounded-xl border overflow-hidden ${
@@ -162,6 +165,15 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
               <p className="text-[10px] text-text-muted mt-0.5">
                 Step {job.step}/{job.totalSteps}
               </p>
+            )}
+            {!isFailed && completedPanelTimings.length > 0 && (
+              <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
+                {completedPanelTimings.map(item => (
+                  <span key={`${item.panel_no}-${item.status}`}>
+                    Viñeta {item.panel_no}: {item.total_seconds!.toFixed(1)}s
+                  </span>
+                ))}
+              </div>
             )}
             {isFailed && (
               <p className="text-[11px] text-text-secondary mt-2 max-h-24 overflow-y-auto px-2 leading-relaxed whitespace-pre-wrap break-words">

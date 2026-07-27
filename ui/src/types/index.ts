@@ -143,8 +143,18 @@ export interface GenerationJob {
   message: string
   outputFiles: string[]
   error: string | null
+  taskTimings?: GenerationTaskTiming[]
   /** Present only on failed jobs that look like CUDA OOMs (see OomInfo). */
   oomInfo?: OomInfo | null
+}
+
+export interface GenerationTaskTiming {
+  panel_no: number
+  panel_total: number
+  prompt_preview: string
+  status: 'running' | 'completed' | 'failed' | 'skipped'
+  total_seconds?: number
+  phase_timings: Array<{ phase: string; seconds: number }>
 }
 
 export interface OutputFile {

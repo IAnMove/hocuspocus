@@ -63,9 +63,19 @@ export interface ApiJobStatus {
   message: string
   output_files: string[]
   error: string | null
+  task_timings?: ApiTaskTiming[]
   /** Present only on failed jobs that look like CUDA OOMs.
    *  See `OomInfo` in types/index.ts. */
   oom_info?: import('../types').OomInfo | null
+}
+
+export interface ApiTaskTiming {
+  panel_no: number
+  panel_total: number
+  prompt_preview: string
+  status: 'running' | 'completed' | 'failed' | 'skipped'
+  total_seconds?: number
+  phase_timings: Array<{ phase: string; seconds: number }>
 }
 
 // --- Models & Families ---
@@ -267,7 +277,7 @@ export async function cancelJob(jobId: string): Promise<void> {
 export async function fetchActiveJobs(): Promise<{ jobs: Array<{
   job_id: string; status: string; progress: number; step: number;
   total_steps: number; phase: string; message: string; output_files: string[];
-  error: string | null; created_at: number;
+  error: string | null; created_at: number; task_timings?: ApiTaskTiming[];
 }> }> {
   const res = await fetch(`${BASE}/api/v1/jobs`)
   if (!res.ok) throw new Error('Failed to fetch jobs')

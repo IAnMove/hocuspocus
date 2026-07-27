@@ -92,6 +92,7 @@ if _hf_token_path:
 print("[Maestro] Importing WanGP engine...")
 import wgp
 from services import model3d_service
+from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 print(f"[Maestro] WanGP loaded: {len(wgp.displayed_model_types)} models available")
 # Base save path always comes from server_config["save_path"] (never from wgp.save_path which gets workspace-modified)
@@ -9633,6 +9634,7 @@ def _run_generation(job_id: str):
 
     job = _jobs[job_id]
     start_time = time.time()
+    active_task_timer = None
 
     with _gen_lock:
         try:
@@ -9932,6 +9934,7 @@ def _run_generation(job_id: str):
             total_tasks = len(queue)
             completed = 0
             skipped = 0
+            job["task_timings"] = []
 
             is_multiclip = total_tasks > 1 and any(t.get('params', {}).get('multi_clip_info') for t in queue)
 
@@ -9939,6 +9942,12 @@ def _run_generation(job_id: str):
                 task_no = task_idx + 1
                 prompt_preview = (task.get('prompt', '') or '')[:60]
                 print(f"\n[Task {task_no}/{total_tasks}] {prompt_preview}...")
+                active_task_timer = GenerationTaskTimer(
+                    panel_no=task_no,
+                    panel_total=total_tasks,
+                    prompt_preview=prompt_preview,
+                )
+                job["task_timings"].append(active_task_timer.data)
                 if is_multiclip:
                     job["message"] = f"Clip {task_no}/{total_tasks}"
                     job["phase"] = f"Clip {task_no}/{total_tasks}"
@@ -9946,6 +9955,8 @@ def _run_generation(job_id: str):
                 validated_params = wgp.validate_task(task, state)
                 if validated_params is None:
                     print(f"  [SKIP] Task {task_no} failed validation")
+                    active_task_timer.finish("skipped")
+                    active_task_timer = None
                     skipped += 1
                     continue
 
@@ -10033,6 +10044,7 @@ def _run_generation(job_id: str):
                                 job["total_steps"] = 0
                             job["message"] = msg
                             job["phase"] = msg
+                            active_task_timer.phase(msg)
                             status_line = f"\r  [{step}/{total}] {msg}" if total > 0 else f"\r  {msg}"
                             print(status_line.ljust(max(last_msg_len, len(status_line))), end="", flush=True)
                             last_msg_len = len(status_line)
@@ -10040,6 +10052,7 @@ def _run_generation(job_id: str):
                     elif cmd == "status":
                         job["message"] = str(data)
                         job["phase"] = str(data)
+                        active_task_timer.phase(data)
                         job["step"] = 0
                         job["total_steps"] = 0
                         job["progress"] = 0
@@ -10058,6 +10071,7 @@ def _run_generation(job_id: str):
 
                 if not task_error:
                     completed += 1
+                    active_task_timer.finish("completed")
                     print(f"\n  Task {task_no} completed")
 
                     # Free VRAM between clips to prevent OOM on long pipelines
@@ -10099,6 +10113,9 @@ def _run_generation(job_id: str):
                                     print(f"  [Continuation] Extracted last frame for clip {task_no + 1}")
                                 except Exception as e:
                                     print(f"  [Continuation] Failed to extract frame: {e}")
+                else:
+                    active_task_timer.finish("failed")
+                active_task_timer = None
 
             elapsed = time.time() - start_time
             print(f"\n{'='*50}")
@@ -10534,6 +10551,8 @@ def _run_generation(job_id: str):
             job["message"] = "Done" if success else "Generation failed"
 
         except Exception as e:
+            if active_task_timer is not None:
+                active_task_timer.finish("failed")
             traceback.print_exc()
             job["status"] = "failed"
             job["error"] = str(e)
@@ -10577,6 +10596,7 @@ def get_status(job_id: str):
         "message": j["message"],
         "output_files": j["output_files"],
         "error": j["error"],
+        "task_timings": j.get("task_timings", []),
         # Present only on failed jobs that look like CUDA OOMs. UI
         # renders the OOM recovery banner when this is non-null.
         "oom_info": j.get("oom_info"),
@@ -10630,6 +10650,7 @@ def list_jobs():
                 "output_files": j["output_files"],
                 "error": j["error"],
                 "oom_info": j.get("oom_info"),
+                "task_timings": j.get("task_timings", []),
                 "created_at": j.get("created_at", 0),
             })
     active.sort(key=lambda x: x["created_at"])
