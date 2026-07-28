@@ -132,18 +132,23 @@ export type ComicPanelCapture = {
 export async function forEachComicPanelCapture(
   consume: (capture: ComicPanelCapture, current: number, total: number) => Promise<void>,
   onProgress?: (current: number, total: number) => void,
-  options: { includeLettering?: boolean } = {},
+  options: { includeLettering?: boolean; limit?: number } = {},
 ): Promise<void> {
   const state = useComicStore.getState()
   const originalPage = state.currentPageId
   const originalZoom = state.zoom
   const originalSelection = state.selectedId
-  const total = state.project.pages.reduce((sum, page) => sum + page.elements.filter(element => element.type === 'panel' && !element.parentId).length, 0)
+  const available = state.project.pages.reduce((sum, page) => sum + page.elements.filter(element => element.type === 'panel' && !element.parentId).length, 0)
+  const requestedLimit = Number.isFinite(Number(options.limit))
+    ? Math.max(1, Math.floor(Number(options.limit)))
+    : available
+  const total = Math.min(available, requestedLimit)
   let current = 0
   state.setSelected(null)
   state.setZoom(1)
   try {
     for (let pageIndex = 0; pageIndex < state.project.pages.length; pageIndex += 1) {
+      if (current >= total) break
       const page = state.project.pages[pageIndex]
       useComicStore.getState().setCurrentPage(page.id)
       await nextPaint()
@@ -174,6 +179,7 @@ export async function forEachComicPanelCapture(
       })
       const pageImage = await loadCapturedImage(pageCapture)
       for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) {
+        if (current >= total) break
         const panel = panels[panelIndex]
         current += 1
         onProgress?.(current, total)

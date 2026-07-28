@@ -287,6 +287,29 @@ def test_living_still_forces_camera_lock_and_reference_preservation():
     assert "CAMERA LOCK" in prompt
 
 
+def test_contextual_comic_motion_forces_camera_lock_and_story_performance():
+    params = {
+        "comic_shots": [{
+            "motion_mode": "contextual",
+            "camera_move": "push-in",
+        }],
+    }
+
+    assert director_pipeline._comic_motion_mode(params, 0) == "contextual"
+    assert director_pipeline._comic_camera_is_locked(params, 0)
+    prompt = director_pipeline._comic_motion_prompt(
+        "Nara closes her hand around the seed and looks toward Kael.",
+        "faithful",
+        False,
+        camera_locked=True,
+        motion_mode="contextual",
+    )
+    assert "CONTEXTUAL PERFORMANCE" in prompt
+    assert "story-specific acting" in prompt
+    assert "generic camera move" in prompt
+    assert "CAMERA LOCK" in prompt
+
+
 def test_legacy_comic_shots_keep_action_motion_mode():
     assert director_pipeline._comic_motion_mode({"comic_shots": [{}]}, 0) == "action"
 

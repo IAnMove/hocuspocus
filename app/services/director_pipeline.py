@@ -2444,12 +2444,16 @@ def _comic_motion_mode(params: dict, index: int) -> str:
     shots = params.get("comic_shots") or []
     shot = shots[index] if index < len(shots) and isinstance(shots[index], dict) else {}
     raw = str(shot.get("motion_mode") or "action").strip().lower()
-    return "living-still" if raw in {"living-still", "living_still", "still"} else "action"
+    if raw in {"living-still", "living_still", "still"}:
+        return "living-still"
+    if raw in {"contextual", "context", "directed"}:
+        return "contextual"
+    return "action"
 
 
 def _comic_camera_is_locked(params: dict, index: int) -> bool:
     """Treat absent comic camera instructions as an intentional static shot."""
-    if _comic_motion_mode(params, index) == "living-still":
+    if _comic_motion_mode(params, index) in {"living-still", "contextual"}:
         return True
     shots = params.get("comic_shots") or []
     shot = shots[index] if index < len(shots) and isinstance(shots[index], dict) else {}
@@ -2483,6 +2487,14 @@ def _comic_motion_prompt(
             "minimal ambient dust, mist, light or reflections. Do not add, "
             "remove, reveal, replace or transform subjects; do not make anyone "
             "cross the frame or approach the viewer. Finish on the same stable composition."
+        )
+    elif motion_mode in {"contextual", "context", "directed"}:
+        additions.append(
+            "CONTEXTUAL PERFORMANCE: carry out only the story-specific acting, "
+            "object motion and environmental response described for this exact "
+            "panel. Keep it restrained and readable. Do not replace the "
+            "performance with a generic camera move and do not invent an "
+            "unrelated action or transition."
         )
     if fidelity == "faithful":
         additions.append(

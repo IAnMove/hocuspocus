@@ -186,7 +186,7 @@ export function normalizeComicPlan(
             .includes(String(panel?.cameraMove))
             ? panel.cameraMove
             : undefined,
-          videoMotion: ['auto', 'living-still', 'action']
+          videoMotion: ['auto', 'contextual', 'living-still', 'action']
             .includes(String(panel?.videoMotion))
             ? panel.videoMotion
             : undefined,

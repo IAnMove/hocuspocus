@@ -45,7 +45,11 @@ _LIVING_STILL_PROMPT = (
 
 def _motion_mode(source: dict) -> str:
     raw = str(source.get("motion_mode") or "action").strip().lower()
-    return "living-still" if raw in {"living-still", "living_still", "still"} else "action"
+    if raw in {"living-still", "living_still", "still"}:
+        return "living-still"
+    if raw in {"contextual", "context", "directed"}:
+        return "contextual"
+    return "action"
 
 
 class ComicMoviePlanner(BasePlanner):
@@ -62,19 +66,21 @@ class ComicMoviePlanner(BasePlanner):
         if not comic_shots:
             return ProductionPlan(skill_type=self.skill_type, shots=[], total_duration_sec=0)
 
-        # Storyboard mode may already contain a manually reviewed, render-ready
-        # prompt. Treat it as source of truth and ask the LLM only for missing
-        # shots; this avoids silently rewriting approved camera/performance work.
+        # Storyboard/action mode may already contain a manually reviewed,
+        # render-ready prompt. Treat it as source of truth. Contextual mode is
+        # intentionally rewritten from the complete scene and story canon so
+        # old generic camera prompts cannot leak into a new conversion.
         treatments: dict[int, str] = {}
         for index, shot in enumerate(comic_shots):
-            if _motion_mode(shot) == "living-still":
+            motion_mode = _motion_mode(shot)
+            if motion_mode == "living-still":
                 # Existing comic plans often contain ambitious action prompts.
                 # Choosing living-still explicitly asks us not to reuse them:
                 # they give the I2V model permission to redraw the panel.
                 treatments[index] = _LIVING_STILL_PROMPT
                 continue
             reviewed = str(shot.get("video_prompt") or "").strip()
-            if reviewed:
+            if motion_mode == "action" and reviewed:
                 treatments[index] = reviewed
         batch_size = 6
         for batch_start in range(0, len(comic_shots), batch_size):
@@ -105,29 +111,36 @@ class ComicMoviePlanner(BasePlanner):
 Return ONLY the requested JSON array, one object for every source panel.
 
 The supplied panel image is the ACTUAL FIRST FRAME. Never redesign it and never
-invent a different opening composition. Write a concise but specific I2V prompt
-describing only motion after that frame: character acting, environmental motion,
-camera movement, timing and the final beat. Use dialogue/script only to guide
-performance; do not ask the video model to draw subtitles, captions, speech
-bubbles, logos or new written text. Preserve faces, wardrobe, props, palette,
-linework and panel geography.
+invent a different opening composition. Read the master story canon, panel
+description, first-frame description, characters, script and narrative role
+together. Write a literal chronological shot paragraph describing only what
+happens after that frame: character performance, object/environment motion,
+camera behavior, timing and the final beat. Use dialogue only to guide acting
+and lip movement; do not draw subtitles, captions, speech bubbles, logos or new
+written text. Preserve faces, wardrobe, props, palette, linework and geography.
 
 EACH PANEL MUST PLAY AS ITS OWN SHOT, NOT AS A TRANSITION TO THE NEXT PANEL.
-Give the visible subject at least one clear, narratively meaningful action; for a
-quiet beat, use expressive acting plus concrete environmental motion. Camera
-movement is secondary and must never be the only thing that happens. Describe
-the action chronologically for the supplied duration and finish on a stable,
-intentional beat inside the same scene. Do not dissolve, morph or travel toward
-an unseen next panel.
+Give the visible subject at least one clear, narratively meaningful action. Do
+not fall back to the same breathing/blinking template for every panel. A quiet
+beat can be a held gaze, a hand tightening around an object, a hesitant pause,
+a small change of posture or another performance justified by this exact story.
+Camera movement is secondary and must never be the only thing that happens.
+Describe the action chronologically for the supplied duration and finish on a
+stable, intentional beat inside the same scene. Do not dissolve, morph or travel
+toward an unseen next panel.
 
 One panel is one continuous shot: no montage and no internal cuts. Preserve the
 explicitly supplied visual_style, including
 anime/cel-shaded rendering when present. Never convert illustrated artwork to
-photorealism or 3D. If requested_camera is "none", "static" or "locked-off",
+photorealism or 3D. When motion_mode is "contextual", keep the camera locked and
+derive restrained but meaningful subject performance from the story; never
+replace that performance with a generic zoom. When motion_mode is "action", use
+requested_camera deliberately. If requested_camera is "none", "static" or "locked-off",
 state that the exact first-frame crop, horizon and perspective remain fixed,
 put all motion inside the frame, and do not introduce any zoom, pan, tilt,
-dolly, crane, reframing or vertical drift. Keep each video_prompt under 130
-words."""
+dolly, crane, reframing or vertical drift. Follow LTX prompt style: plain,
+chronological and concrete, without meta-commentary or negative instructions
+inside video_prompt. Keep each video_prompt under 180 words."""
             items = []
             for source_index, shot in missing:
                 items.append({
@@ -135,6 +148,7 @@ words."""
                     "page": shot.get("page_number"),
                     "panel": shot.get("panel_number"),
                     "duration_seconds": shot.get("duration", 3),
+                    "motion_mode": _motion_mode(shot),
                     "narrative_role": shot.get("narrative_role", ""),
                     "scene": shot.get("scene_description", ""),
                     "first_frame_visual_description": shot.get("image_prompt", ""),
@@ -173,14 +187,12 @@ words."""
         for index, source in enumerate(comic_shots):
             motion_mode = _motion_mode(source)
             duration = max(0.8, min(20.0, float(source.get("duration") or 3)))
-            if motion_mode == "living-still":
-                duration = min(2.0, duration)
             # No camera move is forced by default. The panel's action prompt
-            # may still request camera work deliberately, but a missing UI
-            # value must not turn every shot into the same push-in.
+            # may still request camera work deliberately in action mode, but
+            # contextual and living-still treatments keep composition fixed.
             camera_key = (
                 "none"
-                if motion_mode == "living-still"
+                if motion_mode in {"living-still", "contextual"}
                 else str(source.get("camera_move") or "none")
             )
             camera_movement = _MOVEMENT_LABELS.get(camera_key, camera_key)
@@ -188,11 +200,18 @@ words."""
             script = str(source.get("script") or "").strip()
             first_frame_visual = str(source.get("image_prompt") or "").strip()
             visual_style = str(source.get("visual_style") or "").strip()
+            contextual_direction = (
+                "Keep the camera fixed and turn the visible story information "
+                "into one restrained, narratively meaningful performance. "
+                if motion_mode == "contextual"
+                else ""
+            )
             fallback = (
                 "Animate the supplied comic artwork as the exact first frame. "
                 f"Starting from the visible situation ({first_frame_visual or scene or 'the supplied panel'}), "
                 f"perform this continuous story beat: {scene or source.get('narrative_role') or 'the visible action advances naturally'}. "
                 + (f"Use this script only to guide acting and lip movement: {script}. " if script else "")
+                + contextual_direction
                 + "Give the visible subject a clear action, add concrete environmental "
                 "motion, and settle on a stable final pose within this same scene. "
                 + f"Camera: {camera_movement}; camera motion is secondary to the performance. "

@@ -443,14 +443,18 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const videoModels = useStore(state => state.models)
   const enabledModels = useStore(state => state.enabledModels)
   const selectDirectorVideoModel = useStore(state => state.selectDirectorVideoModel)
+  const movieSelfRefiner = useStore(state => state.directorVideoSelfRefiner)
+  const setMovieSelfRefiner = useStore(state => state.setDirectorVideoSelfRefiner)
   const storyboard = project.director?.input.productionMode === 'storyboard'
   const [aspect, setAspect] = useState<'landscape' | 'portrait' | 'square'>(() =>
     project.director?.input.storyboardAspect || 'landscape')
   const [defaultDuration, setDefaultDuration] = useState(3)
   const [transition, setTransition] = useState('none')
   const [animaticMotion, setAnimaticMotion] = useState<'none' | 'shot-settings'>('none')
-  const [movieQuality, setMovieQuality] = useState<'480p' | '720p'>('720p')
-  const [movieMotionMode, setMovieMotionMode] = useState<'living-still' | 'action'>('living-still')
+  const [movieQuality, setMovieQuality] = useState<'480p' | '720p' | '1080p'>('720p')
+  const [movieMotionMode, setMovieMotionMode] = useState<'contextual' | 'living-still' | 'action'>(
+    storyboard ? 'action' : 'contextual',
+  )
   const [movieImageFit, setMovieImageFit] = useState<'smart' | 'crop'>('smart')
   const [movieEndFrameMode, setMovieEndFrameMode] = useState<'none' | 'smart' | 'all'>('none')
   const [movieFidelity, setMovieFidelity] = useState<'faithful' | 'balanced' | 'expressive'>('faithful')
@@ -462,12 +466,13 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     // 480p is useful for disposable previews, but it is visibly soft after
     // generative I2V reconstruction. Comic films therefore start at 720p.
     setMovieQuality('720p')
-    setMovieMotionMode('living-still')
+    setMovieMotionMode(storyboard ? 'action' : 'contextual')
     // A new comic always starts from independent I2V shots. End-frame
     // conditioning is an explicit creative choice, never a sticky default.
     setMovieEndFrameMode('none')
   }, [
     project.id,
+    storyboard,
     project.director?.input.storyboardAspect,
     project.director?.input.storyboardQuality,
   ])
@@ -504,18 +509,20 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     state.patchProject({ director: { ...director, plan } })
     notify('ok', message)
   }
-  const resolvedMotionMode = (planned?: ComicPlanPanel): 'living-still' | 'action' =>
-    planned?.videoMotion === 'living-still' || planned?.videoMotion === 'action'
+  const resolvedMotionMode = (planned?: ComicPlanPanel): 'contextual' | 'living-still' | 'action' =>
+    planned?.videoMotion === 'contextual'
+      || planned?.videoMotion === 'living-still'
+      || planned?.videoMotion === 'action'
       ? planned.videoMotion
       : movieMotionMode
-  const resolvedMovieDuration = (planned?: ComicPlanPanel) => {
-    const requested = planned?.durationSeconds || defaultDuration
-    // Longer I2V generations give the model more time to redraw a finished
-    // panel. Two seconds was the stable reference-preserving local test.
-    return resolvedMotionMode(planned) === 'living-still'
-      ? Math.min(2, requested)
-      : requested
-  }
+  const resolvedMovieDuration = (planned?: ComicPlanPanel) =>
+    planned?.durationSeconds || defaultDuration
+  const motionTreatmentLabel = (mode: 'contextual' | 'living-still' | 'action') =>
+    mode === 'contextual'
+      ? 'context-aware performance with a fixed camera'
+      : mode === 'living-still'
+        ? 'deterministic living still with a fixed camera'
+        : 'authored story action and camera'
   const create = async () => {
     if (panelCount > 200) {
       notify('error', `This animatic has ${panelCount} panels; the safe limit is 200.`)
@@ -588,21 +595,29 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     }
   }
 
-  const convertToMovie = async () => {
-    if (panelCount > 200) {
-      notify('error', `This comic has ${panelCount} panels; the safe conversion limit is 200.`)
+  const convertToMovie = async (clipLimit?: number) => {
+    const requestedPanelCount = Math.min(
+      panelCount,
+      Number.isFinite(Number(clipLimit))
+        ? Math.max(1, Math.floor(Number(clipLimit)))
+        : panelCount,
+    )
+    if (requestedPanelCount > 200) {
+      notify('error', `This conversion has ${requestedPanelCount} panels; the safe limit is 200.`)
       return
     }
-    const totalSeconds = Math.round(project.director?.plan.pages.reduce(
-      (sum, page) => sum + page.panels.reduce(
-        (pageSum, planned) => pageSum + resolvedMovieDuration(planned),
-        0,
-      ),
-      0,
-    ) || panelCount * (movieMotionMode === 'living-still' ? Math.min(2, defaultDuration) : defaultDuration))
+    const plannedForRun = (project.director?.plan.pages.flatMap(page => page.panels) || [])
+      .slice(0, requestedPanelCount)
+    const totalSeconds = Math.round(
+      plannedForRun.reduce((sum, planned) => sum + resolvedMovieDuration(planned), 0)
+      || requestedPanelCount * defaultDuration,
+    )
+    const isTestRun = clipLimit !== undefined
     if (!window.confirm(
-      `Convert ${panelCount} comic panels into about ${totalSeconds}s of generated video? `
-      + `Motion treatment: ${movieMotionMode === 'living-still' ? 'stable living still' : 'full story action'}. `
+      `${isTestRun ? 'Create a quality test from the first' : 'Convert'} ${requestedPanelCount} `
+      + `comic panel${requestedPanelCount === 1 ? '' : 's'} into about ${totalSeconds}s of generated video? `
+      + `Motion treatment: ${motionTreatmentLabel(movieMotionMode)}. `
+      + `${isTestRun ? 'This uses the final model, resolution, prompts and shot settings; it is not a lower-quality preview. ' : ''}`
       + 'The existing artwork will be reused, so no new panel images are generated, but this starts one image-to-video shot per panel and may consume substantial video credits/time.',
     )) return
 
@@ -624,7 +639,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         script: string
         visual_style: string
         video_prompt: string
-        motion_mode: 'living-still' | 'action'
+        motion_mode: 'contextual' | 'living-still' | 'action'
         end_frame_mode: 'auto' | 'none' | 'next-panel'
       }> = []
       await forEachComicPanelCapture(async (capture, current, total) => {
@@ -643,7 +658,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           page_number: capture.pageNumber,
           panel_number: capture.panelNumber,
           duration: resolvedMovieDuration(planned),
-          camera_move: motionMode === 'living-still' ? 'none' : (planned?.cameraMove || 'none'),
+          camera_move: motionMode === 'action' ? (planned?.cameraMove || 'none') : 'none',
           narrative_role: planned?.narrativeRole || `Panel ${capture.pageNumber}.${capture.panelNumber}`,
           scene_description: planned?.sceneDescription || '',
           image_prompt: planned?.imagePrompt || '',
@@ -663,6 +678,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         // Lettering remains in the comic/script but is removed from I2V first
         // frames so the video model cannot warp speech bubbles or captions.
         includeLettering: false,
+        limit: requestedPanelCount,
       })
 
       const movieContext = [
@@ -673,9 +689,6 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         project.director?.plan.logline ? `LOGLINE: ${project.director.plan.logline}` : '',
         project.director?.plan.synopsis ? `DIRECTOR SYNOPSIS: ${project.director.plan.synopsis}` : '',
         project.director?.plan.styleBible ? `STYLE BIBLE: ${project.director.plan.styleBible}` : '',
-        project.director?.input.storyContext ? `MASTER STORY CANON:\n${project.director.input.storyContext}` : '',
-        project.director?.input.worldContext ? `WORLD CONTINUITY:\n${project.director.input.worldContext}` : '',
-        project.director?.input.forbiddenElements ? `NEVER INTRODUCE: ${project.director.input.forbiddenElements}` : '',
         `CHARACTERS:\n${project.characters.map(character => [
           character.id,
           character.name,
@@ -689,6 +702,9 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         project.director?.plan.storyStructure?.length
           ? `STORY STRUCTURE:\n${JSON.stringify(project.director.plan.storyStructure)}`
           : '',
+        project.director?.input.storyContext ? `MASTER STORY CANON:\n${project.director.input.storyContext}` : '',
+        project.director?.input.worldContext ? `WORLD CONTINUITY:\n${project.director.input.worldContext}` : '',
+        project.director?.input.forbiddenElements ? `NEVER INTRODUCE: ${project.director.input.forbiddenElements}` : '',
       ].filter(Boolean).join('\n\n')
 
       const before = useStore.getState()
@@ -705,14 +721,17 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           + 'Choose an LTX model or use “No end frame”.',
         )
       }
-      const qualityResolution = movieQuality === '720p'
-        ? (aspect === 'portrait' ? '704x1280' : aspect === 'square' ? '1024x1024' : '1280x704')
-        : (aspect === 'portrait' ? '448x832' : aspect === 'square' ? '640x640' : '832x448')
+      const qualityResolution = movieQuality === '1080p'
+        ? (aspect === 'portrait' ? '1088x1920' : aspect === 'square' ? '1408x1408' : '1920x1088')
+        : movieQuality === '720p'
+          ? (aspect === 'portrait' ? '704x1280' : aspect === 'square' ? '1024x1024' : '1280x704')
+          : (aspect === 'portrait' ? '448x832' : aspect === 'square' ? '640x640' : '832x448')
       const fps = state.modelOptions?.fps || 16
       const savedVideoSteps = Number(state.savedParamsPerMode.video?.num_inference_steps ?? 8)
       const validVideoSteps = Number.isFinite(savedVideoSteps) ? savedVideoSteps : 8
-      const videoSteps = videoModel.includes('ltx2') && videoModel.includes('distilled')
-        ? Math.max(8, validVideoSteps)
+      const isLtxDistilled = videoModel.includes('ltx2') && videoModel.includes('distilled')
+      const videoSteps = isLtxDistilled
+        ? 8
         : validVideoSteps
       const plannedClips = comicShots.reduce<PlannedClip[]>((clips, shot, index) => {
         const start = index === 0 ? 0 : Number(clips[index - 1].end)
@@ -782,15 +801,20 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           // preset silently undercut that path for comic films.
           num_inference_steps: videoSteps,
           resolution: qualityResolution,
+          ...(isLtxDistilled ? {
+            single_stage_pipeline: 0,
+            progressive_pipeline: 0,
+            stage2_steps: 3,
+          } : {}),
           input_video_strength: movieFidelity === 'faithful'
-            ? 1
+            ? .9
             : Number(state.savedParamsPerMode.video?.input_video_strength ?? .8),
         },
         video_loras: state.savedLoraPerMode.video || {},
         video_spatial_upsampling: state.directorVideoSpatialUpsampling,
         video_film_grain_intensity: state.directorVideoFilmGrainIntensity,
         video_film_grain_saturation: state.directorVideoFilmGrainSaturation,
-        video_self_refiner: state.directorVideoSelfRefiner,
+        video_self_refiner: movieSelfRefiner,
         audio_scale: state.directorAudioScale,
       })
 
@@ -818,9 +842,11 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       window.dispatchEvent(new Event('maestro:director-open'))
       notify(
         'ok',
-        movieEndFrameMode === 'none'
-          ? 'Comic movie started. Panels without an explicit end-frame override are independent I2V shots; completed clips are joined with clean cuts.'
-          : 'Comic movie started. End-frame conditioning is enabled for selected shots, but completed clips are still joined with clean cuts.',
+        isTestRun
+          ? `${requestedPanelCount}-clip quality test started with the real ${movieQuality} settings. The remaining ${panelCount - requestedPanelCount} panels were not submitted.`
+          : movieEndFrameMode === 'none'
+            ? 'Comic movie started. Panels without an explicit end-frame override are independent I2V shots; completed clips are joined with clean cuts.'
+            : 'Comic movie started. End-frame conditioning is enabled for selected shots, but completed clips are still joined with clean cuts.',
       )
     } catch (error) {
       notify('error', (error as Error).message)
@@ -852,7 +878,8 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         </label>
         <label className="block text-[10px] text-text-muted">I2V quality
           <select className={`${input} mt-1`} value={movieQuality} onChange={event => setMovieQuality(event.target.value as typeof movieQuality)}>
-            <option value="720p">720p · recommended</option>
+            <option value="1080p">1080p · highest native detail · heavy</option>
+            <option value="720p">720p · recommended balance</option>
             <option value="480p">480p · fast preview · visibly softer</option>
           </select>
         </label>
@@ -863,11 +890,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           value={movieMotionMode}
           onChange={event => setMovieMotionMode(event.target.value as typeof movieMotionMode)}
         >
-          <option value="living-still">Living still · fixed camera · subtle motion · recommended</option>
-          <option value="action">Story action · full shot timing · more change/drift</option>
+          <option value="contextual">Context-aware · LLM directs each scene · fixed camera · recommended</option>
+          <option value="living-still">Living still · deterministic micro-motion · fixed camera</option>
+          <option value="action">Authored story action · editable prompt and camera</option>
         </select>
         <span className="mt-1 block text-[9px] text-text-muted">
-          Living still limits each generative shot to 2 seconds and preserves positions, framing and drawing details. Story action uses each shot&apos;s editable action prompt and duration when something substantial must happen.
+          Context-aware reads the complete story, the panel description, characters and script to direct a specific performance while holding the composition. Living still is the conservative fallback. Authored action uses the editable prompt and camera below. Every mode respects the requested duration.
         </span>
       </label>
       <label className="block text-[10px] text-text-muted">Video model
@@ -886,7 +914,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           ))}
         </select>
         <span className="mt-1 block text-[9px] text-text-muted">
-          LTX-2.3 Distilled INT8 is the measured recommendation for this RTX 4090: it preserved the reference better than Q6 and rendered diffusion faster. Comic films keep its canonical 8+3-step path; the earlier softness came from 480p and long redraw windows, not missing steps.
+          LTX-2.3 Distilled INT8 is the measured recommendation for this RTX 4090. Its quality recipe is the trained two-stage 8+3 path; adding arbitrary diffusion steps is not a valid quality preset. Use 1080p for more native detail or 720p for the measured balance.
         </span>
       </label>
       <label className="block text-[10px] text-text-muted">Panel fit
@@ -939,16 +967,28 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           </select>
         </label>
       </div>
+      <label className="block text-[10px] text-text-muted">Experimental self-refiner · applies to every generated clip
+        <select
+          className={`${input} mt-1`}
+          value={movieSelfRefiner}
+          onChange={event => setMovieSelfRefiner(Number(event.target.value))}
+        >
+          <option value={0}>Off · recommended stable path</option>
+          <option value={1}>P1-Norm · experimental</option>
+          <option value={2}>P2-Norm · experimental</option>
+        </select>
+        <span className="mt-1 block text-[9px] text-text-muted">
+          This repeats refinement work and can improve a detail or introduce artifacts; it is not part of the official Distilled quality recipe. Test it on the first two clips before using it for a full comic.
+        </span>
+      </label>
       <p className="text-[9px] text-text-muted">
         This controls how an individual clip ends; it is not a transition between clips. By default every panel is an independent I2V shot. The finished clips are always joined with hard cuts here; fades and other edit transitions can be added afterwards in Video Editor.
       </p>
       <label className="block text-[10px] text-text-muted">Default requested duration per panel
         <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} />
-        {movieMotionMode === 'living-still' && (
-          <span className="mt-1 block text-[9px] text-emerald-300">
-            Living-still shots are capped at 2s to prevent progressive redraw. Choose Story action for longer shots.
-          </span>
-        )}
+        <span className="mt-1 block text-[9px] text-text-muted">
+          This is the real generative duration. Maestro no longer shortens living-still clips to two seconds.
+        </span>
       </label>
       {project.director && (
         <div className="space-y-1.5 rounded border border-border bg-bg-tertiary/30 p-2">
@@ -967,6 +1007,20 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
               Apply {defaultDuration}s to all
             </button>
             <button
+              className={`${button} border-cyan-400/40 text-cyan-300`}
+              type="button"
+              onClick={() => updateAllShots(
+                {
+                  cameraMove: 'none',
+                  videoMotion: 'contextual',
+                  videoEndFrame: 'none',
+                },
+                `Applied context-aware direction to all ${panelCount} shots: story-specific performance, fixed camera, independent I2V and clean cuts.`,
+              )}
+            >
+              Context-aware for all
+            </button>
+            <button
               className={`${button} border-emerald-400/40 text-emerald-300`}
               type="button"
               onClick={() => updateAllShots(
@@ -975,7 +1029,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                   videoMotion: 'living-still',
                   videoEndFrame: 'none',
                 },
-                `Applied stable living-still treatment to all ${panelCount} shots: 2s generation cap, fixed camera, no end-frame conditioning, then a clean cut. Original requested durations remain available for Story action.`,
+                `Applied stable living-still treatment to all ${panelCount} shots: full requested duration, fixed camera, no end-frame conditioning and a clean cut.`,
               )}
             >
               Living still for all
@@ -1016,9 +1070,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                   })}
                   title="Choose whether this panel stays close to the original drawing or performs its full action prompt"
                 >
-                  <option value="auto">Motion · follow global ({movieMotionMode === 'living-still' ? 'living still' : 'story action'})</option>
-                  <option value="living-still">Motion · living still · fixed · max 2s</option>
-                  <option value="action">Motion · story action · use prompt below</option>
+                  <option value="auto">Motion · follow global ({motionTreatmentLabel(movieMotionMode)})</option>
+                  <option value="contextual">Motion · context-aware performance · fixed camera</option>
+                  <option value="living-still">Motion · deterministic living still · fixed camera</option>
+                  <option value="action">Motion · authored story action · use prompt and camera</option>
                 </select>
                 <select
                   className={`${input} col-span-2`}
@@ -1036,7 +1091,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                   className={`${input} col-span-2`}
                   rows={5}
                   value={planned.videoPrompt || ''}
-                  disabled={resolvedMotionMode(planned) === 'living-still'}
+                  disabled={resolvedMotionMode(planned) !== 'action'}
                   onChange={event => updateShot(pageIndex, panelIndex, {
                     videoPrompt: event.target.value,
                   })}
@@ -1044,17 +1099,47 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                     ? 'Chronological action, performance, camera and final beat…'
                     : 'Optional manual action inside this panel. Leave blank for the LLM to write it from the scene and script…'}
                 />
-                {resolvedMotionMode(planned) === 'living-still' && (
+                {resolvedMotionMode(planned) !== 'action' && (
                   <span className="col-span-2 text-[9px] text-emerald-300">
-                    The action prompt is preserved but paused. Select Story action for this shot to use it.
+                    {resolvedMotionMode(planned) === 'contextual'
+                      ? 'At submission, the LLM rewrites this shot from the story, image description, characters and script. Select Authored action to use or edit the prompt directly.'
+                      : 'The action prompt is preserved but paused. Select Authored action for this shot to use it.'}
                   </span>
                 )}
+                <button
+                  className={`${button} col-span-2`}
+                  type="button"
+                  onClick={() => updateAllShots(
+                    {
+                      durationSeconds: planned.durationSeconds || defaultDuration,
+                      cameraMove: planned.cameraMove || 'none',
+                      videoMotion: planned.videoMotion || 'auto',
+                      videoEndFrame: planned.videoEndFrame || 'auto',
+                    },
+                    `Applied shot ${pageIndex + 1}.${panelIndex + 1} timing, camera, motion treatment and end-frame setting to all ${panelCount} shots.`,
+                  )}
+                >
+                  Apply this shot&apos;s settings to all videos
+                </button>
               </div>
             )))}
           </div>
         </details>
       )}
-      <button className={`${button} w-full border-purple-400/50 text-purple-300`} disabled={Boolean(busy) || panelCount === 0} onClick={convertToMovie}>
+      <button
+        className={`${button} w-full border-cyan-400/50 text-cyan-300`}
+        disabled={Boolean(busy) || panelCount === 0}
+        onClick={() => convertToMovie(2)}
+      >
+        {busy === 'movie' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
+        {busy === 'movie' && progress
+          ? progress
+          : `Test first ${Math.min(2, panelCount)} complete I2V clip${Math.min(2, panelCount) === 1 ? '' : 's'}`}
+      </button>
+      <p className="text-[9px] text-cyan-200/80">
+        Uses the selected final model, native resolution, full durations, contextual prompts and effects, but submits only the first two panels.
+      </p>
+      <button className={`${button} w-full border-purple-400/50 text-purple-300`} disabled={Boolean(busy) || panelCount === 0} onClick={() => convertToMovie()}>
         {busy === 'movie' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
         {busy === 'movie' && progress
           ? progress

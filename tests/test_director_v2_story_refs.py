@@ -224,7 +224,7 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(plan.shots[0].video_prompt, reviewed_prompt)
         self.assertEqual(plan.shots[0].duration_sec, 5)
 
-    def test_comic_movie_living_still_bypasses_llm_and_caps_drift_window(self):
+    def test_comic_movie_living_still_bypasses_llm_and_keeps_requested_duration(self):
         def must_not_call_llm(**_kwargs):
             raise AssertionError("Living-still shots use the deterministic fidelity prompt")
 
@@ -246,13 +246,58 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             }],
         )
 
-        self.assertEqual(plan.total_duration_sec, 2)
-        self.assertEqual(plan.shots[0].duration_sec, 2)
+        self.assertEqual(plan.total_duration_sec, 5)
+        self.assertEqual(plan.shots[0].duration_sec, 5)
         self.assertEqual(plan.shots[0].camera_plan.movement, "locked-off camera")
         self.assertIn("restrained living still", plan.shots[0].video_prompt)
         self.assertIn("same position", plan.shots[0].video_prompt)
         self.assertNotIn("runs across the entire frame", plan.shots[0].video_prompt)
         self.assertEqual(plan.shots[0].metadata["motion_mode"], "living-still")
+
+    def test_comic_movie_contextual_mode_rewrites_generic_prompt_from_story(self):
+        captured = {}
+
+        def contextual_planner(**kwargs):
+            captured.update(kwargs)
+            return (
+                '[{"source_index":0,"video_prompt":"With the camera fixed, Nara '
+                'studies the seed in her palm, closes her fingers around it, then '
+                'raises her eyes toward the silent guardian as crystal dust crosses '
+                'the background."}]'
+            )
+
+        planner = ComicMoviePlanner(
+            llm_generate=contextual_planner,
+            llm_generate_streaming=contextual_planner,
+        )
+        plan = planner.plan(
+            comic_context=(
+                "Nara is a solitary messenger carrying the last seed. Kael is the "
+                "guardian whose grief has kept the dead world unchanged."
+            ),
+            comic_shots=[{
+                "page_number": 6,
+                "panel_number": 3,
+                "duration": 5,
+                "motion_mode": "contextual",
+                "narrative_role": "Nara decides to trust Kael.",
+                "scene_description": "Nara silently offers the last seed.",
+                "image_prompt": "Nara faces Kael in a crystal desert, the seed visible in her palm.",
+                "script": "No dialogue. A deliberate moment of trust.",
+                "camera_move": "push-in",
+                "video_prompt": "Slow push-in with generic breathing.",
+                "characters": ["NARA", "KAEL"],
+            }],
+        )
+
+        self.assertIn('"motion_mode": "contextual"', captured["prompt"])
+        self.assertIn("last seed", captured["prompt"])
+        self.assertIn("When motion_mode is \"contextual\"", captured["system_prompt"])
+        self.assertEqual(plan.shots[0].duration_sec, 5)
+        self.assertEqual(plan.shots[0].camera_plan.movement, "locked-off camera")
+        self.assertIn("studies the seed", plan.shots[0].video_prompt)
+        self.assertNotIn("generic breathing", plan.shots[0].video_prompt)
+        self.assertEqual(plan.shots[0].metadata["motion_mode"], "contextual")
 
     def test_comic_movie_plans_action_inside_panel_instead_of_a_transition(self):
         captured = {}
