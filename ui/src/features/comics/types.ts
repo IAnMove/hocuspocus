@@ -182,6 +182,10 @@ export interface ComicPlanPanel {
   videoPrompt?: string
   durationSeconds?: number
   cameraMove?: 'none' | 'push-in' | 'pull-out' | 'pan-left' | 'pan-right'
+  /** Per-shot override for comic-to-video motion. "auto" follows the global
+   *  conversion setting; living-still prioritizes reference fidelity while
+   *  action uses the authored/LLM motion prompt. */
+  videoMotion?: 'auto' | 'living-still' | 'action'
   /** Optional end-frame conditioning for this I2V shot. This is not an edit
    *  transition: generated clips are joined separately with hard cuts. */
   videoEndFrame?: 'auto' | 'none' | 'next-panel'

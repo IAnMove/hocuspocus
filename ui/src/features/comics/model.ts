@@ -186,6 +186,10 @@ export function normalizeComicPlan(
             .includes(String(panel?.cameraMove))
             ? panel.cameraMove
             : undefined,
+          videoMotion: ['auto', 'living-still', 'action']
+            .includes(String(panel?.videoMotion))
+            ? panel.videoMotion
+            : undefined,
           videoEndFrame: ['auto', 'none', 'next-panel']
             .includes(String(panel?.videoEndFrame))
             ? panel.videoEndFrame

@@ -496,6 +496,11 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
             negative_prompt,
             _COMIC_LOCKED_CAMERA_NEGATIVE,
         )
+    if is_comic_movie:
+        negative_prompt = _append_negative_prompt(
+            negative_prompt,
+            _COMIC_REFERENCE_NEGATIVE,
+        )
     gen_params = {
         "model_type": video_model,
         "prompt": _comic_motion_prompt(
@@ -503,6 +508,7 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
             snapshot.get("comic_motion_fidelity", "faithful"),
             bool(has_end),
             camera_locked=camera_locked,
+            motion_mode=_comic_motion_mode(snapshot, clip_index),
         ),
         "image_mode": 0,
         "image_prompt_type": "SE" if has_start and has_end else ("S" if has_start else ("E" if has_end else "")),
@@ -2425,9 +2431,26 @@ _COMIC_LOCKED_CAMERA_NEGATIVE = (
     "camera roll, reframing, drifting crop, top-to-bottom camera movement"
 )
 
+_COMIC_REFERENCE_NEGATIVE = (
+    "new subject, appearing character, disappearing character, replacement "
+    "character, scene replacement, background replacement, restyling, "
+    "photorealistic conversion, identity change, costume change, palette "
+    "change, linework change, redraw"
+)
+
+
+def _comic_motion_mode(params: dict, index: int) -> str:
+    """Return a backwards-compatible per-panel comic motion treatment."""
+    shots = params.get("comic_shots") or []
+    shot = shots[index] if index < len(shots) and isinstance(shots[index], dict) else {}
+    raw = str(shot.get("motion_mode") or "action").strip().lower()
+    return "living-still" if raw in {"living-still", "living_still", "still"} else "action"
+
 
 def _comic_camera_is_locked(params: dict, index: int) -> bool:
     """Treat absent comic camera instructions as an intentional static shot."""
+    if _comic_motion_mode(params, index) == "living-still":
+        return True
     shots = params.get("comic_shots") or []
     shot = shots[index] if index < len(shots) and isinstance(shots[index], dict) else {}
     camera = str(shot.get("camera_move") or "none").strip().lower()
@@ -2444,10 +2467,23 @@ def _comic_motion_prompt(
     fidelity: str,
     has_end: bool,
     camera_locked: bool = False,
+    motion_mode: str = "action",
 ) -> str:
     """Add runtime-only fidelity constraints to the LLM-authored motion."""
     fidelity = str(fidelity or "faithful").strip().lower()
+    motion_mode = str(motion_mode or "action").strip().lower()
     additions: list[str] = []
+    if motion_mode in {"living-still", "living_still", "still"}:
+        additions.append(
+            "LIVING-STILL LOCK: keep every visible character, object and "
+            "background feature in its exact first-frame position. Preserve "
+            "pose, silhouette, anatomy and all drawing details. Use only "
+            "imperceptible natural micro-motion already supported by the image: "
+            "gentle breathing or blinking, tiny cloth or hair response, and "
+            "minimal ambient dust, mist, light or reflections. Do not add, "
+            "remove, reveal, replace or transform subjects; do not make anyone "
+            "cross the frame or approach the viewer. Finish on the same stable composition."
+        )
     if fidelity == "faithful":
         additions.append(
             "Fidelity priority: animate this as a faithful moving illustration, "
@@ -2725,6 +2761,7 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                     comic_fidelity,
                     bool(end_file),
                     camera_locked=_comic_camera_is_locked(params, i),
+                    motion_mode=_comic_motion_mode(params, i),
                 )
             prompts.append(prompt_value)
 
@@ -2850,6 +2887,11 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         negative_prompt = _append_negative_prompt(
             negative_prompt,
             _COMIC_LOCKED_CAMERA_NEGATIVE,
+        )
+    if pipeline_type == "comic_movie":
+        negative_prompt = _append_negative_prompt(
+            negative_prompt,
+            _COMIC_REFERENCE_NEGATIVE,
         )
 
     if seamless:

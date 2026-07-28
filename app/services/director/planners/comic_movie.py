@@ -29,6 +29,24 @@ _MOVEMENT_LABELS = {
     "pan-right": "controlled pan right",
 }
 
+_LIVING_STILL_PROMPT = (
+    "Animate the supplied comic artwork as a restrained living still from the "
+    "exact approved first frame. Keep every visible character, object and "
+    "background feature in the same position and preserve the original pose, "
+    "silhouette, anatomy, linework, palette and lighting. The camera is locked. "
+    "Use only tiny natural motion already supported by the image: gentle "
+    "breathing or blinking for visible characters, a slight response in hair "
+    "or cloth, and minimal ambient movement such as dust, light, mist or "
+    "reflections. Do not introduce, remove, reveal, replace or transform any "
+    "subject. Do not make anyone cross the frame or approach the viewer. End "
+    "on a stable hold of the same composition."
+)
+
+
+def _motion_mode(source: dict) -> str:
+    raw = str(source.get("motion_mode") or "action").strip().lower()
+    return "living-still" if raw in {"living-still", "living_still", "still"} else "action"
+
 
 class ComicMoviePlanner(BasePlanner):
     """Create an I2V production plan while preserving panel order exactly."""
@@ -47,11 +65,17 @@ class ComicMoviePlanner(BasePlanner):
         # Storyboard mode may already contain a manually reviewed, render-ready
         # prompt. Treat it as source of truth and ask the LLM only for missing
         # shots; this avoids silently rewriting approved camera/performance work.
-        treatments: dict[int, str] = {
-            index: str(shot.get("video_prompt") or "").strip()
-            for index, shot in enumerate(comic_shots)
-            if str(shot.get("video_prompt") or "").strip()
-        }
+        treatments: dict[int, str] = {}
+        for index, shot in enumerate(comic_shots):
+            if _motion_mode(shot) == "living-still":
+                # Existing comic plans often contain ambitious action prompts.
+                # Choosing living-still explicitly asks us not to reuse them:
+                # they give the I2V model permission to redraw the panel.
+                treatments[index] = _LIVING_STILL_PROMPT
+                continue
+            reviewed = str(shot.get("video_prompt") or "").strip()
+            if reviewed:
+                treatments[index] = reviewed
         batch_size = 6
         for batch_start in range(0, len(comic_shots), batch_size):
             batch = comic_shots[batch_start:batch_start + batch_size]
@@ -147,11 +171,18 @@ words."""
 
         shots: list[ShotPlan] = []
         for index, source in enumerate(comic_shots):
+            motion_mode = _motion_mode(source)
             duration = max(0.8, min(20.0, float(source.get("duration") or 3)))
+            if motion_mode == "living-still":
+                duration = min(2.0, duration)
             # No camera move is forced by default. The panel's action prompt
             # may still request camera work deliberately, but a missing UI
             # value must not turn every shot into the same push-in.
-            camera_key = str(source.get("camera_move") or "none")
+            camera_key = (
+                "none"
+                if motion_mode == "living-still"
+                else str(source.get("camera_move") or "none")
+            )
             camera_movement = _MOVEMENT_LABELS.get(camera_key, camera_key)
             scene = str(source.get("scene_description") or "").strip()
             script = str(source.get("script") or "").strip()
@@ -209,6 +240,7 @@ words."""
                     "page_number": source.get("page_number"),
                     "panel_number": source.get("panel_number"),
                     "provided_image_path": source.get("image_path"),
+                    "motion_mode": motion_mode,
                 },
                 image_prompt=str(source.get("image_prompt") or scene),
                 video_prompt=treatments.get(index, fallback),

@@ -263,6 +263,34 @@ def test_comic_camera_defaults_to_locked_but_respects_requested_push_in():
     )
 
 
+def test_living_still_forces_camera_lock_and_reference_preservation():
+    params = {
+        "comic_shots": [{
+            "motion_mode": "living-still",
+            "camera_move": "push-in",
+        }],
+    }
+
+    assert director_pipeline._comic_motion_mode(params, 0) == "living-still"
+    assert director_pipeline._comic_camera_is_locked(params, 0)
+    prompt = director_pipeline._comic_motion_prompt(
+        "A large action prompt inherited from the comic plan.",
+        "faithful",
+        False,
+        camera_locked=True,
+        motion_mode="living-still",
+    )
+    assert "LIVING-STILL LOCK" in prompt
+    assert "exact first-frame position" in prompt
+    assert "Do not add" in prompt
+    assert "approach the viewer" in prompt
+    assert "CAMERA LOCK" in prompt
+
+
+def test_legacy_comic_shots_keep_action_motion_mode():
+    assert director_pipeline._comic_motion_mode({"comic_shots": [{}]}, 0) == "action"
+
+
 def test_i2v_prompt_always_anchors_illustrated_source_style():
     prompt = LtxI2VRenderer.ensure_source_style(
         "She turns toward camera while her coat and hair move in the wind.",

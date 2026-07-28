@@ -224,6 +224,36 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(plan.shots[0].video_prompt, reviewed_prompt)
         self.assertEqual(plan.shots[0].duration_sec, 5)
 
+    def test_comic_movie_living_still_bypasses_llm_and_caps_drift_window(self):
+        def must_not_call_llm(**_kwargs):
+            raise AssertionError("Living-still shots use the deterministic fidelity prompt")
+
+        planner = ComicMoviePlanner(
+            llm_generate=must_not_call_llm,
+            llm_generate_streaming=must_not_call_llm,
+        )
+        plan = planner.plan(
+            comic_context="A finished comic whose artwork must remain unchanged.",
+            comic_shots=[{
+                "page_number": 1,
+                "panel_number": 1,
+                "duration": 5,
+                "motion_mode": "living-still",
+                "camera_move": "push-in",
+                "scene_description": "The traveler runs toward the tower.",
+                "video_prompt": "The traveler runs across the entire frame.",
+                "characters": ["NARA"],
+            }],
+        )
+
+        self.assertEqual(plan.total_duration_sec, 2)
+        self.assertEqual(plan.shots[0].duration_sec, 2)
+        self.assertEqual(plan.shots[0].camera_plan.movement, "locked-off camera")
+        self.assertIn("restrained living still", plan.shots[0].video_prompt)
+        self.assertIn("same position", plan.shots[0].video_prompt)
+        self.assertNotIn("runs across the entire frame", plan.shots[0].video_prompt)
+        self.assertEqual(plan.shots[0].metadata["motion_mode"], "living-still")
+
     def test_comic_movie_plans_action_inside_panel_instead_of_a_transition(self):
         captured = {}
 
