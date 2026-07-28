@@ -86,8 +86,18 @@ describing only motion after that frame: character acting, environmental motion,
 camera movement, timing and the final beat. Use dialogue/script only to guide
 performance; do not ask the video model to draw subtitles, captions, speech
 bubbles, logos or new written text. Preserve faces, wardrobe, props, palette,
-linework and panel geography. One panel is one continuous shot: no montage and
-            no internal cuts. Preserve the explicitly supplied visual_style, including
+linework and panel geography.
+
+EACH PANEL MUST PLAY AS ITS OWN SHOT, NOT AS A TRANSITION TO THE NEXT PANEL.
+Give the visible subject at least one clear, narratively meaningful action; for a
+quiet beat, use expressive acting plus concrete environmental motion. Camera
+movement is secondary and must never be the only thing that happens. Describe
+the action chronologically for the supplied duration and finish on a stable,
+intentional beat inside the same scene. Do not dissolve, morph or travel toward
+an unseen next panel.
+
+One panel is one continuous shot: no montage and no internal cuts. Preserve the
+explicitly supplied visual_style, including
 anime/cel-shaded rendering when present. Never convert illustrated artwork to
 photorealism or 3D. Keep each video_prompt under 130 words."""
             items = []
@@ -99,6 +109,7 @@ photorealism or 3D. Keep each video_prompt under 130 words."""
                     "duration_seconds": shot.get("duration", 3),
                     "narrative_role": shot.get("narrative_role", ""),
                     "scene": shot.get("scene_description", ""),
+                    "first_frame_visual_description": shot.get("image_prompt", ""),
                     "script_for_performance": shot.get("script", ""),
                     "framing": shot.get("framing", ""),
                     "requested_camera": shot.get("camera_move", ""),
@@ -137,13 +148,19 @@ photorealism or 3D. Keep each video_prompt under 130 words."""
             camera_movement = _MOVEMENT_LABELS.get(camera_key, camera_key)
             scene = str(source.get("scene_description") or "").strip()
             script = str(source.get("script") or "").strip()
+            first_frame_visual = str(source.get("image_prompt") or "").strip()
             visual_style = str(source.get("visual_style") or "").strip()
             fallback = (
                 "Animate the supplied comic artwork as the exact first frame. "
-                f"Portray this continuous beat: {scene or source.get('narrative_role') or 'the panel action continues naturally'}. "
+                f"Starting from the visible situation ({first_frame_visual or scene or 'the supplied panel'}), "
+                f"perform this continuous story beat: {scene or source.get('narrative_role') or 'the visible action advances naturally'}. "
                 + (f"Use this script only to guide acting and lip movement: {script}. " if script else "")
-                + f"Camera: {camera_movement}. Preserve every face, costume, prop, color, "
+                + "Give the visible subject a clear action, add concrete environmental "
+                "motion, and settle on a stable final pose within this same scene. "
+                + f"Camera: {camera_movement}; camera motion is secondary to the performance. "
+                "Preserve every face, costume, prop, color, "
                 "drawing style and spatial relationship. Add subtle natural secondary motion. "
+                "Do not transition, dissolve or morph toward the next panel. "
                 "Do not create subtitles, captions, speech bubbles, logos or new written text."
             )
             characters = [

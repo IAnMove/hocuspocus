@@ -2354,10 +2354,11 @@ def _comic_motion_prompt(prompt: str, fidelity: str, has_end: bool) -> str:
     additions: list[str] = []
     if fidelity == "faithful":
         additions.append(
-            "Fidelity priority: animate this as a subtly moving illustration, "
-            "not as a newly rendered scene. Keep facial features, anatomy, "
+            "Fidelity priority: animate this as a faithful moving illustration, "
+            "not as a newly rendered scene. Perform the requested subject action "
+            "clearly with controlled motion while keeping facial features, anatomy, "
             "costume shapes, linework, colors and background geometry stable. "
-            "Use restrained local motion and do not invent objects or large pose changes."
+            "Do not invent extra actions, objects or unrequested extreme pose changes."
         )
     elif fidelity == "balanced":
         additions.append(

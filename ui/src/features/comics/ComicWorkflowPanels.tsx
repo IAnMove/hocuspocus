@@ -451,7 +451,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const [movieQuality, setMovieQuality] = useState<'480p' | '720p'>(() =>
     project.director?.input.storyboardQuality === 'final' ? '720p' : '480p')
   const [movieImageFit, setMovieImageFit] = useState<'smart' | 'crop'>('smart')
-  const [movieAnchorMode, setMovieAnchorMode] = useState<'start_only' | 'smart' | 'chain'>('smart')
+  const [movieAnchorMode, setMovieAnchorMode] = useState<'start_only' | 'smart' | 'chain'>('start_only')
   const [movieFidelity, setMovieFidelity] = useState<'faithful' | 'balanced' | 'expressive'>('faithful')
   const [busy, setBusy] = useState<'animatic' | 'movie' | null>(null)
   const [progress, setProgress] = useState('')
@@ -778,7 +778,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       notify(
         'ok',
         movieAnchorMode === 'start_only'
-          ? 'Comic movie started. Every shot uses its panel as the exact I2V first frame.'
+          ? 'Comic movie started. Every panel is animated as an independent I2V shot, then joined with a clean cut.'
           : 'Comic movie started. Compatible shots also use the following approved panel as an I2V end-frame anchor.',
       )
     } catch (error) {
@@ -868,8 +868,8 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             value={movieAnchorMode}
             onChange={event => setMovieAnchorMode(event.target.value as typeof movieAnchorMode)}
           >
-            <option value="smart">Smart start → end · recommended</option>
-            <option value="start_only">First frame only · hard cuts</option>
+            <option value="start_only">Animate each panel · hard cut · recommended</option>
+            <option value="smart">Smart start → end · continuity shots only</option>
             <option value="chain">Every panel → next · experimental</option>
           </select>
         </label>
@@ -879,16 +879,16 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             value={movieFidelity}
             onChange={event => setMovieFidelity(event.target.value as typeof movieFidelity)}
           >
-            <option value="faithful">Faithful · subtle illustration</option>
+            <option value="faithful">Faithful · preserve art, perform action</option>
             <option value="balanced">Balanced</option>
             <option value="expressive">Expressive · more drift risk</option>
           </select>
         </label>
       </div>
       <p className="text-[9px] text-text-muted">
-        Smart mode interpolates only within the same page when characters and framing are compatible; otherwise it makes a clean cut. Full chaining can morph unrelated compositions, so use it only for deliberately continuous storyboards.
+        “Animate each panel” performs the scene inside its own composition and then cuts. Smart interpolation is only for deliberately continuous actions whose next panel is the intended final frame.
       </p>
-      <label className="block text-[10px] text-text-muted">Default seconds per panel
+      <label className="block text-[10px] text-text-muted">Default action duration per panel
         <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} />
       </label>
       {project.director && (
@@ -913,13 +913,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
               onClick={() => updateAllShots(
                 {
                   durationSeconds: defaultDuration,
-                  cameraMove: 'none',
-                  videoTransition: 'auto',
+                  videoTransition: 'cut',
                 },
-                `Applied faithful defaults to all ${panelCount} shots: ${defaultDuration}s, static camera and smart transitions.`,
+                `Applied independent-shot defaults to all ${panelCount} shots: ${defaultDuration}s of action followed by a clean cut.`,
               )}
             >
-              Faithful preset for all
+              Independent shots for all
             </button>
           </div>
         </div>
@@ -947,21 +946,21 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                   })}
                   title="How this shot reaches the following panel"
                 >
-                  <option value="auto">Transition to next · automatic</option>
+                  <option value="auto">Transition · follow panel-anchor mode</option>
                   <option value="cut">Transition to next · force cut</option>
                   <option value="interpolate">Transition to next · force end-frame interpolation</option>
                 </select>
-                {storyboard && (
-                  <textarea
-                    className={`${input} col-span-2`}
-                    rows={5}
-                    value={planned.videoPrompt || ''}
-                    onChange={event => updateShot(pageIndex, panelIndex, {
-                      videoPrompt: event.target.value,
-                    })}
-                    placeholder="Chronological motion, performance, camera and final beat…"
-                  />
-                )}
+                <textarea
+                  className={`${input} col-span-2`}
+                  rows={5}
+                  value={planned.videoPrompt || ''}
+                  onChange={event => updateShot(pageIndex, panelIndex, {
+                    videoPrompt: event.target.value,
+                  })}
+                  placeholder={storyboard
+                    ? 'Chronological action, performance, camera and final beat…'
+                    : 'Optional manual action inside this panel. Leave blank for the LLM to write it from the scene and script…'}
+                />
               </div>
             )))}
           </div>

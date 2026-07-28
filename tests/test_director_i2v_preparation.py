@@ -173,8 +173,9 @@ def test_faithful_comic_motion_guard_describes_both_approved_anchors():
         True,
     )
 
-    assert "subtly moving illustration" in prompt
-    assert "do not invent objects or large pose changes" in prompt
+    assert "faithful moving illustration" in prompt
+    assert "Perform the requested subject action clearly" in prompt
+    assert "Do not invent extra actions" in prompt
     assert "next approved comic panel" in prompt
 
 

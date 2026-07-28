@@ -224,6 +224,41 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(plan.shots[0].video_prompt, reviewed_prompt)
         self.assertEqual(plan.shots[0].duration_sec, 5)
 
+    def test_comic_movie_plans_action_inside_panel_instead_of_a_transition(self):
+        captured = {}
+
+        def action_planner(**kwargs):
+            captured.update(kwargs)
+            return (
+                '[{"source_index":0,"video_prompt":"The traveler plants her staff, '
+                'shields her eyes from crystal dust, then steps onto the ridge while '
+                'her cloak and the distant sand move in the wind."}]'
+            )
+
+        planner = ComicMoviePlanner(
+            llm_generate=action_planner,
+            llm_generate_streaming=action_planner,
+        )
+        plan = planner.plan(
+            comic_context="A solitary crossing through a crystal desert.",
+            comic_shots=[{
+                "page_number": 1,
+                "panel_number": 1,
+                "duration": 5,
+                "narrative_role": "The traveler commits to the crossing.",
+                "scene_description": "She chooses the dangerous ridge path.",
+                "image_prompt": "Wide comic panel: a cloaked traveler before a crystal ridge.",
+                "camera_move": "push-in",
+                "characters": ["NARA"],
+            }],
+        )
+
+        self.assertIn("first_frame_visual_description", captured["prompt"])
+        self.assertIn("cloaked traveler before a crystal ridge", captured["prompt"])
+        self.assertIn("MUST PLAY AS ITS OWN SHOT", captured["system_prompt"])
+        self.assertIn("movement is secondary", captured["system_prompt"])
+        self.assertIn("plants her staff", plan.shots[0].video_prompt)
+
     def test_story_production_resolves_selected_provider_server_side(self):
         previous = director_pipeline._wgp
         director_pipeline._wgp = SimpleNamespace(server_config={
