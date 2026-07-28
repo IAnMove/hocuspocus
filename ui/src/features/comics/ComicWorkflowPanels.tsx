@@ -452,7 +452,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const [movieQuality, setMovieQuality] = useState<'480p' | '720p'>(() =>
     project.director?.input.storyboardQuality === 'final' ? '720p' : '480p')
   const [movieImageFit, setMovieImageFit] = useState<'smart' | 'crop'>('smart')
-  const [movieAnchorMode, setMovieAnchorMode] = useState<'start_only' | 'smart' | 'chain'>('start_only')
+  const [movieEndFrameMode, setMovieEndFrameMode] = useState<'none' | 'smart' | 'all'>('none')
   const [movieFidelity, setMovieFidelity] = useState<'faithful' | 'balanced' | 'expressive'>('faithful')
   const [busy, setBusy] = useState<'animatic' | 'movie' | null>(null)
   const [progress, setProgress] = useState('')
@@ -462,6 +462,9 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     setMovieQuality(
       project.director?.input.storyboardQuality === 'final' ? '720p' : '480p',
     )
+    // A new comic always starts from independent I2V shots. End-frame
+    // conditioning is an explicit creative choice, never a sticky default.
+    setMovieEndFrameMode('none')
   }, [
     project.id,
     project.director?.input.storyboardAspect,
@@ -489,7 +492,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     state.patchProject({ director: { ...director, plan } })
   }
   const updateAllShots = (
-    patch: Partial<Pick<ComicPlanPanel, 'durationSeconds' | 'cameraMove' | 'videoTransition'>>,
+    patch: Partial<Pick<ComicPlanPanel, 'durationSeconds' | 'cameraMove' | 'videoEndFrame'>>,
     message: string,
   ) => {
     const state = useComicStore.getState()
@@ -607,7 +610,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         script: string
         visual_style: string
         video_prompt: string
-        transition_to_next: 'auto' | 'cut' | 'interpolate'
+        end_frame_mode: 'auto' | 'none' | 'next-panel'
       }> = []
       await forEachComicPanelCapture(async (capture, current, total) => {
         setProgress(`Preparing artwork ${current}/${total}`)
@@ -624,7 +627,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           page_number: capture.pageNumber,
           panel_number: capture.panelNumber,
           duration: planned?.durationSeconds || defaultDuration,
-          camera_move: planned?.cameraMove || 'push-in',
+          camera_move: planned?.cameraMove || 'none',
           narrative_role: planned?.narrativeRole || `Panel ${capture.pageNumber}.${capture.panelNumber}`,
           scene_description: planned?.sceneDescription || '',
           image_prompt: planned?.imagePrompt || '',
@@ -632,7 +635,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           characters: planned?.characters || [],
           script: planned ? scriptForPanel(planned) : '',
           video_prompt: planned?.videoPrompt || '',
-          transition_to_next: planned?.videoTransition || 'auto',
+          end_frame_mode: planned?.videoEndFrame || 'auto',
           visual_style: [
             project.style.name,
             project.style.promptSuffix,
@@ -676,13 +679,13 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       await before.loadModelOptions(videoModel)
       const state = useStore.getState()
       if (
-        movieAnchorMode !== 'start_only'
+        movieEndFrameMode !== 'none'
         && state.modelOptions
         && !state.modelOptions.supports_end_frame
       ) {
         throw new Error(
           'The selected video model does not support end frames. '
-          + 'Choose an LTX model or use “First frame only”.',
+          + 'Choose an LTX model or use “No end frame”.',
         )
       }
       const qualityResolution = movieQuality === '720p'
@@ -712,7 +715,11 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         comic_shots: comicShots,
         provided_clip_image_paths: comicShots.map(shot => shot.image_path),
         video_image_fit: movieImageFit,
-        comic_anchor_mode: movieAnchorMode,
+        comic_end_frame_mode: movieEndFrameMode,
+        // Assembly is deliberately independent from I2V end-frame
+        // conditioning. Director joins the completed clips with hard cuts;
+        // edit transitions belong to the Video Editor afterwards.
+        comic_edit_transition: 'none',
         comic_motion_fidelity: movieFidelity,
         planned_clips: plannedClips,
         seamless: false,
@@ -784,9 +791,9 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       window.dispatchEvent(new Event('maestro:director-open'))
       notify(
         'ok',
-        movieAnchorMode === 'start_only'
-          ? 'Comic movie started. Every panel is animated as an independent I2V shot, then joined with a clean cut.'
-          : 'Comic movie started. Compatible shots also use the following approved panel as an I2V end-frame anchor.',
+        movieEndFrameMode === 'none'
+          ? 'Comic movie started. Panels without an explicit end-frame override are independent I2V shots; completed clips are joined with clean cuts.'
+          : 'Comic movie started. End-frame conditioning is enabled for selected shots, but completed clips are still joined with clean cuts.',
       )
     } catch (error) {
       notify('error', (error as Error).message)
@@ -869,15 +876,15 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         </div>
       )}
       <div className="grid grid-cols-2 gap-2">
-        <label className="block text-[10px] text-text-muted">Panel anchors
+        <label className="block text-[10px] text-text-muted">I2V end frame
           <select
             className={`${input} mt-1`}
-            value={movieAnchorMode}
-            onChange={event => setMovieAnchorMode(event.target.value as typeof movieAnchorMode)}
+            value={movieEndFrameMode}
+            onChange={event => setMovieEndFrameMode(event.target.value as typeof movieEndFrameMode)}
           >
-            <option value="start_only">Animate each panel · hard cut · recommended</option>
-            <option value="smart">Smart start → end · continuity shots only</option>
-            <option value="chain">Every panel → next · experimental</option>
+            <option value="none">None · independent clips · recommended</option>
+            <option value="smart">Use next panel only for compatible continuous actions</option>
+            <option value="all">Use next panel for every clip · experimental</option>
           </select>
         </label>
         <label className="block text-[10px] text-text-muted">Motion fidelity
@@ -893,7 +900,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         </label>
       </div>
       <p className="text-[9px] text-text-muted">
-        “Animate each panel” performs the scene inside its own composition and then cuts. Smart interpolation is only for deliberately continuous actions whose next panel is the intended final frame.
+        This controls how an individual clip ends; it is not a transition between clips. By default every panel is an independent I2V shot. The finished clips are always joined with hard cuts here; fades and other edit transitions can be added afterwards in Video Editor.
       </p>
       <label className="block text-[10px] text-text-muted">Default action duration per panel
         <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} />
@@ -920,9 +927,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
               onClick={() => updateAllShots(
                 {
                   durationSeconds: defaultDuration,
-                  videoTransition: 'cut',
+                  cameraMove: 'none',
+                  videoEndFrame: 'none',
                 },
-                `Applied independent-shot defaults to all ${panelCount} shots: ${defaultDuration}s of action followed by a clean cut.`,
+                `Applied independent-shot defaults to all ${panelCount} shots: ${defaultDuration}s, no forced camera move, no end-frame conditioning, then a clean cut.`,
               )}
             >
               Independent shots for all
@@ -938,8 +946,8 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
               <div key={planned.id} className="grid grid-cols-[1fr_70px] gap-1.5 rounded border border-border p-1.5">
                 <span className="text-[10px] text-text-muted">{pageIndex + 1}.{panelIndex + 1} · {planned.narrativeRole}</span>
                 <input className={input} type="number" min={.8} max={20} step={.1} value={planned.durationSeconds || defaultDuration} onChange={event => updateShot(pageIndex, panelIndex, { durationSeconds: Number(event.target.value) })} />
-                <select className={`${input} col-span-2`} value={planned.cameraMove || 'push-in'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}>
-                  <option value="none">Static</option>
+                <select className={`${input} col-span-2`} value={planned.cameraMove || 'none'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}>
+                  <option value="none">No forced camera move</option>
                   <option value="push-in">Slow push-in</option>
                   <option value="pull-out">Slow pull-out</option>
                   <option value="pan-left">Pan left</option>
@@ -947,15 +955,15 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                 </select>
                 <select
                   className={`${input} col-span-2`}
-                  value={planned.videoTransition || 'auto'}
+                  value={planned.videoEndFrame || 'auto'}
                   onChange={event => updateShot(pageIndex, panelIndex, {
-                    videoTransition: event.target.value as ComicPlanPanel['videoTransition'],
+                    videoEndFrame: event.target.value as ComicPlanPanel['videoEndFrame'],
                   })}
-                  title="How this shot reaches the following panel"
+                  title="Optional image conditioning for the final frame of this shot"
                 >
-                  <option value="auto">Transition · follow panel-anchor mode</option>
-                  <option value="cut">Transition to next · force cut</option>
-                  <option value="interpolate">Transition to next · force end-frame interpolation</option>
+                  <option value="auto">End frame · follow global setting</option>
+                  <option value="none">End frame · none (independent clip)</option>
+                  <option value="next-panel">End frame · use next panel image</option>
                 </select>
                 <textarea
                   className={`${input} col-span-2`}

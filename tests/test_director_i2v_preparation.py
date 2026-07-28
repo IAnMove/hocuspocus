@@ -117,7 +117,7 @@ def test_dark_but_detailed_comic_capture_is_not_rejected(tmp_path):
 
 def test_smart_comic_anchors_only_compatible_panels_on_the_same_page():
     params = {
-        "comic_anchor_mode": "smart",
+        "comic_end_frame_mode": "smart",
         "comic_shots": [
             {
                 "page_number": 1,
@@ -145,10 +145,10 @@ def test_smart_comic_anchors_only_compatible_panels_on_the_same_page():
 
 def test_comic_anchor_manual_overrides_take_priority():
     params = {
-        "comic_anchor_mode": "chain",
+        "comic_end_frame_mode": "all",
         "comic_shots": [
-            {"transition_to_next": "cut"},
-            {"transition_to_next": "interpolate"},
+            {"end_frame_mode": "none"},
+            {"end_frame_mode": "next-panel"},
             {},
         ],
     }
@@ -161,7 +161,32 @@ def test_comic_anchor_manual_overrides_take_priority():
 
 def test_smart_comic_anchors_do_not_guess_without_shot_metadata():
     assert director_pipeline._comic_end_image_filenames(
-        {"comic_anchor_mode": "smart", "comic_shots": []},
+        {"comic_end_frame_mode": "smart", "comic_shots": []},
+        ["panel-1.png", "panel-2.png"],
+    ) == ["", ""]
+
+
+def test_comic_end_frames_are_disabled_by_default():
+    assert director_pipeline._comic_end_image_filenames(
+        {
+            "comic_shots": [
+                {"end_frame_mode": "auto"},
+                {"end_frame_mode": "auto"},
+            ],
+        },
+        ["panel-1.png", "panel-2.png"],
+    ) == ["", ""]
+
+
+def test_legacy_comic_anchor_names_still_resume_safely():
+    assert director_pipeline._comic_end_image_filenames(
+        {
+            "comic_anchor_mode": "chain",
+            "comic_shots": [
+                {"transition_to_next": "cut"},
+                {},
+            ],
+        },
         ["panel-1.png", "panel-2.png"],
     ) == ["", ""]
 

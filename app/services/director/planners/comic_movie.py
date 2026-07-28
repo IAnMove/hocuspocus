@@ -144,7 +144,10 @@ photorealism or 3D. Keep each video_prompt under 130 words."""
         shots: list[ShotPlan] = []
         for index, source in enumerate(comic_shots):
             duration = max(0.8, min(20.0, float(source.get("duration") or 3)))
-            camera_key = str(source.get("camera_move") or "push-in")
+            # No camera move is forced by default. The panel's action prompt
+            # may still request camera work deliberately, but a missing UI
+            # value must not turn every shot into the same push-in.
+            camera_key = str(source.get("camera_move") or "none")
             camera_movement = _MOVEMENT_LABELS.get(camera_key, camera_key)
             scene = str(source.get("scene_description") or "").strip()
             script = str(source.get("script") or "").strip()

@@ -6069,7 +6069,8 @@ def concatenate_multi_clip_videos(clip_paths, output_path, audio_path=None):
     Uses ffmpeg's concat FILTER (not demuxer) which re-encodes all clips to a
     uniform format.  This is slower than stream-copy but reliably handles
     codec, timebase, and resolution mismatches that cause the concat demuxer
-    to silently drop clips.
+    to silently drop clips. It intentionally performs direct cuts: visual
+    edit transitions such as xfade belong to the Video Editor post-process.
     """
     import subprocess
     output_path = os.path.abspath(output_path)

@@ -2325,19 +2325,40 @@ def _comic_shots_can_interpolate(current: dict, following: dict) -> bool:
 
 
 def _comic_end_image_filenames(params: dict, clip_images: list[str]) -> list[str]:
-    """Resolve per-shot end anchors without blindly morphing every panel."""
-    mode = str(params.get("comic_anchor_mode") or "start_only").strip().lower()
+    """Resolve optional per-shot end-frame conditioning.
+
+    This deliberately has nothing to do with edit transitions. Each generated
+    clip is assembled later with a hard cut; these images only constrain the
+    final frame *inside* an individual I2V generation.
+    """
+    raw_mode = params.get("comic_end_frame_mode")
+    if raw_mode is None:
+        # Backward compatibility for resumable pipelines made before the
+        # end-frame/transition concepts were separated.
+        raw_mode = params.get("comic_anchor_mode") or "start_only"
+    mode = {
+        "start_only": "none",
+        "chain": "all",
+    }.get(str(raw_mode).strip().lower(), str(raw_mode).strip().lower())
     shots = params.get("comic_shots") or []
     resolved = [""] * len(clip_images)
     for index in range(max(0, len(clip_images) - 1)):
         current = shots[index] if index < len(shots) and isinstance(shots[index], dict) else {}
         following = shots[index + 1] if index + 1 < len(shots) and isinstance(shots[index + 1], dict) else {}
-        override = str(current.get("transition_to_next") or "auto").strip().lower()
-        if override == "cut":
+        override_raw = current.get("end_frame_mode")
+        if override_raw is None:
+            # Legacy saved comic shots used transition terminology even though
+            # the value always controlled I2V end-image conditioning.
+            override_raw = current.get("transition_to_next") or "auto"
+        override = {
+            "cut": "none",
+            "interpolate": "next-panel",
+        }.get(str(override_raw).strip().lower(), str(override_raw).strip().lower())
+        if override == "none":
             should_anchor = False
-        elif override == "interpolate":
+        elif override == "next-panel":
             should_anchor = True
-        elif mode == "chain":
+        elif mode == "all":
             should_anchor = True
         elif mode == "smart":
             should_anchor = _comic_shots_can_interpolate(current, following)
@@ -2574,12 +2595,30 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         )
         comic_fidelity = str(params.get("comic_motion_fidelity") or "faithful")
         if pipeline_type == "comic_movie":
-            _update_pipeline(pid, _clip_end_images=comic_end_images)
+            requested_edit_transition = str(
+                params.get("comic_edit_transition") or "none"
+            ).strip().lower()
+            if requested_edit_transition not in {"", "none", "cut", "hard-cut"}:
+                print(
+                    f"[Pipeline {pid}] Ignoring comic edit transition "
+                    f"{requested_edit_transition!r}: the generation pipeline "
+                    "always assembles I2V shots with hard cuts. Add transitions "
+                    "later in Video Editor."
+                )
+            # Save this explicitly in the resumable checkpoint so the assembly
+            # contract is inspectable and cannot be confused with end frames.
+            params["comic_edit_transition"] = "none"
+            _update_pipeline(
+                pid,
+                _clip_end_images=comic_end_images,
+                _comic_edit_transition="none",
+            )
             _save_pipeline_state(pid)
             print(
-                f"[Pipeline {pid}] Comic anchors: "
+                f"[Pipeline {pid}] Comic end-frame conditioning: "
                 f"{sum(bool(item) for item in comic_end_images)} end frame(s), "
-                f"mode={params.get('comic_anchor_mode', 'start_only')}, "
+                f"mode={params.get('comic_end_frame_mode', params.get('comic_anchor_mode', 'none'))}, "
+                "assembly=hard-cuts, "
                 f"fidelity={comic_fidelity}"
             )
 

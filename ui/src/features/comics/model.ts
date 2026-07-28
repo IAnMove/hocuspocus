@@ -186,10 +186,19 @@ export function normalizeComicPlan(
             .includes(String(panel?.cameraMove))
             ? panel.cameraMove
             : undefined,
-          videoTransition: ['auto', 'cut', 'interpolate']
-            .includes(String(panel?.videoTransition))
-            ? panel.videoTransition
-            : undefined,
+          videoEndFrame: ['auto', 'none', 'next-panel']
+            .includes(String(panel?.videoEndFrame))
+            ? panel.videoEndFrame
+            : panel?.videoTransition === 'cut'
+              ? 'none'
+              : panel?.videoTransition === 'interpolate'
+                ? 'next-panel'
+                : panel?.videoTransition === 'auto'
+                  ? 'auto'
+                  : undefined,
+          // Drop the misleading legacy field after translating it so newly
+          // saved projects have one unambiguous source of truth.
+          videoTransition: undefined,
         }
         const copy = compactPanelCopy(
           safePanel,

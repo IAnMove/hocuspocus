@@ -182,7 +182,10 @@ export interface ComicPlanPanel {
   videoPrompt?: string
   durationSeconds?: number
   cameraMove?: 'none' | 'push-in' | 'pull-out' | 'pan-left' | 'pan-right'
-  /** Manual override for using the following panel as this shot's end frame. */
+  /** Optional end-frame conditioning for this I2V shot. This is not an edit
+   *  transition: generated clips are joined separately with hard cuts. */
+  videoEndFrame?: 'auto' | 'none' | 'next-panel'
+  /** @deprecated Legacy serialized name retained only for project migration. */
   videoTransition?: 'auto' | 'cut' | 'interpolate'
 }
 

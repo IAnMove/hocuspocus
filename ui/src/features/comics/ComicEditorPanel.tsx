@@ -2147,12 +2147,12 @@ export function ComicDirectorPanel({
                           <Field label="Camera">
                             <select
                               className={input}
-                              value={panel.cameraMove || 'push-in'}
+                              value={panel.cameraMove || 'none'}
                               onChange={event => updatePlanPanel(pageIndex, panelIndex, {
                                 cameraMove: event.target.value as ComicPlanPanel['cameraMove'],
                               })}
                             >
-                              <option value="none">Static</option>
+                              <option value="none">No forced camera move</option>
                               <option value="push-in">Push in</option>
                               <option value="pull-out">Pull out</option>
                               <option value="pan-left">Pan left</option>
