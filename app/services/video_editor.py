@@ -395,6 +395,45 @@ def render_project(
     }
 
 
+def _comic_preview_video_filter(
+    *,
+    duration: float,
+    width: int,
+    height: int,
+    fps: int,
+    motion: str,
+) -> str:
+    """Build a restrained FFmpeg filter that never crops comic artwork."""
+    frames = max(2, round(duration * fps))
+    progress = f"on/{max(frames - 1, 1)}"
+    if motion == "pull-out":
+        zoom = f"1.04-0.04*{progress}"
+        x = "iw/2-(iw/zoom/2)"
+        y = "ih/2-(ih/zoom/2)"
+    elif motion == "pan-left":
+        zoom = "1.04"
+        x = f"(iw-iw/zoom)*(1-{progress})"
+        y = "ih/2-(ih/zoom/2)"
+    elif motion == "pan-right":
+        zoom = "1.04"
+        x = f"(iw-iw/zoom)*{progress}"
+        y = "ih/2-(ih/zoom/2)"
+    elif motion == "none":
+        zoom = "1"
+        x = "0"
+        y = "0"
+    else:
+        zoom = f"1+0.04*{progress}"
+        x = "iw/2-(iw/zoom/2)"
+        y = "ih/2-(ih/zoom/2)"
+    return (
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black,"
+        f"zoompan=z='{zoom}':x='{x}':y='{y}':d={frames}:s={width}x{height}:fps={fps},"
+        "setsar=1,format=yuv420p"
+    )
+
+
 def _render_still_segment(
     source: str,
     destination: str,
@@ -405,34 +444,13 @@ def _render_still_segment(
     fps: int,
     motion: str,
 ) -> None:
-    """Turn one lettered comic panel into a silent animated video shot."""
-    frames = max(2, round(duration * fps))
-    progress = f"on/{max(frames - 1, 1)}"
-    if motion == "pull-out":
-        zoom = f"1.10-0.10*{progress}"
-        x = "iw/2-(iw/zoom/2)"
-        y = "ih/2-(ih/zoom/2)"
-    elif motion == "pan-left":
-        zoom = "1.08"
-        x = f"(iw-iw/zoom)*(1-{progress})"
-        y = "ih/2-(ih/zoom/2)"
-    elif motion == "pan-right":
-        zoom = "1.08"
-        x = f"(iw-iw/zoom)*{progress}"
-        y = "ih/2-(ih/zoom/2)"
-    elif motion == "none":
-        zoom = "1"
-        x = "0"
-        y = "0"
-    else:
-        zoom = f"1+0.10*{progress}"
-        x = "iw/2-(iw/zoom/2)"
-        y = "ih/2-(ih/zoom/2)"
-    video_filter = (
-        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height},"
-        f"zoompan=z='{zoom}':x='{x}':y='{y}':d={frames}:s={width}x{height}:fps={fps},"
-        "setsar=1,format=yuv420p"
+    """Turn one lettered comic panel into a silent storyboard-preview shot."""
+    video_filter = _comic_preview_video_filter(
+        duration=duration,
+        width=width,
+        height=height,
+        fps=fps,
+        motion=motion,
     )
     _run(
         [
@@ -456,7 +474,7 @@ def render_comic_animatic(
     width: int,
     height: int,
     fps: int = 30,
-    transition: str = "crossfade",
+    transition: str = "none",
     transition_duration: float = 0.35,
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
@@ -479,7 +497,7 @@ def render_comic_animatic(
             _render_still_segment(
                 str(panel["resolved_path"]), destination, duration=duration,
                 width=width, height=height, fps=fps,
-                motion=str(panel.get("motion") or "push-in"),
+                motion=str(panel.get("motion") or "none"),
             )
             segments.append(destination)
             durations.append(duration)

@@ -14314,6 +14314,8 @@ def _run_comic_animatic(job_id: str, body: dict, output_path: str) -> None:
                         "comic_id": body.get("comic_id"),
                         "comic_title": body.get("comic_title"),
                         "width": body["width"], "height": body["height"], "fps": body["fps"],
+                        "transition": body["transition"],
+                        "transition_duration": body["transition_duration"],
                         "panels": [{key: value for key, value in panel.items() if key != "resolved_path"} for panel in panels],
                     },
                 },
@@ -14351,7 +14353,7 @@ def start_comic_animatic(body: dict):
         raise HTTPException(status_code=400, detail="Invalid animatic resolution")
     if fps not in (24, 25, 30, 50, 60):
         raise HTTPException(status_code=400, detail="Unsupported animatic frame rate")
-    transition = str(body.get("transition") or "crossfade")
+    transition = str(body.get("transition") or "none")
     if transition not in {"none", "crossfade", "fade-black", "wipe-left", "slide-left", "slide-right", "circle-open", "dissolve", "pixelize", "blur", "zoom-in"}:
         raise HTTPException(status_code=400, detail="Unsupported animatic transition")
     safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("comic_title") or "comic")).strip("_")[:60] or "comic"

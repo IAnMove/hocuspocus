@@ -447,7 +447,8 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const [aspect, setAspect] = useState<'landscape' | 'portrait' | 'square'>(() =>
     project.director?.input.storyboardAspect || 'landscape')
   const [defaultDuration, setDefaultDuration] = useState(3)
-  const [transition, setTransition] = useState('crossfade')
+  const [transition, setTransition] = useState('none')
+  const [animaticMotion, setAnimaticMotion] = useState<'none' | 'shot-settings'>('none')
   const [movieQuality, setMovieQuality] = useState<'480p' | '720p'>(() =>
     project.director?.input.storyboardQuality === 'final' ? '720p' : '480p')
   const [movieImageFit, setMovieImageFit] = useState<'smart' | 'crop'>('smart')
@@ -504,6 +505,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       notify('error', `This animatic has ${panelCount} panels; the safe limit is 200.`)
       return
     }
+    if (!window.confirm(
+      `Render a quick non-generative storyboard preview from ${panelCount} still panels? `
+      + 'This does not call LTX or animate characters; it only holds the drawings and optionally applies FFmpeg pans, zooms and transitions.',
+    )) return
     setBusy('animatic')
     setResult(null)
     try {
@@ -529,7 +534,9 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           page_number: capture.pageNumber,
           panel_number: capture.panelNumber,
           duration: planned?.durationSeconds || defaultDuration,
-          motion: planned?.cameraMove || ((current - 1) % 4 === 1 ? 'pan-right' : (current - 1) % 4 === 2 ? 'pull-out' : (current - 1) % 4 === 3 ? 'pan-left' : 'push-in'),
+          motion: animaticMotion === 'shot-settings'
+            ? (planned?.cameraMove || 'none')
+            : 'none',
           script: planned ? scriptForPanel(planned) : '',
         })
       }, (current, total) => setProgress(`Capturing panel ${current}/${total}`))
@@ -970,27 +977,42 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         {busy === 'movie' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
         {busy === 'movie' && progress
           ? progress
-          : `Convert ${panelCount} ${storyboard ? 'shots' : 'panels'} to AI film`}
+          : `Generate ${panelCount} real I2V shots with ${selectedVideoModel || 'the selected model'}`}
       </button>
+      <p className="text-[9px] text-purple-200/80">
+        This is the generative option: it submits one image-to-video job per panel to the selected model.
+      </p>
 
-      <div className="border-t border-border pt-3">
-        <div className="text-xs font-semibold text-text-primary">Quick animatic · no generative video</div>
-        <p className="mt-1 text-[10px] text-text-muted">Captures final lettered panels and adds FFmpeg camera moves and transitions. Fast, deterministic and editable in Video Editor.</p>
-      </div>
-      <label className="block text-[10px] text-text-muted">Animatic transition
-        <select className={`${input} mt-1`} value={transition} onChange={event => setTransition(event.target.value)}>
-          <option value="crossfade">Crossfade</option>
-          <option value="fade-black">Fade through black</option>
-          <option value="wipe-left">Wipe left</option>
-          <option value="dissolve">Dissolve</option>
-          <option value="zoom-in">Zoom portal</option>
-          <option value="none">Hard cuts</option>
-        </select>
-      </label>
-      <button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={Boolean(busy) || panelCount === 0} onClick={create}>
-        {busy === 'animatic' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-        {busy === 'animatic' && progress ? progress : 'Create video animatic'}
-      </button>
+      <details className="border-t border-border pt-3">
+        <summary className="cursor-pointer text-xs font-semibold text-text-muted">
+          FFmpeg storyboard preview · still images only
+        </summary>
+        <div className="mt-2 space-y-2 rounded border border-amber-400/25 bg-amber-400/5 p-2">
+          <p className="text-[10px] text-amber-100/80">
+            This preview never calls LTX and cannot animate characters or environments. It only holds the existing drawings; optional camera moves and transitions are programmatic.
+          </p>
+          <label className="block text-[10px] text-text-muted">Preview motion
+            <select className={`${input} mt-1`} value={animaticMotion} onChange={event => setAnimaticMotion(event.target.value as typeof animaticMotion)}>
+              <option value="none">Static panels · recommended</option>
+              <option value="shot-settings">Use programmed pan/zoom settings</option>
+            </select>
+          </label>
+          <label className="block text-[10px] text-text-muted">Preview transition
+            <select className={`${input} mt-1`} value={transition} onChange={event => setTransition(event.target.value)}>
+              <option value="none">Hard cuts · recommended</option>
+              <option value="crossfade">Crossfade</option>
+              <option value="fade-black">Fade through black</option>
+              <option value="wipe-left">Wipe left</option>
+              <option value="dissolve">Dissolve</option>
+              <option value="zoom-in">Zoom portal</option>
+            </select>
+          </label>
+          <button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={Boolean(busy) || panelCount === 0} onClick={create}>
+            {busy === 'animatic' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
+            {busy === 'animatic' && progress ? progress : 'Render non-AI storyboard preview'}
+          </button>
+        </div>
+      </details>
       {result && (
         <div className="space-y-2 rounded border border-emerald-500/30 bg-emerald-500/5 p-2">
           <video src={result.url} controls className="w-full rounded" />
