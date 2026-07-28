@@ -171,6 +171,15 @@ inside video_prompt. Keep each video_prompt under 180 words."""
                 temperature=0.45,
                 streaming=True,
                 json_schema=schema,
+                # Local multimodal writers inspect the exact clean first
+                # frames in the same order as `items`. Scoped text-only
+                # providers ignore this optional argument and still receive
+                # the complete visual description and story context.
+                image_paths=[
+                    str(shot.get("image_path") or "")
+                    for _, shot in missing
+                    if str(shot.get("image_path") or "").strip()
+                ],
             )
             for item in generated:
                 try:

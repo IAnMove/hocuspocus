@@ -283,6 +283,7 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
                 "narrative_role": "Nara decides to trust Kael.",
                 "scene_description": "Nara silently offers the last seed.",
                 "image_prompt": "Nara faces Kael in a crystal desert, the seed visible in her palm.",
+                "image_path": "/tmp/nara-offers-seed.png",
                 "script": "No dialogue. A deliberate moment of trust.",
                 "camera_move": "push-in",
                 "video_prompt": "Slow push-in with generic breathing.",
@@ -292,6 +293,7 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
 
         self.assertIn('"motion_mode": "contextual"', captured["prompt"])
         self.assertIn("last seed", captured["prompt"])
+        self.assertEqual(captured["image_paths"], ["/tmp/nara-offers-seed.png"])
         self.assertIn("When motion_mode is \"contextual\"", captured["system_prompt"])
         self.assertEqual(plan.shots[0].duration_sec, 5)
         self.assertEqual(plan.shots[0].camera_plan.movement, "locked-off camera")
