@@ -487,6 +487,18 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     Object.assign(plan.pages[pageIndex].panels[panelIndex], patch)
     state.patchProject({ director: { ...director, plan } })
   }
+  const updateAllShots = (
+    patch: Partial<Pick<ComicPlanPanel, 'durationSeconds' | 'cameraMove' | 'videoTransition'>>,
+    message: string,
+  ) => {
+    const state = useComicStore.getState()
+    const director = state.project.director
+    if (!director) return
+    const plan = structuredClone(director.plan)
+    plan.pages.forEach(page => page.panels.forEach(planned => Object.assign(planned, patch)))
+    state.patchProject({ director: { ...director, plan } })
+    notify('ok', message)
+  }
   const create = async () => {
     if (panelCount > 200) {
       notify('error', `This animatic has ${panelCount} panels; the safe limit is 200.`)
@@ -879,6 +891,39 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       <label className="block text-[10px] text-text-muted">Default seconds per panel
         <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} />
       </label>
+      {project.director && (
+        <div className="space-y-1.5 rounded border border-border bg-bg-tertiary/30 p-2">
+          <p className="text-[9px] text-text-muted">
+            Existing shots keep their individual timing. Apply the value above when you want to update the whole film.
+          </p>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              className={button}
+              type="button"
+              onClick={() => updateAllShots(
+                { durationSeconds: defaultDuration },
+                `Applied ${defaultDuration}s to all ${panelCount} shots.`,
+              )}
+            >
+              Apply {defaultDuration}s to all
+            </button>
+            <button
+              className={`${button} border-emerald-400/40 text-emerald-300`}
+              type="button"
+              onClick={() => updateAllShots(
+                {
+                  durationSeconds: defaultDuration,
+                  cameraMove: 'none',
+                  videoTransition: 'auto',
+                },
+                `Applied faithful defaults to all ${panelCount} shots: ${defaultDuration}s, static camera and smart transitions.`,
+              )}
+            >
+              Faithful preset for all
+            </button>
+          </div>
+        </div>
+      )}
       {project.director && (
         <details className="rounded border border-border bg-bg-tertiary/30">
           <summary className="cursor-pointer p-2 text-xs text-text-primary">Shot timing and camera moves</summary>
