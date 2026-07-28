@@ -182,6 +182,8 @@ export interface ComicPlanPanel {
   videoPrompt?: string
   durationSeconds?: number
   cameraMove?: 'none' | 'push-in' | 'pull-out' | 'pan-left' | 'pan-right'
+  /** Manual override for using the following panel as this shot's end frame. */
+  videoTransition?: 'auto' | 'cut' | 'interpolate'
 }
 
 export interface ComicPlanPage {

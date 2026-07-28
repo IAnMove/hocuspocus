@@ -9774,6 +9774,9 @@ def _run_generation(job_id: str):
                 sw_size = raw_params.get("sliding_window_size", raw_params.get("video_length", 121))
                 per_clip_frames = raw_params.pop("per_clip_frames", None)  # optional per-clip durations
                 per_clip_keyframes = raw_params.pop("per_clip_keyframes", None)  # optional keyframe injection per clip
+                preserve_se_duration_per_clip = bool(
+                    raw_params.pop("_se_preserve_duration_per_clip", False)
+                )
                 group_id = f"mc_{int(time.time())}_{raw_params.get('seed', 0)}"
                 clip_count = max(len(prompt_lines), len(image_starts), 1)
 
@@ -9819,11 +9822,22 @@ def _run_generation(job_id: str):
                     if has_end:
                         trim_tail = _mc_fs
                         last_se_clip_end_image = clip_end
+                        if preserve_se_duration_per_clip:
+                            # `clip_frames` is the requested visible duration.
+                            # Generate one conditioning step more so removing
+                            # the distorted SE tail leaves that duration intact.
+                            clip_frames = (
+                                (clip_frames + trim_tail - 1)
+                                // _mc_latent
+                                * _mc_latent
+                                + 1
+                            )
                     clip_params["video_length"] = clip_frames
                     clip_params["trim_tail_frames"] = trim_tail
                     clip_params["audio_frame_offset"] = cumulative_offset
                     cumulative_offset += clip_frames - trim_tail  # advance by post-trim frames for audio sync
-                    total_trimmed_frames += trim_tail
+                    if not preserve_se_duration_per_clip:
+                        total_trimmed_frames += trim_tail
                     clip_params["multi_clip_info"] = {"group_id": group_id, "index": i, "total": clip_count, "cumulative_offset": True}
                     # If the clip prompt has newlines (window_prompts), use mode 1 (per-window)
                     # Otherwise mode 0 (single task)

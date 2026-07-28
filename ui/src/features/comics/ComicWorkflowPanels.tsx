@@ -440,6 +440,9 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const project = useComicStore(state => state.project)
   const refreshOutputs = useStore(state => state.refreshOutputs)
   const selectedVideoModel = useStore(state => state.selectedModelPerMode.video)
+  const videoModels = useStore(state => state.models)
+  const enabledModels = useStore(state => state.enabledModels)
+  const selectDirectorVideoModel = useStore(state => state.selectDirectorVideoModel)
   const storyboard = project.director?.input.productionMode === 'storyboard'
   const [aspect, setAspect] = useState<'landscape' | 'portrait' | 'square'>(() =>
     project.director?.input.storyboardAspect || 'landscape')
@@ -448,6 +451,8 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const [movieQuality, setMovieQuality] = useState<'480p' | '720p'>(() =>
     project.director?.input.storyboardQuality === 'final' ? '720p' : '480p')
   const [movieImageFit, setMovieImageFit] = useState<'smart' | 'crop'>('smart')
+  const [movieAnchorMode, setMovieAnchorMode] = useState<'start_only' | 'smart' | 'chain'>('smart')
+  const [movieFidelity, setMovieFidelity] = useState<'faithful' | 'balanced' | 'expressive'>('faithful')
   const [busy, setBusy] = useState<'animatic' | 'movie' | null>(null)
   const [progress, setProgress] = useState('')
   const [result, setResult] = useState<{ name: string; url: string } | null>(null)
@@ -464,6 +469,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const panelCount = project.pages.reduce(
     (total, page) => total + page.elements.filter(element => element.type === 'panel' && !element.parentId).length,
     0,
+  )
+  const selectableVideoModels = useMemo(
+    () => videoModels
+      .filter(model => model.is_i2v && enabledModels.has(model.model_type))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    [enabledModels, videoModels],
   )
   const resolution = aspect === 'portrait'
     ? { width: 1080, height: 1920 }
@@ -577,6 +588,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         script: string
         visual_style: string
         video_prompt: string
+        transition_to_next: 'auto' | 'cut' | 'interpolate'
       }> = []
       await forEachComicPanelCapture(async (capture, current, total) => {
         setProgress(`Preparing artwork ${current}/${total}`)
@@ -601,6 +613,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           characters: planned?.characters || [],
           script: planned ? scriptForPanel(planned) : '',
           video_prompt: planned?.videoPrompt || '',
+          transition_to_next: planned?.videoTransition || 'auto',
           visual_style: [
             project.style.name,
             project.style.promptSuffix,
@@ -643,6 +656,16 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       const videoModel = before.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
       await before.loadModelOptions(videoModel)
       const state = useStore.getState()
+      if (
+        movieAnchorMode !== 'start_only'
+        && state.modelOptions
+        && !state.modelOptions.supports_end_frame
+      ) {
+        throw new Error(
+          'The selected video model does not support end frames. '
+          + 'Choose an LTX model or use “First frame only”.',
+        )
+      }
       const qualityResolution = movieQuality === '720p'
         ? (aspect === 'portrait' ? '704x1280' : aspect === 'square' ? '1024x1024' : '1280x704')
         : (aspect === 'portrait' ? '448x832' : aspect === 'square' ? '640x640' : '832x448')
@@ -670,8 +693,16 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         comic_shots: comicShots,
         provided_clip_image_paths: comicShots.map(shot => shot.image_path),
         video_image_fit: movieImageFit,
+        comic_anchor_mode: movieAnchorMode,
+        comic_motion_fidelity: movieFidelity,
         planned_clips: plannedClips,
         seamless: false,
+        visual_style: [
+          project.style.name,
+          project.style.promptSuffix,
+          project.director?.plan.styleBible || '',
+        ].filter(Boolean).join('. '),
+        preserve_visual_style: true,
         fps,
         frames_steps: state.modelOptions?.frames_steps || 8,
         frames_minimum: state.modelOptions?.frames_minimum || 41,
@@ -698,6 +729,9 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         video_params: {
           ...(state.savedParamsPerMode.video || { num_inference_steps: 8, guidance_scale: 1 }),
           resolution: qualityResolution,
+          input_video_strength: movieFidelity === 'faithful'
+            ? 1
+            : Number(state.savedParamsPerMode.video?.input_video_strength ?? .8),
         },
         video_loras: state.savedLoraPerMode.video || {},
         video_spatial_upsampling: state.directorVideoSpatialUpsampling,
@@ -729,7 +763,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       })
       useStore.getState().pollPipelineStatus()
       window.dispatchEvent(new Event('maestro:director-open'))
-      notify('ok', 'Comic movie started in Director. Every shot will reuse its panel artwork as the I2V first frame.')
+      notify(
+        'ok',
+        movieAnchorMode === 'start_only'
+          ? 'Comic movie started. Every shot uses its panel as the exact I2V first frame.'
+          : 'Comic movie started. Compatible shots also use the following approved panel as an I2V end-frame anchor.',
+      )
     } catch (error) {
       notify('error', (error as Error).message)
     } finally {
@@ -765,6 +804,25 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           </select>
         </label>
       </div>
+      <label className="block text-[10px] text-text-muted">Video model
+        <select
+          className={`${input} mt-1`}
+          value={selectedVideoModel || 'ltx2_22B_distilled_1_1'}
+          onChange={event => selectDirectorVideoModel(event.target.value)}
+        >
+          {!selectableVideoModels.some(model => model.model_type === selectedVideoModel) && selectedVideoModel && (
+            <option value={selectedVideoModel}>{selectedVideoModel}</option>
+          )}
+          {selectableVideoModels.map(model => (
+            <option key={model.model_type} value={model.model_type}>
+              {model.name}{model.is_downloaded === false ? ' · not installed' : ''}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-[9px] text-text-muted">
+          LTX-2.3 Distilled INT8 is the measured recommendation for this RTX 4090: it preserved the reference better than Q6 and rendered diffusion faster.
+        </span>
+      </label>
       <label className="block text-[10px] text-text-muted">Panel fit
         <select className={`${input} mt-1`} value={movieImageFit} onChange={event => setMovieImageFit(event.target.value as typeof movieImageFit)}>
           <option value="smart">Smart fill · keep the whole panel</option>
@@ -776,9 +834,48 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       </label>
       {selectedVideoModel?.includes('gguf') && (
         <div className="rounded border border-amber-400/30 bg-amber-400/5 px-2 py-1.5 text-[10px] text-amber-200">
-          GGUF saves VRAM, but can be much slower on Linux without a native GGUF CUDA kernel. On an RTX 4090, prefer LTX-2.3 Distilled 1.1 (INT8) or Distilled FP8 for speed.
+          Q6 is the low-VRAM/compatibility option. It was slower and preserved the reference less faithfully than INT8 in the local RTX 4090 comparison.
+          <button
+            className="ml-1 underline"
+            type="button"
+            onClick={() => selectDirectorVideoModel('ltx2_22B_distilled_1_1')}
+          >
+            Use recommended INT8
+          </button>
         </div>
       )}
+      {selectedVideoModel?.includes('fp8') && (
+        <div className="rounded border border-amber-400/30 bg-amber-400/5 px-2 py-1.5 text-[10px] text-amber-200">
+          FP8 remains experimental here: the local comparison took longer and introduced visible anatomy/clothing deformation. INT8 is the quality recommendation.
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block text-[10px] text-text-muted">Panel anchors
+          <select
+            className={`${input} mt-1`}
+            value={movieAnchorMode}
+            onChange={event => setMovieAnchorMode(event.target.value as typeof movieAnchorMode)}
+          >
+            <option value="smart">Smart start → end · recommended</option>
+            <option value="start_only">First frame only · hard cuts</option>
+            <option value="chain">Every panel → next · experimental</option>
+          </select>
+        </label>
+        <label className="block text-[10px] text-text-muted">Motion fidelity
+          <select
+            className={`${input} mt-1`}
+            value={movieFidelity}
+            onChange={event => setMovieFidelity(event.target.value as typeof movieFidelity)}
+          >
+            <option value="faithful">Faithful · subtle illustration</option>
+            <option value="balanced">Balanced</option>
+            <option value="expressive">Expressive · more drift risk</option>
+          </select>
+        </label>
+      </div>
+      <p className="text-[9px] text-text-muted">
+        Smart mode interpolates only within the same page when characters and framing are compatible; otherwise it makes a clean cut. Full chaining can morph unrelated compositions, so use it only for deliberately continuous storyboards.
+      </p>
       <label className="block text-[10px] text-text-muted">Default seconds per panel
         <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} />
       </label>
@@ -796,6 +893,18 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                   <option value="pull-out">Slow pull-out</option>
                   <option value="pan-left">Pan left</option>
                   <option value="pan-right">Pan right</option>
+                </select>
+                <select
+                  className={`${input} col-span-2`}
+                  value={planned.videoTransition || 'auto'}
+                  onChange={event => updateShot(pageIndex, panelIndex, {
+                    videoTransition: event.target.value as ComicPlanPanel['videoTransition'],
+                  })}
+                  title="How this shot reaches the following panel"
+                >
+                  <option value="auto">Transition to next · automatic</option>
+                  <option value="cut">Transition to next · force cut</option>
+                  <option value="interpolate">Transition to next · force end-frame interpolation</option>
                 </select>
                 {storyboard && (
                   <textarea

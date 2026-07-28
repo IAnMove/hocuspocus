@@ -186,6 +186,10 @@ export function normalizeComicPlan(
             .includes(String(panel?.cameraMove))
             ? panel.cameraMove
             : undefined,
+          videoTransition: ['auto', 'cut', 'interpolate']
+            .includes(String(panel?.videoTransition))
+            ? panel.videoTransition
+            : undefined,
         }
         const copy = compactPanelCopy(
           safePanel,

@@ -46,6 +46,7 @@ def _save_pipeline_state(pid: str):
     # Build per-clip state
     clip_plans = p.get("clip_plans", [])
     clip_images = p.get("clip_images", [])
+    clip_end_images = p.get("_clip_end_images", [])
     pre_polish = p.get("_clip_plans_pre_polish", [])
     clip_timings = p.get("_clip_timings", {})
 
@@ -72,6 +73,7 @@ def _save_pipeline_state(pid: str):
             "window_prompts_pre_polish": pre_polish[i].get("window_prompts", []) if i < len(pre_polish) else None,
             "keyframe_prompts_pre_polish": pre_polish[i].get("keyframe_prompts", []) if i < len(pre_polish) else None,
             "start_image_filename": clip_images[i] if i < len(clip_images) else None,
+            "end_image_filename": clip_end_images[i] if i < len(clip_end_images) else None,
             "keyframe_filenames": (p.get("_clip_keyframes", []) or [])[i] if i < len(p.get("_clip_keyframes", [])) else [],
             "video_filename": (p.get("_clip_video_files", []) or [])[i] if i < len(p.get("_clip_video_files", [])) else None,
             "tag": (p.get("_clip_tags", []) or [])[i] if i < len(p.get("_clip_tags", [])) else None,
@@ -458,6 +460,9 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
     start_img = clip.get("start_image_filename")
     start_path = os.path.join(clip_out_dir, start_img) if start_img else ""
     has_start = start_path and os.path.isfile(start_path)
+    end_img = clip.get("end_image_filename")
+    end_path = os.path.join(clip_out_dir, end_img) if end_img else ""
+    has_end = end_path and os.path.isfile(end_path)
 
     # Use planned_clip for duration
     planned = clip.get("planned_clip") or {}
@@ -466,6 +471,14 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         duration_sec = 20
     fps = 25  # LTX-2 default
     video_length = int(duration_sec * fps)
+    if has_end:
+        try:
+            _, trim_step, _ = _wgp.get_model_min_frames_and_step(video_model)
+        except Exception:
+            trim_step = 8
+        # launch.py trims the end-conditioned tail. Generate one extra latent
+        # step so a rerun keeps the original panel duration.
+        video_length += trim_step
 
     resolution = _normalize_video_resolution(
         video_model,
@@ -473,9 +486,13 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
     )
     gen_params = {
         "model_type": video_model,
-        "prompt": prompt,
+        "prompt": _comic_motion_prompt(
+            prompt,
+            (state.get("_params_snapshot") or {}).get("comic_motion_fidelity", "faithful"),
+            bool(has_end),
+        ),
         "image_mode": 0,
-        "image_prompt_type": "S" if has_start else "",
+        "image_prompt_type": "SE" if has_start and has_end else ("S" if has_start else ("E" if has_end else "")),
         "num_inference_steps": video_params.get("num_inference_steps", 8),
         "guidance_scale": video_params.get("guidance_scale", 1),
         "resolution": resolution,
@@ -497,6 +514,24 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
             "input_video_strength",
             0.7 if "distilled" in str(video_model).lower() else 1.0,
         )
+        fidelity = str(
+            (state.get("_params_snapshot") or {}).get(
+                "comic_motion_fidelity",
+                "faithful",
+            )
+        ).lower()
+        if fidelity == "faithful":
+            gen_params["input_video_strength"] = max(
+                0.9,
+                float(gen_params["input_video_strength"]),
+            )
+        elif has_end:
+            gen_params["input_video_strength"] = max(
+                0.8,
+                float(gen_params["input_video_strength"]),
+            )
+    if has_end:
+        gen_params["image_end"] = end_path
     for runtime_key in (
         "single_stage_pipeline",
         "progressive_pipeline",
@@ -807,6 +842,7 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
     } for c in saved_clips]
     planned_clips = [c.get("planned_clip") for c in saved_clips]
     clip_images = [c.get("start_image_filename") for c in saved_clips]
+    clip_end_images = [c.get("end_image_filename") for c in saved_clips]
     clip_keyframes = [c.get("keyframe_filenames", []) or [] for c in saved_clips]
     clip_video_files = [c.get("video_filename") for c in saved_clips]
 
@@ -822,6 +858,7 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         "clip_plans": clip_plans,
         "_planned_clips": planned_clips,
         "clip_images": clip_images,
+        "_clip_end_images": clip_end_images,
         "_clip_keyframes": clip_keyframes,
         "_clip_video_files": clip_video_files,
         "output_files": data.get("output_files", []) or [],
@@ -2244,6 +2281,97 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
 
 # ── Video Generation Phase ──────────────────────────────────────────────
 
+def _comic_framing_band(value: str) -> int:
+    """Coarse framing distance used to avoid implausible panel morphs."""
+    text = str(value or "").lower()
+    if any(token in text for token in ("extreme close", "close-up", "close up", "detail", "macro")):
+        return 0
+    if any(token in text for token in ("wide", "long shot", "establishing", "aerial", "panorama")):
+        return 2
+    return 1
+
+
+def _comic_shots_can_interpolate(current: dict, following: dict) -> bool:
+    """Conservative automatic rule for using the next panel as an end frame."""
+    if not current or not following:
+        return False
+    if current.get("page_number") is None or following.get("page_number") is None:
+        return False
+    try:
+        same_page = int(current.get("page_number")) == int(following.get("page_number"))
+    except (TypeError, ValueError):
+        same_page = current.get("page_number") == following.get("page_number")
+    if not same_page:
+        return False
+
+    current_characters = {
+        str(value).strip().casefold()
+        for value in (current.get("characters") or [])
+        if str(value).strip()
+    }
+    following_characters = {
+        str(value).strip().casefold()
+        for value in (following.get("characters") or [])
+        if str(value).strip()
+    }
+    if current_characters != following_characters:
+        return False
+
+    framing_jump = abs(
+        _comic_framing_band(current.get("framing", ""))
+        - _comic_framing_band(following.get("framing", ""))
+    )
+    return framing_jump <= 1
+
+
+def _comic_end_image_filenames(params: dict, clip_images: list[str]) -> list[str]:
+    """Resolve per-shot end anchors without blindly morphing every panel."""
+    mode = str(params.get("comic_anchor_mode") or "start_only").strip().lower()
+    shots = params.get("comic_shots") or []
+    resolved = [""] * len(clip_images)
+    for index in range(max(0, len(clip_images) - 1)):
+        current = shots[index] if index < len(shots) and isinstance(shots[index], dict) else {}
+        following = shots[index + 1] if index + 1 < len(shots) and isinstance(shots[index + 1], dict) else {}
+        override = str(current.get("transition_to_next") or "auto").strip().lower()
+        if override == "cut":
+            should_anchor = False
+        elif override == "interpolate":
+            should_anchor = True
+        elif mode == "chain":
+            should_anchor = True
+        elif mode == "smart":
+            should_anchor = _comic_shots_can_interpolate(current, following)
+        else:
+            should_anchor = False
+        if should_anchor and clip_images[index + 1]:
+            resolved[index] = clip_images[index + 1]
+    return resolved
+
+
+def _comic_motion_prompt(prompt: str, fidelity: str, has_end: bool) -> str:
+    """Add runtime-only fidelity constraints to the LLM-authored motion."""
+    fidelity = str(fidelity or "faithful").strip().lower()
+    additions: list[str] = []
+    if fidelity == "faithful":
+        additions.append(
+            "Fidelity priority: animate this as a subtly moving illustration, "
+            "not as a newly rendered scene. Keep facial features, anatomy, "
+            "costume shapes, linework, colors and background geometry stable. "
+            "Use restrained local motion and do not invent objects or large pose changes."
+        )
+    elif fidelity == "balanced":
+        additions.append(
+            "Keep character identity, drawing medium, palette and scene geometry "
+            "stable while performing the requested motion."
+        )
+    if has_end:
+        additions.append(
+            "The supplied end image is the next approved comic panel. Move "
+            "continuously toward that exact composition and identity without an internal cut."
+        )
+    return " ".join(part for part in (str(prompt or "").strip(), *additions) if part)
+
+
 def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                           planned_clips: list[dict], clip_images: list[str],
                           clip_keyframes: Optional[list[list[str]]] = None,
@@ -2438,19 +2566,42 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         image_end_paths = []
         per_clip_frames = []
         has_sliding_window = False
+        comic_end_images = (
+            _comic_end_image_filenames(params, clip_images)
+            if pipeline_type == "comic_movie"
+            else [""] * len(clip_images)
+        )
+        comic_fidelity = str(params.get("comic_motion_fidelity") or "faithful")
+        if pipeline_type == "comic_movie":
+            _update_pipeline(pid, _clip_end_images=comic_end_images)
+            _save_pipeline_state(pid)
+            print(
+                f"[Pipeline {pid}] Comic anchors: "
+                f"{sum(bool(item) for item in comic_end_images)} end frame(s), "
+                f"mode={params.get('comic_anchor_mode', 'start_only')}, "
+                f"fidelity={comic_fidelity}"
+            )
 
         for i, plan in enumerate(clip_plans):
             wp = plan.get("window_prompts") or []
             wp = [w.get("prompt", w.get("text", str(w))) if isinstance(w, dict) else str(w) for w in wp]
+            end_file = comic_end_images[i] if i < len(comic_end_images) else ""
             if len(wp) > 1:
-                prompts.append("\n".join(wp))
+                prompt_value = "\n".join(wp)
             else:
                 vp = plan.get("video_prompt", "")
                 pc = planned_clips[i] if i < len(planned_clips) else {}
                 dur = pc.get("duration_sec", pc.get("end", 0) - pc.get("start", 0))
                 if dur > 32 and vp:
                     print(f"[Pipeline] WARNING: Clip {i+1} is {dur:.0f}s but has no window_prompts")
-                prompts.append(vp)
+                prompt_value = vp
+            if pipeline_type == "comic_movie":
+                prompt_value = _comic_motion_prompt(
+                    prompt_value,
+                    comic_fidelity,
+                    bool(end_file),
+                )
+            prompts.append(prompt_value)
 
             img_file = clip_images[i] if i < len(clip_images) else ""
             if img_file:
@@ -2458,7 +2609,11 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 image_start_paths.append(img_path if os.path.isfile(img_path) else "")
             else:
                 image_start_paths.append("")
-            image_end_paths.append("")
+            if end_file:
+                end_path = os.path.join(out_dir, end_file)
+                image_end_paths.append(end_path if os.path.isfile(end_path) else "")
+            else:
+                image_end_paths.append("")
 
             pc = planned_clips[i] if i < len(planned_clips) else {}
             window_prompts = plan.get("window_prompts", []) or []
@@ -2490,7 +2645,13 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 clip_frames = round(dur_sec * fps) if dur_sec > 0 else pc.get("duration_frames", round(20 * fps))
                 if clip_frames > round(32 * fps):
                     has_sliding_window = True
-                per_clip_frames.append(max(clip_frames, round(5 * fps)))
+                # Comic/storyboard shots are often intentionally 2–4 seconds.
+                # The old generic five-second floor ignored the UI duration,
+                # forcing LTX to invent extra motion and drift away from the
+                # approved artwork. Other Director modes keep their historical
+                # five-second minimum.
+                minimum_frames = _min_f if pipeline_type == "comic_movie" else round(5 * fps)
+                per_clip_frames.append(max(clip_frames, minimum_frames))
 
         # Quantize to the model's (latent*n + 1) frame lattice WITHOUT letting
         # the error compound. Floor-snapping each clip independently lost 0-7
@@ -2631,6 +2792,12 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
             gen_params["image_start"] = image_start_paths
         if has_any_end:
             gen_params["image_end"] = image_end_paths
+            if pipeline_type == "comic_movie":
+                # Each SE clip is generated one latent step longer, then the
+                # distorted conditioning tail is removed. This preserves the
+                # requested duration per panel and avoids one enormous
+                # compensation clip after a long storyboard.
+                gen_params["_se_preserve_duration_per_clip"] = True
         # Per-clip keyframe injection
         if clip_keyframes:
             per_clip_kf_paths: list[list[str]] = []
@@ -2673,6 +2840,18 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         gen_params["input_video_strength"] = (
             0.7 if "distilled" in str(video_model).lower() else 1.0
         )
+    if pipeline_type == "comic_movie":
+        fidelity = str(params.get("comic_motion_fidelity") or "faithful").lower()
+        if fidelity == "faithful":
+            gen_params["input_video_strength"] = max(
+                0.9,
+                float(gen_params.get("input_video_strength", 0.9)),
+            )
+        elif not seamless and any(image_end_paths):
+            gen_params["input_video_strength"] = max(
+                0.8,
+                float(gen_params.get("input_video_strength", 0.8)),
+            )
 
     voice_ref = params.get("voice_reference")
     if voice_ref:

@@ -115,6 +115,69 @@ def test_dark_but_detailed_comic_capture_is_not_rejected(tmp_path):
     assert (tmp_path / "outputs" / staged[0]).is_file()
 
 
+def test_smart_comic_anchors_only_compatible_panels_on_the_same_page():
+    params = {
+        "comic_anchor_mode": "smart",
+        "comic_shots": [
+            {
+                "page_number": 1,
+                "characters": ["NARA"],
+                "framing": "Medium shot",
+            },
+            {
+                "page_number": 1,
+                "characters": ["NARA"],
+                "framing": "Close-up",
+            },
+            {
+                "page_number": 2,
+                "characters": ["KAEL"],
+                "framing": "Wide establishing shot",
+            },
+        ],
+    }
+
+    assert director_pipeline._comic_end_image_filenames(
+        params,
+        ["panel-1.png", "panel-2.png", "panel-3.png"],
+    ) == ["panel-2.png", "", ""]
+
+
+def test_comic_anchor_manual_overrides_take_priority():
+    params = {
+        "comic_anchor_mode": "chain",
+        "comic_shots": [
+            {"transition_to_next": "cut"},
+            {"transition_to_next": "interpolate"},
+            {},
+        ],
+    }
+
+    assert director_pipeline._comic_end_image_filenames(
+        params,
+        ["panel-1.png", "panel-2.png", "panel-3.png"],
+    ) == ["", "panel-3.png", ""]
+
+
+def test_smart_comic_anchors_do_not_guess_without_shot_metadata():
+    assert director_pipeline._comic_end_image_filenames(
+        {"comic_anchor_mode": "smart", "comic_shots": []},
+        ["panel-1.png", "panel-2.png"],
+    ) == ["", ""]
+
+
+def test_faithful_comic_motion_guard_describes_both_approved_anchors():
+    prompt = director_pipeline._comic_motion_prompt(
+        "Her scarf moves in the breeze.",
+        "faithful",
+        True,
+    )
+
+    assert "subtly moving illustration" in prompt
+    assert "do not invent objects or large pose changes" in prompt
+    assert "next approved comic panel" in prompt
+
+
 def test_i2v_prompt_always_anchors_illustrated_source_style():
     prompt = LtxI2VRenderer.ensure_source_style(
         "She turns toward camera while her coat and hair move in the wind.",
