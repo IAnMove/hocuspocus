@@ -81,6 +81,40 @@ def test_crop_fit_fills_requested_canvas(tmp_path):
         assert fitted.size == (320, 192)
 
 
+def test_comic_crop_protection_keeps_extreme_portrait_composition(tmp_path):
+    source = tmp_path / "portrait.png"
+    image = Image.new("RGB", (100, 200), (220, 30, 20))
+    for y in range(10):
+        for x in range(100):
+            image.putpixel((x, y), (0, 255, 0))
+            image.putpixel((x, 199 - y), (0, 0, 255))
+    image.save(source)
+
+    staged = director_pipeline._prepare_provided_clip_images(
+        "test-pipeline",
+        [str(source)],
+        expected_count=1,
+        out_dir=str(tmp_path / "outputs"),
+        resolution="320x192",
+        fit_mode="crop",
+        protect_composition=True,
+    )
+
+    with Image.open(tmp_path / "outputs" / staged[0]) as fitted:
+        assert fitted.size == (320, 192)
+        assert fitted.getpixel((160, 0)) == (0, 255, 0)
+        assert fitted.getpixel((160, 191)) == (0, 0, 255)
+
+
+def test_crop_retained_fraction_detects_destructive_portrait_to_landscape_crop():
+    retained = director_pipeline._crop_retained_fraction(
+        (730, 1061),
+        "1280x704",
+    )
+
+    assert retained == pytest.approx(0.3785, abs=0.001)
+
+
 def test_blank_black_comic_capture_is_rejected_before_video_generation(tmp_path):
     source = tmp_path / "black-panel.png"
     Image.new("RGB", (320, 192), (0, 0, 0)).save(source)
@@ -202,6 +236,31 @@ def test_faithful_comic_motion_guard_describes_both_approved_anchors():
     assert "Perform the requested subject action clearly" in prompt
     assert "Do not invent extra actions" in prompt
     assert "next approved comic panel" in prompt
+
+
+def test_locked_comic_camera_forbids_zoom_pan_tilt_and_vertical_drift():
+    prompt = director_pipeline._comic_motion_prompt(
+        "Her scarf moves in the breeze.",
+        "faithful",
+        False,
+        camera_locked=True,
+    )
+
+    assert "CAMERA LOCK" in prompt
+    assert "exact first-frame crop" in prompt
+    assert "no zoom" in prompt
+    assert "pan" in prompt
+    assert "tilt" in prompt
+    assert "vertical drift" in prompt
+    assert "motion only through character acting" in prompt
+
+
+def test_comic_camera_defaults_to_locked_but_respects_requested_push_in():
+    assert director_pipeline._comic_camera_is_locked({"comic_shots": [{}]}, 0)
+    assert not director_pipeline._comic_camera_is_locked(
+        {"comic_shots": [{"camera_move": "push-in"}]},
+        0,
+    )
 
 
 def test_i2v_prompt_always_anchors_illustrated_source_style():

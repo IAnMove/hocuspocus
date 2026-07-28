@@ -484,12 +484,25 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         video_model,
         video_params.get("resolution", "1280x720"),
     )
+    snapshot = state.get("_params_snapshot") or {}
+    is_comic_movie = (
+        state.get("pipeline_type") == "comic_movie"
+        or snapshot.get("pipeline_type") == "comic_movie"
+    )
+    camera_locked = is_comic_movie and _comic_camera_is_locked(snapshot, clip_index)
+    negative_prompt = str(video_params.get("negative_prompt") or "").strip()
+    if camera_locked:
+        negative_prompt = _append_negative_prompt(
+            negative_prompt,
+            _COMIC_LOCKED_CAMERA_NEGATIVE,
+        )
     gen_params = {
         "model_type": video_model,
         "prompt": _comic_motion_prompt(
             prompt,
-            (state.get("_params_snapshot") or {}).get("comic_motion_fidelity", "faithful"),
+            snapshot.get("comic_motion_fidelity", "faithful"),
             bool(has_end),
+            camera_locked=camera_locked,
         ),
         "image_mode": 0,
         "image_prompt_type": "SE" if has_start and has_end else ("S" if has_start else ("E" if has_end else "")),
@@ -501,7 +514,7 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         "settings_version": 2.52,
         "generation_mode": "video",
         "repeat_generation": 1,
-        "negative_prompt": "",
+        "negative_prompt": negative_prompt,
         "activated_loras": video_loras.get("activated_loras", []),
         "loras_multipliers": " ".join(
             m.split(";")[0] for m in (video_loras.get("loras_multipliers", "") or "").split(" ") if m
@@ -1165,6 +1178,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                 out_dir=pipeline_out_dir,
                 resolution=video_params["resolution"],
                 fit_mode=params.get("video_image_fit", "smart"),
+                protect_composition=params.get("pipeline_type") == "comic_movie",
             )
             clip_keyframes = [[] for _ in clip_images]
         else:
@@ -1907,6 +1921,25 @@ def _fit_i2v_image(source: str, destination: str, resolution: str, fit_mode: str
         result.save(destination, format="PNG")
 
 
+def _crop_retained_fraction(
+    source_size: tuple[int, int],
+    resolution: str,
+) -> float:
+    """Estimate how much of the source survives a centered cover crop."""
+    source_width, source_height = source_size
+    try:
+        target_width, target_height = (
+            int(part) for part in str(resolution).lower().split("x", 1)
+        )
+    except (TypeError, ValueError):
+        return 1.0
+    if min(source_width, source_height, target_width, target_height) <= 0:
+        return 1.0
+    source_ratio = source_width / source_height
+    target_ratio = target_width / target_height
+    return min(source_ratio / target_ratio, target_ratio / source_ratio)
+
+
 def _prepare_provided_clip_images(
     pid: str,
     image_paths: list[str],
@@ -1914,6 +1947,7 @@ def _prepare_provided_clip_images(
     out_dir: str,
     resolution: str = "1280x720",
     fit_mode: str = "smart",
+    protect_composition: bool = False,
 ) -> list[str]:
     """Stage caller-supplied I2V frames in one consistent video canvas."""
 
@@ -1926,6 +1960,7 @@ def _prepare_provided_clip_images(
         )
     os.makedirs(out_dir, exist_ok=True)
     staged: list[str] = []
+    protected_crops = 0
     for index, source in enumerate(image_paths):
         source = str(source or "")
         if not source or not os.path.isfile(source):
@@ -1935,7 +1970,9 @@ def _prepare_provided_clip_images(
             )
         try:
             with Image.open(source) as opened:
-                sample = ImageOps.exif_transpose(opened).convert("RGB")
+                transposed = ImageOps.exif_transpose(opened)
+                source_size = transposed.size
+                sample = transposed.convert("RGB")
                 sample.thumbnail((96, 96))
                 extrema = sample.getextrema()
                 statistics = ImageStat.Stat(sample)
@@ -1956,16 +1993,30 @@ def _prepare_provided_clip_images(
                 "Video generation was stopped before using it. Reopen the comic "
                 "and convert it to a movie again; the artwork itself is preserved."
             )
+        effective_fit_mode = fit_mode
+        retained_fraction = _crop_retained_fraction(source_size, resolution)
+        if (
+            protect_composition
+            and str(fit_mode).strip().lower() == "crop"
+            and retained_fraction < 0.72
+        ):
+            effective_fit_mode = "smart"
+            protected_crops += 1
+            print(
+                f"[Pipeline {pid}] Comic panel {index + 1}: crop would retain "
+                f"only {retained_fraction:.0%}; using smart fit to preserve "
+                "the complete composition"
+            )
         extension = (
             os.path.splitext(source)[1].lower()
-            if str(fit_mode).lower() == "source"
+            if str(effective_fit_mode).lower() == "source"
             else ".png"
         )
         if extension not in (".png", ".jpg", ".jpeg", ".webp"):
             extension = ".png"
         filename = f"comic_panel_{index + 1:04d}_{uuid.uuid4().hex[:8]}{extension}"
         destination = os.path.join(out_dir, filename)
-        _fit_i2v_image(source, destination, resolution, fit_mode)
+        _fit_i2v_image(source, destination, resolution, effective_fit_mode)
         staged.append(filename)
         _update_pipeline(
             pid,
@@ -1979,7 +2030,7 @@ def _prepare_provided_clip_images(
         )
     print(
         f"[Pipeline {pid}] Prepared {len(staged)} supplied comic panel start "
-        f"images at {resolution} (fit={fit_mode})"
+        f"images at {resolution} (fit={fit_mode}, protected_crops={protected_crops})"
     )
     return staged
 
@@ -2369,7 +2420,31 @@ def _comic_end_image_filenames(params: dict, clip_images: list[str]) -> list[str
     return resolved
 
 
-def _comic_motion_prompt(prompt: str, fidelity: str, has_end: bool) -> str:
+_COMIC_LOCKED_CAMERA_NEGATIVE = (
+    "camera zoom, push-in, pull-out, dolly, pan, tilt, crane, pedestal, "
+    "camera roll, reframing, drifting crop, top-to-bottom camera movement"
+)
+
+
+def _comic_camera_is_locked(params: dict, index: int) -> bool:
+    """Treat absent comic camera instructions as an intentional static shot."""
+    shots = params.get("comic_shots") or []
+    shot = shots[index] if index < len(shots) and isinstance(shots[index], dict) else {}
+    camera = str(shot.get("camera_move") or "none").strip().lower()
+    return camera in {"", "none", "static", "locked", "locked-off", "locked-off camera"}
+
+
+def _append_negative_prompt(current: str, addition: str) -> str:
+    parts = [str(current or "").strip(), str(addition or "").strip()]
+    return ", ".join(part for part in parts if part)
+
+
+def _comic_motion_prompt(
+    prompt: str,
+    fidelity: str,
+    has_end: bool,
+    camera_locked: bool = False,
+) -> str:
     """Add runtime-only fidelity constraints to the LLM-authored motion."""
     fidelity = str(fidelity or "faithful").strip().lower()
     additions: list[str] = []
@@ -2385,6 +2460,15 @@ def _comic_motion_prompt(prompt: str, fidelity: str, has_end: bool) -> str:
         additions.append(
             "Keep character identity, drawing medium, palette and scene geometry "
             "stable while performing the requested motion."
+        )
+    if camera_locked:
+        additions.append(
+            "CAMERA LOCK: preserve the exact first-frame crop, field of view, "
+            "horizon, vanishing point and perspective for the entire shot. The "
+            "virtual camera is fixed on a tripod: no zoom, push-in, pull-out, "
+            "dolly, pan, tilt, crane, pedestal, roll, reframing or vertical "
+            "drift. Create motion only through character acting, moving objects "
+            "and environmental details inside the fixed frame."
         )
     if has_end:
         additions.append(
@@ -2640,6 +2724,7 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                     prompt_value,
                     comic_fidelity,
                     bool(end_file),
+                    camera_locked=_comic_camera_is_locked(params, i),
                 )
             prompts.append(prompt_value)
 
@@ -2756,6 +2841,16 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
             m.split(";")[0] for m in (video_loras.get("loras_multipliers", "") or "").split(" ") if m
         ),
     }
+    negative_prompt = str(video_params.get("negative_prompt") or "").strip()
+    if (
+        pipeline_type == "comic_movie"
+        and prompts
+        and all(_comic_camera_is_locked(params, index) for index in range(len(prompts)))
+    ):
+        negative_prompt = _append_negative_prompt(
+            negative_prompt,
+            _COMIC_LOCKED_CAMERA_NEGATIVE,
+        )
 
     if seamless:
         # Seamless: ONE generation job with rolling windows + keyframe injection
@@ -2775,7 +2870,7 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
             "settings_version": 2.52,
             "generation_mode": "video",
             "repeat_generation": 1,
-            "negative_prompt": "",
+            "negative_prompt": negative_prompt,
             "self_refiner_setting": self_refiner,
             "_director_pipeline_id": pid,
             **lora_params,
@@ -2822,7 +2917,7 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
             "settings_version": 2.52,
             "generation_mode": "video",
             "repeat_generation": 1,
-            "negative_prompt": "",
+            "negative_prompt": negative_prompt,
             "self_refiner_setting": self_refiner,
             "_director_pipeline_id": pid,
             **lora_params,

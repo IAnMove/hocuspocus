@@ -99,7 +99,11 @@ an unseen next panel.
 One panel is one continuous shot: no montage and no internal cuts. Preserve the
 explicitly supplied visual_style, including
 anime/cel-shaded rendering when present. Never convert illustrated artwork to
-photorealism or 3D. Keep each video_prompt under 130 words."""
+photorealism or 3D. If requested_camera is "none", "static" or "locked-off",
+state that the exact first-frame crop, horizon and perspective remain fixed,
+put all motion inside the frame, and do not introduce any zoom, pan, tilt,
+dolly, crane, reframing or vertical drift. Keep each video_prompt under 130
+words."""
             items = []
             for source_index, shot in missing:
                 items.append({
@@ -112,7 +116,7 @@ photorealism or 3D. Keep each video_prompt under 130 words."""
                     "first_frame_visual_description": shot.get("image_prompt", ""),
                     "script_for_performance": shot.get("script", ""),
                     "framing": shot.get("framing", ""),
-                    "requested_camera": shot.get("camera_move", ""),
+                    "requested_camera": shot.get("camera_move") or "none",
                     "characters": shot.get("characters", []),
                     "visual_style": shot.get("visual_style", ""),
                 })

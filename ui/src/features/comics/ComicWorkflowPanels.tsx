@@ -852,10 +852,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       <label className="block text-[10px] text-text-muted">Panel fit
         <select className={`${input} mt-1`} value={movieImageFit} onChange={event => setMovieImageFit(event.target.value as typeof movieImageFit)}>
           <option value="smart">Smart fill · keep the whole panel</option>
-          <option value="crop">Crop to fill · no borders</option>
+          <option value="crop">Crop to fill · may remove edges</option>
         </select>
         <span className="mt-1 block text-[9px] text-text-muted">
-          Smart fill preserves the complete panel and fills spare space with a subdued blurred edge copy. Every shot keeps one fixed movie resolution, which is required for reliable joining.
+          Smart fill preserves the complete panel and fills spare space with a subdued blurred edge copy. Crop is only used when the aspect ratios are reasonably close; Maestro automatically protects portrait or square panels from destructive panoramic crops.
         </span>
       </label>
       {selectedVideoModel?.includes('gguf') && (
