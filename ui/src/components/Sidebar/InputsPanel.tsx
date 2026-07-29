@@ -214,7 +214,7 @@ export function InputsPanel() {
           win = Math.max(0, parseInt(m[1], 10) - 1)
           offset = snapToOffsetPreset(Math.min(100, parseInt(m[2], 10)) / 100)
         }
-        return { path: refPath, filename, position: pos, previewUrl: `/api/v1/uploads/${filename}`, window: win, offset, file: null }
+        return { path: refPath, filename, position: pos, previewUrl: api.getStoredAssetUrl(refPath), window: win, offset, file: null }
       })
       const same = restored.length === injectedFrames.length &&
         restored.every((r, i) => r.path === injectedFrames[i]?.path && r.position === injectedFrames[i]?.position)
@@ -246,8 +246,8 @@ export function InputsPanel() {
       if (vpt.includes('KFI')) setParam('video_prompt_type', vpt.replace('KFI', ''))
       return
     }
-    setParam('image_refs', frames.map(f => f.path) as unknown as never)
-    setParam('frames_positions', frames.map(f => f.position).join(' ') as unknown as never)
+    setParam('image_refs', frames.map(f => f.path))
+    setParam('frames_positions', frames.map(f => f.position).join(' '))
     const vpt = (params.video_prompt_type as string) || ''
     if (!vpt.includes('KFI')) setParam('video_prompt_type', 'KFI')
   }
@@ -261,7 +261,7 @@ export function InputsPanel() {
       const newFrame: InjectedFrame = {
         path: p, filename: file?.name || basename(p), file: file ?? null,
         position: calcPositionToken(windowIdx, offset),
-        previewUrl: previewUrl || `/api/v1/uploads/${basename(p)}`,
+        previewUrl: previewUrl || api.getStoredAssetUrl(p),
         window: windowIdx, offset,
       }
       const updated = [...injectedFrames, newFrame]
@@ -310,13 +310,13 @@ export function InputsPanel() {
     const out: FrameTile[] = []
     if (!isExtend) {
       const startPreview = startImage ? URL.createObjectURL(startImage)
-        : (params.image_start ? `/api/v1/uploads/${basename(params.image_start as string)}` : null)
+        : (params.image_start ? api.getStoredAssetUrl(Array.isArray(params.image_start) ? params.image_start.find(Boolean) || '' : params.image_start) : null)
       if (startPreview) out.push({ key: 'frame-start', kind: 'start', preview: startPreview, offset: 'start', window: 0, sortKey: 0 })
     }
     injectedFrames.forEach((f, i) => out.push({ key: `frame-inj-${i}`, kind: 'inject', injectIndex: i, preview: f.previewUrl, offset: f.offset, window: f.window, sortKey: frameKey(f.window, f.offset) }))
     if (!isExtend) {
       const endPreview = endImage ? URL.createObjectURL(endImage)
-        : (params.image_end ? `/api/v1/uploads/${basename(params.image_end as string)}` : null)
+        : (params.image_end ? api.getStoredAssetUrl(Array.isArray(params.image_end) ? params.image_end.find(Boolean) || '' : params.image_end) : null)
       if (endPreview) out.push({ key: 'frame-end', kind: 'end', preview: endPreview, offset: 'end', window: 0, sortKey: frameKey(0, 'end') })
     }
     out.sort((a, b) => a.sortKey - b.sortKey)

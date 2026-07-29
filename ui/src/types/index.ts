@@ -407,6 +407,7 @@ export interface ModelOptions {
   sample_solvers: [string, string][] | null
   self_refiner: boolean
   self_refiner_max_plans: number
+  perturbation?: boolean
   sliding_window_defaults: Record<string, number> | null
   fps: number
   frames_minimum: number
@@ -913,7 +914,7 @@ export interface ShotPlan {
   ending_beat: string
   constraints?: string[]
   continuity_refs?: string[]
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface CharacterProfile {
@@ -965,6 +966,7 @@ export interface PipelineClipState {
 export interface PipelineLlmPass {
   pass: string
   system_prompt: string
+  user_prompt?: string
   response_text: string
   thinking_text: string | null
 }

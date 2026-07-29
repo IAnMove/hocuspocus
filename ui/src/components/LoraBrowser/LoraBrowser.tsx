@@ -624,12 +624,12 @@ export function LoraBrowser() {
                     onClick={() => {
                       if (lora.civitai_model_id) {
                         selectModel(lora.civitai_model_id)
-                      } else if ((lora as any).hf_repo_id) {
-                        window.open(`https://huggingface.co/${(lora as any).hf_repo_id}`, '_blank')
+                      } else if (lora.hf_repo_id) {
+                        window.open(`https://huggingface.co/${lora.hf_repo_id}`, '_blank')
                       }
                     }}
                     className={`relative rounded-lg border overflow-hidden bg-bg-tertiary text-left transition-all ${
-                      lora.civitai_model_id || (lora as any).hf_repo_id
+                      lora.civitai_model_id || lora.hf_repo_id
                         ? 'border-border hover:border-accent-blue cursor-pointer group'
                         : 'border-border/50 opacity-75'
                     }`}
@@ -664,8 +664,8 @@ export function LoraBrowser() {
                     </div>
                     {!lora.civitai_model_id && (
                       <div className="absolute top-1.5 right-1.5">
-                        <span className={`text-[8px] px-1 py-0.5 rounded bg-black/60 ${(lora as any).hf_repo_id ? 'text-amber-300/80' : 'text-white/50'}`}>
-                          {(lora as any).hf_repo_id ? 'HuggingFace' : 'Local only'}
+                        <span className={`text-[8px] px-1 py-0.5 rounded bg-black/60 ${lora.hf_repo_id ? 'text-amber-300/80' : 'text-white/50'}`}>
+                          {lora.hf_repo_id ? 'HuggingFace' : 'Local only'}
                         </span>
                       </div>
                     )}

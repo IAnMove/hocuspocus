@@ -6,6 +6,13 @@ import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails } from '../../api/c
 import { LoraGuideTooltip } from './LoraSelector'
 import type { LoraRecommendedWeights } from '../../types'
 
+function serializeMultipliers(loras: string[], weights: Record<string, number[]>): string {
+  return loras.map(name => {
+    const values = weights[name] || [1.0]
+    return values.map(value => value.toFixed(2)).join(';')
+  }).join(' ')
+}
+
 /**
  * Compact preset picker for Director mode LoRA sections.
  */
@@ -67,17 +74,33 @@ export function DirectorLoraSelector({ mode, modelType }: {
   const [activatedLoras, setActivatedLoras] = useState<string[]>(savedLora?.activated_loras || [])
   const [loraWeights, setLoraWeights] = useState<Record<string, number[]>>(savedLora?.loraWeights || {})
   const [phases, setPhases] = useState(1)
-  const [loading, setLoading] = useState(false)
+  const [loadedModelType, setLoadedModelType] = useState(savedLora ? modelType : '')
+  const loading = Boolean(modelType) && loadedModelType !== modelType
   const [search, setSearch] = useState('')
   const [loraWeightRecs, setLoraWeightRecs] = useState<Record<string, LoraRecommendedWeights>>({})
   const [guideStatus, setGuideStatus] = useState<Record<string, 'none' | 'exists' | 'generating' | 'done'>>({})
   const [guideTexts, setGuideTexts] = useState<Record<string, string>>({})
 
+  const persist = useCallback((newLoras: string[], newWeights: Record<string, number[]>) => {
+    const multipliers = serializeMultipliers(newLoras, newWeights)
+    directorSetLora(mode, newLoras, multipliers, newWeights, availableLoras)
+  }, [mode, availableLoras, directorSetLora])
+
+  const updateWeight = useCallback((filename: string, phaseIndex: number, value: number) => {
+    setLoraWeights(prev => {
+      const next = { ...prev }
+      if (!next[filename]) return prev
+      next[filename] = [...next[filename]]
+      next[filename][phaseIndex] = value
+      persist(activatedLoras, next)
+      return next
+    })
+  }, [activatedLoras, persist])
+
   // Load available LoRAs when model changes
   useEffect(() => {
     if (!modelType) return
     let cancelled = false
-    setLoading(true)
     api.fetchLoras(modelType).then(data => {
       if (cancelled) return
       const newPhases = data.guidance_max_phases ?? 1
@@ -101,9 +124,12 @@ export function DirectorLoraSelector({ mode, modelType }: {
         setLoraWeights(adjustedWeights)
         return valid
       })
-      setLoading(false)
+      setLoadedModelType(modelType)
     }).catch(() => {
-      if (!cancelled) { setAvailableLoras([]); setLoading(false) }
+      if (!cancelled) {
+        setAvailableLoras([])
+        setLoadedModelType(modelType)
+      }
     })
     return () => { cancelled = true }
   }, [modelType]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -156,24 +182,16 @@ export function DirectorLoraSelector({ mode, modelType }: {
 
   // Sync from store when savedLora changes externally
   useEffect(() => {
-    if (savedLora) {
+    if (!savedLora) return
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
       setActivatedLoras(savedLora.activated_loras || [])
       setLoraWeights(savedLora.loraWeights || {})
       if (savedLora.availableLoras?.length) setAvailableLoras(savedLora.availableLoras)
-    }
+    })
+    return () => { cancelled = true }
   }, [savedLora])
-
-  const serializeMultipliers = (loras: string[], weights: Record<string, number[]>) => {
-    return loras.map(name => {
-      const w = weights[name] || [1.0]
-      return w.map(v => v.toFixed(2)).join(';')
-    }).join(' ')
-  }
-
-  const persist = useCallback((newLoras: string[], newWeights: Record<string, number[]>) => {
-    const multipliers = serializeMultipliers(newLoras, newWeights)
-    directorSetLora(mode, newLoras, multipliers, newWeights, availableLoras)
-  }, [mode, availableLoras, directorSetLora])
 
   const toggleLora = useCallback((filename: string) => {
     setActivatedLoras(prev => {
@@ -201,17 +219,6 @@ export function DirectorLoraSelector({ mode, modelType }: {
       return next
     })
   }, [loraWeights, phases, persist, loraWeightRecs])
-
-  const updateWeight = useCallback((filename: string, phaseIndex: number, value: number) => {
-    setLoraWeights(prev => {
-      const next = { ...prev }
-      if (!next[filename]) return prev
-      next[filename] = [...next[filename]]
-      next[filename][phaseIndex] = value
-      persist(activatedLoras, next)
-      return next
-    })
-  }, [activatedLoras, persist])
 
   const handleGenerateGuide = async (filename: string) => {
     if (!modelType) return

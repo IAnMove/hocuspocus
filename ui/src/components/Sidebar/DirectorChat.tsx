@@ -1,11 +1,13 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
+import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen } from 'lucide-react'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import { getFileUrl } from '../../api/client'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
 import { DirectorSongSetup } from './DirectorSongSetup'
-import { ComicDirectorPanel } from '../../features/comics/ComicEditorPanel'
 import type { DirectorSkill, ShortFilmCharacter, ShortFilmPath } from '../../types'
+
+const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
+  .then(module => ({ default: module.ComicDirectorPanel })))
 
 // AUDIO_ACCEPT lists both audio formats AND video formats. When a video
 // file is uploaded, the backend's /api/v1/upload-audio endpoint extracts
@@ -413,14 +415,11 @@ export function DirectorChat() {
   const [localBias, setLocalBias] = useState<number | null>(null)
   const [showAnalysisDetails, setShowAnalysisDetails] = useState(false)
   const sliderRef = useRef<number | null>(null)
-  const [chatInput, setChatInput] = useState('')
-
-  // Sync chatInput with store's sceneDescription when entering style step
-  useEffect(() => {
-    if (step === 'style' && sceneDescription && !chatInput) {
-      setChatInput(sceneDescription)
-    }
-  }, [step])
+  // null means "use the current story description as the untouched draft".
+  // Once the user types (including clearing the field), their explicit draft
+  // wins without needing an effect that synchronously mirrors store state.
+  const [chatInput, setChatInput] = useState<string | null>(null)
+  const resolvedChatInput = chatInput ?? (step === 'style' ? sceneDescription : '')
 
   const refImagePreview = useMemo(
     () => referenceImage ? URL.createObjectURL(referenceImage) : null,
@@ -440,7 +439,7 @@ export function DirectorChat() {
       }
     }
     return samples
-  }, [analysis?.lyrics])
+  }, [analysis])
 
   const currentIndex = STEP_ORDER.indexOf(step)
   const pastStep = (s: DirectorStep) => currentIndex > STEP_ORDER.indexOf(s)
@@ -500,8 +499,8 @@ export function DirectorChat() {
       if (songDescription.trim() && !loading) generateTrack()
       return
     }
-    if (step === 'style' && chatInput.trim()) {
-      setSceneDescription(chatInput.trim())
+    if (step === 'style' && resolvedChatInput.trim()) {
+      setSceneDescription(resolvedChatInput.trim())
       if (autoMode) {
         // Auto mode: run entire flow server-side via pipeline
         startDirectorPipeline()
@@ -554,7 +553,9 @@ export function DirectorChat() {
             <RotateCcw size={10} /> Start Over
           </button>
         </div>
-        <ComicDirectorPanel createCompleteComic />
+        <Suspense fallback={<div className="flex items-center justify-center gap-2 py-8 text-xs text-text-muted"><Loader2 size={14} className="animate-spin text-accent-blue" /> Opening Comic Director…</div>}>
+          <ComicDirectorPanel createCompleteComic />
+        </Suspense>
       </div>
     )
   }
@@ -776,7 +777,6 @@ export function DirectorChat() {
               analysis={analysis}
               showDetails={showAnalysisDetails}
               setShowDetails={setShowAnalysisDetails}
-              speakerMappings={speakerMappings}
               isShortFilm={isShortFilm}
             />
             {/* Allow adding/changing reference photo after analysis */}
@@ -975,7 +975,6 @@ export function DirectorChat() {
               speakerMappings={speakerMappings}
               editClipPlan={editClipPlan}
               planPrompts={isStoryPath ? shortFilmPlanFromStory : isShortFilm ? shortFilmPlanPrompts : planPrompts}
-              planVideoPrompts={isShortFilm ? shortFilmPlanVideoPrompts : planVideoPrompts}
               generateStartImages={generateStartImages}
               loading={loading}
               isActive={atStep('review')}
@@ -991,7 +990,6 @@ export function DirectorChat() {
               loading={loading}
               imageGenProgress={imageGenProgress}
               clipImages={clipImages}
-              planVideoPrompts={planVideoPrompts}
             />
           </SystemBubble>
         )}
@@ -1081,7 +1079,7 @@ export function DirectorChat() {
         )}
         <div className="flex items-end gap-2">
           <textarea
-            value={mvGenerateSetup ? songDescription : chatInput}
+            value={mvGenerateSetup ? songDescription : resolvedChatInput}
             onChange={e => {
               const v = e.target.value
               if (mvGenerateSetup) { setSongDescription(v); return }
@@ -1101,7 +1099,7 @@ export function DirectorChat() {
           />
           <button
             onClick={handleChatSubmit}
-            disabled={!chatInputEnabled || !(mvGenerateSetup ? songDescription : chatInput).trim()}
+            disabled={!chatInputEnabled || !(mvGenerateSetup ? songDescription : resolvedChatInput).trim()}
             className="p-2 rounded-lg bg-accent-blue text-white hover:bg-accent-blue-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
           >
             {loading && (step === 'style' || isMusicVideo) ? (
@@ -1686,12 +1684,11 @@ function AdditionalRefsSection() {
 }
 
 function AnalysisSummary({
-  analysis, showDetails, setShowDetails, speakerMappings: _speakerMappings, isShortFilm,
+  analysis, showDetails, setShowDetails, isShortFilm,
 }: {
   analysis: NonNullable<ReturnType<typeof useStore.getState>['directorAnalysis']>
   showDetails: boolean
   setShowDetails: (v: boolean | ((p: boolean) => boolean)) => void
-  speakerMappings: ReturnType<typeof useStore.getState>['directorSpeakerMappings']
   isShortFilm?: boolean
 }) {
   // Count unique speakers
@@ -2335,14 +2332,13 @@ function StyleForm({
 
 function ImagePromptsReview({
   clipPlans, plannedClips, speakerMappings, editClipPlan, planPrompts,
-  planVideoPrompts: _planVideoPrompts, generateStartImages, loading, isActive, isShortFilm,
+  generateStartImages, loading, isActive, isShortFilm,
 }: {
   clipPlans: ReturnType<typeof useStore.getState>['directorClipPlans']
   plannedClips: ReturnType<typeof useStore.getState>['directorPlannedClips']
   speakerMappings: ReturnType<typeof useStore.getState>['directorSpeakerMappings']
   editClipPlan: (index: number, field: 'video_prompt' | 'image_prompt', value: string) => void
   planPrompts: () => Promise<void>
-  planVideoPrompts: () => Promise<void>
   generateStartImages: () => Promise<void>
   loading: boolean
   isActive: boolean
@@ -2417,12 +2413,11 @@ function ImagePromptsReview({
 }
 
 function ImageGenView({
-  loading, imageGenProgress, clipImages, planVideoPrompts: _planVideoPrompts2,
+  loading, imageGenProgress, clipImages,
 }: {
   loading: boolean
   imageGenProgress: ReturnType<typeof useStore.getState>['directorImageGenProgress']
   clipImages: ReturnType<typeof useStore.getState>['directorClipImages']
-  planVideoPrompts: () => Promise<void>
 }) {
   // Architecture-mismatch advisories from the backend's image-gen filter.
   // Surfacing these in chat (vs only in the console) lets the user see

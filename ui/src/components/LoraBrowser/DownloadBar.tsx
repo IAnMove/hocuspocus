@@ -3,7 +3,10 @@ import { useStore } from '../../stores/useStore'
 
 export function DownloadBar() {
   const downloads = useStore(s => s.civitDownloads)
-  const active = downloads.filter(d => d.status !== 'completed' || Date.now() < 30000) // show completed briefly
+  // The backend does not expose a completion timestamp, so completed rows
+  // cannot be timed reliably. Active and failed rows remain actionable;
+  // completed downloads disappear as soon as the next poll confirms them.
+  const active = downloads.filter(d => d.status !== 'completed')
 
   if (active.length === 0) return null
 

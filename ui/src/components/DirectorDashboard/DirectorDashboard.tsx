@@ -154,7 +154,7 @@ function LlmLogPanel({ pipeline }: { pipeline: SavedPipelineState }) {
   const log = pipeline.llm_log
   if (!log) return <p className="text-xs text-text-muted italic">No LLM log captured</p>
 
-  const passes = (log as any).passes as Array<{ pass: string; system_prompt: string; user_prompt?: string; response_text: string; thinking_text?: string | null }> | undefined
+  const passes = log.passes
 
   return (
     <div className="space-y-2">
@@ -184,9 +184,8 @@ function LlmLogPanel({ pipeline }: { pipeline: SavedPipelineState }) {
   )
 }
 
-function ClipCard({ clip, pipeline: _pipeline, onTag, onRerunImage, onRerunVideo }: {
+function ClipCard({ clip, onTag, onRerunImage, onRerunVideo }: {
   clip: PipelineClipState
-  pipeline: SavedPipelineState
   onTag: (tag: 'good' | 'needs_work' | null) => void
   onRerunImage: (clipIndex: number, prompt?: string) => void
   onRerunVideo: (clipIndex: number, prompt?: string) => void
@@ -697,7 +696,6 @@ function DirectorDashboardInner() {
                   <ClipCard
                     key={clip.index}
                     clip={clip}
-                    pipeline={selectedPipeline}
                     onTag={(tag) => tagClip(selectedPipeline.pipeline_id, clip.index, tag)}
                     onRerunImage={(idx, prompt) => { setRegenError(null); rerunClipImage(selectedPipeline.pipeline_id, idx, prompt).catch(e => setRegenError(String(e instanceof Error ? e.message : e))) }}
                     onRerunVideo={(idx, prompt) => { setRegenError(null); rerunClipVideo(selectedPipeline.pipeline_id, idx, prompt).catch(e => setRegenError(String(e instanceof Error ? e.message : e))) }}

@@ -1,16 +1,31 @@
-import { useRef, useCallback, useState, useEffect, useMemo, type JSX } from 'react'
+import { lazy, Suspense, useRef, useCallback, useState, useEffect, useMemo, type JSX } from 'react'
 import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked } from 'lucide-react'
 import { TabFilter } from './TabFilter'
 import { ThumbnailGallery } from './ThumbnailGallery'
 import { MediaFeedItem } from './MediaFeedItem'
-import { SceneAnimatorPanel } from '../Sidebar/SceneAnimatorPanel'
-import { RigAnimatePanel } from '../Sidebar/RigAnimatePanel'
-import { ComicEditorPanel } from '../../features/comics/ComicEditorPanel'
-import { VideoEditorPanel } from '../../features/video-editor/VideoEditorPanel'
-import { StoryLabPanel } from '../../features/stories/StoryLabPanel'
 import { useStore } from '../../stores/useStore'
 import type { GenerationJob } from '../../types'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
+
+const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
+  .then(module => ({ default: module.SceneAnimatorPanel })))
+const RigAnimatePanel = lazy(() => import('../Sidebar/RigAnimatePanel')
+  .then(module => ({ default: module.RigAnimatePanel })))
+const ComicEditorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
+  .then(module => ({ default: module.ComicEditorPanel })))
+const VideoEditorPanel = lazy(() => import('../../features/video-editor/VideoEditorPanel')
+  .then(module => ({ default: module.VideoEditorPanel })))
+const StoryLabPanel = lazy(() => import('../../features/stories/StoryLabPanel')
+  .then(module => ({ default: module.StoryLabPanel })))
+
+function PanelLoadingFallback() {
+  return (
+    <div className="flex flex-1 items-center justify-center text-text-muted">
+      <Loader2 size={22} className="animate-spin text-accent-blue" />
+      <span className="ml-2 text-xs">Opening workspace…</span>
+    </div>
+  )
+}
 
 function WorkspaceSelector() {
   const workspaces = useStore(s => s.workspaces)
@@ -543,6 +558,7 @@ export function MainContent() {
 
       {/* Content area: feed + thumbnails */}
       <div className="flex-1 flex flex-row gap-0 overflow-hidden relative">
+        <Suspense fallback={<PanelLoadingFallback />}>
         {mediaFilter === 'scene3d' ? (
           <div className="flex-1 overflow-y-auto p-4 md:p-8">
             <div className="max-w-[1600px] mx-auto">
@@ -665,6 +681,7 @@ export function MainContent() {
           onThumbnailClick={handleThumbnailClick}
         />
         </>}
+        </Suspense>
       </div>
     </main>
   )

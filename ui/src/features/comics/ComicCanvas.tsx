@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
+import { useLayoutEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
 import { Lock } from 'lucide-react'
 import { useComicStore } from './store'
 import type {
@@ -21,7 +21,6 @@ const FILTERS: Record<ComicImageElement['filter'], string | undefined> = {
 function TextView({ element }: { element: ComicTextElement }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLSpanElement>(null)
-  const [fittedFontSize, setFittedFontSize] = useState(element.fontSize)
   const bubble = element.bubble
   const radius = bubble === 'thought' || bubble === 'ellipse' || bubble === 'cloud'
     ? '50%'
@@ -42,7 +41,7 @@ function TextView({ element }: { element: ComicTextElement }) {
     const container = containerRef.current
     const content = contentRef.current
     if (!container || !content || bubble === 'none' || element.autoFit === false) {
-      setFittedFontSize(element.fontSize)
+      if (content) content.style.fontSize = `${element.fontSize}px`
       return
     }
     let size = element.fontSize
@@ -56,7 +55,6 @@ function TextView({ element }: { element: ComicTextElement }) {
       size -= 1
       content.style.fontSize = `${size}px`
     }
-    setFittedFontSize(size)
   }, [bubble, element.autoFit, element.content, element.fontFamily, element.fontSize, element.height, element.lineHeight, element.width, padding])
   return (
     <div
@@ -64,7 +62,7 @@ function TextView({ element }: { element: ComicTextElement }) {
       className="relative w-full h-full flex items-center justify-center whitespace-pre-wrap break-words overflow-hidden"
       style={{
         fontFamily: element.fontFamily,
-        fontSize: fittedFontSize,
+        fontSize: element.fontSize,
         fontWeight: element.bold ? 800 : 500,
         fontStyle: element.italic ? 'italic' : 'normal',
         textAlign: element.align,
@@ -79,7 +77,7 @@ function TextView({ element }: { element: ComicTextElement }) {
       }}
     >
       <span ref={contentRef} className="block w-full" style={{
-        fontSize: fittedFontSize,
+        fontSize: element.fontSize,
         color: element.textFill === 'gradient' ? 'transparent' : element.color,
         backgroundImage: element.textFill === 'gradient'
           ? `linear-gradient(${element.gradientStart ?? '#fff45c'}, ${element.gradientEnd ?? '#ff7a00'})`

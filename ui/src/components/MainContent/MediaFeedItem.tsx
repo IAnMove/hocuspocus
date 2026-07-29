@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties }
 import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, BookOpen, Box, Film } from 'lucide-react'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { useStore } from '../../stores/useStore'
-import { getUploadUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject } from '../../api/client'
+import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
 import { modelDisplayName } from '../../lib/modelDisplay'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
@@ -459,7 +459,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
       <div className="px-3 py-2 flex items-center gap-2 min-h-[40px]">
         {imageStartFile && (
           <img
-            src={getUploadUrl(imageStartFile)}
+            src={getStoredAssetUrl(imageStartFile)}
             alt="Start"
             className="w-7 h-7 rounded border border-border object-cover shrink-0"
             title="Start image"
@@ -467,7 +467,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
         )}
         {imageEndFile && (
           <img
-            src={getUploadUrl(imageEndFile)}
+            src={getStoredAssetUrl(imageEndFile)}
             alt="End"
             className="w-7 h-7 rounded border border-border object-cover shrink-0"
             title="End image"

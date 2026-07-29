@@ -109,7 +109,7 @@ function PresetManager() {
 /** Active advanced features as human-readable labels. Drives the badge
  *  count AND its hover tooltip, so a surprising number names its source
  *  instead of sending the user hunting through every section. */
-export function useAdvancedActiveItems(): string[] {
+function useAdvancedActiveItems(): string[] {
   const params = useStore(s => s.params)
   const modelOptions = useStore(s => s.modelOptions)
   const spatialUpsampling = useStore(s => s.spatialUpsampling)
@@ -148,11 +148,6 @@ export function useAdvancedActiveItems(): string[] {
     if (effective) items.push(`Process: ${vptVisible}`)
   }
   return items
-}
-
-/** Count active advanced features for the badge */
-export function useAdvancedCount(): number {
-  return useAdvancedActiveItems().length
 }
 
 export function AdvancedSettings() {
@@ -388,26 +383,24 @@ export function AdvancedSettings() {
               {!isAudio && <PostProcessing />}
 
               {/* Seed */}
-              {((
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] text-text-muted uppercase tracking-wider">Seed</label>
-                    <button onClick={() => setParam('seed', -1)} className="text-[10px] text-accent-blue hover:text-accent-blue-hover">
-                      Random
-                    </button>
-                  </div>
-                  <input
-                    type="number"
-                    value={params.seed}
-                    onChange={e => setParam('seed', Number(e.target.value))}
-                    className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
-                    placeholder="-1 for random"
-                  />
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] text-text-muted uppercase tracking-wider">Seed</label>
+                  <button onClick={() => setParam('seed', -1)} className="text-[10px] text-accent-blue hover:text-accent-blue-hover">
+                    Random
+                  </button>
                 </div>
-              ) as any)}
+                <input
+                  type="number"
+                  value={params.seed}
+                  onChange={e => setParam('seed', Number(e.target.value))}
+                  className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+                  placeholder="-1 for random"
+                />
+              </div>
 
               {/* Self Refiner */}
-              {modelOptions?.self_refiner && (
+              {modelOptions?.self_refiner === true ? (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Self Refiner</label>
                   <select
@@ -420,7 +413,7 @@ export function AdvancedSettings() {
                     <option value={2}>Enabled with P2-Norm</option>
                   </select>
                 </div>
-              )}
+              ) : null}
 
               {/* I2V style anchoring. The start frame carries much of the
                   appearance, but an explicit prompt anchor materially reduces
@@ -652,7 +645,7 @@ export function AdvancedSettings() {
               )}
 
               {/* LTX-2 Dev Pipeline Controls — only for models with perturbation/CFG-Star support */}
-              {(modelOptions as Record<string, unknown> | null)?.perturbation && (
+              {modelOptions?.perturbation && (
                 <>
                   {/* STG Scale */}
                   <div>

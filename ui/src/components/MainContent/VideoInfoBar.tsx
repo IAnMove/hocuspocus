@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Sparkles, Mic } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
-import { getUploadUrl } from '../../api/client'
+import { getStoredAssetUrl } from '../../api/client'
 import { modelDisplayName } from '../../lib/modelDisplay'
 
 export function VideoInfoBar() {
@@ -112,7 +112,7 @@ export function VideoInfoBar() {
       {/* Start/End image thumbnails */}
       {imageStartFile && (
         <img
-          src={getUploadUrl(imageStartFile)}
+          src={getStoredAssetUrl(imageStartFile)}
           alt="Start"
           className="w-8 h-8 rounded border border-border object-cover shrink-0"
           title="Start image"
@@ -120,7 +120,7 @@ export function VideoInfoBar() {
       )}
       {imageEndFile && (
         <img
-          src={getUploadUrl(imageEndFile)}
+          src={getStoredAssetUrl(imageEndFile)}
           alt="End"
           className="w-8 h-8 rounded border border-border object-cover shrink-0"
           title="End image"

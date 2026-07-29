@@ -1,4 +1,5 @@
 import { rememberPrompt } from '../lib/promptHistory'
+import type { ProductionPlan } from '../types'
 
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
 
@@ -885,7 +886,7 @@ export interface DirectorV2PlanRequest {
 
 export interface DirectorV2PlanResponse {
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
-  production_plan: Record<string, unknown>
+  production_plan: ProductionPlan
   skill_type: string
 }
 
