@@ -343,6 +343,48 @@ export function getUploadUrl(filename: string): string {
   return `${BASE}/api/v1/uploads/${encodeURIComponent(filename)}`
 }
 
+function storedAssetFilename(pathOrFilename: string): string {
+  const normalized = String(pathOrFilename || '').replace(/\\/g, '/')
+  const withoutQuery = normalized.split(/[?#]/, 1)[0]
+  const encodedName = withoutQuery.split('/').pop() || ''
+  try {
+    return decodeURIComponent(encodedName)
+  } catch {
+    return encodedName
+  }
+}
+
+/**
+ * Resolve a persisted sidecar path to the endpoint that actually owns it.
+ *
+ * Director-generated conditioning frames live in outputs, while files the
+ * user selected live in uploads. Older restore code discarded the directory
+ * and sent every basename to /uploads, which made generated comic frames 404.
+ */
+export function getStoredAssetUrl(pathOrFilename: string): string {
+  const normalized = String(pathOrFilename || '').replace(/\\/g, '/')
+  const filename = storedAssetFilename(normalized)
+  const isUpload = normalized.startsWith('/api/v1/uploads/')
+    || /(^|\/)uploads\//i.test(normalized)
+  return isUpload ? getUploadUrl(filename) : getFileUrl(filename)
+}
+
+/**
+ * Fetch a stored asset with a compatibility fallback for old sidecars that
+ * persisted only a basename and therefore lost whether it came from uploads
+ * or outputs.
+ */
+export async function fetchStoredAsset(pathOrFilename: string): Promise<Response> {
+  const filename = storedAssetFilename(pathOrFilename)
+  const primary = getStoredAssetUrl(pathOrFilename)
+  const fallback = primary === getFileUrl(filename)
+    ? getUploadUrl(filename)
+    : getFileUrl(filename)
+  const first = await fetch(primary)
+  if (first.ok || primary === fallback) return first
+  return fetch(fallback)
+}
+
 export async function fetchOutputMetadata(name: string): Promise<import('../types').OutputMetadata> {
   // Retry with a per-attempt timeout. On a slow/high-latency link (e.g. the user
   // is remote over VPN) the request can stall long enough that a single attempt

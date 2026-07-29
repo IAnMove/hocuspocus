@@ -2047,7 +2047,14 @@ export const useStore = create<AppState>((set, get) => ({
     // Kick the crashed pipeline back into running server-side, then close
     // the Dashboard and reconnect the Director view to it so progress shows.
     await api.resumePipeline(pid)
-    set({ dashboardOpen: false, pipelineId: pid })
+    set({
+      dashboardOpen: false,
+      pipelineId: pid,
+      pipelineStatus: null,
+      pipelinePolling: true,
+      directorLoading: true,
+      directorError: null,
+    })
     get().pollPipelineStatus()
   },
 
@@ -6404,10 +6411,10 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
 
-      // Fetch clip images from upload URLs to show previews. Prefer
-      // upload_filenames.image_start (already-extracted basenames) when
-      // present; fall back to deriving basenames from params.image_start
-      // paths so older sidecars without upload_filenames still restore.
+      // Fetch clip images from their real storage location. User-provided
+      // images live in uploads, while Director comic frames live in outputs.
+      // Prefer the original sidecar path because it retains that distinction;
+      // fetchStoredAsset falls back for old basename-only sidecars.
       const uploadNames = Array.isArray(uploadFilenames?.image_start)
         ? uploadFilenames.image_start as string[]
         : imagePaths.map(p => (p || '').replace(/\\/g, '/').split('/').pop() || '')
@@ -6415,7 +6422,8 @@ export const useStore = create<AppState>((set, get) => ({
         const fname = uploadNames[i]
         if (fname) {
           const idx = i
-          fetch(api.getUploadUrl(fname))
+          const storedPath = imagePaths[i] || fname
+          api.fetchStoredAsset(storedPath)
             .then(r => r.ok ? r.blob() : null)
             .then(blob => {
               if (!blob) return
@@ -6511,8 +6519,7 @@ export const useStore = create<AppState>((set, get) => ({
       const refPromises = imageRefPaths.map(refPath => {
         const fname = refPath.replace(/\\/g, '/').split('/').pop() || ''
         if (!fname) return Promise.resolve(null)
-        const url = `/api/v1/uploads/${fname}`
-        return fetch(url)
+        return api.fetchStoredAsset(refPath)
           .then(r => r.ok ? r.blob() : null)
           .then(blob => blob ? new File([blob], fname, { type: blob.type || 'image/png' }) : null)
           .catch(() => null)
@@ -6561,7 +6568,7 @@ export const useStore = create<AppState>((set, get) => ({
       ? uploadFilenames.image_end
       : null) || _deriveBase(p.image_end)
     if (hadStartImage && startFile) {
-      fetch(api.getUploadUrl(startFile))
+      api.fetchStoredAsset(typeof p.image_start === 'string' ? p.image_start : startFile)
         .then(r => r.ok ? r.blob() : null)
         .then(blob => {
           if (!blob) return
@@ -6571,7 +6578,7 @@ export const useStore = create<AppState>((set, get) => ({
         .catch(() => {})
     }
     if (hadEndImage && endFile) {
-      fetch(api.getUploadUrl(endFile))
+      api.fetchStoredAsset(typeof p.image_end === 'string' ? p.image_end : endFile)
         .then(r => r.ok ? r.blob() : null)
         .then(blob => {
           if (!blob) return
@@ -6602,28 +6609,26 @@ export const useStore = create<AppState>((set, get) => ({
       const editVideoPath = (p.edit_video_path as string) || (p.retake_video as string) || ''
       if (editVideoPath) {
         const fname = editVideoPath.replace(/\\/g, '/').split('/').pop() || ''
-        const url = `/api/v1/uploads/${fname}`
-        // Probe metadata via a hidden <video> first so duration/resolution
-        // are correct, then fetch the blob to populate editVideoFile.
         if (fname) {
-          const video = document.createElement('video')
-          video.src = url
-          video.muted = true
-          video.onloadedmetadata = () => {
-            const duration = video.duration && isFinite(video.duration) ? video.duration : 0
-            const resolution = `${video.videoWidth}x${video.videoHeight}`
-            fetch(url)
-              .then(r => r.ok ? r.blob() : null)
-              .then(blob => {
-                if (!blob) return
-                const file = new File([blob], fname, { type: blob.type || 'video/mp4' })
+          // Fetch first so basename-only legacy sidecars can fall back between
+          // outputs and uploads before probing browser video metadata.
+          api.fetchStoredAsset(editVideoPath)
+            .then(r => r.ok ? r.blob() : null)
+            .then(blob => {
+              if (!blob) return
+              const file = new File([blob], fname, { type: blob.type || 'video/mp4' })
+              const url = URL.createObjectURL(file)
+              const video = document.createElement('video')
+              video.src = url
+              video.muted = true
+              video.onloadedmetadata = () => {
+                const duration = video.duration && isFinite(video.duration) ? video.duration : 0
+                const resolution = `${video.videoWidth}x${video.videoHeight}`
                 get().setEditVideo(file, editVideoPath, url, duration, resolution)
-              })
-              .catch(() => {})
-          }
-          // If metadata never loads (file moved/deleted), still set the path
-          // so the user can re-attach manually.
-          set({ editVideoPath, editVideoUrl: url })
+              }
+              set({ editVideoPath, editVideoUrl: url })
+            })
+            .catch(() => {})
         }
       }
 
