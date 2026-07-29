@@ -458,6 +458,64 @@ export function textElement(
   }
 }
 
+/** Build display lettering with a box sized for its final large font.
+ *
+ * Generated SFX used to inherit a normal 17–19px text box and then change
+ * only ``fontSize`` to 30/34px, so the canvas clipped the glyphs. Keeping the
+ * geometry here also prevents regenerated effects from sharing one position.
+ */
+export function soundEffectElement(
+  panel: ComicPanelElement,
+  content: string,
+  order: number,
+): ComicTextElement {
+  const compact = panel.width < 280 || panel.height < 260
+  const fontSize = compact ? 27 : 34
+  const padding = compact ? 5 : 7
+  const width = Math.min(
+    panel.width - 16,
+    Math.max(
+      panel.width * 0.44,
+      Math.min(panel.width * 0.84, content.length * fontSize * 0.64 + padding * 2),
+    ),
+  )
+  const charactersPerLine = Math.max(
+    5,
+    Math.floor((width - padding * 2) / (fontSize * 0.62)),
+  )
+  const lineCount = Math.max(1, Math.ceil(content.length / charactersPerLine))
+  const height = Math.min(
+    panel.height * 0.36,
+    Math.max(fontSize * 1.45, lineCount * fontSize * 1.15 + padding * 2),
+  )
+  const preferredY = panel.height * 0.42 + order * (height + 7)
+  return {
+    id: comicId('text'),
+    type: 'text',
+    parentId: panel.id,
+    x: Math.max(8, (panel.width - width) / 2),
+    y: Math.max(8, Math.min(panel.height - height - 8, preferredY)),
+    width,
+    height,
+    rotation: order % 2 === 0 ? -2 : 2,
+    zIndex: 24 + order,
+    visible: true,
+    content,
+    fontSize,
+    fontFamily: '"Comic Sans MS", "Trebuchet MS", sans-serif',
+    color: '#facc15',
+    bold: true,
+    italic: false,
+    align: 'center',
+    bubble: 'none',
+    bubbleBackground: '#ffffff',
+    bubbleStrokeColor: '#111111',
+    bubbleStrokeWidth: 0,
+    bubblePadding: padding,
+    autoFit: true,
+  }
+}
+
 export function projectFromPlan(
   plan: ComicPlan,
   base?: ComicProject,
@@ -482,16 +540,7 @@ export function projectFromPlan(
       if (!panel || storyboard) return
       planned.captions.forEach((caption, i) => elements.push(textElement(panel, caption, 'caption', i)))
       planned.dialogue.forEach((dialogue, i) => elements.push(textElement(panel, dialogue.text, dialogue.bubbleType, i)))
-      planned.soundEffects.forEach((sfx, i) => {
-        const el = textElement(panel, sfx, 'none', i)
-        el.fontSize = 34
-        el.bold = true
-        el.color = '#facc15'
-        el.bubbleStrokeWidth = 0
-        el.x = panel.width * 0.2
-        el.y = panel.height * 0.45 + i * 50
-        elements.push(el)
-      })
+      planned.soundEffects.forEach((sfx, i) => elements.push(soundEffectElement(panel, sfx, i)))
     })
     return { ...page, elements }
   })
@@ -547,14 +596,7 @@ export function simplifyDirectorText(project: ComicProject): ComicProject {
         elements.push(textElement(panel, dialogue.text, dialogue.bubbleType, index))
       })
       planned.soundEffects.forEach((soundEffect, index) => {
-        const element = textElement(panel, soundEffect, 'none', index)
-        element.fontSize = 30
-        element.bold = true
-        element.color = '#facc15'
-        element.bubbleStrokeWidth = 0
-        element.x = panel.width * 0.2
-        element.y = panel.height * 0.45
-        elements.push(element)
+        elements.push(soundEffectElement(panel, soundEffect, index))
       })
       if (!existingPage && project.director!.completedPanelIds.includes(planned.id)) {
         const asset = unusedGeneratedAssets[unusedAssetIndex++]

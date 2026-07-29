@@ -3,6 +3,7 @@ import {
   Check, Eye, Film, ImagePlus, Loader2, Play, Plus, ShieldCheck, Sparkles, Trash2, Upload,
 } from 'lucide-react'
 import * as api from '../../api/client'
+import { DirectorLoraSelector } from '../../components/SettingsDrawer/DirectorLoraSelector'
 import { useStore } from '../../stores/useStore'
 import type { PlannedClip } from '../../types'
 import { forEachComicPanelCapture } from './export'
@@ -444,6 +445,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const videoModels = useStore(state => state.models)
   const enabledModels = useStore(state => state.enabledModels)
   const selectDirectorVideoModel = useStore(state => state.selectDirectorVideoModel)
+  const savedVideoLoras = useStore(state => state.savedLoraPerMode.video)
   const movieSelfRefiner = useStore(state => state.directorVideoSelfRefiner)
   const setMovieSelfRefiner = useStore(state => state.setDirectorVideoSelfRefiner)
   const storyboard = project.director?.input.productionMode === 'storyboard'
@@ -1125,6 +1127,23 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           FP8 remains experimental here: the local comparison took longer and introduced visible anatomy/clothing deformation. INT8 is the quality recommendation.
         </div>
       )}
+      <details className="rounded border border-border bg-bg-tertiary/30">
+        <summary className="cursor-pointer p-2 text-[10px] font-semibold text-text-primary">
+          Style preservation and video LoRAs · {savedVideoLoras?.activated_loras?.length || 0} active
+        </summary>
+        <div className="space-y-2 border-t border-border p-2">
+          <p className="text-[9px] text-text-muted">
+            Source-style preservation is always enabled for comic I2V: the clean panel is the exact first frame and the prompt protects its medium, palette, linework and character design. A LoRA is optional and is applied only when selected here.
+          </p>
+          <p className="text-[9px] text-amber-200">
+            The LTX transition LoRA teaches multi-shot transitions; it is not an anime style LoRA and is unnecessary for independent comic clips. Use a style LoRA only when it was trained for the selected video model.
+          </p>
+          <DirectorLoraSelector
+            mode="video"
+            modelType={selectedVideoModel || 'ltx2_22B_distilled_1_1'}
+          />
+        </div>
+      </details>
       <div className="grid grid-cols-2 gap-2">
         <label className="block text-[10px] text-text-muted">I2V end frame
           <select
