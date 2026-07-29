@@ -458,6 +458,14 @@ def test_generate_single_preflight_clip_clones_frozen_contract(
         assert source_plans[1]["_effective_video_prompt"] == "FROZEN SECOND"
         assert len(started_threads) == 1
         assert started_threads[0].kwargs == {"resume": True}
+
+        duplicate_ok, duplicate_message, duplicate_pid = (
+            director_pipeline.start_preview_generation(source_pid, 1)
+        )
+        assert duplicate_ok
+        assert duplicate_message == "already_running"
+        assert duplicate_pid == child_pid
+        assert len(started_threads) == 1
     finally:
         director_pipeline._pipelines.pop(source_pid, None)
         if child_pid:

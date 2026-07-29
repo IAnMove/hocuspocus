@@ -146,3 +146,35 @@ def test_preview_checkpoint_recovers_without_starting_video(tmp_path):
         )
     finally:
         director_pipeline._pipelines.pop(pipeline_id, None)
+
+
+def test_pipeline_history_is_scoped_to_selected_workspace(tmp_path):
+    default_state = tmp_path / "_director_pipeline_default01.json"
+    default_state.write_text(
+        json.dumps({
+            "pipeline_id": "default01",
+            "status": "completed",
+            "pipeline_type": "comic_movie",
+            "clips": [],
+        }),
+        encoding="utf-8",
+    )
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "_director_pipeline_other001.json").write_text(
+        json.dumps({
+            "pipeline_id": "other001",
+            "status": "preview_ready",
+            "pipeline_type": "comic_movie",
+            "comic_id": "comic-other",
+            "clips": [],
+        }),
+        encoding="utf-8",
+    )
+
+    assert [item["id"] for item in director_pipeline.list_pipeline_states(
+        str(tmp_path), "default",
+    )] == ["default01"]
+    other_items = director_pipeline.list_pipeline_states(str(tmp_path), "other")
+    assert [item["id"] for item in other_items] == ["other001"]
+    assert other_items[0]["comic_id"] == "comic-other"

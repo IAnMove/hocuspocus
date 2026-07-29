@@ -6348,8 +6348,18 @@ async def director_pipeline_start(request: Request):
 @api.get("/api/v1/director/pipeline/{pid}")
 def director_pipeline_status(pid: str):
     """Get current pipeline status with rich progress info."""
-    from services.director_pipeline import get_pipeline
+    from services.director_pipeline import get_pipeline, load_pipeline_state, resume_pipeline
     p = get_pipeline(pid)
+    if not p:
+        # A comic PRE is a durable terminal checkpoint rather than a running
+        # job. Transparently rehydrate it after a backend restart so the Comic
+        # Studio can reopen its inspector by ID.
+        base = wgp.server_config.get("save_path", "outputs")
+        saved = load_pipeline_state(base, pid)
+        if saved and saved.get("status") == "preview_ready":
+            ok, _message = resume_pipeline(pid, base)
+            if ok:
+                p = get_pipeline(pid)
     if not p:
         raise HTTPException(status_code=404, detail="Pipeline not found")
     # Don't leak full params back to client
@@ -6381,7 +6391,8 @@ async def director_pipeline_generate_preview(pid: str, request: Request):
         else {}
     )
     clip_index = body.get("clip_index")
-    ok, message, child_pid = start_preview_generation(pid, clip_index)
+    base = wgp.server_config.get("save_path", "outputs")
+    ok, message, child_pid = start_preview_generation(pid, clip_index, base)
     if not ok or not child_pid:
         raise HTTPException(status_code=400, detail=message)
     return {
@@ -6389,6 +6400,7 @@ async def director_pipeline_generate_preview(pid: str, request: Request):
         "pipeline_id": child_pid,
         "source_preview_pipeline_id": pid,
         "clip_index": clip_index,
+        "reused": message == "already_running",
     }
 
 
@@ -6424,7 +6436,7 @@ def list_saved_pipelines():
     """List saved pipeline states for the active workspace."""
     from services.director_pipeline import list_pipeline_states
     base = wgp.server_config.get("save_path", "outputs")
-    pipelines = list_pipeline_states(base)
+    pipelines = list_pipeline_states(base, _get_active_workspace())
     return {"pipelines": pipelines}
 
 
@@ -13371,20 +13383,23 @@ _comic_plan_jobs: dict[str, dict] = {}
 _comic_plan_jobs_lock = threading.Lock()
 
 
-def _comic_plan_checkpoint_dir() -> str:
-    path = os.path.join(_workspace_dir(), ".comic-plan-checkpoints")
+def _comic_plan_checkpoint_dir(workspace: str | None = None) -> str:
+    path = os.path.join(_workspace_dir(workspace), ".comic-plan-checkpoints")
     os.makedirs(path, exist_ok=True)
     return path
 
 
-def _comic_plan_checkpoint_path(job_id: str) -> str | None:
+def _comic_plan_checkpoint_path(job_id: str, workspace: str | None = None) -> str | None:
     if not re.fullmatch(r"comic-plan-job-[a-f0-9]{12}", job_id or ""):
         return None
-    return os.path.join(_comic_plan_checkpoint_dir(), f"{job_id}.json")
+    return os.path.join(_comic_plan_checkpoint_dir(workspace), f"{job_id}.json")
 
 
 def _persist_comic_plan_job(job: dict) -> None:
-    path = _comic_plan_checkpoint_path(str(job.get("jobId") or ""))
+    path = _comic_plan_checkpoint_path(
+        str(job.get("jobId") or ""),
+        str(job.get("workspace") or "default"),
+    )
     if not path:
         return
     temp_path = path + ".tmp"
@@ -13401,8 +13416,8 @@ def _persist_comic_plan_job(job: dict) -> None:
             pass
 
 
-def _load_comic_plan_job(job_id: str) -> dict | None:
-    path = _comic_plan_checkpoint_path(job_id)
+def _load_comic_plan_job(job_id: str, workspace: str | None = None) -> dict | None:
+    path = _comic_plan_checkpoint_path(job_id, workspace)
     if not path or not os.path.isfile(path):
         return None
     try:
@@ -13493,6 +13508,9 @@ def start_director_comic_plan(body: dict):
         raise HTTPException(status_code=400, detail="Comic premise is required")
     job_id = f"comic-plan-job-{uuid.uuid4().hex[:12]}"
     now = time.time()
+    workspace = str(body.get("workspace") or _get_active_workspace())
+    request_body = dict(body)
+    request_body["workspace"] = workspace
     with _comic_plan_jobs_lock:
         # Bound this process-local status cache. Completed results live in
         # the browser project after delivery, so old job records are expendable.
@@ -13509,13 +13527,14 @@ def start_director_comic_plan(body: dict):
             "message": "Comic Director accepted the request.",
             "createdAt": now,
             "updatedAt": now,
-            "request": dict(body),
+            "workspace": workspace,
+            "request": request_body,
         }
         initial_job = copy.deepcopy(_comic_plan_jobs[job_id])
     _persist_comic_plan_job(initial_job)
     threading.Thread(
         target=_run_comic_plan_job,
-        args=(job_id, dict(body)),
+        args=(job_id, request_body),
         name=f"comic-plan-{job_id[-6:]}",
         daemon=True,
     ).start()
@@ -13527,7 +13546,7 @@ def get_director_comic_plan_status(job_id: str):
     with _comic_plan_jobs_lock:
         job = _comic_plan_jobs.get(job_id)
     if job is None:
-        job = _load_comic_plan_job(job_id)
+        job = _load_comic_plan_job(job_id, _get_active_workspace())
         if job is not None:
             with _comic_plan_jobs_lock:
                 _comic_plan_jobs[job_id] = job
@@ -13564,19 +13583,21 @@ def resume_director_comic_plan(job_id: str):
 @api.get("/api/v1/director/comic/plan/recent/completed")
 def get_latest_completed_director_comic_plan():
     """Recover the newest completed plan after a browser-side placement error."""
+    workspace = _get_active_workspace()
     with _comic_plan_jobs_lock:
         completed = [
             dict(job)
             for job in _comic_plan_jobs.values()
             if job.get("status") == "completed"
+            and str(job.get("workspace") or "default") == workspace
             and isinstance(job.get("result"), dict)
             and isinstance(job["result"].get("plan"), dict)
         ]
     try:
-        for name in os.listdir(_comic_plan_checkpoint_dir()):
+        for name in os.listdir(_comic_plan_checkpoint_dir(workspace)):
             if not name.endswith(".json"):
                 continue
-            job = _load_comic_plan_job(name[:-5])
+            job = _load_comic_plan_job(name[:-5], workspace)
             if (
                 isinstance(job, dict)
                 and job.get("status") == "completed"

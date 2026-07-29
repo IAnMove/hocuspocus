@@ -439,6 +439,7 @@ export function ComicQualityPanel({ notify }: { notify: (kind: 'ok' | 'error', t
 export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', text: string) => void }) {
   const project = useComicStore(state => state.project)
   const refreshOutputs = useStore(state => state.refreshOutputs)
+  const activeWorkspace = useStore(state => state.activeWorkspace)
   const selectedVideoModel = useStore(state => state.selectedModelPerMode.video)
   const videoModels = useStore(state => state.models)
   const enabledModels = useStore(state => state.enabledModels)
@@ -464,6 +465,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const [preflightPipelineId, setPreflightPipelineId] = useState<string | null>(null)
   const [preflightStatus, setPreflightStatus] = useState<api.PipelineStatus | null>(null)
   const [preflightGenerating, setPreflightGenerating] = useState<number | 'all' | null>(null)
+  const preflightStorageKey = `maestro-comic-preflight:${activeWorkspace}:${project.id}`
   useEffect(() => {
     setAspect(project.director?.input.storyboardAspect || 'landscape')
     // 480p is useful for disposable previews, but it is visibly soft after
@@ -479,6 +481,48 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     project.director?.input.storyboardAspect,
     project.director?.input.storyboardQuality,
   ])
+  useEffect(() => {
+    let cancelled = false
+
+    const recover = async () => {
+      const remembered = window.localStorage.getItem(preflightStorageKey)
+      const candidates: string[] = remembered ? [remembered] : []
+      try {
+        const { pipelines } = await api.fetchPipelineList()
+        pipelines
+          .filter(item =>
+            item.pipeline_type === 'comic_movie'
+            && item.status === 'preview_ready'
+            && item.comic_id === project.id,
+          )
+          .forEach(item => {
+            if (!candidates.includes(item.id)) candidates.push(item.id)
+          })
+      } catch {
+        // A remembered checkpoint can still be recovered directly while the
+        // dashboard list is temporarily unavailable.
+      }
+      for (const pipelineId of candidates) {
+        try {
+          const status = await api.fetchPipelineStatus(pipelineId)
+          if (cancelled || status.status !== 'preview_ready') continue
+          setPreflightPipelineId(pipelineId)
+          setPreflightStatus(status)
+          window.localStorage.setItem(preflightStorageKey, pipelineId)
+          return
+        } catch {
+          // Try the next durable checkpoint.
+        }
+      }
+      if (!cancelled) {
+        setPreflightPipelineId(null)
+        setPreflightStatus(null)
+        if (remembered) window.localStorage.removeItem(preflightStorageKey)
+      }
+    }
+    void recover()
+    return () => { cancelled = true }
+  }, [activeWorkspace, preflightStorageKey, project.id])
   const panelCount = project.pages.reduce(
     (total, page) => total + page.elements.filter(element => element.type === 'panel' && !element.parentId).length,
     0,
@@ -757,6 +801,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       setProgress('Submitting comic movie to Director…')
       const { pipeline_id } = await api.startPipeline({
         pipeline_type: 'comic_movie',
+        comic_id: project.id,
         auto_mode: true,
         comic_preflight_only: preflightOnly,
         workspace: state.activeWorkspace,
@@ -834,6 +879,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           setPreflightStatus(status)
           setProgress(status.progress?.message || 'Preparing comic video PRE…')
           if (status.status === 'preview_ready') {
+            window.localStorage.setItem(preflightStorageKey, pipeline_id)
             notify(
               'ok',
               `PRE ready for ${status.preview_clips?.length || 0} clips. No video was generated.`,
@@ -896,8 +942,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     ) return
     const marker = Number.isInteger(clipIndex) ? Number(clipIndex) : 'all'
     setPreflightGenerating(marker)
+    let generationStarted = false
     try {
       const started = await api.generatePipelinePreview(preflightPipelineId, clipIndex)
+      generationStarted = true
       const previewClips = preflightStatus.preview_clips || []
       const selectedClips = Number.isInteger(clipIndex)
         ? previewClips.filter(clip => clip.index === clipIndex)
@@ -954,14 +1002,33 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       window.dispatchEvent(new Event('maestro:director-open'))
       notify(
         'ok',
-        Number.isInteger(clipIndex)
+        started.reused
+          ? 'This approved PRE generation was already running; Maestro reconnected to it instead of submitting a duplicate.'
+          : Number.isInteger(clipIndex)
           ? `Generating only PRE clip ${Number(clipIndex) + 1} with its frozen image, prompt and settings.`
           : `Generating all ${selectedClips.length} approved PRE clips.`,
       )
+      void (async () => {
+        try {
+          for (;;) {
+            await new Promise(resolve => window.setTimeout(resolve, 1500))
+            const status = await api.fetchPipelineStatus(started.pipeline_id)
+            if (
+              status.status === 'completed'
+              || status.status === 'failed'
+              || status.status === 'cancelled'
+            ) break
+          }
+        } catch {
+          // Global Director polling still owns the authoritative error state.
+        } finally {
+          setPreflightGenerating(current => current === marker ? null : current)
+        }
+      })()
     } catch (error) {
       notify('error', (error as Error).message)
     } finally {
-      setPreflightGenerating(null)
+      if (!generationStarted) setPreflightGenerating(null)
     }
   }
 

@@ -669,7 +669,7 @@ export async function continuePipeline(pid: string, updates?: { clip_plans?: Arr
 export async function generatePipelinePreview(
   pid: string,
   clipIndex?: number,
-): Promise<{ pipeline_id: string; source_preview_pipeline_id: string; clip_index?: number }> {
+): Promise<{ pipeline_id: string; source_preview_pipeline_id: string; clip_index?: number; reused?: boolean }> {
   const res = await fetch(
     `${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}/generate-preview`,
     {
@@ -1451,7 +1451,7 @@ export type ComicPlanProgress = {
 }
 
 export async function planComic(
-  params: import('../features/comics/types').ComicDirectorRequest,
+  params: import('../features/comics/types').ComicDirectorRequest & { workspace?: string },
   onProgress?: (progress: ComicPlanProgress) => void,
   signal?: AbortSignal,
 ): Promise<{ plan: import('../features/comics/types').ComicPlan }> {

@@ -1503,7 +1503,10 @@ export function ComicDirectorPanel({
       steps: ['Submitting the planning job to Maestro…'],
     })
     try {
-      const { plan } = await api.planComic(request, status => {
+      const { plan } = await api.planComic({
+        ...request,
+        workspace: useStore.getState().activeWorkspace,
+      }, status => {
         if (status.jobId) setRecoveryJobId(status.jobId)
         report(status.message, {
           current: status.current,

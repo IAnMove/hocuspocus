@@ -109,6 +109,11 @@ wetext==0.1.2
 # from these very common Gemma / Qwen JSON output bugs.
 json_repair==0.59.5
 
+# Regression suite. Keeping pytest in the managed environment ensures the
+# image-to-video preparation and checkpoint tests actually run after install
+# instead of being silently skipped by unittest discovery.
+pytest==8.3.5
+
 # Optional / commented out
 # transformers==4.46.3  # for llamallava pre-patch
 # rembg==2.0.65         # non-GPU fallback

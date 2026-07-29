@@ -979,6 +979,9 @@ export interface SavedPipelineState {
   completed_at: number | null
   status: string
   pipeline_type: string
+  comic_id?: string | null
+  workspace?: string
+  preview_clips?: Array<Record<string, unknown>>
   scene_description: string
   reference_image_path: string | null
   auto_mode: boolean
@@ -995,6 +998,7 @@ export interface PipelineListItem {
   id: string
   status: string
   pipeline_type: string
+  comic_id?: string | null
   created_at: number
   clip_count: number
   output_count: number

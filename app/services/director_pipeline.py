@@ -91,6 +91,7 @@ def _save_pipeline_state(pid: str):
         "completed_at": p.get("_completed_at"),
         "status": p.get("status", "unknown"),
         "pipeline_type": params.get("pipeline_type", "music_video"),
+        "comic_id": params.get("comic_id"),
         "scene_description": params.get("scene_description", ""),
         "reference_image_path": params.get("reference_image_path"),
         "character_ref_paths": params.get("character_ref_paths", []),
@@ -107,6 +108,7 @@ def _save_pipeline_state(pid: str):
         "llm_log": p.get("_llm_log"),
         "clips": clips,
         "output_files": p.get("output_files", []),
+        "workspace": p.get("workspace") or "default",
         "total_time_sec": (time.time() - p["created_at"]) if p.get("created_at") else None,
         # Full original request params, verbatim (it's the JSON dict the
         # endpoint received, so it's serializable). This is what makes a
@@ -250,17 +252,22 @@ def _reconcile_pipeline_state_file(filepath: str, data: dict) -> dict:
     return data
 
 
-def list_pipeline_states(out_dir: str) -> list[dict]:
-    """Scan directory for saved pipeline state files. Returns summary list."""
+def list_pipeline_states(out_dir: str, workspace: Optional[str] = None) -> list[dict]:
+    """Scan saved pipeline state files for one workspace.
+
+    Older code always descended into every workspace, despite the API claiming
+    to return the active workspace. Besides leaking unrelated history into the
+    dashboard, that made comic PRE auto-recovery select another project's run.
+    """
     results = []
     if not os.path.isdir(out_dir):
         return results
-    # Scan top-level and workspace subdirectories
-    dirs_to_scan = [out_dir]
-    for name in os.listdir(out_dir):
-        sub = os.path.join(out_dir, name)
-        if os.path.isdir(sub):
-            dirs_to_scan.append(sub)
+    normalized_workspace = workspace or "default"
+    if normalized_workspace == "default":
+        dirs_to_scan = [out_dir]
+    else:
+        workspace_dir = os.path.join(out_dir, normalized_workspace)
+        dirs_to_scan = [workspace_dir] if os.path.isdir(workspace_dir) else []
 
     for scan_dir in dirs_to_scan:
         for fname in os.listdir(scan_dir):
@@ -290,6 +297,7 @@ def list_pipeline_states(out_dir: str) -> list[dict]:
                         "clip_count": len(data.get("clips", [])),
                         "output_count": len(data.get("output_files", [])),
                         "scene_description": (data.get("scene_description", "") or "")[:100],
+                        "comic_id": data.get("comic_id"),
                         "workspace": os.path.basename(scan_dir) if scan_dir != out_dir else "default",
                         "_filepath": filepath,
                     })
@@ -806,6 +814,7 @@ def continue_pipeline(pid: str, updates: Optional[dict] = None):
 def start_preview_generation(
     pid: str,
     clip_index: Optional[int] = None,
+    out_dir: Optional[str] = None,
 ) -> tuple[bool, str, Optional[str]]:
     """Generate all or one clip from a completed comic PRE checkpoint.
 
@@ -814,6 +823,17 @@ def start_preview_generation(
     that were shown to the user, then resumes immediately at video generation.
     """
     import copy
+
+    with _pipeline_lock:
+        source = _pipelines.get(pid)
+
+    # PRE checkpoints are deliberately durable. Rehydrate a preview_ready
+    # checkpoint after a backend restart instead of requiring the user to
+    # press the generic Resume action first.
+    if not source and out_dir:
+        recovered, message = resume_pipeline(pid, out_dir)
+        if not recovered:
+            return False, message, None
 
     with _pipeline_lock:
         source = _pipelines.get(pid)
@@ -840,6 +860,18 @@ def start_preview_generation(
             return False, "The selected PRE clip does not exist.", None
         selected = [normalized_index]
 
+    # Treat launching a frozen PRE as an idempotent operation. Fast double
+    # clicks and remounted UI panels must reconnect to the active child rather
+    # than submit another expensive GPU job with identical inputs.
+    with _pipeline_lock:
+        for candidate in _pipelines.values():
+            if (
+                candidate.get("_source_preview_pipeline_id") == pid
+                and candidate.get("_source_preview_clip_indices") == selected
+                and candidate.get("status") in ("running", "queued", "planning")
+            ):
+                return True, "already_running", candidate.get("id")
+
     params = copy.deepcopy(source.get("params") or {})
     params["comic_preflight_only"] = False
     params["auto_mode"] = True
@@ -863,6 +895,8 @@ def start_preview_generation(
     # A single-clip child no longer has the following panel in its local
     # sequence, so carry the PRE's already-resolved end-frame explicitly.
     params["_comic_prepared_end_images"] = selected_end_images
+    params["_source_preview_pipeline_id"] = pid
+    params["_source_preview_clip_indices"] = selected
 
     child_pid = uuid.uuid4().hex[:8]
     child_plans = [copy.deepcopy(clip_plans[index]) for index in selected]
@@ -916,6 +950,7 @@ def start_preview_generation(
     with _pipeline_lock:
         _pipelines[child_pid] = child
 
+    _save_pipeline_state(child_pid)
     thread = threading.Thread(
         target=_run_pipeline,
         args=(child_pid,),

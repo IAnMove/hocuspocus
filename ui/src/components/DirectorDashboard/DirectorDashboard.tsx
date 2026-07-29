@@ -494,6 +494,8 @@ function DirectorDashboardInner() {
   const rerunClipVideo = useStore(s => s.rerunClipVideo)
   const rejoinClips = useStore(s => s.rejoinPipelineClips)
   const resumePipeline = useStore(s => s.resumePipeline)
+  const setMediaFilter = useStore(s => s.setMediaFilter)
+  const activeWorkspace = useStore(s => s.activeWorkspace)
   const [resuming, setResuming] = useState(false)
 
   // Auto-load first pipeline when list loads
@@ -586,6 +588,23 @@ function DirectorDashboardInner() {
               >
                 <Play size={10} />
                 {resuming ? 'Resuming…' : 'Resume'}
+              </button>
+            )}
+            {selectedPipeline.status === 'preview_ready' && selectedPipeline.comic_id && (
+              <button
+                onClick={() => {
+                  window.localStorage.setItem(
+                    `maestro-comic-preflight:${activeWorkspace}:${selectedPipeline.comic_id}`,
+                    selectedPipeline.pipeline_id,
+                  )
+                  setMediaFilter('comics')
+                  setOpen(false)
+                }}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] bg-red-500/10 border border-red-500/30 rounded text-red-300 hover:bg-red-500/20 transition-colors"
+                title="Open this durable PRE in Comic Studio. Load its matching comic first if another comic is currently open."
+              >
+                <Film size={10} />
+                Open comic PRE
               </button>
             )}
             {hasMissing && (
