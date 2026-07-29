@@ -62,6 +62,8 @@ def _save_pipeline_state(pid: str):
             "keyframe_prompts": plan.get("keyframe_prompts", []) or [],
             "window_prompts": plan.get("window_prompts", []) or [],
             "window_count": plan.get("window_count", 1),
+            "effective_video_prompt": plan.get("_effective_video_prompt"),
+            "effective_video_frames": plan.get("_effective_video_frames"),
             "image_prompt_pre_polish": pre_polish[i].get("image_prompt", "") if i < len(pre_polish) else None,
             "video_prompt_pre_polish": pre_polish[i].get("video_prompt", "") if i < len(pre_polish) else None,
             # Per-window and per-keyframe pre-polish snapshots so the
@@ -101,6 +103,7 @@ def _save_pipeline_state(pid: str):
         "video_loras": params.get("video_loras", {}),
         "image_params": params.get("image_params", {}),
         "video_params": params.get("video_params", {}),
+        "preview_clips": p.get("preview_clips", []),
         "llm_log": p.get("_llm_log"),
         "clips": clips,
         "output_files": p.get("output_files", []),
@@ -800,6 +803,129 @@ def continue_pipeline(pid: str, updates: Optional[dict] = None):
     return True
 
 
+def start_preview_generation(
+    pid: str,
+    clip_index: Optional[int] = None,
+) -> tuple[bool, str, Optional[str]]:
+    """Generate all or one clip from a completed comic PRE checkpoint.
+
+    The PRE pipeline remains immutable and reusable.  A child pipeline gets
+    the exact polished prompts, prepared I2V images and effective frame counts
+    that were shown to the user, then resumes immediately at video generation.
+    """
+    import copy
+
+    with _pipeline_lock:
+        source = _pipelines.get(pid)
+        if not source:
+            return False, "PRE pipeline not found.", None
+        if source.get("status") != "preview_ready":
+            return False, "The comic PRE is not ready yet.", None
+        source = copy.deepcopy(source)
+
+    clip_plans = source.get("clip_plans") or []
+    clip_images = source.get("clip_images") or []
+    planned_clips = source.get("_planned_clips") or []
+    if not clip_plans or len(clip_images) != len(clip_plans):
+        return False, "The comic PRE has incomplete clip data.", None
+
+    if clip_index is None:
+        selected = list(range(len(clip_plans)))
+    else:
+        try:
+            normalized_index = int(clip_index)
+        except (TypeError, ValueError):
+            return False, "clip_index must be an integer.", None
+        if normalized_index < 0 or normalized_index >= len(clip_plans):
+            return False, "The selected PRE clip does not exist.", None
+        selected = [normalized_index]
+
+    params = copy.deepcopy(source.get("params") or {})
+    params["comic_preflight_only"] = False
+    params["auto_mode"] = True
+    params["comic_shots"] = [
+        (params.get("comic_shots") or [])[index]
+        for index in selected
+        if index < len(params.get("comic_shots") or [])
+    ]
+    provided_paths = params.get("provided_clip_image_paths") or []
+    params["provided_clip_image_paths"] = [
+        provided_paths[index]
+        for index in selected
+        if index < len(provided_paths)
+    ]
+
+    prepared_end_images = source.get("_clip_end_images") or []
+    selected_end_images = [
+        prepared_end_images[index] if index < len(prepared_end_images) else ""
+        for index in selected
+    ]
+    # A single-clip child no longer has the following panel in its local
+    # sequence, so carry the PRE's already-resolved end-frame explicitly.
+    params["_comic_prepared_end_images"] = selected_end_images
+
+    child_pid = uuid.uuid4().hex[:8]
+    child_plans = [copy.deepcopy(clip_plans[index]) for index in selected]
+    child_images = [clip_images[index] for index in selected]
+    child_planned = [
+        copy.deepcopy(planned_clips[index])
+        if index < len(planned_clips)
+        else {}
+        for index in selected
+    ]
+    child_keyframes_source = source.get("_clip_keyframes") or []
+    child_keyframes = [
+        copy.deepcopy(child_keyframes_source[index])
+        if index < len(child_keyframes_source)
+        else []
+        for index in selected
+    ]
+    child = {
+        "id": child_pid,
+        "status": "running",
+        "phase": "resuming",
+        "auto_mode": True,
+        "progress": {
+            "current": 0,
+            "total": len(selected),
+            "message": (
+                f"Starting PRE clip {selected[0] + 1}…"
+                if len(selected) == 1
+                else f"Starting {len(selected)} PRE clips…"
+            ),
+            "step": 0,
+            "total_steps": 0,
+        },
+        "clip_plans": child_plans,
+        "_planned_clips": child_planned,
+        "clip_images": child_images,
+        "_clip_end_images": selected_end_images,
+        "_clip_keyframes": child_keyframes,
+        "_clip_video_files": [None] * len(selected),
+        "output_files": [],
+        "error": None,
+        "created_at": time.time(),
+        "params": params,
+        "pause_reason": None,
+        "workspace": source.get("workspace"),
+        "out_dir": source.get("out_dir"),
+        "llm_streaming": False,
+        "_source_preview_pipeline_id": pid,
+        "_source_preview_clip_indices": selected,
+    }
+    with _pipeline_lock:
+        _pipelines[child_pid] = child
+
+    thread = threading.Thread(
+        target=_run_pipeline,
+        args=(child_pid,),
+        kwargs={"resume": True},
+        daemon=False,
+    )
+    thread.start()
+    return True, "started", child_pid
+
+
 def _find_pipeline_state_file(pid: str, out_dir: str) -> Optional[str]:
     """Locate a saved pipeline JSON by id under out_dir or a workspace subdir."""
     fname = f"{_PIPELINE_FILE_PREFIX}{pid}.json"
@@ -858,8 +984,15 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         "keyframe_prompts": c.get("keyframe_prompts", []) or [],
         "window_prompts": c.get("window_prompts", []) or [],
         "window_count": c.get("window_count", 1),
+        "_effective_video_prompt": c.get("effective_video_prompt"),
+        "_effective_video_frames": c.get("effective_video_frames"),
     } for c in saved_clips]
-    planned_clips = [c.get("planned_clip") for c in saved_clips]
+    planned_clips = []
+    for clip in saved_clips:
+        planned = clip.get("planned_clip") or {}
+        if clip.get("effective_video_frames"):
+            planned["_effective_video_frames"] = clip["effective_video_frames"]
+        planned_clips.append(planned)
     clip_images = [c.get("start_image_filename") for c in saved_clips]
     clip_end_images = [c.get("end_image_filename") for c in saved_clips]
     clip_keyframes = [c.get("keyframe_filenames", []) or [] for c in saved_clips]
@@ -880,6 +1013,7 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         "_clip_end_images": clip_end_images,
         "_clip_keyframes": clip_keyframes,
         "_clip_video_files": clip_video_files,
+        "preview_clips": data.get("preview_clips", []) or [],
         "output_files": data.get("output_files", []) or [],
         "_llm_log": data.get("llm_log"),
         "error": None,
@@ -892,6 +1026,21 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
     }
     with _pipeline_lock:
         _pipelines[pid] = pipeline
+
+    if data.get("status") == "preview_ready" and data.get("preview_clips"):
+        _update_pipeline(
+            pid,
+            status="preview_ready",
+            phase="preview_ready",
+            progress={
+                "current": len(data["preview_clips"]),
+                "total": len(data["preview_clips"]),
+                "message": "Recovered comic PRE — no video has been generated",
+                "step": 0,
+                "total_steps": 0,
+            },
+        )
+        return True, "recovered_preview"
 
     if data.get("status") == "completed" and data.get("output_files"):
         _update_pipeline(
@@ -1196,6 +1345,32 @@ def _run_pipeline(pid: str, resume: bool = False):
         _save_pipeline_state(pid)  # Save after image generation
 
         if _pipelines[pid]["status"] == "cancelled":
+            return
+
+        if params.get("comic_preflight_only"):
+            preview_clips, prepared_end_images = _build_comic_video_previews(
+                pid,
+                params,
+                clip_plans,
+                planned_clips,
+                clip_images,
+                out_dir=pipeline_out_dir,
+            )
+            _update_pipeline(
+                pid,
+                status="preview_ready",
+                phase="preview_ready",
+                preview_clips=preview_clips,
+                _clip_end_images=prepared_end_images,
+                progress={
+                    "current": len(preview_clips),
+                    "total": len(preview_clips),
+                    "message": "Comic PRE ready — no video has been generated",
+                    "step": 0,
+                    "total_steps": 0,
+                },
+            )
+            _save_pipeline_state(pid)
             return
 
         # In non-auto mode, pause for image review
@@ -1966,6 +2141,7 @@ def _prepare_provided_clip_images(
         )
     os.makedirs(out_dir, exist_ok=True)
     staged: list[str] = []
+    source_sizes: list[tuple[int, int]] = []
     protected_crops = 0
     for index, source in enumerate(image_paths):
         source = str(source or "")
@@ -1978,6 +2154,7 @@ def _prepare_provided_clip_images(
             with Image.open(source) as opened:
                 transposed = ImageOps.exif_transpose(opened)
                 source_size = transposed.size
+                source_sizes.append(source_size)
                 sample = transposed.convert("RGB")
                 sample.thumbnail((96, 96))
                 extrema = sample.getextrema()
@@ -2038,6 +2215,7 @@ def _prepare_provided_clip_images(
         f"[Pipeline {pid}] Prepared {len(staged)} supplied comic panel start "
         f"images at {resolution} (fit={fit_mode}, protected_crops={protected_crops})"
     )
+    _update_pipeline(pid, _clip_source_sizes=source_sizes)
     return staged
 
 def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_dir: str = None, workspace: str = None) -> tuple[list[str], list[list[str]]]:
@@ -2388,6 +2566,13 @@ def _comic_end_image_filenames(params: dict, clip_images: list[str]) -> list[str
     clip is assembled later with a hard cut; these images only constrain the
     final frame *inside* an individual I2V generation.
     """
+    prepared = params.get("_comic_prepared_end_images")
+    if isinstance(prepared, list):
+        return [
+            str(prepared[index] or "") if index < len(prepared) else ""
+            for index in range(len(clip_images))
+        ]
+
     raw_mode = params.get("comic_end_frame_mode")
     if raw_mode is None:
         # Backward compatibility for resumable pipelines made before the
@@ -2524,6 +2709,223 @@ def _comic_motion_prompt(
             "continuously toward that exact composition and identity without an internal cut."
         )
     return " ".join(part for part in (str(prompt or "").strip(), *additions) if part)
+
+
+def _build_comic_video_previews(
+    pid: str,
+    params: dict,
+    clip_plans: list[dict],
+    planned_clips: list[dict],
+    clip_images: list[str],
+    out_dir: str,
+) -> tuple[list[dict], list[str]]:
+    """Freeze the effective per-shot inputs shown by Comic PRE.
+
+    The effective prompt and frame count are written back into the plans that
+    video generation consumes.  This makes the PRE a contract rather than an
+    estimate: generating one clip later cannot silently re-plan or reinterpret
+    what the user approved.
+    """
+    video_model = str(params.get("video_model") or "ltx2_22B_distilled")
+    video_params = dict(params.get("video_params") or {})
+    resolution = _normalize_video_resolution(
+        video_model,
+        video_params.get("resolution", "1280x720"),
+    )
+    video_params["resolution"] = resolution
+    params["video_params"] = video_params
+
+    fps = int(params.get("fps") or 16)
+    try:
+        model_def = _wgp.get_model_def(video_model) or {}
+        fps = int(model_def.get("fps") or fps)
+    except Exception:
+        pass
+    try:
+        minimum_frames, _frame_step, latent_step = (
+            _wgp.get_model_min_frames_and_step(video_model)
+        )
+    except Exception:
+        minimum_frames, latent_step = 17, 8
+
+    def quantize_nearest(frame_count: float) -> int:
+        return max(
+            round((frame_count - 1) / latent_step) * latent_step + 1,
+            minimum_frames,
+        )
+
+    raw_frames: list[int] = []
+    for index, plan in enumerate(clip_plans):
+        planned = planned_clips[index] if index < len(planned_clips) else {}
+        duration = planned.get("duration_sec") or (
+            planned.get("end", 0) - planned.get("start", 0)
+        )
+        if not duration:
+            duration_frames = planned.get("duration_frames")
+            duration = (
+                float(duration_frames) / fps
+                if duration_frames
+                else 3.0
+            )
+        frame_count = max(round(float(duration) * fps), minimum_frames)
+        raw_frames.append(frame_count)
+
+    effective_frames: list[int] = []
+    carry = 0.0
+    for frame_count in raw_frames:
+        target = frame_count + carry
+        quantized = quantize_nearest(target)
+        carry = target - quantized
+        effective_frames.append(quantized)
+
+    end_images = _comic_end_image_filenames(params, clip_images)
+    fidelity = str(params.get("comic_motion_fidelity") or "faithful")
+    source_sizes = _pipelines.get(pid, {}).get("_clip_source_sizes") or []
+    steps = int(video_params.get("num_inference_steps", 8))
+    stage2_steps = int(video_params.get("stage2_steps", 0) or 0)
+    guidance = float(video_params.get("guidance_scale", 1))
+    input_strength = float(
+        video_params.get(
+            "input_video_strength",
+            0.7 if "distilled" in video_model.lower() else 1.0,
+        )
+    )
+    if fidelity.lower() == "faithful":
+        input_strength = max(0.9, input_strength)
+    elif any(end_images):
+        input_strength = max(0.8, input_strength)
+
+    negative_prompt = str(video_params.get("negative_prompt") or "").strip()
+    if clip_plans and all(
+        _comic_camera_is_locked(params, index)
+        for index in range(len(clip_plans))
+    ):
+        negative_prompt = _append_negative_prompt(
+            negative_prompt,
+            _COMIC_LOCKED_CAMERA_NEGATIVE,
+        )
+    negative_prompt = _append_negative_prompt(
+        negative_prompt,
+        _COMIC_REFERENCE_NEGATIVE,
+    )
+    params["_effective_video_negative_prompt"] = negative_prompt
+
+    previews: list[dict] = []
+    for index, plan in enumerate(clip_plans):
+        windows = plan.get("window_prompts") or []
+        windows = [
+            window.get("prompt", window.get("text", str(window)))
+            if isinstance(window, dict)
+            else str(window)
+            for window in windows
+        ]
+        base_prompt = (
+            "\n".join(windows)
+            if len(windows) > 1
+            else str(plan.get("video_prompt") or "")
+        )
+        camera_locked = _comic_camera_is_locked(params, index)
+        motion_mode = _comic_motion_mode(params, index)
+        effective_prompt = _comic_motion_prompt(
+            base_prompt,
+            fidelity,
+            bool(end_images[index] if index < len(end_images) else ""),
+            camera_locked=camera_locked,
+            motion_mode=motion_mode,
+        )
+        plan["_effective_video_prompt"] = effective_prompt
+        plan["_effective_video_frames"] = effective_frames[index]
+        planned = planned_clips[index] if index < len(planned_clips) else {}
+        planned["_effective_video_frames"] = effective_frames[index]
+        duration_seconds = effective_frames[index] / max(1, fps)
+        source_size = (
+            source_sizes[index]
+            if index < len(source_sizes)
+            else None
+        )
+        previews.append({
+            "index": index,
+            "page_number": (
+                (params.get("comic_shots") or [{}])[index].get("page_number")
+                if index < len(params.get("comic_shots") or [])
+                else None
+            ),
+            "panel_number": (
+                (params.get("comic_shots") or [{}])[index].get("panel_number")
+                if index < len(params.get("comic_shots") or [])
+                else None
+            ),
+            "label": (
+                planned.get("section_label")
+                or planned.get("label")
+                or f"Clip {index + 1}"
+            ),
+            "image_filename": (
+                clip_images[index] if index < len(clip_images) else ""
+            ),
+            "end_image_filename": (
+                end_images[index] if index < len(end_images) else ""
+            ),
+            "source_resolution": (
+                f"{source_size[0]}x{source_size[1]}"
+                if isinstance(source_size, (list, tuple))
+                and len(source_size) == 2
+                else ""
+            ),
+            "input_resolution": resolution,
+            "output_resolution": resolution,
+            "video_model": video_model,
+            "prompt": effective_prompt,
+            "negative_prompt": negative_prompt,
+            "num_inference_steps": steps,
+            "stage2_steps": stage2_steps,
+            "guidance_scale": guidance,
+            "input_video_strength": input_strength,
+            "seed": -1,
+            "fps": fps,
+            "frames": effective_frames[index],
+            "duration_seconds": round(duration_seconds, 3),
+            "image_prompt_type": (
+                "SE"
+                if index < len(end_images) and end_images[index]
+                else "S"
+            ),
+            "fit_mode": params.get("video_image_fit", "smart"),
+            "motion_mode": motion_mode,
+            "camera_locked": camera_locked,
+            "fidelity": fidelity,
+            "self_refiner": params.get("video_self_refiner", 0),
+            "spatial_upsampling": params.get("video_spatial_upsampling", ""),
+            "film_grain_intensity": params.get(
+                "video_film_grain_intensity",
+                0,
+            ),
+            "film_grain_saturation": params.get(
+                "video_film_grain_saturation",
+                0.5,
+            ),
+            "single_stage_pipeline": video_params.get(
+                "single_stage_pipeline",
+                0,
+            ),
+            "progressive_pipeline": video_params.get(
+                "progressive_pipeline",
+                0,
+            ),
+            "activated_loras": (
+                (params.get("video_loras") or {}).get(
+                    "activated_loras",
+                    [],
+                )
+            ),
+            "lora_multipliers": (
+                (params.get("video_loras") or {}).get(
+                    "loras_multipliers",
+                    "",
+                )
+            ),
+        })
+    return previews, end_images
 
 
 def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
@@ -2768,12 +3170,15 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                     print(f"[Pipeline] WARNING: Clip {i+1} is {dur:.0f}s but has no window_prompts")
                 prompt_value = vp
             if pipeline_type == "comic_movie":
-                prompt_value = _comic_motion_prompt(
-                    prompt_value,
-                    comic_fidelity,
-                    bool(end_file),
-                    camera_locked=_comic_camera_is_locked(params, i),
-                    motion_mode=_comic_motion_mode(params, i),
+                prompt_value = str(
+                    plan.get("_effective_video_prompt")
+                    or _comic_motion_prompt(
+                        prompt_value,
+                        comic_fidelity,
+                        bool(end_file),
+                        camera_locked=_comic_camera_is_locked(params, i),
+                        motion_mode=_comic_motion_mode(params, i),
+                    )
                 )
             prompts.append(prompt_value)
 
@@ -2815,8 +3220,20 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 # 26s clip became 26x16=416 frames, rendered at LTX-2's 25
                 # fps = 16.6s — every music-video clip silently shortened
                 # by 16/25.
+                frozen_frames = (
+                    plan.get("_effective_video_frames")
+                    or pc.get("_effective_video_frames")
+                )
                 dur_sec = pc.get("duration_sec") or (pc.get("end", 0) - pc.get("start", 0))
-                clip_frames = round(dur_sec * fps) if dur_sec > 0 else pc.get("duration_frames", round(20 * fps))
+                clip_frames = (
+                    int(frozen_frames)
+                    if frozen_frames
+                    else (
+                        round(dur_sec * fps)
+                        if dur_sec > 0
+                        else pc.get("duration_frames", round(20 * fps))
+                    )
+                )
                 if clip_frames > round(32 * fps):
                     has_sliding_window = True
                 # Comic/storyboard shots are often intentionally 2–4 seconds.
@@ -2890,21 +3307,31 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
             m.split(";")[0] for m in (video_loras.get("loras_multipliers", "") or "").split(" ") if m
         ),
     }
-    negative_prompt = str(video_params.get("negative_prompt") or "").strip()
-    if (
-        pipeline_type == "comic_movie"
-        and prompts
-        and all(_comic_camera_is_locked(params, index) for index in range(len(prompts)))
+    frozen_negative_prompt = params.get("_effective_video_negative_prompt")
+    if pipeline_type == "comic_movie" and isinstance(
+        frozen_negative_prompt,
+        str,
     ):
-        negative_prompt = _append_negative_prompt(
-            negative_prompt,
-            _COMIC_LOCKED_CAMERA_NEGATIVE,
-        )
-    if pipeline_type == "comic_movie":
-        negative_prompt = _append_negative_prompt(
-            negative_prompt,
-            _COMIC_REFERENCE_NEGATIVE,
-        )
+        negative_prompt = frozen_negative_prompt
+    else:
+        negative_prompt = str(video_params.get("negative_prompt") or "").strip()
+        if (
+            pipeline_type == "comic_movie"
+            and prompts
+            and all(
+                _comic_camera_is_locked(params, index)
+                for index in range(len(prompts))
+            )
+        ):
+            negative_prompt = _append_negative_prompt(
+                negative_prompt,
+                _COMIC_LOCKED_CAMERA_NEGATIVE,
+            )
+        if pipeline_type == "comic_movie":
+            negative_prompt = _append_negative_prompt(
+                negative_prompt,
+                _COMIC_REFERENCE_NEGATIVE,
+            )
 
     if seamless:
         # Seamless: ONE generation job with rolling windows + keyframe injection

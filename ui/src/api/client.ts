@@ -536,14 +536,51 @@ export async function fetchGroupClips(groupId: string): Promise<{ group_id: stri
 
 // --- Director Pipeline ---
 
+export interface PipelinePreviewClip {
+  index: number
+  page_number: number | null
+  panel_number: number | null
+  label: string
+  image_filename: string
+  end_image_filename: string
+  source_resolution: string
+  input_resolution: string
+  output_resolution: string
+  video_model: string
+  prompt: string
+  negative_prompt: string
+  num_inference_steps: number
+  stage2_steps: number
+  guidance_scale: number
+  input_video_strength: number
+  seed: number
+  fps: number
+  frames: number
+  duration_seconds: number
+  image_prompt_type: 'S' | 'SE'
+  fit_mode: string
+  motion_mode: string
+  camera_locked: boolean
+  fidelity: string
+  self_refiner: number
+  spatial_upsampling: string
+  film_grain_intensity: number
+  film_grain_saturation: number
+  single_stage_pipeline: number
+  progressive_pipeline: number
+  activated_loras: string[]
+  lora_multipliers: string
+}
+
 export interface PipelineStatus {
   id: string
-  status: 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
-  phase: 'planning' | 'polishing_prompts' | 'generating_images' | 'generating_video' | 'post_processing' | 'completed'
+  status: 'running' | 'paused' | 'preview_ready' | 'completed' | 'failed' | 'cancelled'
+  phase: 'planning' | 'polishing_prompts' | 'generating_images' | 'preview_ready' | 'generating_video' | 'post_processing' | 'completed'
   auto_mode: boolean
   progress: { current: number; total: number; message: string; step: number; total_steps: number }
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
   clip_images: string[]
+  preview_clips?: PipelinePreviewClip[]
   output_files: string[]
   error: string | null
   /** Present only on failed pipelines that look like CUDA OOMs.
@@ -565,7 +602,10 @@ export async function startPipeline(params: Record<string, unknown>): Promise<{ 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  if (!res.ok) throw new Error('Failed to start pipeline')
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: 'Failed to start pipeline' }))
+    throw new Error(body.detail || 'Failed to start pipeline')
+  }
   return res.json()
 }
 
@@ -582,6 +622,25 @@ export async function continuePipeline(pid: string, updates?: { clip_plans?: Arr
     body: JSON.stringify(updates || {}),
   })
   if (!res.ok) throw new Error('Failed to continue pipeline')
+}
+
+export async function generatePipelinePreview(
+  pid: string,
+  clipIndex?: number,
+): Promise<{ pipeline_id: string; source_preview_pipeline_id: string; clip_index?: number }> {
+  const res = await fetch(
+    `${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}/generate-preview`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Number.isInteger(clipIndex) ? { clip_index: clipIndex } : {}),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: 'Failed to generate PRE clip' }))
+    throw new Error(body.detail || 'Failed to generate PRE clip')
+  }
+  return res.json()
 }
 
 export async function stopPipeline(pid: string): Promise<void> {

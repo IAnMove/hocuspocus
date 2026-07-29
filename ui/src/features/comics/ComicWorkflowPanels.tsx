@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Check, Film, ImagePlus, Loader2, Plus, ShieldCheck, Sparkles, Trash2, Upload,
+  Check, Eye, Film, ImagePlus, Loader2, Play, Plus, ShieldCheck, Sparkles, Trash2, Upload,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
@@ -458,9 +458,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const [movieImageFit, setMovieImageFit] = useState<'smart' | 'crop'>('smart')
   const [movieEndFrameMode, setMovieEndFrameMode] = useState<'none' | 'smart' | 'all'>('none')
   const [movieFidelity, setMovieFidelity] = useState<'faithful' | 'balanced' | 'expressive'>('faithful')
-  const [busy, setBusy] = useState<'animatic' | 'movie' | null>(null)
+  const [busy, setBusy] = useState<'animatic' | 'movie' | 'preflight' | null>(null)
   const [progress, setProgress] = useState('')
   const [result, setResult] = useState<{ name: string; url: string } | null>(null)
+  const [preflightPipelineId, setPreflightPipelineId] = useState<string | null>(null)
+  const [preflightStatus, setPreflightStatus] = useState<api.PipelineStatus | null>(null)
+  const [preflightGenerating, setPreflightGenerating] = useState<number | 'all' | null>(null)
   useEffect(() => {
     setAspect(project.director?.input.storyboardAspect || 'landscape')
     // 480p is useful for disposable previews, but it is visibly soft after
@@ -595,7 +598,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     }
   }
 
-  const convertToMovie = async (clipLimit?: number) => {
+  const convertToMovie = async (clipLimit?: number, preflightOnly = false) => {
     const requestedPanelCount = Math.min(
       panelCount,
       Number.isFinite(Number(clipLimit))
@@ -612,8 +615,8 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       plannedForRun.reduce((sum, planned) => sum + resolvedMovieDuration(planned), 0)
       || requestedPanelCount * defaultDuration,
     )
-    const isTestRun = clipLimit !== undefined
-    if (!window.confirm(
+    const isTestRun = clipLimit !== undefined && !preflightOnly
+    if (!preflightOnly && !window.confirm(
       `${isTestRun ? 'Create a quality test from the first' : 'Convert'} ${requestedPanelCount} `
       + `comic panel${requestedPanelCount === 1 ? '' : 's'} into about ${totalSeconds}s of generated video? `
       + `Motion treatment: ${motionTreatmentLabel(movieMotionMode)}. `
@@ -621,8 +624,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       + 'The existing artwork will be reused, so no new panel images are generated, but this starts one image-to-video shot per panel and may consume substantial video credits/time.',
     )) return
 
-    setBusy('movie')
+    setBusy(preflightOnly ? 'preflight' : 'movie')
     setResult(null)
+    if (preflightOnly) {
+      setPreflightPipelineId(null)
+      setPreflightStatus(null)
+    }
     try {
       const comicShots: Array<{
         comic_title: string
@@ -751,6 +758,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       const { pipeline_id } = await api.startPipeline({
         pipeline_type: 'comic_movie',
         auto_mode: true,
+        comic_preflight_only: preflightOnly,
         workspace: state.activeWorkspace,
         scene_description: movieContext,
         comic_shots: comicShots,
@@ -818,6 +826,27 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         audio_scale: state.directorAudioScale,
       })
 
+      if (preflightOnly) {
+        setPreflightPipelineId(pipeline_id)
+        for (;;) {
+          await new Promise(resolve => window.setTimeout(resolve, 900))
+          const status = await api.fetchPipelineStatus(pipeline_id)
+          setPreflightStatus(status)
+          setProgress(status.progress?.message || 'Preparing comic video PRE…')
+          if (status.status === 'preview_ready') {
+            notify(
+              'ok',
+              `PRE ready for ${status.preview_clips?.length || 0} clips. No video was generated.`,
+            )
+            break
+          }
+          if (status.status === 'failed' || status.status === 'cancelled') {
+            throw new Error(status.error || 'Comic video PRE stopped.')
+          }
+        }
+        return
+      }
+
       state.setGenerationMode('video')
       state.setSidebarMode('director')
       state.setDirectorSkill('short_film')
@@ -854,6 +883,92 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       setBusy(null)
       setProgress('')
     }
+  }
+
+  const generateFromPreflight = async (clipIndex?: number) => {
+    if (!preflightPipelineId || preflightStatus?.status !== 'preview_ready') return
+    if (
+      !Number.isInteger(clipIndex)
+      && !window.confirm(
+        `Generate all ${preflightStatus.preview_clips?.length || 0} approved PRE clips now? `
+        + 'This starts the real video model and may take substantial time.',
+      )
+    ) return
+    const marker = Number.isInteger(clipIndex) ? Number(clipIndex) : 'all'
+    setPreflightGenerating(marker)
+    try {
+      const started = await api.generatePipelinePreview(preflightPipelineId, clipIndex)
+      const previewClips = preflightStatus.preview_clips || []
+      const selectedClips = Number.isInteger(clipIndex)
+        ? previewClips.filter(clip => clip.index === clipIndex)
+        : previewClips
+      const plannedClips = selectedClips.reduce<PlannedClip[]>((clips, clip, index) => {
+        const start = index === 0 ? 0 : Number(clips[index - 1].end)
+        clips.push({
+          start,
+          end: start + clip.duration_seconds,
+          section_label: clip.page_number && clip.panel_number
+            ? `${clip.page_number}.${clip.panel_number}`
+            : clip.label,
+          energy: 0.5,
+          suggested_prompt_hint: clip.label,
+          beat_count: 0,
+          duration_frames: clip.frames,
+        })
+        return clips
+      }, [])
+      const totalSeconds = selectedClips.reduce(
+        (sum, clip) => sum + clip.duration_seconds,
+        0,
+      )
+      const state = useStore.getState()
+      state.setGenerationMode('video')
+      state.setSidebarMode('director')
+      state.setDirectorSkill('short_film')
+      state.setMediaFilter('all')
+      useStore.setState({
+        pipelineId: started.pipeline_id,
+        pipelineStatus: null,
+        pipelinePolling: true,
+        directorStep: 'review_video',
+        directorLoading: true,
+        directorError: null,
+        directorSceneDescription: `${project.title}\n\n${project.synopsis}`,
+        directorPlannedClips: plannedClips,
+        directorClipPlans: selectedClips.map(clip => ({
+          video_prompt: clip.prompt,
+          image_prompt: '',
+        })),
+        directorClipImages: selectedClips.map((clip, index) => ({
+          clipIndex: index,
+          prompt: '',
+          file: null as unknown as File,
+          filename: clip.image_filename,
+        })),
+        directorAutoMode: true,
+        directorSeamless: false,
+        shortFilmPath: 'story',
+        shortFilmTargetDuration: Math.round(totalSeconds),
+      })
+      useStore.getState().pollPipelineStatus()
+      window.dispatchEvent(new Event('maestro:director-open'))
+      notify(
+        'ok',
+        Number.isInteger(clipIndex)
+          ? `Generating only PRE clip ${Number(clipIndex) + 1} with its frozen image, prompt and settings.`
+          : `Generating all ${selectedClips.length} approved PRE clips.`,
+      )
+    } catch (error) {
+      notify('error', (error as Error).message)
+    } finally {
+      setPreflightGenerating(null)
+    }
+  }
+
+  const previewClips = preflightStatus?.preview_clips || []
+  const previewAspectRatio = (value: string) => {
+    const [width, height] = String(value || '').split('x').map(Number)
+    return width > 0 && height > 0 ? `${width} / ${height}` : '16 / 9'
   }
 
   return (
@@ -1123,6 +1238,148 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                 </button>
               </div>
             )))}
+          </div>
+        </details>
+      )}
+      <button
+        className={`${button} w-full border-red-400/60 bg-red-400/5 text-red-200`}
+        disabled={Boolean(busy) || panelCount === 0}
+        onClick={() => convertToMovie(undefined, true)}
+      >
+        {busy === 'preflight'
+          ? <Loader2 size={13} className="animate-spin" />
+          : <Eye size={13} />}
+        {busy === 'preflight' && progress
+          ? progress
+          : `PRE · inspect all ${panelCount} I2V inputs before generation`}
+      </button>
+      <p className="text-[9px] text-red-200/80">
+        Plans every shot and prepares the exact input canvases, but stops before loading the video model or spending video generation time.
+      </p>
+      {preflightStatus?.status === 'failed' && (
+        <div className="rounded border border-red-500/40 bg-red-500/10 p-2 text-[10px] text-red-200">
+          {preflightStatus.error || 'Comic video PRE failed.'}
+        </div>
+      )}
+      {preflightStatus?.status === 'preview_ready' && previewClips.length > 0 && (
+        <details open className="rounded-lg border border-red-400/35 bg-red-400/5">
+          <summary className="cursor-pointer p-2 text-xs font-semibold text-red-100">
+            PRE ready · {previewClips.length} exact I2V shot{previewClips.length === 1 ? '' : 's'}
+          </summary>
+          <div className="space-y-2 border-t border-red-400/20 p-2">
+            <p className="text-[9px] text-red-100/75">
+              This PRE is frozen. If you change model, format, prompts or shot settings above, run PRE again before generating.
+            </p>
+            <button
+              className={`${button} w-full border-purple-400/50 text-purple-200`}
+              type="button"
+              disabled={preflightGenerating !== null}
+              onClick={() => generateFromPreflight()}
+            >
+              {preflightGenerating === 'all'
+                ? <Loader2 size={13} className="animate-spin" />
+                : <Play size={13} />}
+              Generate all approved PRE clips
+            </button>
+            {previewClips.map(clip => (
+              <details
+                key={`${preflightPipelineId}-${clip.index}`}
+                className="overflow-hidden rounded border border-border bg-bg-secondary/80"
+              >
+                <summary className="cursor-pointer px-2 py-2 text-[10px] font-semibold text-text-primary">
+                  {clip.page_number && clip.panel_number
+                    ? `${clip.page_number}.${clip.panel_number}`
+                    : `Clip ${clip.index + 1}`}
+                  {' · '}
+                  {clip.label}
+                </summary>
+                <div className="space-y-2 border-t border-border p-2">
+                  <div
+                    className="relative overflow-hidden bg-black"
+                    style={{ aspectRatio: previewAspectRatio(clip.output_resolution) }}
+                    title={`The red frame is the ${clip.output_resolution} canvas sent to the video generator`}
+                  >
+                    <img
+                      src={api.getFileUrl(clip.image_filename)}
+                      alt={`Prepared I2V frame ${clip.index + 1}`}
+                      loading="lazy"
+                      className="h-full w-full object-contain"
+                    />
+                    <div className="pointer-events-none absolute inset-0 border-[3px] border-red-500/70 shadow-[inset_0_0_18px_rgba(239,68,68,0.18)]" />
+                    <span className="pointer-events-none absolute right-1 top-1 rounded bg-red-600/80 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                      OUTPUT {clip.output_resolution}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-[9px] text-text-muted">
+                    <span>Original: <b className="text-text-primary">{clip.source_resolution || 'unknown'}</b></span>
+                    <span>I2V input: <b className="text-text-primary">{clip.input_resolution}</b></span>
+                    <span>Model: <b className="text-text-primary">{clip.video_model}</b></span>
+                    <span>Fit: <b className="text-text-primary">{clip.fit_mode}</b></span>
+                    <span>Steps: <b className="text-text-primary">{clip.num_inference_steps}{clip.stage2_steps ? ` + ${clip.stage2_steps}` : ''}</b></span>
+                    <span>Guidance: <b className="text-text-primary">{clip.guidance_scale}</b></span>
+                    <span>Frames: <b className="text-text-primary">{clip.frames} @ {clip.fps} fps</b></span>
+                    <span>Effective time: <b className="text-text-primary">{clip.duration_seconds.toFixed(2)}s</b></span>
+                    <span>Reference: <b className="text-text-primary">{clip.image_prompt_type}</b></span>
+                    <span>Strength: <b className="text-text-primary">{clip.input_video_strength}</b></span>
+                    <span>Seed: <b className="text-text-primary">{clip.seed}</b></span>
+                    <span>Motion: <b className="text-text-primary">{clip.motion_mode}</b></span>
+                    <span>Camera: <b className="text-text-primary">{clip.camera_locked ? 'locked' : 'authored'}</b></span>
+                    <span>Fidelity: <b className="text-text-primary">{clip.fidelity}</b></span>
+                    <span>Refiner: <b className="text-text-primary">{clip.self_refiner || 'off'}</b></span>
+                    <span>Pipeline: <b className="text-text-primary">
+                      {clip.single_stage_pipeline
+                        ? 'single-stage'
+                        : clip.progressive_pipeline
+                          ? 'progressive'
+                          : 'two-stage'}
+                    </b></span>
+                    <span>LoRAs: <b className="text-text-primary">{clip.activated_loras.length || 'none'}</b></span>
+                    <span>Upsampling: <b className="text-text-primary">{clip.spatial_upsampling || 'off'}</b></span>
+                    <span>Film grain: <b className="text-text-primary">{clip.film_grain_intensity || 'off'}</b></span>
+                    {clip.activated_loras.length > 0 && (
+                      <span className="col-span-2 break-all">
+                        Active LoRAs: <b className="text-text-primary">
+                          {clip.activated_loras.join(', ')}
+                          {clip.lora_multipliers ? ` · ${clip.lora_multipliers}` : ''}
+                        </b>
+                      </span>
+                    )}
+                  </div>
+                  {clip.end_image_filename && (
+                    <div className="rounded border border-amber-400/30 bg-amber-400/5 px-2 py-1 text-[9px] text-amber-200">
+                      End-frame conditioning is enabled for this clip.
+                    </div>
+                  )}
+                  <label className="block text-[9px] text-text-muted">
+                    Exact prompt sent to the video generator
+                    <textarea
+                      className={`${input} mt-1 min-h-28 resize-y font-mono text-[10px]`}
+                      readOnly
+                      value={clip.prompt}
+                    />
+                  </label>
+                  {clip.negative_prompt && (
+                    <details>
+                      <summary className="cursor-pointer text-[9px] text-text-muted">Negative prompt</summary>
+                      <p className="mt-1 whitespace-pre-wrap rounded border border-border bg-bg-tertiary p-1.5 text-[9px] text-text-muted">
+                        {clip.negative_prompt}
+                      </p>
+                    </details>
+                  )}
+                  <button
+                    className={`${button} w-full border-red-400/50 text-red-200`}
+                    type="button"
+                    disabled={preflightGenerating !== null}
+                    onClick={() => generateFromPreflight(clip.index)}
+                  >
+                    {preflightGenerating === clip.index
+                      ? <Loader2 size={13} className="animate-spin" />
+                      : <Play size={13} />}
+                    Generate only this clip
+                  </button>
+                </div>
+              </details>
+            ))}
           </div>
         </details>
       )}

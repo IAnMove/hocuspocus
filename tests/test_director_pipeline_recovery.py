@@ -91,3 +91,58 @@ def test_generation_timeout_is_based_on_inactivity_not_total_runtime():
         ) = previous
 
     assert result == ["finished.mp4"]
+
+
+def test_preview_checkpoint_recovers_without_starting_video(tmp_path):
+    pipeline_id = "preview42"
+    state_path = tmp_path / f"_director_pipeline_{pipeline_id}.json"
+    preview = {
+        "index": 0,
+        "image_filename": "comic_panel_0001.png",
+        "prompt": "FROZEN PREVIEW PROMPT",
+        "input_resolution": "1280x704",
+        "output_resolution": "1280x704",
+    }
+    state_path.write_text(
+        json.dumps({
+            "pipeline_id": pipeline_id,
+            "status": "preview_ready",
+            "created_at": 10,
+            "preview_clips": [preview],
+            "clips": [{
+                "index": 0,
+                "planned_clip": {"start": 0, "end": 3},
+                "image_prompt": "",
+                "video_prompt": "original",
+                "effective_video_prompt": "FROZEN PREVIEW PROMPT",
+                "effective_video_frames": 73,
+                "start_image_filename": "comic_panel_0001.png",
+                "end_image_filename": None,
+            }],
+            "output_files": [],
+            "_params_snapshot": {
+                "pipeline_type": "comic_movie",
+                "comic_preflight_only": True,
+                "auto_mode": True,
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    try:
+        ok, message = director_pipeline.resume_pipeline(
+            pipeline_id,
+            str(tmp_path),
+        )
+        recovered = director_pipeline.get_pipeline(pipeline_id)
+        assert ok
+        assert message == "recovered_preview"
+        assert recovered["status"] == "preview_ready"
+        assert recovered["phase"] == "preview_ready"
+        assert recovered["preview_clips"] == [preview]
+        assert (
+            recovered["clip_plans"][0]["_effective_video_prompt"]
+            == "FROZEN PREVIEW PROMPT"
+        )
+    finally:
+        director_pipeline._pipelines.pop(pipeline_id, None)

@@ -6369,6 +6369,29 @@ async def director_pipeline_continue(pid: str, request: Request):
     return {"status": "resumed"}
 
 
+@api.post("/api/v1/director/pipeline/{pid}/generate-preview")
+async def director_pipeline_generate_preview(pid: str, request: Request):
+    """Generate all or one clip from a reusable comic PRE checkpoint."""
+    _init_pipeline()
+    from services.director_pipeline import start_preview_generation
+
+    body = (
+        await request.json()
+        if request.headers.get("content-length", "0") != "0"
+        else {}
+    )
+    clip_index = body.get("clip_index")
+    ok, message, child_pid = start_preview_generation(pid, clip_index)
+    if not ok or not child_pid:
+        raise HTTPException(status_code=400, detail=message)
+    return {
+        "status": "started",
+        "pipeline_id": child_pid,
+        "source_preview_pipeline_id": pid,
+        "clip_index": clip_index,
+    }
+
+
 @api.post("/api/v1/director/pipeline/{pid}/stop")
 def director_pipeline_stop(pid: str):
     """Cancel a running pipeline."""

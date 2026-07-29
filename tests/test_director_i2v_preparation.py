@@ -314,6 +314,156 @@ def test_legacy_comic_shots_keep_action_motion_mode():
     assert director_pipeline._comic_motion_mode({"comic_shots": [{}]}, 0) == "action"
 
 
+def test_comic_preflight_freezes_exact_prompt_canvas_and_runtime_config(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        director_pipeline,
+        "_wgp",
+        SimpleNamespace(
+            get_model_def=lambda _model: {"fps": 25},
+            get_model_min_frames_and_step=lambda _model: (17, 8, 8),
+        ),
+    )
+    pid = "preflight-contract"
+    director_pipeline._pipelines[pid] = {
+        "_clip_source_sizes": [(730, 1061)],
+    }
+    params = {
+        "video_model": "ltx2_22B_distilled_1_1",
+        "video_params": {
+            "resolution": "1280x720",
+            "num_inference_steps": 8,
+            "stage2_steps": 3,
+            "guidance_scale": 1,
+            "input_video_strength": 0.7,
+        },
+        "comic_motion_fidelity": "faithful",
+        "comic_motion_treatment": "contextual",
+        "comic_shots": [{
+            "page_number": 2,
+            "panel_number": 3,
+            "motion_mode": "contextual",
+            "camera_move": "none",
+        }],
+        "video_loras": {"activated_loras": ["anime-motion.safetensors"]},
+    }
+    clip_plans = [{
+        "video_prompt": "Nara studies the seed without changing position.",
+        "image_prompt": "",
+    }]
+    planned_clips = [{
+        "start": 0,
+        "end": 3,
+        "duration_sec": 3,
+        "section_label": "2.3",
+    }]
+
+    try:
+        previews, end_images = director_pipeline._build_comic_video_previews(
+            pid,
+            params,
+            clip_plans,
+            planned_clips,
+            ["prepared-panel.png"],
+            out_dir=str(tmp_path),
+        )
+    finally:
+        director_pipeline._pipelines.pop(pid, None)
+
+    preview = previews[0]
+    assert end_images == [""]
+    assert preview["source_resolution"] == "730x1061"
+    assert preview["input_resolution"] == "1280x704"
+    assert preview["output_resolution"] == "1280x704"
+    assert preview["num_inference_steps"] == 8
+    assert preview["stage2_steps"] == 3
+    assert preview["frames"] == 73
+    assert preview["input_video_strength"] == 0.9
+    assert preview["activated_loras"] == ["anime-motion.safetensors"]
+    assert "CONTEXTUAL PERFORMANCE" in preview["prompt"]
+    assert "CAMERA LOCK" in preview["prompt"]
+    assert clip_plans[0]["_effective_video_prompt"] == preview["prompt"]
+    assert clip_plans[0]["_effective_video_frames"] == preview["frames"]
+
+
+def test_generate_single_preflight_clip_clones_frozen_contract(
+    monkeypatch,
+    tmp_path,
+):
+    started_threads = []
+
+    class DeferredThread:
+        def __init__(self, *, target, args, kwargs, daemon):
+            self.target = target
+            self.args = args
+            self.kwargs = kwargs
+            self.daemon = daemon
+
+        def start(self):
+            started_threads.append(self)
+
+    monkeypatch.setattr(director_pipeline.threading, "Thread", DeferredThread)
+    source_pid = "preflight-source"
+    source_plans = [
+        {
+            "video_prompt": "first",
+            "_effective_video_prompt": "FROZEN FIRST",
+            "_effective_video_frames": 73,
+        },
+        {
+            "video_prompt": "second",
+            "_effective_video_prompt": "FROZEN SECOND",
+            "_effective_video_frames": 81,
+        },
+    ]
+    director_pipeline._pipelines[source_pid] = {
+        "id": source_pid,
+        "status": "preview_ready",
+        "clip_plans": source_plans,
+        "clip_images": ["first.png", "second.png"],
+        "_planned_clips": [
+            {"start": 0, "end": 3, "_effective_video_frames": 73},
+            {"start": 3, "end": 6, "_effective_video_frames": 81},
+        ],
+        "_clip_end_images": ["", "third.png"],
+        "_clip_keyframes": [[], []],
+        "params": {
+            "comic_preflight_only": True,
+            "auto_mode": True,
+            "comic_shots": [{"panel_number": 1}, {"panel_number": 2}],
+            "provided_clip_image_paths": ["/tmp/first.png", "/tmp/second.png"],
+        },
+        "workspace": None,
+        "out_dir": str(tmp_path),
+    }
+
+    child_pid = None
+    try:
+        ok, message, child_pid = director_pipeline.start_preview_generation(
+            source_pid,
+            1,
+        )
+        child = director_pipeline._pipelines[child_pid]
+        assert ok
+        assert message == "started"
+        assert child["clip_plans"][0]["_effective_video_prompt"] == "FROZEN SECOND"
+        assert child["clip_plans"][0]["_effective_video_frames"] == 81
+        assert child["clip_images"] == ["second.png"]
+        assert child["params"]["comic_shots"] == [{"panel_number": 2}]
+        assert child["params"]["provided_clip_image_paths"] == ["/tmp/second.png"]
+        assert child["params"]["_comic_prepared_end_images"] == ["third.png"]
+        assert child["params"]["comic_preflight_only"] is False
+        assert source_plans[1]["_effective_video_prompt"] == "FROZEN SECOND"
+        assert len(started_threads) == 1
+        assert started_threads[0].kwargs == {"resume": True}
+    finally:
+        director_pipeline._pipelines.pop(source_pid, None)
+        if child_pid:
+            director_pipeline._pipelines.pop(child_pid, None)
+
+
 def test_i2v_prompt_always_anchors_illustrated_source_style():
     prompt = LtxI2VRenderer.ensure_source_style(
         "She turns toward camera while her coat and hair move in the wind.",

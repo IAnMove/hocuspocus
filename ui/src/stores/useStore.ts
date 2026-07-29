@@ -7030,6 +7030,17 @@ export const useStore = create<AppState>((set, get) => ({
           }
         }
 
+        // Comic PRE is a deliberate terminal checkpoint: prompts and I2V
+        // canvases are ready, but no video generation should start until the
+        // user approves all clips or chooses one card in the comic editor.
+        if (status.status === 'preview_ready') {
+          set({
+            pipelinePolling: false,
+            directorLoading: false,
+          })
+          return
+        }
+
         // Handle completion
         if (status.status === 'completed') {
           set({
