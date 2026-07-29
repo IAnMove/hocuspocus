@@ -81,7 +81,7 @@ def test_crop_fit_fills_requested_canvas(tmp_path):
         assert fitted.size == (320, 192)
 
 
-def test_comic_crop_protection_keeps_extreme_portrait_composition(tmp_path):
+def test_explicit_comic_cover_crop_is_not_silently_changed_to_padding(tmp_path):
     source = tmp_path / "portrait.png"
     image = Image.new("RGB", (100, 200), (220, 30, 20))
     for y in range(10):
@@ -102,8 +102,8 @@ def test_comic_crop_protection_keeps_extreme_portrait_composition(tmp_path):
 
     with Image.open(tmp_path / "outputs" / staged[0]) as fitted:
         assert fitted.size == (320, 192)
-        assert fitted.getpixel((160, 0)) == (0, 255, 0)
-        assert fitted.getpixel((160, 191)) == (0, 0, 255)
+        assert fitted.getpixel((160, 0)) == (220, 30, 20)
+        assert fitted.getpixel((160, 191)) == (220, 30, 20)
 
 
 def test_crop_retained_fraction_detects_destructive_portrait_to_landscape_crop():
@@ -232,10 +232,9 @@ def test_faithful_comic_motion_guard_describes_both_approved_anchors():
         True,
     )
 
-    assert "faithful moving illustration" in prompt
-    assert "Perform the requested subject action clearly" in prompt
-    assert "Do not invent extra actions" in prompt
-    assert "next approved comic panel" in prompt
+    assert "Preserve identity, anatomy, costume" in prompt
+    assert "supplied approved end keyframe" in prompt
+    assert len(prompt) < 300
 
 
 def test_locked_comic_camera_forbids_zoom_pan_tilt_and_vertical_drift():
@@ -246,13 +245,9 @@ def test_locked_comic_camera_forbids_zoom_pan_tilt_and_vertical_drift():
         camera_locked=True,
     )
 
-    assert "CAMERA LOCK" in prompt
-    assert "exact first-frame crop" in prompt
-    assert "no zoom" in prompt
-    assert "pan" in prompt
-    assert "tilt" in prompt
-    assert "vertical drift" in prompt
-    assert "motion only through character acting" in prompt
+    assert "Locked camera" in prompt
+    assert "exact crop, horizon, perspective and field of view" in prompt
+    assert len(prompt) < 300
 
 
 def test_comic_camera_defaults_to_locked_but_respects_requested_push_in():
@@ -280,14 +275,12 @@ def test_living_still_forces_camera_lock_and_reference_preservation():
         camera_locked=True,
         motion_mode="living-still",
     )
-    assert "LIVING-STILL LOCK" in prompt
-    assert "exact first-frame position" in prompt
-    assert "Do not add" in prompt
-    assert "approach the viewer" in prompt
-    assert "CAMERA LOCK" in prompt
+    assert "Only subtle supported motion" in prompt
+    assert "Locked camera" in prompt
+    assert "Preserve identity" in prompt
 
 
-def test_contextual_comic_motion_forces_camera_lock_and_story_performance():
+def test_contextual_comic_motion_respects_authored_camera_and_performance():
     params = {
         "comic_shots": [{
             "motion_mode": "contextual",
@@ -296,18 +289,16 @@ def test_contextual_comic_motion_forces_camera_lock_and_story_performance():
     }
 
     assert director_pipeline._comic_motion_mode(params, 0) == "contextual"
-    assert director_pipeline._comic_camera_is_locked(params, 0)
+    assert not director_pipeline._comic_camera_is_locked(params, 0)
     prompt = director_pipeline._comic_motion_prompt(
         "Nara closes her hand around the seed and looks toward Kael.",
         "faithful",
         False,
-        camera_locked=True,
+        camera_locked=False,
         motion_mode="contextual",
     )
-    assert "CONTEXTUAL PERFORMANCE" in prompt
-    assert "story-specific acting" in prompt
-    assert "generic camera move" in prompt
-    assert "CAMERA LOCK" in prompt
+    assert "Perform only this action" in prompt
+    assert "Locked camera" not in prompt
 
 
 def test_legacy_comic_shots_keep_action_motion_mode():
@@ -382,8 +373,8 @@ def test_comic_preflight_freezes_exact_prompt_canvas_and_runtime_config(
     assert preview["frames"] == 73
     assert preview["input_video_strength"] == 0.9
     assert preview["activated_loras"] == ["anime-motion.safetensors"]
-    assert "CONTEXTUAL PERFORMANCE" in preview["prompt"]
-    assert "CAMERA LOCK" in preview["prompt"]
+    assert "Perform only this action" in preview["prompt"]
+    assert "Locked camera" in preview["prompt"]
     assert clip_plans[0]["_effective_video_prompt"] == preview["prompt"]
     assert clip_plans[0]["_effective_video_frames"] == preview["frames"]
 
@@ -418,25 +409,37 @@ def test_generate_single_preflight_clip_clones_frozen_contract(
             "_effective_video_frames": 81,
         },
     ]
+    source_timings = [
+        {"start": 0, "end": 3, "_effective_video_frames": 73},
+        {"start": 3, "end": 6, "_effective_video_frames": 81},
+    ]
+    source_params = {
+        "comic_preflight_only": True,
+        "auto_mode": True,
+        "comic_shots": [{"panel_number": 1}, {"panel_number": 2}],
+        "provided_clip_image_paths": ["/tmp/first.png", "/tmp/second.png"],
+    }
+    fingerprint = director_pipeline._comic_preflight_fingerprint(
+        source_params,
+        source_plans,
+        source_timings,
+        ["first.png", "second.png"],
+        str(tmp_path),
+    )
+    source_params["_comic_preflight_fingerprint"] = fingerprint
     director_pipeline._pipelines[source_pid] = {
         "id": source_pid,
         "status": "preview_ready",
         "clip_plans": source_plans,
         "clip_images": ["first.png", "second.png"],
-        "_planned_clips": [
-            {"start": 0, "end": 3, "_effective_video_frames": 73},
-            {"start": 3, "end": 6, "_effective_video_frames": 81},
-        ],
+        "_planned_clips": source_timings,
         "_clip_end_images": ["", "third.png"],
         "_clip_keyframes": [[], []],
-        "params": {
-            "comic_preflight_only": True,
-            "auto_mode": True,
-            "comic_shots": [{"panel_number": 1}, {"panel_number": 2}],
-            "provided_clip_image_paths": ["/tmp/first.png", "/tmp/second.png"],
-        },
+        "params": source_params,
         "workspace": None,
         "out_dir": str(tmp_path),
+        "_comic_preflight_fingerprint": fingerprint,
+        "_preview_approved_fingerprint": fingerprint,
     }
 
     child_pid = None
@@ -444,6 +447,7 @@ def test_generate_single_preflight_clip_clones_frozen_contract(
         ok, message, child_pid = director_pipeline.start_preview_generation(
             source_pid,
             1,
+            expected_fingerprint=fingerprint,
         )
         child = director_pipeline._pipelines[child_pid]
         assert ok
@@ -460,7 +464,11 @@ def test_generate_single_preflight_clip_clones_frozen_contract(
         assert started_threads[0].kwargs == {"resume": True}
 
         duplicate_ok, duplicate_message, duplicate_pid = (
-            director_pipeline.start_preview_generation(source_pid, 1)
+            director_pipeline.start_preview_generation(
+                source_pid,
+                1,
+                expected_fingerprint=fingerprint,
+            )
         )
         assert duplicate_ok
         assert duplicate_message == "already_running"

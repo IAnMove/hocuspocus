@@ -165,6 +165,25 @@ export interface ComicDialogue {
   bubbleType: Exclude<ComicBubbleType, 'none'>
 }
 
+/** Film-adaptation values that the user explicitly locked on this source beat.
+ * Generated storyboard hints are deliberately not overrides: Director remains
+ * free to merge, omit or rewrite them until the user edits the corresponding
+ * control. */
+export type ComicVideoOverrideField =
+  | 'included'
+  | 'order'
+  | 'action'
+  | 'renderer'
+  | 'fit'
+  | 'motion_mode'
+  | 'motion_level'
+  | 'duration'
+  | 'camera'
+  | 'video_prompt'
+  | 'seed'
+  | 'end_frame'
+  | 'test_selected'
+
 export interface ComicPlanPanel {
   id: string
   order: number
@@ -180,6 +199,9 @@ export interface ComicPlanPanel {
   /** Ready-to-render chronological I2V prompt. Storyboards generate this
    *  alongside the first-frame image instead of waiting for movie conversion. */
   videoPrompt?: string
+  /** Short, editable performance/action brief for the film adaptation. Unlike
+   *  sceneDescription this describes only what changes after the first frame. */
+  videoAction?: string
   durationSeconds?: number
   cameraMove?: 'none' | 'push-in' | 'pull-out' | 'pan-left' | 'pan-right'
   /** Per-shot override for comic-to-video motion. "auto" follows the global
@@ -187,6 +209,17 @@ export interface ComicPlanPanel {
    *  from the panel context, living-still uses deterministic micro-motion,
    *  and action uses the authored/LLM action and camera prompt. */
   videoMotion?: 'auto' | 'contextual' | 'living-still' | 'action'
+  /** Film adaptation controls are deliberately stored on the plan instead of
+   *  changing comic page order or artwork. */
+  videoIncluded?: boolean
+  videoOrder?: number
+  videoRenderer?: 'hold' | 'parallax' | 'cinemagraph' | 'ltx'
+  videoFit?: 'reframe' | 'cover' | 'contain'
+  videoMotionLevel?: 0 | 1 | 2 | 3
+  videoTestSelected?: boolean
+  videoSeed?: number
+  videoSourcePanelIds?: string[]
+  videoOverrideFields?: ComicVideoOverrideField[]
   /** Optional end-frame conditioning for this I2V shot. This is not an edit
    *  transition: generated clips are joined separately with hard cuts. */
   videoEndFrame?: 'auto' | 'none' | 'next-panel'

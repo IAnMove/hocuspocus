@@ -202,7 +202,28 @@ class DirectorOrchestrator:
             has_reference = True
 
         for i, shot in enumerate(plan.shots):
-            result = {}
+            metadata = dict(shot.metadata or {})
+            result = {
+                "shot_id": shot.shot_id,
+                "metadata": metadata,
+            }
+            # Preserve identity and edit decisions when film shots no longer
+            # map one-to-one to the original comic panel list.
+            for field in (
+                "source_panel_ids",
+                "source_panel_indices",
+                "primary_source_panel_id",
+                "primary_source_index",
+                "provided_image_path",
+                "renderer",
+                "fit_mode",
+                "seed",
+                "risk_tags",
+                "test_selected",
+                "motion_level",
+            ):
+                if field in metadata:
+                    result[field] = metadata[field]
 
             # Choose render mode for video
             video_mode = self._choose_video_mode(shot, plan, has_reference)
@@ -423,9 +444,26 @@ class DirectorOrchestrator:
         result = []
         for r in rendered:
             clip = {
+                "shot_id": r.get("shot_id", ""),
                 "video_prompt": r.get("video_prompt", ""),
                 "image_prompt": r.get("image_prompt", ""),
+                "metadata": dict(r.get("metadata") or {}),
             }
+            for field in (
+                "source_panel_ids",
+                "source_panel_indices",
+                "primary_source_panel_id",
+                "primary_source_index",
+                "provided_image_path",
+                "renderer",
+                "fit_mode",
+                "seed",
+                "risk_tags",
+                "test_selected",
+                "motion_level",
+            ):
+                if field in r:
+                    clip[field] = r[field]
             if r.get("window_count", 0) > 1:
                 clip["window_count"] = r["window_count"]
                 # Preserve individual window prompts for dashboard display

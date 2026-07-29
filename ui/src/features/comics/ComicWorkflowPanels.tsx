@@ -1,18 +1,93 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Check, Eye, Film, ImagePlus, Loader2, Play, Plus, ShieldCheck, Sparkles, Trash2, Upload,
+  AlertTriangle, ArrowDown, ArrowUp, Check, CheckCircle2, Clapperboard, Eye, Film,
+  ImagePlus, ListVideo, Loader2, Play, Plus, Settings2, ShieldCheck, Sparkles, Trash2, Upload,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { DirectorLoraSelector } from '../../components/SettingsDrawer/DirectorLoraSelector'
 import { useStore } from '../../stores/useStore'
 import type { PlannedClip } from '../../types'
 import { forEachComicPanelCapture } from './export'
-import { comicId, normalizeComicPlan, simplifyDirectorText } from './model'
+import {
+  comicId, mergeComicVideoOverrideFields, normalizeComicPlan, simplifyDirectorText,
+} from './model'
 import { useComicStore } from './store'
-import type { ComicAsset, ComicCharacter, ComicDirectorRequest, ComicGlossaryEntry, ComicPlanPanel } from './types'
+import type {
+  ComicAsset, ComicCharacter, ComicDirectorRequest, ComicGlossaryEntry, ComicPlanPanel,
+  ComicVideoOverrideField,
+} from './types'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
+const motionLevelLabel = (level: number) => (
+  level <= 0
+    ? '0 · exact hold'
+    : level === 1
+      ? '1 · ambient, locked camera'
+      : level === 2
+        ? '2 · restrained performance'
+        : '3 · authored action'
+)
+
+const VIDEO_OVERRIDE_BY_PROPERTY: Partial<Record<keyof ComicPlanPanel, ComicVideoOverrideField>> = {
+  videoIncluded: 'included',
+  videoOrder: 'order',
+  videoAction: 'action',
+  videoRenderer: 'renderer',
+  videoFit: 'fit',
+  videoMotion: 'motion_mode',
+  videoMotionLevel: 'motion_level',
+  durationSeconds: 'duration',
+  cameraMove: 'camera',
+  videoPrompt: 'video_prompt',
+  videoSeed: 'seed',
+  videoEndFrame: 'end_frame',
+  videoTestSelected: 'test_selected',
+}
+
+function overrideChangesForPatch(patch: Partial<ComicPlanPanel>): {
+  add: ComicVideoOverrideField[]
+  remove: ComicVideoOverrideField[]
+} {
+  const add: ComicVideoOverrideField[] = []
+  const remove: ComicVideoOverrideField[] = []
+  Object.entries(patch).forEach(([property, value]) => {
+    const field = VIDEO_OVERRIDE_BY_PROPERTY[property as keyof ComicPlanPanel]
+    if (!field) return
+    const followsAutomatic = value === undefined
+      || (property === 'videoMotion' && value === 'auto')
+      || (property === 'videoEndFrame' && value === 'auto')
+    ;(followsAutomatic ? remove : add).push(field)
+  })
+  return { add, remove }
+}
+
+type SavedComicVideoSettings = {
+  aspect?: 'landscape' | 'portrait' | 'square'
+  defaultDuration?: number
+  targetFilmShots?: number
+  quality?: '480p' | '720p' | '1080p'
+  motionMode?: 'contextual' | 'living-still' | 'action'
+  imageFit?: 'reframe' | 'cover' | 'contain'
+  endFrameMode?: 'none' | 'smart' | 'all'
+  fidelity?: 'faithful' | 'balanced' | 'expressive'
+}
+
+const comicVideoSettingsKey = (workspace: string, comicIdValue: string) =>
+  `maestro-comic-video-settings:${workspace}:${comicIdValue}`
+
+const readComicVideoSettings = (
+  workspace: string,
+  comicIdValue: string,
+): SavedComicVideoSettings => {
+  try {
+    return JSON.parse(
+      window.localStorage.getItem(comicVideoSettingsKey(workspace, comicIdValue)) || '{}',
+    ) as SavedComicVideoSettings
+  } catch {
+    return {}
+  }
+}
 
 export function ComicWritingProviderFields({
   value,
@@ -295,13 +370,17 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
       })
       const state = useComicStore.getState()
       const current = state.project.director!
+      const revisedPlan = normalizeComicPlan(result.plan, current.input.dialogueDensity)
+      revisedPlan.pages.forEach(page => page.panels.forEach(panel => {
+        panel.videoOverrideFields = []
+      }))
       state.patchProject(simplifyDirectorText({
         ...state.project,
         title: result.plan.title,
         synopsis: result.plan.synopsis,
         director: {
           ...current,
-          plan: normalizeComicPlan(result.plan, current.input.dialogueDensity),
+          plan: revisedPlan,
           scriptApprovedAt: undefined,
           scriptVersion: (current.scriptVersion || 1) + 1,
         },
@@ -375,7 +454,12 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
                       value={panel.videoPrompt || ''}
                       onChange={event => {
                         const plan = structuredClone(useComicStore.getState().project.director!.plan)
-                        plan.pages[pageIndex].panels[panelIndex].videoPrompt = event.target.value
+                        const editedPanel = plan.pages[pageIndex].panels[panelIndex]
+                        editedPanel.videoPrompt = event.target.value
+                        editedPanel.videoOverrideFields = mergeComicVideoOverrideFields(
+                          editedPanel.videoOverrideFields,
+                          ['video_prompt'],
+                        )
                         patchPlan({ pages: plan.pages })
                       }}
                     />
@@ -446,42 +530,104 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const enabledModels = useStore(state => state.enabledModels)
   const selectDirectorVideoModel = useStore(state => state.selectDirectorVideoModel)
   const savedVideoLoras = useStore(state => state.savedLoraPerMode.video)
+  const savedVideoParams = useStore(state => state.savedParamsPerMode.video)
+  const movieSpatialUpsampling = useStore(state => state.directorVideoSpatialUpsampling)
+  const movieFilmGrainIntensity = useStore(state => state.directorVideoFilmGrainIntensity)
+  const movieFilmGrainSaturation = useStore(state => state.directorVideoFilmGrainSaturation)
   const movieSelfRefiner = useStore(state => state.directorVideoSelfRefiner)
+  const movieAudioScale = useStore(state => state.directorAudioScale)
   const setMovieSelfRefiner = useStore(state => state.setDirectorVideoSelfRefiner)
   const storyboard = project.director?.input.productionMode === 'storyboard'
+  const restoredSettings = readComicVideoSettings(activeWorkspace, project.id)
   const [aspect, setAspect] = useState<'landscape' | 'portrait' | 'square'>(() =>
-    project.director?.input.storyboardAspect || 'landscape')
-  const [defaultDuration, setDefaultDuration] = useState(3)
+    restoredSettings.aspect || project.director?.input.storyboardAspect || 'landscape')
+  const [defaultDuration, setDefaultDuration] = useState(
+    restoredSettings.defaultDuration || 3,
+  )
+  const [targetFilmShots, setTargetFilmShots] = useState(
+    Number.isFinite(Number(restoredSettings.targetFilmShots))
+      ? Math.max(0, Math.min(200, Math.trunc(Number(restoredSettings.targetFilmShots))))
+      : 0,
+  )
   const [transition, setTransition] = useState('none')
   const [animaticMotion, setAnimaticMotion] = useState<'none' | 'shot-settings'>('none')
-  const [movieQuality, setMovieQuality] = useState<'480p' | '720p' | '1080p'>('720p')
-  const [movieMotionMode, setMovieMotionMode] = useState<'contextual' | 'living-still' | 'action'>(
-    storyboard ? 'action' : 'contextual',
+  const [movieQuality, setMovieQuality] = useState<'480p' | '720p' | '1080p'>(
+    restoredSettings.quality || '720p',
   )
-  const [movieImageFit, setMovieImageFit] = useState<'smart' | 'crop'>('smart')
-  const [movieEndFrameMode, setMovieEndFrameMode] = useState<'none' | 'smart' | 'all'>('none')
-  const [movieFidelity, setMovieFidelity] = useState<'faithful' | 'balanced' | 'expressive'>('faithful')
+  const [movieMotionMode, setMovieMotionMode] = useState<'contextual' | 'living-still' | 'action'>(
+    restoredSettings.motionMode || (storyboard ? 'action' : 'contextual'),
+  )
+  const [movieImageFit, setMovieImageFit] = useState<'reframe' | 'cover' | 'contain'>(
+    restoredSettings.imageFit === 'reframe' ? 'contain' : restoredSettings.imageFit || 'contain',
+  )
+  const [movieEndFrameMode, setMovieEndFrameMode] = useState<'none' | 'smart' | 'all'>(
+    restoredSettings.endFrameMode || 'none',
+  )
+  const [movieFidelity, setMovieFidelity] = useState<'faithful' | 'balanced' | 'expressive'>(
+    restoredSettings.fidelity || 'faithful',
+  )
+  const [settingsScope, setSettingsScope] = useState(() =>
+    comicVideoSettingsKey(activeWorkspace, project.id))
+  const [videoTab, setVideoTab] = useState<'settings' | 'shots'>('settings')
   const [busy, setBusy] = useState<'animatic' | 'movie' | 'preflight' | null>(null)
   const [progress, setProgress] = useState('')
   const [result, setResult] = useState<{ name: string; url: string } | null>(null)
   const [preflightPipelineId, setPreflightPipelineId] = useState<string | null>(null)
   const [preflightStatus, setPreflightStatus] = useState<api.PipelineStatus | null>(null)
-  const [preflightGenerating, setPreflightGenerating] = useState<number | 'all' | null>(null)
+  const [preflightBuiltFingerprint, setPreflightBuiltFingerprint] = useState('')
   const preflightStorageKey = `maestro-comic-preflight:${activeWorkspace}:${project.id}`
+  const preflightFingerprintStorageKey = `${preflightStorageKey}:fingerprint`
   useEffect(() => {
-    setAspect(project.director?.input.storyboardAspect || 'landscape')
-    // 480p is useful for disposable previews, but it is visibly soft after
-    // generative I2V reconstruction. Comic films therefore start at 720p.
-    setMovieQuality('720p')
-    setMovieMotionMode(storyboard ? 'action' : 'contextual')
-    // A new comic always starts from independent I2V shots. End-frame
-    // conditioning is an explicit creative choice, never a sticky default.
-    setMovieEndFrameMode('none')
+    const saved = readComicVideoSettings(activeWorkspace, project.id)
+    setAspect(saved.aspect || project.director?.input.storyboardAspect || 'landscape')
+    setDefaultDuration(saved.defaultDuration || 3)
+    setTargetFilmShots(
+      Number.isFinite(Number(saved.targetFilmShots))
+        ? Math.max(0, Math.min(200, Math.trunc(Number(saved.targetFilmShots))))
+        : 0,
+    )
+    setMovieQuality(saved.quality || '720p')
+    setMovieMotionMode(saved.motionMode || (storyboard ? 'action' : 'contextual'))
+    setMovieImageFit(saved.imageFit === 'reframe' ? 'contain' : saved.imageFit || 'contain')
+    setMovieEndFrameMode(saved.endFrameMode || 'none')
+    setMovieFidelity(saved.fidelity || 'faithful')
+    setSettingsScope(comicVideoSettingsKey(activeWorkspace, project.id))
+    setVideoTab('settings')
   }, [
+    activeWorkspace,
     project.id,
     storyboard,
     project.director?.input.storyboardAspect,
     project.director?.input.storyboardQuality,
+  ])
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        settingsScope,
+        JSON.stringify({
+          aspect,
+          defaultDuration,
+          targetFilmShots,
+          quality: movieQuality,
+          motionMode: movieMotionMode,
+          imageFit: movieImageFit,
+          endFrameMode: movieEndFrameMode,
+          fidelity: movieFidelity,
+        } satisfies SavedComicVideoSettings),
+      )
+    } catch {
+      // Private browsing may disable persistence; the live configuration remains valid.
+    }
+  }, [
+    aspect,
+    defaultDuration,
+    movieEndFrameMode,
+    movieFidelity,
+    movieImageFit,
+    movieMotionMode,
+    movieQuality,
+    settingsScope,
+    targetFilmShots,
   ])
   useEffect(() => {
     let cancelled = false
@@ -510,6 +656,9 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           if (cancelled || status.status !== 'preview_ready') continue
           setPreflightPipelineId(pipelineId)
           setPreflightStatus(status)
+          setPreflightBuiltFingerprint(
+            window.localStorage.getItem(preflightFingerprintStorageKey) || '',
+          )
           window.localStorage.setItem(preflightStorageKey, pipelineId)
           return
         } catch {
@@ -519,16 +668,43 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       if (!cancelled) {
         setPreflightPipelineId(null)
         setPreflightStatus(null)
+        setPreflightBuiltFingerprint('')
         if (remembered) window.localStorage.removeItem(preflightStorageKey)
       }
     }
     void recover()
     return () => { cancelled = true }
-  }, [activeWorkspace, preflightStorageKey, project.id])
+  }, [
+    activeWorkspace,
+    preflightFingerprintStorageKey,
+    preflightStorageKey,
+    project.id,
+  ])
   const panelCount = project.pages.reduce(
     (total, page) => total + page.elements.filter(element => element.type === 'panel' && !element.parentId).length,
     0,
   )
+  const videoShotRows = useMemo(() => {
+    const rows = (project.director?.plan.pages || []).flatMap((page, pageIndex) =>
+      page.panels.map((planned, panelIndex) => ({
+        planned,
+        pageIndex,
+        panelIndex,
+        naturalOrder: pageIndex * 1000 + panelIndex,
+      })),
+    )
+    return rows.sort((left, right) => {
+      const leftOrder = Number.isFinite(Number(left.planned.videoOrder))
+        ? Number(left.planned.videoOrder)
+        : left.naturalOrder
+      const rightOrder = Number.isFinite(Number(right.planned.videoOrder))
+        ? Number(right.planned.videoOrder)
+        : right.naturalOrder
+      return leftOrder - rightOrder || left.naturalOrder - right.naturalOrder
+    })
+  }, [project.director?.plan.pages])
+  const includedVideoShots = videoShotRows.filter(row => row.planned.videoIncluded !== false)
+  const selectedTestShots = includedVideoShots.filter(row => row.planned.videoTestSelected)
   const selectableVideoModels = useMemo(
     () => videoModels
       .filter(model => model.is_i2v && enabledModels.has(model.model_type))
@@ -538,25 +714,152 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const resolution = aspect === 'portrait'
     ? { width: 1080, height: 1920 }
     : aspect === 'square' ? { width: 1080, height: 1080 } : { width: 1920, height: 1080 }
-  const updateShot = (pageIndex: number, panelIndex: number, patch: Partial<ComicPlanPanel>) => {
-    const state = useComicStore.getState()
-    const director = state.project.director
-    if (!director) return
-    const plan = structuredClone(director.plan)
-    Object.assign(plan.pages[pageIndex].panels[panelIndex], patch)
-    state.patchProject({ director: { ...director, plan } })
-  }
-  const updateAllShots = (
-    patch: Partial<Pick<ComicPlanPanel, 'durationSeconds' | 'cameraMove' | 'videoMotion' | 'videoEndFrame'>>,
-    message: string,
+  const preflightFingerprint = JSON.stringify({
+    comicId: project.id,
+    updatedAt: project.updatedAt,
+    aspect,
+    defaultDuration,
+    movieQuality,
+    movieMotionMode,
+    movieImageFit,
+    movieEndFrameMode,
+    movieFidelity,
+    movieSelfRefiner,
+    selectedVideoModel,
+    savedVideoLoras,
+    targetFilmShots,
+    videoRuntime: {
+      savedVideoParams,
+      spatialUpsampling: movieSpatialUpsampling,
+      filmGrainIntensity: movieFilmGrainIntensity,
+      filmGrainSaturation: movieFilmGrainSaturation,
+      audioScale: movieAudioScale,
+    },
+    shots: videoShotRows.map(({ planned }) => ({
+      id: planned.id,
+      included: planned.videoIncluded !== false,
+      order: planned.videoOrder,
+      renderer: planned.videoRenderer || 'auto',
+      fit: planned.videoFit,
+      action: planned.videoAction,
+      prompt: planned.videoPrompt,
+      motion: planned.videoMotion,
+      motionLevel: planned.videoMotionLevel,
+      duration: planned.durationSeconds,
+      camera: planned.cameraMove,
+      endFrame: planned.videoEndFrame,
+      seed: planned.videoSeed,
+      sources: planned.videoSourcePanelIds,
+      overrides: planned.videoOverrideFields,
+    })),
+  })
+  const preflightIsStale = Boolean(
+    preflightStatus?.status === 'preview_ready'
+    && preflightBuiltFingerprint !== preflightFingerprint,
+  )
+  const updateShot = (
+    pageIndex: number,
+    panelIndex: number,
+    patch: Partial<ComicPlanPanel>,
+    overrideChanges = overrideChangesForPatch(patch),
   ) => {
     const state = useComicStore.getState()
     const director = state.project.director
     if (!director) return
     const plan = structuredClone(director.plan)
-    plan.pages.forEach(page => page.panels.forEach(planned => Object.assign(planned, patch)))
+    const panel = plan.pages[pageIndex].panels[panelIndex]
+    Object.assign(panel, patch)
+    panel.videoOverrideFields = mergeComicVideoOverrideFields(
+      panel.videoOverrideFields,
+      overrideChanges.add,
+      overrideChanges.remove,
+    )
+    state.patchProject({ director: { ...director, plan } })
+  }
+  const updateAllShots = (
+    patch: Partial<ComicPlanPanel>,
+    message: string,
+    overrideChanges = overrideChangesForPatch(patch),
+  ) => {
+    const state = useComicStore.getState()
+    const director = state.project.director
+    if (!director) return
+    const plan = structuredClone(director.plan)
+    plan.pages.forEach(page => page.panels.forEach(planned => {
+      Object.assign(planned, patch)
+      planned.videoOverrideFields = mergeComicVideoOverrideFields(
+        planned.videoOverrideFields,
+        overrideChanges.add,
+        overrideChanges.remove,
+      )
+    }))
     state.patchProject({ director: { ...director, plan } })
     notify('ok', message)
+  }
+  const moveShot = (rowIndex: number, direction: -1 | 1) => {
+    const destination = rowIndex + direction
+    if (destination < 0 || destination >= videoShotRows.length) return
+    const reordered = [...videoShotRows]
+    ;[reordered[rowIndex], reordered[destination]] = [reordered[destination], reordered[rowIndex]]
+    const state = useComicStore.getState()
+    const director = state.project.director
+    if (!director) return
+    const plan = structuredClone(director.plan)
+    reordered.forEach((row, index) => {
+      const planned = plan.pages[row.pageIndex]?.panels[row.panelIndex]
+      if (planned) {
+        planned.videoOrder = index
+        planned.videoOverrideFields = mergeComicVideoOverrideFields(
+          planned.videoOverrideFields,
+          ['order'],
+        )
+      }
+    })
+    state.patchProject({ director: { ...director, plan } })
+  }
+  const selectRepresentativeTests = () => {
+    if (!videoShotRows.length) return
+    const targetRatio = aspect === 'portrait' ? 9 / 16 : aspect === 'square' ? 1 : 16 / 9
+    const score = (row: (typeof videoShotRows)[number], kind: string) => {
+      const panel = row.planned
+      const text = `${panel.framing} ${panel.narrativeRole} ${panel.sceneDescription}`.toLowerCase()
+      const canvasPage = project.pages[row.pageIndex]
+      const canvasPanel = canvasPage?.elements
+        .filter(element => element.type === 'panel' && !element.parentId)
+        .at(row.panelIndex)
+      const ratio = canvasPanel ? canvasPanel.width / Math.max(1, canvasPanel.height) : 1
+      if (kind === 'aspect') return Math.abs(Math.log(Math.max(.01, ratio) / targetRatio))
+      if (kind === 'face') return /close|portrait|rostro|primer plano/.test(text) ? 10 : 0
+      if (kind === 'multi') return panel.characters.length
+      if (kind === 'action') return /(run|fight|jump|fall|cross|attack|correr|lucha|salta|cae|cruza)/.test(text) ? 10 : (panel.videoMotionLevel || 0)
+      if (kind === 'quiet') return /(wide|landscape|establish|panoram|silence|quiet|paisaje|silencio)/.test(text) ? 10 : 0
+      return 0
+    }
+    const selected = new Set<string>()
+    ;['aspect', 'face', 'multi', 'action', 'quiet'].forEach(kind => {
+      const candidate = includedVideoShots
+        .filter(row => !selected.has(row.planned.id))
+        .sort((left, right) => score(right, kind) - score(left, kind))[0]
+      if (candidate) selected.add(candidate.planned.id)
+    })
+    if (selected.size < Math.min(4, includedVideoShots.length)) {
+      includedVideoShots.forEach(row => {
+        if (selected.size < Math.min(4, includedVideoShots.length)) selected.add(row.planned.id)
+      })
+    }
+    const state = useComicStore.getState()
+    const director = state.project.director
+    if (!director) return
+    const plan = structuredClone(director.plan)
+    plan.pages.forEach(page => page.panels.forEach(planned => {
+      planned.videoTestSelected = selected.has(planned.id)
+      planned.videoOverrideFields = mergeComicVideoOverrideFields(
+        planned.videoOverrideFields,
+        ['test_selected'],
+      )
+    }))
+    state.patchProject({ director: { ...director, plan } })
+    notify('ok', `Selected ${selected.size} representative shots: aspect risk, face, ensemble, action and quiet detail.`)
   }
   const resolvedMotionMode = (planned?: ComicPlanPanel): 'contextual' | 'living-still' | 'action' =>
     planned?.videoMotion === 'contextual'
@@ -564,6 +867,11 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       || planned?.videoMotion === 'action'
       ? planned.videoMotion
       : movieMotionMode
+  const resolvedRenderer = (planned?: ComicPlanPanel) => planned?.videoRenderer
+  const resolvedFit = (planned?: ComicPlanPanel) =>
+    planned?.videoOverrideFields?.includes('fit') && planned.videoFit
+      ? planned.videoFit
+      : movieImageFit
   const resolvedMovieDuration = (planned?: ComicPlanPanel) =>
     planned?.durationSeconds || defaultDuration
   const motionTreatmentLabel = (mode: 'contextual' | 'living-still' | 'action') =>
@@ -589,6 +897,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         page_number: number
         panel_number: number
         duration: number
+        duration_seconds: number
         motion: string
         script: string
       }> = []
@@ -606,6 +915,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           page_number: capture.pageNumber,
           panel_number: capture.panelNumber,
           duration: planned?.durationSeconds || defaultDuration,
+          duration_seconds: planned?.durationSeconds || defaultDuration,
           motion: animaticMotion === 'shot-settings'
             ? (planned?.cameraMove || 'none')
             : 'none',
@@ -644,30 +954,43 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     }
   }
 
-  const convertToMovie = async (clipLimit?: number, preflightOnly = false) => {
-    const requestedPanelCount = Math.min(
-      panelCount,
-      Number.isFinite(Number(clipLimit))
-        ? Math.max(1, Math.floor(Number(clipLimit)))
-        : panelCount,
-    )
+  const convertToMovie = async (
+    clipLimit?: number,
+    preflightOnly = false,
+    selectedPanelIds?: string[],
+  ) => {
+    const selected = new Set(selectedPanelIds || [])
+    const requestedRows = includedVideoShots
+      .filter(row => !selected.size || selected.has(row.planned.id))
+      .slice(
+        0,
+        Number.isFinite(Number(clipLimit))
+          ? Math.max(1, Math.floor(Number(clipLimit)))
+          : undefined,
+      )
+    const requestedPanelCount = requestedRows.length
+    if (!requestedPanelCount) {
+      notify('error', selected.size
+        ? 'None of the selected test shots is enabled.'
+        : 'The film adaptation has no enabled shots.')
+      return
+    }
     if (requestedPanelCount > 200) {
       notify('error', `This conversion has ${requestedPanelCount} panels; the safe limit is 200.`)
       return
     }
-    const plannedForRun = (project.director?.plan.pages.flatMap(page => page.panels) || [])
-      .slice(0, requestedPanelCount)
+    const plannedForRun = requestedRows.map(row => row.planned)
     const totalSeconds = Math.round(
       plannedForRun.reduce((sum, planned) => sum + resolvedMovieDuration(planned), 0)
       || requestedPanelCount * defaultDuration,
     )
-    const isTestRun = clipLimit !== undefined && !preflightOnly
+    const isTestRun = (clipLimit !== undefined || selected.size > 0) && !preflightOnly
     if (!preflightOnly && !window.confirm(
-      `${isTestRun ? 'Create a quality test from the first' : 'Convert'} ${requestedPanelCount} `
-      + `comic panel${requestedPanelCount === 1 ? '' : 's'} into about ${totalSeconds}s of generated video? `
-      + `Motion treatment: ${motionTreatmentLabel(movieMotionMode)}. `
+      `${isTestRun ? 'Create a selected quality test from' : 'Adapt'} ${requestedPanelCount} `
+      + `source beat${requestedPanelCount === 1 ? '' : 's'} into an estimated ${totalSeconds}s film edit? `
+      + `Global motion treatment: ${motionTreatmentLabel(movieMotionMode)}; per-shot overrides are shown in the shot plan. `
       + `${isTestRun ? 'This uses the final model, resolution, prompts and shot settings; it is not a lower-quality preview. ' : ''}`
-      + 'The existing artwork will be reused, so no new panel images are generated, but this starts one image-to-video shot per panel and may consume substantial video credits/time.',
+      + 'Director may omit or fuse source beats. Only adapted LTX and AI-living-still shots use I2V; holds and subtle centered pushes are deterministic.',
     )) return
 
     setBusy(preflightOnly ? 'preflight' : 'movie')
@@ -682,7 +1005,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         image_path: string
         page_number: number
         panel_number: number
+        capture_width: number
+        capture_height: number
         duration: number
+        duration_seconds: number
         camera_move: string
         narrative_role: string
         scene_description: string
@@ -694,8 +1020,33 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         video_prompt: string
         motion_mode: 'contextual' | 'living-still' | 'action'
         end_frame_mode: 'auto' | 'none' | 'next-panel'
+        panel_id: string
+        source_panel_ids: string[]
+        included: boolean
+        renderer?: 'hold' | 'parallax' | 'cinemagraph' | 'ltx'
+        fit_mode: 'reframe' | 'cover' | 'contain'
+        motion_level: number
+        test_selected: boolean
+        seed: number
+        action_override: boolean
+        renderer_override: boolean
+        fit_override: boolean
+        motion_mode_override: boolean
+        motion_level_override: boolean
+        duration_override: boolean
+        camera_override: boolean
+        video_prompt_override: boolean
+        seed_override: boolean
+        end_frame_override: boolean
+        test_selected_override: boolean
       }> = []
+      const rowByPosition = new Map(
+        requestedRows.map(row => [`${row.pageIndex + 1}.${row.panelIndex + 1}`, row]),
+      )
+      const rowOrder = new Map(requestedRows.map((row, index) => [row.planned.id, index]))
       await forEachComicPanelCapture(async (capture, current, total) => {
+        const row = rowByPosition.get(`${capture.pageNumber}.${capture.panelNumber}`)
+        if (!row) return
         setProgress(`Preparing artwork ${current}/${total}`)
         const blob = await (await fetch(capture.dataUrl)).blob()
         const upload = await api.uploadImage(new File(
@@ -703,24 +1054,59 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           `comic-movie-${capture.pageNumber}-${capture.panelNumber}.png`,
           { type: 'image/png' },
         ))
-        const planned = project.director?.plan.pages[capture.pageNumber - 1]?.panels[capture.panelNumber - 1]
+        const planned = row.planned
         const motionMode = resolvedMotionMode(planned)
+        const renderer = resolvedRenderer(planned)
+        const overrides = new Set(planned.videoOverrideFields || [])
         comicShots.push({
           comic_title: project.title,
           image_path: upload.path,
           page_number: capture.pageNumber,
           panel_number: capture.panelNumber,
+          capture_width: capture.width,
+          capture_height: capture.height,
           duration: resolvedMovieDuration(planned),
-          camera_move: motionMode === 'action' ? (planned?.cameraMove || 'none') : 'none',
+          duration_seconds: resolvedMovieDuration(planned),
+          camera_move: (!renderer || renderer === 'ltx') && overrides.has('camera')
+            ? (planned.cameraMove || 'none')
+            : 'none',
           narrative_role: planned?.narrativeRole || `Panel ${capture.pageNumber}.${capture.panelNumber}`,
-          scene_description: planned?.sceneDescription || '',
+          scene_description: planned?.videoAction || planned?.sceneDescription || '',
           image_prompt: planned?.imagePrompt || '',
           framing: planned?.framing || 'match comic panel',
           characters: planned?.characters || [],
           script: planned ? scriptForPanel(planned) : '',
-          video_prompt: planned?.videoPrompt || '',
-          motion_mode: motionMode,
+          video_prompt: planned?.videoPrompt || planned?.videoAction || '',
+          motion_mode: renderer === 'hold'
+            || renderer === 'parallax'
+            || renderer === 'cinemagraph'
+            ? 'living-still'
+            : motionMode,
           end_frame_mode: planned?.videoEndFrame || 'auto',
+          panel_id: planned.id,
+          source_panel_ids: planned.videoSourcePanelIds?.length
+            ? planned.videoSourcePanelIds
+            : [planned.id],
+          included: true,
+          renderer,
+          fit_mode: resolvedFit(planned),
+          motion_level: planned.videoMotionLevel ?? (renderer === 'hold' ? 0 : 1),
+          test_selected: Boolean(planned.videoTestSelected),
+          seed: Number.isFinite(Number(planned.videoSeed))
+            ? Number(planned.videoSeed)
+            : Math.abs([...planned.id].reduce((hash, character) =>
+              ((hash * 31) + character.charCodeAt(0)) | 0, 2166136261)),
+          action_override: overrides.has('action'),
+          renderer_override: overrides.has('renderer'),
+          fit_override: overrides.has('fit'),
+          motion_mode_override: overrides.has('motion_mode'),
+          motion_level_override: overrides.has('motion_level'),
+          duration_override: overrides.has('duration'),
+          camera_override: overrides.has('camera'),
+          video_prompt_override: overrides.has('video_prompt'),
+          seed_override: overrides.has('seed'),
+          end_frame_override: overrides.has('end_frame'),
+          test_selected_override: overrides.has('test_selected'),
           visual_style: [
             project.style.name,
             project.style.promptSuffix,
@@ -731,8 +1117,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         // Lettering remains in the comic/script but is removed from I2V first
         // frames so the video model cannot warp speech bubbles or captions.
         includeLettering: false,
-        limit: requestedPanelCount,
       })
+      comicShots.sort((left, right) =>
+        (rowOrder.get(left.panel_id) ?? Number.MAX_SAFE_INTEGER)
+        - (rowOrder.get(right.panel_id) ?? Number.MAX_SAFE_INTEGER))
 
       const movieContext = [
         `TITLE: ${project.title}`,
@@ -809,6 +1197,11 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         workspace: state.activeWorkspace,
         scene_description: movieContext,
         comic_shots: comicShots,
+        // A storyboard is already a deliberate shot list. Preserve its
+        // one-frame/one-shot contract; only printed-comic mode receives the
+        // editorial fusion/omission pass.
+        comic_adapt_to_film: !storyboard,
+        comic_target_shots: targetFilmShots > 0 ? targetFilmShots : undefined,
         provided_clip_image_paths: comicShots.map(shot => shot.image_path),
         video_image_fit: movieImageFit,
         comic_end_frame_mode: movieEndFrameMode,
@@ -882,10 +1275,18 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           setProgress(status.progress?.message || 'Preparing comic video PRE…')
           if (status.status === 'preview_ready') {
             window.localStorage.setItem(preflightStorageKey, pipeline_id)
+            window.localStorage.setItem(
+              preflightFingerprintStorageKey,
+              preflightFingerprint,
+            )
+            setPreflightBuiltFingerprint(preflightFingerprint)
             notify(
               'ok',
               `PRE ready for ${status.preview_clips?.length || 0} clips. No video was generated.`,
             )
+            window.dispatchEvent(new CustomEvent('maestro:comic-pre-open', {
+              detail: { pipelineId: pipeline_id },
+            }))
             break
           }
           if (status.status === 'failed' || status.status === 'cancelled') {
@@ -933,113 +1334,6 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     }
   }
 
-  const generateFromPreflight = async (clipIndex?: number) => {
-    if (!preflightPipelineId || preflightStatus?.status !== 'preview_ready') return
-    if (
-      !Number.isInteger(clipIndex)
-      && !window.confirm(
-        `Generate all ${preflightStatus.preview_clips?.length || 0} approved PRE clips now? `
-        + 'This starts the real video model and may take substantial time.',
-      )
-    ) return
-    const marker = Number.isInteger(clipIndex) ? Number(clipIndex) : 'all'
-    setPreflightGenerating(marker)
-    let generationStarted = false
-    try {
-      const started = await api.generatePipelinePreview(preflightPipelineId, clipIndex)
-      generationStarted = true
-      const previewClips = preflightStatus.preview_clips || []
-      const selectedClips = Number.isInteger(clipIndex)
-        ? previewClips.filter(clip => clip.index === clipIndex)
-        : previewClips
-      const plannedClips = selectedClips.reduce<PlannedClip[]>((clips, clip, index) => {
-        const start = index === 0 ? 0 : Number(clips[index - 1].end)
-        clips.push({
-          start,
-          end: start + clip.duration_seconds,
-          section_label: clip.page_number && clip.panel_number
-            ? `${clip.page_number}.${clip.panel_number}`
-            : clip.label,
-          energy: 0.5,
-          suggested_prompt_hint: clip.label,
-          beat_count: 0,
-          duration_frames: clip.frames,
-        })
-        return clips
-      }, [])
-      const totalSeconds = selectedClips.reduce(
-        (sum, clip) => sum + clip.duration_seconds,
-        0,
-      )
-      const state = useStore.getState()
-      state.setGenerationMode('video')
-      state.setSidebarMode('director')
-      state.setDirectorSkill('short_film')
-      state.setMediaFilter('all')
-      useStore.setState({
-        pipelineId: started.pipeline_id,
-        pipelineStatus: null,
-        pipelinePolling: true,
-        directorStep: 'review_video',
-        directorLoading: true,
-        directorError: null,
-        directorSceneDescription: `${project.title}\n\n${project.synopsis}`,
-        directorPlannedClips: plannedClips,
-        directorClipPlans: selectedClips.map(clip => ({
-          video_prompt: clip.prompt,
-          image_prompt: '',
-        })),
-        directorClipImages: selectedClips.map((clip, index) => ({
-          clipIndex: index,
-          prompt: '',
-          file: null as unknown as File,
-          filename: clip.image_filename,
-        })),
-        directorAutoMode: true,
-        directorSeamless: false,
-        shortFilmPath: 'story',
-        shortFilmTargetDuration: Math.round(totalSeconds),
-      })
-      useStore.getState().pollPipelineStatus()
-      window.dispatchEvent(new Event('maestro:director-open'))
-      notify(
-        'ok',
-        started.reused
-          ? 'This approved PRE generation was already running; Maestro reconnected to it instead of submitting a duplicate.'
-          : Number.isInteger(clipIndex)
-          ? `Generating only PRE clip ${Number(clipIndex) + 1} with its frozen image, prompt and settings.`
-          : `Generating all ${selectedClips.length} approved PRE clips.`,
-      )
-      void (async () => {
-        try {
-          for (;;) {
-            await new Promise(resolve => window.setTimeout(resolve, 1500))
-            const status = await api.fetchPipelineStatus(started.pipeline_id)
-            if (
-              status.status === 'completed'
-              || status.status === 'failed'
-              || status.status === 'cancelled'
-            ) break
-          }
-        } catch {
-          // Global Director polling still owns the authoritative error state.
-        } finally {
-          setPreflightGenerating(current => current === marker ? null : current)
-        }
-      })()
-    } catch (error) {
-      notify('error', (error as Error).message)
-    } finally {
-      if (!generationStarted) setPreflightGenerating(null)
-    }
-  }
-
-  const previewClips = preflightStatus?.preview_clips || []
-  const previewAspectRatio = (value: string) => {
-    const [width, height] = String(value || '').split('x').map(Number)
-    return width > 0 && height > 0 ? `${width} / ${height}` : '16 / 9'
-  }
-
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-purple-400/30 bg-purple-400/5 p-3">
@@ -1049,485 +1343,1256 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         <p className="mt-1 text-[10px] text-text-muted">
           {storyboard
             ? 'Each approved first frame and its editable I2V prompt go directly to Director. Missing prompts alone are completed by the LLM.'
-            : 'The LLM reads the comic canon and every scene, then writes one motion/performance prompt per panel. Clean panel artwork becomes the real first frame of each I2V shot; speech bubbles stay in the script instead of being distorted by the video model.'}
+            : 'Adapt the comic into a film shot list first. Shots can be omitted, reordered or routed to an exact hold, deterministic subtle push, AI living still or authored LTX render without changing the printed comic.'}
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block text-[10px] text-text-muted">Movie format
-          <select className={`${input} mt-1`} value={aspect} onChange={event => setAspect(event.target.value as typeof aspect)}>
-            <option value="landscape">Landscape</option>
-            <option value="portrait">Portrait</option>
-            <option value="square">Square</option>
-          </select>
-        </label>
-        <label className="block text-[10px] text-text-muted">I2V quality
-          <select className={`${input} mt-1`} value={movieQuality} onChange={event => setMovieQuality(event.target.value as typeof movieQuality)}>
-            <option value="1080p">1080p · highest native detail · heavy</option>
-            <option value="720p">720p · recommended balance</option>
-            <option value="480p">480p · fast preview · visibly softer</option>
-          </select>
-        </label>
+      <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-tertiary/30 p-1">
+        <button
+          className={`${button} border-0 ${videoTab === 'settings' ? 'bg-accent-blue/15 text-accent-blue' : ''}`}
+          onClick={() => setVideoTab('settings')}
+        >
+          <Settings2 size={12} /> Configuration
+        </button>
+        <button
+          className={`${button} border-0 ${videoTab === 'shots' ? 'bg-purple-400/15 text-purple-300' : ''}`}
+          onClick={() => setVideoTab('shots')}
+        >
+          <Clapperboard size={12} /> Source beats · {includedVideoShots.length}
+        </button>
       </div>
-      <label className="block text-[10px] text-text-muted">Motion treatment
-        <select
-          className={`${input} mt-1`}
-          value={movieMotionMode}
-          onChange={event => setMovieMotionMode(event.target.value as typeof movieMotionMode)}
-        >
-          <option value="contextual">Context-aware · LLM directs each scene · fixed camera · recommended</option>
-          <option value="living-still">Living still · deterministic micro-motion · fixed camera</option>
-          <option value="action">Authored story action · editable prompt and camera</option>
-        </select>
-        <span className="mt-1 block text-[9px] text-text-muted">
-          Context-aware reads the complete story, the panel description, characters and script to direct a specific performance while holding the composition. Living still is the conservative fallback. Authored action uses the editable prompt and camera below. Every mode respects the requested duration.
-        </span>
-      </label>
-      <label className="block text-[10px] text-text-muted">Video model
-        <select
-          className={`${input} mt-1`}
-          value={selectedVideoModel || 'ltx2_22B_distilled_1_1'}
-          onChange={event => selectDirectorVideoModel(event.target.value)}
-        >
-          {!selectableVideoModels.some(model => model.model_type === selectedVideoModel) && selectedVideoModel && (
-            <option value={selectedVideoModel}>{selectedVideoModel}</option>
-          )}
-          {selectableVideoModels.map(model => (
-            <option key={model.model_type} value={model.model_type}>
-              {model.name}{model.is_downloaded === false ? ' · not installed' : ''}
-            </option>
-          ))}
-        </select>
-        <span className="mt-1 block text-[9px] text-text-muted">
-          LTX-2.3 Distilled INT8 is the measured recommendation for this RTX 4090. Its quality recipe is the trained two-stage 8+3 path; adding arbitrary diffusion steps is not a valid quality preset. Use 1080p for more native detail or 720p for the measured balance.
-        </span>
-      </label>
-      <label className="block text-[10px] text-text-muted">Panel fit
-        <select className={`${input} mt-1`} value={movieImageFit} onChange={event => setMovieImageFit(event.target.value as typeof movieImageFit)}>
-          <option value="smart">Smart fill · keep the whole panel</option>
-          <option value="crop">Crop to fill · may remove edges</option>
-        </select>
-        <span className="mt-1 block text-[9px] text-text-muted">
-          Smart fill preserves the complete panel and fills spare space with a subdued blurred edge copy. Crop is only used when the aspect ratios are reasonably close; Maestro automatically protects portrait or square panels from destructive panoramic crops.
-        </span>
-      </label>
-      {selectedVideoModel?.includes('gguf') && (
-        <div className="rounded border border-amber-400/30 bg-amber-400/5 px-2 py-1.5 text-[10px] text-amber-200">
-          Q6 is the low-VRAM/compatibility option. It was slower and preserved the reference less faithfully than INT8 in the local RTX 4090 comparison.
-          <button
-            className="ml-1 underline"
-            type="button"
-            onClick={() => selectDirectorVideoModel('ltx2_22B_distilled_1_1')}
-          >
-            Use recommended INT8
-          </button>
+
+      {videoTab === 'settings' && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block text-[10px] text-text-muted">Movie format
+              <select className={`${input} mt-1`} value={aspect} onChange={event => setAspect(event.target.value as typeof aspect)}>
+                <option value="landscape">Landscape · TV</option>
+                <option value="portrait">Portrait · mobile</option>
+                <option value="square">Square</option>
+              </select>
+            </label>
+            <label className="block text-[10px] text-text-muted">I2V quality
+              <select className={`${input} mt-1`} value={movieQuality} onChange={event => setMovieQuality(event.target.value as typeof movieQuality)}>
+                <option value="1080p">1080p · heavy</option>
+                <option value="720p">720p · recommended</option>
+                <option value="480p">480p · test only</option>
+              </select>
+            </label>
+          </div>
+          <label className="block text-[10px] text-text-muted">Global LTX direction
+            <select className={`${input} mt-1`} value={movieMotionMode} onChange={event => setMovieMotionMode(event.target.value as typeof movieMotionMode)}>
+              <option value="contextual">Context-aware performance · fixed camera · recommended</option>
+              <option value="living-still">Living still · micro-motion only</option>
+              <option value="action">Authored action · prompt and camera</option>
+            </select>
+          </label>
+          <label className="block text-[10px] text-text-muted">Video model
+            <select className={`${input} mt-1`} value={selectedVideoModel || 'ltx2_22B_distilled_1_1'} onChange={event => selectDirectorVideoModel(event.target.value)}>
+              {!selectableVideoModels.some(model => model.model_type === selectedVideoModel) && selectedVideoModel && <option value={selectedVideoModel}>{selectedVideoModel}</option>}
+              {selectableVideoModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}{model.is_downloaded === false ? ' · not installed' : ''}</option>)}
+            </select>
+            <span className="mt-1 block text-[9px] text-text-muted">LTX-2.3 Distilled INT8 is the measured RTX 4090 recommendation. Maestro keeps its two-stage 8+3 recipe.</span>
+          </label>
+          <label className="block text-[10px] text-text-muted">Default video framing
+            <select className={`${input} mt-1`} value={movieImageFit} onChange={event => setMovieImageFit(event.target.value as typeof movieImageFit)}>
+              <option value="cover">Cinematic crop · fill canvas</option>
+              <option value="contain">Preserve whole panel · visible padding</option>
+            </select>
+            <span className="mt-1 block text-[9px] text-text-muted">Contain preserves the whole panel; Cover is an explicit crop. AI reframe import/generation is not available in this build, so it is never offered as a magical fallback.</span>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block text-[10px] text-text-muted">End frame
+              <select className={`${input} mt-1`} value={movieEndFrameMode} onChange={event => setMovieEndFrameMode(event.target.value as typeof movieEndFrameMode)}>
+                <option value="none">None · independent shots</option>
+                <option value="smart">Compatible continuous actions</option>
+                <option value="all">Every following panel · experimental</option>
+              </select>
+            </label>
+            <label className="block text-[10px] text-text-muted">Fidelity
+              <select className={`${input} mt-1`} value={movieFidelity} onChange={event => setMovieFidelity(event.target.value as typeof movieFidelity)}>
+                <option value="faithful">Faithful · recommended</option>
+                <option value="balanced">Balanced</option>
+                <option value="expressive">Expressive · drift risk</option>
+              </select>
+            </label>
+          </div>
+          <label className="block text-[10px] text-text-muted">Default duration
+            <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} />
+          </label>
+          <label className="block text-[10px] text-text-muted">Target film shots
+            <input
+              className={`${input} mt-1`}
+              type="number"
+              min={0}
+              max={200}
+              step={1}
+              value={targetFilmShots}
+              onChange={event => setTargetFilmShots(Math.max(
+                0,
+                Math.min(200, Math.trunc(Number(event.target.value) || 0)),
+              ))}
+            />
+            <span className="mt-1 block text-[9px] text-text-muted">
+              {targetFilmShots === 0
+                ? `Auto · Director will adapt these ${includedVideoShots.length} source beats into roughly ${Math.max(1, Math.round(includedVideoShots.length * .34))} purposeful film shots.`
+                : `${targetFilmShots} film shots requested. PRE shows the actual adapted shot list before any video is generated.`}
+            </span>
+          </label>
+          <label className="block text-[10px] text-text-muted">Experimental self-refiner
+            <select className={`${input} mt-1`} value={movieSelfRefiner} onChange={event => setMovieSelfRefiner(Number(event.target.value))}>
+              <option value={0}>Off · stable path</option>
+              <option value={1}>P1-Norm · experimental</option>
+              <option value={2}>P2-Norm · experimental</option>
+            </select>
+          </label>
+          {selectedVideoModel?.includes('gguf') && <div className="rounded border border-amber-400/30 bg-amber-400/5 p-2 text-[10px] text-amber-200">Q6 saves VRAM but was slower and less faithful locally. <button className="underline" onClick={() => selectDirectorVideoModel('ltx2_22B_distilled_1_1')}>Use INT8</button></div>}
+          {selectedVideoModel?.includes('fp8') && <div className="rounded border border-amber-400/30 bg-amber-400/5 p-2 text-[10px] text-amber-200">FP8 remains experimental: slower locally with more anatomy and clothing deformation.</div>}
+          <details className="rounded border border-border bg-bg-tertiary/30">
+            <summary className="cursor-pointer p-2 text-[10px] font-semibold text-text-primary">Video LoRAs · {savedVideoLoras?.activated_loras?.length || 0} active</summary>
+            <div className="space-y-2 border-t border-border p-2">
+              <p className="text-[9px] text-amber-200">Transition LoRAs are not comic/anime style LoRAs. Use only a LoRA trained for the selected video model and test it in PRE.</p>
+              <DirectorLoraSelector mode="video" modelType={selectedVideoModel || 'ltx2_22B_distilled_1_1'} />
+            </div>
+          </details>
+          <details className="border-t border-border pt-3">
+            <summary className="cursor-pointer text-xs font-semibold text-text-muted">FFmpeg animatic · no generative video</summary>
+            <div className="mt-2 space-y-2 rounded border border-amber-400/25 bg-amber-400/5 p-2">
+              <p className="text-[10px] text-amber-100/80">Useful for timing only. Camera movement here is programmatic and is never confused with LTX generation.</p>
+              <select className={input} value={animaticMotion} onChange={event => setAnimaticMotion(event.target.value as typeof animaticMotion)}>
+                <option value="none">Static panels · recommended</option>
+                <option value="shot-settings">Use programmed pan/zoom settings</option>
+              </select>
+              <select className={input} value={transition} onChange={event => setTransition(event.target.value)}>
+                <option value="none">Hard cuts · recommended</option>
+                <option value="crossfade">Crossfade</option>
+                <option value="fade-black">Fade through black</option>
+                <option value="wipe-left">Wipe left</option>
+                <option value="dissolve">Dissolve</option>
+              </select>
+              <button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={Boolean(busy) || panelCount === 0} onClick={create}>
+                {busy === 'animatic' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
+                {busy === 'animatic' && progress ? progress : 'Render animatic'}
+              </button>
+            </div>
+          </details>
+          {result && <div className="space-y-2 rounded border border-emerald-500/30 bg-emerald-500/5 p-2"><video src={result.url} controls className="w-full rounded" /><button className={`${button} w-full border-emerald-500/40 text-emerald-300`} onClick={() => useStore.getState().setMediaFilter('videoeditor')}>Open in Video Editor</button></div>}
         </div>
       )}
-      {selectedVideoModel?.includes('fp8') && (
-        <div className="rounded border border-amber-400/30 bg-amber-400/5 px-2 py-1.5 text-[10px] text-amber-200">
-          FP8 remains experimental here: the local comparison took longer and introduced visible anatomy/clothing deformation. INT8 is the quality recommendation.
-        </div>
-      )}
-      <details className="rounded border border-border bg-bg-tertiary/30">
-        <summary className="cursor-pointer p-2 text-[10px] font-semibold text-text-primary">
-          Style preservation and video LoRAs · {savedVideoLoras?.activated_loras?.length || 0} active
-        </summary>
-        <div className="space-y-2 border-t border-border p-2">
-          <p className="text-[9px] text-text-muted">
-            Source-style preservation is always enabled for comic I2V: the clean panel is the exact first frame and the prompt protects its medium, palette, linework and character design. A LoRA is optional and is applied only when selected here.
-          </p>
-          <p className="text-[9px] text-amber-200">
-            The LTX transition LoRA teaches multi-shot transitions; it is not an anime style LoRA and is unnecessary for independent comic clips. Use a style LoRA only when it was trained for the selected video model.
-          </p>
-          <DirectorLoraSelector
-            mode="video"
-            modelType={selectedVideoModel || 'ltx2_22B_distilled_1_1'}
-          />
-        </div>
-      </details>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block text-[10px] text-text-muted">I2V end frame
-          <select
-            className={`${input} mt-1`}
-            value={movieEndFrameMode}
-            onChange={event => setMovieEndFrameMode(event.target.value as typeof movieEndFrameMode)}
-          >
-            <option value="none">None · independent clips · recommended</option>
-            <option value="smart">Use next panel only for compatible continuous actions</option>
-            <option value="all">Use next panel for every clip · experimental</option>
-          </select>
-        </label>
-        <label className="block text-[10px] text-text-muted">Motion fidelity
-          <select
-            className={`${input} mt-1`}
-            value={movieFidelity}
-            onChange={event => setMovieFidelity(event.target.value as typeof movieFidelity)}
-          >
-            <option value="faithful">Faithful · preserve art, perform action</option>
-            <option value="balanced">Balanced</option>
-            <option value="expressive">Expressive · more drift risk</option>
-          </select>
-        </label>
-      </div>
-      <label className="block text-[10px] text-text-muted">Experimental self-refiner · applies to every generated clip
-        <select
-          className={`${input} mt-1`}
-          value={movieSelfRefiner}
-          onChange={event => setMovieSelfRefiner(Number(event.target.value))}
-        >
-          <option value={0}>Off · recommended stable path</option>
-          <option value={1}>P1-Norm · experimental</option>
-          <option value={2}>P2-Norm · experimental</option>
-        </select>
-        <span className="mt-1 block text-[9px] text-text-muted">
-          This repeats refinement work and can improve a detail or introduce artifacts; it is not part of the official Distilled quality recipe. Test it on the first two clips before using it for a full comic.
-        </span>
-      </label>
-      <p className="text-[9px] text-text-muted">
-        This controls how an individual clip ends; it is not a transition between clips. By default every panel is an independent I2V shot. The finished clips are always joined with hard cuts here; fades and other edit transitions can be added afterwards in Video Editor.
-      </p>
-      <label className="block text-[10px] text-text-muted">Default requested duration per panel
-        <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={defaultDuration} onChange={event => setDefaultDuration(Number(event.target.value))} />
-        <span className="mt-1 block text-[9px] text-text-muted">
-          This is the real generative duration. Maestro no longer shortens living-still clips to two seconds.
-        </span>
-      </label>
-      {project.director && (
-        <div className="space-y-1.5 rounded border border-border bg-bg-tertiary/30 p-2">
-          <p className="text-[9px] text-text-muted">
-            Existing shots keep their individual timing. Apply the value above when you want to update the whole film.
-          </p>
+
+      {videoTab === 'shots' && project.director && (
+        <div className="space-y-3">
+          <div className="rounded border border-border bg-bg-tertiary/30 p-2 text-[10px] text-text-muted">
+            <div className="flex items-center justify-between gap-2"><span><b className="text-text-primary">{includedVideoShots.length}</b> source beats enabled · {videoShotRows.length - includedVideoShots.length} omitted · {selectedTestShots.length} suggested for test</span><span>Global: <b className="text-accent-blue">{movieMotionMode}</b></span></div>
+            <p className="mt-1">These are source comic beats, not the final film-shot count. Director may merge adjacent beats, so these controls are adaptation hints. PRE is the authoritative, editable list of effective film shots and render settings.</p>
+          </div>
           <div className="grid grid-cols-2 gap-1.5">
+            <button className={`${button} border-accent-blue/40 text-accent-blue`} onClick={() => updateAllShots({ videoMotion: 'auto' }, `All ${videoShotRows.length} shots now follow the global LTX direction.`)}>All follow global motion</button>
+            <button className={`${button} border-purple-400/40 text-purple-200`} onClick={() => updateAllShots({
+              videoIncluded: undefined,
+              videoOrder: undefined,
+              videoRenderer: undefined,
+              videoFit: undefined,
+              videoMotion: 'auto',
+              videoMotionLevel: undefined,
+              durationSeconds: undefined,
+              cameraMove: undefined,
+              videoEndFrame: undefined,
+              videoSeed: undefined,
+              videoTestSelected: undefined,
+              videoOverrideFields: [],
+            }, `Released every manual adaptation lock on ${videoShotRows.length} source beats.`)}>Release all manual locks</button>
+            <button className={button} onClick={() => updateAllShots({ videoIncluded: true }, 'All film shots enabled.')}>Include all</button>
             <button
               className={button}
-              type="button"
               onClick={() => updateAllShots(
                 { durationSeconds: defaultDuration },
-                `Applied ${defaultDuration}s to all ${panelCount} shots.`,
+                `Applied ${defaultDuration}s as a source timing hint. Set the exact final-shot duration in PRE.`,
+                { add: [], remove: ['duration'] },
               )}
             >
-              Apply {defaultDuration}s to all
+              Use {defaultDuration}s timing hint
             </button>
-            <button
-              className={`${button} border-cyan-400/40 text-cyan-300`}
-              type="button"
-              onClick={() => updateAllShots(
-                {
-                  cameraMove: 'none',
-                  videoMotion: 'contextual',
-                  videoEndFrame: 'none',
-                },
-                `Applied context-aware direction to all ${panelCount} shots: story-specific performance, fixed camera, independent I2V and clean cuts.`,
-              )}
-            >
-              Context-aware for all
-            </button>
-            <button
-              className={`${button} border-emerald-400/40 text-emerald-300`}
-              type="button"
-              onClick={() => updateAllShots(
-                {
-                  cameraMove: 'none',
-                  videoMotion: 'living-still',
-                  videoEndFrame: 'none',
-                },
-                `Applied stable living-still treatment to all ${panelCount} shots: full requested duration, fixed camera, no end-frame conditioning and a clean cut.`,
-              )}
-            >
-              Living still for all
-            </button>
-            <button
-              className={`${button} col-span-2 border-purple-400/40 text-purple-300`}
-              type="button"
-              onClick={() => updateAllShots(
-                { videoMotion: 'action' },
-                `Enabled each shot's story-action prompt for all ${panelCount} shots.`,
-              )}
-            >
-              Story action for all
-            </button>
+            <button className={`${button} border-cyan-400/40 text-cyan-300`} onClick={selectRepresentativeTests}><Sparkles size={12} /> Select representative test</button>
           </div>
-        </div>
-      )}
-      {project.director && (
-        <details className="rounded border border-border bg-bg-tertiary/30">
-          <summary className="cursor-pointer p-2 text-xs text-text-primary">Shot timing and camera moves</summary>
-          <div className="space-y-2 p-2 pt-0">
-            {project.director.plan.pages.flatMap((page, pageIndex) => page.panels.map((planned, panelIndex) => (
-              <div key={planned.id} className="grid grid-cols-[1fr_70px] gap-1.5 rounded border border-border p-1.5">
-                <span className="text-[10px] text-text-muted">{pageIndex + 1}.{panelIndex + 1} · {planned.narrativeRole}</span>
-                <input className={input} type="number" min={.8} max={20} step={.1} value={planned.durationSeconds || defaultDuration} onChange={event => updateShot(pageIndex, panelIndex, { durationSeconds: Number(event.target.value) })} />
-                <select className={`${input} col-span-2`} value={planned.cameraMove || 'none'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}>
-                  <option value="none">No forced camera move</option>
-                  <option value="push-in">Slow push-in</option>
-                  <option value="pull-out">Slow pull-out</option>
-                  <option value="pan-left">Pan left</option>
-                  <option value="pan-right">Pan right</option>
-                </select>
-                <select
-                  className={`${input} col-span-2`}
-                  value={planned.videoMotion || 'auto'}
-                  onChange={event => updateShot(pageIndex, panelIndex, {
-                    videoMotion: event.target.value as ComicPlanPanel['videoMotion'],
-                  })}
-                  title="Choose whether this panel stays close to the original drawing or performs its full action prompt"
-                >
-                  <option value="auto">Motion · follow global ({motionTreatmentLabel(movieMotionMode)})</option>
-                  <option value="contextual">Motion · context-aware performance · fixed camera</option>
-                  <option value="living-still">Motion · deterministic living still · fixed camera</option>
-                  <option value="action">Motion · authored story action · use prompt and camera</option>
-                </select>
-                <select
-                  className={`${input} col-span-2`}
-                  value={planned.videoEndFrame || 'auto'}
-                  onChange={event => updateShot(pageIndex, panelIndex, {
-                    videoEndFrame: event.target.value as ComicPlanPanel['videoEndFrame'],
-                  })}
-                  title="Optional image conditioning for the final frame of this shot"
-                >
-                  <option value="auto">End frame · follow global setting</option>
-                  <option value="none">End frame · none (independent clip)</option>
-                  <option value="next-panel">End frame · use next panel image</option>
-                </select>
-                <textarea
-                  className={`${input} col-span-2`}
-                  rows={5}
-                  value={planned.videoPrompt || ''}
-                  disabled={resolvedMotionMode(planned) !== 'action'}
-                  onChange={event => updateShot(pageIndex, panelIndex, {
-                    videoPrompt: event.target.value,
-                  })}
-                  placeholder={storyboard
-                    ? 'Chronological action, performance, camera and final beat…'
-                    : 'Optional manual action inside this panel. Leave blank for the LLM to write it from the scene and script…'}
-                />
-                {resolvedMotionMode(planned) !== 'action' && (
-                  <span className="col-span-2 text-[9px] text-emerald-300">
-                    {resolvedMotionMode(planned) === 'contextual'
-                      ? 'At submission, the LLM rewrites this shot from the story, image description, characters and script. Select Authored action to use or edit the prompt directly.'
-                      : 'The action prompt is preserved but paused. Select Authored action for this shot to use it.'}
-                  </span>
-                )}
-                <button
-                  className={`${button} col-span-2`}
-                  type="button"
-                  onClick={() => updateAllShots(
-                    {
-                      durationSeconds: planned.durationSeconds || defaultDuration,
-                      cameraMove: planned.cameraMove || 'none',
-                      videoMotion: planned.videoMotion || 'auto',
-                      videoEndFrame: planned.videoEndFrame || 'auto',
-                    },
-                    `Applied shot ${pageIndex + 1}.${panelIndex + 1} timing, camera, motion treatment and end-frame setting to all ${panelCount} shots.`,
-                  )}
-                >
-                  Apply this shot&apos;s settings to all videos
-                </button>
-              </div>
-            )))}
-          </div>
-        </details>
-      )}
-      <button
-        className={`${button} w-full border-red-400/60 bg-red-400/5 text-red-200`}
-        disabled={Boolean(busy) || panelCount === 0}
-        onClick={() => convertToMovie(undefined, true)}
-      >
-        {busy === 'preflight'
-          ? <Loader2 size={13} className="animate-spin" />
-          : <Eye size={13} />}
-        {busy === 'preflight' && progress
-          ? progress
-          : `PRE · inspect all ${panelCount} I2V inputs before generation`}
-      </button>
-      <p className="text-[9px] text-red-200/80">
-        Plans every shot and prepares the exact input canvases, but stops before loading the video model or spending video generation time.
-      </p>
-      {preflightStatus?.status === 'failed' && (
-        <div className="rounded border border-red-500/40 bg-red-500/10 p-2 text-[10px] text-red-200">
-          {preflightStatus.error || 'Comic video PRE failed.'}
-        </div>
-      )}
-      {preflightStatus?.status === 'preview_ready' && previewClips.length > 0 && (
-        <details open className="rounded-lg border border-red-400/35 bg-red-400/5">
-          <summary className="cursor-pointer p-2 text-xs font-semibold text-red-100">
-            PRE ready · {previewClips.length} exact I2V shot{previewClips.length === 1 ? '' : 's'}
-          </summary>
-          <div className="space-y-2 border-t border-red-400/20 p-2">
-            <p className="text-[9px] text-red-100/75">
-              This PRE is frozen. If you change model, format, prompts or shot settings above, run PRE again before generating.
-            </p>
-            <button
-              className={`${button} w-full border-purple-400/50 text-purple-200`}
-              type="button"
-              disabled={preflightGenerating !== null}
-              onClick={() => generateFromPreflight()}
-            >
-              {preflightGenerating === 'all'
-                ? <Loader2 size={13} className="animate-spin" />
-                : <Play size={13} />}
-              Generate all approved PRE clips
-            </button>
-            {previewClips.map(clip => (
-              <details
-                key={`${preflightPipelineId}-${clip.index}`}
-                className="overflow-hidden rounded border border-border bg-bg-secondary/80"
-              >
-                <summary className="cursor-pointer px-2 py-2 text-[10px] font-semibold text-text-primary">
-                  {clip.page_number && clip.panel_number
-                    ? `${clip.page_number}.${clip.panel_number}`
-                    : `Clip ${clip.index + 1}`}
-                  {' · '}
-                  {clip.label}
-                </summary>
-                <div className="space-y-2 border-t border-border p-2">
-                  <div
-                    className="relative overflow-hidden bg-black"
-                    style={{ aspectRatio: previewAspectRatio(clip.output_resolution) }}
-                    title={`The red frame is the ${clip.output_resolution} canvas sent to the video generator`}
-                  >
-                    <img
-                      src={api.getFileUrl(clip.image_filename)}
-                      alt={`Prepared I2V frame ${clip.index + 1}`}
-                      loading="lazy"
-                      className="h-full w-full object-contain"
-                    />
-                    <div className="pointer-events-none absolute inset-0 border-[3px] border-red-500/70 shadow-[inset_0_0_18px_rgba(239,68,68,0.18)]" />
-                    <span className="pointer-events-none absolute right-1 top-1 rounded bg-red-600/80 px-1.5 py-0.5 text-[9px] font-semibold text-white">
-                      OUTPUT {clip.output_resolution}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1 text-[9px] text-text-muted">
-                    <span>Original: <b className="text-text-primary">{clip.source_resolution || 'unknown'}</b></span>
-                    <span>I2V input: <b className="text-text-primary">{clip.input_resolution}</b></span>
-                    <span>Model: <b className="text-text-primary">{clip.video_model}</b></span>
-                    <span>Fit: <b className="text-text-primary">{clip.fit_mode}</b></span>
-                    <span>Steps: <b className="text-text-primary">{clip.num_inference_steps}{clip.stage2_steps ? ` + ${clip.stage2_steps}` : ''}</b></span>
-                    <span>Guidance: <b className="text-text-primary">{clip.guidance_scale}</b></span>
-                    <span>Frames: <b className="text-text-primary">{clip.frames} @ {clip.fps} fps</b></span>
-                    <span>Effective time: <b className="text-text-primary">{clip.duration_seconds.toFixed(2)}s</b></span>
-                    <span>Reference: <b className="text-text-primary">{clip.image_prompt_type}</b></span>
-                    <span>Strength: <b className="text-text-primary">{clip.input_video_strength}</b></span>
-                    <span>Seed: <b className="text-text-primary">{clip.seed}</b></span>
-                    <span>Motion: <b className="text-text-primary">{clip.motion_mode}</b></span>
-                    <span>Camera: <b className="text-text-primary">{clip.camera_locked ? 'locked' : 'authored'}</b></span>
-                    <span>Fidelity: <b className="text-text-primary">{clip.fidelity}</b></span>
-                    <span>Refiner: <b className="text-text-primary">{clip.self_refiner || 'off'}</b></span>
-                    <span>Pipeline: <b className="text-text-primary">
-                      {clip.single_stage_pipeline
-                        ? 'single-stage'
-                        : clip.progressive_pipeline
-                          ? 'progressive'
-                          : 'two-stage'}
-                    </b></span>
-                    <span>LoRAs: <b className="text-text-primary">{clip.activated_loras.length || 'none'}</b></span>
-                    <span>Upsampling: <b className="text-text-primary">{clip.spatial_upsampling || 'off'}</b></span>
-                    <span>Film grain: <b className="text-text-primary">{clip.film_grain_intensity || 'off'}</b></span>
-                    {clip.activated_loras.length > 0 && (
-                      <span className="col-span-2 break-all">
-                        Active LoRAs: <b className="text-text-primary">
-                          {clip.activated_loras.join(', ')}
-                          {clip.lora_multipliers ? ` · ${clip.lora_multipliers}` : ''}
-                        </b>
-                      </span>
-                    )}
-                  </div>
-                  {clip.end_image_filename && (
-                    <div className="rounded border border-amber-400/30 bg-amber-400/5 px-2 py-1 text-[9px] text-amber-200">
-                      End-frame conditioning is enabled for this clip.
+          <div className="space-y-2">
+            {videoShotRows.map((row, rowIndex) => {
+              const { planned, pageIndex, panelIndex } = row
+              const renderer = resolvedRenderer(planned)
+              const rendererLabel = renderer || 'auto'
+              const motion = resolvedMotionMode(planned)
+              const overrides = new Set(planned.videoOverrideFields || [])
+              return (
+                <details key={planned.id} open={rowIndex < 2} className={`rounded-lg border ${planned.videoIncluded === false ? 'border-border opacity-60' : 'border-purple-400/25'} bg-bg-tertiary/20`}>
+                  <summary className="cursor-pointer p-2 text-[10px] text-text-primary">
+                    <span className="font-semibold">{rowIndex + 1}. Source {pageIndex + 1}.{panelIndex + 1}</span>
+                    <span className="ml-1 text-text-muted">· {planned.narrativeRole}</span>
+                    <span className="ml-2 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-purple-200">{rendererLabel}</span>
+                    <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-amber-200">fit {resolvedFit(planned)}</span>
+                    {overrides.size > 0 && <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-emerald-200">{overrides.size} manual lock{overrides.size === 1 ? '' : 's'}</span>}
+                    {(!renderer || renderer === 'ltx') && <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-cyan-200">{overrides.has('motion_mode') ? `${motion} override` : `${motion} global`}</span>}
+                  </summary>
+                  <div className="space-y-2 border-t border-border p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-1 text-[9px] text-text-muted"><input type="checkbox" checked={planned.videoIncluded !== false} onChange={event => updateShot(pageIndex, panelIndex, { videoIncluded: event.target.checked })} /> Include</label>
+                      <label className="flex items-center gap-1 text-[9px] text-text-muted"><input type="checkbox" checked={Boolean(planned.videoTestSelected)} disabled={planned.videoIncluded === false} onChange={event => updateShot(pageIndex, panelIndex, { videoTestSelected: event.target.checked })} /> Suggest for PRE test</label>
+                      <span className="ml-auto flex gap-1"><button className={button} disabled={rowIndex === 0} onClick={() => moveShot(rowIndex, -1)} title="Move earlier"><ArrowUp size={12} /></button><button className={button} disabled={rowIndex === videoShotRows.length - 1} onClick={() => moveShot(rowIndex, 1)} title="Move later"><ArrowDown size={12} /></button></span>
                     </div>
-                  )}
-                  <label className="block text-[9px] text-text-muted">
-                    Exact prompt sent to the video generator
-                    <textarea
-                      className={`${input} mt-1 min-h-28 resize-y font-mono text-[10px]`}
-                      readOnly
-                      value={clip.prompt}
-                    />
-                  </label>
-                  {clip.negative_prompt && (
-                    <details>
-                      <summary className="cursor-pointer text-[9px] text-text-muted">Negative prompt</summary>
-                      <p className="mt-1 whitespace-pre-wrap rounded border border-border bg-bg-tertiary p-1.5 text-[9px] text-text-muted">
-                        {clip.negative_prompt}
-                      </p>
-                    </details>
-                  )}
-                  <button
-                    className={`${button} w-full border-red-400/50 text-red-200`}
-                    type="button"
-                    disabled={preflightGenerating !== null}
-                    onClick={() => generateFromPreflight(clip.index)}
-                  >
-                    {preflightGenerating === clip.index
-                      ? <Loader2 size={13} className="animate-spin" />
-                      : <Play size={13} />}
-                    Generate only this clip
-                  </button>
-                </div>
-              </details>
-            ))}
+                    <label className="block text-[9px] text-text-muted">Action hint after the first frame
+                      <textarea className={`${input} mt-1`} rows={2} value={planned.videoAction || ''} onChange={event => updateShot(pageIndex, panelIndex, { videoAction: event.target.value })} placeholder="One clear chronological performance or environmental action…" />
+                    </label>
+                    <label className="block text-[9px] text-text-muted">I2V prompt hint
+                      <textarea className={`${input} mt-1`} rows={4} value={planned.videoPrompt || ''} onChange={event => updateShot(pageIndex, panelIndex, { videoPrompt: event.target.value })} placeholder="Describe only what changes: action, restrained movement, camera and final beat…" />
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <label className="text-[9px] text-text-muted">Renderer hint
+                        <select
+                          className={`${input} mt-1`}
+                          value={rendererLabel}
+                          onChange={event => {
+                            const nextRenderer = event.target.value
+                            const deterministic = nextRenderer === 'hold'
+                              || nextRenderer === 'parallax'
+                              || nextRenderer === 'cinemagraph'
+                            updateShot(pageIndex, panelIndex, {
+                              videoRenderer: nextRenderer === 'auto'
+                                ? undefined
+                                : nextRenderer as ComicPlanPanel['videoRenderer'],
+                              ...(deterministic ? {
+                                videoMotion: 'auto' as const,
+                                videoMotionLevel: undefined,
+                                cameraMove: undefined,
+                              } : {}),
+                            }, nextRenderer === 'auto'
+                              ? { add: [], remove: ['renderer'] }
+                              : {
+                                add: ['renderer'],
+                                remove: deterministic
+                                  ? ['motion_mode', 'motion_level', 'camera']
+                                  : [],
+                              })
+                          }}
+                        >
+                          <option value="auto">Auto · Director chooses for this beat</option>
+                          <option value="hold">Hold · exact still</option>
+                          <option value="parallax">Subtle centered push · deterministic</option>
+                          <option value="cinemagraph">AI living still · subtle full-frame I2V</option>
+                          <option value="ltx">LTX I2V · performance/action</option>
+                        </select>
+                      </label>
+                      <label className="text-[9px] text-text-muted">Frame-fit hint
+                        <select className={`${input} mt-1`} value={planned.videoFit || 'auto'} onChange={event => updateShot(pageIndex, panelIndex, { videoFit: event.target.value === 'auto' ? undefined : event.target.value as ComicPlanPanel['videoFit'] })}>
+                          <option value="auto">Follow global · {movieImageFit}</option>
+                          {planned.videoFit === 'reframe' && <option value="reframe" disabled>Legacy AI reframe request · change to Contain/Cover</option>}
+                          <option value="cover">Cinematic crop</option>
+                          <option value="contain">Whole panel + padding</option>
+                        </select>
+                      </label>
+                      <label className="text-[9px] text-text-muted">Preferred duration
+                        <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={planned.durationSeconds || defaultDuration} onChange={event => updateShot(pageIndex, panelIndex, { durationSeconds: Number(event.target.value) })} />
+                      </label>
+                      <label className="text-[9px] text-text-muted">Motion hint · {motionLevelLabel(planned.videoMotionLevel ?? (renderer === 'hold' ? 0 : 1))}
+                        <input className="mt-2 w-full" type="range" min={0} max={3} step={1} disabled={renderer === 'hold' || renderer === 'parallax' || renderer === 'cinemagraph'} value={planned.videoMotionLevel ?? (renderer === 'hold' ? 0 : 1)} onChange={event => updateShot(pageIndex, panelIndex, { videoMotionLevel: Number(event.target.value) as ComicPlanPanel['videoMotionLevel'] })} />
+                      </label>
+                      <label className="text-[9px] text-text-muted">Camera hint
+                        <select className={`${input} mt-1`} value={planned.cameraMove || 'none'} disabled={renderer !== 'ltx'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}>
+                          <option value="none">Locked / no requested move</option>
+                          <option value="push-in">Push-in</option>
+                          <option value="pull-out">Pull-out</option>
+                          <option value="pan-left">Pan left</option>
+                          <option value="pan-right">Pan right</option>
+                        </select>
+                      </label>
+                      <label className="text-[9px] text-text-muted">LTX direction hint
+                        <select className={`${input} mt-1`} value={planned.videoMotion || 'auto'} disabled={renderer !== 'ltx'} onChange={event => updateShot(pageIndex, panelIndex, { videoMotion: event.target.value as ComicPlanPanel['videoMotion'] })}>
+                          <option value="auto">Follow global · {movieMotionMode}</option>
+                          <option value="contextual">Context-aware</option>
+                          <option value="living-still">Living still</option>
+                          <option value="action">Authored prompt</option>
+                        </select>
+                      </label>
+                      <label className="text-[9px] text-text-muted">Seed
+                        <input className={`${input} mt-1`} type="number" value={planned.videoSeed ?? ''} placeholder="Stable auto seed" onChange={event => updateShot(pageIndex, panelIndex, { videoSeed: event.target.value === '' ? undefined : Math.trunc(Number(event.target.value)) })} />
+                      </label>
+                      <label className="text-[9px] text-text-muted">End-frame hint
+                        <select className={`${input} mt-1`} value={planned.videoEndFrame || 'auto'} onChange={event => updateShot(pageIndex, panelIndex, { videoEndFrame: event.target.value as ComicPlanPanel['videoEndFrame'] })}>
+                          <option value="auto">Follow global</option>
+                          <option value="none">None</option>
+                          <option value="next-panel">Use next compatible panel</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                </details>
+              )
+            })}
           </div>
-        </details>
+        </div>
       )}
-      <button
-        className={`${button} w-full border-cyan-400/50 text-cyan-300`}
-        disabled={Boolean(busy) || panelCount === 0}
-        onClick={() => convertToMovie(2)}
-      >
-        {busy === 'movie' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
-        {busy === 'movie' && progress
-          ? progress
-          : `Test first ${Math.min(2, panelCount)} complete I2V clip${Math.min(2, panelCount) === 1 ? '' : 's'}`}
-      </button>
-      <p className="text-[9px] text-cyan-200/80">
-        Uses the selected final model, native resolution, full durations, contextual prompts and effects, but submits only the first two panels.
-      </p>
-      <button className={`${button} w-full border-purple-400/50 text-purple-300`} disabled={Boolean(busy) || panelCount === 0} onClick={() => convertToMovie()}>
-        {busy === 'movie' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
-        {busy === 'movie' && progress
-          ? progress
-          : `Generate ${panelCount} real I2V shots with ${selectedVideoModel || 'the selected model'}`}
-      </button>
-      <p className="text-[9px] text-purple-200/80">
-        This is the generative option: it submits one image-to-video job per panel to the selected model.
-      </p>
 
-      <details className="border-t border-border pt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-text-muted">
-          FFmpeg storyboard preview · still images only
-        </summary>
-        <div className="mt-2 space-y-2 rounded border border-amber-400/25 bg-amber-400/5 p-2">
-          <p className="text-[10px] text-amber-100/80">
-            This preview never calls LTX and cannot animate characters or environments. It only holds the existing drawings; optional camera moves and transitions are programmatic.
-          </p>
-          <label className="block text-[10px] text-text-muted">Preview motion
-            <select className={`${input} mt-1`} value={animaticMotion} onChange={event => setAnimaticMotion(event.target.value as typeof animaticMotion)}>
-              <option value="none">Static panels · recommended</option>
-              <option value="shot-settings">Use programmed pan/zoom settings</option>
-            </select>
-          </label>
-          <label className="block text-[10px] text-text-muted">Preview transition
-            <select className={`${input} mt-1`} value={transition} onChange={event => setTransition(event.target.value)}>
-              <option value="none">Hard cuts · recommended</option>
-              <option value="crossfade">Crossfade</option>
-              <option value="fade-black">Fade through black</option>
-              <option value="wipe-left">Wipe left</option>
-              <option value="dissolve">Dissolve</option>
-              <option value="zoom-in">Zoom portal</option>
-            </select>
-          </label>
-          <button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={Boolean(busy) || panelCount === 0} onClick={create}>
-            {busy === 'animatic' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
-            {busy === 'animatic' && progress ? progress : 'Render non-AI storyboard preview'}
+      <div className="space-y-2 border-t border-border pt-3">
+        <button className={`${button} w-full border-red-400/60 bg-red-400/5 text-red-200`} disabled={Boolean(busy) || includedVideoShots.length === 0} onClick={() => convertToMovie(undefined, true)}>
+          {busy === 'preflight' ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}
+          {busy === 'preflight' && progress ? progress : `Prepare PRE for ${includedVideoShots.length} enabled film shots`}
+        </button>
+        <p className="text-[9px] text-red-200/80">PRE opens as its own full comic workspace tab. It shows the exact source, prepared frame, prompt, renderer, seed and LTX parameters before any video generation.</p>
+        {preflightStatus?.status === 'preview_ready' && (
+          <button className={`${button} w-full ${preflightIsStale ? 'border-amber-400/50 text-amber-200' : 'border-emerald-400/50 text-emerald-300'}`} onClick={() => window.dispatchEvent(new CustomEvent('maestro:comic-pre-open', { detail: { pipelineId: preflightPipelineId } }))}>
+            {preflightIsStale ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
+            {preflightIsStale ? 'Open stale PRE · rebuild before approval' : `Open prepared PRE · ${preflightStatus.preview_clips?.length || 0} shots`}
           </button>
+        )}
+        {preflightStatus?.status === 'failed' && <div className="rounded border border-red-500/40 bg-red-500/10 p-2 text-[10px] text-red-200">{preflightStatus.error || 'Comic video PRE failed.'}</div>}
+      </div>
+    </div>
+  )
+}
+
+type PreviewDraft = api.PipelinePreviewClip & {
+  included: boolean
+  order: number
+  renderer: 'hold' | 'parallax' | 'cinemagraph' | 'ltx'
+  fit_mode: 'reframe' | 'cover' | 'contain'
+  test_selected: boolean
+  camera_move: string
+  prompt_override_update?: boolean
+}
+
+type StoredPreviewRecovery = {
+  fingerprint?: string
+  drafts?: api.PipelinePreviewClip[]
+  dirty?: boolean
+  waiverReason?: string
+  reviewedTestIndices?: number[]
+}
+
+const previewRatio = (value: string): number => {
+  const [width, height] = String(value || '').split('x').map(Number)
+  return width > 0 && height > 0 ? width / height : 16 / 9
+}
+
+const normalizePreviewDrafts = (clips: api.PipelinePreviewClip[]): PreviewDraft[] =>
+  clips.map((clip, position) => {
+    const renderer = ['hold', 'parallax', 'cinemagraph', 'ltx'].includes(String(clip.renderer))
+      ? clip.renderer as PreviewDraft['renderer']
+      : 'ltx'
+    const index = Number.isFinite(Number(clip.index)) ? Number(clip.index) : position
+    return {
+      ...clip,
+      index,
+      label: String(clip.label || `Shot ${index + 1}`),
+      image_filename: String(clip.image_filename || ''),
+      end_image_filename: String(clip.end_image_filename || ''),
+      source_resolution: String(clip.source_resolution || clip.input_resolution || ''),
+      input_resolution: String(clip.input_resolution || clip.output_resolution || ''),
+      output_resolution: String(clip.output_resolution || clip.input_resolution || ''),
+      prompt: String(clip.prompt || clip.base_prompt || ''),
+      base_prompt: clip.base_prompt === undefined ? undefined : String(clip.base_prompt || ''),
+      negative_prompt: String(clip.negative_prompt || ''),
+      dialogue: String(clip.dialogue || ''),
+      included: clip.included !== false,
+      order: Number.isFinite(Number(clip.order)) ? Number(clip.order) : position,
+      renderer,
+      fit_mode: ['reframe', 'cover', 'contain'].includes(String(clip.fit_mode))
+        ? clip.fit_mode as PreviewDraft['fit_mode']
+        : clip.fit_mode === 'crop'
+          ? 'cover'
+          : 'contain',
+      duration_seconds: Number.isFinite(Number(clip.duration_seconds))
+        ? Math.max(.8, Math.min(20, Number(clip.duration_seconds)))
+        : 3,
+      motion_level: Number.isFinite(Number(clip.motion_level))
+        ? Math.max(0, Math.min(3, Number(clip.motion_level)))
+        : renderer === 'hold' ? 0 : 1,
+      seed: Number.isFinite(Number(clip.seed)) ? Math.trunc(Number(clip.seed)) : -1,
+      test_selected: Boolean(clip.test_selected),
+      camera_move: String(clip.camera_move || (clip.camera_locked ? 'none' : 'authored')),
+      activated_loras: Array.isArray(clip.activated_loras) ? clip.activated_loras : [],
+      source_panel_ids: Array.isArray(clip.source_panel_ids)
+        ? clip.source_panel_ids.map(value => String(value)).filter(Boolean)
+        : [],
+      risk_tags: Array.isArray(clip.risk_tags)
+        ? clip.risk_tags.map(value => String(value)).filter(Boolean)
+        : [],
+      prompt_override_update: typeof (clip as PreviewDraft).prompt_override_update === 'boolean'
+        ? (clip as PreviewDraft).prompt_override_update
+        : undefined,
+    }
+  }).sort((left, right) => left.order - right.order || left.index - right.index)
+
+export function ComicVideoPreflightPanel({
+  notify,
+  onDirtyChange,
+}: {
+  notify: (kind: 'ok' | 'error', text: string) => void
+  onDirtyChange?: (dirty: boolean) => void
+}) {
+  const project = useComicStore(state => state.project)
+  const activeWorkspace = useStore(state => state.activeWorkspace)
+  const selectedVideoModel = useStore(state => state.selectedModelPerMode.video)
+  const savedVideoLoras = useStore(state => state.savedLoraPerMode.video)
+  const savedVideoParams = useStore(state => state.savedParamsPerMode.video)
+  const movieSpatialUpsampling = useStore(state => state.directorVideoSpatialUpsampling)
+  const movieFilmGrainIntensity = useStore(state => state.directorVideoFilmGrainIntensity)
+  const movieFilmGrainSaturation = useStore(state => state.directorVideoFilmGrainSaturation)
+  const movieSelfRefiner = useStore(state => state.directorVideoSelfRefiner)
+  const movieAudioScale = useStore(state => state.directorAudioScale)
+  const [pipelineId, setPipelineId] = useState<string | null>(null)
+  const [status, setStatus] = useState<api.PipelineStatus | null>(null)
+  const [drafts, setDrafts] = useState<PreviewDraft[]>([])
+  const [loading, setLoading] = useState(true)
+  const [dirty, setDirty] = useState(false)
+  const dirtyRef = useRef(false)
+  const [waiverReason, setWaiverReason] = useState('')
+  const [bulkDuration, setBulkDuration] = useState(3)
+  const [reviewedTestIndices, setReviewedTestIndices] = useState<number[]>([])
+  const [busy, setBusy] = useState<'save' | 'approve' | 'accept' | 'test' | 'all' | number | null>(null)
+  const storageKey = `maestro-comic-preflight:${activeWorkspace}:${project.id}`
+  const hasUnsavedLocalChanges = dirty
+    || waiverReason !== (status?.quality_gate?.waiver_reason || '')
+    || (status?.quality_gate?.status === 'review_required' && reviewedTestIndices.length > 0)
+  const frontendSourceStale = (() => {
+    const builtValue = window.localStorage.getItem(`${storageKey}:fingerprint`)
+    // The backend fingerprint freezes the PRE itself; this companion signature
+    // proves that it was built from the comic/config currently open in the UI.
+    // Without both pieces of evidence a recovered PRE remains view-only.
+    if (!builtValue) return true
+    try {
+      const built = JSON.parse(builtValue) as Record<string, unknown>
+      const saved = readComicVideoSettings(activeWorkspace, project.id)
+      return built.comicId !== project.id
+        || built.updatedAt !== project.updatedAt
+        || built.aspect !== (saved.aspect || project.director?.input.storyboardAspect || 'landscape')
+        || Number(built.defaultDuration || 3) !== Number(saved.defaultDuration || 3)
+        || built.movieQuality !== (saved.quality || '720p')
+        || built.movieMotionMode !== (
+          saved.motionMode
+          || (project.director?.input.productionMode === 'storyboard' ? 'action' : 'contextual')
+        )
+        || built.movieImageFit !== (saved.imageFit || 'contain')
+        || built.movieEndFrameMode !== (saved.endFrameMode || 'none')
+        || built.movieFidelity !== (saved.fidelity || 'faithful')
+        || Number(built.targetFilmShots || 0) !== Number(saved.targetFilmShots || 0)
+        || built.movieSelfRefiner !== movieSelfRefiner
+        || built.selectedVideoModel !== selectedVideoModel
+        || JSON.stringify(built.savedVideoLoras || {}) !== JSON.stringify(savedVideoLoras || {})
+        || JSON.stringify(built.videoRuntime || {}) !== JSON.stringify({
+          savedVideoParams,
+          spatialUpsampling: movieSpatialUpsampling,
+          filmGrainIntensity: movieFilmGrainIntensity,
+          filmGrainSaturation: movieFilmGrainSaturation,
+          audioScale: movieAudioScale,
+        })
+    } catch {
+      return true
+    }
+  })()
+
+  useEffect(() => {
+    dirtyRef.current = hasUnsavedLocalChanges
+    onDirtyChange?.(hasUnsavedLocalChanges)
+  }, [hasUnsavedLocalChanges, onDirtyChange])
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange])
+
+  useEffect(() => {
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedLocalChanges) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeLeaving)
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }, [hasUnsavedLocalChanges])
+
+  useEffect(() => {
+    const fingerprint = status?.preview_fingerprint || ''
+    if (loading || !pipelineId || !fingerprint) return
+    const recoveryKey = `${storageKey}:unsaved:${pipelineId}:${fingerprint}`
+    try {
+      if (hasUnsavedLocalChanges) {
+        window.localStorage.setItem(recoveryKey, JSON.stringify({
+          fingerprint,
+          drafts,
+          dirty,
+          waiverReason,
+          reviewedTestIndices,
+          savedAt: new Date().toISOString(),
+        }))
+      } else {
+        window.localStorage.removeItem(recoveryKey)
+      }
+    } catch {
+      // Durable server PRE remains available if browser storage is disabled.
+    }
+  }, [
+    dirty,
+    drafts,
+    hasUnsavedLocalChanges,
+    loading,
+    pipelineId,
+    reviewedTestIndices,
+    status?.preview_fingerprint,
+    storageKey,
+    waiverReason,
+  ])
+
+  const loadPreview = async (requestedId?: string | null) => {
+    setLoading(true)
+    try {
+      const candidates: string[] = []
+      if (requestedId) candidates.push(requestedId)
+      const remembered = window.localStorage.getItem(storageKey)
+      if (remembered && !candidates.includes(remembered)) candidates.push(remembered)
+      try {
+        const listed = await api.fetchPipelineList()
+        listed.pipelines
+          .filter(item =>
+            item.pipeline_type === 'comic_movie'
+            && item.status === 'preview_ready'
+            && item.comic_id === project.id)
+          .forEach(item => {
+            if (!candidates.includes(item.id)) candidates.push(item.id)
+          })
+      } catch {
+        // The durable ID remains enough when list recovery is temporarily unavailable.
+      }
+      for (const candidate of candidates) {
+        try {
+          const recovered = await api.fetchPipelineStatus(candidate)
+          if (recovered.status !== 'preview_ready') continue
+          const serverDrafts = normalizePreviewDrafts(recovered.preview_clips || [])
+          const fingerprint = recovered.preview_fingerprint || ''
+          let localRecovery: StoredPreviewRecovery | null = null
+          if (fingerprint) {
+            try {
+              localRecovery = JSON.parse(
+                window.localStorage.getItem(
+                  `${storageKey}:unsaved:${candidate}:${fingerprint}`,
+                ) || 'null',
+              ) as StoredPreviewRecovery | null
+            } catch {
+              localRecovery = null
+            }
+          }
+          const canRestore = localRecovery?.fingerprint === fingerprint
+            && Array.isArray(localRecovery?.drafts)
+          setPipelineId(candidate)
+          setStatus(recovered)
+          setDrafts(canRestore
+            ? normalizePreviewDrafts(localRecovery!.drafts!)
+            : serverDrafts)
+          setDirty(canRestore && Boolean(localRecovery?.dirty))
+          setWaiverReason(canRestore
+            ? String(localRecovery?.waiverReason
+              ?? recovered.quality_gate?.waiver_reason
+              ?? '')
+            : recovered.quality_gate?.waiver_reason || '')
+          setReviewedTestIndices(canRestore
+            ? (localRecovery?.reviewedTestIndices || [])
+              .filter(value => Number.isInteger(value))
+            : [])
+          window.localStorage.setItem(storageKey, candidate)
+          if (canRestore) {
+            notify('ok', 'Recovered unsaved PRE edits from this browser for the exact same fingerprint.')
+          }
+          return
+        } catch {
+          // Try the next durable PRE.
+        }
+      }
+      setPipelineId(null)
+      setStatus(null)
+      setDrafts([])
+      setDirty(false)
+      setWaiverReason('')
+      setReviewedTestIndices([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadPreview()
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ pipelineId?: string }>).detail
+      if (dirtyRef.current && !window.confirm(
+        'Discard unsaved PRE edits and open the requested prepared shot list?',
+      )) return
+      if (dirtyRef.current) {
+        const currentPipelineId = window.localStorage.getItem(storageKey)
+        const prefix = currentPipelineId
+          ? `${storageKey}:unsaved:${currentPipelineId}:`
+          : ''
+        if (prefix) {
+          const keys = Array.from(
+            { length: window.localStorage.length },
+            (_, index) => window.localStorage.key(index),
+          ).filter((key): key is string => Boolean(key?.startsWith(prefix)))
+          keys.forEach(key => window.localStorage.removeItem(key))
+        }
+      }
+      void loadPreview(detail?.pipelineId)
+    }
+    window.addEventListener('maestro:comic-pre-open', open)
+    return () => window.removeEventListener('maestro:comic-pre-open', open)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace, project.id, storageKey])
+
+  const patchDraft = (index: number, patch: Partial<PreviewDraft>) => {
+    if (frontendSourceStale) {
+      notify('error', 'This recovered PRE is view-only. Rebuild it from the current comic before editing.')
+      return
+    }
+    setDrafts(current => current.map(clip => clip.index === index ? { ...clip, ...patch } : clip))
+    setDirty(true)
+  }
+  const moveDraft = (position: number, direction: -1 | 1) => {
+    if (frontendSourceStale) {
+      notify('error', 'This recovered PRE is view-only. Rebuild it from the current comic before reordering.')
+      return
+    }
+    const destination = position + direction
+    if (destination < 0 || destination >= drafts.length) return
+    setDrafts(current => {
+      const next = [...current]
+      ;[next[position], next[destination]] = [next[destination], next[position]]
+      return next.map((clip, order) => ({ ...clip, order }))
+    })
+    setDirty(true)
+  }
+  const updatePayload = (
+    values = drafts,
+  ): api.PipelinePreviewClipUpdate[] => values.map((clip, order) => ({
+    index: clip.index,
+    included: clip.included,
+    order,
+    renderer: clip.renderer,
+    motion_level: Math.max(0, Math.min(3, Number(clip.motion_level) || 0)),
+    fit_mode: clip.fit_mode,
+    duration_seconds: Math.max(.8, Math.min(20, Number(clip.duration_seconds) || 3)),
+    camera_move: clip.camera_move || 'none',
+    seed: Number.isFinite(Number(clip.seed)) ? Math.trunc(Number(clip.seed)) : -1,
+    test_selected: clip.test_selected,
+    // Approval is evidence-based: the browser never claims that an AI reframe
+    // exists unless the frozen PRE already points to a real prepared keyframe.
+    reframe_approved: Boolean(
+      clip.reframe_approved && clip.used_prepared_keyframe,
+    ),
+    ...(typeof clip.prompt_override_update === 'boolean'
+      ? {
+        prompt_override: clip.prompt_override_update,
+        ...(clip.prompt_override_update ? { prompt: clip.prompt } : {}),
+      }
+      : {}),
+  }))
+  const save = async ({
+    approvePreview = false,
+    qualityWaiver = false,
+  }: {
+    approvePreview?: boolean
+    qualityWaiver?: boolean
+  } = {}) => {
+    if (!pipelineId) return false
+    if (frontendSourceStale) {
+      notify('error', 'The comic or film configuration changed after this PRE was built. Return to Video and rebuild it.')
+      return false
+    }
+    const expectedFingerprint = status?.preview_fingerprint || ''
+    if (!expectedFingerprint) {
+      notify('error', 'This legacy PRE has no backend fingerprint. Rebuild it from Video before editing or generating.')
+      return false
+    }
+    const unresolved = drafts.filter(clip =>
+      clip.included
+      && clip.needs_reframe
+      && !(clip.reframe_approved && clip.used_prepared_keyframe))
+    if (approvePreview && unresolved.length) {
+      notify(
+        'error',
+        `${unresolved.length} enabled shot${unresolved.length === 1 ? '' : 's'} requested AI reframe but has no real prepared keyframe. Reframe import/generation is not available yet; change each to Contain/Cover and save.`,
+      )
+      return false
+    }
+    const normalizedWaiverReason = waiverReason.trim()
+    if (qualityWaiver && !normalizedWaiverReason) {
+      notify('error', 'Explain why the representative quality test is being waived. The reason is stored with the PRE.')
+      return false
+    }
+    if (qualityWaiver && !status?.preview_approved) {
+      notify('error', 'Approve this exact PRE first; only an approved fingerprint can receive a quality-test waiver.')
+      return false
+    }
+    if (qualityWaiver && !window.confirm(
+      'Waive the representative quality test for this exact PRE fingerprint? '
+      + 'This is an auditable exception, not a successful quality test.',
+    )) return false
+    setBusy(approvePreview || qualityWaiver ? 'approve' : 'save')
+    try {
+      await api.updatePipelinePreview(
+        pipelineId,
+        approvePreview || qualityWaiver ? [] : updatePayload(drafts),
+        {
+          expectedFingerprint,
+          approvePreview,
+          qualityWaiver,
+          waiverReason: normalizedWaiverReason,
+        },
+      )
+      try {
+        window.localStorage.removeItem(
+          `${storageKey}:unsaved:${pipelineId}:${expectedFingerprint}`,
+        )
+      } catch {
+        // Server save already succeeded; browser recovery is best-effort.
+      }
+      const refreshed = await api.fetchPipelineStatus(pipelineId)
+      const refreshedDrafts = normalizePreviewDrafts(refreshed.preview_clips || [])
+      setStatus(refreshed)
+      setDrafts(refreshedDrafts)
+      setDirty(false)
+      setReviewedTestIndices([])
+      setWaiverReason(refreshed.quality_gate?.waiver_reason || normalizedWaiverReason)
+      const refreshedBlocking = refreshedDrafts.filter(clip =>
+        clip.included
+        && clip.needs_reframe
+        && !(clip.reframe_approved && clip.used_prepared_keyframe))
+      if (approvePreview && !refreshed.preview_approved) {
+        notify('error', refreshedBlocking.length
+          ? 'PRE was saved but not approved: at least one requested AI reframe still lacks a real prepared keyframe.'
+          : 'PRE was saved but the backend did not approve this fingerprint. Reload it before generating.')
+        return false
+      }
+      const gate = refreshed.quality_gate
+      const gateReady = Boolean(
+        gate
+        && gate.fingerprint === refreshed.preview_fingerprint
+        && (gate.status === 'passed' || gate.status === 'waived'),
+      )
+      if (qualityWaiver && !gateReady) {
+        notify('error', 'The backend did not accept the quality waiver for this PRE fingerprint.')
+        return false
+      }
+      let message = 'PRE changes saved and prepared inputs rebuilt. Approval and earlier quality tests were invalidated.'
+      if (qualityWaiver) {
+        message = 'Quality test waived with an auditable reason. Full generation is unlocked for this approved PRE.'
+      } else if (approvePreview) {
+        message = gateReady
+          ? `PRE approved; quality gate ${gate?.status}. Full generation is unlocked for this exact fingerprint.`
+          : 'PRE approved. Run the selected representative clips and pass the quality gate before full generation.'
+      }
+      notify('ok', message)
+      return true
+    } catch (error) {
+      notify('error', (error as Error).message)
+      return false
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const acceptTestedClips = async () => {
+    if (!pipelineId || !status?.preview_fingerprint) return
+    if (frontendSourceStale || dirty || !status.preview_approved) {
+      notify('error', 'Only the current saved and approved PRE can accept a representative quality test.')
+      return
+    }
+    if (status.quality_gate?.status !== 'review_required') {
+      notify('error', 'The complete required test set is not ready for review yet. Reload after the test jobs finish.')
+      return
+    }
+    const missingReviews = (status.quality_gate.required_test_indices || [])
+      .filter(index => !reviewedTestIndices.includes(index))
+    if (missingReviews.length) {
+      notify('error', `Review and confirm the test video for shot${missingReviews.length === 1 ? '' : 's'} ${missingReviews.map(index => index + 1).join(', ')} first.`)
+      return
+    }
+    const testedCount = status.quality_gate.tested_indices?.length || 0
+    if (!window.confirm(
+      `Accept the ${testedCount} completed representative clip`
+      + `${testedCount === 1 ? '' : 's'} for this exact PRE fingerprint?`,
+    )) return
+    setBusy('accept')
+    try {
+      await api.updatePipelinePreview(pipelineId, [], {
+        expectedFingerprint: status.preview_fingerprint,
+        acceptQualityTest: true,
+      })
+      const refreshed = await api.fetchPipelineStatus(pipelineId)
+      setStatus(refreshed)
+      if (refreshed.quality_gate?.status !== 'passed') {
+        throw new Error(
+          refreshed.quality_gate?.failures?.join(' · ')
+          || 'The backend did not pass the quality gate for this fingerprint.',
+        )
+      }
+      notify('ok', 'Representative clips accepted. Full generation is now unlocked for this exact approved PRE.')
+    } catch (error) {
+      notify('error', (error as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const sourceImageFor = (clip: PreviewDraft): string => {
+    if (clip.source_image_filename) return api.getFileUrl(clip.source_image_filename)
+    const page = project.pages[Math.max(0, Number(clip.page_number || 1) - 1)]
+    const panels = page?.elements.filter(element => element.type === 'panel' && !element.parentId) || []
+    const panel = panels[Math.max(0, Number(clip.panel_number || 1) - 1)]
+    const image = page?.elements.find(element =>
+      element.type === 'image' && panel && element.parentId === panel.id)
+    if (image?.type === 'image') {
+      const asset = project.assets[image.assetId]
+      return asset?.source || asset?.thumbnail || ''
+    }
+    return ''
+  }
+  const aspectRisk = (clip: PreviewDraft) =>
+    Math.abs(Math.log(
+      Math.max(.01, previewRatio(clip.source_resolution))
+      / Math.max(.01, previewRatio(clip.output_resolution)),
+    )) > .38
+  const enabledDrafts = drafts.filter(clip => clip.included)
+  const selectedDrafts = enabledDrafts.filter(clip => clip.test_selected)
+  const unresolvedRisks = enabledDrafts.filter(clip =>
+    clip.needs_reframe
+    && !(clip.reframe_approved && clip.used_prepared_keyframe))
+  const previewFingerprint = status?.preview_fingerprint || ''
+  const qualityGate = status?.quality_gate
+  const qualityTestedIndices = qualityGate?.tested_indices || []
+  const qualityRequiredIndices = qualityGate?.required_test_indices || selectedDrafts.map(clip => clip.index)
+  const qualityResults = qualityGate?.results || {}
+  const pendingVisualReviews = qualityRequiredIndices.filter(index =>
+    !reviewedTestIndices.includes(index))
+  const qualityGateReady = Boolean(
+    qualityGate
+    && qualityGate.fingerprint === previewFingerprint
+    && (qualityGate.status === 'passed' || qualityGate.status === 'waived'),
+  )
+  const previewApproved = Boolean(status?.preview_approved && previewFingerprint)
+  const fullGenerationUnlocked = Boolean(
+    !dirty
+    && previewApproved
+    && qualityGateReady
+    && !unresolvedRisks.length
+    && !frontendSourceStale,
+  )
+  const selectRepresentativePreviewTests = () => {
+    if (frontendSourceStale) {
+      notify('error', 'This recovered PRE is view-only. Rebuild it before changing the test selection.')
+      return
+    }
+    const candidates = drafts.filter(clip => clip.included)
+    const selected = new Set<number>()
+    const take = (predicate: (clip: PreviewDraft) => boolean) => {
+      const clip = candidates.find(item => !selected.has(item.index) && predicate(item))
+      if (clip) selected.add(clip.index)
+    }
+    take(clip => aspectRisk(clip) || Boolean(clip.needs_reframe))
+    take(clip => clip.renderer === 'ltx' && (clip.motion_level || 0) >= 2)
+    take(clip => clip.renderer === 'cinemagraph' || clip.renderer === 'parallax')
+    take(clip => (clip.source_panel_ids?.length || 0) > 1)
+    take(clip => clip.renderer === 'hold')
+    candidates.forEach(clip => {
+      if (selected.size < Math.min(5, candidates.length)) selected.add(clip.index)
+    })
+    setDrafts(current => current.map(clip => ({
+      ...clip,
+      test_selected: selected.has(clip.index),
+    })))
+    setDirty(true)
+    notify('ok', `Selected ${selected.size} representative PRE shots by aspect risk, renderer and motion.`)
+  }
+  const applyDurationToPreparedShots = () => {
+    if (frontendSourceStale) {
+      notify('error', 'This recovered PRE is view-only. Rebuild it before changing shot durations.')
+      return
+    }
+    const duration = Math.max(.8, Math.min(20, Number(bulkDuration) || 3))
+    setBulkDuration(duration)
+    setDrafts(current => current.map(clip => (
+      clip.included ? { ...clip, duration_seconds: duration } : clip
+    )))
+    setDirty(true)
+    notify('ok', `Applied ${duration}s to every enabled final PRE shot. Save to freeze the new timing.`)
+  }
+
+  const handOffGeneration = (
+    started: { pipeline_id: string; reused?: boolean },
+    clips: PreviewDraft[],
+  ) => {
+    const plannedClips = clips.reduce<PlannedClip[]>((items, clip, index) => {
+      const start = index === 0 ? 0 : Number(items[index - 1].end)
+      items.push({
+        start,
+        end: start + clip.duration_seconds,
+        section_label: clip.page_number && clip.panel_number
+          ? `${clip.page_number}.${clip.panel_number}`
+          : clip.label,
+        energy: .5,
+        suggested_prompt_hint: clip.label,
+        beat_count: 0,
+        duration_frames: clip.frames,
+      })
+      return items
+    }, [])
+    const state = useStore.getState()
+    state.setGenerationMode('video')
+    state.setSidebarMode('director')
+    state.setDirectorSkill('short_film')
+    state.setMediaFilter('all')
+    useStore.setState({
+      pipelineId: started.pipeline_id,
+      pipelineStatus: null,
+      pipelinePolling: true,
+      directorStep: 'review_video',
+      directorLoading: true,
+      directorError: null,
+      directorSceneDescription: `${project.title}\n\n${project.synopsis}`,
+      directorPlannedClips: plannedClips,
+      directorClipPlans: clips.map(clip => ({ video_prompt: clip.prompt, image_prompt: '' })),
+      directorClipImages: clips.map((clip, index) => ({
+        clipIndex: index,
+        prompt: '',
+        file: null as unknown as File,
+        filename: clip.image_filename,
+      })),
+      directorAutoMode: true,
+      directorSeamless: false,
+      shortFilmPath: 'story',
+      shortFilmTargetDuration: Math.round(
+        clips.reduce((total, clip) => total + clip.duration_seconds, 0),
+      ),
+    })
+    useStore.getState().pollPipelineStatus()
+    window.dispatchEvent(new Event('maestro:director-open'))
+  }
+  const generate = async (mode: 'all' | 'test' | number) => {
+    if (!pipelineId || dirty) return
+    const chosen = typeof mode === 'number'
+      ? drafts.filter(clip => clip.index === mode && clip.included)
+      : mode === 'test'
+        ? selectedDrafts
+        : enabledDrafts
+    if (!chosen.length) {
+      notify('error', mode === 'test'
+        ? 'Select at least one enabled PRE shot for the quality test.'
+        : 'No enabled PRE shots are available.')
+      return
+    }
+    if (!previewFingerprint) {
+      notify('error', 'This PRE has no backend fingerprint. Rebuild it before generation.')
+      return
+    }
+    if (frontendSourceStale) {
+      notify('error', 'This PRE is stale relative to the current comic or film settings. Rebuild it from Video.')
+      return
+    }
+    if (mode !== 'all' && !previewApproved) {
+      notify('error', 'Approve this exact saved PRE before running representative test clips.')
+      return
+    }
+    if (mode === 'all' && !fullGenerationUnlocked) {
+      notify(
+        'error',
+        'Full generation requires this exact PRE fingerprint to be approved and its representative quality gate to be passed or explicitly waived.',
+      )
+      return
+    }
+    if (!window.confirm(
+      `${mode === 'all' ? 'Generate the approved film' : 'Generate this quality test'} `
+      + `from ${chosen.length} exact PRE shot${chosen.length === 1 ? '' : 's'}?`,
+    )) return
+    setBusy(mode)
+    try {
+      const indices = chosen.map(clip => clip.index)
+      const started = await api.generatePipelinePreview(pipelineId, {
+        clipIndex: typeof mode === 'number' ? mode : undefined,
+        clipIndices: typeof mode === 'number' ? undefined : indices,
+        expectedFingerprint: previewFingerprint,
+        runType: mode === 'all' ? 'full' : 'test',
+      })
+      handOffGeneration(started, chosen)
+      notify('ok', started.reused
+        ? 'Reconnected to the already-running PRE generation.'
+        : `Started ${chosen.length} exact PRE clip${chosen.length === 1 ? '' : 's'}.`)
+    } catch (error) {
+      notify('error', (error as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (loading) return <div className="flex min-h-52 items-center justify-center gap-2 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" /> Loading comic PRE…</div>
+  if (!pipelineId || status?.status !== 'preview_ready') {
+    return (
+      <div className="mx-auto max-w-2xl rounded-xl border border-dashed border-border bg-bg-secondary/60 p-8 text-center">
+        <Eye size={28} className="mx-auto text-text-muted" />
+        <h2 className="mt-3 text-base font-semibold text-text-primary">No prepared film PRE</h2>
+        <p className="mt-1 text-xs text-text-muted">Open Video → Configuration/Adaptation, prepare a PRE, and Maestro will open it here without covering the comic canvas.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-[1500px] space-y-4 p-3">
+      <header className="sticky top-0 z-10 rounded-xl border border-red-400/35 bg-bg-primary/95 p-3 shadow-lg backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-text-primary"><ListVideo size={16} className="text-red-300" /> Comic film PRE · {drafts.length} planned shots</div>
+            <p className="mt-1 text-[10px] text-text-muted">This is a separate review workspace. Changes are saved into the durable PRE checkpoint before generation.</p>
+          </div>
+          <div className="ml-auto flex flex-wrap gap-1.5">
+            <button className={button} disabled={busy !== null || hasUnsavedLocalChanges} onClick={() => void loadPreview(pipelineId)}>Reload</button>
+            <button className={button} disabled={busy !== null || frontendSourceStale} onClick={selectRepresentativePreviewTests}><Sparkles size={12} /> Auto-select test</button>
+            <label className="flex items-center gap-1 rounded border border-border px-1.5 text-[9px] text-text-muted">
+              Duration
+              <input
+                className="w-12 bg-transparent text-right text-text-primary outline-none"
+                type="number"
+                min={.8}
+                max={20}
+                step={.1}
+                value={bulkDuration}
+                onChange={event => setBulkDuration(Number(event.target.value))}
+              />
+              s
+            </label>
+            <button className={button} disabled={busy !== null || frontendSourceStale || !enabledDrafts.length} onClick={applyDurationToPreparedShots}>Apply to final shots</button>
+            <button className={`${button} border-cyan-400/40 text-cyan-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewApproved || !selectedDrafts.length} onClick={() => void generate('test')}><Play size={12} /> Test selected ({selectedDrafts.length})</button>
+            <button className={`${button} border-emerald-400/40 text-emerald-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewFingerprint || previewApproved || Boolean(unresolvedRisks.length)} onClick={() => void save({ approvePreview: true })}>{busy === 'approve' ? <Loader2 size={12} className="animate-spin" /> : previewApproved ? <CheckCircle2 size={12} /> : <ShieldCheck size={12} />} {previewApproved ? 'Exact PRE approved' : 'Approve exact PRE'}</button>
+            <button className={`${button} border-purple-400/50 text-purple-200`} disabled={busy !== null || !fullGenerationUnlocked} onClick={() => void generate('all')}>{busy === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Film size={12} />} Generate approved film</button>
+          </div>
         </div>
-      </details>
-      {result && (
-        <div className="space-y-2 rounded border border-emerald-500/30 bg-emerald-500/5 p-2">
-          <video src={result.url} controls className="w-full rounded" />
-          <button className={`${button} w-full border-emerald-500/40 text-emerald-300`} onClick={() => useStore.getState().setMediaFilter('videoeditor')}>Open in Video Editor</button>
-        </div>
-      )}
+        {frontendSourceStale && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />This recovered PRE belongs to an older comic/configuration state. It remains viewable, but editing, approval and generation are locked. Return to Video and prepare a new PRE.</div>}
+        {dirty && <div className="mt-2 flex items-center justify-between rounded border border-amber-400/35 bg-amber-400/5 p-2 text-[10px] text-amber-200"><span><AlertTriangle size={12} className="mr-1 inline" />Unsaved PRE edits. Saving rebuilds prepared inputs and invalidates approval and earlier tests.</span><button className={`${button} border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale} onClick={() => void save()}>{busy === 'save' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save & rebuild PRE</button></div>}
+        {!previewFingerprint && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />Legacy PRE without a backend fingerprint. Rebuild it from Video; this checkpoint cannot be safely approved or generated.</div>}
+        {!dirty && previewApproved && <div className={`mt-2 rounded border p-2 text-[10px] ${qualityGateReady ? 'border-emerald-400/35 bg-emerald-400/5 text-emerald-200' : 'border-cyan-400/35 bg-cyan-400/5 text-cyan-200'}`}><CheckCircle2 size={12} className="mr-1 inline" />PRE fingerprint approved. Quality gate: <b>{qualityGate?.status || 'pending'}</b>{qualityGateReady ? '; full generation is unlocked.' : '; run and review the representative test before full generation.'}</div>}
+        {!dirty && previewApproved && qualityGate && !qualityGateReady && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-cyan-400/30 bg-cyan-400/5 p-2 text-[10px] text-cyan-100">
+            <div className="min-w-0 flex-1">
+              <span>
+                Representative test: <b>{qualityTestedIndices.length}</b> completed / <b>{qualityRequiredIndices.length}</b> required.
+                {!!(qualityGate.failures || []).length && <span className="ml-1 text-red-200">{qualityGate.failures.join(' · ')}</span>}
+              </span>
+              {!!qualityRequiredIndices.length && (
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-cyan-200/80">Required shots and recorded results</summary>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {qualityRequiredIndices.map(index => {
+                      const result = qualityResults[String(index)]
+                      const resultStatus = result?.passed === true
+                        ? 'passed'
+                        : result?.passed === false
+                          ? 'failed'
+                          : result?.status || (qualityTestedIndices.includes(index) ? 'completed' : 'pending')
+                      return (
+                        <span key={index} className={`rounded border px-1.5 py-0.5 ${resultStatus === 'passed' || resultStatus === 'completed' ? 'border-emerald-400/35 text-emerald-200' : resultStatus === 'failed' ? 'border-red-400/35 text-red-200' : 'border-border text-text-muted'}`}>
+                          #{index + 1} · {resultStatus}
+                        </span>
+                      )
+                    })}
+                  </div>
+                </details>
+              )}
+            </div>
+            {qualityGate.status === 'review_required' && (
+              <button className={`${button} ml-auto border-emerald-400/50 text-emerald-200`} disabled={busy !== null || frontendSourceStale || Boolean(pendingVisualReviews.length)} onClick={() => void acceptTestedClips()} title={pendingVisualReviews.length ? 'Review every required test video in its shot card first' : 'Accept the reviewed representative clips'}>
+                {busy === 'accept' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />} Accept tested clips
+              </button>
+            )}
+          </div>
+        )}
+        {!dirty && previewApproved && !qualityGateReady && previewFingerprint && (
+          <div className="mt-2 grid gap-2 rounded border border-amber-400/30 bg-amber-400/5 p-2 sm:grid-cols-[1fr_auto]">
+            <label className="text-[9px] text-amber-100">
+              Auditable quality-test waiver reason
+              <input className={`${input} mt-1`} value={waiverReason} onChange={event => setWaiverReason(event.target.value)} placeholder="Why is a representative test unsafe, unavailable or intentionally skipped?" />
+            </label>
+            <button className={`${button} self-end border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale || !waiverReason.trim() || Boolean(unresolvedRisks.length)} onClick={() => void save({ qualityWaiver: true })}><ShieldCheck size={12} /> Waive quality test</button>
+          </div>
+        )}
+        {!!unresolvedRisks.length && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />{unresolvedRisks.length} enabled shot{unresolvedRisks.length === 1 ? '' : 's'} requested AI reframe but has no real prepared keyframe. Reframe import/generation is not available yet; choose Contain/Cover and save.</div>}
+      </header>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        {drafts.map((clip, position) => {
+          const risk = aspectRisk(clip) || Boolean(clip.needs_reframe)
+          const sourceImage = sourceImageFor(clip)
+          const testResult = qualityResults[String(clip.index)]
+          const testVideoFilename = testResult?.video_filename || testResult?.output_files?.[0]
+          const requiresVisualReview = qualityGate?.status === 'review_required'
+            && qualityRequiredIndices.includes(clip.index)
+          const promptIsManual = clip.prompt_override_update === true
+            || (clip.prompt_override_update === undefined && clip.prompt_overridden)
+          return (
+            <article key={`${pipelineId}-${clip.index}`} className={`rounded-xl border ${clip.included ? risk ? 'border-amber-400/45' : 'border-border' : 'border-border opacity-55'} bg-bg-secondary/80 p-3`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-text-primary">{position + 1}. {clip.label || `Shot ${clip.index + 1}`}</span>
+                <span className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[9px] text-purple-200">
+                  {clip.effective_renderer && clip.effective_renderer !== clip.renderer
+                    ? `${clip.renderer} → ${clip.effective_renderer} effective`
+                    : clip.effective_renderer || clip.renderer}
+                </span>
+                {risk && <span className="rounded bg-amber-400/10 px-1.5 py-0.5 text-[9px] text-amber-200">aspect risk</span>}
+                <div className="ml-auto flex gap-1"><button className={button} disabled={position === 0} onClick={() => moveDraft(position, -1)}><ArrowUp size={12} /></button><button className={button} disabled={position === drafts.length - 1} onClick={() => moveDraft(position, 1)}><ArrowDown size={12} /></button></div>
+              </div>
+              <div className="mt-1 text-[9px] text-text-muted">
+                Primary <b className="text-text-primary">{clip.panel_id || `${clip.page_number || '?'}.${clip.panel_number || '?'}`}</b>
+                {' · '}context from <b className="text-text-primary">{clip.source_panel_ids?.length || 1}</b> source panel{(clip.source_panel_ids?.length || 1) === 1 ? '' : 's'}
+                {!!clip.source_panel_ids?.length && <span className="ml-1">({clip.source_panel_ids.join(', ')})</span>}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <figure>
+                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-text-muted">Source panel · {clip.source_resolution || 'unknown'}</div>
+                  <div className="relative overflow-hidden rounded border border-border bg-black" style={{ aspectRatio: previewRatio(clip.output_resolution) }}>
+                    {sourceImage ? <img src={sourceImage} alt={`Source ${clip.label}`} className="h-full w-full object-contain" /> : <div className="flex h-full min-h-32 items-center justify-center text-[9px] text-text-muted">Source unavailable in this recovered PRE</div>}
+                  </div>
+                </figure>
+                <figure>
+                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-red-200">Prepared input · {clip.output_resolution}</div>
+                  <div className="relative overflow-hidden rounded bg-black" style={{ aspectRatio: previewRatio(clip.output_resolution) }}>
+                    <img src={api.getFileUrl(clip.image_filename)} alt={`Prepared ${clip.label}`} className="h-full w-full object-contain" />
+                    <div className="pointer-events-none absolute inset-0 border-[3px] border-red-500/70 shadow-[inset_0_0_18px_rgba(239,68,68,0.18)]" />
+                  </div>
+                </figure>
+              </div>
+              {requiresVisualReview && (
+                <div className="mt-2 rounded border border-cyan-400/30 bg-black/20 p-2">
+                  <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-cyan-200">Generated representative test · human review required</div>
+                  {testVideoFilename ? (
+                    <>
+                      <video
+                        src={api.getFileUrl(testVideoFilename)}
+                        controls
+                        preload="metadata"
+                        className="max-h-64 w-full rounded bg-black"
+                        onEnded={() => setReviewedTestIndices(current =>
+                          current.includes(clip.index) ? current : [...current, clip.index])}
+                      />
+                      <label className="mt-2 flex items-center gap-1.5 text-[9px] text-cyan-100">
+                        <input
+                          type="checkbox"
+                          checked={reviewedTestIndices.includes(clip.index)}
+                          onChange={event => setReviewedTestIndices(current =>
+                            event.target.checked
+                              ? current.includes(clip.index) ? current : [...current, clip.index]
+                              : current.filter(index => index !== clip.index))}
+                        />
+                        I reviewed this exact generated clip and accept its visual quality.
+                      </label>
+                    </>
+                  ) : (
+                    <div className="rounded border border-red-400/30 p-2 text-[9px] text-red-200">The quality result has no playable video filename. Reload after the test finishes; this shot cannot be visually accepted yet.</div>
+                  )}
+                </div>
+              )}
+              {clip.needs_reframe ? (
+                <div className="mt-2 rounded border border-red-400/35 bg-red-400/5 p-2 text-[9px] text-red-100">
+                  AI reframe was requested, but this PRE has no real prepared keyframe. The backend used a safe contain fallback and blocks generation. Reframe import/generation is not available yet; change Fit to Contain/Cover and save.
+                </div>
+              ) : aspectRisk(clip) ? (
+                <div className="mt-2 rounded border border-amber-400/30 bg-amber-400/5 p-2 text-[9px] text-amber-100">
+                  Source and output aspect ratios differ substantially. <b>{clip.fit_mode}</b> is an explicit editorial choice; inspect the prepared input before approval.
+                </div>
+              ) : null}
+              <div className="mt-2 flex flex-wrap gap-3 text-[9px] text-text-muted">
+                <label className="flex items-center gap-1"><input type="checkbox" checked={clip.included} onChange={event => patchDraft(clip.index, { included: event.target.checked })} /> Include</label>
+                <label className="flex items-center gap-1"><input type="checkbox" checked={clip.test_selected} disabled={!clip.included} onChange={event => patchDraft(clip.index, { test_selected: event.target.checked })} /> Test sample</label>
+                <span>Model <b className="text-text-primary">{clip.video_model}</b></span>
+                {clip.runtime_recipe && <span>Recipe <b className="text-text-primary">{clip.runtime_recipe}</b></span>}
+                <span>Steps <b className="text-text-primary">{clip.num_inference_steps}{clip.stage2_steps ? `+${clip.stage2_steps}` : ''}</b></span>
+                {clip.requested_num_inference_steps !== undefined
+                  && clip.requested_num_inference_steps !== clip.num_inference_steps
+                  && <span>Requested steps <b className="text-text-primary">{clip.requested_num_inference_steps}</b></span>}
+                {clip.requested_stage2_steps !== undefined
+                  && clip.requested_stage2_steps !== clip.stage2_steps
+                  && <span>Requested stage 2 <b className="text-text-primary">{clip.requested_stage2_steps}</b></span>}
+                <span>CFG <b className="text-text-primary">{clip.guidance_scale}</b></span>
+                {clip.requested_guidance_scale !== undefined
+                  && clip.requested_guidance_scale !== clip.guidance_scale
+                  && <span>Requested CFG <b className="text-text-primary">{clip.requested_guidance_scale}</b></span>}
+                <span>Frames <b className="text-text-primary">{clip.frames}@{clip.fps}</b></span>
+                {clip.output_frames !== undefined && <span>Output <b className="text-text-primary">{clip.output_frames} frames</b></span>}
+                <span>Strength <b className="text-text-primary">{clip.input_video_strength}</b></span>
+                <span>Prompt type <b className="text-text-primary">{clip.image_prompt_type || 'S'}</b></span>
+                <span>Motion <b className="text-text-primary">{clip.motion_mode || 'automatic'}</b></span>
+                <span>Fidelity <b className="text-text-primary">{clip.fidelity || 'default'}</b></span>
+                {clip.self_refiner > 0 && <span>Self-refiner <b className="text-text-primary">{clip.self_refiner}</b></span>}
+                {!!clip.activated_loras?.length && <span>LoRAs <b className="text-text-primary">{clip.activated_loras.join(', ')}</b>{clip.lora_multipliers ? ` · ${clip.lora_multipliers}` : ''}</span>}
+                {clip.spatial_upsampling && <span>Upsampling <b className="text-text-primary">{clip.spatial_upsampling}</b></span>}
+                {clip.film_grain_intensity > 0 && <span>Film grain <b className="text-text-primary">{clip.film_grain_intensity} / {clip.film_grain_saturation}</b></span>}
+                {clip.effective_fit_mode && <span>Effective fit <b className="text-text-primary">{clip.effective_fit_mode}</b></span>}
+                {clip.retained_fraction !== undefined && <span>Source retained <b className="text-text-primary">{Math.round(clip.retained_fraction * 100)}%</b></span>}
+                {(clip.single_stage_pipeline > 0 || clip.progressive_pipeline > 0) && <span>Pipeline <b className="text-text-primary">{clip.single_stage_pipeline > 0 ? 'single-stage' : 'progressive'}</b></span>}
+                {clip.used_prepared_keyframe && <span className="text-emerald-300">Prepared reframe verified</span>}
+              </div>
+              {clip.guidance_note && <p className="mt-1 rounded border border-border bg-bg-tertiary/50 px-2 py-1 text-[9px] text-text-muted">{clip.guidance_note}</p>}
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <label className="text-[9px] text-text-muted">Renderer<select className={`${input} mt-1`} value={clip.renderer} onChange={event => {
+                  const renderer = event.target.value as PreviewDraft['renderer']
+                  patchDraft(clip.index, {
+                    renderer,
+                    ...(renderer === 'hold'
+                      ? { motion_level: 0 }
+                      : renderer === 'parallax' || renderer === 'cinemagraph'
+                        ? { motion_level: 1 }
+                        : {}),
+                  })
+                }}><option value="hold">Hold · exact still</option><option value="parallax">Subtle centered push · deterministic</option><option value="cinemagraph">AI living still · subtle full-frame I2V</option><option value="ltx">LTX I2V · authored action</option></select></label>
+                <label className="text-[9px] text-text-muted">Fit
+                  <select className={`${input} mt-1`} value={clip.fit_mode} onChange={event => patchDraft(clip.index, { fit_mode: event.target.value as PreviewDraft['fit_mode'] })}>
+                    {(clip.fit_mode === 'reframe' || clip.used_prepared_keyframe) && (
+                      <option value="reframe" disabled={!clip.used_prepared_keyframe}>
+                        {clip.used_prepared_keyframe ? 'Prepared AI reframe · verified' : 'Legacy reframe request · change to Contain/Cover'}
+                      </option>
+                    )}
+                    <option value="cover">Cinematic crop · explicit</option>
+                    <option value="contain">Whole panel + padding · safe</option>
+                  </select>
+                </label>
+                <label className="text-[9px] text-text-muted">Duration<input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={clip.duration_seconds} onChange={event => patchDraft(clip.index, { duration_seconds: Number(event.target.value) })} /></label>
+                <label className="text-[9px] text-text-muted">Seed<input className={`${input} mt-1`} type="number" value={clip.seed} onChange={event => patchDraft(clip.index, { seed: Math.trunc(Number(event.target.value)) })} /></label>
+                <label className="text-[9px] text-text-muted">Motion level · {motionLevelLabel(clip.motion_level || 0)}<input className="mt-2 w-full" type="range" min={0} max={3} step={1} disabled={clip.renderer === 'hold' || clip.renderer === 'parallax' || clip.renderer === 'cinemagraph'} value={clip.motion_level || 0} onChange={event => patchDraft(clip.index, { motion_level: Number(event.target.value) })} /></label>
+                <label className="col-span-2 text-[9px] text-text-muted">Camera<select className={`${input} mt-1`} value={clip.camera_move} disabled={clip.renderer !== 'ltx'} onChange={event => patchDraft(clip.index, { camera_move: event.target.value })}><option value="none">Locked / no move</option><option value="push-in">Push-in</option><option value="pull-out">Pull-out</option><option value="pan-left">Pan left</option><option value="pan-right">Pan right</option><option value="authored">Authored in prompt</option></select></label>
+              </div>
+              <label className="mt-2 block text-[9px] text-text-muted">
+                <span className="flex items-center justify-between gap-2">
+                  <span>Exact effective video prompt · {promptIsManual ? 'manual override' : 'automatic'}</span>
+                  {promptIsManual && (
+                    <button
+                      type="button"
+                      className={`${button} py-1 text-[9px]`}
+                      onClick={() => patchDraft(clip.index, {
+                        prompt: clip.base_prompt || clip.prompt,
+                        prompt_override_update: false,
+                      })}
+                    >
+                      Reset to automatic
+                    </button>
+                  )}
+                </span>
+                <textarea className={`${input} mt-1 min-h-28 resize-y font-mono text-[10px]`} value={clip.prompt} onChange={event => patchDraft(clip.index, { prompt: event.target.value, prompt_override_update: true })} />
+              </label>
+              {clip.dialogue && (
+                <div className="mt-2 rounded border border-cyan-400/25 bg-cyan-400/5 p-2">
+                  <div className="text-[9px] font-semibold uppercase tracking-wide text-cyan-200">
+                    Spoken script retained
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-[10px] text-text-primary">{clip.dialogue}</p>
+                  <p className="mt-1 text-[9px] text-text-muted">
+                    {(clip.effective_renderer || clip.renderer) === 'ltx'
+                      || (clip.effective_renderer || clip.renderer) === 'cinemagraph'
+                      ? 'Automatic LTX prompts include a bounded excerpt as a performance and native-audio cue. LTX audio is not deterministic TTS: exact wording, timing and voice identity are not guaranteed. A manual prompt must include any words that must be attempted.'
+                      : 'This deterministic renderer preserves the line for later dubbing or subtitles; it does not synthesize speech.'}
+                  </p>
+                </div>
+              )}
+              {clip.negative_prompt && <details className="mt-2"><summary className="cursor-pointer text-[9px] text-text-muted">Negative prompt and safeguards</summary><p className="mt-1 whitespace-pre-wrap rounded border border-border bg-bg-tertiary p-2 text-[9px] text-text-muted">{clip.negative_prompt}</p></details>}
+              <button className={`${button} mt-2 w-full border-red-400/45 text-red-200`} disabled={busy !== null || dirty || frontendSourceStale || !clip.included || !previewApproved || Boolean(clip.needs_reframe && !(clip.reframe_approved && clip.used_prepared_keyframe))} onClick={() => void generate(clip.index)}>{busy === clip.index ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Generate only this approved test clip</button>
+            </article>
+          )
+        })}
+      </div>
     </div>
   )
 }

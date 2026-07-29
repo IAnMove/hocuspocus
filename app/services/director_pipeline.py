@@ -15,29 +15,241 @@ import time
 import json
 import uuid
 import threading
+import copy
+import hashlib
+import secrets
+import subprocess
 from typing import Optional
 
 # These will be set by launch.py on startup
 _jobs: dict = None          # reference to launch._jobs
 _run_generation = None      # reference to launch._run_generation
+_cancel_generation = None   # reference to launch._request_generation_cancel
 _wgp = None                 # reference to wgp module
 _gen_lock = None            # reference to launch._gen_lock
 
 _pipelines: dict = {}
 _pipeline_lock = threading.Lock()
+_PRE_ACTIVE_CHILD_STATUSES = frozenset({
+    "running",
+    "queued",
+    "paused",
+})
+
+
+class PipelineCancelled(RuntimeError):
+    """Raised after a Director cancellation has stopped its active worker."""
 
 # ── Pipeline State Persistence ─────────────────────────────────────────────
 
-PIPELINE_STATE_VERSION = 1
+PIPELINE_STATE_VERSION = 2
 _PIPELINE_FILE_PREFIX = "_director_pipeline_"
 
 
-def _save_pipeline_state(pid: str):
-    """Serialize pipeline state to JSON on disk. Called at phase boundaries."""
+def _json_fingerprint(value) -> str:
+    """Return a stable, compact fingerprint for resumable contracts."""
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _as_bool(value, *, default: bool = False) -> bool:
+    """Parse API booleans without treating the string ``"false"`` as true."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+    return bool(value)
+
+
+def _file_identity(path: str) -> dict:
+    """Identify a source without persisting its absolute path."""
+    path = str(path or "")
+    if not path or not os.path.isfile(path):
+        return {"name": os.path.basename(path), "missing": True}
+    stat = os.stat(path)
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        digest.update(handle.read(65536))
+        if stat.st_size > 65536:
+            handle.seek(max(0, stat.st_size - 65536))
+            digest.update(handle.read(65536))
+    return {
+        "name": os.path.basename(path),
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+        "edge_sha256": digest.hexdigest(),
+    }
+
+
+def _normalise_master_seed(params: dict) -> int:
+    """Choose once and persist the production's master seed."""
+    candidates = (
+        params.get("master_seed"),
+        params.get("seed"),
+        (params.get("video_params") or {}).get("seed"),
+    )
+    for candidate in candidates:
+        try:
+            value = int(candidate)
+        except (TypeError, ValueError):
+            continue
+        if value >= 0:
+            params["master_seed"] = value
+            return value
+    value = secrets.randbelow(2**31 - 1)
+    params["master_seed"] = value
+    return value
+
+
+def _comic_shot(params: dict, index: int) -> dict:
+    shots = params.get("comic_shots") or []
+    return (
+        shots[index]
+        if index < len(shots) and isinstance(shots[index], dict)
+        else {}
+    )
+
+
+def _stable_comic_shot_id(
+    params: dict,
+    index: int,
+    plan: Optional[dict] = None,
+) -> str:
+    """Resolve the stable identity used for seeds, edits and PRE diffs."""
+    plan = plan or {}
+    metadata = plan.get("metadata") if isinstance(plan.get("metadata"), dict) else {}
+    shot = _comic_shot(params, index)
+    for source in (plan, metadata, shot):
+        for key in ("shot_id", "primary_source_panel_id", "panel_id", "id"):
+            value = str(source.get(key) or "").strip()
+            if value:
+                return value
+        panel_ids = source.get("source_panel_ids")
+        if isinstance(panel_ids, list) and panel_ids:
+            values = [
+                str(item).strip()
+                for item in panel_ids
+                if str(item).strip()
+            ]
+            if values:
+                return "+".join(values)
+    page = shot.get("page_number")
+    panel = shot.get("panel_number")
+    return f"comic-shot-{page or 0}-{panel or index + 1}"
+
+
+def _comic_shot_seed(
+    params: dict,
+    index: int,
+    plan: Optional[dict] = None,
+) -> int:
+    """Derive a reproducible seed from master seed and stable shot ID."""
+    plan = plan or {}
+    metadata = plan.get("metadata") if isinstance(plan.get("metadata"), dict) else {}
+    shot = _comic_shot(params, index)
+    for source in (plan, metadata, shot):
+        try:
+            explicit = int(source.get("seed"))
+        except (TypeError, ValueError):
+            continue
+        if explicit >= 0:
+            return explicit
+    master = _normalise_master_seed(params)
+    shot_id = _stable_comic_shot_id(params, index, plan)
+    digest = hashlib.sha256(f"{master}:{shot_id}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
+
+
+def _is_ltx_distilled(video_model: str) -> bool:
+    value = str(video_model or "").lower()
+    return "ltx2" in value and "distilled" in value
+
+
+def _effective_ltx_runtime(video_model: str, video_params: dict) -> dict:
+    """Expose what the local LTX route really executes."""
+    requested_steps = int(video_params.get("num_inference_steps", 8) or 8)
+    requested_guidance = float(video_params.get("guidance_scale", 1) or 1)
+    requested_stage2 = int(video_params.get("stage2_steps", 3) or 3)
+    if _is_ltx_distilled(video_model):
+        return {
+            "recipe": "ltx-distilled-two-stage",
+            "num_inference_steps": 8,
+            "stage2_steps": 3,
+            "guidance_scale": 1.0,
+            "requested_num_inference_steps": requested_steps,
+            "requested_stage2_steps": requested_stage2,
+            "requested_guidance_scale": requested_guidance,
+            "guidance_note": (
+                "Distilled uses its trained 8+3 schedule; conventional CFG "
+                "is fixed at 1."
+            ),
+        }
+    return {
+        "recipe": "standard",
+        "num_inference_steps": requested_steps,
+        "stage2_steps": requested_stage2,
+        "guidance_scale": requested_guidance,
+        "requested_num_inference_steps": requested_steps,
+        "requested_stage2_steps": requested_stage2,
+        "requested_guidance_scale": requested_guidance,
+        "guidance_note": "",
+    }
+
+
+def _comic_preflight_fingerprint(
+    params: dict,
+    clip_plans: list[dict],
+    planned_clips: list[dict],
+    clip_images: Optional[list[str]] = None,
+    out_dir: Optional[str] = None,
+) -> str:
+    """Fingerprint every input that can change what Comic PRE promises."""
+    source_paths = params.get("provided_clip_image_paths") or []
+    prepared = [
+        _file_identity(os.path.join(out_dir or "", str(filename or "")))
+        for filename in (clip_images or [])
+    ]
+    contract = {
+        "comic_id": params.get("comic_id"),
+        "master_seed": _normalise_master_seed(params),
+        "video_model": params.get("video_model"),
+        "video_params": params.get("video_params") or {},
+        "video_loras": params.get("video_loras") or {},
+        "video_image_fit": params.get("video_image_fit"),
+        "comic_motion_fidelity": params.get("comic_motion_fidelity"),
+        "comic_end_frame_mode": params.get("comic_end_frame_mode"),
+        "comic_shots": params.get("comic_shots") or [],
+        "clip_plans": clip_plans,
+        "planned_clips": planned_clips,
+        "sources": [_file_identity(path) for path in source_paths],
+        "prepared": prepared,
+    }
+    return _json_fingerprint(contract)
+
+
+def _save_pipeline_state(pid: str) -> bool:
+    """Serialize pipeline state to JSON on disk. Called at phase boundaries.
+
+    Returning a success flag matters for PRE edits: superseded prepared images
+    may only be deleted after the replacement checkpoint has reached disk.
+    Legacy callers may continue to ignore the result.
+    """
     with _pipeline_lock:
         p = _pipelines.get(pid)
         if not p:
-            return
+            return False
         p = dict(p)  # shallow copy for safe access outside lock
 
     out_dir = p.get("out_dir") or (_wgp.save_path if _wgp else "outputs")
@@ -47,8 +259,12 @@ def _save_pipeline_state(pid: str):
     clip_plans = p.get("clip_plans", [])
     clip_images = p.get("clip_images", [])
     clip_end_images = p.get("_clip_end_images", [])
+    clip_source_images = p.get("_clip_source_images", [])
+    clip_source_sizes = p.get("_clip_source_sizes", [])
+    clip_fit_details = p.get("_clip_fit_details", [])
     pre_polish = p.get("_clip_plans_pre_polish", [])
     clip_timings = p.get("_clip_timings", {})
+    clip_validations = p.get("_clip_validations", [])
 
     clips = []
     for i, plan in enumerate(clip_plans):
@@ -75,12 +291,32 @@ def _save_pipeline_state(pid: str):
             "window_prompts_pre_polish": pre_polish[i].get("window_prompts", []) if i < len(pre_polish) else None,
             "keyframe_prompts_pre_polish": pre_polish[i].get("keyframe_prompts", []) if i < len(pre_polish) else None,
             "start_image_filename": clip_images[i] if i < len(clip_images) else None,
+            "source_image_filename": (
+                clip_source_images[i] if i < len(clip_source_images) else None
+            ),
+            "source_size": (
+                clip_source_sizes[i] if i < len(clip_source_sizes) else None
+            ),
+            "fit_details": (
+                clip_fit_details[i] if i < len(clip_fit_details) else None
+            ),
             "end_image_filename": clip_end_images[i] if i < len(clip_end_images) else None,
             "keyframe_filenames": (p.get("_clip_keyframes", []) or [])[i] if i < len(p.get("_clip_keyframes", [])) else [],
             "video_filename": (p.get("_clip_video_files", []) or [])[i] if i < len(p.get("_clip_video_files", [])) else None,
             "tag": (p.get("_clip_tags", []) or [])[i] if i < len(p.get("_clip_tags", [])) else None,
             "image_gen_time_sec": clip_timings.get(f"image_{i}"),
             "video_gen_time_sec": clip_timings.get(f"video_{i}"),
+            "validation": (
+                clip_validations[i] if i < len(clip_validations) else None
+            ),
+            "shot_id": _stable_comic_shot_id(params, i, plan),
+            "seed": _comic_shot_seed(params, i, plan),
+            "renderer": _comic_renderer(params, i, plan),
+            "effective_renderer": _comic_effective_renderer(
+                params,
+                i,
+                plan,
+            ),
         }
         clips.append(clip_state)
 
@@ -105,7 +341,34 @@ def _save_pipeline_state(pid: str):
         "image_params": params.get("image_params", {}),
         "video_params": params.get("video_params", {}),
         "preview_clips": p.get("preview_clips", []),
+        "preview_fingerprint": p.get("_comic_preflight_fingerprint"),
+        "preview_revision": p.get("_preview_revision", 1),
+        "preview_approved_fingerprint": p.get(
+            "_preview_approved_fingerprint"
+        ),
+        "preview_approved": bool(
+            p.get("_comic_preflight_fingerprint")
+            and p.get("_preview_approved_fingerprint")
+            == p.get("_comic_preflight_fingerprint")
+        ),
+        "quality_gate": p.get("_quality_gate") or {
+            "status": "pending",
+            "fingerprint": p.get("_comic_preflight_fingerprint"),
+            "required_test_indices": [],
+            "tested_indices": [],
+            "results": {},
+            "failures": [],
+        },
+        "clip_source_sizes": clip_source_sizes,
+        "clip_fit_details": clip_fit_details,
+        "clip_validations": clip_validations,
         "llm_log": p.get("_llm_log"),
+        # Persist the complete dictionaries as well as the backwards-compatible
+        # flattened clip summaries.  Metadata carries stable panel identities,
+        # renderer choices and source mappings required to recompute the same
+        # PRE fingerprint after a restart.
+        "clip_plans": clip_plans,
+        "planned_clips": p.get("_planned_clips", []),
         "clips": clips,
         "output_files": p.get("output_files", []),
         "workspace": p.get("workspace") or "default",
@@ -126,8 +389,10 @@ def _save_pipeline_state(pid: str):
         with open(temp_path, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False, default=str)
         os.replace(temp_path, filepath)
+        return True
     except Exception as e:
         print(f"[Pipeline] Failed to save state for {pid}: {e}")
+        return False
     finally:
         try:
             if os.path.isfile(temp_path):
@@ -298,6 +563,8 @@ def list_pipeline_states(out_dir: str, workspace: Optional[str] = None) -> list[
                         "output_count": len(data.get("output_files", [])),
                         "scene_description": (data.get("scene_description", "") or "")[:100],
                         "comic_id": data.get("comic_id"),
+                        "preview_fingerprint": data.get("preview_fingerprint"),
+                        "preview_revision": data.get("preview_revision", 1),
                         "workspace": os.path.basename(scan_dir) if scan_dir != out_dir else "default",
                         "_filepath": filepath,
                     })
@@ -408,6 +675,10 @@ def rerun_clip_image(out_dir: str, pid: str, clip_index: int, prompt_override: s
     pipeline_file = _find_pipeline_file(out_dir, pid)
     clip_out_dir = os.path.dirname(pipeline_file) if pipeline_file else out_dir
 
+    try:
+        rerun_seed = int(clip.get("seed", -1))
+    except (TypeError, ValueError):
+        rerun_seed = -1
     gen_params = {
         "model_type": image_model,
         "prompt": prompt,
@@ -418,7 +689,7 @@ def rerun_clip_image(out_dir: str, pid: str, clip_index: int, prompt_override: s
         "guidance_scale": image_params.get("guidance_scale", 1),
         "video_prompt_type": "KI",
         "resolution": image_params.get("resolution", "1280x720"),
-        "seed": -1,
+        "seed": rerun_seed,
         "settings_version": 2.52,
         "generation_mode": "image",
         "repeat_generation": 1,
@@ -500,6 +771,16 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         state.get("pipeline_type") == "comic_movie"
         or snapshot.get("pipeline_type") == "comic_movie"
     )
+    if is_comic_movie:
+        raise ValueError(
+            "Comic shots must be regenerated from their approved PRE. "
+            "Use Generate only this clip there so renderer, fit, seed, "
+            "negative prompt and frame contract remain exact."
+        )
+    try:
+        rerun_seed = int(clip.get("seed", -1))
+    except (TypeError, ValueError):
+        rerun_seed = -1
     camera_locked = is_comic_movie and _comic_camera_is_locked(snapshot, clip_index)
     negative_prompt = str(video_params.get("negative_prompt") or "").strip()
     if camera_locked:
@@ -512,6 +793,7 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
             negative_prompt,
             _COMIC_REFERENCE_NEGATIVE,
         )
+    runtime = _effective_ltx_runtime(video_model, video_params)
     gen_params = {
         "model_type": video_model,
         "prompt": _comic_motion_prompt(
@@ -523,11 +805,11 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         ),
         "image_mode": 0,
         "image_prompt_type": "SE" if has_start and has_end else ("S" if has_start else ("E" if has_end else "")),
-        "num_inference_steps": video_params.get("num_inference_steps", 8),
-        "guidance_scale": video_params.get("guidance_scale", 1),
+        "num_inference_steps": runtime["num_inference_steps"],
+        "guidance_scale": runtime["guidance_scale"],
         "resolution": resolution,
         "video_length": video_length,
-        "seed": -1,
+        "seed": rerun_seed,
         "settings_version": 2.52,
         "generation_mode": "video",
         "repeat_generation": 1,
@@ -538,6 +820,7 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         ),
         "_director_pipeline_id": pid,
     }
+    gen_params["stage2_steps"] = runtime["stage2_steps"]
     if has_start:
         gen_params["image_start"] = start_path
         gen_params["input_video_strength"] = video_params.get(
@@ -574,6 +857,11 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         "progressive_stage3_image_weight",
     ):
         if runtime_key in video_params:
+            if (
+                runtime_key == "stage2_steps"
+                and _is_ltx_distilled(video_model)
+            ):
+                continue
             gen_params[runtime_key] = video_params[runtime_key]
 
     output_files = _submit_and_wait(gen_params, timeout_s=3600, out_dir=clip_out_dir)
@@ -631,13 +919,48 @@ def rejoin_clips(out_dir: str, pid: str) -> dict:
         raise RuntimeError(f"Rejoin failed: {e}")
 
 
-def init(jobs_dict, run_gen_fn, wgp_module, gen_lock=None):
+def init(
+    jobs_dict,
+    run_gen_fn,
+    wgp_module,
+    gen_lock=None,
+    cancel_gen_fn=None,
+):
     """Called by launch.py to wire up shared references."""
-    global _jobs, _run_generation, _wgp, _gen_lock
+    global _jobs, _run_generation, _cancel_generation, _wgp, _gen_lock
     _jobs = jobs_dict
     _run_generation = run_gen_fn
+    _cancel_generation = cancel_gen_fn
     _wgp = wgp_module
     _gen_lock = gen_lock
+
+
+def _pipeline_cancel_requested(pid: Optional[str]) -> bool:
+    if not pid:
+        return False
+    with _pipeline_lock:
+        pipeline = _pipelines.get(pid)
+        return bool(
+            pipeline
+            and (
+                pipeline.get("_cancel_requested")
+                or pipeline.get("status") == "cancelled"
+                or pipeline.get("phase") == "cancelling"
+            )
+        )
+
+
+def _clear_active_generation_job(pid: Optional[str], job_id: str) -> None:
+    """Clear only the job this waiter owns, preserving a newer worker."""
+    if not pid:
+        return
+    with _pipeline_lock:
+        pipeline = _pipelines.get(pid)
+        if (
+            pipeline
+            and pipeline.get("_active_generation_job_id") == job_id
+        ):
+            pipeline.pop("_active_generation_job_id", None)
 
 
 def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None, out_dir: str = None) -> list[str]:
@@ -649,6 +972,10 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
 
     Returns list of output filenames. Raises on failure/timeout.
     """
+    _dir_pid = params.get("_director_pipeline_id")
+    if _pipeline_cancel_requested(_dir_pid):
+        raise PipelineCancelled("Director pipeline was cancelled.")
+
     job_id = uuid.uuid4().hex[:8]
     job = {
         "id": job_id,
@@ -668,20 +995,50 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
     }
     _jobs[job_id] = job
 
+    if _dir_pid:
+        with _pipeline_lock:
+            pipeline = _pipelines.get(_dir_pid)
+            if pipeline:
+                pipeline["_active_generation_job_id"] = job_id
+        _save_pipeline_state(_dir_pid)
+
+    # Close the race between registering the worker and a simultaneous Stop.
+    if _pipeline_cancel_requested(_dir_pid):
+        job["_cancel_requested"] = True
+        job["status"] = "cancelled"
+        job["message"] = "Cancelled"
+        _clear_active_generation_job(_dir_pid, job_id)
+        raise PipelineCancelled("Director pipeline was cancelled.")
+
     # Run generation in a separate thread (it acquires _gen_lock internally)
     # Non-daemon so the process stays alive if browser disconnects mid-generation
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
     thread.start()
 
     # Wait for completion, mirroring job progress to pipeline status
-    _dir_pid = params.get("_director_pipeline_id")
     last_activity_at = time.time()
     last_signature = None
     last_saved_clip_outputs: tuple = ()
+    cancel_dispatched = False
     while True:
         j = _jobs.get(job_id)
         if not j:
+            _clear_active_generation_job(_dir_pid, job_id)
             raise RuntimeError("Job disappeared")
+
+        if _pipeline_cancel_requested(_dir_pid) and not cancel_dispatched:
+            cancel_dispatched = True
+            if _cancel_generation is not None:
+                _cancel_generation(job_id)
+            else:
+                # Tests and standalone callers may initialize Director without
+                # launch.py's abort callback. Preserve the same queued-job
+                # semantics and expose an explicit request to cooperative
+                # workers instead of pretending an active GPU job has stopped.
+                j["_cancel_requested"] = True
+                if j.get("status") == "queued":
+                    j["status"] = "cancelled"
+                    j["message"] = "Cancelled"
 
         signature = (
             j.get("status"),
@@ -706,8 +1063,32 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
                 pipeline = _pipelines.get(_dir_pid)
                 if pipeline:
                     expected = len(pipeline.get("clip_plans") or [])
-                    pipeline["_clip_video_files"] = list(clip_outputs[:expected])
-                    completed = sum(bool(name) for name in clip_outputs[:expected])
+                    index_map = params.get("_director_clip_index_map")
+                    if isinstance(index_map, list) and index_map:
+                        merged = list(
+                            pipeline.get("_clip_video_files")
+                            or [None] * expected
+                        )
+                        if len(merged) < expected:
+                            merged.extend([None] * (expected - len(merged)))
+                        for local_index, name in enumerate(clip_outputs):
+                            if local_index >= len(index_map):
+                                break
+                            try:
+                                global_index = int(index_map[local_index])
+                            except (TypeError, ValueError):
+                                continue
+                            if 0 <= global_index < expected:
+                                merged[global_index] = name
+                        pipeline["_clip_video_files"] = merged
+                    else:
+                        pipeline["_clip_video_files"] = list(
+                            clip_outputs[:expected]
+                        )
+                    completed = sum(
+                        bool(name)
+                        for name in pipeline.get("_clip_video_files", [])[:expected]
+                    )
                     if "progress" in pipeline:
                         pipeline["progress"]["current"] = completed
                         pipeline["progress"]["total"] = expected
@@ -717,11 +1098,38 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
             _save_pipeline_state(_dir_pid)
 
         if j["status"] == "completed":
+            _clear_active_generation_job(_dir_pid, job_id)
+            if _pipeline_cancel_requested(_dir_pid):
+                _update_pipeline(
+                    _dir_pid,
+                    status="cancelled",
+                    phase="cancelled",
+                )
+                _save_pipeline_state(_dir_pid)
+                raise PipelineCancelled("Director pipeline was cancelled.")
             return j.get("output_files", [])
         if j["status"] == "failed":
+            _clear_active_generation_job(_dir_pid, job_id)
             err = j.get("error") or "Generation failed"
             print(f"[Pipeline] Job {job_id} failed: {err}")
             raise RuntimeError(err)
+        if j["status"] == "cancelled":
+            _clear_active_generation_job(_dir_pid, job_id)
+            if _dir_pid:
+                _update_pipeline(
+                    _dir_pid,
+                    status="cancelled",
+                    phase="cancelled",
+                    progress={
+                        "current": 0,
+                        "total": 0,
+                        "message": "Cancelled",
+                        "step": 0,
+                        "total_steps": 0,
+                    },
+                )
+                _save_pipeline_state(_dir_pid)
+            raise PipelineCancelled("Director pipeline was cancelled.")
         # Mirror denoising step progress to pipeline status
         # Only update step/total_steps and message — preserve current/total for pipeline-level counts
         if _dir_pid and (j.get("step", 0) > 0 or j.get("total_steps", 0) > 0):
@@ -749,6 +1157,8 @@ def _update_pipeline(pid: str, **kwargs):
 def start_pipeline(params: dict) -> str:
     """Start a new director pipeline. Returns pipeline_id."""
     pid = uuid.uuid4().hex[:8]
+    params = dict(params)
+    _normalise_master_seed(params)
 
     # Capture workspace at submission time — not at execution time
     workspace = params.pop("workspace", None)
@@ -815,6 +1225,9 @@ def start_preview_generation(
     pid: str,
     clip_index: Optional[int] = None,
     out_dir: Optional[str] = None,
+    clip_indices: Optional[list[int]] = None,
+    expected_fingerprint: Optional[str] = None,
+    run_type: Optional[str] = None,
 ) -> tuple[bool, str, Optional[str]]:
     """Generate all or one clip from a completed comic PRE checkpoint.
 
@@ -843,14 +1256,78 @@ def start_preview_generation(
             return False, "The comic PRE is not ready yet.", None
         source = copy.deepcopy(source)
 
+    stored_fingerprint = str(
+        source.get("_comic_preflight_fingerprint")
+        or (source.get("params") or {}).get("_comic_preflight_fingerprint")
+        or ""
+    )
+    if not stored_fingerprint:
+        return (
+            False,
+            "This is a legacy PRE without a verifiable fingerprint. Rebuild "
+            "PRE before generating any test clip or film.",
+            None,
+        )
+    if stored_fingerprint and not expected_fingerprint:
+        return (
+            False,
+            "expected_fingerprint is required to generate from PRE.",
+            None,
+        )
+    if expected_fingerprint and stored_fingerprint != str(expected_fingerprint):
+        return (
+            False,
+            "This PRE is stale because its film plan or settings changed. "
+            "Open the current PRE tab and review it again.",
+            None,
+        )
+    if stored_fingerprint:
+        current_fingerprint = _comic_preflight_fingerprint(
+            source.get("params") or {},
+            source.get("clip_plans") or [],
+            source.get("_planned_clips") or [],
+            source.get("clip_images") or [],
+            source.get("out_dir") or out_dir,
+        )
+        if current_fingerprint != stored_fingerprint:
+            return (
+                False,
+                "This PRE is stale because a source image or generation "
+                "setting changed. Rebuild PRE before generating video.",
+                None,
+            )
+
     clip_plans = source.get("clip_plans") or []
     clip_images = source.get("clip_images") or []
     planned_clips = source.get("_planned_clips") or []
     if not clip_plans or len(clip_images) != len(clip_plans):
         return False, "The comic PRE has incomplete clip data.", None
 
-    if clip_index is None:
-        selected = list(range(len(clip_plans)))
+    if clip_indices is not None:
+        if not isinstance(clip_indices, list) or not clip_indices:
+            return False, "clip_indices must be a non-empty array.", None
+        selected = []
+        seen = set()
+        for raw_index in clip_indices:
+            try:
+                normalized_index = int(raw_index)
+            except (TypeError, ValueError):
+                return False, "Every clip index must be an integer.", None
+            if normalized_index < 0 or normalized_index >= len(clip_plans):
+                return False, "A selected PRE clip does not exist.", None
+            if normalized_index not in seen:
+                selected.append(normalized_index)
+                seen.add(normalized_index)
+    elif clip_index is None:
+        preview_clips = source.get("preview_clips") or []
+        selected = [
+            index
+            for index in range(len(clip_plans))
+            if index >= len(preview_clips)
+            or preview_clips[index].get("included", True) is not False
+        ]
+        if not selected:
+            return False, "PRE has no enabled shots.", None
     else:
         try:
             normalized_index = int(clip_index)
@@ -860,17 +1337,122 @@ def start_preview_generation(
             return False, "The selected PRE clip does not exist.", None
         selected = [normalized_index]
 
+    preview_clips = source.get("preview_clips") or []
+    excluded = [
+        index + 1
+        for index in selected
+        if index < len(preview_clips)
+        and preview_clips[index].get("included", True) is False
+    ]
+    if excluded:
+        return (
+            False,
+            "Shots "
+            + ", ".join(str(value) for value in excluded)
+            + " are disabled in PRE.",
+            None,
+        )
+    blocked = [
+        index + 1
+        for index in selected
+        if index < len(preview_clips)
+        and preview_clips[index].get("needs_reframe")
+        and not (
+            preview_clips[index].get("reframe_approved")
+            and preview_clips[index].get("used_prepared_keyframe")
+        )
+    ]
+    if blocked:
+        return (
+            False,
+            "Shots "
+            + ", ".join(str(value) for value in blocked)
+            + " need a video-safe reframe. Choose Cover/Contain or approve "
+              "a prepared keyframe in PRE first.",
+            None,
+        )
+
+    effective_run_type = str(
+        run_type
+        or (
+            "test"
+            if clip_index is not None or clip_indices is not None
+            else "full"
+        )
+    ).strip().lower()
+    if effective_run_type not in {"test", "full"}:
+        return False, "run_type must be 'test' or 'full'.", None
+    approved = bool(
+        stored_fingerprint
+        and source.get("_preview_approved_fingerprint")
+        == stored_fingerprint
+    )
+    if effective_run_type == "test" and stored_fingerprint and not approved:
+        return (
+            False,
+            "Approve this exact PRE revision before running its quality test.",
+            None,
+        )
+    if effective_run_type == "full":
+        enabled_indices = [
+            index
+            for index in range(len(clip_plans))
+            if index >= len(preview_clips)
+            or preview_clips[index].get("included", True) is not False
+        ]
+        if selected != enabled_indices:
+            return (
+                False,
+                "A full PRE generation must include every enabled shot in "
+                "its approved editorial order.",
+                None,
+            )
+        gate = source.get("_quality_gate") or {}
+        gate_ready = bool(
+            gate.get("fingerprint") == stored_fingerprint
+            and gate.get("status") in {"passed", "waived"}
+        )
+        if not approved:
+            return (
+                False,
+                "Approve this exact PRE revision before generating the film.",
+                None,
+            )
+        if not gate_ready:
+            return (
+                False,
+                "Run and pass a representative PRE quality test first, or "
+                "record an explicit quality waiver.",
+                None,
+            )
+
     # Treat launching a frozen PRE as an idempotent operation. Fast double
     # clicks and remounted UI panels must reconnect to the active child rather
-    # than submit another expensive GPU job with identical inputs.
+    # than submit another expensive GPU job with identical inputs. A different
+    # request from the same PRE is rejected while any child is active: two LTX
+    # children from separate tabs would otherwise compete for VRAM and can OOM.
     with _pipeline_lock:
-        for candidate in _pipelines.values():
+        active_children = [
+            candidate
+            for candidate in _pipelines.values()
+            if candidate.get("_source_preview_pipeline_id") == pid
+            and candidate.get("_source_preview_fingerprint")
+            == stored_fingerprint
+            and candidate.get("status") in _PRE_ACTIVE_CHILD_STATUSES
+        ]
+        for candidate in active_children:
             if (
-                candidate.get("_source_preview_pipeline_id") == pid
-                and candidate.get("_source_preview_clip_indices") == selected
-                and candidate.get("status") in ("running", "queued", "planning")
+                candidate.get("_source_preview_clip_indices") == selected
+                and candidate.get("_preview_run_type") == effective_run_type
             ):
                 return True, "already_running", candidate.get("id")
+        if active_children:
+            return (
+                False,
+                "Another generation from this PRE revision is active. Wait "
+                "for it to finish or cancel it before starting different clips.",
+                active_children[0].get("id"),
+            )
 
     params = copy.deepcopy(source.get("params") or {})
     params["comic_preflight_only"] = False
@@ -886,6 +1468,13 @@ def start_preview_generation(
         for index in selected
         if index < len(provided_paths)
     ]
+    frozen_negatives = params.get("_effective_video_negative_prompts")
+    if isinstance(frozen_negatives, list):
+        params["_effective_video_negative_prompts"] = [
+            frozen_negatives[index]
+            for index in selected
+            if index < len(frozen_negatives)
+        ]
 
     prepared_end_images = source.get("_clip_end_images") or []
     selected_end_images = [
@@ -897,10 +1486,19 @@ def start_preview_generation(
     params["_comic_prepared_end_images"] = selected_end_images
     params["_source_preview_pipeline_id"] = pid
     params["_source_preview_clip_indices"] = selected
+    params["_source_preview_fingerprint"] = stored_fingerprint
+    params["_preview_run_type"] = effective_run_type
 
     child_pid = uuid.uuid4().hex[:8]
     child_plans = [copy.deepcopy(clip_plans[index]) for index in selected]
     child_images = [clip_images[index] for index in selected]
+    child_source_images_all = source.get("_clip_source_images") or []
+    child_source_images = [
+        child_source_images_all[index]
+        if index < len(child_source_images_all)
+        else ""
+        for index in selected
+    ]
     child_planned = [
         copy.deepcopy(planned_clips[index])
         if index < len(planned_clips)
@@ -914,6 +1512,29 @@ def start_preview_generation(
         else []
         for index in selected
     ]
+    reusable_video_files = [None] * len(selected)
+    if effective_run_type == "full":
+        gate = source.get("_quality_gate") or {}
+        gate_results = (
+            gate.get("results")
+            if gate.get("status") == "passed"
+            and gate.get("fingerprint") == stored_fingerprint
+            and isinstance(gate.get("results"), dict)
+            else {}
+        )
+        source_out_dir = source.get("out_dir") or out_dir or ""
+        for local_index, original_index in enumerate(selected):
+            result = gate_results.get(str(original_index))
+            if not isinstance(result, dict) or not result.get("passed"):
+                continue
+            filename = str(result.get("video_filename") or "").strip()
+            candidate = (
+                filename
+                if os.path.isabs(filename)
+                else os.path.join(source_out_dir, filename)
+            )
+            if filename and os.path.isfile(candidate):
+                reusable_video_files[local_index] = filename
     child = {
         "id": child_pid,
         "status": "running",
@@ -933,9 +1554,25 @@ def start_preview_generation(
         "clip_plans": child_plans,
         "_planned_clips": child_planned,
         "clip_images": child_images,
+        "_clip_source_images": child_source_images,
+        "_clip_source_sizes": [
+            (source.get("_clip_source_sizes") or [])[index]
+            if index < len(source.get("_clip_source_sizes") or [])
+            else None
+            for index in selected
+        ],
+        "_clip_fit_details": [
+            copy.deepcopy((source.get("_clip_fit_details") or [])[index])
+            if index < len(source.get("_clip_fit_details") or [])
+            else {}
+            for index in selected
+        ],
         "_clip_end_images": selected_end_images,
         "_clip_keyframes": child_keyframes,
-        "_clip_video_files": [None] * len(selected),
+        # A visually accepted representative clip was generated from this
+        # exact frozen fingerprint. Reuse it in the full film instead of
+        # spending time and credits creating an identical shot again.
+        "_clip_video_files": reusable_video_files,
         "output_files": [],
         "error": None,
         "created_at": time.time(),
@@ -946,11 +1583,47 @@ def start_preview_generation(
         "llm_streaming": False,
         "_source_preview_pipeline_id": pid,
         "_source_preview_clip_indices": selected,
+        "_source_preview_fingerprint": stored_fingerprint,
+        "_preview_run_type": effective_run_type,
+        "_comic_preflight_fingerprint": stored_fingerprint,
+        "_preview_revision": source.get("_preview_revision", 1),
     }
+    # Reserve the PRE revision atomically. The first check above avoids doing
+    # needless copying, while this second check closes the race between two
+    # browser tabs reaching child construction at the same time.
     with _pipeline_lock:
+        active_children = [
+            candidate
+            for candidate in _pipelines.values()
+            if candidate.get("_source_preview_pipeline_id") == pid
+            and candidate.get("_source_preview_fingerprint")
+            == stored_fingerprint
+            and candidate.get("status") in _PRE_ACTIVE_CHILD_STATUSES
+        ]
+        for candidate in active_children:
+            if (
+                candidate.get("_source_preview_clip_indices") == selected
+                and candidate.get("_preview_run_type") == effective_run_type
+            ):
+                return True, "already_running", candidate.get("id")
+        if active_children:
+            return (
+                False,
+                "Another generation from this PRE revision is active. Wait "
+                "for it to finish or cancel it before starting different clips.",
+                active_children[0].get("id"),
+            )
         _pipelines[child_pid] = child
 
-    _save_pipeline_state(child_pid)
+    if not _save_pipeline_state(child_pid):
+        with _pipeline_lock:
+            if _pipelines.get(child_pid) is child:
+                _pipelines.pop(child_pid, None)
+        return (
+            False,
+            "Could not save the generation checkpoint; no GPU work was started.",
+            None,
+        )
     thread = threading.Thread(
         target=_run_pipeline,
         args=(child_pid,),
@@ -959,6 +1632,754 @@ def start_preview_generation(
     )
     thread.start()
     return True, "started", child_pid
+
+
+def update_comic_preview(
+    pid: str,
+    clips: Optional[list[dict]],
+    out_dir: Optional[str] = None,
+    expected_fingerprint: Optional[str] = None,
+    approve_preview: bool = False,
+    quality_waiver: bool = False,
+    waiver_reason: str = "",
+    accept_quality_test: bool = False,
+) -> tuple[bool, str]:
+    """Atomically apply durable PRE edits and rebuild prepared inputs.
+
+    PRE edits never mutate the comic artwork.  Reframing starts from the
+    pipeline's lossless source copies, then the complete frozen contract gets
+    a new revision and fingerprint so an older browser tab cannot launch it.
+    """
+    with _pipeline_lock:
+        source = _pipelines.get(pid)
+    if not source and out_dir:
+        recovered, message = resume_pipeline(pid, out_dir)
+        if not recovered:
+            return False, message
+    with _pipeline_lock:
+        source = _pipelines.get(pid)
+        if not source:
+            return False, "PRE pipeline not found."
+        if source.get("status") != "preview_ready":
+            return False, "The comic PRE is not ready for editing."
+        active_child = next(
+            (
+                candidate
+                for candidate in _pipelines.values()
+                if candidate.get("_source_preview_pipeline_id") == pid
+                and candidate.get("status") in _PRE_ACTIVE_CHILD_STATUSES
+            ),
+            None,
+        )
+        if active_child:
+            return (
+                False,
+                "A test or film generation is using this PRE. Wait for it to "
+                "finish or cancel it before changing, approving or waiving "
+                "this revision.",
+            )
+        source = copy.deepcopy(source)
+    stored_fingerprint = str(
+        source.get("_comic_preflight_fingerprint")
+        or (source.get("params") or {}).get("_comic_preflight_fingerprint")
+        or ""
+    )
+    if stored_fingerprint and not expected_fingerprint:
+        return False, "expected_fingerprint is required for every PRE change."
+    if expected_fingerprint and str(expected_fingerprint) != stored_fingerprint:
+        return False, "This PRE revision is stale; reload it before saving."
+    normalized_waiver_reason = str(waiver_reason or "").strip()
+    if quality_waiver and not normalized_waiver_reason:
+        return (
+            False,
+            "A quality waiver requires a reason for the production record.",
+        )
+    if stored_fingerprint:
+        current_fingerprint = _comic_preflight_fingerprint(
+            source.get("params") or {},
+            source.get("clip_plans") or [],
+            source.get("_planned_clips") or [],
+            source.get("clip_images") or [],
+            source.get("out_dir") or out_dir,
+        )
+        if current_fingerprint != stored_fingerprint:
+            return (
+                False,
+                "This PRE is stale because a source image or setting changed.",
+            )
+
+    def persist_metadata(updates: dict) -> tuple[bool, str]:
+        """Commit gate/approval metadata or restore it when disk replace fails."""
+        missing = object()
+        with _pipeline_lock:
+            live = _pipelines.get(pid)
+            if (
+                not live
+                or live.get("status") != "preview_ready"
+                or live.get("_comic_preflight_fingerprint")
+                != stored_fingerprint
+            ):
+                return False, "PRE changed while metadata was being saved."
+            previous = {
+                key: (
+                    copy.deepcopy(live[key])
+                    if key in live
+                    else missing
+                )
+                for key in updates
+            }
+            live.update(copy.deepcopy(updates))
+        if _save_pipeline_state(pid):
+            return True, ""
+
+        rolled_back = False
+        with _pipeline_lock:
+            current = _pipelines.get(pid)
+            if current and all(
+                current.get(key) == value
+                for key, value in updates.items()
+            ):
+                for key, value in previous.items():
+                    if value is missing:
+                        current.pop(key, None)
+                    else:
+                        current[key] = value
+                rolled_back = True
+        return (
+            False,
+            "Could not save PRE metadata; the change was rolled back."
+            if rolled_back
+            else (
+                "Could not save PRE metadata and it changed concurrently. "
+                "Reload PRE before continuing."
+            ),
+        )
+
+    if accept_quality_test:
+        gate = source.get("_quality_gate") or {}
+        if (
+            not stored_fingerprint
+            or source.get("_preview_approved_fingerprint")
+            != stored_fingerprint
+        ):
+            return False, "Approve this PRE revision before accepting its test."
+        if (
+            gate.get("fingerprint") != stored_fingerprint
+            or gate.get("status") != "review_required"
+        ):
+            return (
+                False,
+                "All required test clips must pass automatic checks before "
+                "visual acceptance.",
+            )
+        gate = {
+            **gate,
+            "status": "passed",
+            "accepted_at": time.time(),
+        }
+        saved, message = persist_metadata({"_quality_gate": gate})
+        if not saved:
+            return False, message
+        return True, "quality_test_accepted"
+    if not clips and (approve_preview or quality_waiver):
+        previews = source.get("preview_clips") or []
+        if not stored_fingerprint or not previews:
+            return False, "The PRE contract is incomplete and cannot be approved."
+        blocked = [
+            int(preview.get("index", index)) + 1
+            for index, preview in enumerate(previews)
+            if preview.get("included", True) is not False
+            and preview.get("needs_reframe")
+            and not (
+                preview.get("reframe_approved")
+                and preview.get("used_prepared_keyframe")
+            )
+        ]
+        if approve_preview and blocked:
+            return (
+                False,
+                "Shots "
+                + ", ".join(str(value) for value in blocked)
+                + " still need a real prepared reframe, Cover or Contain.",
+            )
+        was_approved = (
+            source.get("_preview_approved_fingerprint")
+            == stored_fingerprint
+        )
+        if quality_waiver and not (approve_preview or was_approved):
+            return False, "Approve this PRE revision before waiving its test."
+        required_test_indices = [
+            int(preview.get("index", index))
+            for index, preview in enumerate(previews)
+            if preview.get("included", True) is not False
+            and preview.get("test_selected")
+        ]
+        if not required_test_indices:
+            first_enabled = next(
+                (
+                    int(preview.get("index", index))
+                    for index, preview in enumerate(previews)
+                    if preview.get("included", True) is not False
+                ),
+                None,
+            )
+            if first_enabled is not None:
+                required_test_indices = [first_enabled]
+        gate = {
+            "status": "waived" if quality_waiver else "pending",
+            "fingerprint": stored_fingerprint,
+            "required_test_indices": required_test_indices,
+            "tested_indices": [],
+            "results": {},
+            "failures": [],
+        }
+        if quality_waiver:
+            gate.update({
+                "waiver_reason": normalized_waiver_reason,
+                "waived_at": time.time(),
+            })
+        saved, message = persist_metadata(
+            {
+                "_preview_approved_fingerprint": stored_fingerprint,
+                "_quality_gate": gate,
+            }
+        )
+        if not saved:
+            return False, message
+        return (
+            True,
+            "quality_test_waived" if quality_waiver else "preview_approved",
+        )
+    if not isinstance(clips, list) or not clips:
+        return False, "clips must be a non-empty array."
+
+    clip_plans = list(source.get("clip_plans") or [])
+    planned_clips = list(source.get("_planned_clips") or [])
+    params = copy.deepcopy(source.get("params") or {})
+    shots = [
+        item if isinstance(item, dict) else {}
+        for item in (params.get("comic_shots") or [])
+    ]
+    source_images = list(source.get("_clip_source_images") or [])
+    source_sizes = list(source.get("_clip_source_sizes") or [])
+    fit_details = list(source.get("_clip_fit_details") or [])
+    clip_images = list(source.get("clip_images") or [])
+    keyframes = list(source.get("_clip_keyframes") or [])
+    if not clip_plans or len(clip_images) != len(clip_plans):
+        return False, "The PRE checkpoint has incomplete clip data."
+
+    count = len(clip_plans)
+    updates: dict[int, dict] = {}
+    for item in clips:
+        if not isinstance(item, dict):
+            return False, "Every PRE clip update must be an object."
+        try:
+            index = int(item.get("index"))
+        except (TypeError, ValueError):
+            return False, "Every PRE clip update needs a valid index."
+        if index < 0 or index >= count or index in updates:
+            return False, "A PRE clip index is invalid or duplicated."
+        updates[index] = item
+
+    records: list[dict] = []
+    for index in range(count):
+        plan = copy.deepcopy(clip_plans[index])
+        planned = copy.deepcopy(
+            planned_clips[index] if index < len(planned_clips) else {}
+        )
+        shot = copy.deepcopy(shots[index] if index < len(shots) else {})
+        edit = updates.get(index, {})
+
+        if "included" in edit:
+            shot["included"] = bool(edit["included"])
+        renderer = str(edit.get("renderer") or _comic_renderer(
+            params, index, plan
+        )).strip().lower()
+        if renderer not in {"hold", "parallax", "cinemagraph", "ltx"}:
+            return False, f"Unsupported renderer for shot {index + 1}."
+        shot["renderer"] = renderer
+        plan["renderer"] = renderer
+
+        if "prompt" in edit:
+            prompt = " ".join(str(edit.get("prompt") or "").split())
+            if not prompt and renderer in {"cinemagraph", "ltx"}:
+                return False, f"Shot {index + 1} needs a motion prompt."
+            previous_previews = source.get("preview_clips") or []
+            previous_prompt = (
+                " ".join(
+                    str(previous_previews[index].get("prompt") or "").split()
+                )
+                if index < len(previous_previews)
+                and isinstance(previous_previews[index], dict)
+                else ""
+            )
+            # The cards submit their displayed effective prompt on every Save.
+            # Treat it as a manual override only when the user actually changed
+            # the text; otherwise camera/motion/renderer edits must be allowed
+            # to re-compose the prompt from its undecorated story action.
+            explicit_prompt_override = edit.get("prompt_override")
+            if explicit_prompt_override is False:
+                plan.pop("_preflight_prompt_override", None)
+            elif bool(explicit_prompt_override) or prompt != previous_prompt:
+                plan["_preflight_prompt_override"] = prompt[:1200]
+        elif edit.get("prompt_override") is False:
+            plan.pop("_preflight_prompt_override", None)
+        elif edit.get("prompt_override") is True:
+            return False, f"Shot {index + 1} needs the overridden prompt text."
+
+        try:
+            duration = float(
+                edit.get(
+                    "duration_seconds",
+                    planned.get("duration_sec")
+                    or planned.get("end", 3) - planned.get("start", 0),
+                )
+            )
+        except (TypeError, ValueError):
+            return False, f"Shot {index + 1} has an invalid duration."
+        planned["duration_sec"] = max(0.8, min(20.0, duration))
+
+        camera = str(
+            edit.get("camera_move")
+            or shot.get("camera_move")
+            or shot.get("camera")
+            or "none"
+        ).strip().lower()
+        shot["camera_move"] = camera
+        plan["camera_move"] = camera
+
+        fit_mode = str(
+            edit.get("fit_mode")
+            or shot.get("fit_mode")
+            or params.get("video_image_fit")
+            or "contain"
+        ).strip().lower()
+        fit_mode = {
+            "crop": "cover",
+            "smart": "contain",
+            "preserve": "contain",
+            "reframe-ai": "reframe",
+        }.get(fit_mode, fit_mode)
+        if fit_mode not in {"reframe", "cover", "contain"}:
+            return False, f"Unsupported fit mode for shot {index + 1}."
+        shot["fit_mode"] = fit_mode
+        if "subject_focus" in edit:
+            shot["subject_focus"] = copy.deepcopy(edit["subject_focus"])
+        elif "focus" in edit:
+            shot["subject_focus"] = copy.deepcopy(edit["focus"])
+        previous_fit_detail = (
+            copy.deepcopy(fit_details[index])
+            if index < len(fit_details)
+            and isinstance(fit_details[index], dict)
+            else {}
+        )
+        previous_fit_mode = str(
+            previous_fit_detail.get("requested_fit_mode")
+            or _comic_shot(params, index).get("fit_mode")
+            or params.get("video_image_fit")
+            or "contain"
+        ).strip().lower()
+        previous_fit_mode = {
+            "crop": "cover",
+            "smart": "contain",
+            "preserve": "contain",
+            "reframe-ai": "reframe",
+        }.get(previous_fit_mode, previous_fit_mode)
+        existing_clip_name = (
+            str(clip_images[index] or "")
+            if index < len(clip_images)
+            else ""
+        )
+        existing_clip_path = (
+            existing_clip_name
+            if os.path.isabs(existing_clip_name)
+            else os.path.join(
+                source.get("out_dir") or out_dir or "",
+                existing_clip_name,
+            )
+        )
+        needs_restage = bool(
+            fit_mode != previous_fit_mode
+            or "subject_focus" in edit
+            or "focus" in edit
+            or not os.path.isfile(existing_clip_path)
+        )
+
+        if "seed" in edit:
+            try:
+                seed = int(edit["seed"])
+            except (TypeError, ValueError):
+                return False, f"Shot {index + 1} has an invalid seed."
+            if seed >= 0:
+                shot["seed"] = seed
+                plan["seed"] = seed
+            else:
+                shot.pop("seed", None)
+                plan.pop("seed", None)
+        if "test_selected" in edit:
+            shot["test_selected"] = bool(edit["test_selected"])
+        if "motion_level" in edit:
+            try:
+                motion_level = int(edit["motion_level"])
+            except (TypeError, ValueError):
+                return False, f"Shot {index + 1} has an invalid motion level."
+            if motion_level < 0 or motion_level > 3:
+                return (
+                    False,
+                    f"Shot {index + 1} motion level must be between 0 and 3.",
+                )
+        else:
+            motion_level = _comic_motion_level(params, index, plan)
+        if renderer == "hold":
+            motion_level = 0
+        elif renderer in {"parallax", "cinemagraph"}:
+            motion_level = 1
+        shot["motion_level"] = motion_level
+        plan["motion_level"] = motion_level
+        metadata = (
+            dict(plan.get("metadata"))
+            if isinstance(plan.get("metadata"), dict)
+            else {}
+        )
+        metadata["motion_level"] = motion_level
+        if motion_level <= 1:
+            shot["camera_move"] = "none"
+            plan["camera_move"] = "none"
+            metadata["camera"] = "none"
+            metadata["camera_move"] = "none"
+        plan["metadata"] = metadata
+        if "reframe_approved" in edit:
+            prepared = str(
+                shot.get("prepared_keyframe_path")
+                or shot.get("video_keyframe_path")
+                or ""
+            )
+            prepared_exists = bool(
+                prepared
+                and (
+                    os.path.isfile(prepared)
+                    or os.path.isfile(
+                        os.path.join(
+                            source.get("out_dir") or out_dir or "",
+                            prepared,
+                        )
+                    )
+                )
+            )
+            shot["reframe_approved"] = bool(
+                edit["reframe_approved"] and prepared_exists
+            )
+
+        try:
+            order = int(edit.get("order", index))
+        except (TypeError, ValueError):
+            order = index
+        records.append({
+            "old_index": index,
+            "order": order,
+            "plan": plan,
+            "planned": planned,
+            "shot": shot,
+            "source_image": (
+                source_images[index] if index < len(source_images) else ""
+            ),
+            "clip_image": clip_images[index],
+            "source_size": (
+                source_sizes[index] if index < len(source_sizes) else None
+            ),
+            "fit_detail": previous_fit_detail,
+            "needs_restage": needs_restage,
+            "keyframes": (
+                copy.deepcopy(keyframes[index])
+                if index < len(keyframes)
+                else []
+            ),
+        })
+
+    records.sort(key=lambda item: (item["order"], item["old_index"]))
+    clip_plans = [item["plan"] for item in records]
+    planned_clips = [item["planned"] for item in records]
+    shots = [item["shot"] for item in records]
+    keyframes = [item["keyframes"] for item in records]
+
+    pipeline_out_dir = source.get("out_dir") or out_dir
+    if not pipeline_out_dir:
+        pipeline_out_dir = _wgp.save_path if _wgp else "outputs"
+    safe_sources: list[str] = []
+    for item in records:
+        filename = str(item["source_image"] or "")
+        path = (
+            filename
+            if os.path.isabs(filename)
+            else os.path.join(pipeline_out_dir, filename)
+        )
+        if not os.path.isfile(path):
+            return (
+                False,
+                "A lossless PRE source copy is missing. Rebuild PRE from the "
+                "comic before changing its fit.",
+            )
+        safe_sources.append(path)
+
+    for shot in shots:
+        prepared = str(shot.get("prepared_keyframe_path") or "")
+        if prepared and not os.path.isabs(prepared):
+            candidate = os.path.join(pipeline_out_dir, prepared)
+            if os.path.isfile(candidate):
+                shot["prepared_keyframe_path"] = candidate
+
+    params["comic_shots"] = shots
+    params["provided_clip_image_paths"] = safe_sources
+    params["video_image_fit"] = str(
+        params.get("video_image_fit") or "contain"
+    )
+    params["_preview_revision"] = int(
+        source.get("_preview_revision") or 1
+    ) + 1
+
+    cumulative = 0.0
+    for planned in planned_clips:
+        duration = float(planned.get("duration_sec") or 3.0)
+        planned["start"] = cumulative
+        planned["end"] = cumulative + duration
+        cumulative += duration
+    resolution = (params.get("video_params") or {}).get(
+        "resolution", "1280x720"
+    )
+    new_images: list[str] = []
+    new_source_images: list[str] = []
+    new_source_sizes: list = []
+    new_fit_details: list[dict] = []
+    created_files: list[str] = []
+    staging_pid = f"{pid}:preview-staging:{uuid.uuid4().hex[:8]}"
+    try:
+        for index, item in enumerate(records):
+            source_filename = str(item["source_image"] or "")
+            if item["needs_restage"]:
+                (
+                    staged,
+                    staged_sources,
+                    staged_sizes,
+                    staged_fit,
+                ) = _prepare_provided_clip_images(
+                    staging_pid,
+                    [safe_sources[index]],
+                    expected_count=1,
+                    out_dir=pipeline_out_dir,
+                    resolution=resolution,
+                    fit_mode=params["video_image_fit"],
+                    protect_composition=True,
+                    shots=[shots[index]],
+                    reuse_source_filenames=[source_filename],
+                    update_pipeline_state=False,
+                    return_details=True,
+                )
+                new_images.append(staged[0])
+                new_source_images.append(staged_sources[0])
+                new_source_sizes.append(staged_sizes[0])
+                new_fit_details.append(staged_fit[0])
+                created_files.append(
+                    os.path.join(pipeline_out_dir, staged[0])
+                )
+            else:
+                new_images.append(str(item["clip_image"] or ""))
+                new_source_images.append(source_filename)
+                new_source_sizes.append(item["source_size"])
+                detail = copy.deepcopy(item["fit_detail"] or {})
+                detail["requested_fit_mode"] = shots[index].get(
+                    "fit_mode",
+                    detail.get("requested_fit_mode", "contain"),
+                )
+                if "reframe_approved" in shots[index]:
+                    detail["reframe_approved"] = bool(
+                        shots[index]["reframe_approved"]
+                    )
+                new_fit_details.append(detail)
+
+        # Build the new frozen contract against an isolated staging pipeline.
+        # The live PRE remains untouched until image preparation, prompt
+        # composition and fingerprinting have all succeeded.
+        with _pipeline_lock:
+            _pipelines[staging_pid] = {
+                "id": staging_pid,
+                "status": "preview_staging",
+                "params": params,
+                "clip_plans": clip_plans,
+                "_planned_clips": planned_clips,
+                "clip_images": new_images,
+                "_clip_source_images": new_source_images,
+                "_clip_source_sizes": new_source_sizes,
+                "_clip_fit_details": new_fit_details,
+                "_preview_revision": params["_preview_revision"],
+            }
+        preview_clips, end_images = _build_comic_video_previews(
+            staging_pid,
+            params,
+            clip_plans,
+            planned_clips,
+            new_images,
+            out_dir=pipeline_out_dir,
+        )
+        fingerprint = str(
+            (_pipelines.get(staging_pid) or {}).get(
+                "_comic_preflight_fingerprint"
+            )
+            or params.get("_comic_preflight_fingerprint")
+            or ""
+        )
+    except Exception as exc:
+        for path in created_files:
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                pass
+        with _pipeline_lock:
+            _pipelines.pop(staging_pid, None)
+        return False, f"Could not stage PRE changes safely: {exc}"
+    finally:
+        with _pipeline_lock:
+            _pipelines.pop(staging_pid, None)
+
+    approval_blocked = [
+        int(preview.get("index", index)) + 1
+        for index, preview in enumerate(preview_clips)
+        if preview.get("included", True) is not False
+        and preview.get("needs_reframe")
+        and not (
+            preview.get("reframe_approved")
+            and preview.get("used_prepared_keyframe")
+        )
+    ]
+    approval_allowed = bool(approve_preview and not approval_blocked)
+    approved_fingerprint = fingerprint if approval_allowed else None
+    required_test_indices = [
+        int(preview["index"])
+        for preview in preview_clips
+        if preview.get("included", True) is not False
+        and preview.get("test_selected")
+    ]
+    if approve_preview and not required_test_indices:
+        first_enabled = next(
+            (
+                int(preview["index"])
+                for preview in preview_clips
+                if preview.get("included", True) is not False
+            ),
+            None,
+        )
+        if first_enabled is not None:
+            required_test_indices = [first_enabled]
+    effective_quality_waiver = bool(quality_waiver and approval_allowed)
+    quality_gate = {
+        "status": "waived" if effective_quality_waiver else "pending",
+        "fingerprint": fingerprint,
+        "required_test_indices": required_test_indices,
+        "tested_indices": [],
+        "results": {},
+        "failures": [],
+    }
+    if effective_quality_waiver:
+        quality_gate.update({
+            "waiver_reason": normalized_waiver_reason,
+            "waived_at": time.time(),
+        })
+    with _pipeline_lock:
+        live = _pipelines.get(pid)
+        if (
+            not live
+            or live.get("status") != "preview_ready"
+            or live.get("_comic_preflight_fingerprint")
+            != stored_fingerprint
+        ):
+            for path in created_files:
+                try:
+                    if os.path.isfile(path):
+                        os.remove(path)
+                except OSError:
+                    pass
+            return False, "PRE changed while edits were being staged; reload it."
+        live.update({
+            "params": params,
+            "clip_plans": clip_plans,
+            "_planned_clips": planned_clips,
+            "clip_images": new_images,
+            "_clip_source_images": new_source_images,
+            "_clip_source_sizes": new_source_sizes,
+            "_clip_fit_details": new_fit_details,
+            "_clip_keyframes": keyframes,
+            "_clip_end_images": end_images,
+            "_clip_video_files": [None] * count,
+            "_clip_validations": [None] * count,
+            "_preview_revision": params["_preview_revision"],
+            "_comic_preflight_fingerprint": fingerprint,
+            "preview_clips": preview_clips,
+            "_preview_approved_fingerprint": approved_fingerprint,
+            "_quality_gate": quality_gate,
+            "progress": {
+                "current": len(preview_clips),
+                "total": len(preview_clips),
+                "message": (
+                    "Comic PRE changes saved — review before generation"
+                ),
+                "step": 0,
+                "total_steps": 0,
+            },
+        })
+    if not _save_pipeline_state(pid):
+        rolled_back = False
+        with _pipeline_lock:
+            current = _pipelines.get(pid)
+            if (
+                current
+                and current.get("_comic_preflight_fingerprint")
+                == fingerprint
+            ):
+                current.clear()
+                current.update(copy.deepcopy(source))
+                rolled_back = True
+        if rolled_back:
+            for path in created_files:
+                try:
+                    if os.path.isfile(path):
+                        os.remove(path)
+                except OSError:
+                    pass
+        return (
+            False,
+            "Could not save the PRE checkpoint; all edits were rolled back."
+            if rolled_back
+            else (
+                "Could not save the PRE checkpoint, and PRE changed "
+                "concurrently. Reload it before continuing."
+            ),
+        )
+
+    # Only after the atomic swap may superseded prepared panels be removed.
+    # Lossless comic_source_* files are deliberately retained and reused.
+    new_image_set = {str(value) for value in new_images}
+    for old_name in clip_images:
+        old_name = str(old_name or "")
+        if old_name in new_image_set:
+            continue
+        basename = os.path.basename(old_name)
+        if not basename.startswith("comic_panel_"):
+            continue
+        old_path = os.path.join(pipeline_out_dir, basename)
+        try:
+            if os.path.isfile(old_path):
+                os.remove(old_path)
+        except OSError:
+            pass
+    if approve_preview and approval_blocked:
+        return (
+            True,
+            "updated_approval_blocked: shots "
+            + ", ".join(str(value) for value in approval_blocked)
+            + " cannot be approved until they use Cover, Contain or a real "
+              "prepared reframe.",
+        )
+    return True, "updated"
 
 
 def _find_pipeline_state_file(pid: str, out_dir: str) -> Optional[str]:
@@ -1011,7 +2432,7 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
 
     # Rebuild the generation-driving structures from the saved per-clip state.
     saved_clips = data.get("clips", []) or []
-    clip_plans = [{
+    flattened_clip_plans = [{
         "image_prompt": c.get("image_prompt", ""),
         "video_prompt": c.get("video_prompt", ""),
         "visual_changes": c.get("visual_changes", []) or [],
@@ -1021,14 +2442,30 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         "window_count": c.get("window_count", 1),
         "_effective_video_prompt": c.get("effective_video_prompt"),
         "_effective_video_frames": c.get("effective_video_frames"),
+        "shot_id": c.get("shot_id"),
+        "seed": c.get("seed"),
+        "renderer": c.get("renderer"),
     } for c in saved_clips]
-    planned_clips = []
+    clip_plans = (
+        copy.deepcopy(data.get("clip_plans"))
+        if isinstance(data.get("clip_plans"), list)
+        and len(data.get("clip_plans")) == len(saved_clips)
+        else flattened_clip_plans
+    )
+    flattened_planned_clips = []
     for clip in saved_clips:
         planned = clip.get("planned_clip") or {}
         if clip.get("effective_video_frames"):
             planned["_effective_video_frames"] = clip["effective_video_frames"]
-        planned_clips.append(planned)
+        flattened_planned_clips.append(planned)
+    planned_clips = (
+        copy.deepcopy(data.get("planned_clips"))
+        if isinstance(data.get("planned_clips"), list)
+        and len(data.get("planned_clips")) == len(saved_clips)
+        else flattened_planned_clips
+    )
     clip_images = [c.get("start_image_filename") for c in saved_clips]
+    clip_source_images = [c.get("source_image_filename") for c in saved_clips]
     clip_end_images = [c.get("end_image_filename") for c in saved_clips]
     clip_keyframes = [c.get("keyframe_filenames", []) or [] for c in saved_clips]
     clip_video_files = [c.get("video_filename") for c in saved_clips]
@@ -1045,9 +2482,34 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         "clip_plans": clip_plans,
         "_planned_clips": planned_clips,
         "clip_images": clip_images,
+        "_clip_source_images": clip_source_images,
+        "_clip_source_sizes": (
+            data.get("clip_source_sizes")
+            or [c.get("source_size") for c in saved_clips]
+        ),
+        "_clip_fit_details": (
+            data.get("clip_fit_details")
+            or [c.get("fit_details") or {} for c in saved_clips]
+        ),
         "_clip_end_images": clip_end_images,
         "_clip_keyframes": clip_keyframes,
         "_clip_video_files": clip_video_files,
+        "_clip_validations": [
+            c.get("validation") for c in saved_clips
+        ],
+        "_comic_preflight_fingerprint": data.get("preview_fingerprint"),
+        "_preview_revision": data.get("preview_revision", 1),
+        "_preview_approved_fingerprint": data.get(
+            "preview_approved_fingerprint"
+        ),
+        "_quality_gate": data.get("quality_gate") or {
+            "status": "pending",
+            "fingerprint": data.get("preview_fingerprint"),
+            "required_test_indices": [],
+            "tested_indices": [],
+            "results": {},
+            "failures": [],
+        },
         "preview_clips": data.get("preview_clips", []) or [],
         "output_files": data.get("output_files", []) or [],
         "_llm_log": data.get("llm_log"),
@@ -1058,6 +2520,16 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         "workspace": workspace,
         "out_dir": resume_out_dir,
         "llm_streaming": False,
+        "_source_preview_pipeline_id": params.get(
+            "_source_preview_pipeline_id"
+        ),
+        "_source_preview_clip_indices": params.get(
+            "_source_preview_clip_indices"
+        ),
+        "_source_preview_fingerprint": params.get(
+            "_source_preview_fingerprint"
+        ),
+        "_preview_run_type": params.get("_preview_run_type"),
     }
     with _pipeline_lock:
         _pipelines[pid] = pipeline
@@ -1099,10 +2571,27 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
 
 
 def stop_pipeline(pid: str):
+    active_job_id = None
     with _pipeline_lock:
         p = _pipelines.get(pid)
         if p:
-            p["status"] = "cancelled"
+            p["_cancel_requested"] = True
+            active_job_id = p.get("_active_generation_job_id")
+            if active_job_id:
+                # Do not publish a terminal pipeline state until the
+                # generation worker confirms that it released the GPU.
+                p["status"] = "running"
+                p["phase"] = "cancelling"
+                progress = dict(p.get("progress") or {})
+                progress["message"] = "Cancelling active generation…"
+                p["progress"] = progress
+            else:
+                p["status"] = "cancelled"
+                p["phase"] = "cancelled"
+    _save_pipeline_state(pid)
+    if active_job_id and _cancel_generation is not None:
+        _cancel_generation(active_job_id)
+    return "cancelling" if active_job_id else "cancelled"
 
 
 def _run_pipeline(pid: str, resume: bool = False):
@@ -1361,14 +2850,40 @@ def _run_pipeline(pid: str, resume: bool = False):
                 video_params.get("resolution", "1280x720"),
             )
             params["video_params"] = video_params
-            clip_images = _prepare_provided_clip_images(
+            (
+                clip_images,
+                durable_source_names,
+                source_sizes,
+                fit_details,
+            ) = _prepare_provided_clip_images(
                 pid,
                 provided_clip_image_paths,
                 expected_count=len(clip_plans),
                 out_dir=pipeline_out_dir,
                 resolution=video_params["resolution"],
-                fit_mode=params.get("video_image_fit", "smart"),
+                fit_mode=params.get("video_image_fit", "contain"),
                 protect_composition=params.get("pipeline_type") == "comic_movie",
+                shots=params.get("comic_shots") or [],
+                return_details=True,
+            )
+            # The browser upload may live in a temporary directory. PRE must
+            # fingerprint and persist the lossless copies beside its checkpoint
+            # so a restart or upload cleanup cannot make an approved contract
+            # spuriously stale.
+            params["provided_clip_image_paths"] = [
+                (
+                    name
+                    if os.path.isabs(str(name or ""))
+                    else os.path.join(pipeline_out_dir, str(name or ""))
+                )
+                for name in durable_source_names
+            ]
+            _update_pipeline(
+                pid,
+                params=params,
+                _clip_source_images=durable_source_names,
+                _clip_source_sizes=source_sizes,
+                _clip_fit_details=fit_details,
             )
             clip_keyframes = [[] for _ in clip_images]
         else:
@@ -1422,6 +2937,9 @@ def _run_pipeline(pid: str, resume: bool = False):
 
         output_files = _run_video_generation(pid, params, clip_plans, planned_clips, clip_images, clip_keyframes, out_dir=pipeline_out_dir, workspace=pipeline_workspace)
 
+        if _pipeline_cancel_requested(pid):
+            raise PipelineCancelled("Director pipeline was cancelled.")
+
         _update_pipeline(pid,
                          status="completed",
                          phase="completed",
@@ -1430,6 +2948,22 @@ def _run_pipeline(pid: str, resume: bool = False):
                          progress={"current": 3, "total": 3, "message": "Done!", "step": 0, "total_steps": 0})
         _save_pipeline_state(pid)  # Save on completion
 
+    except PipelineCancelled:
+        _update_pipeline(
+            pid,
+            status="cancelled",
+            phase="cancelled",
+            _completed_at=time.time(),
+            progress={
+                "current": 0,
+                "total": 0,
+                "message": "Cancelled",
+                "step": 0,
+                "total_steps": 0,
+            },
+        )
+        _save_pipeline_state(pid)
+        return
     except Exception as e:
         import traceback
         # Special-case the safety scanner. Don't print a stack trace for
@@ -1477,6 +3011,40 @@ def _run_pipeline(pid: str, resume: bool = False):
                          oom_info=_oom_info,
                          _completed_at=time.time(),
                          progress={"current": 0, "total": 0, "message": f"Error: {e}", "step": 0, "total_steps": 0})
+        failed_pipeline = _pipelines.get(pid) or {}
+        if (
+            failed_pipeline.get("_preview_run_type") == "test"
+            and not failed_pipeline.get("_quality_recorded")
+        ):
+            safe_error = " ".join(str(e).split())
+            for sensitive_path in (
+                failed_pipeline.get("out_dir"),
+                os.path.expanduser("~"),
+            ):
+                if sensitive_path:
+                    safe_error = safe_error.replace(
+                        str(sensitive_path),
+                        "[path]",
+                    )
+            safe_error = safe_error[:400] or "generation-failed"
+            selected = list(
+                failed_pipeline.get("_source_preview_clip_indices") or []
+            )
+            _record_comic_preview_quality(
+                pid,
+                [
+                    {
+                        "passed": False,
+                        "failures": [f"generation-failed:{safe_error}"],
+                        "warnings": [],
+                        "metrics": {
+                            "child_pipeline_id": pid,
+                            "phase": failed_pipeline.get("phase"),
+                        },
+                    }
+                    for _index in selected
+                ],
+            )
         _save_pipeline_state(pid)  # Save on failure too
 
 
@@ -1697,6 +3265,137 @@ def _has_visual_references(params: dict) -> bool:
     )
 
 
+def _clip_metadata(value: dict) -> dict:
+    metadata = value.get("metadata") if isinstance(value, dict) else None
+    return dict(metadata) if isinstance(metadata, dict) else {}
+
+
+def _align_comic_plan_sources(
+    params: dict,
+    clip_plans: list[dict],
+    planned_clips: list[dict],
+) -> None:
+    """Map adapted film shots back to their primary comic panels.
+
+    Film planning may omit or fuse panels.  Positional zipping therefore
+    sends the wrong artwork to LTX; stable source IDs/indices are authoritative.
+    """
+    original_shots = [
+        item if isinstance(item, dict) else {}
+        for item in (params.get("comic_shots") or [])
+    ]
+    original_paths = list(params.get("provided_clip_image_paths") or [])
+    by_id: dict[str, int] = {}
+    for index, shot in enumerate(original_shots):
+        for key in ("shot_id", "panel_id", "id", "primary_source_panel_id"):
+            value = str(shot.get(key) or "").strip()
+            if value:
+                by_id[value] = index
+
+    aligned_shots: list[dict] = []
+    aligned_paths: list[str] = []
+    for index, plan in enumerate(clip_plans):
+        planned = planned_clips[index] if index < len(planned_clips) else {}
+        metadata = {
+            **_clip_metadata(planned),
+            **_clip_metadata(plan),
+        }
+        for source in (planned, plan):
+            for key in (
+                "shot_id",
+                "renderer",
+                "source_panel_ids",
+                "source_panel_indices",
+                "primary_source_panel_id",
+                "primary_source_index",
+                "provided_image_path",
+                "prepared_keyframe_path",
+                "action",
+                "camera",
+                "motion_level",
+                "fit_mode",
+                "test_selected",
+                "seed",
+                "end_beat",
+                "risk_tags",
+            ):
+                if key in source and key not in metadata:
+                    metadata[key] = source[key]
+
+        source_index = metadata.get("primary_source_index")
+        try:
+            source_index = int(source_index)
+        except (TypeError, ValueError):
+            source_index = None
+        if source_index is None:
+            source_id = str(
+                metadata.get("primary_source_panel_id") or ""
+            ).strip()
+            if not source_id:
+                panel_ids = metadata.get("source_panel_ids")
+                if isinstance(panel_ids, list) and panel_ids:
+                    source_id = str(panel_ids[0] or "").strip()
+            source_index = by_id.get(source_id)
+        if source_index is None and len(clip_plans) == len(original_shots):
+            source_index = index
+        if source_index is None:
+            indices = metadata.get("source_panel_indices")
+            if isinstance(indices, list) and indices:
+                try:
+                    source_index = int(indices[0])
+                except (TypeError, ValueError):
+                    source_index = None
+
+        base_shot = (
+            original_shots[source_index]
+            if isinstance(source_index, int)
+            and 0 <= source_index < len(original_shots)
+            else {}
+        )
+        aligned = {**base_shot, **metadata}
+        aligned.setdefault(
+            "shot_id",
+            str(
+                metadata.get("shot_id")
+                or metadata.get("primary_source_panel_id")
+                or base_shot.get("panel_id")
+                or base_shot.get("id")
+                or f"film-shot-{index + 1}"
+            ),
+        )
+        aligned.setdefault("included", True)
+        aligned_shots.append(aligned)
+
+        # The primary source remains the original panel. A prepared keyframe
+        # is an optional video-safe derivative consumed by image preparation;
+        # it must never replace the provenance/source thumbnail in PRE.
+        direct_path = str(metadata.get("provided_image_path") or "")
+        if direct_path and os.path.isfile(direct_path):
+            aligned_paths.append(direct_path)
+        elif (
+            isinstance(source_index, int)
+            and 0 <= source_index < len(original_paths)
+        ):
+            aligned_paths.append(original_paths[source_index])
+        elif index < len(original_paths):
+            aligned_paths.append(original_paths[index])
+        else:
+            aligned_paths.append("")
+
+        if not isinstance(plan.get("metadata"), dict):
+            plan["metadata"] = {}
+        plan["metadata"].update(metadata)
+        plan["shot_id"] = aligned["shot_id"]
+        if index < len(planned_clips):
+            if not isinstance(planned_clips[index].get("metadata"), dict):
+                planned_clips[index]["metadata"] = {}
+            planned_clips[index]["metadata"].update(metadata)
+            planned_clips[index]["shot_id"] = aligned["shot_id"]
+
+    params["comic_shots"] = aligned_shots
+    params["provided_clip_image_paths"] = aligned_paths
+
+
 def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     """New architecture: DirectorOrchestrator with planners + renderers."""
     from services import llm_service
@@ -1829,6 +3528,11 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         planner_kwargs.update({
             "comic_context": scene_description,
             "comic_shots": params.get("comic_shots", []),
+            "adapt_to_film": _as_bool(
+                params.get("comic_adapt_to_film"),
+                default=True,
+            ),
+            "target_shots": params.get("comic_target_shots"),
         })
     elif pipeline_type == "short_film_story":
         planner_kwargs.update({
@@ -1920,6 +3624,7 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         new_clips = []
         for shot in plan.shots:
             duration_frames = shot.metadata.get("duration_frames") if shot.metadata else int(shot.duration_sec * fps)
+            shot_metadata = dict(shot.metadata or {})
             new_clips.append({
                 "start": cumulative,
                 "end": cumulative + shot.duration_sec,
@@ -1927,6 +3632,8 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
                 "duration_frames": duration_frames,
                 "label": shot.narrative_role or shot.scene_type or "scene",
                 "beat_count": 0,
+                "shot_id": shot.shot_id,
+                "metadata": shot_metadata,
             })
             cumulative += shot.duration_sec
         planned_clips = new_clips
@@ -1934,6 +3641,8 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     # Normalize
     if clip_plans and isinstance(clip_plans[0], str):
         clip_plans = [{"video_prompt": p, "image_prompt": ""} for p in clip_plans]
+    if pipeline_type == "comic_movie":
+        _align_comic_plan_sources(params, clip_plans, planned_clips)
 
     # Debug: log shot structure
     for idx, cp in enumerate(clip_plans):
@@ -2070,18 +3779,32 @@ def _normalize_video_resolution(video_model: str, resolution: str) -> str:
     return normalized
 
 
-def _fit_i2v_image(source: str, destination: str, resolution: str, fit_mode: str) -> None:
+def _fit_i2v_image(
+    source: str,
+    destination: str,
+    resolution: str,
+    fit_mode: str,
+    focus: Optional[tuple[float, float]] = None,
+) -> None:
     """Prepare a first frame without stretching it.
 
-    ``smart`` keeps every source pixel visible and fills unused canvas space
-    with a subdued blurred copy. ``crop`` fills the canvas by cropping its
-    edges. ``source`` copies the image untouched for callers that deliberately
-    want the model/backend to choose the output aspect.
+    ``cover``/``reframe`` create a full-bleed editorial crop around an optional
+    normalized focus point. ``contain`` preserves the full panel on a quiet
+    solid matte. Legacy ``crop`` and ``smart`` aliases remain readable, but
+    new PREs never synthesize the blurred "poster card" that encouraged LTX
+    to zoom into the inset panel. ``source`` copies an already prepared
+    keyframe untouched.
     """
     import shutil
-    from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+    from PIL import Image, ImageOps, ImageStat
 
-    fit_mode = str(fit_mode or "smart").strip().lower()
+    fit_mode = str(fit_mode or "contain").strip().lower()
+    fit_mode = {
+        "crop": "cover",
+        "smart": "contain",
+        "preserve": "contain",
+        "fit": "contain",
+    }.get(fit_mode, fit_mode)
     if fit_mode == "source":
         shutil.copy2(source, destination)
         return
@@ -2100,27 +3823,31 @@ def _fit_i2v_image(source: str, destination: str, resolution: str, fit_mode: str
             image.save(destination, format="PNG")
             return
 
-        if fit_mode == "crop":
+        center = focus or (0.5, 0.5)
+        center = (
+            max(0.0, min(1.0, float(center[0]))),
+            max(0.0, min(1.0, float(center[1]))),
+        )
+        if fit_mode in {"cover", "reframe", "reframe-ai"}:
             result = ImageOps.fit(
                 image,
                 (target_width, target_height),
                 method=Image.Resampling.LANCZOS,
-                centering=(0.5, 0.5),
+                centering=center,
             )
         else:
-            # No-loss foreground + edge-filled background.  A blurred/dimmed
-            # copy avoids black bars while keeping the full comic panel or
-            # source photograph visible in the exact requested video canvas.
-            background = ImageOps.fit(
-                image,
-                (target_width, target_height),
-                method=Image.Resampling.LANCZOS,
-                centering=(0.5, 0.5),
+            sample = image.copy()
+            sample.thumbnail((64, 64))
+            mean = ImageStat.Stat(sample).mean
+            matte = tuple(
+                max(0, min(255, round(channel * 0.22)))
+                for channel in mean[:3]
             )
-            radius = max(8.0, max(target_width, target_height) / 32.0)
-            background = ImageEnhance.Brightness(
-                background.filter(ImageFilter.GaussianBlur(radius=radius))
-            ).enhance(0.58)
+            background = Image.new(
+                "RGB",
+                (target_width, target_height),
+                matte,
+            )
             foreground = ImageOps.contain(
                 image,
                 (target_width, target_height),
@@ -2162,9 +3889,13 @@ def _prepare_provided_clip_images(
     expected_count: int,
     out_dir: str,
     resolution: str = "1280x720",
-    fit_mode: str = "smart",
+    fit_mode: str = "contain",
     protect_composition: bool = False,
-) -> list[str]:
+    shots: Optional[list[dict]] = None,
+    reuse_source_filenames: Optional[list[str]] = None,
+    update_pipeline_state: bool = True,
+    return_details: bool = False,
+):
     """Stage caller-supplied I2V frames in one consistent video canvas."""
 
     from PIL import Image, ImageOps, ImageStat
@@ -2176,9 +3907,15 @@ def _prepare_provided_clip_images(
         )
     os.makedirs(out_dir, exist_ok=True)
     staged: list[str] = []
+    source_copies: list[str] = []
+    fit_details: list[dict] = []
     source_sizes: list[tuple[int, int]] = []
-    protected_crops = 0
     for index, source in enumerate(image_paths):
+        shot = (
+            shots[index]
+            if shots and index < len(shots) and isinstance(shots[index], dict)
+            else {}
+        )
         source = str(source or "")
         if not source or not os.path.isfile(source):
             raise RuntimeError(
@@ -2211,22 +3948,79 @@ def _prepare_provided_clip_images(
                 "Video generation was stopped before using it. Reopen the comic "
                 "and convert it to a movie again; the artwork itself is preserved."
             )
-        effective_fit_mode = fit_mode
+        prepared_keyframe = str(
+            shot.get("prepared_keyframe_path")
+            or shot.get("video_keyframe_path")
+            or ""
+        )
+        source_for_fit = (
+            prepared_keyframe
+            if prepared_keyframe and os.path.isfile(prepared_keyframe)
+            else source
+        )
+        requested_fit_mode = str(
+            shot.get("fit_mode") or fit_mode or "contain"
+        ).strip().lower()
+        effective_fit_mode = {
+            "crop": "cover",
+            "smart": "contain",
+            "preserve": "contain",
+        }.get(requested_fit_mode, requested_fit_mode)
         retained_fraction = _crop_retained_fraction(source_size, resolution)
-        if (
+        has_prepared_keyframe = source_for_fit != source
+        needs_reframe = bool(
             protect_composition
-            and str(fit_mode).strip().lower() == "crop"
-            and retained_fraction < 0.72
+            and effective_fit_mode in {"reframe", "reframe-ai"}
+            and retained_fraction < 0.58
+            and not has_prepared_keyframe
+        )
+        if (
+            effective_fit_mode in {"reframe", "reframe-ai"}
+            and not has_prepared_keyframe
+            and retained_fraction < 0.58
         ):
-            effective_fit_mode = "smart"
-            protected_crops += 1
-            print(
-                f"[Pipeline {pid}] Comic panel {index + 1}: crop would retain "
-                f"only {retained_fraction:.0%}; using smart fit to preserve "
-                "the complete composition"
-            )
+            # Never spend image-model credits or substitute a blur silently.
+            # PRE exposes the risk and lets the user choose an explicit crop,
+            # contain fit, or approved edited keyframe.
+            effective_fit_mode = "contain"
+            needs_reframe = True
+
+        focus_value = shot.get("subject_focus") or shot.get("focus")
+        focus = None
+        if isinstance(focus_value, dict):
+            try:
+                focus = (
+                    float(focus_value.get("x", 0.5)),
+                    float(focus_value.get("y", 0.5)),
+                )
+            except (TypeError, ValueError):
+                focus = None
+        elif isinstance(focus_value, (list, tuple)) and len(focus_value) >= 2:
+            try:
+                focus = (float(focus_value[0]), float(focus_value[1]))
+            except (TypeError, ValueError):
+                focus = None
+
+        reusable_source = (
+            str(reuse_source_filenames[index] or "")
+            if reuse_source_filenames
+            and index < len(reuse_source_filenames)
+            else ""
+        )
+        source_filename = reusable_source or (
+            f"comic_source_{index + 1:04d}_{uuid.uuid4().hex[:8]}.png"
+        )
+        if not reusable_source:
+            source_destination = os.path.join(out_dir, source_filename)
+            with Image.open(source) as opened:
+                ImageOps.exif_transpose(opened).convert("RGB").save(
+                    source_destination,
+                    format="PNG",
+                )
+        source_copies.append(source_filename)
+
         extension = (
-            os.path.splitext(source)[1].lower()
+            os.path.splitext(source_for_fit)[1].lower()
             if str(effective_fit_mode).lower() == "source"
             else ".png"
         )
@@ -2234,23 +4028,52 @@ def _prepare_provided_clip_images(
             extension = ".png"
         filename = f"comic_panel_{index + 1:04d}_{uuid.uuid4().hex[:8]}{extension}"
         destination = os.path.join(out_dir, filename)
-        _fit_i2v_image(source, destination, resolution, effective_fit_mode)
-        staged.append(filename)
-        _update_pipeline(
-            pid,
-            progress={
-                "current": index + 1,
-                "total": expected_count,
-                "message": f"Preparing comic panel {index + 1}/{expected_count}",
-                "step": 0,
-                "total_steps": 0,
-            },
+        _fit_i2v_image(
+            source_for_fit,
+            destination,
+            resolution,
+            effective_fit_mode,
+            focus=focus,
         )
+        staged.append(filename)
+        fit_details.append({
+            "requested_fit_mode": requested_fit_mode,
+            "effective_fit_mode": effective_fit_mode,
+            "retained_fraction": round(retained_fraction, 4),
+            "needs_reframe": needs_reframe,
+            "reframe_approved": bool(
+                shot.get("reframe_approved") or has_prepared_keyframe
+            ),
+            "used_prepared_keyframe": has_prepared_keyframe,
+            "focus": list(focus) if focus else [0.5, 0.5],
+        })
+        if update_pipeline_state:
+            _update_pipeline(
+                pid,
+                progress={
+                    "current": index + 1,
+                    "total": expected_count,
+                    "message": (
+                        f"Preparing comic panel {index + 1}/{expected_count}"
+                    ),
+                    "step": 0,
+                    "total_steps": 0,
+                },
+            )
     print(
         f"[Pipeline {pid}] Prepared {len(staged)} supplied comic panel start "
-        f"images at {resolution} (fit={fit_mode}, protected_crops={protected_crops})"
+        f"images at {resolution} (fit={fit_mode}, "
+        f"needs_reframe={sum(item['needs_reframe'] for item in fit_details)})"
     )
-    _update_pipeline(pid, _clip_source_sizes=source_sizes)
+    if update_pipeline_state:
+        _update_pipeline(
+            pid,
+            _clip_source_sizes=source_sizes,
+            _clip_source_images=source_copies,
+            _clip_fit_details=fit_details,
+        )
+    if return_details:
+        return staged, source_copies, source_sizes, fit_details
     return staged
 
 def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_dir: str = None, workspace: str = None) -> tuple[list[str], list[list[str]]]:
@@ -2659,11 +4482,87 @@ _COMIC_REFERENCE_NEGATIVE = (
 )
 
 
+def _comic_renderer(
+    params: dict,
+    index: int,
+    plan: Optional[dict] = None,
+) -> str:
+    """Return the effective shot renderer with legacy aliases."""
+    plan = plan or {}
+    metadata = _clip_metadata(plan)
+    shot = _comic_shot(params, index)
+    raw = str(
+        plan.get("renderer")
+        or metadata.get("renderer")
+        or shot.get("renderer")
+        or "ltx"
+    ).strip().lower()
+    return {
+        "still": "hold",
+        "static": "hold",
+        "image": "hold",
+        "2.5d": "parallax",
+        "2_5d": "parallax",
+        "living-still": "cinemagraph",
+        "living_still": "cinemagraph",
+        "contextual": "ltx",
+        "action": "ltx",
+        "i2v": "ltx",
+    }.get(raw, raw if raw in {"hold", "parallax", "cinemagraph", "ltx"} else "ltx")
+
+
+def _comic_motion_level(
+    params: dict,
+    index: int,
+    plan: Optional[dict] = None,
+) -> int:
+    """Resolve the authored 0–3 motion intensity for one shot."""
+    plan = plan or {}
+    metadata = _clip_metadata(plan)
+    shot = _comic_shot(params, index)
+    requested_renderer = _comic_renderer(params, index, plan)
+    if requested_renderer == "hold":
+        return 0
+    if requested_renderer in {"parallax", "cinemagraph"}:
+        return 1
+    default = (
+        1
+        if _comic_motion_mode(params, index) == "living-still"
+        else 2
+    )
+    for source in (plan, metadata, shot):
+        if "motion_level" not in source:
+            continue
+        try:
+            return max(0, min(3, int(source["motion_level"])))
+        except (TypeError, ValueError):
+            continue
+    return default
+
+
+def _comic_effective_renderer(
+    params: dict,
+    index: int,
+    plan: Optional[dict] = None,
+) -> str:
+    """Apply motion-level policy without erasing the requested renderer."""
+    renderer = _comic_renderer(params, index, plan)
+    # Level zero is a true deterministic hold.  Sending an allegedly static
+    # shot through diffusion wastes time and is exactly how unwanted zoom,
+    # redraw and character drift entered earlier comic films.
+    if _comic_motion_level(params, index, plan) == 0:
+        return "hold"
+    return renderer
+
+
 def _comic_motion_mode(params: dict, index: int) -> str:
     """Return a backwards-compatible per-panel comic motion treatment."""
-    shots = params.get("comic_shots") or []
-    shot = shots[index] if index < len(shots) and isinstance(shots[index], dict) else {}
-    raw = str(shot.get("motion_mode") or "action").strip().lower()
+    shot = _comic_shot(params, index)
+    raw = str(
+        shot.get("motion_mode")
+        or params.get("comic_motion_treatment")
+        or "action"
+    ).strip().lower()
     if raw in {"living-still", "living_still", "still"}:
         return "living-still"
     if raw in {"contextual", "context", "directed"}:
@@ -2671,13 +4570,28 @@ def _comic_motion_mode(params: dict, index: int) -> str:
     return "action"
 
 
-def _comic_camera_is_locked(params: dict, index: int) -> bool:
+def _comic_camera_is_locked(
+    params: dict,
+    index: int,
+    plan: Optional[dict] = None,
+) -> bool:
     """Treat absent comic camera instructions as an intentional static shot."""
-    if _comic_motion_mode(params, index) in {"living-still", "contextual"}:
+    if _comic_motion_mode(params, index) == "living-still":
         return True
-    shots = params.get("comic_shots") or []
-    shot = shots[index] if index < len(shots) and isinstance(shots[index], dict) else {}
-    camera = str(shot.get("camera_move") or "none").strip().lower()
+    if _comic_motion_level(params, index, plan) <= 1:
+        return True
+    plan = plan or {}
+    metadata = _clip_metadata(plan)
+    shot = _comic_shot(params, index)
+    camera = str(
+        plan.get("camera_move")
+        or plan.get("camera")
+        or metadata.get("camera_move")
+        or metadata.get("camera")
+        or shot.get("camera_move")
+        or shot.get("camera")
+        or "none"
+    ).strip().lower()
     return camera in {"", "none", "static", "locked", "locked-off", "locked-off camera"}
 
 
@@ -2692,58 +4606,70 @@ def _comic_motion_prompt(
     has_end: bool,
     camera_locked: bool = False,
     motion_mode: str = "action",
+    motion_level: Optional[int] = None,
 ) -> str:
-    """Add runtime-only fidelity constraints to the LLM-authored motion."""
+    """Build a concise LTX I2V change prompt.
+
+    The approved first frame already defines subjects, style and composition.
+    Repeating a visual bible and a wall of prohibitions makes scene
+    replacement more likely; this contract describes only change plus a small
+    preservation clause.
+    """
     fidelity = str(fidelity or "faithful").strip().lower()
     motion_mode = str(motion_mode or "action").strip().lower()
-    additions: list[str] = []
-    if motion_mode in {"living-still", "living_still", "still"}:
-        additions.append(
-            "LIVING-STILL LOCK: keep every visible character, object and "
-            "background feature in its exact first-frame position. Preserve "
-            "pose, silhouette, anatomy and all drawing details. Use only "
-            "imperceptible natural micro-motion already supported by the image: "
-            "gentle breathing or blinking, tiny cloth or hair response, and "
-            "minimal ambient dust, mist, light or reflections. Do not add, "
-            "remove, reveal, replace or transform subjects; do not make anyone "
-            "cross the frame or approach the viewer. Finish on the same stable composition."
+    if motion_level is None:
+        motion_level = (
+            1
+            if motion_mode in {"living-still", "living_still", "still"}
+            else 2
         )
-    elif motion_mode in {"contextual", "context", "directed"}:
+    motion_level = max(0, min(3, int(motion_level)))
+    base = " ".join(str(prompt or "").split())
+    if len(base) > 640:
+        base = base[:637].rsplit(" ", 1)[0] + "..."
+    additions: list[str] = []
+    if motion_level == 0:
         additions.append(
-            "CONTEXTUAL PERFORMANCE: carry out only the story-specific acting, "
-            "object motion and environmental response described for this exact "
-            "panel. Keep it restrained and readable. Do not replace the "
-            "performance with a generic camera move and do not invent an "
-            "unrelated action or transition."
+            "No subject or camera motion; hold the approved frame."
+        )
+    elif motion_level == 1:
+        additions.append(
+            "Only subtle supported motion: a blink or breath "
+            "and slight hair, cloth, dust, light or reflection movement."
+        )
+    elif motion_level == 2:
+        additions.append(
+            "Use one contained, readable performance near the approved pose "
+            "and staging."
+        )
+    else:
+        additions.append(
+            "Perform one clear, readable action with a continuous beginning "
+            "and end; do not add a cut or a second event."
+        )
+    if motion_mode in {"contextual", "context", "directed"}:
+        additions.append(
+            "Perform only this action, chronologically and without an internal cut."
         )
     if fidelity == "faithful":
         additions.append(
-            "Fidelity priority: animate this as a faithful moving illustration, "
-            "not as a newly rendered scene. Perform the requested subject action "
-            "clearly with controlled motion while keeping facial features, anatomy, "
-            "costume shapes, linework, colors and background geometry stable. "
-            "Do not invent extra actions, objects or unrequested extreme pose changes."
+            "Preserve identity, anatomy, costume, linework, palette "
+            "and background geometry."
         )
     elif fidelity == "balanced":
         additions.append(
-            "Keep character identity, drawing medium, palette and scene geometry "
-            "stable while performing the requested motion."
+            "Preserve character identity, drawing medium and scene geometry."
         )
     if camera_locked:
         additions.append(
-            "CAMERA LOCK: preserve the exact first-frame crop, field of view, "
-            "horizon, vanishing point and perspective for the entire shot. The "
-            "virtual camera is fixed on a tripod: no zoom, push-in, pull-out, "
-            "dolly, pan, tilt, crane, pedestal, roll, reframing or vertical "
-            "drift. Create motion only through character acting, moving objects "
-            "and environmental details inside the fixed frame."
+            "Locked camera; keep the exact crop, horizon, perspective and field "
+            "of view."
         )
     if has_end:
         additions.append(
-            "The supplied end image is the next approved comic panel. Move "
-            "continuously toward that exact composition and identity without an internal cut."
+            "Finish at the supplied approved end keyframe without a cut."
         )
-    return " ".join(part for part in (str(prompt or "").strip(), *additions) if part)
+    return " ".join(part for part in (base, *additions) if part).strip()
 
 
 def _build_comic_video_previews(
@@ -2790,6 +4716,7 @@ def _build_comic_video_previews(
         )
 
     raw_frames: list[int] = []
+    requested_durations: list[float] = []
     for index, plan in enumerate(clip_plans):
         planned = planned_clips[index] if index < len(planned_clips) else {}
         duration = planned.get("duration_sec") or (
@@ -2802,7 +4729,9 @@ def _build_comic_video_previews(
                 if duration_frames
                 else 3.0
             )
-        frame_count = max(round(float(duration) * fps), minimum_frames)
+        duration = max(0.8, min(20.0, float(duration)))
+        requested_durations.append(duration)
+        frame_count = max(round(duration * fps), minimum_frames)
         raw_frames.append(frame_count)
 
     effective_frames: list[int] = []
@@ -2815,10 +4744,14 @@ def _build_comic_video_previews(
 
     end_images = _comic_end_image_filenames(params, clip_images)
     fidelity = str(params.get("comic_motion_fidelity") or "faithful")
-    source_sizes = _pipelines.get(pid, {}).get("_clip_source_sizes") or []
-    steps = int(video_params.get("num_inference_steps", 8))
-    stage2_steps = int(video_params.get("stage2_steps", 0) or 0)
-    guidance = float(video_params.get("guidance_scale", 1))
+    pipeline = _pipelines.get(pid, {})
+    source_sizes = pipeline.get("_clip_source_sizes") or []
+    source_images = pipeline.get("_clip_source_images") or []
+    fit_details = pipeline.get("_clip_fit_details") or []
+    runtime = _effective_ltx_runtime(video_model, video_params)
+    steps = int(runtime["num_inference_steps"])
+    stage2_steps = int(runtime["stage2_steps"])
+    guidance = float(runtime["guidance_scale"])
     input_strength = float(
         video_params.get(
             "input_video_strength",
@@ -2830,23 +4763,31 @@ def _build_comic_video_previews(
     elif any(end_images):
         input_strength = max(0.8, input_strength)
 
-    negative_prompt = str(video_params.get("negative_prompt") or "").strip()
-    if clip_plans and all(
-        _comic_camera_is_locked(params, index)
-        for index in range(len(clip_plans))
-    ):
-        negative_prompt = _append_negative_prompt(
-            negative_prompt,
-            _COMIC_LOCKED_CAMERA_NEGATIVE,
-        )
-    negative_prompt = _append_negative_prompt(
-        negative_prompt,
+    base_negative_prompt = _append_negative_prompt(
+        str(video_params.get("negative_prompt") or "").strip(),
         _COMIC_REFERENCE_NEGATIVE,
     )
-    params["_effective_video_negative_prompt"] = negative_prompt
+    per_clip_negative_prompts = [
+        _append_negative_prompt(
+            base_negative_prompt,
+            _COMIC_LOCKED_CAMERA_NEGATIVE,
+        )
+        if _comic_camera_is_locked(params, index, plan)
+        else base_negative_prompt
+        for index, plan in enumerate(clip_plans)
+    ]
+    # Keep the scalar field for old checkpoints and non multi-clip callers,
+    # but freeze the exact per-shot values that PRE displays.  A locked hold
+    # must not accidentally force "static camera" into an authored pan.
+    params["_effective_video_negative_prompt"] = base_negative_prompt
+    params["_effective_video_negative_prompts"] = (
+        per_clip_negative_prompts
+    )
 
     previews: list[dict] = []
     for index, plan in enumerate(clip_plans):
+        metadata = _clip_metadata(plan)
+        shot = _comic_shot(params, index)
         windows = plan.get("window_prompts") or []
         windows = [
             window.get("prompt", window.get("text", str(window)))
@@ -2854,32 +4795,124 @@ def _build_comic_video_previews(
             else str(window)
             for window in windows
         ]
-        base_prompt = (
-            "\n".join(windows)
-            if len(windows) > 1
-            else str(plan.get("video_prompt") or "")
+        metadata_motion = metadata.get("motion_only_prompt")
+        plan_motion = plan.get("motion_only_prompt")
+        base_prompt = str(
+            (
+                metadata_motion
+                if isinstance(metadata_motion, str)
+                else ""
+            )
+            or (
+                plan_motion
+                if isinstance(plan_motion, str)
+                else ""
+            )
+            or (
+                "\n".join(windows)
+                if len(windows) > 1
+                else plan.get("video_prompt")
+            )
+            or shot.get("action")
+            or metadata.get("action")
+            or ""
         )
-        camera_locked = _comic_camera_is_locked(params, index)
+        camera_locked = _comic_camera_is_locked(params, index, plan)
         motion_mode = _comic_motion_mode(params, index)
-        effective_prompt = _comic_motion_prompt(
-            base_prompt,
-            fidelity,
-            bool(end_images[index] if index < len(end_images) else ""),
-            camera_locked=camera_locked,
-            motion_mode=motion_mode,
+        renderer = _comic_renderer(params, index, plan)
+        effective_renderer = _comic_effective_renderer(
+            params,
+            index,
+            plan,
+        )
+        motion_level = _comic_motion_level(params, index, plan)
+        requested_camera_move = str(
+            plan.get("camera_move")
+            or plan.get("camera")
+            or metadata.get("camera_move")
+            or metadata.get("camera")
+            or shot.get("camera_move")
+            or shot.get("camera")
+            or "none"
+        )
+        effective_camera_move = (
+            "none" if camera_locked else requested_camera_move
+        )
+        prompt_override = plan.get("_preflight_prompt_override")
+        prompt_overridden = prompt_override is not None
+        effective_prompt = (
+            " ".join(str(prompt_override).split())[:1200]
+            if prompt_override is not None
+            else _comic_motion_prompt(
+                base_prompt,
+                fidelity,
+                bool(end_images[index] if index < len(end_images) else ""),
+                camera_locked=camera_locked,
+                motion_mode=motion_mode,
+                motion_level=motion_level,
+            )
         )
         plan["_effective_video_prompt"] = effective_prompt
         plan["_effective_video_frames"] = effective_frames[index]
+        plan["renderer"] = renderer
+        plan["seed"] = _comic_shot_seed(params, index, plan)
         planned = planned_clips[index] if index < len(planned_clips) else {}
         planned["_effective_video_frames"] = effective_frames[index]
-        duration_seconds = effective_frames[index] / max(1, fps)
+        planned["duration_sec"] = requested_durations[index]
+        duration_seconds = requested_durations[index]
         source_size = (
             source_sizes[index]
             if index < len(source_sizes)
             else None
         )
+        fit_detail = (
+            fit_details[index]
+            if index < len(fit_details)
+            and isinstance(fit_details[index], dict)
+            else {}
+        )
+        shot_id = _stable_comic_shot_id(params, index, plan)
+        source_panel_ids = (
+            metadata.get("source_panel_ids")
+            or shot.get("source_panel_ids")
+            or [shot.get("panel_id") or shot.get("id")]
+        )
+        source_panel_ids = [
+            str(value)
+            for value in source_panel_ids
+            if value not in (None, "")
+        ]
+        risk_tags = list(
+            dict.fromkeys(
+                [
+                    *(
+                        metadata.get("risk_tags")
+                        if isinstance(metadata.get("risk_tags"), list)
+                        else []
+                    ),
+                    *(
+                        shot.get("risk_tags")
+                        if isinstance(shot.get("risk_tags"), list)
+                        else []
+                    ),
+                    *(
+                        ["aspect-mismatch"]
+                        if fit_detail.get("needs_reframe")
+                        else []
+                    ),
+                ]
+            )
+        )
         previews.append({
             "index": index,
+            "order": index,
+            "included": shot.get("included", True) is not False,
+            "shot_id": shot_id,
+            "panel_id": (
+                shot.get("panel_id")
+                or metadata.get("primary_source_panel_id")
+            ),
+            "source_panel_ids": source_panel_ids,
             "page_number": (
                 (params.get("comic_shots") or [{}])[index].get("page_number")
                 if index < len(params.get("comic_shots") or [])
@@ -2898,6 +4931,9 @@ def _build_comic_video_previews(
             "image_filename": (
                 clip_images[index] if index < len(clip_images) else ""
             ),
+            "source_image_filename": (
+                source_images[index] if index < len(source_images) else ""
+            ),
             "end_image_filename": (
                 end_images[index] if index < len(end_images) else ""
             ),
@@ -2910,22 +4946,69 @@ def _build_comic_video_previews(
             "input_resolution": resolution,
             "output_resolution": resolution,
             "video_model": video_model,
+            "base_prompt": " ".join(base_prompt.split()),
             "prompt": effective_prompt,
-            "negative_prompt": negative_prompt,
+            "prompt_overridden": prompt_overridden,
+            "negative_prompt": per_clip_negative_prompts[index],
             "num_inference_steps": steps,
             "stage2_steps": stage2_steps,
             "guidance_scale": guidance,
+            "runtime_recipe": runtime["recipe"],
+            "requested_num_inference_steps": runtime[
+                "requested_num_inference_steps"
+            ],
+            "requested_stage2_steps": runtime[
+                "requested_stage2_steps"
+            ],
+            "requested_guidance_scale": runtime[
+                "requested_guidance_scale"
+            ],
+            "guidance_note": runtime["guidance_note"],
             "input_video_strength": input_strength,
-            "seed": -1,
+            "seed": _comic_shot_seed(params, index, plan),
             "fps": fps,
             "frames": effective_frames[index],
+            "output_frames": max(1, round(duration_seconds * fps)),
             "duration_seconds": round(duration_seconds, 3),
             "image_prompt_type": (
                 "SE"
                 if index < len(end_images) and end_images[index]
                 else "S"
             ),
-            "fit_mode": params.get("video_image_fit", "smart"),
+            "fit_mode": (
+                fit_detail.get("requested_fit_mode")
+                or shot.get("fit_mode")
+                or params.get("video_image_fit", "contain")
+            ),
+            "effective_fit_mode": fit_detail.get("effective_fit_mode"),
+            "retained_fraction": fit_detail.get("retained_fraction"),
+            "needs_reframe": bool(fit_detail.get("needs_reframe")),
+            "reframe_approved": bool(fit_detail.get("reframe_approved")),
+            "used_prepared_keyframe": bool(
+                fit_detail.get("used_prepared_keyframe")
+            ),
+            "renderer": renderer,
+            "effective_renderer": effective_renderer,
+            "motion_level": motion_level,
+            "action": str(
+                shot.get("action") or metadata.get("action") or base_prompt
+            ),
+            # Keep the complete editorial line in PRE even though the compact
+            # LTX motion prompt may include only a bounded spoken excerpt.
+            # This is script metadata, not a promise of deterministic TTS.
+            "dialogue": str(
+                shot.get("dialogue") or metadata.get("dialogue") or ""
+            ),
+            "requested_camera_move": requested_camera_move,
+            "camera_move": effective_camera_move,
+            "end_beat": str(
+                shot.get("end_beat") or metadata.get("end_beat") or ""
+            ),
+            "test_selected": bool(
+                shot.get("test_selected")
+                or metadata.get("test_selected")
+            ),
+            "risk_tags": risk_tags,
             "motion_mode": motion_mode,
             "camera_locked": camera_locked,
             "fidelity": fidelity,
@@ -2960,7 +5043,882 @@ def _build_comic_video_previews(
                 )
             ),
         })
+
+    # Planning chooses representative tests before the real source dimensions
+    # and fit loss are known. Re-select once PRE has measured them so at least
+    # one destructive aspect mismatch is exercised. Explicit per-shot user
+    # overrides remain authoritative.
+    has_test_override = any(
+        bool(
+            (_comic_shot(params, index) or {}).get(
+                "test_selected_override"
+            )
+            or (
+                _clip_metadata(plan).get("test_selected_override")
+                if isinstance(plan, dict)
+                else False
+            )
+        )
+        for index, plan in enumerate(clip_plans)
+    )
+    if previews and not has_test_override:
+        try:
+            from .director.planners.comic_movie import (
+                select_representative_shot_indices,
+            )
+
+            first_mismatch = next(
+                (
+                    index
+                    for index, preview in enumerate(previews)
+                    if preview.get("needs_reframe")
+                    or (
+                        preview.get("retained_fraction") is not None
+                        and float(preview["retained_fraction"]) < 0.65
+                    )
+                ),
+                None,
+            )
+            selected_indices = (
+                [first_mismatch] if first_mismatch is not None else []
+            )
+            selected_indices.extend(
+                select_representative_shot_indices(
+                    previews,
+                    max_count=6,
+                )
+            )
+            selected_indices = list(dict.fromkeys(selected_indices))[:6]
+        except Exception:
+            selected_indices = [
+                index
+                for index, preview in enumerate(previews)
+                if preview.get("test_selected")
+            ][:6]
+        selected_set = set(selected_indices)
+        for index, (preview, plan) in enumerate(
+            zip(previews, clip_plans)
+        ):
+            selected = index in selected_set
+            preview["test_selected"] = selected
+            shot = _comic_shot(params, index)
+            shot["test_selected"] = selected
+            metadata = (
+                dict(plan.get("metadata"))
+                if isinstance(plan.get("metadata"), dict)
+                else {}
+            )
+            metadata["test_selected"] = selected
+            plan["metadata"] = metadata
+
+    fingerprint = _comic_preflight_fingerprint(
+        params,
+        clip_plans,
+        planned_clips,
+        clip_images,
+        out_dir,
+    )
+    params["_comic_preflight_fingerprint"] = fingerprint
+    for preview in previews:
+        preview["preflight_fingerprint"] = fingerprint
+    _update_pipeline(
+        pid,
+        _comic_preflight_fingerprint=fingerprint,
+        _preview_revision=int(pipeline.get("_preview_revision") or 1),
+    )
     return previews, end_images
+
+
+def _comic_ffmpeg_binary() -> str:
+    return os.environ.get("FFMPEG_BINARY", "ffmpeg")
+
+
+def _comic_ffprobe_binary() -> str:
+    configured = os.environ.get("FFPROBE_BINARY")
+    if configured:
+        return configured
+    ffmpeg = _comic_ffmpeg_binary()
+    basename = os.path.basename(ffmpeg)
+    if basename == "ffmpeg":
+        return os.path.join(os.path.dirname(ffmpeg), "ffprobe") or "ffprobe"
+    return "ffprobe"
+
+
+def _comic_source_has_audio(path: str) -> bool:
+    """Return whether the source has an audio stream; malformed means no."""
+    try:
+        result = subprocess.run(
+            [
+                _comic_ffprobe_binary(),
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=index",
+                "-of",
+                "csv=p=0",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _comic_resolution_tuple(resolution: str) -> tuple[int, int]:
+    try:
+        width, height = (
+            int(value)
+            for value in str(resolution).lower().split("x", 1)
+        )
+    except (TypeError, ValueError):
+        return 1280, 704
+    return max(2, width - width % 2), max(2, height - height % 2)
+
+
+def _run_comic_ffmpeg(command: list[str], label: str) -> None:
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=900,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{label} failed: {(result.stderr or result.stdout)[-800:]}"
+        )
+
+
+def _render_deterministic_comic_clip(
+    image_path: str,
+    output_path: str,
+    renderer: str,
+    duration_seconds: float,
+    fps: int,
+    resolution: str,
+) -> None:
+    """Render exact still/parallax shots without invoking a diffusion model."""
+    width, height = _comic_resolution_tuple(resolution)
+    output_frames = max(1, round(duration_seconds * fps))
+    if renderer == "parallax":
+        # Intentionally tiny and centered: at most 1.5% over the full shot.
+        # This gives a deterministic 2.5D-like breath without the giant
+        # push-ins and vertical drift that made earlier comic films unusable.
+        increment = 0.015 / max(1, output_frames - 1)
+        video_filter = (
+            f"scale={width}:{height}:flags=lanczos,"
+            f"zoompan=z='min(zoom+{increment:.9f},1.015)':"
+            "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+            f"d=1:s={width}x{height}:fps={fps},format=yuv420p"
+        )
+    else:
+        video_filter = (
+            f"scale={width}:{height}:flags=lanczos,"
+            f"fps={fps},format=yuv420p"
+        )
+    temporary = f"{output_path}.{uuid.uuid4().hex[:8]}.tmp.mp4"
+    try:
+        _run_comic_ffmpeg(
+            [
+                _comic_ffmpeg_binary(),
+                "-y",
+                "-loop",
+                "1",
+                "-framerate",
+                str(fps),
+                "-i",
+                image_path,
+                "-vf",
+                video_filter,
+                "-frames:v",
+                str(output_frames),
+                "-an",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "17",
+                "-pix_fmt",
+                "yuv420p",
+                temporary,
+            ],
+            f"Comic {renderer} render",
+        )
+        os.replace(temporary, output_path)
+    finally:
+        if os.path.isfile(temporary):
+            os.remove(temporary)
+
+
+def _normalize_comic_clip_duration(
+    source_path: str,
+    output_path: str,
+    duration_seconds: float,
+    fps: int,
+    resolution: str,
+) -> None:
+    """Make every clip match duration/canvas and carry a uniform AAC stream.
+
+    Generated LTX clips may contain dialogue or ambience while deterministic
+    hold/parallax shots are silent.  Every normalized segment gets stereo AAC:
+    existing audio is preserved, padded and trimmed; otherwise a silent stream
+    is synthesized.  This makes mixed-renderer hard-cut concatenation reliable
+    without erasing LTX audio.
+    """
+    width, height = _comic_resolution_tuple(resolution)
+    output_frames = max(1, round(duration_seconds * fps))
+    temporary = f"{output_path}.{uuid.uuid4().hex[:8]}.tmp.mp4"
+    has_audio = _comic_source_has_audio(source_path)
+    video_filter = (
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease:"
+        "flags=lanczos,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black,"
+        f"fps={fps},tpad=stop_mode=clone:stop_duration=20,"
+        f"trim=duration={duration_seconds:.6f},"
+        f"setpts=N/({fps}*TB),format=yuv420p"
+    )
+    audio_filter = (
+        "aresample=48000:async=1:first_pts=0,"
+        f"apad,atrim=duration={duration_seconds:.6f},"
+        "asetpts=N/SR/TB"
+    )
+    command = [
+        _comic_ffmpeg_binary(),
+        "-y",
+        "-i",
+        source_path,
+    ]
+    if not has_audio:
+        command.extend([
+            "-f",
+            "lavfi",
+            "-t",
+            f"{duration_seconds:.6f}",
+            "-i",
+            "anullsrc=r=48000:cl=stereo",
+        ])
+    command.extend([
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0" if has_audio else "1:a:0",
+        "-vf",
+        video_filter,
+        "-af",
+        audio_filter,
+        "-frames:v",
+        str(output_frames),
+        "-t",
+        f"{duration_seconds:.6f}",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "17",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        temporary,
+    ])
+    try:
+        _run_comic_ffmpeg(
+            command,
+            "Comic exact-duration normalization",
+        )
+        os.replace(temporary, output_path)
+    finally:
+        if os.path.isfile(temporary):
+            os.remove(temporary)
+
+
+def _comic_frame_signature(frame) -> str:
+    import cv2
+
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    tiny = cv2.resize(gray, (16, 16), interpolation=cv2.INTER_AREA)
+    return hashlib.sha256(tiny.tobytes()).hexdigest()
+
+
+def _validate_comic_clip(
+    video_path: str,
+    source_image_path: str,
+    renderer: str,
+    requested_frames: int,
+    fps: int,
+    resolution: str,
+    camera_locked: bool,
+) -> dict:
+    """Run inexpensive first-frame, duration and drift checks without GPU."""
+    import cv2
+    import numpy as np
+
+    failures: list[str] = []
+    warnings: list[str] = []
+    metrics: dict = {}
+    capture = cv2.VideoCapture(video_path)
+    if not capture.isOpened():
+        return {
+            "passed": False,
+            "failures": ["unreadable-output"],
+            "warnings": [],
+            "metrics": {},
+        }
+    frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    actual_fps = float(capture.get(cv2.CAP_PROP_FPS) or 0)
+    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+    sample_indices = [0, max(0, frame_count // 2), max(0, frame_count - 1)]
+    frames = []
+    for frame_index in sample_indices:
+        capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+        ok, frame = capture.read()
+        frames.append(frame if ok else None)
+    capture.release()
+
+    target_width, target_height = _comic_resolution_tuple(resolution)
+    metrics.update({
+        "frames": frame_count,
+        "fps": round(actual_fps, 4),
+        "width": width,
+        "height": height,
+    })
+    if abs(frame_count - requested_frames) > 1:
+        failures.append(
+            f"duration-mismatch:{frame_count}!={requested_frames}"
+        )
+    if (width, height) != (target_width, target_height):
+        failures.append(
+            f"canvas-mismatch:{width}x{height}!="
+            f"{target_width}x{target_height}"
+        )
+    if not frames[0] is None and os.path.isfile(source_image_path):
+        source = cv2.imread(source_image_path)
+        if source is not None:
+            source = cv2.resize(
+                source,
+                (frames[0].shape[1], frames[0].shape[0]),
+                interpolation=cv2.INTER_AREA,
+            )
+            mae = float(
+                np.mean(
+                    np.abs(
+                        source.astype(np.float32)
+                        - frames[0].astype(np.float32)
+                    )
+                )
+                / 255.0
+            )
+            metrics["first_frame_mae"] = round(mae, 5)
+            if renderer in {"hold", "parallax"} and mae > 0.08:
+                failures.append(f"first-frame-drift:{mae:.3f}")
+            elif renderer in {"ltx", "cinemagraph"} and mae > 0.48:
+                failures.append(f"probable-scene-replacement:{mae:.3f}")
+            elif mae > 0.28:
+                warnings.append(f"first-frame-change:{mae:.3f}")
+
+            if camera_locked and frames[-1] is not None:
+                source_gray = cv2.cvtColor(source, cv2.COLOR_BGR2GRAY)
+                final_gray = cv2.cvtColor(frames[-1], cv2.COLOR_BGR2GRAY)
+                detector = cv2.ORB_create(nfeatures=800)
+                source_keys, source_desc = detector.detectAndCompute(
+                    source_gray, None
+                )
+                final_keys, final_desc = detector.detectAndCompute(
+                    final_gray, None
+                )
+                if (
+                    source_desc is not None
+                    and final_desc is not None
+                    and len(source_keys) >= 8
+                    and len(final_keys) >= 8
+                ):
+                    matches = cv2.BFMatcher(
+                        cv2.NORM_HAMMING, crossCheck=True
+                    ).match(source_desc, final_desc)
+                    matches = sorted(matches, key=lambda item: item.distance)[
+                        :80
+                    ]
+                    if len(matches) >= 6:
+                        source_points = np.float32([
+                            source_keys[item.queryIdx].pt for item in matches
+                        ])
+                        final_points = np.float32([
+                            final_keys[item.trainIdx].pt for item in matches
+                        ])
+                        matrix, _mask = cv2.estimateAffinePartial2D(
+                            source_points,
+                            final_points,
+                            method=cv2.RANSAC,
+                        )
+                        if matrix is not None:
+                            scale = float(
+                                np.sqrt(
+                                    matrix[0, 0] ** 2
+                                    + matrix[0, 1] ** 2
+                                )
+                            )
+                            translation = max(
+                                abs(float(matrix[0, 2]))
+                                / max(1, width),
+                                abs(float(matrix[1, 2]))
+                                / max(1, height),
+                            )
+                            metrics["estimated_scale"] = round(scale, 4)
+                            metrics["estimated_translation"] = round(
+                                translation, 4
+                            )
+                            if scale < 0.62 or scale > 1.58:
+                                failures.append(
+                                    f"locked-camera-scale:{scale:.3f}"
+                                )
+                            elif scale < 0.80 or scale > 1.24:
+                                warnings.append(
+                                    f"camera-scale:{scale:.3f}"
+                                )
+                            if translation > 0.36:
+                                failures.append(
+                                    "locked-camera-translation:"
+                                    f"{translation:.3f}"
+                                )
+                            elif translation > 0.18:
+                                warnings.append(
+                                    f"camera-translation:{translation:.3f}"
+                                )
+    signatures = [
+        _comic_frame_signature(frame)
+        for frame in frames
+        if frame is not None
+    ]
+    metrics["frame_signatures"] = signatures
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "warnings": warnings,
+        "metrics": metrics,
+    }
+
+
+def _record_comic_preview_quality(
+    child_pid: str,
+    validations: list[dict],
+) -> None:
+    """Propagate a test child's validation result into its durable PRE."""
+    child = _pipelines.get(child_pid) or {}
+    if child.get("_preview_run_type") != "test":
+        return
+    parent_pid = child.get("_source_preview_pipeline_id")
+    fingerprint = child.get("_source_preview_fingerprint")
+    selected = list(child.get("_source_preview_clip_indices") or [])
+    if not parent_pid or not fingerprint:
+        return
+    _update_pipeline(child_pid, _quality_recorded=True)
+    if not _pipelines.get(parent_pid):
+        parent_out_dir = child.get("out_dir")
+        if parent_out_dir:
+            try:
+                resume_pipeline(parent_pid, parent_out_dir)
+            except Exception as exc:
+                print(
+                    f"[Pipeline {child_pid}] Could not rehydrate PRE "
+                    f"{parent_pid} for quality propagation: {exc}"
+                )
+    with _pipeline_lock:
+        parent = _pipelines.get(parent_pid)
+        if (
+            not parent
+            or parent.get("_comic_preflight_fingerprint") != fingerprint
+        ):
+            return
+        previous = (
+            dict(parent.get("_quality_gate"))
+            if isinstance(parent.get("_quality_gate"), dict)
+            and parent.get("_quality_gate", {}).get("fingerprint")
+            == fingerprint
+            else {}
+        )
+        required = []
+        for value in previous.get("required_test_indices") or selected:
+            try:
+                index = int(value)
+            except (TypeError, ValueError):
+                continue
+            if index >= 0 and index not in required:
+                required.append(index)
+        results = (
+            copy.deepcopy(previous.get("results"))
+            if isinstance(previous.get("results"), dict)
+            else {}
+        )
+        validated_at = time.time()
+        for local_index, validation in enumerate(validations):
+            if local_index >= len(selected):
+                break
+            original_index = int(selected[local_index])
+            item = validation if isinstance(validation, dict) else {}
+            item_failures = [
+                str(value)
+                for value in (item.get("failures") or [])
+            ]
+            passed = bool(item.get("passed")) and not item_failures
+            if not passed and not item_failures:
+                item_failures = ["validation-failed"]
+            results[str(original_index)] = {
+                "passed": passed,
+                "failures": item_failures,
+                "warnings": [
+                    str(value)
+                    for value in (item.get("warnings") or [])
+                ],
+                "metrics": copy.deepcopy(item.get("metrics") or {}),
+                "renderer": item.get("renderer"),
+                "video_filename": item.get("video_filename"),
+                "output_files": (
+                    [str(item.get("video_filename"))]
+                    if item.get("video_filename")
+                    else []
+                ),
+                "validated_at": validated_at,
+            }
+
+        tested_indices = sorted(
+            {
+                int(key)
+                for key in results
+                if str(key).lstrip("-").isdigit() and int(key) >= 0
+            }
+        )
+        required_results = [
+            results.get(str(index))
+            for index in required
+        ]
+        required_failures: list[str] = []
+        for index, result in zip(required, required_results):
+            if isinstance(result, dict) and not result.get("passed"):
+                failures = result.get("failures") or ["validation-failed"]
+                required_failures.extend(
+                    f"shot {index + 1}: {failure}"
+                    for failure in failures
+                )
+        if required_failures:
+            status = "failed"
+        elif required and all(
+            isinstance(result, dict) and result.get("passed")
+            for result in required_results
+        ):
+            # Automatic checks are necessary but not sufficient.  The user
+            # must inspect the representative clips and explicitly accept
+            # them before the expensive full run is unlocked.
+            status = "review_required"
+        else:
+            status = "pending"
+        parent["_quality_gate"] = {
+            **previous,
+            "status": status,
+            "fingerprint": fingerprint,
+            "required_test_indices": required,
+            "tested_indices": tested_indices,
+            "results": results,
+            "failures": required_failures,
+            "validated_at": validated_at,
+        }
+    _save_pipeline_state(parent_pid)
+
+
+def _run_comic_renderer_pipeline(
+    pid: str,
+    params: dict,
+    clip_plans: list[dict],
+    planned_clips: list[dict],
+    clip_images: list[str],
+    clip_keyframes: Optional[list[list[str]]],
+    out_dir: str,
+    workspace: Optional[str],
+) -> list[str]:
+    """Dispatch comic shots to deterministic or generative renderers."""
+    video_model = str(
+        params.get("video_model") or "ltx2_22B_distilled_1_1"
+    )
+    video_params = dict(params.get("video_params") or {})
+    resolution = _normalize_video_resolution(
+        video_model,
+        video_params.get("resolution", "1280x720"),
+    )
+    video_params["resolution"] = resolution
+    runtime = _effective_ltx_runtime(video_model, video_params)
+    video_params["num_inference_steps"] = runtime["num_inference_steps"]
+    video_params["guidance_scale"] = runtime["guidance_scale"]
+    video_params["stage2_steps"] = runtime["stage2_steps"]
+    params["video_params"] = video_params
+
+    fps = int(params.get("fps") or 25)
+    try:
+        fps = int((_wgp.get_model_def(video_model) or {}).get("fps") or fps)
+    except Exception:
+        pass
+    count = len(clip_plans)
+    existing = list(
+        (_pipelines.get(pid) or {}).get("_clip_video_files")
+        or [None] * count
+    )
+    if len(existing) < count:
+        existing.extend([None] * (count - len(existing)))
+    renderers = [
+        _comic_effective_renderer(params, index, plan)
+        for index, plan in enumerate(clip_plans)
+    ]
+    durations = []
+    for index in range(count):
+        planned = planned_clips[index] if index < len(planned_clips) else {}
+        duration = planned.get("duration_sec") or (
+            planned.get("end", 0) - planned.get("start", 0)
+        )
+        durations.append(max(0.8, min(20.0, float(duration or 3.0))))
+
+    generative_indices: list[int] = []
+    for index, renderer in enumerate(renderers):
+        if _pipeline_cancel_requested(pid):
+            raise PipelineCancelled("Director pipeline was cancelled.")
+        current = str(existing[index] or "")
+        current_path = (
+            current
+            if os.path.isabs(current)
+            else os.path.join(out_dir, current)
+        )
+        if current and os.path.isfile(current_path):
+            continue
+        if renderer in {"hold", "parallax"}:
+            image_path = os.path.join(out_dir, clip_images[index])
+            output_name = (
+                f"comic_{pid}_{index + 1:04d}_{renderer}.mp4"
+            )
+            _render_deterministic_comic_clip(
+                image_path,
+                os.path.join(out_dir, output_name),
+                renderer,
+                durations[index],
+                fps,
+                resolution,
+            )
+            existing[index] = output_name
+            _update_pipeline(pid, _clip_video_files=list(existing))
+            _save_pipeline_state(pid)
+        else:
+            generative_indices.append(index)
+
+    if generative_indices:
+        selected_plans = [
+            copy.deepcopy(clip_plans[index])
+            for index in generative_indices
+        ]
+        selected_planned = [
+            copy.deepcopy(
+                planned_clips[index]
+                if index < len(planned_clips)
+                else {}
+            )
+            for index in generative_indices
+        ]
+        selected_images = [clip_images[index] for index in generative_indices]
+        selected_keyframes = [
+            copy.deepcopy(
+                clip_keyframes[index]
+                if clip_keyframes and index < len(clip_keyframes)
+                else []
+            )
+            for index in generative_indices
+        ]
+        selected_shots = [
+            copy.deepcopy(_comic_shot(params, index))
+            for index in generative_indices
+        ]
+        for local_index, global_index in enumerate(generative_indices):
+            if renderers[global_index] == "cinemagraph":
+                selected_shots[local_index]["motion_mode"] = "living-still"
+                selected_shots[local_index]["camera_move"] = "none"
+        all_end_images = _comic_end_image_filenames(params, clip_images)
+        subparams = copy.deepcopy(params)
+        subparams.update({
+            "seamless": False,
+            "_comic_renderer_orchestrated": True,
+            "_director_clip_index_map": generative_indices,
+            "comic_shots": selected_shots,
+            "_comic_prepared_end_images": [
+                all_end_images[index] for index in generative_indices
+            ],
+            "provided_clip_image_paths": [
+                (params.get("provided_clip_image_paths") or [])[index]
+                if index < len(params.get("provided_clip_image_paths") or [])
+                else ""
+                for index in generative_indices
+            ],
+        })
+        frozen_negatives = params.get("_effective_video_negative_prompts")
+        if isinstance(frozen_negatives, list):
+            subparams["_effective_video_negative_prompts"] = [
+                frozen_negatives[index]
+                for index in generative_indices
+                if index < len(frozen_negatives)
+            ]
+        _run_video_generation(
+            pid,
+            subparams,
+            selected_plans,
+            selected_planned,
+            selected_images,
+            selected_keyframes,
+            out_dir=out_dir,
+            workspace=workspace,
+        )
+        existing = list(
+            (_pipelines.get(pid) or {}).get("_clip_video_files")
+            or existing
+        )
+
+    normalized_files: list[str] = []
+    validations: list[dict] = []
+    signature_owners: dict[tuple[str, ...], int] = {}
+    for index in range(count):
+        if _pipeline_cancel_requested(pid):
+            raise PipelineCancelled("Director pipeline was cancelled.")
+        raw_name = str(existing[index] or "")
+        raw_path = (
+            raw_name
+            if os.path.isabs(raw_name)
+            else os.path.join(out_dir, raw_name)
+        )
+        if not os.path.isfile(raw_path):
+            raise RuntimeError(
+                f"Comic shot {index + 1} has no completed video checkpoint."
+            )
+        normalized_name = (
+            f"comic_{pid}_{index + 1:04d}_{renderers[index]}_exact.mp4"
+        )
+        normalized_path = os.path.join(out_dir, normalized_name)
+        if os.path.abspath(raw_path) != os.path.abspath(normalized_path):
+            _normalize_comic_clip_duration(
+                raw_path,
+                normalized_path,
+                durations[index],
+                fps,
+                resolution,
+            )
+        source_path = os.path.join(out_dir, clip_images[index])
+        validation = _validate_comic_clip(
+            normalized_path,
+            source_path,
+            renderers[index],
+            max(1, round(durations[index] * fps)),
+            fps,
+            resolution,
+            _comic_camera_is_locked(params, index, clip_plans[index]),
+        )
+        signature = tuple(
+            validation.get("metrics", {}).get("frame_signatures") or []
+        )
+        if (
+            signature
+            and signature in signature_owners
+            and renderers[index] in {"ltx", "cinemagraph"}
+        ):
+            validation["passed"] = False
+            validation.setdefault("failures", []).append(
+                "duplicate-generated-output:"
+                f"{signature_owners[signature] + 1}"
+            )
+        else:
+            signature_owners[signature] = index
+        validation.update({
+            "index": index,
+            "renderer": renderers[index],
+            "video_filename": normalized_name,
+        })
+        validations.append(validation)
+        normalized_files.append(normalized_name)
+        existing[index] = normalized_name
+        _update_pipeline(
+            pid,
+            _clip_video_files=list(existing),
+            _clip_validations=list(validations),
+            progress={
+                "current": index + 1,
+                "total": count,
+                "message": f"Validated comic shot {index + 1}/{count}",
+                "step": 0,
+                "total_steps": 0,
+            },
+        )
+        _save_pipeline_state(pid)
+
+    _record_comic_preview_quality(pid, validations)
+    failed = [
+        validation
+        for validation in validations
+        if not validation.get("passed")
+    ]
+    if failed:
+        # Preserve failed media on disk for diagnosis, but clear only those
+        # checkpoint slots. Resume will regenerate the failed shots while
+        # reusing neighbours that already passed validation.
+        resumable_files = list(existing)
+        for validation in failed:
+            failed_index = int(validation.get("index", -1))
+            if 0 <= failed_index < len(resumable_files):
+                resumable_files[failed_index] = None
+        _update_pipeline(
+            pid,
+            _clip_video_files=resumable_files,
+            _clip_validations=list(validations),
+        )
+        _save_pipeline_state(pid)
+        details = "; ".join(
+            f"shot {item['index'] + 1}: "
+            + ", ".join(item.get("failures") or ["validation failed"])
+            for item in failed
+        )
+        raise RuntimeError(
+            "Comic clip validation blocked final assembly. Completed clips "
+            f"remain resumable. {details}"
+        )
+
+    if len(normalized_files) == 1:
+        return normalized_files
+    final_name = (
+        f"comic_{pid}_r"
+        f"{int((_pipelines.get(pid) or {}).get('_preview_revision') or 1)}"
+        "_movie.mp4"
+    )
+    final_path = os.path.join(out_dir, final_name)
+    clip_paths = [os.path.join(out_dir, name) for name in normalized_files]
+    if _pipeline_cancel_requested(pid):
+        raise PipelineCancelled("Director pipeline was cancelled.")
+    concatenate = getattr(
+        _wgp,
+        "concatenate_multi_clip_videos",
+        None,
+    )
+    if not callable(concatenate) or not concatenate(
+        clip_paths,
+        final_path,
+        None,
+    ):
+        raise RuntimeError(
+            "All comic shots passed validation, but final hard-cut assembly "
+            "failed. Individual clip checkpoints were preserved."
+        )
+    return [final_name]
 
 
 def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
@@ -2968,6 +5926,22 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                           clip_keyframes: Optional[list[list[str]]] = None,
                           out_dir: str = None, workspace: str = None) -> list[str]:
     """Generate multi-clip video with optional keyframe injection. Returns list of output filenames."""
+    if (
+        params.get("pipeline_type") == "comic_movie"
+        and not params.get("_comic_renderer_orchestrated")
+    ):
+        if not out_dir:
+            out_dir = _wgp.save_path
+        return _run_comic_renderer_pipeline(
+            pid,
+            params,
+            clip_plans,
+            planned_clips,
+            clip_images,
+            clip_keyframes,
+            out_dir,
+            workspace,
+        )
     video_model = params.get("video_model")
     if not video_model:
         # Fallback: use first available video model from server config
@@ -3054,6 +6028,15 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         video_params = dict(video_params)
         video_params["resolution"] = resolution
         params["video_params"] = video_params
+    runtime = _effective_ltx_runtime(video_model, video_params)
+    if pipeline_type == "comic_movie":
+        video_params = dict(video_params)
+        video_params.update({
+            "num_inference_steps": runtime["num_inference_steps"],
+            "guidance_scale": runtime["guidance_scale"],
+            "stage2_steps": runtime["stage2_steps"],
+        })
+        params["video_params"] = video_params
     steps = video_params.get("num_inference_steps", 8)
     guidance = video_params.get("guidance_scale", 1)
     spatial_upsampling = params.get("video_spatial_upsampling", "")
@@ -3082,6 +6065,18 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
     # ── SEAMLESS MODE: one continuous rolling window generation ──────
     # Instead of separate per-clip jobs, build ONE generation that looks like
     # Studio mode: rolling windows with per-window prompts + keyframe injection.
+    comic_seeds = (
+        [
+            _comic_shot_seed(params, index, plan)
+            for index, plan in enumerate(clip_plans)
+        ]
+        if pipeline_type == "comic_movie"
+        else []
+    )
+    generation_seed = (
+        comic_seeds[0] if comic_seeds else -1
+    )
+
     if seamless:
         window_prompts_all = []  # One prompt per rolling window
         keyframe_images = []     # All keyframe images in order
@@ -3211,8 +6206,9 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                         prompt_value,
                         comic_fidelity,
                         bool(end_file),
-                        camera_locked=_comic_camera_is_locked(params, i),
+                        camera_locked=_comic_camera_is_locked(params, i, plan),
                         motion_mode=_comic_motion_mode(params, i),
+                        motion_level=_comic_motion_level(params, i, plan),
                     )
                 )
             prompts.append(prompt_value)
@@ -3343,30 +6339,46 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         ),
     }
     frozen_negative_prompt = params.get("_effective_video_negative_prompt")
-    if pipeline_type == "comic_movie" and isinstance(
-        frozen_negative_prompt,
-        str,
-    ):
-        negative_prompt = frozen_negative_prompt
-    else:
-        negative_prompt = str(video_params.get("negative_prompt") or "").strip()
-        if (
-            pipeline_type == "comic_movie"
-            and prompts
-            and all(
-                _comic_camera_is_locked(params, index)
-                for index in range(len(prompts))
-            )
-        ):
-            negative_prompt = _append_negative_prompt(
-                negative_prompt,
-                _COMIC_LOCKED_CAMERA_NEGATIVE,
-            )
-        if pipeline_type == "comic_movie":
-            negative_prompt = _append_negative_prompt(
-                negative_prompt,
+    frozen_negative_prompts = params.get(
+        "_effective_video_negative_prompts"
+    )
+    per_clip_negative_prompts: list[str] = []
+    if pipeline_type == "comic_movie":
+        base_negative_prompt = (
+            str(frozen_negative_prompt)
+            if isinstance(frozen_negative_prompt, str)
+            else _append_negative_prompt(
+                str(video_params.get("negative_prompt") or "").strip(),
                 _COMIC_REFERENCE_NEGATIVE,
             )
+        )
+        if (
+            isinstance(frozen_negative_prompts, list)
+            and len(frozen_negative_prompts) == len(clip_plans)
+        ):
+            per_clip_negative_prompts = [
+                str(value or "") for value in frozen_negative_prompts
+            ]
+        else:
+            per_clip_negative_prompts = [
+                _append_negative_prompt(
+                    base_negative_prompt,
+                    _COMIC_LOCKED_CAMERA_NEGATIVE,
+                )
+                if _comic_camera_is_locked(params, index, plan)
+                else base_negative_prompt
+                for index, plan in enumerate(clip_plans)
+            ]
+        # Comic shots are normally separate hard-cut jobs.  Keep a scalar for
+        # old direct/seamless callers while the standard route consumes the
+        # exact PRE value per clip.
+        negative_prompt = (
+            per_clip_negative_prompts[0]
+            if per_clip_negative_prompts
+            else base_negative_prompt
+        )
+    else:
+        negative_prompt = str(video_params.get("negative_prompt") or "").strip()
 
     if seamless:
         # Seamless: ONE generation job with rolling windows + keyframe injection
@@ -3382,7 +6394,7 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
             "resolution": resolution,
             "video_length": total_frames,
             "sliding_window_size": sliding_window_frames,
-            "seed": -1,
+            "seed": generation_seed,
             "settings_version": 2.52,
             "generation_mode": "video",
             "repeat_generation": 1,
@@ -3429,7 +6441,7 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
             "video_length": total_frames,
             "sliding_window_size": sliding_window_frames,
             "per_clip_frames": per_clip_frames,
-            "seed": -1,
+            "seed": generation_seed,
             "settings_version": 2.52,
             "generation_mode": "video",
             "repeat_generation": 1,
@@ -3439,6 +6451,15 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
             **lora_params,
             **audio_params,
         }
+        if comic_seeds:
+            gen_params["per_clip_seeds"] = comic_seeds
+        if per_clip_negative_prompts:
+            gen_params["per_clip_negative_prompts"] = (
+                per_clip_negative_prompts
+            )
+        index_map = params.get("_director_clip_index_map")
+        if isinstance(index_map, list):
+            gen_params["_director_clip_index_map"] = list(index_map)
         if has_any_start:
             gen_params["image_start"] = image_start_paths
         if has_any_end:

@@ -127,6 +127,8 @@ export type ComicPanelCapture = {
   pageNumber: number
   panelNumber: number
   panelId: string
+  width: number
+  height: number
 }
 
 export async function forEachComicPanelCapture(
@@ -188,6 +190,8 @@ export async function forEachComicPanelCapture(
           pageNumber: pageIndex + 1,
           panelNumber: panelIndex + 1,
           panelId: panel.id,
+          width: panel.width,
+          height: panel.height,
         }
         // Wait for the consumer (normally upload) before capturing the next
         // panel. Once this callback resolves the large data URL can be

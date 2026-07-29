@@ -485,6 +485,11 @@ def enforce_visual_style_on_clip_plans(
     for plan in clip_plans or []:
         if not isinstance(plan, dict):
             continue
+        metadata = plan.get("metadata")
+        motion_only_prompt = bool(
+            isinstance(metadata, dict)
+            and metadata.get("motion_only_prompt")
+        )
         if str(plan.get("image_prompt") or "").strip():
             plan["image_prompt"] = apply_visual_style_lock(
                 plan["image_prompt"],
@@ -493,7 +498,10 @@ def enforce_visual_style_on_clip_plans(
                 preserve=preserve,
                 has_reference=has_reference,
             )
-        if str(plan.get("video_prompt") or "").strip():
+        if (
+            not motion_only_prompt
+            and str(plan.get("video_prompt") or "").strip()
+        ):
             plan["video_prompt"] = apply_visual_style_lock(
                 plan["video_prompt"],
                 visual_style,
@@ -505,6 +513,8 @@ def enforce_visual_style_on_clip_plans(
             ("window_prompts", "video"),
             ("keyframe_prompts", "image"),
         ):
+            if motion_only_prompt and mode == "video":
+                continue
             values = plan.get(field)
             if not isinstance(values, list):
                 continue

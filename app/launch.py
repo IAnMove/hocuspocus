@@ -264,11 +264,47 @@ def _list_workspaces() -> list[dict]:
 _pipeline_initialized = False
 
 
+def _request_generation_cancel(job_id: str) -> dict:
+    """Request cancellation without claiming an active GPU worker is done."""
+    job = _jobs.get(job_id)
+    if not job:
+        return {"status": "missing", "was_running": False}
+
+    status = job.get("status")
+    if status == "queued":
+        job["_cancel_requested"] = True
+        job["status"] = "cancelled"
+        job["message"] = "Cancelled"
+        return {"status": "cancelled", "was_running": False}
+
+    if status == "running":
+        job["_cancel_requested"] = True
+        job["message"] = "Cancelling…"
+        gen_state = _active_gen_states.get(job_id)
+        if gen_state:
+            gen_state["abort"] = True
+            print(f"[Cancel] Signalling abort for job {job_id}")
+        model = getattr(wgp, "wan_model", None)
+        if model is not None and hasattr(model, "_interrupt"):
+            model._interrupt = True
+        # Keep the job non-terminal until _run_generation's finally block
+        # confirms it has unwound and removed its active GPU state.
+        return {"status": "cancelling", "was_running": True}
+
+    return {"status": status, "was_running": False}
+
+
 def _init_pipeline():
     global _pipeline_initialized
     if not _pipeline_initialized:
         from services.director_pipeline import init as pipeline_init
-        pipeline_init(_jobs, _run_generation, wgp, _gen_lock)
+        pipeline_init(
+            _jobs,
+            _run_generation,
+            wgp,
+            _gen_lock,
+            _request_generation_cancel,
+        )
         _pipeline_initialized = True
 
 
@@ -6364,6 +6400,20 @@ def director_pipeline_status(pid: str):
         raise HTTPException(status_code=404, detail="Pipeline not found")
     # Don't leak full params back to client
     p.pop("params", None)
+    fingerprint = p.get("_comic_preflight_fingerprint")
+    p["preview_fingerprint"] = fingerprint
+    p["preview_approved"] = bool(
+        fingerprint
+        and p.get("_preview_approved_fingerprint") == fingerprint
+    )
+    p["quality_gate"] = p.get("_quality_gate") or {
+        "status": "pending",
+        "fingerprint": fingerprint,
+        "required_test_indices": [],
+        "tested_indices": [],
+        "results": {},
+        "failures": [],
+    }
     return p
 
 
@@ -6391,8 +6441,17 @@ async def director_pipeline_generate_preview(pid: str, request: Request):
         else {}
     )
     clip_index = body.get("clip_index")
+    clip_indices = body.get("clip_indices")
+    expected_fingerprint = body.get("expected_fingerprint")
     base = wgp.server_config.get("save_path", "outputs")
-    ok, message, child_pid = start_preview_generation(pid, clip_index, base)
+    ok, message, child_pid = start_preview_generation(
+        pid,
+        clip_index,
+        base,
+        clip_indices=clip_indices,
+        expected_fingerprint=expected_fingerprint,
+        run_type=body.get("run_type"),
+    )
     if not ok or not child_pid:
         raise HTTPException(status_code=400, detail=message)
     return {
@@ -6400,7 +6459,47 @@ async def director_pipeline_generate_preview(pid: str, request: Request):
         "pipeline_id": child_pid,
         "source_preview_pipeline_id": pid,
         "clip_index": clip_index,
+        "clip_indices": clip_indices,
+        "run_type": body.get("run_type"),
         "reused": message == "already_running",
+    }
+
+
+@api.patch("/api/v1/director/pipeline/{pid}/preview")
+async def director_pipeline_update_preview(pid: str, request: Request):
+    """Persist edits to a Comic PRE and rebuild its frozen inputs."""
+    _init_pipeline()
+    from services.director_pipeline import (
+        get_pipeline,
+        update_comic_preview,
+    )
+
+    body = await request.json()
+    base = wgp.server_config.get("save_path", "outputs")
+    ok, message = update_comic_preview(
+        pid,
+        body.get("clips"),
+        base,
+        expected_fingerprint=body.get("expected_fingerprint"),
+        approve_preview=bool(body.get("approve_preview", False)),
+        quality_waiver=bool(body.get("quality_waiver", False)),
+        waiver_reason=str(body.get("waiver_reason") or ""),
+        accept_quality_test=bool(body.get("accept_quality_test", False)),
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    pipeline = get_pipeline(pid) or {}
+    fingerprint = pipeline.get("_comic_preflight_fingerprint")
+    return {
+        "status": pipeline.get("status", "preview_ready"),
+        "message": message,
+        "preview_clips": pipeline.get("preview_clips", []),
+        "preview_fingerprint": fingerprint,
+        "preview_approved": bool(
+            fingerprint
+            and pipeline.get("_preview_approved_fingerprint") == fingerprint
+        ),
+        "quality_gate": pipeline.get("_quality_gate"),
     }
 
 
@@ -6408,8 +6507,7 @@ async def director_pipeline_generate_preview(pid: str, request: Request):
 def director_pipeline_stop(pid: str):
     """Cancel a running pipeline."""
     from services.director_pipeline import stop_pipeline
-    stop_pipeline(pid)
-    return {"status": "cancelled"}
+    return {"status": stop_pipeline(pid)}
 
 
 @api.post("/api/v1/director/pipeline/{pid}/resume")
@@ -9683,13 +9781,18 @@ def _run_generation(job_id: str):
 
     with _gen_lock:
         try:
-            job["status"] = "running"
-            job["message"] = "Preparing..."
-
-            # Check if job was cancelled before we even start
-            if job.get("status") == "cancelled":
+            # A queued job may have been cancelled while waiting for the GPU
+            # lock. Never overwrite that terminal state with "running".
+            if (
+                job.get("_cancel_requested")
+                or job.get("status") == "cancelled"
+            ):
+                job["status"] = "cancelled"
                 job["message"] = "Cancelled"
                 return
+
+            job["status"] = "running"
+            job["message"] = "Preparing..."
 
             # Per-job VRAM coefficient adjustment — accounts for active
             # LoRAs and pipeline stage count beyond what the auto-tuned
@@ -9723,6 +9826,12 @@ def _run_generation(job_id: str):
 
             # Store gen state reference for abort signaling
             _active_gen_states[job_id] = state["gen"]
+            # Close the small race where cancellation lands after status was
+            # set to running but before the abort state became addressable.
+            if job.get("_cancel_requested"):
+                state["gen"]["abort"] = True
+                job["message"] = "Cancelling…"
+                return
 
             # Build task manifest from user params
             raw_params = job["params"].copy()
@@ -9808,6 +9917,11 @@ def _run_generation(job_id: str):
                     image_ends = [image_ends] if image_ends else []
                 sw_size = raw_params.get("sliding_window_size", raw_params.get("video_length", 121))
                 per_clip_frames = raw_params.pop("per_clip_frames", None)  # optional per-clip durations
+                per_clip_seeds = raw_params.pop("per_clip_seeds", None)
+                per_clip_negative_prompts = raw_params.pop(
+                    "per_clip_negative_prompts",
+                    None,
+                )
                 per_clip_keyframes = raw_params.pop("per_clip_keyframes", None)  # optional keyframe injection per clip
                 preserve_se_duration_per_clip = bool(
                     raw_params.pop("_se_preserve_duration_per_clip", False)
@@ -9831,6 +9945,18 @@ def _run_generation(job_id: str):
                 for i in range(clip_count):
                     wgp.task_id += 1
                     clip_params = raw_params.copy()
+                    if per_clip_seeds and i < len(per_clip_seeds):
+                        try:
+                            clip_params["seed"] = int(per_clip_seeds[i])
+                        except (TypeError, ValueError):
+                            pass
+                    if (
+                        isinstance(per_clip_negative_prompts, list)
+                        and i < len(per_clip_negative_prompts)
+                    ):
+                        clip_params["negative_prompt"] = str(
+                            per_clip_negative_prompts[i] or ""
+                        )
                     clip_params["prompt"] = prompt_lines[i] if i < len(prompt_lines) else (prompt_lines[-1] if prompt_lines else "")
                     clip_params["image_start"] = image_starts[i] if i < len(image_starts) else None
                     clip_end = image_ends[i] if i < len(image_ends) else None
@@ -10619,29 +10745,33 @@ def _run_generation(job_id: str):
                         except Exception:
                             pass
 
-            job["status"] = "completed" if success else "failed"
-            job["progress"] = 100 if success else 0
-            job["step"] = 0
-            job["total_steps"] = 0
-            job["phase"] = ""
-            job["message"] = "Done" if success else "Generation failed"
+            if not job.get("_cancel_requested"):
+                job["status"] = "completed" if success else "failed"
+                job["progress"] = 100 if success else 0
+                job["step"] = 0
+                job["total_steps"] = 0
+                job["phase"] = ""
+                job["message"] = "Done" if success else "Generation failed"
 
         except Exception as e:
-            if active_task_timer is not None:
-                active_task_timer.finish("failed")
-            traceback.print_exc()
-            job["status"] = "failed"
-            job["error"] = str(e)
-            job["message"] = f"Error: {e}"
-            # Tag with OOM info — see _run_sfx_generation for rationale.
-            try:
-                from services.oom_detect import detect_oom
-                _coef = float(wgp.server_config.get("vram_safety_coefficient", 0.80))
-                _oom = detect_oom(e, _coef)
-                if _oom:
-                    job["oom_info"] = _oom
-            except Exception:
-                pass
+            if job.get("_cancel_requested"):
+                job["message"] = "Cancelling…"
+            else:
+                if active_task_timer is not None:
+                    active_task_timer.finish("failed")
+                traceback.print_exc()
+                job["status"] = "failed"
+                job["error"] = str(e)
+                job["message"] = f"Error: {e}"
+                # Tag with OOM info — see _run_sfx_generation for rationale.
+                try:
+                    from services.oom_detect import detect_oom
+                    _coef = float(wgp.server_config.get("vram_safety_coefficient", 0.80))
+                    _oom = detect_oom(e, _coef)
+                    if _oom:
+                        job["oom_info"] = _oom
+                except Exception:
+                    pass
         finally:
             _active_gen_states.pop(job_id, None)
             # Restore the persisted base coefficient so the next job
@@ -10654,6 +10784,16 @@ def _run_generation(job_id: str):
                 active_dir = _workspace_dir()
                 wgp.save_path = active_dir
                 wgp.image_save_path = active_dir
+            if job.get("_cancel_requested"):
+                # This is the terminal acknowledgement observed by Director.
+                # It is intentionally last: until here, the GPU job is still
+                # considered active and a second PRE launch remains blocked.
+                job["status"] = "cancelled"
+                job["progress"] = 0
+                job["step"] = 0
+                job["total_steps"] = 0
+                job["phase"] = ""
+                job["message"] = "Cancelled"
 
 
 @api.get("/api/v1/status/{job_id}")
@@ -10685,28 +10825,7 @@ def cancel_job(job_id: str):
     if job_id not in _jobs:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    job = _jobs[job_id]
-
-    # If still queued (not yet picked up by _run_generation), just mark cancelled
-    if job["status"] == "queued":
-        job["status"] = "cancelled"
-        job["message"] = "Cancelled"
-        return {"status": "cancelled", "was_running": False}
-
-    # If running, signal abort to wgp
-    if job["status"] == "running":
-        gen_state = _active_gen_states.get(job_id)
-        if gen_state:
-            gen_state["abort"] = True
-            print(f"[Cancel] Signalling abort for job {job_id}")
-        # Also set interrupt on the model directly
-        if wgp.wan_model is not None and hasattr(wgp.wan_model, '_interrupt'):
-            wgp.wan_model._interrupt = True
-        job["status"] = "cancelled"
-        job["message"] = "Cancelled"
-        return {"status": "cancelled", "was_running": True}
-
-    return {"status": job["status"], "was_running": False}
+    return _request_generation_cancel(job_id)
 
 
 @api.get("/api/v1/jobs")

@@ -591,14 +591,22 @@ export interface PipelinePreviewClip {
   output_resolution: string
   video_model: string
   prompt: string
+  base_prompt?: string
+  prompt_overridden?: boolean
   negative_prompt: string
   num_inference_steps: number
   stage2_steps: number
   guidance_scale: number
+  runtime_recipe?: string
+  requested_num_inference_steps?: number
+  requested_stage2_steps?: number
+  requested_guidance_scale?: number
+  guidance_note?: string
   input_video_strength: number
   seed: number
   fps: number
   frames: number
+  output_frames?: number
   duration_seconds: number
   image_prompt_type: 'S' | 'SE'
   fit_mode: string
@@ -613,6 +621,44 @@ export interface PipelinePreviewClip {
   progressive_pipeline: number
   activated_loras: string[]
   lora_multipliers: string
+  panel_id?: string
+  shot_id?: string
+  source_panel_ids?: string[]
+  source_image_filename?: string
+  renderer?: 'hold' | 'parallax' | 'cinemagraph' | 'ltx'
+  effective_renderer?: 'hold' | 'parallax' | 'cinemagraph' | 'ltx'
+  motion_level?: number
+  dialogue?: string
+  included?: boolean
+  order?: number
+  test_selected?: boolean
+  camera_move?: string
+  needs_reframe?: boolean
+  reframe_approved?: boolean
+  used_prepared_keyframe?: boolean
+  effective_fit_mode?: string
+  retained_fraction?: number
+  risk_tags?: string[]
+}
+
+export interface PipelineQualityGate {
+  status: 'pending' | 'failed' | 'review_required' | 'passed' | 'waived'
+  fingerprint: string
+  tested_indices: number[]
+  required_test_indices?: number[]
+  failures: string[]
+  results?: Record<string, {
+    passed?: boolean
+    status?: string
+    failures?: string[]
+    warnings?: string[]
+    renderer?: string
+    video_filename?: string
+    error?: string
+    pipeline_id?: string
+    output_files?: string[]
+  }>
+  waiver_reason?: string
 }
 
 export interface PipelineStatus {
@@ -624,6 +670,12 @@ export interface PipelineStatus {
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
   clip_images: string[]
   preview_clips?: PipelinePreviewClip[]
+  /** Hash of the exact frozen source images, shot plan and render settings.
+   *  PATCH and generation calls echo this value so stale browser tabs cannot
+   *  mutate or launch a different PRE accidentally. */
+  preview_fingerprint?: string
+  preview_approved?: boolean
+  quality_gate?: PipelineQualityGate
   output_files: string[]
   error: string | null
   /** Present only on failed pipelines that look like CUDA OOMs.
@@ -669,19 +721,87 @@ export async function continuePipeline(pid: string, updates?: { clip_plans?: Arr
 
 export async function generatePipelinePreview(
   pid: string,
-  clipIndex?: number,
+  options: {
+    clipIndex?: number
+    clipIndices?: number[]
+    expectedFingerprint: string
+    runType: 'test' | 'full'
+  },
 ): Promise<{ pipeline_id: string; source_preview_pipeline_id: string; clip_index?: number; reused?: boolean }> {
+  const selectedIndices = (options.clipIndices || [])
+    .filter(value => Number.isInteger(value) && value >= 0)
+    .map(Number)
+  const selection = selectedIndices.length
+    ? { clip_indices: Array.from(new Set(selectedIndices)) }
+    : Number.isInteger(options.clipIndex)
+      ? { clip_index: options.clipIndex }
+      : {}
   const res = await fetch(
     `${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}/generate-preview`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(Number.isInteger(clipIndex) ? { clip_index: clipIndex } : {}),
+      body: JSON.stringify({
+        ...selection,
+        expected_fingerprint: options.expectedFingerprint,
+        run_type: options.runType,
+      }),
     },
   )
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: 'Failed to generate PRE clip' }))
     throw new Error(body.detail || 'Failed to generate PRE clip')
+  }
+  return res.json()
+}
+
+export interface PipelinePreviewClipUpdate {
+  index: number
+  included: boolean
+  order: number
+  prompt?: string
+  prompt_override?: boolean
+  renderer: 'hold' | 'parallax' | 'cinemagraph' | 'ltx'
+  motion_level: number
+  fit_mode: 'reframe' | 'cover' | 'contain'
+  duration_seconds: number
+  camera_move: string
+  seed: number
+  test_selected: boolean
+  reframe_approved?: boolean
+}
+
+export async function updatePipelinePreview(
+  pid: string,
+  clips: PipelinePreviewClipUpdate[],
+  options: {
+    expectedFingerprint: string
+    approvePreview?: boolean
+    acceptQualityTest?: boolean
+    qualityWaiver?: boolean
+    waiverReason?: string
+  },
+): Promise<PipelineStatus | { preview_clips: PipelinePreviewClip[] }> {
+  const res = await fetch(
+    `${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}/preview`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clips,
+        expected_fingerprint: options.expectedFingerprint,
+        ...(options.approvePreview ? { approve_preview: true } : {}),
+        ...(options.acceptQualityTest ? { accept_quality_test: true } : {}),
+        ...(options.qualityWaiver ? {
+          quality_waiver: true,
+          waiver_reason: options.waiverReason || '',
+        } : {}),
+      }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: 'Failed to update comic PRE' }))
+    throw new Error(body.detail || 'Failed to update comic PRE')
   }
   return res.json()
 }

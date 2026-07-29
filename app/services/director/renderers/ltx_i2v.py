@@ -29,6 +29,12 @@ class LtxI2VRenderer(BaseRenderer):
         deterministic so it also protects prompts written by remote LLMs.
         """
         prompt = str(prompt or "").strip()
+        metadata = getattr(shot, "metadata", None) or {}
+        if metadata.get("motion_only_prompt"):
+            # The approved clean keyframe already defines appearance. Repeating
+            # it in text can contradict the actual pixels and cause a scene
+            # replacement, so comic-film prompts describe changes only.
+            return prompt
         lower = prompt.lower()
         anchors = []
         if "exact first frame" not in lower:

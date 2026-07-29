@@ -10,11 +10,14 @@ import { EditableLanguageInput } from '../../components/common/EditableLanguageI
 import { findCompletedLocalImage, generateImageAsset } from '../../lib/imageGeneration'
 import { rememberPrompt } from '../../lib/promptHistory'
 import { ComicCanvas } from './ComicCanvas'
-import { ComicCharactersPanel, ComicQualityPanel, ComicScriptPanel, ComicVideoPanel, ComicWritingProviderFields } from './ComicWorkflowPanels'
+import {
+  ComicCharactersPanel, ComicQualityPanel, ComicScriptPanel, ComicVideoPanel,
+  ComicVideoPreflightPanel, ComicWritingProviderFields,
+} from './ComicWorkflowPanels'
 import {
   comicId, COMIC_FORMATS, createComicProject, normalizeComicProject, panelsForCount,
-  normalizeComicPlan, planWithCanvasText, projectFromPlan, repairComicText, repairMojibake,
-  simplifyDirectorText, varyDirectorLayouts,
+  mergeComicVideoOverrideFields, normalizeComicPlan, planWithCanvasText, projectFromPlan,
+  repairComicText, repairMojibake, simplifyDirectorText, varyDirectorLayouts,
 } from './model'
 import { COMIC_EFFECTS, COMIC_LAYOUTS, createEffect } from './presets'
 import { useComicStore } from './store'
@@ -22,10 +25,10 @@ import { captureComicPage, exportComicCbz, exportComicJson, exportComicPagePng, 
 import type {
   ComicAsset, ComicCharacter, ComicDirectorRequest, ComicElement, ComicImageElement,
   ComicPanelElement, ComicPlan, ComicPlanPanel, ComicProject, ComicTextElement,
-  ComicPlanPage,
+  ComicPlanPage, ComicVideoOverrideField,
 } from './types'
 
-type SideTab = 'assets' | 'inspector' | 'script' | 'characters' | 'quality' | 'video' | 'director'
+type SideTab = 'assets' | 'inspector' | 'script' | 'characters' | 'quality' | 'video' | 'pre' | 'director'
 type Notice = { kind: 'ok' | 'error'; text: string } | null
 type DirectorActivity = {
   state: 'idle' | 'running' | 'complete' | 'error'
@@ -1393,6 +1396,12 @@ export function ComicDirectorPanel({
     placementRequest: ComicDirectorRequest = request,
   ) => {
       const plan = normalizeComicPlan(rawPlan, placementRequest.dialogueDensity)
+      // A freshly generated storyboard may contain duration, camera and motion
+      // hints, but none of them are manual locks until the user edits a source
+      // beat. Unknown fields invented by an LLM must not defeat film adaptation.
+      plan.pages.forEach(page => page.panels.forEach(panel => {
+        panel.videoOverrideFields = []
+      }))
       setPendingPlan(plan)
       const plannedImageCount = plan.pages.reduce(
         (total, page) => total + page.panels.length,
@@ -1590,13 +1599,28 @@ export function ComicDirectorPanel({
     }
   }
 
-  const updatePlanPanel = (pageIndex: number, panelIndex: number, patchValue: Partial<ComicPlanPanel>) => {
+  const updatePlanPanel = (
+    pageIndex: number,
+    panelIndex: number,
+    patchValue: Partial<ComicPlanPanel>,
+    overrideFields: readonly ComicVideoOverrideField[] = [],
+  ) => {
     const state = useComicStore.getState()
     const director = state.project.director
     if (!director) return
     const pages = director.plan.pages.map((page, pi) => pi !== pageIndex ? page : {
       ...page,
-      panels: page.panels.map((panel, pj) => pj === panelIndex ? { ...panel, ...patchValue } : panel),
+      panels: page.panels.map((panel, pj) => {
+        if (pj !== panelIndex) return panel
+        const updated = { ...panel, ...patchValue }
+        if (overrideFields.length) {
+          updated.videoOverrideFields = mergeComicVideoOverrideFields(
+            panel.videoOverrideFields,
+            overrideFields,
+          )
+        }
+        return updated
+      }),
     })
     state.patchProject({ director: { ...director, plan: { ...director.plan, pages } } })
   }
@@ -2143,7 +2167,7 @@ export function ComicDirectorPanel({
                             value={panel.videoPrompt || ''}
                             onChange={event => updatePlanPanel(pageIndex, panelIndex, {
                               videoPrompt: event.target.value,
-                            })}
+                            }, ['video_prompt'])}
                           />
                         </Field>
                         <div className="grid grid-cols-[1fr_90px] gap-2">
@@ -2153,7 +2177,7 @@ export function ComicDirectorPanel({
                               value={panel.cameraMove || 'none'}
                               onChange={event => updatePlanPanel(pageIndex, panelIndex, {
                                 cameraMove: event.target.value as ComicPlanPanel['cameraMove'],
-                              })}
+                              }, ['camera'])}
                             >
                               <option value="none">No forced camera move</option>
                               <option value="push-in">Push in</option>
@@ -2172,7 +2196,7 @@ export function ComicDirectorPanel({
                               value={panel.durationSeconds || 3}
                               onChange={event => updatePlanPanel(pageIndex, panelIndex, {
                                 durationSeconds: Number(event.target.value),
-                              })}
+                              }, ['duration'])}
                             />
                           </Field>
                         </div>
@@ -2216,6 +2240,7 @@ export function ComicEditorPanel() {
   const [sideTab, setSideTab] = useState<SideTab>('assets')
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false)
   const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
+  const [preDirty, setPreDirty] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewZoom, setPreviewZoom] = useState(1)
   const [notice, setNotice] = useState<Notice>(null)
@@ -2242,6 +2267,24 @@ export function ComicEditorPanel() {
     if (value) setTimeout(() => setNotice(null), 5000)
   }
   const notifyWorkflow = (kind: 'ok' | 'error', text: string) => notify({ kind, text })
+  const selectSideTab = (nextTab: SideTab) => {
+    if (sideTab === 'pre' && nextTab !== 'pre' && preDirty
+      && !window.confirm(
+        'Leave PRE with unsaved shot edits? They will remain in browser recovery for this exact PRE fingerprint when you return.',
+      )) return
+    setSideTab(nextTab)
+    if (nextTab === 'pre') setSidePanelCollapsed(true)
+    else if (sideTab === 'pre') setSidePanelCollapsed(false)
+  }
+
+  useEffect(() => {
+    const openPre = () => {
+      setSideTab('pre')
+      setSidePanelCollapsed(true)
+    }
+    window.addEventListener('maestro:comic-pre-open', openPre)
+    return () => window.removeEventListener('maestro:comic-pre-open', openPre)
+  }, [])
   const checkpointCurrent = async (
     reason: string,
     snapshot = useComicStore.getState(),
@@ -2663,58 +2706,75 @@ export function ComicEditorPanel() {
         <div className={`shrink-0 px-3 py-1.5 text-xs ${notice.kind === 'ok' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>{notice.text}</div>
       )}
       <div className="flex flex-1 min-h-0">
-        <PagesRail />
+        {sideTab !== 'pre' && <PagesRail />}
         <section className="flex-1 min-w-0 flex flex-col bg-[#15171b]">
-          <div className="shrink-0 border-b border-border p-2 flex items-center justify-center gap-2 text-xs text-text-muted">
-            <button
-              className={button}
-              disabled={currentPageIndex === 0}
-              onClick={() => goToPage(currentPageIndex - 1)}
-              title="Previous page"
-            >
-              <ChevronLeft size={12} />
-            </button>
-            <select
-              className={`${input} w-28`}
-              value={currentPageId}
-              onChange={event => useComicStore.getState().setCurrentPage(event.target.value)}
-              aria-label="Current comic page"
-            >
-              {project.pages.map((page, index) => (
-                <option key={page.id} value={page.id}>Page {index + 1} / {project.pages.length}</option>
-              ))}
-            </select>
-            <button
-              className={button}
-              disabled={currentPageIndex >= project.pages.length - 1}
-              onClick={() => goToPage(currentPageIndex + 1)}
-              title="Next page"
-            >
-              <ChevronRight size={12} />
-            </button>
-            <div className="h-5 border-l border-border mx-1" />
-            <button className={button} onClick={() => setZoom(zoom - .1)}>-</button>
-            <span className="w-12 text-center">{Math.round(zoom * 100)}%</span>
-            <button className={button} onClick={() => setZoom(zoom + .1)}>+</button>
-            <button
-              className={button}
-              onClick={() => {
-                useComicStore.getState().setSelected(null)
-                setPreviewOpen(true)
-              }}
-              title="Open a full-screen, read-only page preview"
-            >
-              <Maximize2 size={12} /> Fit
-            </button>
-            <span className="ml-2">{project.format.width} × {project.format.height}</span>
-          </div>
-          <div className="flex-1 min-h-0 overflow-auto">
-            <div className="min-w-full min-h-full flex p-4">
-              <div className="m-auto">
-                <ComicCanvas />
+          {sideTab === 'pre' ? (
+            <>
+              <div className="shrink-0 border-b border-border p-2 flex items-center gap-2 text-xs text-text-muted">
+                <button className={button} onClick={() => selectSideTab('video')}>
+                  <ChevronLeft size={12} /> Back to comic
+                </button>
+                <span className="font-semibold text-text-primary">PRE · cinematic shot review</span>
+                <span className="hidden sm:inline">The comic remains unchanged while you prepare and test the film.</span>
               </div>
-            </div>
-          </div>
+              <div className="flex-1 min-h-0 overflow-auto">
+                <ComicVideoPreflightPanel notify={notifyWorkflow} onDirtyChange={setPreDirty} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="shrink-0 border-b border-border p-2 flex items-center justify-center gap-2 text-xs text-text-muted">
+                <button
+                  className={button}
+                  disabled={currentPageIndex === 0}
+                  onClick={() => goToPage(currentPageIndex - 1)}
+                  title="Previous page"
+                >
+                  <ChevronLeft size={12} />
+                </button>
+                <select
+                  className={`${input} w-28`}
+                  value={currentPageId}
+                  onChange={event => useComicStore.getState().setCurrentPage(event.target.value)}
+                  aria-label="Current comic page"
+                >
+                  {project.pages.map((page, index) => (
+                    <option key={page.id} value={page.id}>Page {index + 1} / {project.pages.length}</option>
+                  ))}
+                </select>
+                <button
+                  className={button}
+                  disabled={currentPageIndex >= project.pages.length - 1}
+                  onClick={() => goToPage(currentPageIndex + 1)}
+                  title="Next page"
+                >
+                  <ChevronRight size={12} />
+                </button>
+                <div className="h-5 border-l border-border mx-1" />
+                <button className={button} onClick={() => setZoom(zoom - .1)}>-</button>
+                <span className="w-12 text-center">{Math.round(zoom * 100)}%</span>
+                <button className={button} onClick={() => setZoom(zoom + .1)}>+</button>
+                <button
+                  className={button}
+                  onClick={() => {
+                    useComicStore.getState().setSelected(null)
+                    setPreviewOpen(true)
+                  }}
+                  title="Open a full-screen, read-only page preview"
+                >
+                  <Maximize2 size={12} /> Fit
+                </button>
+                <span className="ml-2">{project.format.width} × {project.format.height}</span>
+              </div>
+              <div className="flex-1 min-h-0 overflow-auto">
+                <div className="min-w-full min-h-full flex p-4">
+                  <div className="m-auto">
+                    <ComicCanvas />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </section>
         <aside className={`shrink-0 border-l border-border bg-bg-secondary flex flex-col min-h-0 transition-[width] ${
           sidePanelCollapsed ? 'w-10' : 'w-72 xl:w-80'
@@ -2739,9 +2799,10 @@ export function ComicEditorPanel() {
                     ['characters', 'Characters'],
                     ['quality', 'Quality'],
                     ['video', 'Video'],
+                    ['pre', 'PRE'],
                     ['director', 'Director'],
                   ] as const).map(([id, label]) => (
-                    <button key={id} className={`py-2 text-[11px] ${sideTab === id ? 'text-accent-blue border-b-2 border-accent-blue' : 'text-text-muted'}`} onClick={() => setSideTab(id)}>{label}</button>
+                    <button key={id} className={`py-2 text-[11px] ${sideTab === id ? 'text-accent-blue border-b-2 border-accent-blue' : 'text-text-muted'}`} onClick={() => selectSideTab(id)}>{label}</button>
                   ))}
                 </div>
                 <button
@@ -2759,6 +2820,7 @@ export function ComicEditorPanel() {
                 {sideTab === 'characters' && <ComicCharactersPanel generateReference={generateCharacterReference} notify={notifyWorkflow} />}
                 {sideTab === 'quality' && <ComicQualityPanel notify={notifyWorkflow} />}
                 {sideTab === 'video' && <ComicVideoPanel notify={notifyWorkflow} />}
+                {sideTab === 'pre' && <p className="text-xs text-text-muted">PRE is open in the main workspace so source and prepared frames can use the full screen.</p>}
                 {sideTab === 'director' && <ComicDirectorPanel notify={notify} />}
               </div>
             </>

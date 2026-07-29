@@ -6,7 +6,35 @@ import type {
   ComicPlanPanel,
   ComicProject,
   ComicTextElement,
+  ComicVideoOverrideField,
 } from './types'
+
+const COMIC_VIDEO_OVERRIDE_FIELDS: readonly ComicVideoOverrideField[] = [
+  'included',
+  'order',
+  'action',
+  'renderer',
+  'fit',
+  'motion_mode',
+  'motion_level',
+  'duration',
+  'camera',
+  'video_prompt',
+  'seed',
+  'end_frame',
+  'test_selected',
+]
+
+export function mergeComicVideoOverrideFields(
+  current: readonly ComicVideoOverrideField[] | undefined,
+  add: readonly ComicVideoOverrideField[] = [],
+  remove: readonly ComicVideoOverrideField[] = [],
+): ComicVideoOverrideField[] {
+  const fields = new Set<ComicVideoOverrideField>(current || [])
+  remove.forEach(field => fields.delete(field))
+  add.forEach(field => fields.add(field))
+  return COMIC_VIDEO_OVERRIDE_FIELDS.filter(field => fields.has(field))
+}
 
 function randomIdPart(): string {
   const cryptoApi = globalThis.crypto
@@ -179,6 +207,7 @@ export function normalizeComicPlan(
             .filter(value => value.trim()),
           continuityNotes: String(panel?.continuityNotes || ''),
           videoPrompt: String(panel?.videoPrompt || ''),
+          videoAction: String(panel?.videoAction || ''),
           durationSeconds: Number.isFinite(Number(panel?.durationSeconds))
             ? Math.max(.8, Math.min(20, Number(panel.durationSeconds)))
             : undefined,
@@ -190,6 +219,37 @@ export function normalizeComicPlan(
             .includes(String(panel?.videoMotion))
             ? panel.videoMotion
             : undefined,
+          videoIncluded: typeof panel?.videoIncluded === 'boolean'
+            ? panel.videoIncluded
+            : undefined,
+          videoOrder: Number.isFinite(Number(panel?.videoOrder))
+            ? Math.max(0, Math.floor(Number(panel.videoOrder)))
+            : undefined,
+          videoRenderer: ['hold', 'parallax', 'cinemagraph', 'ltx']
+            .includes(String(panel?.videoRenderer))
+            ? panel.videoRenderer
+            : undefined,
+          videoFit: ['reframe', 'cover', 'contain']
+            .includes(String(panel?.videoFit))
+            ? panel.videoFit
+            : undefined,
+          videoMotionLevel: [0, 1, 2, 3].includes(Number(panel?.videoMotionLevel))
+            ? Number(panel.videoMotionLevel) as ComicPlanPanel['videoMotionLevel']
+            : undefined,
+          videoTestSelected: typeof panel?.videoTestSelected === 'boolean'
+            ? panel.videoTestSelected
+            : undefined,
+          videoSeed: Number.isFinite(Number(panel?.videoSeed))
+            ? Math.trunc(Number(panel.videoSeed))
+            : undefined,
+          videoSourcePanelIds: (Array.isArray(panel?.videoSourcePanelIds)
+            ? panel.videoSourcePanelIds
+            : []
+          ).map(value => String(value)).filter(Boolean),
+          videoOverrideFields: COMIC_VIDEO_OVERRIDE_FIELDS.filter(field =>
+            (Array.isArray(panel?.videoOverrideFields) ? panel.videoOverrideFields : [])
+              .includes(field),
+          ),
           videoEndFrame: ['auto', 'none', 'next-panel']
             .includes(String(panel?.videoEndFrame))
             ? panel.videoEndFrame
