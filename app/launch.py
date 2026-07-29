@@ -12166,6 +12166,51 @@ def _story_checkpoint_request(body: dict) -> dict:
     return request
 
 
+_story_library_lock = threading.Lock()
+
+
+def _story_library_workspace(value) -> str:
+    workspace = str(value or _get_active_workspace()).strip()
+    if workspace != "default" and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", workspace):
+        raise HTTPException(status_code=400, detail="Invalid Story Lab workspace")
+    return workspace
+
+
+@api.get("/api/v1/stories/library")
+def get_story_library(workspace: str | None = None):
+    """Load the durable Story Lab library for one workspace."""
+    from services.story_library import read_story_library
+
+    target_workspace = _story_library_workspace(workspace)
+    try:
+        with _story_library_lock:
+            return read_story_library(_workspace_dir(target_workspace))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not read the Story Lab library: {exc}",
+        ) from exc
+
+
+@api.put("/api/v1/stories/library")
+def put_story_library(body: dict):
+    """Atomically replace a workspace Story Lab library."""
+    from services.story_library import write_story_library
+
+    target_workspace = _story_library_workspace(body.get("workspace"))
+    library = body.get("library")
+    try:
+        with _story_library_lock:
+            return write_story_library(_workspace_dir(target_workspace), library)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not save the Story Lab library: {exc}",
+        ) from exc
+
+
 def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     """Generate and validate one replaceable Story Lab stage."""
     schema_scope = "beats" if scope == "structure" else scope

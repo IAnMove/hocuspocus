@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import * as api from '../../api/client'
 import { changedSections, createStoryProject, normalizeStoryProject } from './model'
 import type { StoryProject } from './types'
 
@@ -15,27 +16,32 @@ const safeWorkspace = (workspace: string): string =>
   workspace.trim().replace(/[^a-zA-Z0-9._-]+/g, '-') || 'default'
 const libraryKey = (workspace: string): string => `${LIBRARY_PREFIX}${safeWorkspace(workspace)}`
 
-function restoreLibrary(workspace: string): StoryLibraryData {
+function normalizeLibrary(value: unknown): StoryLibraryData | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Partial<StoryLibraryData>
+  if (!raw.projects || typeof raw.projects !== 'object') return null
+  const projects = Object.fromEntries(
+    Object.values(raw.projects).map(item => {
+      const project = normalizeStoryProject(item)
+      return [project.id, project]
+    }),
+  )
+  const firstId = Object.keys(projects)[0]
+  if (!firstId) return null
+  const activeId = typeof raw.activeId === 'string' && projects[raw.activeId]
+    ? raw.activeId : firstId
+  return { version: 2, activeId, projects }
+}
+
+function restoreLocalLibrary(workspace: string): StoryLibraryData {
   const fallback = createStoryProject()
   if (typeof window === 'undefined') {
     return { version: 2, activeId: fallback.id, projects: { [fallback.id]: fallback } }
   }
   try {
     const raw = JSON.parse(window.localStorage.getItem(libraryKey(workspace)) || 'null')
-    if (raw && typeof raw === 'object' && raw.projects && typeof raw.projects === 'object') {
-      const projects = Object.fromEntries(
-        Object.values(raw.projects as Record<string, unknown>).map(value => {
-          const project = normalizeStoryProject(value)
-          return [project.id, project]
-        }),
-      )
-      const firstId = Object.keys(projects)[0]
-      if (firstId) {
-        const activeId = typeof raw.activeId === 'string' && projects[raw.activeId]
-          ? raw.activeId : firstId
-        return { version: 2, activeId, projects }
-      }
-    }
+    const restored = normalizeLibrary(raw)
+    if (restored) return restored
     const legacy = workspace === 'default'
       ? JSON.parse(window.localStorage.getItem(LEGACY_AUTOSAVE_KEY) || 'null')
       : null
@@ -49,18 +55,27 @@ function restoreLibrary(workspace: string): StoryLibraryData {
   return { version: 2, activeId: fallback.id, projects: { [fallback.id]: fallback } }
 }
 
-function persistLibrary(
+function buildLibrary(
+  project: StoryProject,
+  projects: Record<string, StoryProject>,
+): StoryLibraryData {
+  return {
+    version: 2,
+    activeId: project.id,
+    projects: { ...projects, [project.id]: project },
+  }
+}
+
+function persistLocalLibrary(
   workspace: string,
   project: StoryProject,
   projects: Record<string, StoryProject>,
 ): void {
   if (typeof window === 'undefined') return
-  const complete = { ...projects, [project.id]: project }
-  window.localStorage.setItem(libraryKey(workspace), JSON.stringify({
-    version: 2,
-    activeId: project.id,
-    projects: complete,
-  } satisfies StoryLibraryData))
+  window.localStorage.setItem(
+    libraryKey(workspace),
+    JSON.stringify(buildLibrary(project, projects)),
+  )
 }
 
 function touched(before: StoryProject, candidate: StoryProject): StoryProject {
@@ -81,7 +96,10 @@ interface StoryState {
   project: StoryProject
   projects: Record<string, StoryProject>
   dirty: boolean
-  loadWorkspace: (workspace: string) => void
+  hydrated: boolean
+  loading: boolean
+  saveError: string | null
+  loadWorkspace: (workspace: string) => Promise<void>
   setProject: (project: StoryProject) => void
   patchProject: (patch: Partial<StoryProject>) => void
   updateProject: (updater: (project: StoryProject) => StoryProject) => void
@@ -89,38 +107,94 @@ interface StoryState {
   duplicateProject: (id?: string) => void
   openProject: (id: string) => void
   deleteProject: (id: string) => void
-  markSaved: () => void
 }
 
 const initialWorkspace = 'default'
-const restored = restoreLibrary(initialWorkspace)
+const restored = restoreLocalLibrary(initialWorkspace)
 
-export const useStoryStore = create<StoryState>((set) => ({
+export const useStoryStore = create<StoryState>((set, get) => ({
   workspace: initialWorkspace,
   project: restored.projects[restored.activeId],
   projects: restored.projects,
   dirty: false,
-  loadWorkspace: workspace => set(state => {
-    if (workspace === state.workspace) return state
+  hydrated: false,
+  loading: false,
+  saveError: null,
+  loadWorkspace: async rawWorkspace => {
+    const workspace = safeWorkspace(rawWorkspace)
+    const previous = get()
+    if (workspace === previous.workspace && (previous.hydrated || previous.loading)) return
+
     try {
-      persistLibrary(state.workspace, state.project, state.projects)
+      persistLocalLibrary(previous.workspace, previous.project, previous.projects)
     } catch {
       // The visible story remains exportable even if browser storage is full.
     }
-    const library = restoreLibrary(workspace)
-    return {
-      workspace,
-      project: library.projects[library.activeId],
-      projects: library.projects,
-      dirty: false,
+
+    // Flush the previous workspace before changing the active in-memory
+    // library; otherwise the debounce below could be cancelled by a fast
+    // workspace switch.
+    if (previous.hydrated && workspace !== previous.workspace) {
+      try {
+        const previousLibrary = buildLibrary(previous.project, previous.projects)
+        await api.saveStoryLibrary(previous.workspace, previousLibrary)
+        lastPersistedLibrary.set(previous.workspace, JSON.stringify(previousLibrary))
+      } catch {
+        // Its local cache remains intact and will be retried next time.
+      }
     }
-  }),
+
+    const local = restoreLocalLibrary(workspace)
+    set({
+      workspace,
+      project: local.projects[local.activeId],
+      projects: local.projects,
+      dirty: false,
+      hydrated: false,
+      loading: true,
+      saveError: null,
+    })
+    try {
+      const remoteValue = await api.fetchStoryLibrary(workspace)
+      if (get().workspace !== workspace) return
+      let library = normalizeLibrary(remoteValue)
+      if (!library) {
+        // First-run migration: upload the existing v2/legacy browser cache.
+        library = local
+        await api.saveStoryLibrary(workspace, library)
+      }
+      persistLocalLibrary(
+        workspace,
+        library.projects[library.activeId],
+        library.projects,
+      )
+      lastPersistedLibrary.set(workspace, JSON.stringify(library))
+      set({
+        project: library.projects[library.activeId],
+        projects: library.projects,
+        dirty: false,
+        hydrated: true,
+        loading: false,
+        saveError: null,
+      })
+      if (workspace === 'default') {
+        window.localStorage.removeItem(LEGACY_AUTOSAVE_KEY)
+      }
+    } catch (error) {
+      if (get().workspace !== workspace) return
+      set({
+        hydrated: false,
+        loading: false,
+        saveError: error instanceof Error ? error.message : 'Story Lab storage is unavailable',
+      })
+    }
+  },
   setProject: value => set(state => {
     const project = normalizeStoryProject(value)
     return {
       project,
       projects: { ...state.projects, [project.id]: project },
-      dirty: false,
+      dirty: true,
     }
   }),
   patchProject: patch => set(state => {
@@ -144,7 +218,7 @@ export const useStoryStore = create<StoryState>((set) => ({
     return {
       project,
       projects: { ...state.projects, [project.id]: project },
-      dirty: false,
+      dirty: true,
     }
   }),
   duplicateProject: id => set(state => {
@@ -169,7 +243,7 @@ export const useStoryStore = create<StoryState>((set) => ({
   }),
   openProject: id => set(state => {
     const project = state.projects[id]
-    return project ? { project, dirty: false } : state
+    return project ? { project, dirty: true } : state
   }),
   deleteProject: id => set(state => {
     if (!state.projects[id]) return state
@@ -186,21 +260,49 @@ export const useStoryStore = create<StoryState>((set) => ({
     const project = createStoryProject()
     return { projects: { [project.id]: project }, project, dirty: true }
   }),
-  markSaved: () => set({ dirty: false }),
 }))
 
 let saveTimer: number | undefined
+let backendSaveChain: Promise<void> = Promise.resolve()
+const lastPersistedLibrary = new Map<string, string>()
 useStoryStore.subscribe(state => {
   if (typeof window === 'undefined') return
+  try {
+    persistLocalLibrary(state.workspace, state.project, state.projects)
+  } catch {
+    // Storypack export remains available when browser storage is full.
+  }
+  if (!state.hydrated) return
+
+  const workspace = state.workspace
+  const library = buildLibrary(state.project, state.projects)
+  const serialized = JSON.stringify(library)
+  if (lastPersistedLibrary.get(workspace) === serialized) return
+
   window.clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
-    try {
-      persistLibrary(state.workspace, state.project, state.projects)
-      window.localStorage.removeItem(LEGACY_AUTOSAVE_KEY)
-    } catch {
-      // Storypack export remains available when browser storage is full.
-    }
-  }, 250)
+    backendSaveChain = backendSaveChain
+      .catch(() => undefined)
+      .then(async () => {
+        await api.saveStoryLibrary(workspace, library)
+        lastPersistedLibrary.set(workspace, serialized)
+        useStoryStore.setState(current => {
+          if (
+            current.workspace !== workspace
+            || JSON.stringify(buildLibrary(current.project, current.projects)) !== serialized
+          ) return {}
+          return { dirty: false, saveError: null }
+        })
+      })
+      .catch(error => {
+        useStoryStore.setState(current => current.workspace === workspace
+          ? {
+              dirty: true,
+              saveError: error instanceof Error ? error.message : 'Story Lab autosave failed',
+            }
+          : {})
+      })
+  }, 750)
 })
 
 export { createStoryProject, normalizeStoryProject, storyId } from './model'

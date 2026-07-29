@@ -1385,6 +1385,39 @@ export async function generateStorySection(params: {
   }
 }
 
+export interface StoryLibraryPayload {
+  version: 2
+  activeId: string
+  projects: Record<string, import('../features/stories/types').StoryProject>
+}
+
+export async function fetchStoryLibrary(workspace: string): Promise<StoryLibraryPayload> {
+  const response = await fetch(
+    `${BASE}/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not load Story Lab library' }))
+    throw new Error(error.detail || 'Could not load Story Lab library')
+  }
+  return response.json()
+}
+
+export async function saveStoryLibrary(
+  workspace: string,
+  library: StoryLibraryPayload,
+): Promise<StoryLibraryPayload> {
+  const response = await fetch(`${BASE}/api/v1/stories/library`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, library }),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not save Story Lab library' }))
+    throw new Error(error.detail || 'Could not save Story Lab library')
+  }
+  return response.json()
+}
+
 export async function cancelStoryGeneration(jobId: string): Promise<void> {
   const response = await fetch(
     `${BASE}/api/v1/stories/generate/cancel/${encodeURIComponent(jobId)}`,

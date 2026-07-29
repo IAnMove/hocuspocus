@@ -330,6 +330,9 @@ export function StoryLabPanel() {
   const project = useStoryStore(state => state.project)
   const projects = useStoryStore(state => state.projects)
   const dirty = useStoryStore(state => state.dirty)
+  const storyHydrated = useStoryStore(state => state.hydrated)
+  const storyLoading = useStoryStore(state => state.loading)
+  const storySaveError = useStoryStore(state => state.saveError)
   const loadWorkspace = useStoryStore(state => state.loadWorkspace)
   const openProject = useStoryStore(state => state.openProject)
   const duplicateProject = useStoryStore(state => state.duplicateProject)
@@ -338,7 +341,6 @@ export function StoryLabPanel() {
   const update = useStoryStore(state => state.updateProject)
   const setProject = useStoryStore(state => state.setProject)
   const newProject = useStoryStore(state => state.newProject)
-  const markSaved = useStoryStore(state => state.markSaved)
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const [tab, setTab] = useState<StoryTab>('overview')
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
@@ -924,7 +926,6 @@ export function StoryLabPanel() {
     link.download = `${project.title.replace(/[^\w.-]+/g, '-') || 'story'}.storypack`
     link.click()
     URL.revokeObjectURL(link.href)
-    markSaved()
   }
 
   const importStorypack = async (file?: File) => {
@@ -1251,7 +1252,15 @@ export function StoryLabPanel() {
             <BookOpen size={16} className="text-accent-blue" />
             <span className="text-sm font-semibold text-text-primary">Story Lab</span>
             <span className="text-[10px] text-text-muted">v{project.revision} · {progress}/4 foundations</span>
-            {dirty && <span className="text-[9px] text-amber-300">autosaved locally</span>}
+            {storyLoading
+              ? <span className="text-[9px] text-text-muted">loading workspace…</span>
+              : storySaveError
+                ? <span className="text-[9px] text-red-300" title={storySaveError}>local fallback · save unavailable</span>
+                : dirty
+                  ? <span className="text-[9px] text-amber-300">saving to workspace…</span>
+                  : storyHydrated
+                    ? <span className="text-[9px] text-emerald-400">saved in workspace</span>
+                    : <span className="text-[9px] text-text-muted">cached locally</span>}
           </div>
           <p className="text-[9px] text-text-muted mt-0.5">One editable story bible for comics, films and future adaptations.</p>
         </div>
