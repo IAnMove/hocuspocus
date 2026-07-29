@@ -77,6 +77,7 @@ export interface GenerateParams {
   stage2_steps?: number
   generation_mode?: string
   per_clip_frames?: number[]
+  per_clip_keyframes?: string[][]
   remove_background_images_ref?: number
   // TTS-specific
   audio_guide2?: string
@@ -448,6 +449,11 @@ export interface OutputMetadata {
   created_at?: number
 }
 
+export interface MultiClipKeyframe {
+  file: File | null
+  path: string | null
+}
+
 export interface MultiClip {
   prompt: string
   startImage: File | null
@@ -455,6 +461,7 @@ export interface MultiClip {
   endImage: File | null
   endImagePath: string | null
   durationFrames?: number
+  keyframes: MultiClipKeyframe[]
 }
 
 export type SettingsTab = 'performance' | 'integrations'

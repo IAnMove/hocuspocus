@@ -952,6 +952,8 @@ interface AppState {
   singlePromptMode: boolean
   setClipPrompt: (index: number, prompt: string) => void
   setClipStartImage: (index: number, file: File | null) => void
+  addClipKeyframe: (index: number, file: File) => void
+  removeClipKeyframe: (index: number, keyframeIndex: number) => void
   setSinglePromptMode: (v: boolean) => void
   syncClipCount: () => void
 
@@ -2849,9 +2851,27 @@ export const useStore = create<AppState>((set, get) => ({
   setClipStartImage: (index, file) => {
     const clips = [...get().clips]
     if (clips[index]) {
-      clips[index] = { ...clips[index], startImage: file }
+      clips[index] = { ...clips[index], startImage: file, startImagePath: null }
       set({ clips })
     }
+  },
+  addClipKeyframe: (index, file) => {
+    const clips = [...get().clips]
+    if (!clips[index]) return
+    clips[index] = {
+      ...clips[index],
+      keyframes: [...(clips[index].keyframes || []), { file, path: null }],
+    }
+    set({ clips })
+  },
+  removeClipKeyframe: (index, keyframeIndex) => {
+    const clips = [...get().clips]
+    if (!clips[index]) return
+    clips[index] = {
+      ...clips[index],
+      keyframes: (clips[index].keyframes || []).filter((_, i) => i !== keyframeIndex),
+    }
+    set({ clips })
   },
   setSinglePromptMode: (v) => set({ singlePromptMode: v }),
   syncClipCount: () => {
@@ -2868,7 +2888,14 @@ export const useStore = create<AppState>((set, get) => ({
     if (count > current.length) {
       const newClips = [...current]
       for (let i = current.length; i < count; i++) {
-        newClips.push({ prompt: '', startImage: null, startImagePath: null, endImage: null, endImagePath: null })
+        newClips.push({
+          prompt: '',
+          startImage: null,
+          startImagePath: null,
+          endImage: null,
+          endImagePath: null,
+          keyframes: [],
+        })
       }
       set({ clips: newClips })
     } else {
@@ -3478,6 +3505,7 @@ export const useStore = create<AppState>((set, get) => ({
       const clips = state.clips
       const imagePaths: string[] = []
       const endImagePaths: string[] = []
+      const perClipKeyframes: string[][] = []
       let hasAnyEndImage = false
 
       for (const clip of clips) {
@@ -3511,6 +3539,21 @@ export const useStore = create<AppState>((set, get) => ({
         } else {
           endImagePaths.push('')
         }
+
+        const clipKeyframes: string[] = []
+        for (const keyframe of clip.keyframes || []) {
+          if (keyframe.file) {
+            try {
+              const result = await api.uploadImage(keyframe.file)
+              clipKeyframes.push(result.path)
+            } catch (e) {
+              console.error('Failed to upload clip keyframe:', e)
+            }
+          } else if (keyframe.path) {
+            clipKeyframes.push(keyframe.path)
+          }
+        }
+        perClipKeyframes.push(clipKeyframes)
       }
 
       let promptLines: string[]
@@ -3525,6 +3568,11 @@ export const useStore = create<AppState>((set, get) => ({
       params.image_start = imagePaths
       if (hasAnyEndImage) {
         params.image_end = endImagePaths
+      }
+      if (perClipKeyframes.some(keyframes => keyframes.length > 0)) {
+        params.per_clip_keyframes = perClipKeyframes
+      } else {
+        delete params.per_clip_keyframes
       }
       params.multi_prompts_gen_type = 3
       params.image_mode = 0
@@ -5442,6 +5490,7 @@ export const useStore = create<AppState>((set, get) => ({
         endImage,
         endImagePath: null,
         durationFrames: plannedClip?.duration_frames,
+        keyframes: [],
       }
     })
 
@@ -5513,6 +5562,7 @@ export const useStore = create<AppState>((set, get) => ({
         endImage,
         endImagePath: null,
         durationFrames: plannedClip?.duration_frames,
+        keyframes: [],
       }
     })
 
@@ -6372,44 +6422,14 @@ export const useStore = create<AppState>((set, get) => ({
           endImage: null,
           endImagePath: null,
           durationFrames: perClipFrames[i] || undefined,
+          keyframes: (perClipKeyframes[i] || [])
+            .filter(path => typeof path === 'string' && path.length > 0)
+            .map(path => ({ file: null, path })),
         })
       }
       set({ clips, singlePromptMode: false })
       newParams.image_mode = 2
       newParams.multi_prompts_gen_type = 3
-
-      // Surface per-clip keyframes via image_refs + frames_positions so
-      // ControlVideoSection's restore picks them up. NOTE: MultiClip's type
-      // doesn't yet carry per-clip keyframes, so all clips' keyframes get
-      // concatenated into a single image_refs array with "L" positions
-      // (the same encoding launch.py uses at line 7353). Re-running the
-      // generation will dispatch keyframes to clips by position order,
-      // matching the original layout. Documented as a known limitation:
-      // editing one clip's keyframes after restore affects the whole pool.
-      if (perClipKeyframes.length > 0) {
-        const flatRefs: string[] = []
-        const flatPositions: string[] = []
-        for (const clipKfs of perClipKeyframes) {
-          if (Array.isArray(clipKfs)) {
-            for (const kf of clipKfs) {
-              if (kf) {
-                flatRefs.push(kf)
-                flatPositions.push('L')
-              }
-            }
-          }
-        }
-        if (flatRefs.length > 0) {
-          newParams.image_refs = flatRefs
-          newParams.frames_positions = flatPositions.join(' ')
-          // Ensure KFI is in video_prompt_type so ControlVideoSection
-          // recognizes the inject-frame mode on restore.
-          const vpt = newParams.video_prompt_type || ''
-          if (!vpt.includes('KFI')) {
-            newParams.video_prompt_type = vpt + 'KFI'
-          }
-        }
-      }
 
       // Fetch clip images from their real storage location. User-provided
       // images live in uploads, while Director comic frames live in outputs.
@@ -6957,6 +6977,18 @@ export const useStore = create<AppState>((set, get) => ({
     const pid = get().pipelineId
     if (!pid) return
 
+    // The output gallery used to be reloaded on every two-second pipeline
+    // heartbeat. Besides rescanning the whole workspace on the backend, that
+    // replaced the gallery array even when no file had changed and caused a
+    // visible editor blink. Refresh only when the pipeline reports a new
+    // completed image/video checkpoint.
+    let lastOutputRefreshSignature = ''
+    const refreshOutputsWhenChanged = (signature: string) => {
+      if (signature === lastOutputRefreshSignature) return
+      lastOutputRefreshSignature = signature
+      get().refreshOutputs()
+    }
+
     const poll = async () => {
       if (!get().pipelinePolling || get().pipelineId !== pid) return
 
@@ -7012,12 +7044,13 @@ export const useStore = create<AppState>((set, get) => ({
               status: 'generating',
             },
           })
-          // Refresh media feed to show new images as they're generated
-          get().refreshOutputs()
+          const completedImages = (status.clip_images || []).filter(Boolean)
+          refreshOutputsWhenChanged(`images:${completedImages.join('|')}`)
         } else if (status.phase === 'generating_video') {
           set({ directorStep: 'review_video' })
-          // Refresh media feed to show new video clips as they complete
-          get().refreshOutputs()
+          refreshOutputsWhenChanged(
+            `video:${status.progress.current}:${(status.output_files || []).join('|')}`,
+          )
         }
 
         // Handle LLM streaming

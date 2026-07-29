@@ -13612,6 +13612,11 @@ def get_latest_completed_director_comic_plan():
     return max(completed, key=lambda job: job.get("finishedAt") or job.get("updatedAt") or 0)
 
 
+_output_scan_cache_lock = threading.Lock()
+_output_scan_cache: dict[str, dict] = {}
+_OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
+
+
 @api.get("/api/v1/outputs")
 def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = ""):
     """List generated output files (newest first) from the active workspace.
@@ -13666,62 +13671,97 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
 
     favs = _load_favorites()
 
-    # Build a quick listing with mtime — avoid reading JSON for every file
-    # We only read sidecar JSON for files in the visible page
-    raw_entries = []
-    for name in os.listdir(out_dir):
-        if name.startswith(".trash_") or name.startswith("."):
-            continue
-        # 3D preview sidecars are served as card thumbnails, not gallery items.
-        if name.endswith(".preview.png"):
-            continue
-        filepath = os.path.join(out_dir, name)
-        if not os.path.isfile(filepath):
-            continue
-        ext = os.path.splitext(name)[1].lower()
-        if ext not in media_exts and not name.endswith(".scene.json") and not name.endswith(".comic.json"):
-            continue
-        raw_entries.append((name, filepath, ext, os.path.getmtime(filepath)))
+    # Building the gallery index requires stat'ing every media file and
+    # parsing every metadata sidecar. The UI polls while a generation is
+    # active, so doing that work on each heartbeat caused unnecessary disk
+    # load and visible layout churn. Reuse a workspace snapshot while the
+    # directory is unchanged, with a short TTL as a safety net for in-place
+    # metadata edits that do not update the directory mtime.
+    try:
+        directory_signature = os.stat(out_dir).st_mtime_ns
+    except OSError:
+        return {"outputs": [], "total": 0}
+    now = time.monotonic()
+    with _output_scan_cache_lock:
+        cached_snapshot = _output_scan_cache.get(out_dir)
+        cache_is_fresh = (
+            cached_snapshot is not None
+            and cached_snapshot.get("signature") == directory_signature
+            and now - float(cached_snapshot.get("created_at", 0)) < _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS
+        )
 
-    # Sort by creation time (newest first) before any filtering
-    raw_entries.sort(key=lambda e: e[3], reverse=True)
+    if cache_is_fresh:
+        raw_entries = cached_snapshot["raw_entries"]
+        sidecar_cache = cached_snapshot["sidecar_cache"]
+        clip_groups = cached_snapshot["clip_groups"]
+    else:
+        raw_entries = []
+        for name in os.listdir(out_dir):
+            if name.startswith(".trash_") or name.startswith("."):
+                continue
+            # 3D preview sidecars are served as card thumbnails, not gallery items.
+            if name.endswith(".preview.png"):
+                continue
+            filepath = os.path.join(out_dir, name)
+            if not os.path.isfile(filepath):
+                continue
+            ext = os.path.splitext(name)[1].lower()
+            if ext not in media_exts and not name.endswith(".scene.json") and not name.endswith(".comic.json"):
+                continue
+            try:
+                raw_entries.append((name, filepath, ext, os.path.getmtime(filepath)))
+            except OSError:
+                continue
 
-    # First pass: read sidecar JSON ONCE per file and cache the bits we need
-    # downstream (clip group info, generation_mode, edit_sub_mode). Files
-    # without a sidecar simply have no entry in the cache. We previously read
-    # sidecars in two separate passes (once for clip groups, once for mode);
-    # consolidating saves disk I/O and keeps the mode/edit_sub_mode populated
-    # for ALL files — the prior code only set `mode` when a multi-clip group
-    # existed, which meant the gallery's Edits filter never had data to
-    # filter on for non-multiclip outputs.
-    sidecar_cache: dict[str, dict] = {}
-    clip_groups: dict[str, dict] = {}
-    for name, filepath, ext, mtime in raw_entries:
-        meta_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".meta.json")
-        if not os.path.isfile(meta_path):
-            continue
-        try:
-            with open(meta_path, "r", encoding="utf-8") as mf:
-                meta = json.load(mf)
-        except Exception:
-            continue
-        params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
-        sidecar_cache[name] = {
-            "mode": meta.get("generation_mode"),
-            "edit_sub_mode": params.get("edit_sub_mode"),
-            "multi_clip_info": params.get("multi_clip_info"),
-            "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
-        }
-        mci = sidecar_cache[name]["multi_clip_info"]
-        if mci and mci.get("group_id"):
-            gid = mci["group_id"]
-            if gid not in clip_groups:
-                clip_groups[gid] = {"total": mci.get("total", 0), "highest_index": -1, "has_final": False}
-            clip_groups[gid]["highest_index"] = max(clip_groups[gid]["highest_index"], mci.get("index", 0))
+        # Sort by creation time (newest first) before any filtering.
+        raw_entries.sort(key=lambda e: e[3], reverse=True)
 
-    for gid, info in clip_groups.items():
-        if info["highest_index"] >= info["total"] - 1:
-            info["has_final"] = True
+        # Read each sidecar once per snapshot and retain only the fields used
+        # by the gallery. Favorites remain outside the cache so toggles are
+        # reflected immediately.
+        sidecar_cache: dict[str, dict] = {}
+        clip_groups: dict[str, dict] = {}
+        for name, filepath, ext, mtime in raw_entries:
+            meta_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".meta.json")
+            if not os.path.isfile(meta_path):
+                continue
+            try:
+                with open(meta_path, "r", encoding="utf-8") as mf:
+                    meta = json.load(mf)
+            except Exception:
+                continue
+            params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
+            sidecar_cache[name] = {
+                "mode": meta.get("generation_mode"),
+                "edit_sub_mode": params.get("edit_sub_mode"),
+                "multi_clip_info": params.get("multi_clip_info"),
+                "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
+            }
+            mci = sidecar_cache[name]["multi_clip_info"]
+            if mci and mci.get("group_id"):
+                gid = mci["group_id"]
+                if gid not in clip_groups:
+                    clip_groups[gid] = {"total": mci.get("total", 0), "highest_index": -1, "has_final": False}
+                clip_groups[gid]["highest_index"] = max(clip_groups[gid]["highest_index"], mci.get("index", 0))
+
+        for info in clip_groups.values():
+            if info["highest_index"] >= info["total"] - 1:
+                info["has_final"] = True
+
+        with _output_scan_cache_lock:
+            if len(_output_scan_cache) >= 16 and out_dir not in _output_scan_cache:
+                oldest = min(
+                    _output_scan_cache,
+                    key=lambda key: float(_output_scan_cache[key].get("created_at", 0)),
+                )
+                _output_scan_cache.pop(oldest, None)
+            _output_scan_cache[out_dir] = {
+                "signature": directory_signature,
+                "created_at": now,
+                "raw_entries": raw_entries,
+                "sidecar_cache": sidecar_cache,
+                "clip_groups": clip_groups,
+            }
 
     # Second pass: build the file list using the cached sidecar data.
     files = []
