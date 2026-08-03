@@ -91,7 +91,7 @@ if _hf_token_path:
 # Now safe to import wgp - all module-level code will run with patched argv
 print("[Maestro] Importing WanGP engine...")
 import wgp
-from services import model3d_service, minimax_h3_service
+from services import model3d_service, minimax_h3_service, minimax_image_service
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 print(f"[Maestro] WanGP loaded: {len(wgp.displayed_model_types)} models available")
@@ -11366,96 +11366,37 @@ def _comic_reference_image_file(source: str) -> str:
 def generate_comic_minimax(body: dict):
     """Generate one comic panel with MiniMax image-01 and persist it."""
     prompt = str(body.get("prompt") or "").strip()
-    if not prompt or len(prompt) > 10000:
-        raise HTTPException(status_code=400, detail="A prompt of at most 10000 characters is required")
-    # MiniMax Image rejects prompts of 1,500 characters or more. The editor
-    # normally sends a prioritized shorter prompt; keep this safeguard for
-    # imported projects and clients created before that limit was enforced.
-    if len(prompt) >= 1500:
-        head = prompt[:480].rsplit(" ", 1)[0].rstrip(" ,;:-")
-        tail = prompt[-960:].split(" ", 1)[-1].lstrip(" ,;:-")
-        prompt = f"{head}. {tail}"
     services = wgp.server_config.get("services", {})
     api_key = services.get("minimax_api_key", "")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="Set the MiniMax API key in Settings → Services")
     aspect_ratio = str(body.get("aspect_ratio") or "1:1")
-    if aspect_ratio not in {"1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9"}:
-        raise HTTPException(status_code=400, detail="Unsupported MiniMax image aspect ratio")
-    request_body = {
-        "model": "image-01",
-        "prompt": prompt,
-        "aspect_ratio": aspect_ratio,
-        "response_format": "base64",
-        "n": 1,
-        "prompt_optimizer": False,
-    }
     subject = body.get("subject_reference")
-    if subject:
-        request_body["subject_reference"] = [{
-            "type": "character",
-            "image_file": _comic_reference_image_file(str(subject)),
-        }]
     try:
-        response = requests.post(
-            "https://api.minimax.io/v1/image_generation",
-            json=request_body,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            timeout=(15, 300),
+        generated = minimax_image_service.generate_image(
+            api_key=api_key,
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            output_dir=_workspace_dir(),
+            subject_reference=(
+                _comic_reference_image_file(str(subject)) if subject else ""
+            ),
+            filename_prefix="minimax-comic",
         )
-        response.raise_for_status()
-        payload = response.json()
-    except requests.RequestException as exc:
-        detail = ""
-        try:
-            detail = response.text[:500]
-        except Exception:
-            pass
-        raise HTTPException(status_code=502, detail=f"MiniMax request failed: {detail or exc}") from exc
-    base_resp = payload.get("base_resp") or {}
-    if base_resp.get("status_code", 0) != 0:
-        raise HTTPException(status_code=502, detail=base_resp.get("status_msg") or "MiniMax returned an error")
-    encoded = (payload.get("data") or {}).get("image_base64")
-    if not isinstance(encoded, list) or not encoded:
-        raise HTTPException(status_code=502, detail="MiniMax returned no image")
-    try:
-        image_bytes = base64.b64decode(encoded[0], validate=True)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="MiniMax returned invalid image data") from exc
-    if len(image_bytes) > 50 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="MiniMax image is too large")
-    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    name = f"{stamp}_minimax-comic_{uuid.uuid4().hex[:8]}.jpg"
-    path = os.path.join(_workspace_dir(), name)
-    with open(path + ".tmp", "wb") as handle:
-        handle.write(image_bytes)
-    os.replace(path + ".tmp", path)
-    meta_path = os.path.join(_workspace_dir(), os.path.splitext(name)[0] + ".meta.json")
-    with open(meta_path + ".tmp", "w", encoding="utf-8") as handle:
-        json.dump({
-            "generation_mode": "image",
-            "params": {
-                "prompt": prompt,
-                "provider": "minimax",
-                "model_type": "image-01",
-                "aspect_ratio": aspect_ratio,
-            },
-            "created_at": time.time(),
-        }, handle, ensure_ascii=False, indent=2)
-    os.replace(meta_path + ".tmp", meta_path)
+    except minimax_image_service.MiniMaxImageError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    name = generated["name"]
     return {"asset": {
         "id": f"asset-{uuid.uuid4().hex[:12]}",
         "name": name,
         "kind": "minimax",
         "source": f"/api/v1/file/{name}",
         "thumbnail": f"/api/v1/file/{name}",
-        "prompt": prompt,
+        "prompt": generated["prompt"],
         "provider": "minimax",
         "model": "image-01",
         "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "metadata": {
-            "subjectReference": bool(subject),
-            "aspectRatio": aspect_ratio,
+            "subjectReference": generated["subject_reference"],
+            "aspectRatio": generated["aspect_ratio"],
         },
     }}
 

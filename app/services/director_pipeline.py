@@ -679,31 +679,44 @@ def rerun_clip_image(out_dir: str, pid: str, clip_index: int, prompt_override: s
         rerun_seed = int(clip.get("seed", -1))
     except (TypeError, ValueError):
         rerun_seed = -1
-    gen_params = {
-        "model_type": image_model,
-        "prompt": prompt,
-        "image_refs": all_refs if all_refs else [ref_path],
-        "image_mode": 1,
-        "image_prompt_type": "",
-        "num_inference_steps": image_params.get("num_inference_steps", 8),
-        "guidance_scale": image_params.get("guidance_scale", 1),
-        "video_prompt_type": "KI",
-        "resolution": image_params.get("resolution", "1280x720"),
-        "seed": rerun_seed,
-        "settings_version": 2.52,
-        "generation_mode": "image",
-        "repeat_generation": 1,
-        "negative_prompt": "",
-        "video_length": 1,
-        "activated_loras": image_loras.get("activated_loras", []),
-        "loras_multipliers": " ".join(
-            m.split(";")[0] for m in (image_loras.get("loras_multipliers", "") or "").split(" ") if m
-        ),
-        "_director_pipeline_id": pid,
-    }
+    if image_model == "minimax:image-01":
+        new_filename = _generate_minimax_director_image(
+            prompt=prompt,
+            resolution=image_params.get("resolution", "1280x720"),
+            output_dir=clip_out_dir,
+            reference_paths=[
+                *(state.get("character_ref_paths") or []),
+                ref_path,
+            ],
+        )
+    else:
+        gen_params = {
+            "model_type": image_model,
+            "prompt": prompt,
+            "image_refs": all_refs if all_refs else [ref_path],
+            "image_mode": 1,
+            "image_prompt_type": "",
+            "num_inference_steps": image_params.get("num_inference_steps", 8),
+            "guidance_scale": image_params.get("guidance_scale", 1),
+            "video_prompt_type": "KI",
+            "resolution": image_params.get("resolution", "1280x720"),
+            "seed": rerun_seed,
+            "settings_version": 2.52,
+            "generation_mode": "image",
+            "repeat_generation": 1,
+            "negative_prompt": "",
+            "video_length": 1,
+            "activated_loras": image_loras.get("activated_loras", []),
+            "loras_multipliers": " ".join(
+                m.split(";")[0]
+                for m in (image_loras.get("loras_multipliers", "") or "").split(" ")
+                if m
+            ),
+            "_director_pipeline_id": pid,
+        }
 
-    output_files = _submit_and_wait(gen_params, timeout_s=600, out_dir=clip_out_dir)
-    new_filename = output_files[0] if output_files else ""
+        output_files = _submit_and_wait(gen_params, timeout_s=600, out_dir=clip_out_dir)
+        new_filename = output_files[0] if output_files else ""
 
     if new_filename:
         # Update the saved pipeline state
@@ -4076,6 +4089,38 @@ def _prepare_provided_clip_images(
         return staged, source_copies, source_sizes, fit_details
     return staged
 
+def _generate_minimax_director_image(
+    *,
+    prompt: str,
+    resolution: str,
+    output_dir: str,
+    reference_paths: list[str],
+) -> str:
+    """Generate one Director frame with the external MiniMax Image-01 API."""
+    from services import minimax_image_service
+
+    api_key = ((_wgp.server_config.get("services") or {}).get("minimax_api_key") or "")
+    if not api_key:
+        raise RuntimeError("Set the MiniMax API key in Settings → Services")
+    subject_reference = ""
+    for path in reference_paths:
+        if path and os.path.isfile(path):
+            subject_reference = minimax_image_service.local_image_data_uri(path)
+            break
+    try:
+        generated = minimax_image_service.generate_image(
+            api_key=api_key,
+            prompt=prompt,
+            aspect_ratio=minimax_image_service.aspect_ratio_for_resolution(resolution),
+            output_dir=output_dir,
+            subject_reference=subject_reference,
+            filename_prefix="minimax-director",
+        )
+    except minimax_image_service.MiniMaxImageError as exc:
+        raise RuntimeError(str(exc)) from exc
+    return str(generated.get("name") or "")
+
+
 def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_dir: str = None, workspace: str = None) -> tuple[list[str], list[list[str]]]:
     """Generate start images and keyframe images per clip.
 
@@ -4088,6 +4133,7 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
     character_ref_paths = params.get("character_ref_paths", []) or []
     location_ref_paths = params.get("location_ref_paths", []) or []
     image_model = params.get("image_model", "flux2_klein_9b")
+    use_minimax_image_api = image_model == "minimax:image-01"
     image_params = params.get("image_params", {})
     image_loras = params.get("image_loras", {})
 
@@ -4096,7 +4142,15 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
     # can correlate against the [LoRA] Loading line wgp prints.
     _activated_in = list(image_loras.get("activated_loras", []) or [])
     _mults_in = image_loras.get("loras_multipliers", "") or ""
-    if _activated_in:
+    if _activated_in and use_minimax_image_api:
+        print(
+            f"[Pipeline {pid}] Ignoring {len(_activated_in)} local image LoRA(s): "
+            "MiniMax Image-01 runs through the external API."
+        )
+        _activated_in = []
+        _mults_in = ""
+        image_loras = {"activated_loras": [], "loras_multipliers": ""}
+    elif _activated_in:
         print(
             f"[Pipeline {pid}] Image LoRAs received: {len(_activated_in)} | "
             f"model={image_model} | "
@@ -4118,7 +4172,7 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
     # directory? If not, drop it with a clear warning so the user knows
     # to re-select their image LoRAs for the active model.
     try:
-        if _activated_in:
+        if _activated_in and not use_minimax_image_api:
             try:
                 _lora_dir = _wgp.get_lora_dir(image_model)
             except Exception:
@@ -4179,6 +4233,9 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
     if not out_dir:
         out_dir = _wgp.save_path
 
+    if use_minimax_image_api and not ((_wgp.server_config.get("services") or {}).get("minimax_api_key")):
+        raise RuntimeError("Set the MiniMax API key in Settings → Services before starting Director")
+
     # Count total images to generate (start images + keyframes)
     total_images = len(clip_plans)
     for plan in clip_plans:
@@ -4199,6 +4256,21 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
         # before submission to guarantee one requested image means one job.
         prompt = " ".join(str(prompt or "").split())
         print(f"[Pipeline {pid}] _gen_image: {len(all_refs)} refs: {[os.path.basename(r) for r in all_refs]}")
+        if use_minimax_image_api:
+            # Image-01 accepts one character identity reference. Prioritise the
+            # Story cast reference, then fall back to the current continuity
+            # frame. Location references are descriptive context, not identity.
+            filename = _generate_minimax_director_image(
+                prompt=prompt,
+                resolution=resolution,
+                output_dir=out_dir,
+                reference_paths=[
+                    *[p for p in character_ref_paths if p and os.path.isfile(p)],
+                    source_ref,
+                ],
+            )
+            image_count += 1
+            return filename
         gen_params: dict = {
             "model_type": image_model,
             "prompt": prompt,
@@ -4310,6 +4382,8 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
             clip_images.append(start_img)
         except Exception as e:
             print(f"[Pipeline {pid}] Shot {i+1} start image failed: {e}")
+            if use_minimax_image_api:
+                raise
             clip_images.append("")
         # Record per-clip image timing
         timings = _pipelines.get(pid, {}).get("_clip_timings", {})
@@ -4358,6 +4432,8 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
                         chain_ref = os.path.join(out_dir, kf_img)
                 except Exception as e:
                     print(f"[Pipeline {pid}] Shot {i+1} keyframe {ki+1} failed: {e}")
+                    if use_minimax_image_api:
+                        raise
                     shot_keyframes.append("")
 
         clip_keyframes.append(shot_keyframes)

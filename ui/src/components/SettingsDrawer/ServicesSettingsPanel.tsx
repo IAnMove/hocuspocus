@@ -498,7 +498,7 @@ export function ServicesSettingsPanel() {
       <div className="space-y-3">
         <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">MiniMax API</h3>
         <p className="text-[10px] text-text-muted">
-          One MiniMax key is shared by its text and image APIs. Writing and image models remain independently selectable in the Comics editor.
+          One MiniMax key is shared by its text and Image-01 APIs. Writing and image models remain independently selectable in Comics, Story Lab and Director.
         </p>
         <ApiKeyField
           label="MiniMax API Key"

@@ -590,6 +590,16 @@ visually prioritised character with an available reference and describe the
 remaining cast from the locked character bible. `aspect_ratio` accepts `1:1`,
 `16:9`, `4:3`, `3:2`, `2:3`, `3:4`, `9:16`, or `21:9`.
 
+Director and Story Lab film adaptations can select the virtual image model ID
+`minimax:image-01` in their normal `image_model` field. This routes shot-frame
+generation through the same external Image-01 client while the independently
+selected video model (for example local `minimax_h3`) remains unchanged.
+Director maps its requested frame resolution to the nearest supported MiniMax
+aspect ratio, sends at most one prioritised character identity reference, and
+does not apply local image LoRAs. The credential is read only from
+Settings → Services; it is not accepted in pipeline payloads or persisted in
+output metadata.
+
 Comic recovery checkpoints are workspace-scoped and durable. Create one with
 `POST /api/v1/comics/history`, list versions with
 `GET /api/v1/comics/history` (optionally `?comic_id=...`), and load a version

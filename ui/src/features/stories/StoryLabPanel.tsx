@@ -8,6 +8,7 @@ import * as api from '../../api/client'
 import { getModelMode, useStore } from '../../stores/useStore'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
 import { generateImageAsset } from '../../lib/imageGeneration'
+import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
 import {
@@ -344,7 +345,10 @@ export function StoryLabPanel() {
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const videoModels = useStore(state => state.models)
   const enabledModels = useStore(state => state.enabledModels)
+  const servicesConfig = useStore(state => state.servicesConfig)
+  const filmImageModel = useStore(state => state.selectedModelPerMode.image) || 'flux2_klein_9b'
   const filmVideoModel = useStore(state => state.selectedModelPerMode.video) || 'ltx2_22B_distilled_1_1'
+  const selectDirectorImageModel = useStore(state => state.selectDirectorImageModel)
   const selectDirectorVideoModel = useStore(state => state.selectDirectorVideoModel)
   const [tab, setTab] = useState<StoryTab>('overview')
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
@@ -385,7 +389,15 @@ export function StoryLabPanel() {
       .sort((left, right) => left.name.localeCompare(right.name)),
     [enabledModels, videoModels],
   )
+  const selectableImageModels = useMemo(
+    () => videoModels
+      .filter(model => getModelMode(model.model_type, model.family) === 'image' && enabledModels.has(model.model_type) && !model.tool_only)
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    [enabledModels, videoModels],
+  )
+  const selectedFilmImageModel = videoModels.find(model => model.model_type === filmImageModel)
   const selectedFilmVideoModel = videoModels.find(model => model.model_type === filmVideoModel)
+  const filmImageReady = filmImageModel !== MINIMAX_IMAGE_API_MODEL || Boolean(servicesConfig?.minimax_api_key_set)
 
   useEffect(() => {
     loadWorkspace(activeWorkspace)
@@ -1034,6 +1046,7 @@ export function StoryLabPanel() {
     targetDuration = filmDuration,
     preserveVisualStyle = filmPreserveVisualStyle,
     videoModel = filmVideoModel,
+    imageModel = filmImageModel,
   ) => {
     const adaptation = buildShortFilmAdaptation(source, direction, targetDuration, {
       preserveVisualStyle,
@@ -1042,6 +1055,9 @@ export function StoryLabPanel() {
     director.directorReset()
     const store = useStore.getState()
     store.setGenerationMode('video')
+    if (imageModel) {
+      useStore.getState().selectDirectorImageModel(imageModel)
+    }
     if (videoModel) {
       await useStore.getState().selectDirectorVideoModel(videoModel)
     }
@@ -1144,6 +1160,7 @@ export function StoryLabPanel() {
             narrative: adaptation.narrative,
             visualStyle: adaptation.visualStyle,
             preserveVisualStyle: adaptation.preserveVisualStyle,
+            imageModel: filmImageModel,
             videoModel: filmVideoModel,
           },
           status: 'staged',
@@ -1211,7 +1228,10 @@ export function StoryLabPanel() {
     const videoModel = typeof production.targetSnapshot?.videoModel === 'string'
       ? production.targetSnapshot.videoModel
       : filmVideoModel
-    await loadFilmProduction(source, direction, false, targetDuration, preserveVisualStyle, videoModel)
+    const imageModel = typeof production.targetSnapshot?.imageModel === 'string'
+      ? production.targetSnapshot.imageModel
+      : filmImageModel
+    await loadFilmProduction(source, direction, false, targetDuration, preserveVisualStyle, videoModel, imageModel)
   }
 
   const restoreProductionSource = (productionId: string) => {
@@ -1580,6 +1600,34 @@ export function StoryLabPanel() {
                         onChange={event => setFilmDuration(Math.max(10, Math.min(1800, Number(event.target.value) || 45)))}
                       />
                     </label>
+                    <label className="block text-[10px] text-text-muted">Image model
+                      <select
+                        className={`${input} mt-1`}
+                        value={filmImageModel}
+                        onChange={event => selectDirectorImageModel(event.target.value)}
+                      >
+                        {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
+                          <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
+                        )}
+                        <optgroup label="External API">
+                          <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
+                        </optgroup>
+                        <optgroup label="Maestro local">
+                          {selectableImageModels.map(model => (
+                            <option key={model.model_type} value={model.model_type}>
+                              {model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                      <span className={`mt-1 block text-[9px] leading-relaxed ${filmImageReady ? 'text-text-muted' : 'text-amber-300'}`}>
+                        {filmImageModel === MINIMAX_IMAGE_API_MODEL
+                          ? filmImageReady
+                            ? 'MiniMax Image-01 runs through the external API and does not use local VRAM. It is independent from the local H3 video model.'
+                            : 'Add the MiniMax API key in Settings → Services before starting complete generation.'
+                          : 'Generates every shot frame locally with the selected Maestro image model.'}
+                      </span>
+                    </label>
                     <label className="block text-[10px] text-text-muted">Video model
                       <select
                         className={`${input} mt-1`}
@@ -1615,7 +1663,7 @@ export function StoryLabPanel() {
                         </span>
                       </span>
                     </label>
-                    <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate complete short film</button>
+                    <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmImageReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate complete short film</button>
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> Open in Short Film Director</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
                   </div>

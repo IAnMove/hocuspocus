@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } fro
 import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen } from 'lucide-react'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import { getFileUrl } from '../../api/client'
+import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
 import { DirectorSongSetup } from './DirectorSongSetup'
 import type { DirectorSkill, ShortFilmCharacter, ShortFilmPath } from '../../types'
@@ -2207,7 +2208,8 @@ function DirectorModelPicker({ mode, value, onChange }: {
     })).filter(g => g.models.length > 0),
   [mode, families, models, enabledModels, nsfwMode])
 
-  const known = groups.some(g => g.models.some(m => m.model_type === value))
+  const externalKnown = mode === 'image' && value === MINIMAX_IMAGE_API_MODEL
+  const known = externalKnown || groups.some(g => g.models.some(m => m.model_type === value))
 
   return (
     <div className="flex items-center gap-1.5">
@@ -2220,6 +2222,11 @@ function DirectorModelPicker({ mode, value, onChange }: {
         className="flex-1 min-w-0 bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
       >
         {!known && <option value={value}>{value}</option>}
+        {mode === 'image' && (
+          <optgroup label="External API">
+            <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
+          </optgroup>
+        )}
         {groups.map(({ family, models: famModels }) => (
           <optgroup key={family.id} label={family.label}>
             {famModels.map(m => (
@@ -2249,6 +2256,7 @@ function DirectorLoraAccordion() {
   const selectDirectorVideoModel = useStore(s => s.selectDirectorVideoModel)
   const h3Profile = useStore(s => s.savedParamsPerMode.video?.h3_model_profile || 'balanced')
   const setH3Profile = useStore(s => s.setDirectorH3Profile)
+  const minimaxImageReady = useStore(s => Boolean(s.servicesConfig?.minimax_api_key_set))
   const [imageOpen, setImageOpen] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
 
@@ -2258,6 +2266,13 @@ function DirectorLoraAccordion() {
           user can verify before starting; LoRA lists below follow. */}
       <div className="space-y-1 mb-1.5">
         <DirectorModelPicker mode="image" value={imageModel} onChange={selectDirectorImageModel} />
+        {imageModel === MINIMAX_IMAGE_API_MODEL && (
+          <p className={`pl-[50px] text-[9px] leading-relaxed ${minimaxImageReady ? 'text-emerald-400' : 'text-amber-300'}`}>
+            {minimaxImageReady
+              ? 'External Image-01 API ready · no local VRAM or image LoRAs.'
+              : 'Add the MiniMax API key in Settings → Services before generating.'}
+          </p>
+        )}
         <DirectorModelPicker mode="video" value={videoModel} onChange={selectDirectorVideoModel} />
         {videoModel === 'minimax_h3' && (
           <div className="flex items-center gap-1.5">
@@ -2275,7 +2290,7 @@ function DirectorLoraAccordion() {
         )}
       </div>
       {/* Image LoRAs */}
-      {imageModel && (
+      {imageModel && imageModel !== MINIMAX_IMAGE_API_MODEL && (
         <div className="border border-border rounded-lg overflow-hidden">
           <button
             onClick={() => setImageOpen(!imageOpen)}

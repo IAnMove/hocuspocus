@@ -13,7 +13,11 @@ import time
 import types
 import unittest
 import uuid
-from unittest.mock import Mock
+import sys
+from unittest.mock import Mock, patch
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
+from services import minimax_image_service  # noqa: E402
 
 
 class HTTPException(Exception):
@@ -97,11 +101,13 @@ class TestComicStoryReferences(unittest.TestCase):
             with open(reference_path, "wb") as handle:
                 handle.write(b"reference-image")
 
-            result = scope["generate_comic_minimax"]({
-                "prompt": "The hero crosses the salt desert at dusk.",
-                "aspect_ratio": "4:3",
-                "subject_reference": "/api/v1/file/hero.png",
-            })
+            scope["minimax_image_service"] = minimax_image_service
+            with patch.object(minimax_image_service.requests, "post", post):
+                result = scope["generate_comic_minimax"]({
+                    "prompt": "The hero crosses the salt desert at dusk.",
+                    "aspect_ratio": "4:3",
+                    "subject_reference": "/api/v1/file/hero.png",
+                })
 
             payload = post.call_args.kwargs["json"]
             self.assertEqual(payload["model"], "image-01")
