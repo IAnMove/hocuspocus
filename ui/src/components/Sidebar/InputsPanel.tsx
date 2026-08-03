@@ -111,6 +111,10 @@ export function InputsPanel() {
   const setContinueVideo = useStore(s => s.setContinueVideo)
   const clearContinueVideo = useStore(s => s.clearContinueVideo)
   const isExtend = (params.image_mode as number) === 3
+  const isH3 = modelOptions?.architecture === 'minimax_h3'
+  const h3RefVideos = params.h3_ref_videos || []
+  const h3RefAudios = params.h3_ref_audios || []
+  const h3ReferenceCount = imageRefs.length + h3RefVideos.length + h3RefAudios.length
 
   const [selected, setSelected] = useState<string | null>(null)
   const [injectedFrames, setInjectedFrames] = useState<InjectedFrame[]>([])
@@ -179,7 +183,11 @@ export function InputsPanel() {
     input.type = 'file'
     input.accept = '.png,.jpg,.jpeg,.webp,.bmp'
     input.multiple = true
-    input.onchange = () => Array.from(input.files || []).forEach(addImageRef)
+    input.onchange = () => {
+      const files = Array.from(input.files || [])
+      const available = isH3 ? Math.max(0, Math.min(9 - imageRefs.length, 12 - h3ReferenceCount)) : files.length
+      files.slice(0, available).forEach(addImageRef)
+    }
     input.click()
   }
 
@@ -461,6 +469,26 @@ export function InputsPanel() {
     setParam('audio_prompt_type', '')
     if (selected === 'ctrlvid') setSelected(null)
   }
+
+  const addH3Reference = async (kind: 'video' | 'audio', file: File) => {
+    try {
+      if (h3ReferenceCount >= 12) return
+      const result = await api.uploadImage(file)
+      if (kind === 'video') {
+        if (h3RefVideos.length < 3) setParam('h3_ref_videos', [...h3RefVideos, result.path])
+      } else if (h3RefAudios.length < 3) {
+        setParam('h3_ref_audios', [...h3RefAudios, result.path])
+      }
+    } catch (e) {
+      console.error(`MiniMax H3 ${kind} reference upload failed:`, e)
+    }
+  }
+  const removeH3Reference = (kind: 'video' | 'audio', index: number) => {
+    const current = kind === 'video' ? h3RefVideos : h3RefAudios
+    const updated = current.filter((_, i) => i !== index)
+    setParam(kind === 'video' ? 'h3_ref_videos' : 'h3_ref_audios', updated.length ? updated : undefined)
+    if (selected === `h3-${kind}-${index}`) setSelected(null)
+  }
   const toggleAudioFlag = (flag: 'N' | 'V') => {
     const cur = (params.audio_prompt_type as string) || ''
     setParam('audio_prompt_type', cur.includes(flag) ? cur.replace(flag, '') : cur + flag)
@@ -572,7 +600,32 @@ export function InputsPanel() {
             </div>
           </div>
         ))}
-        {supportsRefs && <AddTile label="Reference" icon={<Plus size={18} />} onClick={pickReferences} onDropFile={addImageRef} dropAccept="image" />}
+        {supportsRefs && (!isH3 || (imageRefs.length < 9 && h3ReferenceCount < 12)) && <AddTile label="Reference" icon={<Plus size={18} />} onClick={pickReferences} onDropFile={file => { if (!isH3 || h3ReferenceCount < 12) addImageRef(file) }} dropAccept="image" />}
+
+        {/* MiniMax H3 Ref2VA accepts up to three reference videos (with their
+            embedded soundtrack) and three standalone audio references. */}
+        {isH3 && h3RefVideos.map((path, i) => (
+          <Tile key={`h3-video-${i}`} role={`Video ref ${i + 1}`} filledIcon={<Film size={20} />}
+            filledLabel={basename(path)} imgSrc={null} selected={selected === `h3-video-${i}`}
+            onClear={() => removeH3Reference('video', i)}
+            onSelect={() => setSelected(selected === `h3-video-${i}` ? null : `h3-video-${i}`)} />
+        ))}
+        {isH3 && h3RefVideos.length < 3 && h3ReferenceCount < 12 && (
+          <AddTile label="Video ref" icon={<Film size={18} />}
+            onClick={() => pickFile('.mp4,.mov,.mkv,.webm,.avi,.m4v', f => void addH3Reference('video', f))}
+            onDropFile={f => void addH3Reference('video', f)} dropAccept="video" />
+        )}
+        {isH3 && h3RefAudios.map((path, i) => (
+          <Tile key={`h3-audio-${i}`} role={`Audio ref ${i + 1}`} filledIcon={<Music size={20} />}
+            filledLabel={basename(path)} imgSrc={null} selected={selected === `h3-audio-${i}`}
+            onClear={() => removeH3Reference('audio', i)}
+            onSelect={() => setSelected(selected === `h3-audio-${i}` ? null : `h3-audio-${i}`)} />
+        ))}
+        {isH3 && h3RefAudios.length < 3 && h3ReferenceCount < 12 && (
+          <AddTile label="Audio ref" icon={<Music size={18} />}
+            onClick={() => pickFile('.wav,.mp3,.flac,.ogg,.m4a,.aac', f => void addH3Reference('audio', f))}
+            onDropFile={f => void addH3Reference('audio', f)} dropAccept="audio" />
+        )}
       </div>
 
       {/* Option strip — Frame: position picker (routes start / end / inject
@@ -664,6 +717,17 @@ export function InputsPanel() {
       {/* Option strip — references: focus mode + background removal */}
       {selected?.startsWith('ref-') && imageRefs.length > 0 && (
         <Strip>
+          {isH3 && (
+            <>
+              <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
+                <button onClick={() => setParam('h3_ref_image_size', 'match')}
+                  className={`flex-1 text-[10px] py-1 rounded-md transition-all ${(params.h3_ref_image_size || 'match') === 'match' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>Match canvas</button>
+                <button onClick={() => setParam('h3_ref_image_size', 'max')}
+                  className={`flex-1 text-[10px] py-1 rounded-md transition-all ${params.h3_ref_image_size === 'max' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>Max identity</button>
+              </div>
+              <p className="text-[9px] text-text-muted/60">Use &lt;Picture 1&gt;, &lt;Picture 2&gt;… in the prompt. Max identity uses more VRAM and is slower.</p>
+            </>
+          )}
           {hasLandscapeMode && hasPeopleMode && (
             <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
               <button onClick={() => setImageRefType('KI')}
@@ -682,6 +746,13 @@ export function InputsPanel() {
             </label>
           )}
         </Strip>
+      )}
+
+      {isH3 && selected?.startsWith('h3-video-') && (
+        <Strip><p className="text-[9px] text-text-muted/70">Use &lt;Video 1&gt;, &lt;Video 2&gt;… in the prompt. The embedded soundtrack is paired automatically as &lt;Audio n&gt;. Each clip must be 2–15 seconds.</p></Strip>
+      )}
+      {isH3 && selected?.startsWith('h3-audio-') && (
+        <Strip><p className="text-[9px] text-text-muted/70">Use &lt;Audio 1&gt;, &lt;Audio 2&gt;… in the prompt. Audio-only Ref2VA is not supported: also add an image or video reference.</p></Strip>
       )}
     </div>
   )

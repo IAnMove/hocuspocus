@@ -1,12 +1,34 @@
 module.exports = {
   run: [{
-    // Pull the latest launcher + app code (single monorepo, so this one
-    // pull covers both `ui/` and `app/`). The next step inspects this
-    // output: an unchanged Maestro skips its main dependency/UI rebuild,
-    // but still reaches the bundled-runtime maintenance section.
+    // Never let Update merge around uncommitted work. shell.run returns the
+    // porcelain output as input.stdout; the next documented jump either stops
+    // with a recoverable message or proceeds to a fast-forward-only pull.
+    // The single Maestro repository contains both `ui/` and `app/`, so one
+    // clean-tree check protects the complete launcher and application.
     method: "shell.run",
     params: {
-      message: "git pull"
+      message: "git status --porcelain"
+    }
+  }, {
+    method: "jump",
+    params: {
+      id: "{{/(?:^|\\r?\\n)[ MADRCU?!]{2} /.test(input.stdout) ? 'dirty' : 'pull'}}"
+    }
+  }, {
+    id: "dirty",
+    method: "log",
+    params: {
+      raw: "Update stopped safely: Maestro has uncommitted changes. Commit or stash them before updating; no files were changed."
+    },
+    next: null
+  }, {
+    id: "pull",
+    method: "shell.run",
+    params: {
+      env: {
+        LC_ALL: "C"
+      },
+      message: "git pull --ff-only"
     }
   }, {
     // Branch on the git pull output (captured here as input.stdout — a
@@ -21,8 +43,15 @@ module.exports = {
     // never a wrongly-skipped rebuild.
     method: "jump",
     params: {
-      id: "{{/already up[- ]to[- ]date/i.test(input.stdout) && exists('app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1') && exists('app/postprocessing/seedvc/__init__.py') ? 'uptodate' : 'build'}}"
+      id: "{{/(?:fatal:|error:|aborting|no tracking information|specify which branch)/i.test(input.stdout) ? 'pull_failed' : (/already up[- ]to[- ]date/i.test(input.stdout) && exists('app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1') && exists('app/services/minimax_h3/env/.maestro_minimax_h3_v2.installed') && exists('app/services/minimax_h3/vendor/ComfyUI/main.py') && exists('app/postprocessing/seedvc/__init__.py') ? 'uptodate' : 'build')}}"
     }
+  }, {
+    id: "pull_failed",
+    method: "log",
+    params: {
+      raw: "Update stopped safely because Git could not fast-forward the current branch. Configure its upstream or resolve the Git error shown above; dependencies were not changed."
+    },
+    next: null
   }, {
     id: "uptodate",
     method: "log",
@@ -113,6 +142,44 @@ module.exports = {
     method: "script.start",
     params: {
       uri: "sam_install.js"
+    }
+  },
+  // Existing installations that predate MiniMax H3 reach this section through
+  // the normal build path. The weights remain lazy downloads.
+  {
+    when: "{{!exists('app/services/minimax_h3/vendor/ComfyUI/main.py')}}",
+    method: "shell.run",
+    params: {
+      message: [
+        "git clone --depth 1 --branch minimax_h3 https://github.com/kijai/ComfyUI app/services/minimax_h3/vendor/ComfyUI",
+        "git -C app/services/minimax_h3/vendor/ComfyUI fetch --depth 1 origin e2ab36d933356bc8cd6ecb39c655fe8be75af4e5",
+        "git -C app/services/minimax_h3/vendor/ComfyUI checkout e2ab36d933356bc8cd6ecb39c655fe8be75af4e5"
+      ]
+    }
+  }, {
+    when: "{{exists('app/services/minimax_h3/vendor/ComfyUI/.git')}}",
+    method: "shell.run",
+    params: {
+      path: "app/services/minimax_h3/vendor/ComfyUI",
+      message: [
+        "git fetch --depth 1 origin e2ab36d933356bc8cd6ecb39c655fe8be75af4e5",
+        "git checkout e2ab36d933356bc8cd6ecb39c655fe8be75af4e5"
+      ]
+    }
+  }, {
+    method: "shell.run",
+    params: {
+      conda: { path: "app/services/minimax_h3/env", python: "3.11" },
+      message: [
+        "uv pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu130",
+        "uv pip install -r app/services/minimax_h3/vendor/ComfyUI/requirements.txt"
+      ]
+    }
+  }, {
+    method: "fs.write",
+    params: {
+      path: "app/services/minimax_h3/env/.maestro_minimax_h3_v2.installed",
+      text: "e2ab36d933356bc8cd6ecb39c655fe8be75af4e5 torch-2.10.0-cu130"
     }
   },
   // Existing installations that predate native 3D reach this section through

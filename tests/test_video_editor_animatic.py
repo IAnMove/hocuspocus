@@ -1,7 +1,11 @@
 """Regression tests for the non-generative comic storyboard preview."""
 
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
+from app.services import video_editor
 from app.services.video_editor import _comic_preview_video_filter
 
 
@@ -32,6 +36,28 @@ class TestComicStoryboardPreview(unittest.TestCase):
 
         self.assertIn("1+0.04*", video_filter)
         self.assertNotIn("1+0.10*", video_filter)
+
+    def test_end_frame_capture_verifies_output_and_retries_earlier(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = Path(tmp) / "last.png"
+            calls = []
+
+            def fake_run(command, **_kwargs):
+                calls.append(command)
+                if len(calls) == 2:
+                    destination.write_bytes(b"png")
+
+            with patch.object(video_editor, "probe_media", return_value={
+                "duration": 9.417,
+                "fps": 24,
+                "width": 960,
+                "height": 544,
+            }), patch.object(video_editor, "_run", side_effect=fake_run):
+                result = video_editor.extract_frame("clip.mp4", str(destination), 9.417)
+
+            self.assertEqual(len(calls), 2)
+            self.assertAlmostEqual(result["time"], 9.417 - 3 / 24, places=5)
+            self.assertTrue(destination.is_file())
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ export function DurationSlider() {
     ? 1 + Math.ceil((duration - windowSize + discardSeconds) / stride)
     : 1
   const showSlidingWindow = duration > windowSize
+  const isH3 = modelOptions?.architecture === 'minimax_h3'
 
   // Auto-track: window size follows duration with a +1s buffer until
   // duration exceeds 20s (unless locked).
@@ -61,8 +62,8 @@ export function DurationSlider() {
       </div>
       <input
         type="range"
-        min={1}
-        max={300}
+        min={isH3 ? 4 : 1}
+        max={isH3 ? 15 : 300}
         step={1}
         value={duration}
         onChange={e => setDuration(Number(e.target.value))}

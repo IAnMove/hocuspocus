@@ -16,6 +16,8 @@ const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorP
 // the soundtrack analyzed without converting first.
 const AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a,.mp4,.mov,.mkv,.webm,.avi,.m4v'
 const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.bmp'
+const H3_VIDEO_ACCEPT = '.mp4,.mov,.mkv,.webm,.avi,.m4v'
+const H3_AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a'
 
 function AudioScaleSlider() {
   const audioScale = useStore(s => s.directorAudioScale)
@@ -1572,19 +1574,33 @@ function AdditionalRefsSection() {
   const removeLocRef = useStore(s => s.directorRemoveLocationRef)
   const setLocLabel = useStore(s => s.directorSetLocationRefLabel)
   const reorderLocRefs = useStore(s => s.directorReorderLocationRefs)
+  const referenceImage = useStore(s => s.directorReferenceImage)
+  const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
+  const h3VideoRefs = useStore(s => s.directorH3VideoRefs)
+  const h3AudioRefs = useStore(s => s.directorH3AudioRefs)
+  const addH3VideoRef = useStore(s => s.directorAddH3VideoRef)
+  const removeH3VideoRef = useStore(s => s.directorRemoveH3VideoRef)
+  const addH3AudioRef = useStore(s => s.directorAddH3AudioRef)
+  const removeH3AudioRef = useStore(s => s.directorRemoveH3AudioRef)
   const voiceRef = useStore(s => s.directorVoiceRef)
   const setVoiceRef = useStore(s => s.setDirectorVoiceRef)
   const identityScale = useStore(s => s.directorIdentityGuidanceScale)
   const setIdentityScale = useStore(s => s.setDirectorIdentityGuidanceScale)
-  const [expanded, setExpanded] = useState(charRefs.length > 0 || locRefs.length > 0 || voiceRef !== null)
+  const isH3 = videoModel === 'minimax_h3'
+  const h3UserRefCount = (referenceImage ? 1 : 0) + charRefs.length + locRefs.length + h3VideoRefs.length + h3AudioRefs.length
+  const [expanded, setExpanded] = useState(
+    charRefs.length > 0 || locRefs.length > 0 || h3VideoRefs.length > 0 || h3AudioRefs.length > 0 || voiceRef !== null
+  )
 
   const handleFiles = useCallback((files: FileList | null, type: 'char' | 'loc') => {
     if (!files) return
     const add = type === 'char' ? addCharRef : addLocRef
-    Array.from(files).forEach(f => { if (f.type.startsWith('image/')) add(f) })
-  }, [addCharRef, addLocRef])
+    const imageCount = charRefs.length + locRefs.length + (referenceImage ? 1 : 0)
+    const available = isH3 ? Math.max(0, Math.min(8 - imageCount, 11 - h3UserRefCount)) : files.length
+    Array.from(files).slice(0, available).forEach(f => { if (f.type.startsWith('image/')) add(f) })
+  }, [addCharRef, addLocRef, charRefs.length, locRefs.length, referenceImage, isH3, h3UserRefCount])
 
-  const totalRefs = charRefs.length + locRefs.length + (voiceRef ? 1 : 0)
+  const totalRefs = charRefs.length + locRefs.length + h3VideoRefs.length + h3AudioRefs.length + (voiceRef ? 1 : 0)
 
   return (
     <div className="mt-1">
@@ -1676,6 +1692,60 @@ function AdditionalRefsSection() {
             ) : (
               <p className="text-[9px] text-text-muted/50 italic">~5 sec voice sample for consistent voice across clips</p>
             )}
+          </div>}
+          {isH3 && <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-2 space-y-2">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-medium text-cyan-200">H3 Ref2VA omni references</span>
+                <span className="text-[9px] text-text-muted">
+                  {h3UserRefCount}/11
+                </span>
+              </div>
+              <p className="text-[9px] text-text-muted leading-tight mt-0.5">
+                The generated shot frame reserves slot 12 for continuity. Images above are included automatically.
+              </p>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-text-secondary"><Film size={9} className="inline mr-0.5" />Video refs ({h3VideoRefs.length}/3)</span>
+                {h3VideoRefs.length < 3 && h3UserRefCount < 11 && <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
+                  + Add
+                  <input type="file" accept={H3_VIDEO_ACCEPT} multiple className="hidden"
+                    onChange={e => {
+                      Array.from(e.target.files || []).slice(0, Math.min(3 - h3VideoRefs.length, 11 - h3UserRefCount)).forEach(addH3VideoRef)
+                      e.target.value = ''
+                    }} />
+                </label>}
+              </div>
+              {h3VideoRefs.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="flex items-center gap-1.5 bg-bg-tertiary rounded px-1.5 py-1 mb-1">
+                  <Film size={10} className="text-cyan-300 shrink-0" />
+                  <span className="text-[9px] text-text-secondary truncate flex-1">{file.name}</span>
+                  <button onClick={() => removeH3VideoRef(index)} className="text-red-400"><X size={9} /></button>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-text-secondary"><Mic size={9} className="inline mr-0.5" />Audio refs ({h3AudioRefs.length}/3)</span>
+                {h3AudioRefs.length < 3 && h3UserRefCount < 11 && <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
+                  + Add
+                  <input type="file" accept={H3_AUDIO_ACCEPT} multiple className="hidden"
+                    onChange={e => {
+                      Array.from(e.target.files || []).slice(0, Math.min(3 - h3AudioRefs.length, 11 - h3UserRefCount)).forEach(addH3AudioRef)
+                      e.target.value = ''
+                    }} />
+                </label>}
+              </div>
+              {h3AudioRefs.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="flex items-center gap-1.5 bg-bg-tertiary rounded px-1.5 py-1 mb-1">
+                  <Mic size={10} className="text-cyan-300 shrink-0" />
+                  <span className="text-[9px] text-text-secondary truncate flex-1">{file.name}</span>
+                  <button onClick={() => removeH3AudioRef(index)} className="text-red-400"><X size={9} /></button>
+                </div>
+              ))}
+              <p className="text-[9px] text-text-muted/70">Each video/audio: 2–15 s; each category totals at most 15 s.</p>
+            </div>
           </div>}
         </div>
       )}
@@ -2177,6 +2247,8 @@ function DirectorLoraAccordion() {
   const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
   const selectDirectorImageModel = useStore(s => s.selectDirectorImageModel)
   const selectDirectorVideoModel = useStore(s => s.selectDirectorVideoModel)
+  const h3Profile = useStore(s => s.savedParamsPerMode.video?.h3_model_profile || 'balanced')
+  const setH3Profile = useStore(s => s.setDirectorH3Profile)
   const [imageOpen, setImageOpen] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
 
@@ -2187,6 +2259,20 @@ function DirectorLoraAccordion() {
       <div className="space-y-1 mb-1.5">
         <DirectorModelPicker mode="image" value={imageModel} onChange={selectDirectorImageModel} />
         <DirectorModelPicker mode="video" value={videoModel} onChange={selectDirectorVideoModel} />
+        {videoModel === 'minimax_h3' && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-text-muted uppercase tracking-wider w-11 shrink-0">Profile</span>
+            <select
+              value={h3Profile}
+              onChange={e => setH3Profile(e.target.value as 'balanced' | 'quality' | 'low_memory')}
+              className="flex-1 min-w-0 bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
+            >
+              <option value="balanced">Balanced 4090 · MIXED</option>
+              <option value="quality">Quality 4090 · INT8</option>
+              <option value="low_memory">Low VRAM · INT4</option>
+            </select>
+          </div>
+        )}
       </div>
       {/* Image LoRAs */}
       {imageModel && (

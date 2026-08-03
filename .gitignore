@@ -77,6 +77,10 @@ app/services/hunyuan3d/env/
 app/services/hunyuan3d/vendor/
 app/services/rigging/vendor/
 
+# MiniMax H3 isolated ComfyUI runtime, inputs/outputs, and model weights
+app/services/minimax_h3/env/
+app/services/minimax_h3/vendor/
+
 # Retired optional content supplement pack — the download apparatus is
 # gone (nothing reads the pack anymore), but leftover local copies may
 # still exist on dev machines. Never tracked in git.

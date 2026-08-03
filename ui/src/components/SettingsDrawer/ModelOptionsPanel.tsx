@@ -57,7 +57,7 @@ export function ModelOptionsPanel() {
       {flow_shift && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">Flow Shift</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider">{modelOptions.architecture === 'minimax_h3' ? 'Video Sigma Shift' : 'Flow Shift'}</label>
             <input
               type="number"
               value={params.flow_shift ?? 3.0}
@@ -74,6 +74,46 @@ export function ModelOptionsPanel() {
             value={params.flow_shift ?? 3.0}
             onChange={e => setParam('flow_shift', Number(e.target.value))}
           />
+        </div>
+      )}
+
+      {modelOptions.architecture === 'minimax_h3' && (
+        <div className="space-y-4">
+          <div>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">4090 Model Profile</label>
+            <select
+              value={params.h3_model_profile ?? 'balanced'}
+              onChange={e => setParam('h3_model_profile', e.target.value as 'balanced' | 'quality' | 'low_memory')}
+              className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+            >
+              <option value="balanced">Balanced · MIXED INT4/INT8 (recommended)</option>
+              <option value="quality">Quality · INT8 (largest)</option>
+              <option value="low_memory">Low VRAM · INT4</option>
+            </select>
+            <p className="text-[10px] text-text-muted mt-1">Downloads only the selected FL2VA or Ref2VA checkpoint on first use.</p>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] text-text-muted uppercase tracking-wider">Audio Sigma Shift</label>
+              <input type="number" value={params.h3_audio_shift ?? 3.0}
+                onChange={e => setParam('h3_audio_shift', Number(e.target.value))} step={0.1}
+                className="w-14 bg-bg-tertiary border border-border rounded px-2 py-0.5 text-xs text-text-primary text-center focus:outline-none" />
+            </div>
+            <input type="range" min={0.1} max={20} step={0.1} value={params.h3_audio_shift ?? 3.0}
+              onChange={e => setParam('h3_audio_shift', Number(e.target.value))} />
+            <p className="text-[10px] text-text-muted mt-1">Official default: video 12, audio 3.</p>
+          </div>
+          <div>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Audio Direction</label>
+            <textarea
+              rows={3}
+              value={params.h3_audio_prompt ?? ''}
+              onChange={e => setParam('h3_audio_prompt', e.target.value)}
+              placeholder="Ambience, dialogue, music and sound effects for the clip"
+              className="w-full resize-y bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-accent-blue"
+            />
+            <p className="text-[10px] text-text-muted mt-1">Appended as <code>Audio:</code> when the main prompt has no audio clause. Director adds each shot's planned ambience, effects and dialogue automatically.</p>
+          </div>
         </div>
       )}
 

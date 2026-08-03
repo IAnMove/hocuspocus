@@ -342,6 +342,10 @@ export function StoryLabPanel() {
   const setProject = useStoryStore(state => state.setProject)
   const newProject = useStoryStore(state => state.newProject)
   const activeWorkspace = useStore(state => state.activeWorkspace)
+  const videoModels = useStore(state => state.models)
+  const enabledModels = useStore(state => state.enabledModels)
+  const filmVideoModel = useStore(state => state.selectedModelPerMode.video) || 'ltx2_22B_distilled_1_1'
+  const selectDirectorVideoModel = useStore(state => state.selectDirectorVideoModel)
   const [tab, setTab] = useState<StoryTab>('overview')
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
   const [imageBusy, setImageBusy] = useState('')
@@ -375,6 +379,13 @@ export function StoryLabPanel() {
   const uploadRef = useRef<HTMLInputElement>(null)
   const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
+  const selectableVideoModels = useMemo(
+    () => videoModels
+      .filter(model => model.is_i2v && enabledModels.has(model.model_type) && !model.tool_only)
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    [enabledModels, videoModels],
+  )
+  const selectedFilmVideoModel = videoModels.find(model => model.model_type === filmVideoModel)
 
   useEffect(() => {
     loadWorkspace(activeWorkspace)
@@ -1022,6 +1033,7 @@ export function StoryLabPanel() {
     autoStart = false,
     targetDuration = filmDuration,
     preserveVisualStyle = filmPreserveVisualStyle,
+    videoModel = filmVideoModel,
   ) => {
     const adaptation = buildShortFilmAdaptation(source, direction, targetDuration, {
       preserveVisualStyle,
@@ -1030,12 +1042,13 @@ export function StoryLabPanel() {
     director.directorReset()
     const store = useStore.getState()
     store.setGenerationMode('video')
+    if (videoModel) {
+      await useStore.getState().selectDirectorVideoModel(videoModel)
+    }
     // setSidebarMode normally sends a fresh Director session to its route
     // chooser. Open it before restoring the Story Lab payload, otherwise it
     // overwrites the preloaded `style` step with `upload`.
     store.setSidebarMode('director')
-    const selectedVideoModel = useStore.getState().selectedModelPerMode.video
-    if (selectedVideoModel) await useStore.getState().loadModelOptions(selectedVideoModel)
     store.directorSetSceneDescription(adaptation.sceneDescription)
     store.setDirectorSkill('short_film')
     store.shortFilmSetPath('story')
@@ -1131,6 +1144,7 @@ export function StoryLabPanel() {
             narrative: adaptation.narrative,
             visualStyle: adaptation.visualStyle,
             preserveVisualStyle: adaptation.preserveVisualStyle,
+            videoModel: filmVideoModel,
           },
           status: 'staged',
         }],
@@ -1194,7 +1208,10 @@ export function StoryLabPanel() {
       : DEFAULT_SHORT_FILM_DIRECTION
     const targetDuration = Number(production.targetSnapshot?.targetDuration) || 45
     const preserveVisualStyle = production.targetSnapshot?.preserveVisualStyle !== false
-    await loadFilmProduction(source, direction, false, targetDuration, preserveVisualStyle)
+    const videoModel = typeof production.targetSnapshot?.videoModel === 'string'
+      ? production.targetSnapshot.videoModel
+      : filmVideoModel
+    await loadFilmProduction(source, direction, false, targetDuration, preserveVisualStyle, videoModel)
   }
 
   const restoreProductionSource = (productionId: string) => {
@@ -1562,6 +1579,27 @@ export function StoryLabPanel() {
                         value={filmDuration}
                         onChange={event => setFilmDuration(Math.max(10, Math.min(1800, Number(event.target.value) || 45)))}
                       />
+                    </label>
+                    <label className="block text-[10px] text-text-muted">Video model
+                      <select
+                        className={`${input} mt-1`}
+                        value={filmVideoModel}
+                        onChange={event => void selectDirectorVideoModel(event.target.value)}
+                      >
+                        {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && (
+                          <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>
+                        )}
+                        {selectableVideoModels.map(model => (
+                          <option key={model.model_type} value={model.model_type}>
+                            {model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
+                        {filmVideoModel === 'minimax_h3'
+                          ? 'MiniMax H3 renders every planned shot locally at up to 768p with native stereo audio. Longer shots are continued and assembled automatically.'
+                          : 'LTX uses Maestro’s established multi-shot Director pipeline.'}
+                      </span>
                     </label>
                     <label className="flex items-start gap-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2 cursor-pointer">
                       <input

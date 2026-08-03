@@ -70,6 +70,16 @@ export interface GenerateParams {
   audio_scale?: number
   video_guide?: string
   image_refs?: string[]
+  /** MiniMax H3 Ref2VA video references (their embedded audio is paired automatically). */
+  h3_ref_videos?: string[]
+  /** MiniMax H3 Ref2VA standalone audio references. */
+  h3_ref_audios?: string[]
+  h3_audio_shift?: number
+  /** Sound direction appended as an Audio: clause when the prompt has none. */
+  h3_audio_prompt?: string
+  h3_ref_image_size?: 'match' | 'max'
+  /** Quantized MiniMax H3 checkpoint pair; balanced is tuned for RTX 4090. */
+  h3_model_profile?: 'balanced' | 'quality' | 'low_memory'
   frames_positions?: string
   injection_strength?: number
   settings_version?: number
@@ -423,6 +433,7 @@ export interface ModelOptions {
   pause_between_sentences: boolean
   temperature_enabled: boolean
   custom_settings_def: { id: string; label: string; name: string; type: string }[] | null
+  h3_reference_inputs?: boolean
 }
 
 export interface SystemConfig {

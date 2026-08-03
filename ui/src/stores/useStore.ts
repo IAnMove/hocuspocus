@@ -162,6 +162,8 @@ const EPHEMERAL_PARAM_FIELDS: ReadonlyArray<keyof SavedModeParams> = [
   'image_start',
   'image_end',
   'image_refs',
+  'h3_ref_videos',
+  'h3_ref_audios',
   'video_guide',
   'video_source',
   'audio_guide',
@@ -293,6 +295,10 @@ const _PRIMARY_MODEL_DEFAULT_FIELDS: ReadonlyArray<string> = [
   'num_inference_steps',
   'guidance_scale',
   'flow_shift',
+  'h3_audio_shift',
+  'h3_audio_prompt',
+  'h3_ref_image_size',
+  'h3_model_profile',
   'sample_solver',
   'embedded_guidance_scale',
   'audio_guidance_scale',
@@ -335,6 +341,7 @@ const familyModeMap: Record<string, GenerationMode> = {
   hunyuan_1_5: 'video',
   ltxv: 'video',
   ltx2: 'video',
+  minimax_h3: 'video',
   kandinsky5: 'video',
   tts: 'audio',
   longcat: 'avatar',
@@ -425,6 +432,7 @@ const DEFAULT_ENABLED_MODELS = new Set([
   // Settings → System → Model Visibility but off by default so the
   // first-launch picker isn't overwhelming.
   'ltx2_22B_distilled_1_1',
+  'minimax_h3',
   // Audio — Speech
   'kugelaudio_0_open',
   'qwen3_tts_base',
@@ -443,6 +451,7 @@ const DEFAULT_ENABLED_MODELS = new Set([
 
 const ENABLED_MODELS_KEY = 'maestro_enabled_models'
 const HUNYUAN3D_VISIBILITY_MIGRATION_KEY = 'maestro_hunyuan3d_visibility_v2'
+const MINIMAX_H3_VISIBILITY_MIGRATION_KEY = 'maestro_minimax_h3_visibility_v1'
 
 function _saveEnabledModels(models: Set<string>) {
   try {
@@ -462,6 +471,13 @@ function _loadEnabledModels(): Set<string> | null {
         HUNYUAN3D_MODEL_TYPES.forEach(modelType => models.delete(modelType))
         _saveEnabledModels(models)
         localStorage.setItem(HUNYUAN3D_VISIBILITY_MIGRATION_KEY, '1')
+      }
+      if (localStorage.getItem(MINIMAX_H3_VISIBILITY_MIGRATION_KEY) !== '1') {
+        // H3 did not exist when this persisted set was written, so enable the
+        // new model once for existing users. They can still hide it normally.
+        models.add('minimax_h3')
+        _saveEnabledModels(models)
+        localStorage.setItem(MINIMAX_H3_VISIBILITY_MIGRATION_KEY, '1')
       }
       return models
     }
@@ -1125,6 +1141,10 @@ interface AppState {
   directorLocationRefs: File[]
   directorLocationRefPaths: string[]
   directorLocationRefLabels: string[]
+  directorH3VideoRefs: File[]
+  directorH3VideoRefPaths: string[]
+  directorH3AudioRefs: File[]
+  directorH3AudioRefPaths: string[]
   directorVoiceRef: File | null
   directorVoiceRefPath: string | null
   directorIdentityGuidanceScale: number
@@ -1159,7 +1179,8 @@ interface AppState {
   setDirectorResolution: (preset: ResolutionPreset) => void
   setDirectorAspectRatio: (ratio: AspectRatio) => void
   selectDirectorImageModel: (modelType: string) => void
-  selectDirectorVideoModel: (modelType: string) => void
+  selectDirectorVideoModel: (modelType: string) => Promise<void>
+  setDirectorH3Profile: (profile: 'balanced' | 'quality' | 'low_memory') => void
   directorSetLora: (mode: 'image' | 'video', activated_loras: string[], loras_multipliers: string, loraWeights: Record<string, number[]>, availableLoras: string[]) => void
   setSidebarMode: (mode: 'director' | 'studio') => void
   directorSetSpeakerMapping: (speakerId: string, name: string, role: SpeakerMapping['role']) => void
@@ -1194,6 +1215,10 @@ interface AppState {
   directorRemoveLocationRef: (index: number) => void
   directorSetLocationRefLabel: (index: number, label: string) => void
   directorReorderLocationRefs: (from: number, to: number) => void
+  directorAddH3VideoRef: (file: File) => void
+  directorRemoveH3VideoRef: (index: number) => void
+  directorAddH3AudioRef: (file: File) => void
+  directorRemoveH3AudioRef: (index: number) => void
   directorPlanPrompts: () => Promise<void>
   directorPlanVideoPrompts: () => Promise<void>
   directorGenerateStartImages: () => Promise<void>
@@ -1312,6 +1337,8 @@ const BLANK_VIDEO_INPUT_PARAMS: Partial<GenerateParams> = {
   image_start: undefined,
   image_end: undefined,
   image_refs: undefined,
+  h3_ref_videos: undefined,
+  h3_ref_audios: undefined,
   frames_positions: undefined,
   injection_strength: undefined,
   video_prompt_type: '',
@@ -4312,6 +4339,10 @@ export const useStore = create<AppState>((set, get) => ({
           seed: params.seed,
           negative_prompt: params.negative_prompt,
           flow_shift: params.flow_shift,
+          h3_audio_shift: params.h3_audio_shift,
+          h3_audio_prompt: params.h3_audio_prompt,
+          h3_ref_image_size: params.h3_ref_image_size,
+          h3_model_profile: params.h3_model_profile,
           self_refiner_setting: params.self_refiner_setting,
           stage2_steps: params.stage2_steps,
         },
@@ -4351,15 +4382,16 @@ export const useStore = create<AppState>((set, get) => ({
     set({ modelOptionsLoading: true })
     try {
       const options = await api.fetchModelOptions(modelType)
-      const { durationSeconds, slidingWindowSeconds } = get()
+      const { durationSeconds, slidingWindowSeconds, aspectRatio } = get()
       const fps = options.fps || 16
+      const isH3 = modelType === 'minimax_h3'
       // Set overlap from model defaults
       const swDefaults = (options as unknown as Record<string, unknown>).sliding_window_defaults as Record<string, number> | undefined
       const overlapDefault = swDefaults?.overlap_default ?? 5
       const discardDefault = swDefaults?.discard_last_frames ?? 0
       const paramUpdates: Record<string, unknown> = {
         guidance_phases: options.guidance_max_phases,
-        video_length: Math.round(durationSeconds * fps),
+        video_length: isH3 ? 124 : Math.round(durationSeconds * fps),
         sliding_window_size: Math.round(slidingWindowSeconds * fps),
         sliding_window_overlap: overlapDefault,
         sliding_window_discard_last_frames: discardDefault,
@@ -4397,12 +4429,17 @@ export const useStore = create<AppState>((set, get) => ({
       }
       set(s => ({
         ...ttsDefaults,
+        ...(isH3 ? {
+          durationSeconds: 124 / fps,
+          resolutionPreset: '540p' as ResolutionPreset,
+        } : {}),
         modelOptions: options,
         modelOptionsLoading: false,
         slidingWindowOverlap: overlapDefault,
         params: {
           ...s.params,
           ...paramUpdates,
+          ...(isH3 ? { resolution: resolutionMap['540p'][aspectRatio] } : {}),
         },
       }))
     } catch {
@@ -4673,6 +4710,10 @@ export const useStore = create<AppState>((set, get) => ({
   directorLocationRefs: [],
   directorLocationRefPaths: [],
   directorLocationRefLabels: [],
+  directorH3VideoRefs: [],
+  directorH3VideoRefPaths: [],
+  directorH3AudioRefs: [],
+  directorH3AudioRefPaths: [],
   directorVoiceRef: null,
   directorVoiceRefPath: null,
   directorIdentityGuidanceScale: 3.0,
@@ -4771,11 +4812,58 @@ export const useStore = create<AppState>((set, get) => ({
     }, s.loraIdByFilename)
   },
 
-  selectDirectorVideoModel: (modelType) => {
+  selectDirectorVideoModel: async (modelType) => {
     set(s => ({
       selectedModelPerMode: { ...s.selectedModelPerMode, video: modelType },
+      ...(s.generationMode === 'video' ? {
+        params: { ...s.params, model_type: modelType },
+      } : {}),
     }))
-    get().loadModelOptions(modelType)
+    await get().loadModelOptions(modelType)
+    if (modelType === 'minimax_h3') {
+      set({ directorResolution: '540p' as ResolutionPreset })
+    }
+    try {
+      const defaults = await api.fetchDefaults(modelType)
+      if (get().selectedModelPerMode.video === modelType) {
+        const overrides: Record<string, unknown> = {}
+        for (const field of _PRIMARY_MODEL_DEFAULT_FIELDS) {
+          if (defaults[field] !== undefined) overrides[field] = defaults[field]
+        }
+        if (Object.keys(overrides).length > 0) {
+          set(s => ({
+            savedParamsPerMode: {
+              ...s.savedParamsPerMode,
+              video: { ...(s.savedParamsPerMode.video || {}), ...overrides },
+            },
+            ...(s.generationMode === 'video' ? {
+              params: { ...s.params, ...overrides, model_type: modelType } as GenerateParams,
+            } : {}),
+          }))
+        }
+      }
+    } catch {
+      // Model selection remains usable if the optional defaults request fails.
+    }
+    const s = get()
+    _saveSettings({
+      generationMode: s.generationMode,
+      selectedModelPerMode: s.selectedModelPerMode,
+      savedParamsPerMode: s.savedParamsPerMode,
+      savedLoraPerMode: s.savedLoraPerMode,
+    }, s.loraIdByFilename)
+  },
+
+  setDirectorH3Profile: (profile) => {
+    set(s => ({
+      savedParamsPerMode: {
+        ...s.savedParamsPerMode,
+        video: { ...(s.savedParamsPerMode.video || {}), h3_model_profile: profile },
+      },
+      ...(s.generationMode === 'video' ? {
+        params: { ...s.params, h3_model_profile: profile },
+      } : {}),
+    }))
     const s = get()
     _saveSettings({
       generationMode: s.generationMode,
@@ -5147,6 +5235,24 @@ export const useStore = create<AppState>((set, get) => ({
     const [lF] = labels.splice(from, 1); labels.splice(to, 0, lF)
     return { directorLocationRefs: refs, directorLocationRefPaths: paths, directorLocationRefLabels: labels }
   }),
+  directorAddH3VideoRef: (file) => set(s => (
+    s.directorH3VideoRefs.length >= 3
+      ? {}
+      : { directorH3VideoRefs: [...s.directorH3VideoRefs, file] }
+  )),
+  directorRemoveH3VideoRef: (index) => set(s => ({
+    directorH3VideoRefs: s.directorH3VideoRefs.filter((_, i) => i !== index),
+    directorH3VideoRefPaths: s.directorH3VideoRefPaths.filter((_, i) => i !== index),
+  })),
+  directorAddH3AudioRef: (file) => set(s => (
+    s.directorH3AudioRefs.length >= 3
+      ? {}
+      : { directorH3AudioRefs: [...s.directorH3AudioRefs, file] }
+  )),
+  directorRemoveH3AudioRef: (index) => set(s => ({
+    directorH3AudioRefs: s.directorH3AudioRefs.filter((_, i) => i !== index),
+    directorH3AudioRefPaths: s.directorH3AudioRefPaths.filter((_, i) => i !== index),
+  })),
 
   directorSetSceneDescription: (prompt) => set({ directorSceneDescription: prompt }),
 
@@ -5648,6 +5754,10 @@ export const useStore = create<AppState>((set, get) => ({
       directorLocationRefs: [],
       directorLocationRefPaths: [],
       directorLocationRefLabels: [],
+      directorH3VideoRefs: [],
+      directorH3VideoRefPaths: [],
+      directorH3AudioRefs: [],
+      directorH3AudioRefPaths: [],
       directorVoiceRef: null,
       directorVoiceRefPath: null,
       directorClipImages: [],
@@ -6370,11 +6480,16 @@ export const useStore = create<AppState>((set, get) => ({
     newParams.image_prompt_type = (p.image_prompt_type as string) || ''
     newParams.input_video_strength = (p.input_video_strength as number) ?? undefined
     newParams.flow_shift = (p.flow_shift as number) ?? undefined
+    newParams.h3_audio_shift = (p.h3_audio_shift as number) ?? undefined
+    newParams.h3_audio_prompt = (p.h3_audio_prompt as string) || undefined
+    newParams.h3_ref_image_size = (p.h3_ref_image_size as 'match' | 'max') ?? undefined
     newParams.self_refiner_setting = (p.self_refiner_setting as number) ?? undefined
     newParams.audio_guide = (p.audio_guide as string) || ''
     newParams.audio_guide2 = (p.audio_guide2 as string) || ''
     newParams.video_guide = (p.video_guide as string) || ''
     newParams.image_refs = Array.isArray(p.image_refs) ? (p.image_refs as string[]) : []
+    newParams.h3_ref_videos = Array.isArray(p.h3_ref_videos) ? (p.h3_ref_videos as string[]) : []
+    newParams.h3_ref_audios = Array.isArray(p.h3_ref_audios) ? (p.h3_ref_audios as string[]) : []
     newParams.frames_positions = (p.frames_positions as string) || ''
     newParams.injection_strength = (p.injection_strength as number) ?? undefined
     newParams.remove_background_images_ref = (p.remove_background_images_ref as number) ?? 0
@@ -6874,6 +6989,33 @@ export const useStore = create<AppState>((set, get) => ({
     if (locPaths.length > state.directorLocationRefPaths.length) {
       set({ directorLocationRefPaths: locPaths })
     }
+    // Ref2VA media are Director-session inputs. Upload lazily only when H3 is
+    // the selected renderer; generic /upload accepts video while audio keeps
+    // its dedicated normalization endpoint.
+    const isH3 = selectedModelPerMode.video === 'minimax_h3'
+    const h3VideoRefPaths = [...state.directorH3VideoRefPaths]
+    const h3AudioRefPaths = [...state.directorH3AudioRefPaths]
+    if (isH3) {
+      for (let i = h3VideoRefPaths.length; i < state.directorH3VideoRefs.length; i++) {
+        try {
+          const uploaded = await api.uploadImage(state.directorH3VideoRefs[i])
+          h3VideoRefPaths.push(uploaded.path)
+        } catch (error) {
+          console.error('Failed to upload an H3 video reference:', error)
+          break
+        }
+      }
+      for (let i = h3AudioRefPaths.length; i < state.directorH3AudioRefs.length; i++) {
+        try {
+          const uploaded = await api.uploadAudio(state.directorH3AudioRefs[i])
+          h3AudioRefPaths.push(uploaded.path)
+        } catch (error) {
+          console.error('Failed to upload an H3 audio reference:', error)
+          break
+        }
+      }
+      set({ directorH3VideoRefPaths: h3VideoRefPaths, directorH3AudioRefPaths: h3AudioRefPaths })
+    }
     // Upload voice reference if not already uploaded
     let voiceRefPath = state.directorVoiceRefPath
     if (!voiceRefPath && state.directorVoiceRef) {
@@ -6941,7 +7083,14 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Video gen settings
       video_model: selectedModelPerMode.video || 'ltx2_22B_distilled_1_1',
-      video_params: { ...(savedParamsPerMode.video || { num_inference_steps: 8, guidance_scale: 1 }), resolution: directorRes },
+      video_params: {
+        ...(savedParamsPerMode.video || { num_inference_steps: 8, guidance_scale: 1 }),
+        resolution: directorRes,
+        ...(isH3 ? {
+          h3_ref_videos: h3VideoRefPaths,
+          h3_ref_audios: h3AudioRefPaths,
+        } : {}),
+      },
       video_loras: savedLoraPerMode.video || {},
       video_spatial_upsampling: directorVideoSpatialUpsampling,
       video_film_grain_intensity: directorVideoFilmGrainIntensity,

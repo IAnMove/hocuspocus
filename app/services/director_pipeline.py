@@ -5921,6 +5921,303 @@ def _run_comic_renderer_pipeline(
     return [final_name]
 
 
+def _minimax_h3_frame_segments(duration_sec: float, fps: int = 24) -> list[int]:
+    """Split a requested duration into H3's 17n+5 frame lattice.
+
+    Open H3 accepts 107..362 frames per request.  Director shots can be much
+    longer, so keep every segment valid while making the assembled duration
+    as close as possible to the authored shot duration.
+    """
+    minimum, maximum, step, offset = 107, 362, 17, 5
+    requested = max(minimum, round(max(0.0, float(duration_sec)) * fps))
+    count = max(1, (requested + maximum - 1) // maximum)
+    target = requested / count
+
+    def quantize(value: float) -> int:
+        aligned = round((value - offset) / step) * step + offset
+        return max(minimum, min(maximum, aligned))
+
+    segments = [quantize(target) for _ in range(count)]
+    # Adjust by whole latent steps until the total is within half a step of
+    # the request (or no segment can move further).
+    while requested - sum(segments) > step / 2:
+        candidates = [index for index, value in enumerate(segments) if value + step <= maximum]
+        if not candidates:
+            break
+        index = max(candidates, key=lambda item: target - segments[item])
+        segments[index] += step
+    while sum(segments) - requested > step / 2:
+        candidates = [index for index, value in enumerate(segments) if value - step >= minimum]
+        if not candidates:
+            break
+        index = max(candidates, key=lambda item: segments[item] - target)
+        segments[index] -= step
+    return segments
+
+
+def _minimax_h3_audio_direction(plan: dict, global_direction: str = "") -> str:
+    """Render Director's structured per-shot sound plan for H3."""
+    audio_plan = plan.get("audio_plan") if isinstance(plan.get("audio_plan"), dict) else {}
+    parts: list[str] = []
+
+    ambience = " ".join(str(audio_plan.get("ambience") or "").split())
+    if ambience:
+        parts.append(f"Ambience: {ambience}.")
+
+    raw_effects = audio_plan.get("effects") or []
+    if isinstance(raw_effects, str):
+        raw_effects = [raw_effects]
+    effects = [" ".join(str(effect).split()) for effect in raw_effects if str(effect).strip()]
+    if effects:
+        parts.append(f"Sound effects: {', '.join(effects)}.")
+
+    dialogue_lines: list[str] = []
+    for beat in plan.get("dialogue_beats") or []:
+        if not isinstance(beat, dict):
+            continue
+        spoken = " ".join(str(beat.get("spoken_text") or beat.get("text") or "").split())
+        if not spoken:
+            continue
+        speaker = " ".join(str(beat.get("speaker_name") or beat.get("speaker_id") or "").split())
+        delivery = " ".join(str(beat.get("delivery") or "").split())
+        cue = f'{speaker + " says " if speaker else "Spoken dialogue "}"{spoken}"'
+        if delivery:
+            cue += f" ({delivery})"
+        dialogue_lines.append(cue)
+    if dialogue_lines:
+        parts.append("; ".join(dialogue_lines) + ".")
+
+    vocal_style = " ".join(str(audio_plan.get("vocal_style") or "").split())
+    if vocal_style:
+        parts.append(f"Vocal style: {vocal_style}.")
+    if audio_plan.get("lip_sync_critical"):
+        parts.append("Natural, precise lip sync for every spoken line.")
+
+    mode = str(audio_plan.get("mode") or "").strip().lower()
+    if mode == "ambient_only" and not dialogue_lines:
+        parts.append("No spoken dialogue; use natural scene ambience and synchronized action sounds.")
+    elif mode == "dialogue_driven" and not dialogue_lines:
+        parts.append("Clear foreground speech with natural lip sync over restrained ambience.")
+
+    global_audio = " ".join(str(global_direction or "").split())
+    if global_audio:
+        parts.append(global_audio)
+    return " ".join(parts)
+
+
+def _minimax_h3_segment_prompt(
+    plan: dict,
+    segment_index: int,
+    segment_count: int,
+    global_audio_direction: str = "",
+) -> str:
+    """Choose the authored continuation and attach its explicit audio plan."""
+    window_prompts = plan.get("window_prompts") or []
+    normalized = [
+        str(item.get("prompt", item.get("text", ""))) if isinstance(item, dict) else str(item)
+        for item in window_prompts
+    ]
+    normalized = [item for item in normalized if item.strip()]
+    if normalized:
+        prompt_index = min(len(normalized) - 1, segment_index * len(normalized) // segment_count)
+        prompt = normalized[prompt_index]
+    else:
+        prompt = str(plan.get("video_prompt") or "")
+
+    try:
+        from services import minimax_h3_service
+    except ImportError:  # pytest imports this module through app.services
+        from app.services import minimax_h3_service
+    return minimax_h3_service.ensure_audio_prompt(
+        prompt,
+        _minimax_h3_audio_direction(plan, global_audio_direction),
+    )
+
+
+def _run_minimax_h3_story_video(
+    pid: str,
+    params: dict,
+    clip_plans: list[dict],
+    planned_clips: list[dict],
+    clip_images: list[str],
+    video_params: dict,
+    resolution: str,
+    out_dir: str,
+    workspace: str = None,
+) -> list[str]:
+    """Render a complete Story short film as sequential native-audio H3 clips."""
+    fps = 24
+    global_image_refs: list[str] = []
+    for candidate in [
+        params.get("reference_image_path"),
+        *(params.get("character_ref_paths") or []),
+        *(params.get("location_ref_paths") or []),
+        *(video_params.get("image_refs") or []),
+    ]:
+        path = str(candidate or "").strip()
+        if path and path not in global_image_refs:
+            global_image_refs.append(path)
+    video_refs = [str(path) for path in (video_params.get("h3_ref_videos") or []) if path]
+    audio_refs = [str(path) for path in (video_params.get("h3_ref_audios") or []) if path]
+    uses_ref2va = bool(global_image_refs or video_refs or audio_refs)
+    if len(global_image_refs) > 8:
+        raise ValueError(
+            "MiniMax H3 Story supports at most 8 user reference images because "
+            "the generated shot frame occupies Ref2VA image slot 9."
+        )
+    if len(video_refs) > 3 or len(audio_refs) > 3:
+        raise ValueError("MiniMax H3 Ref2VA accepts at most 3 videos and 3 audio files.")
+    if uses_ref2va and len(global_image_refs) + len(video_refs) + len(audio_refs) + 1 > 12:
+        raise ValueError(
+            "MiniMax H3 Ref2VA accepts at most 12 references total, including "
+            "the generated shot frame used for continuity."
+        )
+
+    jobs: list[tuple[int, int, int, int, str]] = []
+    for shot_index, plan in enumerate(clip_plans):
+        planned = planned_clips[shot_index] if shot_index < len(planned_clips) else {}
+        duration = planned.get("duration_sec") or (
+            float(planned.get("end", 0) or 0) - float(planned.get("start", 0) or 0)
+        )
+        if duration <= 0:
+            duration_frames = planned.get("duration_frames")
+            duration = float(duration_frames) / fps if duration_frames else 5.0
+        frame_segments = _minimax_h3_frame_segments(duration, fps)
+        for segment_index, frames in enumerate(frame_segments):
+            jobs.append((
+                shot_index,
+                segment_index,
+                len(frame_segments),
+                frames,
+                _minimax_h3_segment_prompt(
+                    plan,
+                    segment_index,
+                    len(frame_segments),
+                    str(video_params.get("h3_audio_prompt") or ""),
+                ),
+            ))
+
+    if not jobs:
+        raise RuntimeError("MiniMax H3 received no planned Story shots to render.")
+
+    outputs: list[str] = []
+    continuation_frames: list[str] = []
+    current_shot = -1
+    segment_start = ""
+    try:
+        for job_index, (shot_index, segment_index, segment_count, frames, prompt) in enumerate(jobs):
+            if _pipeline_cancel_requested(pid):
+                raise PipelineCancelled("Director pipeline was cancelled.")
+
+            if shot_index != current_shot:
+                current_shot = shot_index
+                image_name = clip_images[shot_index] if shot_index < len(clip_images) else ""
+                candidate = image_name if os.path.isabs(image_name) else os.path.join(out_dir, image_name)
+                segment_start = candidate if image_name and os.path.isfile(candidate) else ""
+
+            gen_params: dict = {
+                "model_type": "minimax_h3",
+                "prompt": prompt,
+                "image_mode": 0,
+                "image_prompt_type": "S" if segment_start else "",
+                "num_inference_steps": video_params.get("num_inference_steps", 20),
+                "guidance_scale": video_params.get("guidance_scale", 1),
+                "resolution": resolution,
+                "video_length": frames,
+                "seed": -1,
+                "settings_version": 2.52,
+                "generation_mode": "video",
+                "repeat_generation": 1,
+                "negative_prompt": "",
+                "flow_shift": video_params.get("flow_shift", 12),
+                "h3_audio_shift": video_params.get("h3_audio_shift", 3),
+                "h3_audio_prompt": video_params.get("h3_audio_prompt", ""),
+                "h3_ref_image_size": video_params.get("h3_ref_image_size", "match"),
+                "h3_model_profile": video_params.get("h3_model_profile", "balanced"),
+                "_director_pipeline_id": pid,
+            }
+            if uses_ref2va:
+                image_refs = [segment_start, *global_image_refs] if segment_start else list(global_image_refs)
+                gen_params["image_refs"] = [path for path in image_refs if path]
+                gen_params["h3_ref_videos"] = video_refs
+                gen_params["h3_ref_audios"] = audio_refs
+            elif segment_start:
+                gen_params["image_start"] = segment_start
+
+            print(
+                f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1}, "
+                f"segment {segment_index + 1}/{segment_count}: {frames} frames"
+            )
+            generated = _submit_and_wait(
+                gen_params,
+                timeout_s=7200,
+                workspace=workspace,
+                out_dir=out_dir,
+            )
+            if not generated:
+                raise RuntimeError(
+                    f"MiniMax H3 returned no video for shot {shot_index + 1}, "
+                    f"segment {segment_index + 1}."
+                )
+            outputs.extend(generated)
+            generated_path = generated[-1] if os.path.isabs(generated[-1]) else os.path.join(out_dir, generated[-1])
+
+            if segment_index + 1 < segment_count:
+                from services.video_editor import extract_frame, probe_media
+                continuation_path = os.path.join(
+                    out_dir,
+                    f".minimax_h3_{pid}_{shot_index + 1}_{segment_index + 1}_continuation.png",
+                )
+                media = probe_media(generated_path)
+                extract_frame(generated_path, continuation_path, float(media["duration"]))
+                continuation_frames.append(continuation_path)
+                segment_start = continuation_path
+
+            _update_pipeline(
+                pid,
+                progress={
+                    "current": job_index + 1,
+                    "total": len(jobs),
+                    "message": f"Generated MiniMax H3 segment {job_index + 1}/{len(jobs)}",
+                    "step": 0,
+                    "total_steps": 0,
+                },
+            )
+            _save_pipeline_state(pid)
+    finally:
+        for path in continuation_frames:
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                pass
+
+    if len(outputs) == 1:
+        return outputs
+
+    final_name = f"minimax_h3_{pid}_multiclip.mp4"
+    final_path = os.path.join(out_dir, final_name)
+    clip_paths = [name if os.path.isabs(name) else os.path.join(out_dir, name) for name in outputs]
+    if not _wgp.concatenate_multi_clip_videos(clip_paths, final_path, None):
+        raise RuntimeError(
+            "MiniMax H3 rendered every segment, but final short-film assembly failed. "
+            "The individual clips were preserved."
+        )
+    sidecar = {
+        "params": {
+            "model_type": "minimax_h3",
+            "resolution": resolution,
+            "source_clips": [os.path.basename(path) for path in clip_paths],
+            "director_pipeline_id": pid,
+        },
+        "generation_mode": "video",
+        "created_at": time.time(),
+    }
+    with open(os.path.splitext(final_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
+        json.dump(sidecar, handle, indent=2)
+    return [*outputs, final_name]
+
+
 def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                           planned_clips: list[dict], clip_images: list[str],
                           clip_keyframes: Optional[list[list[str]]] = None,
@@ -6046,6 +6343,22 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
 
     if not out_dir:
         out_dir = _wgp.save_path
+
+    # H3's open model renders one native-audio clip per request and has no
+    # WanGP multi-clip/sliding-window contract. Story mode therefore runs its
+    # planned shots explicitly and assembles them with their embedded audio.
+    if video_model == "minimax_h3" and pipeline_type == "short_film_story":
+        return _run_minimax_h3_story_video(
+            pid,
+            params,
+            clip_plans,
+            planned_clips,
+            clip_images,
+            video_params,
+            resolution,
+            out_dir,
+            workspace,
+        )
 
     # Quantize helper
     try:

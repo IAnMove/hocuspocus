@@ -32,6 +32,79 @@ Direct access to every model and every knob:
 - **Sliding window** for arbitrarily long generations
 - **Spatial upsampling, film grain, codec selection** as post-processing options
 
+### 🎥 MiniMax H3 — native video and stereo audio
+
+Studio Video includes the open **MiniMax H3 Base** model through an isolated, quantized ComfyUI runtime designed for 24 GB NVIDIA cards. One model card exposes all three official workflows:
+
+- **T2VA**: prompt only; describe shots, dialogue, music, ambience and sound effects together.
+- **FL2VA**: add a first frame, a last frame, or both.
+- **Ref2VA**: up to 9 images, 3 videos and 3 audio clips (12 files total). Video soundtracks are paired automatically. Audio-only references are not valid; include at least one image or video.
+
+H3 outputs 24 fps video with native 32 kHz stereo audio. The open Base release supports a canvas up to 768×1344 and 4–15 second clips. Maestro aligns duration to H3's `17k+5` frame grid. The RTX 4090 defaults are **960×544, 124 frames and 20 steps**; choose a larger canvas when quality matters more than turnaround. `H3-Regenerate-2K` is not part of the open checkpoint and therefore is not presented as a local option.
+
+The Advanced/Model Options panel exposes inference steps, seed, video sigma shift (default 12), audio sigma shift (default 3), an editable **Audio Direction**, resolution, reference-image sizing and three lazy-downloaded ConvRot profiles: **Balanced 4090** (MIXED INT4/INT8 DiT + INT4 encoder, default), **Quality 4090** (INT8 + INT8) and **Low VRAM** (INT4 + INT4). Maestro appends that direction as an `Audio:` clause when a Studio prompt does not already contain one, avoiding technically valid but nearly silent mixes. Reference prompts use `<Picture 1>`, `<Video 1>` and `<Audio 1>` tags. Ref2VA's separate DiT downloads only when a reference workflow is first requested.
+
+Director → Short Film → Story also supports H3 Ref2VA. Its main artwork, character references and location references are passed as images automatically; the Additional References panel adds up to three 2–15 second video clips and three audio clips. One of H3's 12 slots is reserved for each generated shot's continuity frame. Director's structured per-shot audio plan (ambience, effects, vocal style and exact dialogue) is rendered into every H3 prompt automatically.
+
+#### MiniMax H3 API
+
+All normal Maestro job/status/cancel endpoints apply. A complete text-to-video request with curl:
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_type": "minimax_h3",
+    "prompt": "A wide shot of waves at night. Audio: surf, wind and a low cello motif.",
+    "resolution": "960x544",
+    "video_length": 124,
+    "num_inference_steps": 20,
+    "h3_model_profile": "balanced",
+    "seed": -1,
+    "flow_shift": 12,
+    "h3_audio_shift": 3
+  }'
+```
+
+Python:
+
+```python
+import requests
+
+job = requests.post(f"{MAESTRO_URL}/api/v1/generate", json={
+    "model_type": "minimax_h3",
+    "prompt": "<Picture 1> walks through a rainstorm. Audio: footsteps and distant thunder.",
+    "resolution": "768x1344",
+    "video_length": 243,
+    "num_inference_steps": 20,
+    "seed": 42,
+    "image_refs": ["/absolute/path/from-the-upload-endpoint.png"],
+    "h3_ref_image_size": "max",
+}).json()
+print(job["job_id"])
+```
+
+JavaScript:
+
+```javascript
+const response = await fetch(`${MAESTRO_URL}/api/v1/generate`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    model_type: 'minimax_h3',
+    prompt: '<Video 1> in a new location. Preserve <Audio 1> as a sonic reference.',
+    resolution: '1344x768',
+    video_length: 362,
+    num_inference_steps: 20,
+    seed: 1234,
+    h3_ref_videos: ['/absolute/path/from-the-upload-endpoint.mp4'],
+  }),
+})
+const { job_id } = await response.json()
+```
+
+Use `POST /api/v1/upload` first for local reference assets, then pass the returned `path`. Poll `GET /api/v1/status/{job_id}` or cancel with `POST /api/v1/cancel/{job_id}`.
+
 ### 📚 Story Lab — reusable stories, worlds and characters
 Story Lab is a production bible that sits before Comic Studio and Director. Write a premise once, then generate or manually edit the logline, synopsis, world rules, locations, character psychology and appearance, relationships, dramatic beats, and ending. Every generated field stays editable.
 
@@ -243,6 +316,7 @@ Maestro is built on top of, and indebted to, the following projects:
 - [**Wan2GP / WanGP**](https://github.com/deepbeepmeep/Wan2GP) by [@deepbeepmeep](https://github.com/deepbeepmeep) — the entire generation pipeline. Maestro inherits WanGP's non-commercial license.
 - [**LTX-Video**](https://github.com/Lightricks/LTX-Video) by Lightricks — LTX-2 and LTX-2.3 distilled models.
 - [**Wan 2.1 / 2.2**](https://github.com/Wan-Video/Wan2.1) by Alibaba — text-to-video and image-to-video.
+- [**MiniMax H3**](https://huggingface.co/MiniMaxAI/MiniMax-H3) by MiniMax and its [ComfyUI implementation](https://github.com/Comfy-Org/ComfyUI/pull/15224) — omni-modal video generation with native stereo audio.
 - [**Flux**](https://github.com/black-forest-labs/flux) by Black Forest Labs — image generation.
 - [**Qwen**](https://github.com/QwenLM/Qwen) by Alibaba — image generation and LLMs.
 - [**Gemma**](https://ai.google.dev/gemma) by Google — Gemma 4 LLM (default for Director mode).

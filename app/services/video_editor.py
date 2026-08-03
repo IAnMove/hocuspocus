@@ -101,26 +101,42 @@ def extract_frame(
     media = probe_media(source)
     fps = max(float(media.get("fps") or 0), 1.0)
     duration = float(media["duration"])
-    timestamp = max(0.0, min(float(time_seconds), duration - (1.0 / fps)))
-    _run(
-        [
-            "ffmpeg",
-            "-y",
-            "-i",
-            source,
-            "-ss",
-            f"{timestamp:.6f}",
-            "-map",
-            "0:v:0",
-            "-frames:v",
-            "1",
-            "-c:v",
-            "png",
-            destination,
-        ],
-        timeout=120,
-        label=f"Capturing {os.path.basename(source)} at {timestamp:.3f}s",
-    )
+    requested = max(0.0, float(time_seconds))
+    # Container duration can extend a fraction beyond the final video PTS.
+    # Seeking to duration-1/fps may then return success but write no frame.
+    end_margin_frames = 2 if requested >= duration - (1.0 / fps) else 1
+    timestamp = max(0.0, min(requested, duration - (end_margin_frames / fps)))
+
+    def capture(at: float) -> None:
+        _run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                source,
+                "-ss",
+                f"{at:.6f}",
+                "-map",
+                "0:v:0",
+                "-frames:v",
+                "1",
+                "-c:v",
+                "png",
+                destination,
+            ],
+            timeout=120,
+            label=f"Capturing {os.path.basename(source)} at {at:.3f}s",
+        )
+
+    capture(timestamp)
+    if not os.path.isfile(destination) or os.path.getsize(destination) <= 0:
+        timestamp = max(0.0, duration - (3.0 / fps))
+        capture(timestamp)
+    if not os.path.isfile(destination) or os.path.getsize(destination) <= 0:
+        raise RuntimeError(
+            f"FFmpeg did not produce a frame from {os.path.basename(source)} "
+            f"near {time_seconds:.3f}s."
+        )
     return {
         "time": round(timestamp, 6),
         "width": int(media["width"]),

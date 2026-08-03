@@ -91,7 +91,7 @@ if _hf_token_path:
 # Now safe to import wgp - all module-level code will run with patched argv
 print("[Maestro] Importing WanGP engine...")
 import wgp
-from services import model3d_service
+from services import model3d_service, minimax_h3_service
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 print(f"[Maestro] WanGP loaded: {len(wgp.displayed_model_types)} models available")
@@ -287,6 +287,8 @@ def _request_generation_cancel(job_id: str) -> dict:
         model = getattr(wgp, "wan_model", None)
         if model is not None and hasattr(model, "_interrupt"):
             model._interrupt = True
+        if job.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID:
+            minimax_h3_service.cancel()
         # Keep the job non-terminal until _run_generation's finally block
         # confirms it has unwound and removed its active GPU state.
         return {"status": "cancelling", "was_running": True}
@@ -318,6 +320,8 @@ def _check_model_downloaded(model_type: str) -> bool:
     Models often list multiple URLs (e.g. full bf16 + quantized int8).
     The user only needs ONE variant downloaded, so check all URLs.
     """
+    if model_type == minimax_h3_service.MODEL_ID:
+        return minimax_h3_service.is_model_downloaded()
     try:
         md = wgp.get_model_def(model_type)
         if not md:
@@ -359,6 +363,7 @@ def list_models():
             continue
         families.append({"id": fid, "label": label, "order": order})
     families.append({"id": "hunyuan3d", "label": "Hunyuan3D", "order": 350})
+    families.append({"id": "minimax_h3", "label": "MiniMax H3", "order": 65})
     families.sort(key=lambda f: f["order"])
 
     # Models
@@ -410,6 +415,22 @@ def list_models():
             "shared_cache_group": [item["id"] for item in model3d_service.models_sharing_repo(model["id"])],
         })
 
+    models.append({
+        "model_type": minimax_h3_service.MODEL_ID,
+        "name": minimax_h3_service.MODEL_NAME,
+        "family": "minimax_h3",
+        "architecture": minimax_h3_service.MODEL_ID,
+        "is_i2v": True,
+        "is_t2v": True,
+        "guidance_max_phases": 1,
+        "fps": 24,
+        "supports_end_frame": True,
+        "supports_audio": True,
+        "supports_ref_images": True,
+        "is_downloaded": minimax_h3_service.is_model_downloaded(),
+        "nsfw_only": False,
+    })
+
     # UniRig is a generative ML model too (autoregressive skeleton + learned
     # skinning), so its weights are managed from the same catalog. tool_only
     # keeps it out of the generation model selectors: it rigs existing
@@ -438,6 +459,13 @@ def list_models():
 @api.get("/api/v1/models/{model_type}/debug")
 def debug_model(model_type: str):
     """Debug: show raw model definition and download check."""
+    if model_type == minimax_h3_service.MODEL_ID:
+        return {
+            "model_type": model_type,
+            "runtime_installed": minimax_h3_service.is_runtime_installed(),
+            "is_downloaded": minimax_h3_service.is_model_downloaded(),
+            "runtime_dir": str(minimax_h3_service.COMFY_DIR),
+        }
     if model_type in model3d_service.MODEL_BY_ID:
         model = model3d_service.MODEL_BY_ID[model_type]
         return {
@@ -471,6 +499,9 @@ def debug_model(model_type: str):
 @api.delete("/api/v1/models/{model_type}")
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
+    if model_type == minimax_h3_service.MODEL_ID:
+        deleted = minimax_h3_service.delete_model_cache()
+        return {"deleted": deleted, "model_type": model_type, "affected_models": []}
     if model_type == "unirig":
         from services import rig_service
         deleted = rig_service.delete_unirig_cache()
@@ -516,6 +547,8 @@ def list_resolutions():
 @api.get("/api/v1/defaults/{model_type}")
 def get_defaults(model_type: str):
     """Get default settings for a model type."""
+    if model_type == minimax_h3_service.MODEL_ID:
+        return minimax_h3_service.DEFAULTS
     if wgp.get_model_def(model_type) is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
     defaults = wgp.get_default_settings(model_type)
@@ -1102,6 +1135,8 @@ def list_all_installed_loras():
 @api.get("/api/v1/loras/{model_type}")
 def list_loras(model_type: str):
     """List available LoRA files for a model type."""
+    if model_type == minimax_h3_service.MODEL_ID:
+        return {"loras": [], "guidance_max_phases": 1}
     if model_type in model3d_service.MODEL_BY_ID:
         return {"loras": [], "guidance_max_phases": 1}
     md = wgp.get_model_def(model_type)
@@ -1131,6 +1166,8 @@ def list_loras(model_type: str):
 @api.get("/api/v1/loras/{model_type}/details")
 def list_loras_details(model_type: str):
     """List LoRAs with metadata from .civitai.json sidecars."""
+    if model_type == minimax_h3_service.MODEL_ID:
+        return {"loras": [], "guidance_max_phases": 1}
     if model_type in model3d_service.MODEL_BY_ID:
         return {"loras": [], "guidance_max_phases": 1}
     md = wgp.get_model_def(model_type)
@@ -4083,6 +4120,8 @@ async def scan_and_generate_guides(request: Request):
 @api.get("/api/v1/model-options/{model_type}")
 def get_model_options(model_type: str):
     """Return UI-relevant model options for dynamic rendering."""
+    if model_type == minimax_h3_service.MODEL_ID:
+        return minimax_h3_service.MODEL_OPTIONS
     if model_type in model3d_service.MODEL_BY_ID:
         return {
             "model_type": model_type,
@@ -6752,7 +6791,8 @@ async def generate(request: Request):
     if not is_sfx and not body.get("prompt"):
         raise HTTPException(status_code=400, detail="prompt is required")
     # SFX virtual models (mmaudio_*) are frontend-only; skip backend model validation
-    if not is_sfx and wgp.get_model_def(body["model_type"]) is None:
+    if (not is_sfx and body["model_type"] != minimax_h3_service.MODEL_ID
+            and wgp.get_model_def(body["model_type"]) is None):
         raise HTTPException(status_code=400, detail=f"Unknown model: {body['model_type']}")
 
     # Defense: normalize video_prompt_type so flags whose required input
@@ -9794,6 +9834,11 @@ def _run_generation(job_id: str):
             job["status"] = "running"
             job["message"] = "Preparing..."
 
+            # A Comfy sidecar owns the GPU while H3 runs. Stop it before any
+            # normal WanGP job so the two runtimes never retain VRAM together.
+            if job.get("params", {}).get("model_type") != minimax_h3_service.MODEL_ID:
+                minimax_h3_service.stop_runtime()
+
             # Per-job VRAM coefficient adjustment — accounts for active
             # LoRAs and pipeline stage count beyond what the auto-tuned
             # base captures. Mutates wgp.args.vram_safety_coefficient
@@ -9835,6 +9880,44 @@ def _run_generation(job_id: str):
 
             # Build task manifest from user params
             raw_params = job["params"].copy()
+
+            # MiniMax H3 runs through the isolated, quantized Comfy runtime.
+            # It still uses Maestro's normal queue/status/cancel contract.
+            if raw_params.get("model_type") == minimax_h3_service.MODEL_ID:
+                wgp.release_model()
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+                def _h3_progress(message: str, value: int) -> None:
+                    job["message"] = message
+                    job["progress"] = max(0, min(100, int(value)))
+
+                generated = minimax_h3_service.generate(
+                    raw_params,
+                    job_id,
+                    job["out_dir"],
+                    _h3_progress,
+                    lambda: bool(job.get("_cancel_requested")),
+                )
+                output_names = [os.path.basename(path) for path in generated]
+                job["output_files"] = output_names
+                sidecar = {
+                    "params": raw_params,
+                    "upload_filenames": {},
+                    "generation_mode": "video",
+                    "job_id": job_id,
+                    "generation_time": round(time.time() - start_time),
+                    "created_at": time.time(),
+                }
+                for path in generated:
+                    meta_path = os.path.splitext(path)[0] + ".meta.json"
+                    with open(meta_path, "w", encoding="utf-8") as handle:
+                        json.dump(sidecar, handle, indent=2)
+                job["status"] = "completed"
+                job["progress"] = 100
+                job["message"] = "Done"
+                return
 
             # Inject progressive pipeline setting from services config (applies to all paths)
             _services_cfg = wgp.server_config.get("services", {})
