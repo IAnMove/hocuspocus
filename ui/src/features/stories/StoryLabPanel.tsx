@@ -1456,7 +1456,16 @@ export function StoryLabPanel() {
     try {
       const brief = project.music.brief.trim()
         || storySongBrief(project, project.music.targetDurationSeconds)
-      const written = await api.writeSong({ description: brief })
+      const written = await api.writeSong({
+        target: 'minimax',
+        model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
+        description: brief,
+        style_direction: project.music.style || `${project.genre}, ${project.tone}`,
+        lyrics_direction: project.music.lyrics || project.music.sourceLyrics,
+        story_context: storySongBrief(project, project.music.targetDurationSeconds),
+        language: project.language,
+        duration_seconds: project.music.targetDurationSeconds,
+      })
       patch({
         music: {
           ...project.music,
@@ -1489,13 +1498,14 @@ export function StoryLabPanel() {
       const storyBrief = project.music.brief.trim()
         || storySongBrief(project, project.music.targetDurationSeconds)
       const written = await api.writeSong({
-        description: [
-          storyBrief,
-          'Write completely original replacement lyrics for this Story.',
-          'Keep only the broad section order, approximate meter and singability of the source; do not copy distinctive wording, names or lines.',
-          'SOURCE LYRICS / STRUCTURE REFERENCE:',
-          sourceLyrics.slice(0, 6000),
-        ].join('\n\n'),
+        target: 'minimax',
+        model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
+        description: 'Write completely original replacement lyrics for this Story. Keep only the broad section order, approximate meter and singability of the authorized source; do not copy distinctive wording, names or lines.',
+        style_direction: project.music.style || storyBrief,
+        lyrics_direction: sourceLyrics,
+        story_context: storySongBrief(project, project.music.targetDurationSeconds),
+        language: project.language,
+        duration_seconds: project.music.targetDurationSeconds,
       })
       patch({
         music: {
@@ -1566,7 +1576,16 @@ export function StoryLabPanel() {
       let lyrics = project.music.lyrics.trim()
       if (!style || (project.music.mode === 'original' && !lyrics)) {
         activity.update('Story Lab is writing the missing song prompt and lyrics…', 'writing_song', 0, 1)
-        const written = await api.writeSong({ description: brief })
+        const written = await api.writeSong({
+          target: 'minimax',
+          model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
+          description: brief,
+          style_direction: style || `${project.genre}, ${project.tone}`,
+          lyrics_direction: lyrics || project.music.sourceLyrics,
+          story_context: storySongBrief(project, project.music.targetDurationSeconds),
+          language: project.language,
+          duration_seconds: project.music.targetDurationSeconds,
+        })
         style = written.style
         lyrics = written.lyrics
       }
@@ -1639,14 +1658,16 @@ export function StoryLabPanel() {
         ? project.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
         : cue.kind === 'world' ? 'the Story world' : 'the complete Story'
       const written = await api.writeSong({
+        target: 'minimax',
+        model: project.music.model,
         instrumental: cue.instrumental,
-        description: [
-          `Create an entirely original ${cue.instrumental ? 'instrumental music cue' : 'song'} for ${target}.`,
-          `Purpose in this Story: ${cue.purpose}.`,
-          `Creative brief: ${cue.brief}.`,
-          `Reference input: ${cue.referenceSong}. Use only its broad tempo, instrumentation or emotional architecture; do not copy melody, lyrics, title phrases or distinctive arrangement.`,
-          storySongBrief(project, cue.durationSeconds),
-        ].join('\n'),
+        description: `Create an entirely original ${cue.instrumental ? 'instrumental music cue' : 'song'} for ${target}. Purpose in this Story: ${cue.purpose}.`,
+        reference_song: cue.referenceSong,
+        style_direction: cue.brief,
+        lyrics_direction: cue.lyrics,
+        story_context: storySongBrief(project, cue.durationSeconds),
+        language: project.language,
+        duration_seconds: cue.durationSeconds,
       })
       patchMusicCue(cueId, { style: written.style, lyrics: written.lyrics })
       setNotice({ kind: 'ok', text: `“${cue.title}” now has an editable, Story-specific prompt${cue.instrumental ? '' : ' and lyrics'}.` })
@@ -1676,12 +1697,7 @@ export function StoryLabPanel() {
       : beginStoryActivity('generating_music', `MiniMax Music is generating “${cue.title}”…`, 1)
     setMusicCueBusy(`audio:${cueId}`)
     try {
-      const prompt = [
-        cue.style,
-        cue.referenceSong.trim()
-          ? `High-level inspiration only: ${cue.referenceSong}; wholly original melody and arrangement.` : '',
-        cue.purpose,
-      ].filter(Boolean).join(' ').slice(0, 300)
+      const prompt = cue.style.trim().slice(0, 300)
       const result = await api.generateStoryMusicCandidates({
         prompt,
         lyrics: cue.instrumental ? '' : cue.lyrics,
@@ -2272,10 +2288,11 @@ export function StoryLabPanel() {
                                 onChange={referenceSong => patchMusicCue(cue.id, { referenceSong })} rows={2}
                                 placeholder="Song title — Artist" />
                               <p className="text-[9px] text-text-muted">The LLM uses only high-level tempo, instrumentation and emotional architecture; the resulting melody and wording must be original.</p>
-                              <Field label="Creative brief" value={cue.brief}
+                              <Field label="Desired style + Story role · editable LLM input" value={cue.brief}
                                 onChange={brief => patchMusicCue(cue.id, { brief })} rows={3} />
-                              <Field label="MiniMax style prompt" value={cue.style}
+                              <Field label="Final MiniMax prompt · English · max 300 characters" value={cue.style}
                                 onChange={style => patchMusicCue(cue.id, { style })} rows={3} />
+                              <p className="text-[9px] text-text-muted">Final order: genre, mood, instruments, voice, tempo and production. The example song is sent only to the LLM, never appended to this MiniMax prompt.</p>
                               <div className="grid grid-cols-2 gap-2">
                                 <label className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[10px] text-text-secondary">
                                   <input type="checkbox" checked={cue.instrumental}
@@ -2380,7 +2397,7 @@ export function StoryLabPanel() {
                         onClick={() => void adaptStoryLyrics()}><Sparkles size={13} /> Adapt lyrics to this Story</button>
                     </div>
                     <div className="space-y-2">
-                      <Field label="MiniMax style prompt" value={project.music.style}
+                      <Field label="Final MiniMax prompt · English · max 300 characters" value={project.music.style}
                         onChange={style => patch({ music: { ...project.music, style } })} rows={3} />
                       <Field label="Editable lyrics" value={project.music.lyrics}
                         onChange={lyrics => patch({ music: { ...project.music, lyrics } })} rows={8} />

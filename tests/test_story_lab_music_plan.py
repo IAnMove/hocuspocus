@@ -39,7 +39,7 @@ def cue(cue_id, kind, target, *, instrumental=True):
         "referenceSong": "Example Track — Example Artist",
         "brief": "An original cue grounded in the Story bible.",
         "style": "cinematic, evolving, memorable motif",
-        "lyrics": "" if instrumental else "[Verse]\nAn original line",
+        "lyrics": "" if instrumental else "[Verse]\n\nAn original line\n\n[Chorus]\n\nA recurring original hook",
         "instrumental": instrumental,
         "durationSeconds": 90,
     }
@@ -77,6 +77,30 @@ class TestStoryLabMusicPlan(unittest.TestCase):
         invalid = copy.deepcopy(self.result)
         invalid["music"]["cues"].pop()
         self.assertIn("exactly", _story_stage_problem(invalid, "music", self.project))
+
+    def test_rejects_prompts_that_are_not_minimax_ready(self):
+        invalid = copy.deepcopy(self.result)
+        invalid["music"]["cues"][0]["style"] = "vague"
+        self.assertIn("10–300", _story_stage_problem(invalid, "music", self.project))
+
+        invalid = copy.deepcopy(self.result)
+        invalid["music"]["cues"][0]["lyrics"] = "[Verse]\nThis should stay silent"
+        self.assertIn("empty lyrics", _story_stage_problem(invalid, "music", self.project))
+
+        invalid = copy.deepcopy(self.result)
+        invalid["music"]["cues"][3]["lyrics"] = "Words without a supported section tag"
+        self.assertIn("structural tags", _story_stage_problem(invalid, "music", self.project))
+
+    def test_world_is_instrumental_and_story_tracks_are_vocal(self):
+        invalid = _normalize_story_stage_ids(copy.deepcopy(self.result), "music", self.project)
+        invalid["music"]["cues"][0]["instrumental"] = False
+        invalid["music"]["cues"][0]["lyrics"] = "[Verse]\n\nA vocal world"
+        self.assertIn("world ambience", _story_stage_problem(invalid, "music", self.project))
+
+        invalid = _normalize_story_stage_ids(copy.deepcopy(self.result), "music", self.project)
+        invalid["music"]["cues"][3]["instrumental"] = True
+        invalid["music"]["cues"][3]["lyrics"] = ""
+        self.assertIn("must include vocals", _story_stage_problem(invalid, "music", self.project))
 
 
 if __name__ == "__main__":

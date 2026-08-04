@@ -5344,6 +5344,7 @@ async def llm_test():
 # services.guide_loader.load_guide at request time, cached after first read):
 #   app/services/llm_guides/music/song_writer.md            (vocals)
 #   app/services/llm_guides/music/song_writer_instrumental.md
+#   app/services/llm_guides/music/song_writer_minimax.md
 # Edit those to tune the prompt without touching code. These short fallbacks are
 # only used if a guide file is missing/unreadable.
 _SONG_WRITER_FALLBACK = (
@@ -5358,6 +5359,14 @@ _SONG_WRITER_FALLBACK_INSTRUMENTAL = (
     "[STYLE]\nA dense prose paragraph describing genre, instruments, mood, "
     "production, and energy — instrumental, no vocals, no numeric BPM/key.\n"
     "[LYRICS]\n[Instrumental]"
+)
+_SONG_WRITER_FALLBACK_MINIMAX = (
+    "You write prompts for MiniMax Music. Output exactly [STYLE] and [LYRICS]. "
+    "STYLE is one English comma-separated line of 10-300 characters containing "
+    "genre, mood, instruments, vocal direction, tempo and production. Never put "
+    "reference song or artist names in STYLE. LYRICS use supported tags such as "
+    "[Verse], [Pre Chorus], [Chorus], [Bridge], [Inst], [Solo] and [Outro], each "
+    "on its own line, with short singable lines. For instrumentals leave LYRICS empty."
 )
 
 
@@ -5380,17 +5389,67 @@ def _parse_song_output(raw, instrumental):
     return style, lyrics
 
 
+def _minimax_song_request_prompt(body: dict, description: str, instrumental: bool) -> str:
+    """Build a labelled brief so references never leak into the final provider prompt."""
+    model = str(body.get("model") or "music-3.0").strip()
+    language = str(body.get("language") or "English").strip()[:80]
+    try:
+        duration = max(20, min(360, int(body.get("duration_seconds") or 90)))
+    except (TypeError, ValueError):
+        duration = 90
+    sections = [
+        f"MODE: {'instrumental' if instrumental else 'vocal song'}",
+        f"TARGET MODEL: {model}",
+        f"LYRICS LANGUAGE: {language}",
+        f"TARGET DURATION: approximately {duration} seconds",
+        f"CORE REQUEST:\n{description[:8000]}",
+    ]
+    labelled_inputs = (
+        ("REFERENCE SONG (analysis input only; omit its title and artist from STYLE)", "reference_song", 500),
+        ("DESIRED STYLE", "style_direction", 3000),
+        ("DESIRED LYRICS OR STRUCTURE", "lyrics_direction", 6000),
+        ("STORY CONTEXT", "story_context", 8000),
+    )
+    for label, key, limit in labelled_inputs:
+        value = str(body.get(key) or "").strip()
+        if value:
+            sections.append(f"{label}:\n{value[:limit]}")
+    if model in {"music-cover", "music-cover-free"}:
+        sections.append(
+            "COVER RULE: STYLE describes only the new target sound; replacement LYRICS "
+            "must stay within 1000 characters."
+        )
+    return "\n\n".join(sections)
+
+
+def _normalize_minimax_song_output(style: str, lyrics: str, instrumental: bool, model: str):
+    """Return provider-safe MiniMax fields while preserving editable lyrics."""
+    style = re.sub(r"\s+", " ", str(style or "")).strip()
+    if len(style) > 300:
+        style = style[:300].rsplit(" ", 1)[0].rstrip(" ,.;:")
+    if instrumental:
+        return style, ""
+    lyrics_limit = 1000 if model in {"music-cover", "music-cover-free"} else 3500
+    lyrics = str(lyrics or "").strip()[:lyrics_limit].rstrip()
+    return style, lyrics
+
+
 @api.post("/api/v1/llm/write-song")
 async def llm_write_song(request: Request):
-    """Music-mode Simple writer: from a free-text description, produce a Music
-    Caption (style tags) + structured lyrics for ACE-Step. Returns
-    {style, lyrics, raw}."""
+    """Produce a provider-ready style prompt and structured lyrics.
+
+    Existing callers default to ACE-Step. Story Lab explicitly selects the
+    MiniMax contract and may supply separately labelled inspiration, desired
+    style, lyric direction, and story context. Returns {style, lyrics, raw}.
+    """
     from services import llm_service
     body = await request.json()
     description = (body.get("description") or "").strip()
     if not description:
         raise HTTPException(status_code=400, detail="description is required")
     instrumental = bool(body.get("instrumental"))
+    target = str(body.get("target") or "ace-step").strip().lower()
+    model = str(body.get("model") or "music-3.0").strip()
 
     # Optional reference image → the vision LLM lets the visuals inform the
     # STYLE (e.g. neon cityscape → synthwave). Degrades gracefully: if the
@@ -5402,13 +5461,18 @@ async def llm_write_song(request: Request):
 
     _ensure_llm_loaded()
     from services.guide_loader import load_guide
-    if instrumental:
+    if target == "minimax":
+        system_prompt = load_guide("music", "song_writer_minimax") or _SONG_WRITER_FALLBACK_MINIMAX
+        user_prompt = _minimax_song_request_prompt(body, description, instrumental)
+    elif instrumental:
         system_prompt = load_guide("music", "song_writer_instrumental") or _SONG_WRITER_FALLBACK_INSTRUMENTAL
+        user_prompt = description
     else:
         system_prompt = load_guide("music", "song_writer") or _SONG_WRITER_FALLBACK
+        user_prompt = description
     try:
         raw = llm_service.generate(
-            prompt=description,
+            prompt=user_prompt,
             system_prompt=system_prompt,
             max_new_tokens=body.get("max_new_tokens", 1024),
             temperature=body.get("temperature", 0.85),
@@ -5419,6 +5483,12 @@ async def llm_write_song(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     style, lyrics = _parse_song_output(raw, instrumental)
+    if target == "minimax":
+        style, lyrics = _normalize_minimax_song_output(style, lyrics, instrumental, model)
+        if len(style) < 10:
+            raise HTTPException(status_code=502, detail="The LLM did not return a valid MiniMax style prompt")
+        if not instrumental and not lyrics:
+            raise HTTPException(status_code=502, detail="The LLM did not return MiniMax lyrics")
     return {"style": style, "lyrics": lyrics, "raw": raw}
 
 
@@ -12343,6 +12413,19 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
             duration = cue.get("durationSeconds")
             if not isinstance(duration, int) or isinstance(duration, bool) or not 20 <= duration <= 360:
                 return f"music cue {index + 1} durationSeconds is outside 20–360"
+            style = cue["style"].strip()
+            lyrics = cue["lyrics"].strip()
+            if not 10 <= len(style) <= 300:
+                return f"music cue {index + 1} style must contain 10–300 characters"
+            if not cue["referenceSong"].strip():
+                return f"music cue {index + 1} needs an editable reference song"
+            if cue["instrumental"] and lyrics:
+                return f"instrumental music cue {index + 1} must have empty lyrics"
+            if not cue["instrumental"]:
+                if not 10 <= len(lyrics) <= 3500:
+                    return f"vocal music cue {index + 1} lyrics must contain 10–3500 characters"
+                if not re.search(r"^\[(Verse|Chorus|Hook)\]\s*$", lyrics, re.MULTILINE):
+                    return f"vocal music cue {index + 1} needs supported structural tags"
             ids.append(cue["id"])
         if len(ids) != len(set(ids)):
             return "music contains duplicate IDs"
@@ -12353,12 +12436,16 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
         story_cues = [cue for cue in cues if cue["kind"] == "story"]
         if len(world_cues) != 1:
             return "music needs exactly one world ambience cue"
+        if not world_cues[0]["instrumental"]:
+            return "the world ambience cue must be instrumental"
         if character_targets != character_ids or len(character_targets) != len([
             cue for cue in cues if cue["kind"] == "character"
         ]):
             return "music needs exactly one presentation cue per character ID"
         if len(story_cues) != 3:
             return "music needs exactly three story songs"
+        if any(cue["instrumental"] for cue in story_cues):
+            return "the three story songs must include vocals"
         return None
     if not value and scope != "relationships":
         return f"{key} is empty"
@@ -12565,7 +12652,20 @@ Music-specific contract:
   recognizable reference for tempo, instrumentation or emotional architecture only.
 - Every style prompt, melody concept and lyric must be newly written for this Story. Never
   reproduce the reference song's melody, lyrics, title phrases or distinctive arrangement.
-- Write vocal lyrics in {language}; use an empty lyrics string for instrumental cues.
+- Treat referenceSong, brief, the Story canon and requested lyric theme as INPUTS to transform.
+  The final style field must never contain the reference title or artist name.
+- style is the final MiniMax Music prompt. Write one concise English comma-separated line,
+  10–300 characters, ordered as applicable: primary genre/subgenre, secondary influence,
+  mood/atmosphere, key instruments, vocal direction, tempo or BPM, dynamics, production.
+  Prefer concrete compatible traits; avoid contradictions, filler and narrative synopsis.
+- Write vocal lyrics in {language}, maximum 3500 characters, with short natural singable
+  lines (usually 4–8 words). Use only MiniMax-supported tags on their own lines with blank
+  lines between sections: [Intro], [Verse], [Pre Chorus], [Chorus], [Post Chorus],
+  [Interlude], [Bridge], [Transition], [Build Up], [Break], [Hook], [Inst], [Solo], [Outro].
+  Use parentheses for sparse performance/arrangement directions. Give every vocal song a
+  recurring hook or chorus and a concrete narrative progression through this Story.
+- For instrumental cues set instrumental true and lyrics to an empty string. Put genre,
+  atmosphere, instrumentation, tempo and musical arc entirely in style.
 - Make brief and purpose explain how the cue maps to this exact world, character or story arc.
 """
     base_prompt = f"""Create the requested editable Story Lab material.

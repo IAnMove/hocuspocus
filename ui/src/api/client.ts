@@ -153,6 +153,14 @@ export async function fetchJobStatus(jobId: string): Promise<ApiJobStatus> {
 export async function writeSong(params: {
   description: string
   instrumental?: boolean
+  target?: 'ace-step' | 'minimax'
+  model?: 'music-3.0' | 'music-2.6' | 'music-cover'
+  reference_song?: string
+  style_direction?: string
+  lyrics_direction?: string
+  story_context?: string
+  language?: string
+  duration_seconds?: number
   seed?: number
   reference_image_path?: string
 }): Promise<{ style: string; lyrics: string; raw: string }> {
