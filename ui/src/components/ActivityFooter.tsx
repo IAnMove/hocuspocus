@@ -11,6 +11,13 @@ const PHASE_LABELS: Record<string, string> = {
   preparing_comic_video: 'Preparing comic video',
   uploading_artwork: 'Uploading artwork',
   rendering_animatic: 'Rendering animatic',
+  story_planning: 'Story Lab planning',
+  story_music: 'Story Lab music',
+  music_planning: 'Planning music',
+  writing_song: 'Writing song',
+  generating_music: 'Generating music',
+  music_queue: 'Music queue',
+  uploading_music_reference: 'Uploading music reference',
 }
 
 function clampPercent(value: number): number {

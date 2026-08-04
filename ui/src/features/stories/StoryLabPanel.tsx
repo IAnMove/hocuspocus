@@ -417,6 +417,57 @@ export function StoryLabPanel() {
   const musicCoverRef = useRef<HTMLInputElement>(null)
   const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
+  const beginStoryActivity = (phase: string, message: string, total = 0) => {
+    const id = `story-lab:${project.id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+    let failed = false
+    useStore.getState().setForegroundActivity({
+      id,
+      status: 'running',
+      phase,
+      message,
+      current: 0,
+      total,
+    })
+    const updateActivity = (
+      nextMessage: string,
+      nextPhase = phase,
+      current = 0,
+      nextTotal = total,
+    ) => {
+      const active = useStore.getState().foregroundActivity
+      if (active && active.id !== id) return
+      useStore.getState().setForegroundActivity({
+        id,
+        status: 'running',
+        phase: nextPhase,
+        message: nextMessage,
+        current,
+        total: nextTotal,
+      })
+    }
+    return {
+      update: updateActivity,
+      fail: (error: unknown, nextPhase = phase) => {
+        failed = true
+        const active = useStore.getState().foregroundActivity
+        if (active?.id !== id) return
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        useStore.getState().setForegroundActivity({
+          id,
+          status: 'failed',
+          phase: nextPhase,
+          message: errorMessage,
+          error: errorMessage,
+        })
+      },
+      finish: () => {
+        if (failed) return
+        if (useStore.getState().foregroundActivity?.id === id) {
+          useStore.getState().setForegroundActivity(null)
+        }
+      },
+    }
+  }
   const selectableVideoModels = useMemo(
     () => videoModels
       .filter(model => model.is_i2v && enabledModels.has(model.model_type) && !model.tool_only)
@@ -747,6 +798,10 @@ export function StoryLabPanel() {
     setNotice(null)
     const controller = new AbortController()
     generationAbortRef.current = controller
+    const activity = beginStoryActivity(
+      'story_planning',
+      scope === 'music' ? 'Story Lab is planning the music proposals…' : 'Story Lab is preparing the generation request…',
+    )
     let activeJobId = ''
     const sourceProjectId = project.id
     try {
@@ -768,6 +823,12 @@ export function StoryLabPanel() {
         setRecoveryJobId(progress.jobId)
         window.localStorage.setItem(storyJobKey(activeWorkspace, project.id), progress.jobId)
         setJobProgress(`${progress.message} ${progress.total ? `${progress.current}/${progress.total}` : ''}`)
+        activity.update(
+          progress.message,
+          progress.stage === 'music' ? 'music_planning' : `story_${progress.stage || 'planning'}`,
+          progress.current,
+          progress.total,
+        )
       }, controller.signal)
       setInstruction('')
       window.localStorage.setItem(storyResultKey(activeWorkspace, project.id), JSON.stringify({
@@ -781,6 +842,7 @@ export function StoryLabPanel() {
       }
       await completeGeneratedDraft(scope, result)
     } catch (error) {
+      if ((error as Error).name !== 'AbortError') activity.fail(error)
       setNotice({
         kind: (error as Error).name === 'AbortError' ? 'ok' : 'error',
         text: (error as Error).name === 'AbortError'
@@ -788,6 +850,7 @@ export function StoryLabPanel() {
           : (error as Error).message,
       })
     } finally {
+      activity.finish()
       if (generationAbortRef.current === controller) generationAbortRef.current = null
       setBusy(null)
       setJobProgress('')
@@ -808,11 +871,18 @@ export function StoryLabPanel() {
   const resumeGeneration = async () => {
     if (!recoveryJobId.trim() || busy) return
     const sourceProjectId = project.id
+    const activity = beginStoryActivity('story_planning', 'Story Lab is resuming the saved generation…')
     setBusy('all')
     setNotice(null)
     try {
       const { result } = await api.resumeStoryGeneration(recoveryJobId.trim(), progress => {
         setJobProgress(`${progress.message} ${progress.total ? `${progress.current}/${progress.total}` : ''}`)
+        activity.update(
+          progress.message,
+          progress.stage === 'music' ? 'music_planning' : `story_${progress.stage || 'planning'}`,
+          progress.current,
+          progress.total,
+        )
       })
       if (useStoryStore.getState().project.id !== sourceProjectId) return
       setPendingDraft({
@@ -828,8 +898,10 @@ export function StoryLabPanel() {
       }))
       setNotice({ kind: 'ok', text: 'Recovered Story Lab draft is ready for review.' })
     } catch (error) {
+      activity.fail(error)
       setNotice({ kind: 'error', text: (error as Error).message })
     } finally {
+      activity.finish()
       setBusy(null)
       setJobProgress('')
     }
@@ -1071,7 +1143,7 @@ export function StoryLabPanel() {
       setNotice(completed === targets.length
         ? {
             kind: 'ok',
-            text: `Regenerated ${completed} visual reference${completed === 1 ? '' : 's'} with the current style. Old detached assets were removed from the Story library.`,
+            text: `Regenerated ${completed} visual reference${completed === 1 ? '' : 's'} with the current style. Old detached assets were removed from the Story Lab library.`,
           }
         : {
             kind: 'error',
@@ -1379,6 +1451,7 @@ export function StoryLabPanel() {
   }
 
   const writeStorySong = async () => {
+    const activity = beginStoryActivity('writing_song', 'Story Lab is writing the song prompt and lyrics…', 1)
     setProductionBusy('music')
     try {
       const brief = project.music.brief.trim()
@@ -1395,9 +1468,11 @@ export function StoryLabPanel() {
       setNotice({ kind: 'ok', text: 'Song prompt and editable lyrics are ready. Review them before spending MiniMax credits.' })
       return { brief, style: written.style, lyrics: written.lyrics }
     } catch (error) {
+      activity.fail(error)
       setNotice({ kind: 'error', text: `The song draft could not be written: ${(error as Error).message}` })
       return null
     } finally {
+      activity.finish()
       setProductionBusy(null)
     }
   }
@@ -1408,6 +1483,7 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'Paste the source lyrics you are authorized to adapt first.' })
       return
     }
+    const activity = beginStoryActivity('writing_song', 'Story Lab is adapting the lyrics to this story…', 1)
     setProductionBusy('music')
     try {
       const storyBrief = project.music.brief.trim()
@@ -1431,8 +1507,10 @@ export function StoryLabPanel() {
       })
       setNotice({ kind: 'ok', text: 'The Story lyrics were adapted and remain fully editable before generation.' })
     } catch (error) {
+      activity.fail(error)
       setNotice({ kind: 'error', text: `The lyrics could not be adapted: ${(error as Error).message}` })
     } finally {
+      activity.finish()
       setProductionBusy(null)
     }
   }
@@ -1443,6 +1521,7 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'MiniMax Cover accepts reference audio up to 50 MB.' })
       return
     }
+    const activity = beginStoryActivity('uploading_music_reference', `Uploading cover reference “${file.name}”…`, 1)
     setProductionBusy('music')
     try {
       const uploaded = await api.uploadAudio(file)
@@ -1456,8 +1535,10 @@ export function StoryLabPanel() {
       })
       setNotice({ kind: 'ok', text: 'Cover reference uploaded. You can keep its lyrics or replace them with the editable Story lyrics.' })
     } catch (error) {
+      activity.fail(error)
       setNotice({ kind: 'error', text: `The cover reference could not be uploaded: ${(error as Error).message}` })
     } finally {
+      activity.finish()
       setProductionBusy(null)
       if (musicCoverRef.current) musicCoverRef.current.value = ''
     }
@@ -1472,6 +1553,11 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'Upload a reference song before generating a cover.' })
       return
     }
+    const activity = beginStoryActivity(
+      'generating_music',
+      `Preparing ${project.music.candidateCount} MiniMax Music candidates…`,
+      project.music.candidateCount,
+    )
     setProductionBusy('music')
     try {
       const brief = project.music.brief.trim()
@@ -1479,10 +1565,17 @@ export function StoryLabPanel() {
       let style = project.music.style.trim()
       let lyrics = project.music.lyrics.trim()
       if (!style || (project.music.mode === 'original' && !lyrics)) {
+        activity.update('Story Lab is writing the missing song prompt and lyrics…', 'writing_song', 0, 1)
         const written = await api.writeSong({ description: brief })
         style = written.style
         lyrics = written.lyrics
       }
+      activity.update(
+        `MiniMax Music is generating ${project.music.candidateCount} candidates…`,
+        'generating_music',
+        0,
+        project.music.candidateCount,
+      )
       const result = await api.generateStoryMusicCandidates({
         prompt: style,
         lyrics,
@@ -1516,8 +1609,10 @@ export function StoryLabPanel() {
       })
       setNotice({ kind: 'ok', text: `${candidates.length} MiniMax Music candidates generated. Listen and choose one for the musical trailer.` })
     } catch (error) {
+      activity.fail(error, 'generating_music')
       setNotice({ kind: 'error', text: `MiniMax Music could not generate the candidates: ${(error as Error).message}` })
     } finally {
+      activity.finish()
       setProductionBusy(null)
     }
   }
@@ -1537,6 +1632,7 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'Add an example reference song before adapting this proposal.' })
       return
     }
+    const activity = beginStoryActivity('music_planning', `Story Lab is adapting “${cue.title}”…`, 1)
     setMusicCueBusy(`llm:${cueId}`)
     try {
       const target = cue.kind === 'character'
@@ -1555,8 +1651,10 @@ export function StoryLabPanel() {
       patchMusicCue(cueId, { style: written.style, lyrics: written.lyrics })
       setNotice({ kind: 'ok', text: `“${cue.title}” now has an editable, Story-specific prompt${cue.instrumental ? '' : ' and lyrics'}.` })
     } catch (error) {
+      activity.fail(error, 'music_planning')
       setNotice({ kind: 'error', text: `The music proposal could not be adapted: ${(error as Error).message}` })
     } finally {
+      activity.finish()
       setMusicCueBusy('')
     }
   }
@@ -1573,6 +1671,9 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: `Review or adapt the prompt${cue.instrumental ? '' : ' and lyrics'} for “${cue.title}” first.` })
       return false
     }
+    const activity = queued
+      ? null
+      : beginStoryActivity('generating_music', `MiniMax Music is generating “${cue.title}”…`, 1)
     setMusicCueBusy(`audio:${cueId}`)
     try {
       const prompt = [
@@ -1614,9 +1715,11 @@ export function StoryLabPanel() {
       }
       return true
     } catch (error) {
+      activity?.fail(error, 'generating_music')
       setNotice({ kind: 'error', text: `“${cue.title}” could not be generated: ${(error as Error).message}` })
       return false
     } finally {
+      activity?.finish()
       if (!queued) setMusicCueBusy('')
     }
   }
@@ -1640,23 +1743,43 @@ export function StoryLabPanel() {
       `Generate ${cues.length} MiniMax track${cues.length === 1 ? '' : 's'} sequentially? This consumes one paid music request per proposal.`,
     )) return
     const ids = cues.map(cue => cue.id)
+    const activity = beginStoryActivity(
+      'music_queue',
+      `MiniMax Music queue ready: 0/${ids.length} tracks generated`,
+      ids.length,
+    )
     setMusicQueue({ ids, index: 0 })
     let completed = 0
     try {
       for (let index = 0; index < ids.length; index += 1) {
         setMusicQueue({ ids, index })
+        const cue = useStoryStore.getState().project.music.cues.find(item => item.id === ids[index])
+        activity.update(
+          `Generating “${cue?.title || `track ${index + 1}`}” · ${index + 1}/${ids.length}`,
+          'music_queue',
+          index,
+          ids.length,
+        )
         const ready = await generateMusicCueAudio(ids[index], true)
         if (!ready) break
         completed += 1
+        activity.update(
+          `Completed “${cue?.title || `track ${index + 1}`}” · ${completed}/${ids.length}`,
+          'music_queue',
+          completed,
+          ids.length,
+        )
       }
       if (completed === ids.length) {
         setNotice({ kind: 'ok', text: `Music queue completed: ${completed} tracks generated one after another.` })
       } else {
+        activity.fail(new Error(`Music queue stopped after ${completed}/${ids.length}`), 'music_queue')
         setNotice(current => current?.kind === 'error' ? current : {
           kind: 'error', text: `Music queue stopped after ${completed}/${ids.length}; completed tracks were preserved.`,
         })
       }
     } finally {
+      activity.finish()
       setMusicCueBusy('')
       setMusicQueue(null)
     }
