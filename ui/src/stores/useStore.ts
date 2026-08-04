@@ -3449,6 +3449,28 @@ export const useStore = create<AppState>((set, get) => ({
 
     const params: Record<string, unknown> = { ...state.params, generation_mode: state.generationMode, workspace: state.activeWorkspace }
 
+    // MiniMax H3 has two mutually exclusive conditioning contracts. After a
+    // Ref2VA run, selecting a new Start image can leave the persisted mode set
+    // to "references" even when all reference tiles have been removed. In
+    // that case the backend rejects the request before generation because
+    // Ref2VA has no reference input. Treat an unaccompanied Start image as an
+    // explicit FL2VA request and discard stale reference paths from the
+    // previous run. If live reference tiles are still present, keep Ref2VA so
+    // users can intentionally combine them.
+    if (
+      params.model_type === 'minimax_h3'
+      && (state.startImage || params.image_start)
+      && (params.h3_reference_mode === 'references' || !params.h3_reference_mode)
+      && state.imageRefs.length === 0
+      && !(Array.isArray(params.h3_ref_videos) && params.h3_ref_videos.length > 0)
+      && !(Array.isArray(params.h3_ref_audios) && params.h3_ref_audios.length > 0)
+    ) {
+      params.h3_reference_mode = 'first_frame'
+      delete params.image_refs
+      delete params.h3_ref_videos
+      delete params.h3_ref_audios
+    }
+
     // Tag avatar/edit-mode generations with their sub-mode so the gallery's
     // Edits filter and the loadSettingsFromOutput restore path can identify
     // them. Restyle is the one edit sub-mode that flows through the standard
