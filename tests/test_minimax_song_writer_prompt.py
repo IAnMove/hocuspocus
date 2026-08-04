@@ -20,9 +20,11 @@ def _load_functions(*names: str):
     return tuple(namespace[name] for name in names)
 
 
-_minimax_song_request_prompt, _normalize_minimax_song_output = _load_functions(
+_minimax_song_request_prompt, _normalize_minimax_song_output, _parse_song_output, _parse_lyria_output = _load_functions(
     "_minimax_song_request_prompt",
     "_normalize_minimax_song_output",
+    "_parse_song_output",
+    "_parse_lyria_output",
 )
 
 
@@ -64,6 +66,27 @@ class TestMiniMaxSongWriterPrompt(unittest.TestCase):
         )
         self.assertEqual(instrumental_style, "Ambient electronic, soft pads, slow build")
         self.assertEqual(instrumental_lyrics, "")
+
+    def test_separates_minimax_lyrics_from_optional_timed_lyria_prompt(self):
+        raw = """[STYLE]
+Indie folk, hopeful, acoustic guitar, warm alto, mid-tempo
+[LYRICS]
+[Verse]
+We carry light across the plain
+
+[Chorus]
+The sky remembers rain
+[LYRIA]
+Sky Seed: Composition Breakdown
+[0:00 - 0:12] Intro: Intensity: 3/10. Warm acoustic guitar.
+[0:12 - 0:42] Verse: Intensity: 4/10. Lyrics: \"We carry light across the plain\".
+"""
+        style, lyrics = _parse_song_output(raw, False)
+
+        self.assertEqual(style, "Indie folk, hopeful, acoustic guitar, warm alto, mid-tempo")
+        self.assertNotIn("[LYRIA]", lyrics)
+        self.assertIn("[Chorus]", lyrics)
+        self.assertIn("[0:00 - 0:12]", _parse_lyria_output(raw))
 
 
 if __name__ == "__main__":

@@ -100,7 +100,8 @@ function normalizeMusicCandidate(value: unknown, now: string): StoryMusicCandida
     source: text(candidate.source),
     prompt: text(candidate.prompt),
     lyrics: text(candidate.lyrics),
-    provider: candidate.provider === 'local' ? 'local' : 'minimax',
+    provider: candidate.provider === 'local' ? 'local'
+      : candidate.provider === 'lyria' ? 'lyria' : 'minimax',
     model: text(candidate.model),
     durationSeconds: Math.max(0, Number(candidate.durationSeconds) || 0),
     createdAt: text(candidate.createdAt, now),
@@ -122,6 +123,7 @@ function normalizeMusicCue(value: unknown, index: number, now: string): StoryMus
     brief: text(cue.brief),
     style: text(cue.style),
     lyrics: text(cue.lyrics),
+    lyriaPrompt: text(cue.lyriaPrompt),
     instrumental: cue.instrumental === true,
     durationSeconds: Math.max(20, Math.min(360, Number(cue.durationSeconds) || 90)),
     candidates: Array.isArray(cue.candidates)

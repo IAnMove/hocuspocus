@@ -163,7 +163,9 @@ export async function writeSong(params: {
   duration_seconds?: number
   seed?: number
   reference_image_path?: string
-}): Promise<{ style: string; lyrics: string; raw: string }> {
+  include_lyria?: boolean
+  max_new_tokens?: number
+}): Promise<{ style: string; lyrics: string; lyria_prompt: string; raw: string }> {
   const res = await fetch(`${BASE}/api/v1/llm/write-song`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

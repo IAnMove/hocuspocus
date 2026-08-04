@@ -5376,7 +5376,7 @@ def _parse_song_output(raw, instrumental):
     text = str(raw or "").strip()
     style, lyrics = "", ""
     sm = _re.search(r"\[STYLE\](.*?)(?=\[LYRICS\]|\Z)", text, _re.IGNORECASE | _re.DOTALL)
-    lm = _re.search(r"\[LYRICS\](.*)\Z", text, _re.IGNORECASE | _re.DOTALL)
+    lm = _re.search(r"\[LYRICS\](.*?)(?=\[LYRIA\]|\Z)", text, _re.IGNORECASE | _re.DOTALL)
     if sm:
         style = sm.group(1).strip()
     if lm:
@@ -5387,6 +5387,12 @@ def _parse_song_output(raw, instrumental):
     if instrumental:
         lyrics = "[Instrumental]"
     return style, lyrics
+
+
+def _parse_lyria_output(raw):
+    """Extract the optional paste-ready Google Lyria prompt."""
+    match = re.search(r"\[LYRIA\](.*)\Z", str(raw or ""), re.IGNORECASE | re.DOTALL)
+    return match.group(1).strip() if match else ""
 
 
 def _minimax_song_request_prompt(body: dict, description: str, instrumental: bool) -> str:
@@ -5461,8 +5467,14 @@ async def llm_write_song(request: Request):
 
     _ensure_llm_loaded()
     from services.guide_loader import load_guide
+    include_lyria = False
     if target == "minimax":
         system_prompt = load_guide("music", "song_writer_minimax") or _SONG_WRITER_FALLBACK_MINIMAX
+        include_lyria = bool(body.get("include_lyria"))
+        if include_lyria:
+            lyria_guide = load_guide("music", "song_writer_lyria")
+            if lyria_guide:
+                system_prompt = f"{system_prompt}\n\n{lyria_guide}"
         user_prompt = _minimax_song_request_prompt(body, description, instrumental)
     elif instrumental:
         system_prompt = load_guide("music", "song_writer_instrumental") or _SONG_WRITER_FALLBACK_INSTRUMENTAL
@@ -5474,7 +5486,7 @@ async def llm_write_song(request: Request):
         raw = llm_service.generate(
             prompt=user_prompt,
             system_prompt=system_prompt,
-            max_new_tokens=body.get("max_new_tokens", 1024),
+            max_new_tokens=body.get("max_new_tokens", 3000 if include_lyria else 1024),
             temperature=body.get("temperature", 0.85),
             top_p=body.get("top_p", 0.9),
             seed=body.get("seed"),
@@ -5483,13 +5495,18 @@ async def llm_write_song(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     style, lyrics = _parse_song_output(raw, instrumental)
+    lyria_prompt = _parse_lyria_output(raw) if target == "minimax" and include_lyria else ""
     if target == "minimax":
         style, lyrics = _normalize_minimax_song_output(style, lyrics, instrumental, model)
         if len(style) < 10:
             raise HTTPException(status_code=502, detail="The LLM did not return a valid MiniMax style prompt")
         if not instrumental and not lyrics:
             raise HTTPException(status_code=502, detail="The LLM did not return MiniMax lyrics")
-    return {"style": style, "lyrics": lyrics, "raw": raw}
+        if include_lyria and not re.search(
+            r"\[\d+:\d{2}\s*-\s*\d+:\d{2}\]", lyria_prompt,
+        ):
+            raise HTTPException(status_code=502, detail="The LLM did not return a timed Lyria prompt")
+    return {"style": style, "lyrics": lyrics, "lyria_prompt": lyria_prompt, "raw": raw}
 
 
 def _build_music_gen_params(model_type: str, lyrics: str, style: str, duration_seconds, seed) -> dict:

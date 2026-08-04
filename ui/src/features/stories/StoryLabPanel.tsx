@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
-  BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, Film, ImagePlus, Loader2,
+  BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, ExternalLink, Film, ImagePlus, Loader2,
   Music, Network, Palette, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
@@ -427,6 +427,8 @@ export function StoryLabPanel() {
   const importRef = useRef<HTMLInputElement>(null)
   const uploadRef = useRef<HTMLInputElement>(null)
   const musicCoverRef = useRef<HTMLInputElement>(null)
+  const lyriaUploadRef = useRef<HTMLInputElement>(null)
+  const lyriaUploadCueId = useRef('')
   const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
   const beginStoryActivity = (phase: string, message: string, total = 0) => {
@@ -1680,15 +1682,61 @@ export function StoryLabPanel() {
         story_context: storySongBrief(project, cue.durationSeconds),
         language: project.language,
         duration_seconds: cue.durationSeconds,
+        include_lyria: true,
+        max_new_tokens: 3000,
       })
-      patchMusicCue(cueId, { style: written.style, lyrics: written.lyrics })
-      setNotice({ kind: 'ok', text: `“${cue.title}” now has an editable, Story-specific prompt${cue.instrumental ? '' : ' and lyrics'}.` })
+      patchMusicCue(cueId, {
+        style: written.style,
+        lyrics: written.lyrics,
+        lyriaPrompt: written.lyria_prompt,
+      })
+      setNotice({ kind: 'ok', text: `“${cue.title}” now has editable MiniMax and Google Lyria prompts${cue.instrumental ? '' : ' with structured lyrics'}.` })
     } catch (error) {
       activity.fail(error, 'music_planning')
       setNotice({ kind: 'error', text: `The music proposal could not be adapted: ${(error as Error).message}` })
     } finally {
       activity.finish()
       setMusicCueBusy('')
+    }
+  }
+
+  const uploadLyriaResult = async (file?: File) => {
+    const cueId = lyriaUploadCueId.current
+    if (!file || !cueId) return
+    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    if (!cue) return
+    const activity = beginStoryActivity('uploading_music', `Importing Google Lyria result “${file.name}”…`, 1)
+    setMusicCueBusy(`lyria-upload:${cueId}`)
+    try {
+      const uploaded = await api.uploadAudio(file)
+      const candidate = {
+        id: storyId('song'),
+        name: file.name || uploaded.filename,
+        source: uploaded.url,
+        prompt: cue.lyriaPrompt,
+        lyrics: cue.lyrics,
+        provider: 'lyria' as const,
+        model: 'lyria-3-pro-preview',
+        durationSeconds: 0,
+        createdAt: new Date().toISOString(),
+      }
+      update(current => {
+        const target = current.music.cues.find(item => item.id === cueId)
+        if (target) {
+          target.candidates.push(candidate)
+          target.selectedCandidateId = candidate.id
+        }
+        return current
+      })
+      setNotice({ kind: 'ok', text: `Google Lyria result imported under “${cue.title}”.` })
+    } catch (error) {
+      activity.fail(error, 'uploading_music')
+      setNotice({ kind: 'error', text: `The Lyria result could not be imported: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+      lyriaUploadCueId.current = ''
+      if (lyriaUploadRef.current) lyriaUploadRef.current.value = ''
     }
   }
 
@@ -2321,6 +2369,7 @@ export function StoryLabPanel() {
                                     {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Adapt provider prompt{cue.instrumental ? '' : ' + lyrics'} with LLM
                                   </button>
                                 </div>
+                                <div className="space-y-3">
                                 <div className="space-y-2.5 rounded-lg border border-pink-500/30 bg-pink-500/5 p-3">
                                   <div className="flex items-start justify-between gap-2">
                                     <div>
@@ -2354,6 +2403,38 @@ export function StoryLabPanel() {
                                       {generatingAudio ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />} Generate this track
                                     </button>
                                   </div>
+                                </div>
+                                <div className="space-y-2.5 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <h4 className="text-xs font-semibold text-blue-200">Google Lyria 3 Pro · manual workflow</h4>
+                                      <p className="mt-0.5 text-[9px] text-text-muted">The LLM prepares the prompt here. Copy it to Google AI Studio, generate there, then import the MP3 result.</p>
+                                    </div>
+                                    <span className="shrink-0 rounded border border-blue-500/30 px-2 py-1 text-[9px] text-blue-200">lyria-3-pro-preview</span>
+                                  </div>
+                                  <Field label="Paste-ready Lyria prompt · editable" value={cue.lyriaPrompt}
+                                    onChange={lyriaPrompt => patchMusicCue(cue.id, { lyriaPrompt })} rows={14}
+                                    placeholder="Generate provider prompts with the LLM to create a timed composition breakdown…" />
+                                  <p className="text-[9px] text-text-muted">Uses contiguous timestamps, section names, intensity, arrangement and separated lyrics. Lyria Pro targets up to about 3:00; longer Story durations are condensed in this prompt.</p>
+                                  <div className="grid sm:grid-cols-2 gap-2">
+                                    <button className={button} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
+                                      onClick={() => void adaptMusicCueWithLlm(cue.id)}>
+                                      {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate / refresh Lyria prompt
+                                    </button>
+                                    <button className={button} disabled={!cue.lyriaPrompt.trim()} onClick={() => {
+                                      void navigator.clipboard.writeText(cue.lyriaPrompt)
+                                      setNotice({ kind: 'ok', text: `Lyria prompt for “${cue.title}” copied.` })
+                                    }}><Copy size={12} /> Copy Lyria prompt</button>
+                                    <a className={button} href="https://aistudio.google.com/u/1/new_music?model=lyria-3-pro-preview"
+                                      target="_blank" rel="noreferrer">
+                                      <ExternalLink size={12} /> Open Lyria in Google AI Studio
+                                    </a>
+                                    <button className={button} disabled={Boolean(musicCueBusy || musicQueue)} onClick={() => {
+                                      lyriaUploadCueId.current = cue.id
+                                      lyriaUploadRef.current?.click()
+                                    }}><Upload size={12} /> Import generated audio</button>
+                                  </div>
+                                </div>
                                 </div>
                               </div>
                               {cue.candidates.length > 0 && (
@@ -2751,6 +2832,8 @@ export function StoryLabPanel() {
         </div>
       </div>
       <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={event => uploadVisual(event.target.files)} />
+      <input ref={lyriaUploadRef} type="file" accept="audio/*" className="hidden"
+        onChange={event => void uploadLyriaResult(event.target.files?.[0])} />
     </div>
   )
 }

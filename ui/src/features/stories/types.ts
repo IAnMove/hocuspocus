@@ -105,7 +105,7 @@ export interface StoryMusicCandidate {
   source: string
   prompt: string
   lyrics: string
-  provider: 'minimax' | 'local'
+  provider: 'minimax' | 'lyria' | 'local'
   model: string
   durationSeconds: number
   createdAt: string
@@ -122,6 +122,8 @@ export interface StoryMusicCue {
   brief: string
   style: string
   lyrics: string
+  /** Paste-ready Google AI Studio prompt; Maestro does not call Lyria directly. */
+  lyriaPrompt: string
   instrumental: boolean
   durationSeconds: number
   candidates: StoryMusicCandidate[]
