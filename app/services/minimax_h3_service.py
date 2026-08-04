@@ -37,7 +37,10 @@ INPUT_DIR = COMFY_DIR / "input"
 OUTPUT_DIR = COMFY_DIR / "output"
 
 FL2VA_MODEL = "MiniMax_H3_FL2VA_pruned_mixed_int4_int8_convrot.safetensors"
-REF2VA_MODEL = "MiniMax_H3_Ref2VA_pruned_mixed_int4_int8_convrot.safetensors"
+# The community model card still documents a mixed Ref2VA file, but the Hub
+# repository does not publish it. Balanced Ref2VA therefore uses the available
+# INT4 ConvRot checkpoint; FL2VA keeps the mixed checkpoint.
+REF2VA_MODEL = "MiniMax_H3_Ref2VA_pruned_int4_convrot.safetensors"
 TEXT_ENCODER = "qwen3vl_32b_minimax_h3_int4_convrot.safetensors"
 VIDEO_VAE = "minimax_h3_video_vae_fp16.safetensors"
 AUDIO_VAE = "minimax_h3_audio_vae_fp32.safetensors"
@@ -49,8 +52,8 @@ DEFAULT_AUDIO_DIRECTION = (
 )
 
 MODEL_PROFILES = {
-    # Practical 4090 default: the 12.5 GB mixed DiT leaves VAE headroom and
-    # avoids repeatedly swapping a roughly 21 GB INT8 DiT off the GPU.
+    # Practical 4090 default: mixed FL2VA and INT4 Ref2VA leave VAE headroom
+    # and avoid repeatedly swapping a roughly 21 GB INT8 DiT off the GPU.
     "balanced": {
         "text_encoder": TEXT_ENCODER,
         "fl2va": FL2VA_MODEL,
@@ -246,7 +249,20 @@ def _ensure_models(pipeline: str, profile: str, progress: Callable[[str], None])
             continue
         progress(f"Downloading MiniMax H3 ({index}/{len(wanted)}): {display_name}")
         destination.parent.mkdir(parents=True, exist_ok=True)
-        hf_hub_download(repo_id=repo_id, filename=relative, local_dir=str(COMFY_DIR / "models"))
+        # Abiray publishes DiT files at the repository root, while ComfyUI
+        # requires them under models/diffusion_models. Text encoders and the
+        # official VAEs already use their desired subfolders on the Hub.
+        if repo_id == COMMUNITY_HF_REPO and relative.startswith("diffusion_models/"):
+            remote_filename = display_name
+            local_dir = destination.parent
+        else:
+            remote_filename = relative
+            local_dir = COMFY_DIR / "models"
+        hf_hub_download(
+            repo_id=repo_id,
+            filename=remote_filename,
+            local_dir=str(local_dir),
+        )
 
 
 def _free_port() -> int:

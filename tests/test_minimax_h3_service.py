@@ -50,6 +50,26 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         self.assertEqual(h3.DEFAULTS["video_length"], 124)
         self.assertEqual(h3.DEFAULTS["num_inference_steps"], 20)
 
+    def test_balanced_ref2va_uses_an_available_int4_checkpoint(self):
+        self.assertEqual(
+            h3.MODEL_PROFILES["balanced"]["ref2va"],
+            "MiniMax_H3_Ref2VA_pruned_int4_convrot.safetensors",
+        )
+
+    def test_community_dit_download_uses_hub_root_and_comfy_diffusion_folder(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(h3, "COMFY_DIR", Path(tmp) / "ComfyUI"), \
+                patch("huggingface_hub.hf_hub_download") as download:
+            h3._ensure_models("ref2va", "balanced", lambda _message: None)
+
+        dit_call = next(
+            call for call in download.call_args_list
+            if call.kwargs["repo_id"] == h3.COMMUNITY_HF_REPO
+            and call.kwargs["filename"].startswith("MiniMax_H3_Ref2VA")
+        )
+        self.assertEqual(dit_call.kwargs["filename"], h3.REF2VA_MODEL)
+        self.assertTrue(dit_call.kwargs["local_dir"].endswith("models/diffusion_models"))
+
     def test_visual_only_prompt_receives_recommended_audio_direction(self):
         workflow, _ = h3.build_workflow({
             **h3.DEFAULTS,
