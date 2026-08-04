@@ -5,6 +5,87 @@ import type {
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
 
+const STYLE_LOCK_PREFIX = 'VISUAL STYLE LOCK (mandatory, highest priority):'
+const STYLE_LOCK_SUFFIX = 'END VISUAL STYLE LOCK.'
+const STYLE_LOCK_PATTERN = new RegExp(
+  `^${STYLE_LOCK_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${STYLE_LOCK_SUFFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`,
+  'i',
+)
+
+const STYLE_FAMILIES = [
+  ['anime', 'manga'],
+  ['comic book', 'comic-book', 'comics', 'comic', 'tebeo', 'graphic novel', 'novela grafica'],
+  ['photoreal', 'photographic', 'live action', 'fotoreal', 'fotografico', 'accion real'],
+  ['watercolor', 'watercolour', 'acuarela'],
+  ['oil painting', 'oil-painted', 'oleo'],
+  ['pixel art', 'pixel-art'],
+  ['vector art', 'vectorial'],
+  ['cel shading', 'cel-shaded', 'cel shaded'],
+  ['3d render', '3d-rendered', 'cgi'],
+  ['stop motion', 'stop-motion', 'claymation'],
+] as const
+
+const normalizeStyleText = (value: string): string => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLocaleLowerCase()
+
+function containsAffirmedStyleTerm(style: string, term: string): boolean {
+  let index = style.indexOf(term)
+  while (index >= 0) {
+    const prefix = style.slice(Math.max(0, index - 36), index)
+    const negated = /(?:\bno\b|\bnot\b|\bnever\b|\bwithout\b|\bzero\b|\bavoid\b|\bexclude\b|\bevitar\b|\bsin\b|\bnunca\b)[^,.;:]{0,28}$/u.test(prefix)
+    if (!negated) return true
+    index = style.indexOf(term, index + term.length)
+  }
+  return false
+}
+
+/**
+ * Keep continuity exclusions while dropping legacy medium/style bans that
+ * directly contradict the currently enforced global style. The stored Story
+ * data is left untouched, so disabling the lock restores its original rules.
+ */
+export function storyNegativePromptForStyle(
+  negativePrompt: string,
+  visualStyle: string,
+  enforce = true,
+): string {
+  const negative = negativePrompt.trim()
+  const style = normalizeStyleText(visualStyle.trim())
+  if (!enforce || !negative || !style) return negative
+  const desiredFamilies = STYLE_FAMILIES.filter(family =>
+    family.some(term => containsAffirmedStyleTerm(style, term)))
+  if (!desiredFamilies.length) return negative
+  return negative
+    .split(/(?:[;\n]+|(?<=[.!?])\s+)/u)
+    .map(clause => clause.trim())
+    .filter(Boolean)
+    .filter(clause => {
+      const normalizedClause = normalizeStyleText(clause)
+      return !desiredFamilies.some(family =>
+        family.some(term => normalizedClause.includes(term)))
+    })
+    .join('; ')
+}
+
+/** Remove a previously materialized Story style lock without changing prompt content. */
+export function stripStoryVisualStyle(prompt: string): string {
+  return prompt.trim().replace(STYLE_LOCK_PATTERN, '').trim()
+}
+
+/** Compose a replaceable, provider-neutral style lock ahead of semantic prompt content. */
+export function applyStoryVisualStyle(
+  prompt: string,
+  visualStyle: string,
+  enforce = true,
+): string {
+  const content = stripStoryVisualStyle(prompt)
+  const style = visualStyle.trim()
+  if (!enforce || !style) return content
+  return `${STYLE_LOCK_PREFIX} ${style} ${STYLE_LOCK_SUFFIX}${content ? ` ${content}` : ''}`
+}
+
 export function storyId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
@@ -121,6 +202,8 @@ export function createStoryProject(): StoryProject {
     genre: 'Adventure',
     tone: 'Cinematic',
     audience: 'General',
+    visualStyle: '',
+    enforceVisualStyle: true,
     premise: '',
     logline: '',
     synopsis: '',
@@ -219,6 +302,8 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     genre: text(project.genre, fallback.genre),
     tone: text(project.tone, fallback.tone),
     audience: text(project.audience, fallback.audience),
+    visualStyle: text(project.visualStyle),
+    enforceVisualStyle: project.enforceVisualStyle !== false,
     premise: text(project.premise),
     logline: text(project.logline),
     synopsis: text(project.synopsis),
@@ -326,10 +411,12 @@ export function normalizeStoryProject(value: unknown): StoryProject {
 export function changedSections(before: StoryProject, after: StoryProject): StorySection[] {
   const overviewBefore = [
     before.title, before.language, before.genre, before.tone, before.audience,
+    before.visualStyle, before.enforceVisualStyle,
     before.premise, before.logline, before.synopsis, before.theme, before.ending,
   ]
   const overviewAfter = [
     after.title, after.language, after.genre, after.tone, after.audience,
+    after.visualStyle, after.enforceVisualStyle,
     after.premise, after.logline, after.synopsis, after.theme, after.ending,
   ]
   const changed: StorySection[] = []

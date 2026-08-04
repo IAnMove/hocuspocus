@@ -12289,7 +12289,8 @@ def _story_project_prompt_context(project: dict, scope: str) -> str:
     """Return bounded, valid JSON with editorial facts but no heavy runtime data."""
     overview_keys = (
         "title", "language", "genre", "tone", "audience", "premise",
-        "logline", "synopsis", "theme", "ending",
+        "logline", "synopsis", "theme", "ending", "visualStyle",
+        "enforceVisualStyle",
     )
     compact = {key: project.get(key) for key in overview_keys if key in project}
     # Characters are useful grounding for every downstream phase and are
@@ -12423,6 +12424,8 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     genre = str(body.get("genre") or project.get("genre") or "Adventure").strip()
     tone = str(body.get("tone") or project.get("tone") or "Cinematic").strip()
     audience = str(body.get("audience") or project.get("audience") or "General").strip()
+    visual_style = str(project.get("visualStyle") or "").strip()[:4000]
+    enforce_visual_style = project.get("enforceVisualStyle") is not False
     llm_override = _comic_writing_llm(body)
     if not llm_override:
         _ensure_llm_loaded()
@@ -12434,6 +12437,8 @@ Language for every reader-facing field: {language}
 Genre: {genre}
 Tone: {tone}
 Audience: {audience}
+Global visual style (separate from story content): {visual_style or 'not set'}
+Apply that style as a mandatory render-time constraint: {'yes' if enforce_visual_style else 'no'}
 Optional user instruction: {instruction or 'none'}
 Current manually edited project (preserve useful established facts and stable IDs):
 {current}
@@ -12444,6 +12449,9 @@ rising complications, midpoint/reversal, crisis, climax and resolution. Characte
 distinct desire, need, flaw, voice, visual silhouette and a change caused by their choices.
 Visual prompts describe one neutral concept-art subject or environment only: no contact
 sheets, no grids, no comic panels, no lettering, no captions, no UI and no multiple views.
+Keep visualPrompt fields semantic and reusable: describe identity, environment, composition,
+lighting and story-specific color cues, but do not paste the global visual style into every
+field. Maestro applies that independent style at image render time when its lock is enabled.
 Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instruction asks."""
     result = None
     problem = None
@@ -12867,9 +12875,13 @@ Language for ALL reader-facing dialogue/captions: {requested_language}
 Genre: {body.get('genre', 'Adventure')}
 Tone: {body.get('tone', 'Cinematic')}
 Audience: {body.get('audience', 'General')}
-User art-style preference: {manual_art_style or 'not provided; choose an appropriate treatment'}
+User art-style preference (highest-priority visual lock; it overrides conflicting inherited
+medium, rendering or palette guidance): {manual_art_style or 'not provided; choose an appropriate treatment'}
 User world / period / location override: {manual_world_context or 'not provided'}
 User forbidden-elements override: {manual_forbidden or 'not provided'}
+If an inherited visual exclusion conflicts with the explicit art-style preference, keep the
+art-style preference and ignore only that conflicting exclusion; preserve all story and
+continuity exclusions that do not conflict.
 Dialogue density: {body.get('dialogueDensity', 'medium')}
 Ending requirement: {body.get('ending') or 'a satisfying ending'}
 Locked character bible: {json.dumps(characters, ensure_ascii=False)}"""

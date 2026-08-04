@@ -6,6 +6,7 @@ import type {
   ComicProject,
 } from '../comics/types'
 import type { ShortFilmCharacter } from '../../types'
+import { storyNegativePromptForStyle, stripStoryVisualStyle } from './model'
 import type { StoryCharacter, StoryProject } from './types'
 
 export const DEFAULT_COMIC_CHAPTER_DIRECTION =
@@ -27,7 +28,7 @@ function canonicalCharacterDescription(character: StoryCharacter): string {
     character.pronouns ? `Pronouns: ${character.pronouns}.` : '',
     character.appearance,
     character.wardrobe ? `Canonical wardrobe: ${character.wardrobe}.` : '',
-    character.visualPrompt ? `Visual identity: ${character.visualPrompt}.` : '',
+    character.visualPrompt ? `Visual identity: ${stripStoryVisualStyle(character.visualPrompt)}.` : '',
   ].filter(Boolean).join(' ')
 }
 
@@ -43,7 +44,11 @@ function canonicalCharacterPsychology(character: StoryCharacter): string {
   ].filter(Boolean).join(' ')
 }
 
-function comicCharacter(character: StoryCharacter): ComicCharacter {
+function comicCharacter(
+  character: StoryCharacter,
+  visualStyle: string,
+  enforceVisualStyle: boolean,
+): ComicCharacter {
   return {
     id: character.id,
     name: character.name,
@@ -61,8 +66,12 @@ function comicCharacter(character: StoryCharacter): ComicCharacter {
     ].filter(Boolean).join(' '),
     voice: character.voice,
     wardrobe: character.wardrobe,
-    visualNotes: character.visualPrompt,
-    negativePrompt: character.negativePrompt,
+    visualNotes: stripStoryVisualStyle(character.visualPrompt),
+    negativePrompt: storyNegativePromptForStyle(
+      character.negativePrompt,
+      visualStyle,
+      enforceVisualStyle,
+    ),
     referenceAssetIds: Array.from(new Set(character.referenceAssetIds)),
     referenceAssetId: character.primaryReferenceAssetId,
     locked: true,
@@ -78,6 +87,7 @@ export function storyAdaptationContext(project: StoryProject): string {
     line('Synopsis', project.synopsis),
     line('Theme', project.theme),
     line('Required ending', project.ending),
+    line('Global visual style', project.enforceVisualStyle ? project.visualStyle : ''),
     '',
     'DRAMATIC BEATS',
     ...project.beats.map((beat, index) => [
@@ -109,7 +119,7 @@ export function storyAdaptationContext(project: StoryProject): string {
       location.name,
       location.purpose,
       location.description,
-      location.visualPrompt ? `Visual continuity: ${location.visualPrompt}` : '',
+      location.visualPrompt ? `Visual continuity: ${stripStoryVisualStyle(location.visualPrompt)}` : '',
     ].filter(Boolean).join(' · ')),
     '',
     'CHARACTER ARCS AND VOICES',
@@ -140,6 +150,15 @@ export function buildComicAdaptation(
 } {
   const pageCount = Math.max(1, Math.min(100, Math.round(options.pageCount || 4)))
   const panelsPerPage = Math.max(1, Math.min(12, Math.round(options.panelsPerPage || 4)))
+  const enforcedVisualStyle = project.enforceVisualStyle
+    ? project.visualStyle.trim()
+    : ''
+  const hasStyleLock = Boolean(enforcedVisualStyle)
+  const compatibleNegative = (value: string) => storyNegativePromptForStyle(
+    value,
+    enforcedVisualStyle,
+    hasStyleLock,
+  )
   const comic = createComicProject()
   comic.title = project.title
   comic.synopsis = project.synopsis
@@ -156,7 +175,11 @@ export function buildComicAdaptation(
     model: asset.model,
     createdAt: asset.createdAt,
   } satisfies ComicAsset]))
-  comic.characters = project.characters.map(comicCharacter)
+  comic.characters = project.characters.map(character => comicCharacter(
+    character,
+    enforcedVisualStyle,
+    hasStyleLock,
+  ))
 
   const worldContext = [
     project.world.summary,
@@ -166,7 +189,7 @@ export function buildComicAdaptation(
     line('Technology', project.world.technology),
     line('World rules', project.world.rules.join('; ')),
     ...project.world.locations.map(location =>
-      `${location.name}: ${[location.purpose, location.description, location.visualPrompt]
+      `${location.name}: ${[location.purpose, location.description, stripStoryVisualStyle(location.visualPrompt)]
         .filter(Boolean).join(' · ')}`),
   ].filter(Boolean).join('\n')
 
@@ -193,12 +216,14 @@ export function buildComicAdaptation(
     genre: project.genre,
     tone: project.tone,
     audience: project.audience,
-    artStyle: [project.world.visualLanguage, project.world.visualPrompt]
-      .filter(Boolean).join('. '),
+    // A locked global style replaces inherited art direction. Keeping the old
+    // visual language in Story makes the toggle reversible without asking an
+    // image model to reconcile two contradictory media at render time.
+    artStyle: enforcedVisualStyle || project.world.visualLanguage,
     worldContext,
     forbiddenElements: [
-      project.world.negativePrompt,
-      ...project.world.locations.map(location => location.negativePrompt),
+      compatibleNegative(project.world.negativePrompt),
+      ...project.world.locations.map(location => compatibleNegative(location.negativePrompt)),
     ].filter(Boolean).join('; '),
     worldReferenceAssetIds: Array.from(new Set([
       ...project.world.referenceAssetIds,
@@ -241,10 +266,16 @@ export function buildShortFilmAdaptation(
   options: ShortFilmAdaptationOptions = {},
 ): ShortFilmAdaptation {
   const preserveVisualStyle = options.preserveVisualStyle ?? true
-  const visualStyle = [
-    project.world.visualLanguage,
-    project.world.visualPrompt,
-  ].map(value => value.trim()).filter(Boolean).join('. ')
+  const enforcedVisualStyle = project.enforceVisualStyle
+    ? project.visualStyle.trim()
+    : ''
+  const hasStyleLock = Boolean(enforcedVisualStyle)
+  const compatibleNegative = (value: string) => storyNegativePromptForStyle(
+    value,
+    enforcedVisualStyle,
+    hasStyleLock,
+  )
+  const visualStyle = enforcedVisualStyle || project.world.visualLanguage.trim()
     || 'Match the approved Story reference artwork exactly, preserving its authored visual medium and character design; if it is anime, comic or illustration, keep it illustrated and never reinterpret it as live action.'
   const characterReferences = project.characters.flatMap(character => {
     const assetId = character.primaryReferenceAssetId || character.referenceAssetIds[0]
@@ -269,22 +300,26 @@ export function buildShortFilmAdaptation(
       storyAdaptationContext(project),
       '',
       'VISUAL WORLD BIBLE',
-      line('Visual language', project.world.visualLanguage),
-      line('World visual prompt', project.world.visualPrompt),
+      line('Global visual style', enforcedVisualStyle),
+      line('Visual language', hasStyleLock ? '' : project.world.visualLanguage),
+      line('World visual prompt', stripStoryVisualStyle(project.world.visualPrompt)),
       line('Forbidden imagery', [
-        project.world.negativePrompt,
-        ...project.world.locations.map(location => location.negativePrompt),
+        compatibleNegative(project.world.negativePrompt),
+        ...project.world.locations.map(location => compatibleNegative(location.negativePrompt)),
       ].filter(Boolean).join('; ')),
       preserveVisualStyle ? '' : 'Visual medium may be reinterpreted for this adaptation.',
     ].filter(Boolean).join('\n'),
-    characters: project.characters.map(character => ({
-      name: character.name,
-      description: [
-        canonicalCharacterDescription(character),
-        canonicalCharacterPsychology(character),
-        character.negativePrompt ? `Never depict: ${character.negativePrompt}.` : '',
-      ].filter(Boolean).join(' '),
-    })),
+    characters: project.characters.map(character => {
+      const negativePrompt = compatibleNegative(character.negativePrompt)
+      return {
+        name: character.name,
+        description: [
+          canonicalCharacterDescription(character),
+          canonicalCharacterPsychology(character),
+          negativePrompt ? `Never depict: ${negativePrompt}.` : '',
+        ].filter(Boolean).join(' '),
+      }
+    }),
     targetDuration: Math.max(10, Math.min(1800, Math.round(targetDuration || 45))),
     narrative: true,
     visualStyle,

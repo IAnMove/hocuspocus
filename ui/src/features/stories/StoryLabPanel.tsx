@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
   BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Download, Film, ImagePlus, Loader2,
-  Music, Network, Plus, Sparkles, Trash2, Upload, Users,
+  Music, Network, Palette, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, useStore } from '../../stores/useStore'
@@ -19,7 +19,11 @@ import {
   DEFAULT_SHORT_FILM_DIRECTION,
 } from './adaptations'
 import { normalizeStoryProject, storyId, useStoryStore } from './store'
-import { normalizeStoryCharacter } from './model'
+import {
+  applyStoryVisualStyle,
+  normalizeStoryCharacter,
+  storyNegativePromptForStyle,
+} from './model'
 import type {
   StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
   StoryRelationship, StoryVisualAsset, StoryWritingProvider,
@@ -370,6 +374,7 @@ export function StoryLabPanel() {
   const [tab, setTab] = useState<StoryTab>('overview')
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
   const [imageBusy, setImageBusy] = useState('')
+  const [referenceBatchBusy, setReferenceBatchBusy] = useState(false)
   const [productionBusy, setProductionBusy] = useState<'film' | 'music' | null>(null)
   const [instruction, setInstruction] = useState('')
   const [comicDirection, setComicDirection] = useState(DEFAULT_COMIC_CHAPTER_DIRECTION)
@@ -795,22 +800,36 @@ export function StoryLabPanel() {
     }
   }
 
-  const addAsset = (asset: StoryVisualAsset, target: { kind: 'world' | 'character' | 'location'; id?: string }) => {
+  const addAsset = (
+    asset: StoryVisualAsset,
+    target: { kind: 'world' | 'character' | 'location'; id?: string },
+    replaceReferences = false,
+  ) => {
     update(current => {
       current.assets[asset.id] = asset
-      if (target.kind === 'world') current.world.referenceAssetIds.push(asset.id)
+      if (target.kind === 'world') {
+        current.world.referenceAssetIds = replaceReferences
+          ? [asset.id] : [...current.world.referenceAssetIds, asset.id]
+      }
       if (target.kind === 'character') {
         const character = current.characters.find(item => item.id === target.id)
         if (character) {
-          character.referenceAssetIds.push(asset.id)
-          character.primaryReferenceAssetId ||= asset.id
+          character.referenceAssetIds = replaceReferences
+            ? [asset.id] : [...character.referenceAssetIds, asset.id]
+          if (replaceReferences || !character.primaryReferenceAssetId) {
+            character.primaryReferenceAssetId = asset.id
+          }
           character.approval = 'draft'
         }
       }
       if (target.kind === 'location') {
         const location = current.world.locations.find(item => item.id === target.id)
-        if (location) location.referenceAssetIds.push(asset.id)
+        if (location) {
+          location.referenceAssetIds = replaceReferences
+            ? [asset.id] : [...location.referenceAssetIds, asset.id]
+        }
       }
+      if (replaceReferences) pruneUnusedAssets(current)
       return current
     })
   }
@@ -818,6 +837,12 @@ export function StoryLabPanel() {
   const generateVisual = async (
     target: { kind: 'world' | 'character' | 'location'; id?: string },
     prompt: string,
+    options: {
+      replaceReferences?: boolean
+      usePrimaryReference?: boolean
+      quiet?: boolean
+      onError?: (message: string) => void
+    } = {},
   ) => {
     if (!prompt.trim()) return
     const key = `${target.kind}:${target.id || 'world'}`
@@ -830,17 +855,22 @@ export function StoryLabPanel() {
     const negativePrompt = target.kind === 'world'
       ? current.world.negativePrompt
       : character?.negativePrompt || location?.negativePrompt || ''
-    const primaryReference = character?.primaryReferenceAssetId
+    const compatibleNegativePrompt = storyNegativePromptForStyle(
+      negativePrompt,
+      current.visualStyle,
+      current.enforceVisualStyle,
+    )
+    const primaryReference = options.usePrimaryReference !== false && character?.primaryReferenceAssetId
       ? current.assets[character.primaryReferenceAssetId]?.source
       : undefined
     const effectivePrompt = [
-      prompt.trim(),
+      applyStoryVisualStyle(prompt, current.visualStyle, current.enforceVisualStyle),
       'Single concept-art image, one coherent view, no contact sheet, no grid, no text, no labels.',
-      negativePrompt.trim() ? `Strictly avoid: ${negativePrompt.trim()}.` : '',
+      compatibleNegativePrompt ? `Strictly avoid: ${compatibleNegativePrompt}.` : '',
     ].filter(Boolean).join(' ')
     const jobKey = `${key}:${stableTextKey(effectivePrompt)}`
     setImageBusy(key)
-    setNotice(null)
+    if (!options.quiet) setNotice(null)
     try {
       const generated = await generateImageAsset(
         current.provider.imageProvider,
@@ -873,12 +903,12 @@ export function StoryLabPanel() {
         id: storyId('asset'),
         name: generated.name,
         source: generated.source,
-        prompt,
+        prompt: effectivePrompt,
         negativePrompt,
         provider: current.provider.imageProvider,
         model: generated.model,
         createdAt: new Date().toISOString(),
-      }, target)
+      }, target, options.replaceReferences)
       update(latest => {
         if (latest.id !== sourceProjectId) return latest
         Object.keys(latest.visualJobs)
@@ -886,7 +916,9 @@ export function StoryLabPanel() {
           .forEach(item => { delete latest.visualJobs[item] })
         return latest
       })
-      setNotice({ kind: 'ok', text: 'Concept image generated and attached as a reference.' })
+      if (!options.quiet) {
+        setNotice({ kind: 'ok', text: 'Concept image generated and attached as a reference.' })
+      }
       return true
     } catch (error) {
       const message = (error as Error).message
@@ -897,10 +929,121 @@ export function StoryLabPanel() {
           return latest
         })
       }
-      setNotice({ kind: 'error', text: message })
+      options.onError?.(message)
+      if (!options.quiet) setNotice({ kind: 'error', text: message })
       return false
     } finally {
       setImageBusy('')
+    }
+  }
+
+  const writeStyleIntoPrompts = () => {
+    const style = project.visualStyle.trim()
+    if (!style) {
+      setNotice({ kind: 'error', text: 'Write a visual style before applying it to prompts.' })
+      return
+    }
+    let changed = 0
+    update(current => {
+      current.enforceVisualStyle = true
+      const apply = (value: string) => {
+        if (!value.trim()) return value
+        changed += 1
+        return applyStoryVisualStyle(value, current.visualStyle, true)
+      }
+      current.world.visualPrompt = apply(current.world.visualPrompt)
+      current.world.locations.forEach(location => {
+        location.visualPrompt = apply(location.visualPrompt)
+      })
+      current.characters.forEach(character => {
+        character.visualPrompt = apply(character.visualPrompt)
+      })
+      return current
+    })
+    setNotice({
+      kind: 'ok',
+      text: changed
+        ? `The replaceable style lock was written into ${changed} existing visual prompt${changed === 1 ? '' : 's'} and render-time enforcement is on.`
+        : 'There are no existing visual prompts to update yet; render-time style enforcement is on.',
+    })
+  }
+
+  const regenerateStyledReferences = async () => {
+    const current = useStoryStore.getState().project
+    if (!current.visualStyle.trim()) {
+      setNotice({ kind: 'error', text: 'Write a visual style before regenerating references.' })
+      return
+    }
+    const targets: Array<{
+      target: { kind: 'world' | 'character' | 'location'; id?: string }
+      label: string
+      prompt: string
+    }> = []
+    if (current.world.visualPrompt.trim()) {
+      targets.push({ target: { kind: 'world' }, label: 'world', prompt: current.world.visualPrompt })
+    }
+    current.characters.forEach(character => {
+      if (character.visualPrompt.trim()) {
+        targets.push({
+          target: { kind: 'character', id: character.id },
+          label: character.name,
+          prompt: character.visualPrompt,
+        })
+      }
+    })
+    current.world.locations.forEach(location => {
+      if (location.visualPrompt.trim()) {
+        targets.push({
+          target: { kind: 'location', id: location.id },
+          label: location.name,
+          prompt: location.visualPrompt,
+        })
+      }
+    })
+    if (!targets.length) {
+      setNotice({ kind: 'error', text: 'Add at least one world, character or location visual prompt first.' })
+      return
+    }
+    const creditWarning = current.provider.imageProvider === 'minimax'
+      ? ' This may use MiniMax provider credits.' : ''
+    if (!window.confirm(
+      `Generate ${targets.length} styled reference image${targets.length === 1 ? '' : 's'}? Each successful result will replace that target's old references; failed targets keep their current references.${creditWarning}`,
+    )) return
+
+    update(latest => {
+      latest.enforceVisualStyle = true
+      return latest
+    })
+    setReferenceBatchBusy(true)
+    setNotice(null)
+    let completed = 0
+    let lastError = ''
+    try {
+      for (const item of targets) {
+        setNotice({
+          kind: 'ok',
+          text: `Regenerating styled references ${completed + 1}/${targets.length}: ${item.label}`,
+        })
+        const ready = await generateVisual(item.target, item.prompt, {
+          replaceReferences: true,
+          usePrimaryReference: false,
+          quiet: true,
+          onError: message => { lastError = message },
+        })
+        if (!ready) break
+        completed += 1
+      }
+      setNotice(completed === targets.length
+        ? {
+            kind: 'ok',
+            text: `Regenerated ${completed} visual reference${completed === 1 ? '' : 's'} with the current style. Old detached assets were removed from the Story library.`,
+          }
+        : {
+            kind: 'error',
+            text: `Stopped after ${completed}/${targets.length} references. Completed replacements were kept; the failed target kept its old reference. ${lastError}`.trim(),
+          })
+    } finally {
+      setReferenceBatchBusy(false)
     }
   }
 
@@ -1636,7 +1779,30 @@ export function StoryLabPanel() {
                     <Choice label="Tone" value={project.tone} options={TONES} onChange={tone => patch({ tone })} />
                     <Field label="Audience" value={project.audience} onChange={audience => patch({ audience })} />
                     <Field label="Theme" value={project.theme} onChange={theme => patch({ theme })} />
-                    <div className="md:col-span-2"><Field label="Premise / your request" value={project.premise} onChange={premise => patch({ premise })} rows={4} placeholder="Who wants what, what stops them, and what happens if they fail?" /></div>
+                    <Field label="What the story is about / premise" value={project.premise} onChange={premise => patch({ premise })} rows={5} placeholder="Who wants what, what stops them, and what happens if they fail?" />
+                    <Field label="Visual style / independent art direction" value={project.visualStyle} onChange={visualStyle => patch({ visualStyle })} rows={5} placeholder="For example: hand-painted 2D animation, watercolor backgrounds, clean ink contours, warm muted palette…" />
+                    <div className="md:col-span-2 rounded-lg border border-border bg-bg-tertiary/50 p-3 space-y-2">
+                      <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={project.enforceVisualStyle}
+                          onChange={event => patch({ enforceVisualStyle: event.target.checked })}
+                        />
+                        <span>
+                          <span className="font-medium text-text-primary">Enforce this style on every Story image</span>
+                          <span className="block mt-0.5 text-[10px] text-text-muted">Adds a highest-priority render-time lock while keeping story and subject prompts independent, so changing style does not require regenerating the bible.</span>
+                        </span>
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <button className={button} disabled={!project.visualStyle.trim()} onClick={writeStyleIntoPrompts}>
+                          <Palette size={13} /> Write/replace style lock in existing prompts
+                        </button>
+                        <button className={button} disabled={!project.visualStyle.trim() || Boolean(imageBusy) || referenceBatchBusy} onClick={regenerateStyledReferences}>
+                          {referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Regenerate all visual references in this style
+                        </button>
+                      </div>
+                    </div>
                     <div className="md:col-span-2"><Field label="Logline" value={project.logline} onChange={logline => patch({ logline })} rows={2} /></div>
                     <div className="md:col-span-2"><Field label="Synopsis" value={project.synopsis} onChange={synopsis => patch({ synopsis })} rows={8} /></div>
                     <div className="md:col-span-2"><Field label="Ending / final image" value={project.ending} onChange={ending => patch({ ending })} rows={3} /></div>
@@ -1655,11 +1821,11 @@ export function StoryLabPanel() {
                     <Field key={key} label={key[0].toUpperCase() + key.slice(1)} value={project.world[key]} onChange={value => patch({ world: { ...project.world, [key]: value } })} rows={2} />
                   ))}
                   <div className="md:col-span-2"><Field label="Rules — one per line" value={project.world.rules.join('\n')} onChange={value => patch({ world: { ...project.world, rules: value.split('\n').filter(Boolean) } })} rows={4} /></div>
-                  <div className="md:col-span-2"><Field label="Visual language" value={project.world.visualLanguage} onChange={visualLanguage => patch({ world: { ...project.world, visualLanguage } })} rows={3} /></div>
-                  <Field label="World concept prompt" value={project.world.visualPrompt} onChange={visualPrompt => patch({ world: { ...project.world, visualPrompt } })} rows={4} />
+                  <div className="md:col-span-2"><Field label="World-specific visual language (lighting, palette, motifs)" value={project.world.visualLanguage} onChange={visualLanguage => patch({ world: { ...project.world, visualLanguage } })} rows={3} /></div>
+                  <Field label="World concept content prompt" value={project.world.visualPrompt} onChange={visualPrompt => patch({ world: { ...project.world, visualPrompt } })} rows={4} />
                   <Field label="Negative visual prompt" value={project.world.negativePrompt} onChange={negativePrompt => patch({ world: { ...project.world, negativePrompt } })} rows={4} />
                   <div className="md:col-span-2 flex gap-2">
-                    <button className={button} disabled={Boolean(imageBusy) || !project.world.visualPrompt.trim()} onClick={() => generateVisual({ kind: 'world' }, project.world.visualPrompt)}>
+                    <button className={button} disabled={Boolean(imageBusy) || referenceBatchBusy || !project.world.visualPrompt.trim()} onClick={() => generateVisual({ kind: 'world' }, project.world.visualPrompt)}>
                       {imageBusy === 'world:world' ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} {project.world.referenceAssetIds.length ? 'Generate another world concept' : 'Generate world concept'}
                     </button>
                     <button className={button} onClick={() => { setUploadTarget({ kind: 'world' }); uploadRef.current?.click() }}><Upload size={13} /> Add reference</button>

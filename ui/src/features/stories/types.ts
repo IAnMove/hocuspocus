@@ -144,6 +144,10 @@ export interface StoryProject {
   genre: string
   tone: string
   audience: string
+  /** Global art direction, kept separate from narrative and subject prompts. */
+  visualStyle: string
+  /** Compose visualStyle as a highest-priority lock whenever Story renders an image. */
+  enforceVisualStyle: boolean
   premise: string
   logline: string
   synopsis: string
