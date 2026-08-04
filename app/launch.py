@@ -229,6 +229,53 @@ _jobs: dict = {}
 _gen_lock = threading.Lock()
 _active_gen_states: dict = {}  # job_id -> wgp gen state dict (for abort signaling)
 _audio_analysis_execution_lock = threading.Lock()
+_H3_IDLE_SHUTDOWN_SECONDS = minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS
+
+
+def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
+    """Return queued/running GPU-generation jobs, excluding a terminalizing job."""
+    pending: list[dict] = []
+    for candidate_id, candidate in _jobs.items():
+        if candidate_id == exclude_job_id:
+            continue
+        if candidate.get("status") not in {"queued", "running"}:
+            continue
+        # Auxiliary tasks such as audio analysis share the status dictionary
+        # but do not own the GPU generation lock or require a model runtime.
+        if not candidate.get("params", {}).get("model_type"):
+            continue
+        pending.append(candidate)
+    return pending
+
+
+def _release_h3_when_queue_allows(job_id: str) -> None:
+    """Keep H3 warm for its own queue, but promptly yield VRAM to other models."""
+    pending = _pending_gpu_jobs(exclude_job_id=job_id)
+    h3_pending = any(
+        candidate.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
+        for candidate in pending
+    )
+    if h3_pending:
+        minimax_h3_service.cancel_idle_shutdown()
+        print("[MiniMax H3] Keeping runtime warm for a queued H3 job.")
+        return
+
+    if pending:
+        print("[MiniMax H3] Releasing runtime for a queued non-H3 GPU job.")
+        minimax_h3_service.stop_runtime()
+        return
+
+    print(
+        f"[MiniMax H3] Queue idle; releasing runtime in "
+        f"{int(_H3_IDLE_SHUTDOWN_SECONDS)}s unless another H3 job arrives."
+    )
+    minimax_h3_service.schedule_idle_shutdown(
+        _H3_IDLE_SHUTDOWN_SECONDS,
+        lambda: any(
+            candidate.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
+            for candidate in _pending_gpu_jobs(exclude_job_id=job_id)
+        ),
+    )
 
 # --- Workspace support ---
 # Base path read from wgp.server_config["save_path"] wherever needed
@@ -7220,6 +7267,11 @@ async def generate(request: Request):
     }
     _jobs[job_id] = job
 
+    if body.get("model_type") == minimax_h3_service.MODEL_ID:
+        # Cancel any idle-release race as soon as the new H3 work enters the
+        # queue, not only once its thread acquires the GPU lock.
+        minimax_h3_service.cancel_idle_shutdown()
+
     # Non-daemon so generation survives browser disconnect during overnight runs
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
     thread.start()
@@ -10215,6 +10267,10 @@ def _run_generation(job_id: str):
             # MiniMax H3 runs through the isolated, quantized Comfy runtime.
             # It still uses Maestro's normal queue/status/cancel contract.
             if raw_params.get("model_type") == minimax_h3_service.MODEL_ID:
+                # A queued H3 job can arrive while the previous one is inside
+                # its idle grace period. Cancel that pending release before
+                # acquiring/loading the sidecar.
+                minimax_h3_service.cancel_idle_shutdown()
                 wgp.release_model()
                 gc.collect()
                 if torch.cuda.is_available():
@@ -10233,9 +10289,11 @@ def _run_generation(job_id: str):
                     job["out_dir"],
                     _h3_progress,
                     lambda: bool(job.get("_cancel_requested")),
-                    # Director owns one warm runtime across all of its H3
-                    # segments and releases it after final assembly.
-                    keep_runtime=bool(raw_params.get("_director_pipeline_id")),
+                    # Queue-aware release happens in this worker's finally
+                    # block, after it has inspected following jobs. Keep the
+                    # sidecar alive until that decision instead of stopping
+                    # it unconditionally inside the service.
+                    keep_runtime=True,
                 )
                 output_names = [os.path.basename(path) for path in generated]
                 job["output_files"] = output_names
@@ -11214,6 +11272,14 @@ def _run_generation(job_id: str):
                 job["total_steps"] = 0
                 job["phase"] = ""
                 job["message"] = "Cancelled"
+            if (
+                job.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
+                # Story Director deliberately keeps H3 alive between its
+                # sequential segments. Its wrapper schedules the same
+                # queue-aware idle release after final assembly.
+                and not job.get("params", {}).get("_director_pipeline_id")
+            ):
+                _release_h3_when_queue_allows(job_id)
 
 
 @api.get("/api/v1/status/{job_id}")

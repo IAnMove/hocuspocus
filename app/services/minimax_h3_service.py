@@ -159,6 +159,12 @@ _port: int | None = None
 _runtime_profile: str | None = None
 _runtime_lock = threading.RLock()
 _active_prompt: str | None = None
+_idle_shutdown_timer: threading.Timer | None = None
+
+# Keep the large H3 sidecar warm briefly after the queue becomes idle. The
+# caller cancels this timer when a compatible job arrives, so a run of clips
+# does not repeatedly reload the model just to generate the next one.
+DEFAULT_IDLE_SHUTDOWN_SECONDS = 45.0
 
 
 def _python_executable() -> Path:
@@ -303,6 +309,7 @@ def _runtime_command(port: int, profile: str = "quality") -> list[str]:
 def ensure_runtime(progress: Callable[[str], None], profile: str = "quality") -> str:
     global _process, _port, _runtime_profile
     with _runtime_lock:
+        _cancel_idle_shutdown_locked()
         if _process is not None and _process.poll() is None and _port is not None:
             if _runtime_profile == profile:
                 return f"http://127.0.0.1:{_port}"
@@ -338,21 +345,72 @@ def ensure_runtime(progress: Callable[[str], None], profile: str = "quality") ->
         raise RuntimeError("MiniMax H3 runtime did not become ready within 3 minutes")
 
 
-def stop_runtime() -> None:
-    global _process, _port, _runtime_profile, _active_prompt
+def _cancel_idle_shutdown_locked() -> None:
+    global _idle_shutdown_timer
+    if _idle_shutdown_timer is not None:
+        _idle_shutdown_timer.cancel()
+        _idle_shutdown_timer = None
+
+
+def cancel_idle_shutdown() -> None:
+    """Keep H3 warm because another H3 job is about to run."""
     with _runtime_lock:
-        process = _process
-        _process = None
-        _port = None
-        _runtime_profile = None
-        _active_prompt = None
-        if process is not None and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
+        _cancel_idle_shutdown_locked()
+
+
+def _stop_runtime_locked() -> None:
+    global _process, _port, _runtime_profile, _active_prompt
+    process = _process
+    _process = None
+    _port = None
+    _runtime_profile = None
+    _active_prompt = None
+    if process is not None and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+
+def stop_runtime() -> None:
+    """Release the isolated H3 runtime immediately."""
+    with _runtime_lock:
+        _cancel_idle_shutdown_locked()
+        _stop_runtime_locked()
+
+
+def schedule_idle_shutdown(
+    delay_seconds: float = DEFAULT_IDLE_SHUTDOWN_SECONDS,
+    should_keep_warm: Callable[[], bool] | None = None,
+) -> None:
+    """Release H3 after a short idle period unless the queue becomes active.
+
+    ``should_keep_warm`` is evaluated under the runtime lock immediately
+    before shutdown. It is a final race-safe queue check; enqueueing a job
+    should also call :func:`cancel_idle_shutdown` for an immediate cancel.
+    """
+    global _idle_shutdown_timer
+    delay = max(0.0, float(delay_seconds))
+
+    with _runtime_lock:
+        _cancel_idle_shutdown_locked()
+
+        def _shutdown_if_still_idle() -> None:
+            global _idle_shutdown_timer
+            with _runtime_lock:
+                if _idle_shutdown_timer is not timer:
+                    return
+                _idle_shutdown_timer = None
+                if should_keep_warm is not None and should_keep_warm():
+                    return
+                _stop_runtime_locked()
+
+        timer = threading.Timer(delay, _shutdown_if_still_idle)
+        timer.daemon = True
+        _idle_shutdown_timer = timer
+        timer.start()
 
 
 def cancel() -> None:

@@ -7323,7 +7323,11 @@ def _stop_minimax_h3_runtime() -> None:
         from services import minimax_h3_service
     except ImportError:  # pragma: no cover - package import mode
         from app.services import minimax_h3_service
-    minimax_h3_service.stop_runtime()
+    # Director owns the runtime while it submits sequential H3 segments. Once
+    # assembly finishes, let the shared H3 idle policy release it after a
+    # short grace period; a newly queued H3 job cancels this timer, while a
+    # non-H3 job releases it immediately before it acquires the GPU lock.
+    minimax_h3_service.schedule_idle_shutdown()
 
 
 def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
@@ -7469,9 +7473,9 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 workspace,
             )
         finally:
-            # Keep one warm sidecar across all Story segments, then release it
-            # after assembly (or any failure/cancel) so idle H3 does not retain
-            # almost the whole GPU indefinitely.
+            # Keep one warm sidecar across all Story segments, then hand it to
+            # the shared queue-aware idle-release policy after final assembly
+            # (or any failure/cancel).
             _stop_minimax_h3_runtime()
 
     # Quantize helper

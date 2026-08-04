@@ -274,6 +274,35 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         self.assertEqual(result, ["clip.mp4"])
         stop_runtime.assert_not_called()
 
+    def test_idle_shutdown_rechecks_queue_guard_before_releasing(self):
+        class FakeTimer:
+            def __init__(self, _delay, callback):
+                self.callback = callback
+                self.daemon = False
+                self.cancelled = False
+
+            def start(self):
+                pass
+
+            def cancel(self):
+                self.cancelled = True
+
+        with patch.object(h3.threading, "Timer", FakeTimer), \
+                patch.object(h3, "_stop_runtime_locked") as stop_runtime:
+            h3.schedule_idle_shutdown(45, should_keep_warm=lambda: True)
+            timer = h3._idle_shutdown_timer
+            self.assertIsNotNone(timer)
+            timer.callback()
+            stop_runtime.assert_not_called()
+
+            h3.schedule_idle_shutdown(45, should_keep_warm=lambda: False)
+            timer = h3._idle_shutdown_timer
+            self.assertIsNotNone(timer)
+            timer.callback()
+            stop_runtime.assert_called_once()
+
+        h3.cancel_idle_shutdown()
+
 
 if __name__ == "__main__":
     unittest.main()
