@@ -87,7 +87,7 @@ export interface StoryBeat {
 
 export interface StoryProduction {
   id: string
-  kind: 'comic' | 'film'
+  kind: 'comic' | 'film' | 'music_video'
   title: string
   createdAt: string
   sourceVersion: number

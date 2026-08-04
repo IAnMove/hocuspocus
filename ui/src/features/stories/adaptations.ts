@@ -7,7 +7,7 @@ import type {
 } from '../comics/types'
 import type { ShortFilmCharacter } from '../../types'
 import { storyNegativePromptForStyle, stripStoryVisualStyle } from './model'
-import type { StoryCharacter, StoryProject } from './types'
+import type { StoryCharacter, StoryMusicCue, StoryProject } from './types'
 
 export const DEFAULT_COMIC_CHAPTER_DIRECTION =
   'Create a self-contained comic chapter inside this story world. Tell a new compact incident with a beginning, escalation, decisive action and resolution. Preserve the master plot and ending for later chapters; do not summarize or resolve the whole source story.'
@@ -256,6 +256,93 @@ export interface ShortFilmAdaptation {
 
 export interface ShortFilmAdaptationOptions {
   preserveVisualStyle?: boolean
+}
+
+export interface MusicVideoAdaptation {
+  sceneDescription: string
+  focusKind: 'world' | 'character' | 'story'
+  focusTargetId: string
+  focusLabel: string
+  characterReferences: Array<{ assetId: string; label: string }>
+  locationReferences: Array<{ assetId: string; label: string }>
+}
+
+/** Build a song-led visual brief whose subject follows the authored music cue. */
+export function buildMusicVideoAdaptation(
+  project: StoryProject,
+  cue?: StoryMusicCue,
+): MusicVideoAdaptation {
+  const focusKind = cue?.kind || 'story'
+  const targetCharacter = focusKind === 'character'
+    ? project.characters.find(character => character.id === cue?.targetId)
+    : undefined
+  const mentionedCharacters = project.characters.filter(character =>
+    (cue?.lyrics || '').toLocaleLowerCase().includes(character.name.toLocaleLowerCase()))
+  const focusedCharacters = focusKind === 'story'
+    ? project.characters
+    : focusKind === 'character'
+      ? Array.from(new Map([targetCharacter, ...mentionedCharacters]
+          .filter(Boolean)
+          .map(character => [character!.id, character!])).values())
+      : mentionedCharacters
+  const characterReferences = focusedCharacters.flatMap(character => {
+    const assetId = character.primaryReferenceAssetId || character.referenceAssetIds[0]
+    return assetId ? [{ assetId, label: character.name }] : []
+  })
+  const locationReferences = [
+    ...project.world.referenceAssetIds.map(assetId => ({
+      assetId,
+      label: project.world.summary ? `${project.title} · world` : 'World',
+    })),
+    ...project.world.locations.flatMap(location =>
+      location.referenceAssetIds.map(assetId => ({ assetId, label: location.name }))),
+  ]
+  const focusLabel = targetCharacter?.name
+    || (focusKind === 'world' ? `${project.title} · world` : project.title)
+  const focusCanon = targetCharacter
+    ? [
+        `${targetCharacter.name} (${targetCharacter.role || 'character'})`,
+        canonicalCharacterDescription(targetCharacter),
+        canonicalCharacterPsychology(targetCharacter),
+      ].join('\n')
+    : focusKind === 'world'
+      ? [project.world.summary, project.world.visualPrompt, ...project.world.rules].filter(Boolean).join('\n')
+      : storyAdaptationContext(project)
+
+  return {
+    focusKind,
+    focusTargetId: targetCharacter?.id || (focusKind === 'world' ? 'world' : project.id),
+    focusLabel,
+    sceneDescription: [
+      'PRODUCTION TASK',
+      `Create a song-led music video focused on ${focusLabel}.`,
+      focusKind === 'character'
+        ? 'Keep this character visually recognizable in every relevant shot. Other characters may appear only when named in the lyrics.'
+        : focusKind === 'world'
+          ? 'Prioritize atmosphere, places and the rules of this world over unrelated character coverage.'
+          : 'Translate the song into a coherent visual arc across the main story and cast.',
+      '',
+      line('Song title / cue', cue?.title),
+      line('Song purpose', cue?.purpose),
+      line('Music-video brief', cue?.brief),
+      line('Musical style', cue?.style),
+      cue?.lyrics ? `AUTHORITATIVE LYRICS\n${cue.lyrics}` : '',
+      '',
+      'FOCUS CANON',
+      focusCanon,
+      '',
+      'VISUAL WORLD BIBLE',
+      line('Global visual style', project.enforceVisualStyle ? project.visualStyle : ''),
+      line('Visual language', project.world.visualLanguage),
+      line('Forbidden imagery', project.world.negativePrompt),
+    ].filter(Boolean).join('\n'),
+    characterReferences: Array.from(
+      new Map(characterReferences.map(reference => [reference.assetId, reference])).values(),
+    ),
+    locationReferences: Array.from(
+      new Map(locationReferences.map(reference => [reference.assetId, reference])).values(),
+    ),
+  }
 }
 
 /** Build an editable, self-contained Director episode without flattening the master story. */

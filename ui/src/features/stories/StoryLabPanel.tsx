@@ -14,6 +14,7 @@ import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
 import {
   buildComicAdaptation,
+  buildMusicVideoAdaptation,
   buildShortFilmAdaptation,
   DEFAULT_COMIC_CHAPTER_DIRECTION,
   DEFAULT_SHORT_FILM_DIRECTION,
@@ -26,7 +27,7 @@ import {
 } from './model'
 import type {
   StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
-  StoryMusicCue, StoryRelationship, StoryVisualAsset, StoryWritingProvider,
+  StoryMusicCandidate, StoryMusicCue, StoryRelationship, StoryVisualAsset, StoryWritingProvider,
 } from './types'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
@@ -406,6 +407,12 @@ export function StoryLabPanel() {
   const [filmDirection, setFilmDirection] = useState(DEFAULT_SHORT_FILM_DIRECTION)
   const [filmDuration, setFilmDuration] = useState(45)
   const [filmPreserveVisualStyle, setFilmPreserveVisualStyle] = useState(true)
+  const [musicProductionCandidateId, setMusicProductionCandidateId] = useState(
+    project.music.selectedCandidateId
+      || project.music.cues.find(cue => cue.selectedCandidateId)?.selectedCandidateId
+      || '',
+  )
+  const [musicProductionPacing, setMusicProductionPacing] = useState<'cinematic' | 'balanced' | 'rhythmic'>('balanced')
   const [jobProgress, setJobProgress] = useState('')
   const [recoveryJobId, setRecoveryJobId] = useState(() =>
     window.localStorage.getItem(storyJobKey(activeWorkspace, project.id)) || '')
@@ -431,6 +438,29 @@ export function StoryLabPanel() {
   const lyriaUploadCueId = useRef('')
   const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
+  const musicCandidateOptions = useMemo(() => {
+    const seen = new Set<string>()
+    const options: Array<{ candidate: StoryMusicCandidate; cue?: StoryMusicCue; label: string }> = []
+    project.music.cues.forEach(cue => cue.candidates.forEach(candidate => {
+      if (seen.has(candidate.id)) return
+      seen.add(candidate.id)
+      options.push({ candidate, cue, label: `${cue.title} · ${candidate.model}` })
+    }))
+    project.music.candidates.forEach(candidate => {
+      if (seen.has(candidate.id)) return
+      seen.add(candidate.id)
+      options.push({ candidate, label: `Story song · ${candidate.model}` })
+    })
+    return options
+  }, [project.music.candidates, project.music.cues])
+  const selectedMusicOption = musicCandidateOptions.find(option => option.candidate.id === musicProductionCandidateId)
+
+  useEffect(() => {
+    if (selectedMusicOption || !musicCandidateOptions.length) return
+    const preferred = musicCandidateOptions.find(option => option.cue?.selectedCandidateId === option.candidate.id)
+      || musicCandidateOptions[0]
+    setMusicProductionCandidateId(preferred.candidate.id)
+  }, [musicCandidateOptions, selectedMusicOption])
   const beginStoryActivity = (phase: string, message: string, total = 0) => {
     const id = `story-lab:${project.id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
     let failed = false
@@ -1868,50 +1898,225 @@ export function StoryLabPanel() {
     }
   }
 
-  const openMusicalTrailer = async (candidateId?: string) => {
-    const cue = project.music.cues.find(item =>
-      item.candidates.some(candidate => candidate.id === candidateId))
-    const candidate = project.music.candidates.find(item => item.id === candidateId)
+  const musicCueForCandidate = (source: StoryProject, candidateId?: string) =>
+    source.music.cues.find(item => item.candidates.some(candidate => candidate.id === candidateId))
+
+  const musicCandidateById = (source: StoryProject, candidateId?: string) => {
+    const cue = musicCueForCandidate(source, candidateId)
+    return source.music.candidates.find(item => item.id === candidateId)
       || cue?.candidates.find(item => item.id === candidateId)
+  }
+
+  const effectiveMusicCue = (
+    source: StoryProject,
+    cue: StoryMusicCue | undefined,
+    candidate: StoryMusicCandidate,
+  ): StoryMusicCue => cue || {
+    id: 'story-song',
+    kind: 'story',
+    targetId: source.id,
+    title: candidate.name,
+    purpose: source.music.brief || `Tell ${source.title} as a song-led visual story.`,
+    referenceSong: '',
+    brief: source.music.brief,
+    style: candidate.prompt || source.music.style,
+    lyrics: candidate.lyrics || source.music.lyrics,
+    lyriaPrompt: '',
+    instrumental: !(candidate.lyrics || source.music.lyrics).trim(),
+    durationSeconds: candidate.durationSeconds || source.music.targetDurationSeconds,
+    candidates: [candidate],
+    selectedCandidateId: candidate.id,
+  }
+
+  const loadMusicVideoProduction = async (
+    source: StoryProject,
+    cue: StoryMusicCue | undefined,
+    candidate: StoryMusicCandidate,
+    autoStart = false,
+    pacing: 'cinematic' | 'balanced' | 'rhythmic' = 'balanced',
+  ) => {
+    const resolvedCue = effectiveMusicCue(source, cue, candidate)
+    const adaptation = buildMusicVideoAdaptation(source, resolvedCue)
     const director = useStore.getState()
     director.directorReset()
     const store = useStore.getState()
     store.setGenerationMode('video')
     store.setSidebarMode('director')
     store.setDirectorSkill('music_video')
-    store.setDirectorAutoMode(false)
-    store.directorSetSceneDescription(
-      `${project.title}. ${project.synopsis}\nVisual direction: ${project.world.visualLanguage}`,
-    )
+    store.setDirectorAutoMode(autoStart)
+    store.directorSetSceneDescription(adaptation.sceneDescription)
     useStore.setState({
-      directorMusicSource: candidate ? 'upload' : 'generate',
-      directorSongDescription: cue?.brief || project.music.brief || storySongBrief(project, project.music.targetDurationSeconds),
-      directorSongStyle: cue?.style || project.music.style,
-      directorSongLyrics: cue?.lyrics || project.music.lyrics,
-      directorSongDuration: cue?.durationSeconds || project.music.targetDurationSeconds,
+      directorMusicSource: 'upload',
+      directorSongDescription: resolvedCue.brief,
+      directorSongStyle: resolvedCue.style,
+      directorSongLyrics: resolvedCue.lyrics,
+      directorSongDuration: resolvedCue.durationSeconds,
+      directorPacingProfile: pacing,
       directorStep: 'upload',
     })
+
+    for (const reference of adaptation.characterReferences) {
+      const asset = source.assets[reference.assetId]
+      if (!asset) continue
+      try {
+        const blob = await fetch(asset.source).then(response => {
+          if (!response.ok) throw new Error('Character reference unavailable')
+          return response.blob()
+        })
+        store.directorAddCharacterRef(new File(
+          [blob], asset.name || `${reference.assetId}.png`, { type: blob.type || 'image/png' },
+        ))
+        const index = useStore.getState().directorCharacterRefs.length - 1
+        useStore.getState().directorSetCharacterRefLabel(index, reference.label)
+      } catch { /* The written identity remains available in the visual brief. */ }
+    }
+    for (const reference of adaptation.locationReferences) {
+      const asset = source.assets[reference.assetId]
+      if (!asset) continue
+      try {
+        const blob = await fetch(asset.source).then(response => {
+          if (!response.ok) throw new Error('Location reference unavailable')
+          return response.blob()
+        })
+        store.directorAddLocationRef(new File(
+          [blob], asset.name || `${reference.assetId}.png`, { type: blob.type || 'image/png' },
+        ))
+        const index = useStore.getState().directorLocationRefs.length - 1
+        useStore.getState().directorSetLocationRefLabel(index, reference.label)
+      } catch { /* The written world bible remains available in the visual brief. */ }
+    }
+
     window.dispatchEvent(new Event('maestro:director-open'))
-    if (!candidate) return
+    const blob = await fetch(candidate.source).then(response => {
+      if (!response.ok) throw new Error('The selected song file is unavailable')
+      return response.blob()
+    })
+    await useStore.getState().directorUploadAndAnalyze(new File(
+      [blob], candidate.name, { type: blob.type || 'audio/mpeg' },
+    ), { lyricsHint: resolvedCue.lyrics || undefined })
+    if (autoStart && useStore.getState().directorStep === 'structure') {
+      useStore.getState().directorConfirmStructure()
+      await useStore.getState().startDirectorPipeline()
+    }
+    return { adaptation, resolvedCue, pipelineId: useStore.getState().pipelineId }
+  }
+
+  const openMusicalTrailer = async (
+    candidateId?: string,
+    options: { autoStart?: boolean; saveProduction?: boolean; pacing?: 'cinematic' | 'balanced' | 'rhythmic' } = {},
+  ) => {
+    const cue = musicCueForCandidate(project, candidateId)
+    const candidate = musicCandidateById(project, candidateId)
+    if (!candidate) {
+      const director = useStore.getState()
+      director.directorReset()
+      director.setGenerationMode('video')
+      director.setSidebarMode('director')
+      director.setDirectorSkill('music_video')
+      director.setDirectorAutoMode(false)
+      useStore.setState({ directorMusicSource: 'generate', directorStep: 'upload' })
+      window.dispatchEvent(new Event('maestro:director-open'))
+      return
+    }
     setProductionBusy('music')
     try {
-      const blob = await fetch(candidate.source).then(response => {
-        if (!response.ok) throw new Error('The selected song file is unavailable')
-        return response.blob()
+      const loaded = await loadMusicVideoProduction(
+        project,
+        cue,
+        candidate,
+        options.autoStart === true,
+        options.pacing || musicProductionPacing,
+      )
+      if (options.saveProduction !== false) {
+        patch({
+          productions: [...project.productions, {
+            id: storyId('production'),
+            kind: 'music_video',
+            title: `${loaded.adaptation.focusLabel} · music video`,
+            createdAt: new Date().toISOString(),
+            sourceVersion: project.revision,
+            sourceSnapshot: { ...structuredClone(project), productions: [] },
+            targetId: loaded.adaptation.focusTargetId,
+            targetName: loaded.adaptation.focusLabel,
+            targetSnapshot: {
+              cueId: loaded.resolvedCue.id,
+              candidateId: candidate.id,
+              candidateName: candidate.name,
+              candidateSource: candidate.source,
+              provider: candidate.provider,
+              model: candidate.model,
+              lyrics: loaded.resolvedCue.lyrics,
+              focusKind: loaded.adaptation.focusKind,
+              focusTargetId: loaded.adaptation.focusTargetId,
+              sceneDescription: loaded.adaptation.sceneDescription,
+              pacing: options.pacing || musicProductionPacing,
+              imageModel: filmImageModel,
+              videoModel: filmVideoModel,
+              pipelineId: loaded.pipelineId,
+            },
+            status: 'staged',
+          }],
+        })
+      }
+      setNotice({
+        kind: 'ok',
+        text: options.autoStart
+          ? `The music video for “${loaded.adaptation.focusLabel}” is running in Director.`
+          : `The song, lyrics and visual references for “${loaded.adaptation.focusLabel}” are loaded in Director.`,
       })
-      await useStore.getState().directorUploadAndAnalyze(new File(
-        [blob], candidate.name, { type: blob.type || 'audio/mpeg' },
-      ), { lyricsHint: cue?.lyrics || project.music.lyrics || undefined })
     } catch (error) {
-      setNotice({ kind: 'error', text: `The musical trailer could not load the song: ${(error as Error).message}` })
+      setNotice({ kind: 'error', text: `The music video could not load the song: ${(error as Error).message}` })
     } finally {
       setProductionBusy(null)
     }
   }
 
+  const stageMusicVideo = async (autoStart = false) => {
+    if (!selectedMusicOption) {
+      setNotice({ kind: 'error', text: 'Generate or import a song in Music before creating a music video.' })
+      return
+    }
+    if (autoStart && !window.confirm(
+      `Generate the complete music video for “${selectedMusicOption.label}”? `
+      + 'This creates one start image and one video render per planned clip and may consume provider credits.',
+    )) return
+    await openMusicalTrailer(selectedMusicOption.candidate.id, {
+      autoStart,
+      pacing: musicProductionPacing,
+    })
+  }
+
   const reopenProduction = async (productionId: string) => {
     const production = project.productions.find(item => item.id === productionId)
     if (!production) return
+    if (production.kind === 'music_video') {
+      const source = normalizeStoryProject(production.sourceSnapshot)
+      const candidateId = typeof production.targetSnapshot?.candidateId === 'string'
+        ? production.targetSnapshot.candidateId : ''
+      const candidate = musicCandidateById(source, candidateId)
+      const cue = musicCueForCandidate(source, candidateId)
+      if (!candidate) {
+        setNotice({ kind: 'error', text: 'The selected song for this production is no longer available.' })
+        return
+      }
+      const pacingValue = production.targetSnapshot?.pacing
+      const pacing = pacingValue === 'cinematic' || pacingValue === 'rhythmic'
+        ? pacingValue : 'balanced'
+      const current = useStore.getState()
+      const hasWork = Boolean(current.directorSceneDescription.trim() || current.directorPlannedClips.length)
+      if (hasWork && !window.confirm(
+        'Reopen this music-video production? The current Director draft will be replaced.',
+      )) return
+      setProductionBusy('music')
+      try {
+        await loadMusicVideoProduction(source, cue, candidate, false, pacing)
+      } catch (error) {
+        setNotice({ kind: 'error', text: `The music-video production could not be reopened: ${(error as Error).message}` })
+      } finally {
+        setProductionBusy(null)
+      }
+      return
+    }
     if (production.kind === 'comic') {
       const comic = production.targetSnapshot?.comic
       const request = production.targetSnapshot?.request
@@ -2687,6 +2892,102 @@ export function StoryLabPanel() {
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> Open in Short Film Director</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
                   </div>
+                  <div className={`${panel} space-y-3 md:col-span-2`}>
+                    <div className="flex items-start gap-3">
+                      <Music size={26} className="shrink-0 text-pink-400" />
+                      <div>
+                        <h3 className="font-semibold text-text-primary">Music video or musical trailer</h3>
+                        <p className="mt-1 text-xs text-text-muted">
+                          Selects an existing Story song and builds the visuals around what that cue represents. Character themes keep that character and approved identity references at the center.
+                        </p>
+                      </div>
+                    </div>
+                    {musicCandidateOptions.length ? (
+                      <>
+                        <label className="block text-[10px] text-text-muted">Song
+                          <select
+                            className={`${input} mt-1`}
+                            value={musicProductionCandidateId}
+                            onChange={event => setMusicProductionCandidateId(event.target.value)}
+                          >
+                            {musicCandidateOptions.map(option => (
+                              <option key={option.candidate.id} value={option.candidate.id}>
+                                {option.label} · {option.candidate.durationSeconds
+                                  ? `${Math.floor(option.candidate.durationSeconds / 60)}:${Math.round(option.candidate.durationSeconds % 60).toString().padStart(2, '0')}`
+                                  : 'duration on playback'}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {selectedMusicOption && (
+                          <div className="rounded-lg border border-pink-500/25 bg-pink-500/5 p-2.5 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                              <span className="font-medium text-pink-200">
+                                {selectedMusicOption.cue
+                                  ? `${selectedMusicOption.cue.kind === 'character' ? 'Character' : selectedMusicOption.cue.kind === 'world' ? 'World' : 'Story'} focus · ${selectedMusicOption.cue.title}`
+                                  : 'Story-wide focus'}
+                              </span>
+                              <span className="text-text-muted">
+                                {getOutputReference({ name: selectedMusicOption.candidate.name, type: 'audio' })} · {selectedMusicOption.candidate.provider}/{selectedMusicOption.candidate.model}
+                              </span>
+                            </div>
+                            {selectedMusicOption.cue?.purpose && (
+                              <p className="text-[10px] text-text-secondary">{selectedMusicOption.cue.purpose}</p>
+                            )}
+                            <audio src={selectedMusicOption.candidate.source} controls preload="metadata" className="h-8 w-full" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-[10px] text-text-muted">Editing rhythm</span>
+                            <span className="text-[9px] text-text-muted">Balanced is recommended</span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {([
+                              ['cinematic', 'Cinematic', '8–16s'],
+                              ['balanced', 'Balanced', '5–8s'],
+                              ['rhythmic', 'Rhythmic', '3–5s'],
+                            ] as const).map(([value, label, duration]) => (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => setMusicProductionPacing(value)}
+                                className={`${button} flex-col ${musicProductionPacing === value ? 'border-pink-500/60 text-pink-300' : ''}`}
+                              >
+                                <span>{label}</span><span className="text-[9px] text-text-muted">{duration}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <button
+                            className={`${button} w-full border-pink-500/60 text-pink-300`}
+                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length)}
+                            onClick={() => void stageMusicVideo(true)}
+                          >
+                            {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                            Generate complete music video
+                          </button>
+                          <button
+                            className={`${button} w-full`}
+                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length)}
+                            onClick={() => void stageMusicVideo(false)}
+                          >
+                            <ChevronRight size={13} /> Open in Music Video Director
+                          </button>
+                        </div>
+                        <p className="text-[9px] text-text-muted">
+                          The selected song, structured lyrics, focus character/world, approved images and pacing are saved in Adaptation history and can be reopened independently.
+                        </p>
+                      </>
+                    ) : (
+                      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
+                        No generated or imported songs are available yet.{' '}
+                        <button type="button" className="underline" onClick={() => setTab('music')}>Open Music</button>
+                        {' '}to generate with MiniMax or import a Google Lyria result.
+                      </div>
+                    )}
+                  </div>
                   <div className="hidden" aria-hidden="true">
                     <Music size={26} className="text-pink-400" />
                     <h3 className="font-semibold text-text-primary">Musical trailer</h3>
@@ -2815,7 +3116,9 @@ export function StoryLabPanel() {
                   {project.productions.length ? project.productions.map(item => (
                     <div key={item.id} className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 border-b border-border last:border-0 py-2 text-xs">
                       <div>
-                        <span className="text-text-primary capitalize">{item.kind} · {item.targetName || item.title}</span>
+                        <span className="text-text-primary capitalize">
+                          {item.kind === 'music_video' ? 'Music video' : item.kind} · {item.targetName || item.title}
+                        </span>
                         <span className="text-text-muted ml-2">
                           source v{item.sourceVersion} · {new Date(item.createdAt).toLocaleString()}
                         </span>
