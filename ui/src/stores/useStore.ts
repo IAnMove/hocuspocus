@@ -823,6 +823,7 @@ interface AppState {
   tagClip: (pid: string, clipIndex: number, tag: string | null) => Promise<void>
   rerunClipImage: (pid: string, clipIndex: number, prompt?: string) => Promise<unknown>
   rerunClipVideo: (pid: string, clipIndex: number, prompt?: string) => Promise<unknown>
+  rerunH3Segment: (pid: string, clipIndex: number, segmentIndex: number, prompt?: string) => Promise<unknown>
   rejoinPipelineClips: (pid: string) => Promise<unknown>
   resumePipeline: (pid: string) => Promise<void>
   loadDirectorFromPipeline: (pid: string) => Promise<void>
@@ -2093,6 +2094,20 @@ export const useStore = create<AppState>((set, get) => ({
       return result
     } catch (e) {
       console.error('Re-run video failed:', e)
+      set({ dashboardLoading: false })
+      throw e
+    }
+  },
+  rerunH3Segment: async (pid: string, clipIndex: number, segmentIndex: number, prompt?: string) => {
+    set({ dashboardLoading: true })
+    try {
+      const result = await api.rerunH3Segment(pid, clipIndex, segmentIndex, prompt)
+      const pipeline = await api.fetchSavedPipeline(pid)
+      await get().loadOutputs()
+      set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      return result
+    } catch (e) {
+      console.error('H3 segment regeneration failed:', e)
       set({ dashboardLoading: false })
       throw e
     }

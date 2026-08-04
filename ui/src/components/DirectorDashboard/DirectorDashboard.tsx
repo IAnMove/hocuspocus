@@ -1,8 +1,9 @@
 import { useState, useEffect, Component, type ReactNode } from 'react'
-import { X, ChevronDown, ChevronRight, Play, ImageIcon, Check, AlertTriangle, Clock, Brain, Sparkles, Loader2, Camera, Film, Combine, Pencil } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Play, ImageIcon, Check, AlertTriangle, Clock, Brain, Sparkles, Loader2, Camera, Film, Combine, Pencil, Copy, RefreshCw } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { getFileUrl } from '../../api/client'
-import type { PipelineClipState, SavedPipelineState } from '../../types'
+import { getOutputReference } from '../../lib/outputReference'
+import type { H3SegmentState, PipelineClipState, SavedPipelineState } from '../../types'
 
 /** Safely coerce any value to a displayable string */
 function safeStr(val: unknown): string {
@@ -24,7 +25,7 @@ class DashboardErrorBoundary extends Component<{ children: ReactNode }, { error:
     if (this.state.error) {
       return (
         <div className="p-4 text-center">
-          <p className="text-red-400 text-sm mb-2">Productions view error: {this.state.error}</p>
+          <p className="text-red-400 text-sm mb-2">Video workflows error: {this.state.error}</p>
           <button onClick={() => this.setState({ error: null })}
             className="text-xs text-accent-blue hover:underline">Try again</button>
         </div>
@@ -188,11 +189,88 @@ function LlmLogPanel({ pipeline }: { pipeline: SavedPipelineState }) {
   )
 }
 
-function ClipCard({ clip, onTag, onRerunImage, onRerunVideo }: {
+function H3SegmentCard({ segment, shotIndex, onRerun }: {
+  segment: H3SegmentState
+  shotIndex: number
+  onRerun: (segmentIndex: number, prompt: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [prompt, setPrompt] = useState(segment.prompt || '')
+  const [copied, setCopied] = useState(false)
+  const reference = segment.filename
+    ? getOutputReference({ name: segment.filename, type: 'video' })
+    : ''
+
+  const copyReference = () => {
+    if (!reference) return
+    navigator.clipboard.writeText(reference).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    })
+  }
+
+  return (
+    <div className={`rounded border p-2 space-y-2 ${segment.stale ? 'border-amber-500/50 bg-amber-500/5' : 'border-cyan-500/20 bg-bg-tertiary/60'}`}>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-medium text-cyan-300">Segment {segment.index + 1}</span>
+        <span className="text-[9px] text-text-muted">{(segment.frames / 24).toFixed(1)}s · seed {segment.seed}</span>
+        <span className="text-[9px] text-text-muted">{segment.reference_mode === 'references' ? 'identity references' : 'exact first frame'}</span>
+        {segment.stale && <span className="ml-auto text-[9px] text-amber-300">Needs regeneration</span>}
+      </div>
+      {segment.filename && (
+        <video
+          src={getFileUrl(segment.filename)}
+          controls
+          preload="metadata"
+          className="w-full max-h-44 rounded bg-black object-contain"
+        />
+      )}
+      <div className="flex items-center gap-1.5">
+        {reference && (
+          <button
+            type="button"
+            onClick={copyReference}
+            className="flex items-center gap-1 rounded border border-border px-1.5 py-1 text-[9px] text-text-muted hover:text-text-primary"
+            title={`Copy output ID ${reference}`}
+          >
+            {copied ? <Check size={9} className="text-green-400" /> : <Copy size={9} />}
+            {reference}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditing(value => !value)}
+          className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-1 text-[9px] text-text-secondary hover:text-accent-blue"
+        >
+          <Pencil size={9} /> Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => onRerun(segment.index, prompt)}
+          className="flex items-center gap-1 rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-1 text-[9px] text-cyan-300 hover:bg-cyan-500/20"
+          title={`Regenerate shot ${shotIndex + 1} from this segment and rebuild its dependent continuations`}
+        >
+          <RefreshCw size={9} /> Regenerate from here
+        </button>
+      </div>
+      {editing && (
+        <textarea
+          value={prompt}
+          onChange={event => setPrompt(event.target.value)}
+          rows={5}
+          className="w-full resize-y rounded border border-cyan-500/40 bg-bg-primary px-2 py-1.5 text-[10px] text-text-primary focus:outline-none focus:border-cyan-400"
+        />
+      )}
+    </div>
+  )
+}
+
+function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }: {
   clip: PipelineClipState
   onTag: (tag: 'good' | 'needs_work' | null) => void
   onRerunImage: (clipIndex: number, prompt?: string) => void
   onRerunVideo: (clipIndex: number, prompt?: string) => void
+  onRerunH3Segment: (clipIndex: number, segmentIndex: number, prompt?: string) => void
 }) {
   const [expandImage, setExpandImage] = useState(false)
   const [expandVideo, setExpandVideo] = useState(false)
@@ -362,6 +440,25 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo }: {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {clip.h3_segments && clip.h3_segments.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[9px] text-text-muted uppercase tracking-wider">
+              Editable H3 segments ({clip.h3_segments.length})
+            </div>
+            {clip.h3_segments.map(segment => (
+              <H3SegmentCard
+                key={`${clip.index}-${segment.index}-${segment.filename}`}
+                segment={segment}
+                shotIndex={clip.index}
+                onRerun={(segmentIndex, prompt) => onRerunH3Segment(clip.index, segmentIndex, prompt)}
+              />
+            ))}
+            <p className="text-[9px] text-text-muted">
+              Regenerating an intermediate segment also rebuilds the following segments in this shot, preventing an old drifted face from propagating.
+            </p>
           </div>
         )}
 
@@ -546,6 +643,7 @@ function DirectorDashboardInner() {
   const tagClip = useStore(s => s.tagClip)
   const rerunClipImage = useStore(s => s.rerunClipImage)
   const rerunClipVideo = useStore(s => s.rerunClipVideo)
+  const rerunH3Segment = useStore(s => s.rerunH3Segment)
   const rejoinClips = useStore(s => s.rejoinPipelineClips)
   const resumePipeline = useStore(s => s.resumePipeline)
   const setMediaFilter = useStore(s => s.setMediaFilter)
@@ -563,8 +661,15 @@ function DirectorDashboardInner() {
   const needsWorkCount = selectedPipeline?.clips.filter(c => c.tag === 'needs_work').length || 0
   const totalClips = selectedPipeline?.clips.length || 0
   const missingImages = selectedPipeline?.clips.filter(c => !c.start_image_filename).length || 0
-  const missingVideos = selectedPipeline?.clips.filter(c => !c.video_filename && c.start_image_filename).length || 0
+  const missingVideos = selectedPipeline?.clips.filter(c => !c.video_filename && !c.h3_segments?.length && c.start_image_filename).length || 0
   const hasMissing = missingImages > 0 || missingVideos > 0
+  const videoPartCount = selectedPipeline?.clips.reduce(
+    (count, clip) => count + (clip.h3_segments?.length || (clip.video_filename ? 1 : 0)),
+    0,
+  ) || 0
+  const finalOutputFilename = selectedPipeline?.final_output_filename || [...(selectedPipeline?.output_files || [])]
+    .reverse()
+    .find(filename => /(?:rejoin|multiclip|_movie)\.(?:mp4|webm|mkv|mov)$/i.test(filename))
 
   const [regenError, setRegenError] = useState<string | null>(null)
 
@@ -581,7 +686,7 @@ function DirectorDashboardInner() {
       }
       // Then missing videos
       for (const clip of selectedPipeline.clips) {
-        if (!clip.video_filename && clip.video_prompt) {
+        if (!clip.video_filename && !clip.h3_segments?.length && clip.video_prompt) {
           await rerunClipVideo(pid, clip.index)
         }
       }
@@ -594,7 +699,7 @@ function DirectorDashboardInner() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-bg-primary">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2 shrink-0">
-        <h1 className="text-sm font-semibold text-text-primary shrink-0">Productions</h1>
+        <h1 className="text-sm font-semibold text-text-primary shrink-0">Video workflows</h1>
 
         {/* Pipeline selector */}
         <select
@@ -602,7 +707,7 @@ function DirectorDashboardInner() {
           onChange={e => { if (e.target.value) loadPipeline(e.target.value) }}
           className="flex-1 min-w-0 max-w-md bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue truncate"
         >
-          <option value="">Select production...</option>
+          <option value="">Select an independent creation...</option>
           {pipelineList.map(p => (
             <option key={p.id} value={p.id}>
               {formatDate(p.created_at)} — {p.pipeline_type} ({p.clip_count} clips) [{p.status}]
@@ -674,7 +779,7 @@ function DirectorDashboardInner() {
             )}
             <button
               onClick={() => selectedPipeline && rejoinClips(selectedPipeline.pipeline_id)}
-              disabled={loading || totalClips < 2}
+              disabled={loading || videoPartCount < 2}
               className="flex items-center gap-1 px-2 py-1 text-[10px] bg-accent-blue/10 border border-accent-blue/30 rounded text-accent-blue hover:bg-accent-blue/20 disabled:opacity-40 transition-colors"
               title="Re-join all clips into a new video"
             >
@@ -733,6 +838,22 @@ function DirectorDashboardInner() {
                 <p className="text-[11px] text-text-secondary">{selectedPipeline.scene_description}</p>
               )}
               <PipelineProgressBar pipeline={selectedPipeline} />
+              {finalOutputFilename && (
+                <div className="pt-2 border-t border-border space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase tracking-wider text-text-muted">Current final assembly</span>
+                    <span className="text-[9px] text-text-muted">
+                      {getOutputReference({ name: finalOutputFilename, type: 'video' })}
+                    </span>
+                  </div>
+                  <video
+                    src={getFileUrl(finalOutputFilename)}
+                    controls
+                    preload="metadata"
+                    className="w-full max-h-72 rounded bg-black object-contain"
+                  />
+                </div>
+              )}
             </div>
 
             {/* LLM Log */}
@@ -754,6 +875,7 @@ function DirectorDashboardInner() {
                     onTag={(tag) => tagClip(selectedPipeline.pipeline_id, clip.index, tag)}
                     onRerunImage={(idx, prompt) => { setRegenError(null); rerunClipImage(selectedPipeline.pipeline_id, idx, prompt).catch(e => setRegenError(String(e instanceof Error ? e.message : e))) }}
                     onRerunVideo={(idx, prompt) => { setRegenError(null); rerunClipVideo(selectedPipeline.pipeline_id, idx, prompt).catch(e => setRegenError(String(e instanceof Error ? e.message : e))) }}
+                    onRerunH3Segment={(idx, segmentIndex, prompt) => { setRegenError(null); rerunH3Segment(selectedPipeline.pipeline_id, idx, segmentIndex, prompt).catch(e => setRegenError(String(e instanceof Error ? e.message : e))) }}
                   />
                 ))}
               </div>

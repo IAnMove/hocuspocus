@@ -594,9 +594,9 @@ export function DirectorChat() {
             <button
               onClick={() => useStore.getState().setDashboardOpen(true)}
               className="text-[10px] text-accent-blue hover:text-accent-blue/80 flex items-center gap-0.5 transition-colors"
-              title="Open current and past productions"
+              title="Open independent video creations and edit their clips"
             >
-              Productions
+              Video workflows
             </button>
             {(skill || step !== 'upload') && (
               <button

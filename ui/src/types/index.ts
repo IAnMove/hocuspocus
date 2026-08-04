@@ -979,7 +979,21 @@ export interface PipelineClipState {
   video_gen_time_sec: number | null
   h3_references?: H3ShotReferenceManifest | null
   h3_segment_prompts?: string[]
+  h3_segments?: H3SegmentState[]
   h3_prompt_validation?: 'optimized' | 'deterministic_fallback' | null
+}
+
+export interface H3SegmentState {
+  index: number
+  filename: string
+  prompt: string
+  frames: number
+  seed: number
+  reference_mode: 'first_frame' | 'references'
+  start_image_filename?: string
+  stale?: boolean
+  created_at?: number
+  updated_at?: number
 }
 
 export interface H3ShotReferenceManifest {
@@ -994,6 +1008,7 @@ export interface H3ShotReferenceManifest {
   audio_references: string[]
   note: string
   warnings?: string[]
+  continuity_mode?: 'identity_safe_hybrid'
 }
 
 export interface PipelineLlmPass {
@@ -1039,6 +1054,7 @@ export interface SavedPipelineState {
   llm_log: PipelineLlmLog | null
   clips: PipelineClipState[]
   output_files: string[]
+  final_output_filename?: string
   total_time_sec: number | null
 }
 

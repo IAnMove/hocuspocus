@@ -957,6 +957,24 @@ export async function rerunClipVideo(pid: string, clipIndex: number, prompt?: st
   return res.json()
 }
 
+export async function rerunH3Segment(
+  pid: string,
+  clipIndex: number,
+  segmentIndex: number,
+  prompt?: string,
+): Promise<{ filename: string; filenames: string[]; clip_index: number; segment_index: number; requires_rejoin: boolean }> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/clips/${clipIndex}/segments/${segmentIndex}/rerun`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: prompt || undefined, cascade: true }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Segment regeneration failed' }))
+    throw new Error(err.error || 'Segment regeneration failed')
+  }
+  return res.json()
+}
+
 export async function rejoinPipeline(pid: string): Promise<{ filename: string }> {
   const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/rejoin`, {
     method: 'POST',

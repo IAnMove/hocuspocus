@@ -26,7 +26,7 @@ export function ActivityFooter() {
   const jobs = useStore(s => s.jobs)
   const pipelineStatus = useStore(s => s.pipelineStatus)
   const foregroundActivity = useStore(s => s.foregroundActivity)
-  const setProductionsOpen = useStore(s => s.setDashboardOpen)
+  const setVideoWorkflowsOpen = useStore(s => s.setDashboardOpen)
 
   const activeJobs = jobs.filter(job => job.status === 'running' || job.status === 'queued')
   const primaryJob = activeJobs[0] ?? null
@@ -125,12 +125,12 @@ export function ActivityFooter() {
       )}
 
       <button
-        onClick={() => setProductionsOpen(true)}
+        onClick={() => setVideoWorkflowsOpen(true)}
         className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:border-accent-blue/50 hover:text-accent-blue transition-colors shrink-0"
-        title="Open current and past Director productions"
+        title="Open independent video creations and edit their clips"
       >
         <ListVideo size={12} />
-        <span className="hidden sm:inline">Productions</span>
+        <span className="hidden sm:inline">Video workflows</span>
       </button>
     </footer>
   )
