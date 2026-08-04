@@ -1752,6 +1752,13 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: `Review or adapt the prompt${cue.instrumental ? '' : ' and lyrics'} for “${cue.title}” first.` })
       return false
     }
+    if (!cue.instrumental && !MINIMAX_LYRIC_SECTION.test(cue.lyrics)) {
+      setNotice({
+        kind: 'error',
+        text: `“${cue.title}” needs [Verse], [Chorus] or another supported section tag before MiniMax generation. Adapt it with the LLM or edit the lyrics first.`,
+      })
+      return false
+    }
     const activity = queued
       ? null
       : beginStoryActivity('generating_music', `MiniMax Music is generating “${cue.title}”…`, 1)
