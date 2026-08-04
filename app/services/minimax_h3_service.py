@@ -53,12 +53,13 @@ DEFAULT_AUDIO_DIRECTION = (
 )
 
 MODEL_PROFILES = {
-    # Practical 4090 default: mixed FL2VA and INT4 Ref2VA leave VAE headroom
-    # and avoid repeatedly swapping a roughly 21 GB INT8 DiT off the GPU.
+    # ``balanced`` is retained as a backwards-compatible saved-settings alias.
+    # It now resolves to the same INT8 pair as ``quality`` so existing 4090
+    # users never silently fall back to the visibly softer INT4 Ref2VA model.
     "balanced": {
-        "text_encoder": TEXT_ENCODER,
-        "fl2va": FL2VA_MODEL,
-        "ref2va": REF2VA_MODEL,
+        "text_encoder": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        "fl2va": "MiniMax_H3_FL2VA_pruned_int8_convrot.safetensors",
+        "ref2va": "MiniMax_H3_Ref2VA_pruned_int8_convrot.safetensors",
     },
     "quality": {
         "text_encoder": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
@@ -105,7 +106,8 @@ DEFAULTS = {
     "h3_audio_shift": 3.0,
     "h3_audio_prompt": DEFAULT_AUDIO_DIRECTION,
     "h3_ref_image_size": "match",
-    "h3_model_profile": "balanced",
+    "h3_model_profile": "quality",
+    "h3_reference_mode": "first_frame",
 }
 
 MODEL_OPTIONS = {
@@ -172,7 +174,7 @@ def _model_path(relative_name: str) -> Path:
 
 
 def _profile_name(params: dict | None = None) -> str:
-    requested = str((params or {}).get("h3_model_profile") or "balanced").strip().lower()
+    requested = str((params or {}).get("h3_model_profile") or "quality").strip().lower()
     requested = {"mixed": "balanced", "int8": "quality", "int4": "low_memory"}.get(
         requested, requested
     )
@@ -280,7 +282,7 @@ def _drain_output(process: subprocess.Popen) -> None:
             print(f"[MiniMax H3] {line.rstrip()}")
 
 
-def _runtime_command(port: int, profile: str = "balanced") -> list[str]:
+def _runtime_command(port: int, profile: str = "quality") -> list[str]:
     """Build the ComfyUI command used by the isolated H3 sidecar."""
     command = [
         str(_python_executable()), "main.py", "--listen", "127.0.0.1",
@@ -293,12 +295,12 @@ def _runtime_command(port: int, profile: str = "balanced") -> list[str]:
     # The 21 GB quality DiT needs chunked loading on a 24 GB card.  MIXED and
     # INT4 fit alongside the VAE at the recommended 540p canvas and are faster
     # with ComfyUI's normal VRAM manager.
-    if profile == "quality":
+    if profile in {"quality", "balanced"}:
         command.append("--lowvram")
     return command
 
 
-def ensure_runtime(progress: Callable[[str], None], profile: str = "balanced") -> str:
+def ensure_runtime(progress: Callable[[str], None], profile: str = "quality") -> str:
     global _process, _port, _runtime_profile
     with _runtime_lock:
         if _process is not None and _process.poll() is None and _port is not None:
@@ -450,7 +452,31 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
     image_refs = [p for p in (params.get("image_refs") or []) if p]
     video_refs = [p for p in (params.get("h3_ref_videos") or []) if p]
     audio_refs = [p for p in (params.get("h3_ref_audios") or []) if p]
-    pipeline = "ref2va" if image_refs or video_refs or audio_refs else "fl2va"
+    has_omni_refs = bool(image_refs or video_refs or audio_refs)
+    requested_mode = str(params.get("h3_reference_mode") or "").strip().lower()
+    requested_mode = {
+        "fl2va": "first_frame",
+        "ref2va": "references",
+        "reference": "references",
+    }.get(requested_mode, requested_mode)
+    if requested_mode == "first_frame":
+        if has_omni_refs:
+            raise ValueError(
+                "MiniMax H3 First-frame mode cannot also use omni references; "
+                "remove them or choose Ref2VA References mode."
+            )
+        pipeline = "fl2va"
+    elif requested_mode == "references":
+        if not has_omni_refs:
+            raise ValueError(
+                "MiniMax H3 Ref2VA References mode needs at least one image, "
+                "video, or paired audio reference."
+            )
+        pipeline = "ref2va"
+    else:
+        # Backwards compatibility for saved jobs created before the explicit
+        # selector existed. New jobs always submit h3_reference_mode.
+        pipeline = "ref2va" if has_omni_refs else "fl2va"
     profile = _profile_name(params)
     selected = MODEL_PROFILES[profile]
     workflow = _base_sampling_graph(params, selected[pipeline], selected["text_encoder"])
@@ -645,7 +671,29 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
 def generate(params: dict, job_id: str, out_dir: str, progress: Callable[[str, int, int, int], None],
              cancelled: Callable[[], bool]) -> list[str]:
     try:
-        return _generate_impl(params, job_id, out_dir, progress, cancelled)
+        try:
+            return _generate_impl(params, job_id, out_dir, progress, cancelled)
+        except RuntimeError as exc:
+            message = str(exc).casefold()
+            profile = _profile_name(params)
+            is_oom = any(marker in message for marker in (
+                "out of memory",
+                "cuda error: memory allocation",
+                "allocation on device",
+                "failed to allocate",
+            ))
+            if profile not in {"quality", "balanced"} or not is_oom or cancelled():
+                raise
+            stop_runtime()
+            params["h3_model_fallback_from"] = profile
+            params["h3_model_profile"] = "low_memory"
+            progress(
+                "INT8 exceeded available VRAM; retrying this clip with the INT4 fallback…",
+                2,
+                0,
+                0,
+            )
+            return _generate_impl(params, job_id, out_dir, progress, cancelled)
     finally:
         if INPUT_DIR.is_dir():
             for staged in INPUT_DIR.glob(f"maestro_h3_{job_id}_*"):

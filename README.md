@@ -42,9 +42,9 @@ Studio Video includes the open **MiniMax H3 Base** model through an isolated, qu
 
 H3 outputs 24 fps video with native 32 kHz stereo audio. The open Base release supports a canvas up to 768×1344 and 4–15 second clips. Maestro aligns duration to H3's `17k+5` frame grid. The RTX 4090 defaults are **960×544, 124 frames and 20 steps**; choose a larger canvas when quality matters more than turnaround. `H3-Regenerate-2K` is not part of the open checkpoint and therefore is not presented as a local option.
 
-The Advanced/Model Options panel exposes inference steps, seed, video sigma shift (default 12), audio sigma shift (default 3), an editable **Audio Direction**, resolution, reference-image sizing and three lazy-downloaded ConvRot profiles: **Balanced 4090** (MIXED INT4/INT8 FL2VA or INT4 Ref2VA + INT4 encoder, default), **Quality 4090** (INT8 + INT8) and **Low VRAM** (INT4 + INT4). Maestro appends that direction as an `Audio:` clause when a Studio prompt does not already contain one, avoiding technically valid but nearly silent mixes. Reference prompts use `<Picture 1>`, `<Video 1>` and `<Audio 1>` tags. Ref2VA's separate DiT downloads only when a reference workflow is first requested.
+The Advanced/Model Options panel exposes inference steps, seed, video sigma shift (default 12), audio sigma shift (default 3), an editable **Audio Direction**, resolution, reference-image sizing and two explicit conditioning contracts: **Exact frame · FL2VA** and **References · Ref2VA**. FL2VA is the default when Story has an approved shot frame; Ref2VA must be selected explicitly and composes a new opening from its references rather than promising an exact first frame. **Quality 4090** uses INT8 + INT8 by default. **Low VRAM fallback** uses INT4 + INT4 and is retried automatically only after an INT8 out-of-memory error; the old `balanced` setting remains a backwards-compatible INT8 alias. Maestro appends the audio direction as an `Audio:` clause when a Studio prompt does not already contain one. Reference prompts use `<Picture 1>`, `<Video 1>` and `<Audio 1>` tags.
 
-Director → Short Film → Story also supports H3 Ref2VA. Its main artwork and character references are passed as global identity references, while each shot receives only its single matching labelled location reference; unrelated locations are never mixed into the same generation. The Additional References panel adds up to three 2–15 second video clips and three audio clips. One of H3's 12 slots is reserved for each generated shot's continuity frame. Director's structured per-shot audio plan (ambience, effects, vocal style and exact dialogue) is rendered into every H3 prompt automatically.
+Director → Short Film → Story defaults to FL2VA, sending only each approved shot/continuity frame to the video model; character and location artwork still guides creation of that composite frame without competing with it during video generation. Ref2VA is an explicit alternative: the main artwork and character references are passed as identity references, while each shot receives only its single exactly matched labelled location. The UI previews that per-shot reference manifest, and Productions stores the authoritative manifest with warnings for unmatched locations. Story targets 124-frame segments and divides long action prose into non-repeating temporal windows, so consecutive clips continue the sequence instead of replaying the full prompt. Structured ambience, effects, vocal style and dialogue are assigned to their relevant segment. Before releasing the writing model from memory, Director makes one additional structured H3 validation pass over the exact post-split prompts. It may improve motion and camera phrasing, but protected story beats, style contracts, quoted dialogue and the complete audio direction are validated and preserved; malformed or drifting output falls back automatically to the deterministic prompts. Productions shows both the validation result and the exact H3 segment prompts that were used.
 
 #### MiniMax H3 API
 
@@ -59,7 +59,8 @@ curl -X POST "$MAESTRO_URL/api/v1/generate" \
     "resolution": "960x544",
     "video_length": 124,
     "num_inference_steps": 20,
-    "h3_model_profile": "balanced",
+    "h3_model_profile": "quality",
+    "h3_reference_mode": "first_frame",
     "seed": -1,
     "flow_shift": 12,
     "h3_audio_shift": 3
@@ -79,6 +80,7 @@ job = requests.post(f"{MAESTRO_URL}/api/v1/generate", json={
     "num_inference_steps": 20,
     "seed": 42,
     "image_refs": ["/absolute/path/from-the-upload-endpoint.png"],
+    "h3_reference_mode": "references",
     "h3_ref_image_size": "max",
 }).json()
 print(job["job_id"])
@@ -97,6 +99,7 @@ const response = await fetch(`${MAESTRO_URL}/api/v1/generate`, {
     video_length: 362,
     num_inference_steps: 20,
     seed: 1234,
+    h3_reference_mode: 'references',
     h3_ref_videos: ['/absolute/path/from-the-upload-endpoint.mp4'],
   }),
 })

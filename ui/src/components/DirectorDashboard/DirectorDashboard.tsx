@@ -12,6 +12,10 @@ function safeStr(val: unknown): string {
   return String(val)
 }
 
+function fileLabel(path: string): string {
+  return String(path || '').split(/[\\/]/).pop() || String(path || '')
+}
+
 /** Error boundary to prevent the productions view crashing on bad saved data. */
 class DashboardErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   state = { error: null as string | null }
@@ -294,6 +298,45 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo }: {
           </div>
         </div>
 
+        {clip.h3_references && (
+          <div className="rounded border border-cyan-500/20 bg-cyan-500/5 p-2 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-medium uppercase tracking-wider text-cyan-300">H3 conditioning</span>
+              <span className="text-[9px] text-text-muted">
+                {clip.h3_references.mode === 'first_frame' ? 'FL2VA · exact frame' : 'Ref2VA · references'}
+              </span>
+            </div>
+            <p className="text-[9px] text-text-muted">{clip.h3_references.note}</p>
+            {clip.h3_prompt_validation && (
+              <div className={`text-[9px] ${
+                clip.h3_prompt_validation === 'optimized' ? 'text-green-300' : 'text-amber-300'
+              }`}>
+                Prompt: {clip.h3_prompt_validation === 'optimized'
+                  ? `validated and optimized for H3 · ${clip.h3_segment_prompts?.length || 0} segments`
+                  : 'deterministic safe prompt · LLM validation unavailable'}
+              </div>
+            )}
+            <div className="text-[9px] text-text-secondary space-y-0.5">
+              <div>Shot frame: {fileLabel(clip.h3_references.shot_frame) || 'missing'}</div>
+              {clip.h3_references.image_references.length > 0 && (
+                <div>Images: {clip.h3_references.image_references.map(fileLabel).join(', ')}</div>
+              )}
+              {clip.h3_references.location_label && <div>Location: {clip.h3_references.location_label}</div>}
+              {clip.h3_references.video_references.length > 0 && (
+                <div>Videos: {clip.h3_references.video_references.map(fileLabel).join(', ')}</div>
+              )}
+              {clip.h3_references.audio_references.length > 0 && (
+                <div>Audio: {clip.h3_references.audio_references.map(fileLabel).join(', ')}</div>
+              )}
+            </div>
+            {clip.h3_references.warnings?.map((warning, index) => (
+              <div key={index} className="flex items-start gap-1 text-[9px] text-amber-300">
+                <AlertTriangle size={9} className="mt-0.5 shrink-0" />{warning}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Keyframes */}
         {(clip.keyframe_prompts?.length > 0 || clip.keyframe_filenames?.length > 0) && (
           <div>
@@ -326,7 +369,9 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo }: {
         <div>
           <div className="flex items-center justify-between mb-0.5">
             <span className="text-[9px] text-text-muted uppercase tracking-wider">
-              Video Prompt{clip.window_prompts?.length > 1 ? ` (${clip.window_prompts.length} windows)` : ''}
+              Video Prompt{clip.h3_segment_prompts?.length
+                ? ` (${clip.h3_segment_prompts.length} H3 segments)`
+                : clip.window_prompts?.length > 1 ? ` (${clip.window_prompts.length} windows)` : ''}
             </span>
             <div className="flex items-center gap-1">
               <button onClick={() => {
@@ -379,7 +424,17 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo }: {
               />
             )
           ) : (
-            clip.window_prompts?.length > 1 ? (
+            clip.h3_segment_prompts?.length ? (
+              <div className="space-y-0.5">
+                {clip.h3_segment_prompts.map((prompt, index) => (
+                  <p key={index} className={`text-[10px] text-text-secondary pl-2 border-l-2 ${index === 0 ? 'border-cyan-400/50' : 'border-border'} ${expandVideo ? '' : 'line-clamp-2'} cursor-pointer`}
+                    onClick={() => setExpandVideo(!expandVideo)}>
+                    <span className="text-[8px] text-cyan-300 mr-1">H3-{index + 1}</span>
+                    {safeStr(prompt)}
+                  </p>
+                ))}
+              </div>
+            ) : clip.window_prompts?.length > 1 ? (
               <div className="space-y-0.5">
                 {clip.window_prompts.map((wp, wi) => (
                   <p key={wi} className={`text-[10px] text-text-secondary pl-2 border-l-2 ${wi === 0 ? 'border-accent-blue/40' : 'border-border'} ${expandVideo ? '' : 'line-clamp-2'} cursor-pointer`}

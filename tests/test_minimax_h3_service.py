@@ -16,7 +16,7 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         command = h3._runtime_command(43123, "balanced")
 
         self.assertIn("--enable-triton-backend", command)
-        self.assertNotIn("--lowvram", command)
+        self.assertIn("--lowvram", command)
         self.assertEqual(command[command.index("--listen") + 1], "127.0.0.1")
         self.assertEqual(command[command.index("--port") + 1], "43123")
 
@@ -30,7 +30,10 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         }, "jobt2v")
 
         self.assertEqual(pipeline, "fl2va")
-        self.assertEqual(workflow["1"]["inputs"]["unet_name"], h3.FL2VA_MODEL)
+        self.assertEqual(
+            workflow["1"]["inputs"]["unet_name"],
+            h3.MODEL_PROFILES["quality"]["fl2va"],
+        )
         self.assertEqual(workflow["10"]["class_type"], "MiniMaxH3ImageToVideo")
         self.assertEqual(workflow["10"]["inputs"]["prompt"].lower().count("audio:"), 1)
         self.assertEqual(workflow["27"]["inputs"]["fps"], 24.0)
@@ -50,25 +53,30 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         self.assertEqual(h3.DEFAULTS["resolution"], "960x544")
         self.assertEqual(h3.DEFAULTS["video_length"], 124)
         self.assertEqual(h3.DEFAULTS["num_inference_steps"], 20)
+        self.assertEqual(h3.DEFAULTS["h3_model_profile"], "quality")
+        self.assertEqual(h3.DEFAULTS["h3_reference_mode"], "first_frame")
 
-    def test_balanced_ref2va_uses_an_available_int4_checkpoint(self):
+    def test_legacy_balanced_profile_no_longer_silently_uses_int4(self):
         self.assertEqual(
             h3.MODEL_PROFILES["balanced"]["ref2va"],
-            "MiniMax_H3_Ref2VA_pruned_int4_convrot.safetensors",
+            h3.MODEL_PROFILES["quality"]["ref2va"],
         )
 
     def test_community_dit_download_uses_hub_root_and_comfy_diffusion_folder(self):
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.object(h3, "COMFY_DIR", Path(tmp) / "ComfyUI"), \
                 patch("huggingface_hub.hf_hub_download") as download:
-            h3._ensure_models("ref2va", "balanced", lambda _message: None)
+            h3._ensure_models("ref2va", "quality", lambda _message: None)
 
         dit_call = next(
             call for call in download.call_args_list
             if call.kwargs["repo_id"] == h3.COMMUNITY_HF_REPO
             and call.kwargs["filename"].startswith("MiniMax_H3_Ref2VA")
         )
-        self.assertEqual(dit_call.kwargs["filename"], h3.REF2VA_MODEL)
+        self.assertEqual(
+            dit_call.kwargs["filename"],
+            h3.MODEL_PROFILES["quality"]["ref2va"],
+        )
         self.assertTrue(dit_call.kwargs["local_dir"].endswith("models/diffusion_models"))
 
     def test_visual_only_prompt_receives_recommended_audio_direction(self):
@@ -137,10 +145,14 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
                 "h3_ref_videos": [files["clip.mp4"]],
                 "h3_ref_audios": [files["voice.wav"]],
                 "h3_ref_image_size": "max",
+                "h3_reference_mode": "references",
             }, "jobref")
 
         self.assertEqual(pipeline, "ref2va")
-        self.assertEqual(workflow["1"]["inputs"]["unet_name"], h3.REF2VA_MODEL)
+        self.assertEqual(
+            workflow["1"]["inputs"]["unet_name"],
+            h3.MODEL_PROFILES["quality"]["ref2va"],
+        )
         inputs = workflow["10"]["inputs"]
         self.assertEqual(workflow["10"]["class_type"], "MiniMaxH3ReferenceToVideo")
         self.assertEqual(inputs["ref_image_size"], "max")
@@ -159,6 +171,7 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
                     **h3.DEFAULTS,
                     "prompt": "voice",
                     "h3_ref_audios": [str(audio)],
+                    "h3_reference_mode": "references",
                 }, "jobaudio")
 
     def test_duration_is_clamped_and_aligned_to_17k_plus_5(self):
@@ -195,7 +208,42 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
                     "prompt": "test",
                     "image_refs": [str(picture)],
                     "h3_ref_videos": [str(video)],
+                    "h3_reference_mode": "references",
                 }, "joblong")
+
+    def test_first_frame_mode_rejects_silent_omni_reference_mixing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            picture = Path(tmp) / "picture.png"
+            picture.write_bytes(b"picture")
+            with self.assertRaisesRegex(ValueError, "cannot also use omni references"):
+                h3.build_workflow({
+                    **h3.DEFAULTS,
+                    "prompt": "keep the first frame",
+                    "image_refs": [str(picture)],
+                }, "jobmixed")
+
+    def test_quality_profile_retries_int4_only_after_an_oom(self):
+        params = {**h3.DEFAULTS, "prompt": "test"}
+        updates = []
+        with patch.object(
+            h3,
+            "_generate_impl",
+            side_effect=[RuntimeError("CUDA out of memory"), ["fallback.mp4"]],
+        ) as generate_impl, patch.object(h3, "stop_runtime") as stop_runtime:
+            result = h3.generate(
+                params,
+                "jobfallback",
+                "/tmp",
+                lambda *args: updates.append(args),
+                lambda: False,
+            )
+
+        self.assertEqual(result, ["fallback.mp4"])
+        self.assertEqual(generate_impl.call_count, 2)
+        stop_runtime.assert_called_once()
+        self.assertEqual(params["h3_model_profile"], "low_memory")
+        self.assertEqual(params["h3_model_fallback_from"], "quality")
+        self.assertTrue(any("INT4 fallback" in update[0] for update in updates))
 
 
 if __name__ == "__main__":

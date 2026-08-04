@@ -80,17 +80,33 @@ export function ModelOptionsPanel() {
       {modelOptions.architecture === 'minimax_h3' && (
         <div className="space-y-4">
           <div>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Conditioning Mode</label>
+            <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-tertiary p-1">
+              <button type="button" onClick={() => setParam('h3_reference_mode', 'first_frame')}
+                className={`rounded-md px-2 py-1.5 text-[11px] transition-colors ${(params.h3_reference_mode ?? 'first_frame') === 'first_frame' ? 'bg-accent-blue text-white' : 'text-text-secondary hover:bg-bg-hover'}`}>
+                Exact frame · FL2VA
+              </button>
+              <button type="button" onClick={() => setParam('h3_reference_mode', 'references')}
+                className={`rounded-md px-2 py-1.5 text-[11px] transition-colors ${params.h3_reference_mode === 'references' ? 'bg-cyan-600 text-white' : 'text-text-secondary hover:bg-bg-hover'}`}>
+                References · Ref2VA
+              </button>
+            </div>
+            <p className="text-[10px] text-text-muted mt-1">
+              FL2VA preserves the supplied first frame. Ref2VA composes a new shot from image/video/audio references and cannot guarantee an exact opening frame.
+            </p>
+          </div>
+          <div>
             <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">4090 Model Profile</label>
             <select
-              value={params.h3_model_profile ?? 'balanced'}
+              value={params.h3_model_profile ?? 'quality'}
               onChange={e => setParam('h3_model_profile', e.target.value as 'balanced' | 'quality' | 'low_memory')}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             >
-              <option value="balanced">Balanced · MIXED INT4/INT8 (recommended)</option>
-              <option value="quality">Quality · INT8 (largest)</option>
-              <option value="low_memory">Low VRAM · INT4</option>
+              <option value="quality">Quality 4090 · INT8 (recommended)</option>
+              <option value="balanced">Legacy Balanced · INT8</option>
+              <option value="low_memory">Low VRAM fallback · INT4</option>
             </select>
-            <p className="text-[10px] text-text-muted mt-1">Downloads only the selected FL2VA or Ref2VA checkpoint on first use.</p>
+            <p className="text-[10px] text-text-muted mt-1">INT4 is retried automatically only if INT8 runs out of VRAM. The selected FL2VA or Ref2VA checkpoint downloads on first use.</p>
           </div>
           <div>
             <div className="flex items-center justify-between mb-1.5">

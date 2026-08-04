@@ -1,5 +1,6 @@
 """Regression tests for Story Director's MiniMax H3 duration adapter."""
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -10,7 +11,7 @@ from app.services import director_pipeline
 def test_h3_duration_segments_stay_on_the_supported_lattice():
     segments = director_pipeline._minimax_h3_frame_segments(45.0)
 
-    assert len(segments) == 3
+    assert len(segments) == 9
     assert all(107 <= frames <= 362 for frames in segments)
     assert all(frames % 17 == 5 for frames in segments)
     assert abs(sum(segments) - 45 * 24) <= 17 / 2
@@ -19,7 +20,7 @@ def test_h3_duration_segments_stay_on_the_supported_lattice():
 def test_h3_long_shot_is_split_without_losing_its_duration():
     segments = director_pipeline._minimax_h3_frame_segments(20.0)
 
-    assert len(segments) == 2
+    assert len(segments) == 4
     assert abs(sum(segments) - 20 * 24) <= 17 / 2
 
 
@@ -38,8 +39,27 @@ def test_h3_segment_prompts_follow_authored_windows():
         for index in range(3)
     ]
 
-    assert [prompt.splitlines()[0] for prompt in prompts] == ["opening", "middle", "ending"]
+    assert all(expected in prompt for expected, prompt in zip(["opening", "middle", "ending"], prompts))
     assert all("Audio:" in prompt for prompt in prompts)
+
+
+def test_h3_authored_windows_are_split_instead_of_replayed():
+    plan = {
+        "window_prompts": [
+            {"prompt": "She approaches. She stops. She kneels. She uncovers the sphere."},
+            {"prompt": "She lifts it. The map appears. She studies it. She walks away."},
+        ],
+    }
+
+    prompts = [
+        director_pipeline._minimax_h3_segment_prompt(plan, index, 4)
+        for index in range(4)
+    ]
+
+    assert "She approaches" in prompts[0]
+    assert "She approaches" not in prompts[1]
+    assert "She lifts it" in prompts[2]
+    assert "She lifts it" not in prompts[3]
 
 
 def test_h3_segment_prompt_renders_director_audio_plan_and_dialogue():
@@ -103,12 +123,47 @@ def test_h3_story_renders_each_shot_and_assembles_native_audio(tmp_path: Path):
             str(tmp_path),
         )
 
-    assert [item["prompt"].splitlines()[0] for item in submitted] == ["first", "second"]
+    assert all(expected in item["prompt"] for expected, item in zip(["first", "second"], submitted))
     assert all("Audio:" in item["prompt"] for item in submitted)
     assert all(item["model_type"] == "minimax_h3" for item in submitted)
     assert all(item["image_start"].endswith(f"shot_{index}.png") for index, item in enumerate(submitted))
     assert outputs == ["clip_1.mp4", "clip_2.mp4", "minimax_h3_h3story_multiclip.mp4"]
     assert (tmp_path / "minimax_h3_h3story_multiclip.mp4").is_file()
+
+
+def test_h3_story_first_frame_mode_does_not_silently_send_omni_refs(tmp_path: Path):
+    shot = tmp_path / "shot.png"
+    portrait = tmp_path / "portrait.png"
+    location = tmp_path / "location.png"
+    for path in (shot, portrait, location):
+        path.write_bytes(b"frame")
+
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        (tmp_path / "clip.mp4").write_bytes(b"video")
+        return ["clip.mp4"]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch.object(director_pipeline, "_save_pipeline_state"):
+        director_pipeline._run_minimax_h3_story_video(
+            "h3firstframe",
+            {
+                "character_ref_paths": [str(portrait)],
+                "location_ref_paths": [str(location)],
+            },
+            [{"video_prompt": "Use the supplied image as the exact first frame. She turns."}],
+            [{"start": 0, "end": 5}],
+            [shot.name],
+            {"num_inference_steps": 20, "h3_reference_mode": "first_frame"},
+            "960x544",
+            str(tmp_path),
+        )
+
+    assert submitted[0]["image_start"] == str(shot)
+    assert "image_refs" not in submitted[0]
+    assert "exact first frame" in submitted[0]["prompt"].casefold()
 
 
 def test_h3_story_routes_director_omni_references_to_ref2va(tmp_path: Path):
@@ -139,6 +194,7 @@ def test_h3_story_routes_director_omni_references_to_ref2va(tmp_path: Path):
             {
                 "num_inference_steps": 20,
                 "h3_model_profile": "balanced",
+                "h3_reference_mode": "references",
                 "h3_ref_videos": ["/refs/motion.mp4"],
                 "h3_ref_audios": ["/refs/voice.wav"],
             },
@@ -183,7 +239,7 @@ def test_h3_story_routes_only_the_location_selected_for_the_shot(tmp_path: Path)
             }],
             [{"start": 0, "end": 5}],
             [shot.name],
-            {"num_inference_steps": 20},
+            {"num_inference_steps": 20, "h3_reference_mode": "references"},
             "960x544",
             str(tmp_path),
         )
@@ -221,12 +277,103 @@ def test_h3_story_legacy_plan_matches_one_location_from_prompt(tmp_path: Path):
             [{"video_prompt": "A wide view across the silent Crystal Desert."}],
             [{"start": 0, "end": 5}],
             [shot.name],
-            {"num_inference_steps": 20},
+            {"num_inference_steps": 20, "h3_reference_mode": "references"},
             "960x544",
             str(tmp_path),
         )
 
     assert submitted[0]["image_refs"] == [str(shot), str(desert)]
+
+
+def test_h3_unwindowed_story_prompt_is_split_without_repeating_actions():
+    plan = {
+        "video_prompt": (
+            "Use the supplied image as the exact first frame. "
+            "Animate the artwork without changing its visual medium. "
+            "She walks forward. She stops. She kneels. She uncovers a sphere. "
+            "She lifts it. A map appears. She studies it. She walks away."
+        ),
+    }
+
+    prompts = [
+        director_pipeline._minimax_h3_segment_prompt(plan, index, 4)
+        for index in range(4)
+    ]
+
+    assert all("Perform only these actions" in prompt for prompt in prompts)
+    assert "She walks forward" in prompts[0]
+    assert "She walks away" in prompts[-1]
+    assert "She walks forward" not in prompts[-1]
+    assert "do not repeat actions" in prompts[1]
+
+
+def test_h3_ref2va_prompt_does_not_claim_an_exact_first_frame():
+    prompt = director_pipeline._minimax_h3_segment_prompt({
+        "video_prompt": "Use the supplied image as the exact first frame. She turns around.",
+    }, 0, 1, reference_mode="references")
+
+    assert "exact first frame" not in prompt.casefold()
+    assert "Compose a new opening frame" in prompt
+
+
+def test_h3_prompt_validator_cannot_rewrite_authored_audio():
+    draft = (
+        "Use the supplied image as the exact first frame. She opens the door. "
+        'Audio: rain; Mara says "We leave at dawn."'
+    )
+    candidate = (
+        "She slowly opens the door with one clear movement. "
+        "Audio: loud music and different dialogue."
+    )
+
+    validated = director_pipeline._h3_validated_candidate(
+        candidate,
+        draft,
+        "first_frame",
+    )
+
+    assert 'Audio: rain; Mara says "We leave at dawn."' in validated
+    assert "loud music" not in validated
+    assert "exact first frame" in validated.casefold()
+
+
+def test_h3_story_runs_one_guarded_optimizer_pass_for_exact_segments():
+    old_pipelines = director_pipeline._pipelines
+    director_pipeline._pipelines = {"h3opt": {"_llm_passes": []}}
+
+    def optimize(**kwargs):
+        entries = json.loads(kwargs["prompt"].split("prompts:\n", 1)[1])
+        return json.dumps(entries)
+
+    try:
+        with patch.object(director_pipeline, "_scoped_writing_llm", return_value={
+            "provider": "minimax",
+            "model": "MiniMax-M3",
+            "base_url": "https://api.minimax.io/v1",
+            "api_key": "test-key",
+        }), patch("app.services.llm_service.generate_openai_compatible", side_effect=optimize) as generate:
+            plans = director_pipeline._optimize_minimax_h3_story_prompts(
+                "h3opt",
+                {
+                    "video_model": "minimax_h3",
+                    "video_params": {"h3_reference_mode": "first_frame"},
+                },
+                [{
+                    "video_prompt": (
+                        "Use the supplied image as the exact first frame. "
+                        "Animate the artwork without changing its visual medium. "
+                        "She walks. She stops."
+                    ),
+                }],
+                [{"duration_sec": 5}],
+            )
+    finally:
+        director_pipeline._pipelines = old_pipelines
+
+    generate.assert_called_once()
+    assert len(plans[0]["h3_segment_prompts"]) == 1
+    assert plans[0]["metadata"]["h3_prompt_validation"] == "optimized"
+    assert "Audio:" in plans[0]["h3_segment_prompts"][0]
 
 
 def test_legacy_location_matching_handles_spanish_labels_and_english_prompts():

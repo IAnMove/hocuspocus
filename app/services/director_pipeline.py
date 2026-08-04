@@ -267,6 +267,7 @@ def _save_pipeline_state(pid: str) -> bool:
     pre_polish = p.get("_clip_plans_pre_polish", [])
     clip_timings = p.get("_clip_timings", {})
     clip_validations = p.get("_clip_validations", [])
+    h3_reference_manifest = p.get("h3_reference_manifest", [])
 
     clips = []
     for i, plan in enumerate(clip_plans):
@@ -311,6 +312,17 @@ def _save_pipeline_state(pid: str) -> bool:
             "validation": (
                 clip_validations[i] if i < len(clip_validations) else None
             ),
+            "h3_references": (
+                h3_reference_manifest[i]
+                if i < len(h3_reference_manifest)
+                else None
+            ),
+            "h3_segment_prompts": plan.get("h3_segment_prompts", []) or [],
+            "h3_prompt_validation": (
+                plan.get("metadata", {}).get("h3_prompt_validation")
+                if isinstance(plan.get("metadata"), dict)
+                else None
+            ),
             "shot_id": _stable_comic_shot_id(params, i, plan),
             "seed": _comic_shot_seed(params, i, plan),
             "renderer": _comic_renderer(params, i, plan),
@@ -342,6 +354,8 @@ def _save_pipeline_state(pid: str) -> bool:
         "video_loras": params.get("video_loras", {}),
         "image_params": params.get("image_params", {}),
         "video_params": params.get("video_params", {}),
+        "h3_reference_manifest": h3_reference_manifest,
+        "h3_prompt_validation": p.get("h3_prompt_validation"),
         "preview_clips": p.get("preview_clips", []),
         "preview_fingerprint": p.get("_comic_preflight_fingerprint"),
         "preview_revision": p.get("_preview_revision", 1),
@@ -2526,6 +2540,8 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
             "failures": [],
         },
         "preview_clips": data.get("preview_clips", []) or [],
+        "h3_reference_manifest": data.get("h3_reference_manifest", []) or [],
+        "h3_prompt_validation": data.get("h3_prompt_validation"),
         "output_files": data.get("output_files", []) or [],
         "_llm_log": data.get("llm_log"),
         "error": None,
@@ -2824,6 +2840,56 @@ def _run_pipeline(pid: str, resume: bool = False):
             )
             _update_pipeline(pid, clip_plans=clip_plans)
 
+        # H3 consumes shorter temporal segments than the Story planner writes.
+        # Validate the exact post-split prompts while the selected writing LLM
+        # is still available, then unload it before image/video generation.
+        if not resume_plans and params.get("video_model") == "minimax_h3":
+            _update_pipeline(
+                pid,
+                phase="validating_h3_prompts",
+                llm_streaming=False,
+                progress={
+                    "current": 0,
+                    "total": len(clip_plans),
+                    "message": "Validating prompts for MiniMax H3...",
+                    "step": 0,
+                    "total_steps": 0,
+                },
+            )
+            try:
+                clip_plans = _optimize_minimax_h3_story_prompts(
+                    pid,
+                    params,
+                    clip_plans,
+                    planned_clips,
+                )
+                _update_pipeline(
+                    pid,
+                    clip_plans=clip_plans,
+                    h3_prompt_validation={
+                        "status": "optimized",
+                        "segments": sum(
+                            len(plan.get("h3_segment_prompts") or [])
+                            for plan in clip_plans
+                        ),
+                    },
+                )
+            except Exception as error:
+                print(f"[Pipeline] H3 prompt validation failed; using deterministic prompts: {error}")
+                for plan in clip_plans:
+                    metadata = plan.setdefault("metadata", {})
+                    if isinstance(metadata, dict):
+                        metadata["h3_prompt_validation"] = "deterministic_fallback"
+                _update_pipeline(
+                    pid,
+                    clip_plans=clip_plans,
+                    h3_prompt_validation={
+                        "status": "deterministic_fallback",
+                        "error": str(error),
+                    },
+                )
+            _save_pipeline_state(pid)
+
         # ── Phase 2: Prepare or Generate Start Images ────────────────────
         # Normal Director productions generate start frames here. Comic
         # movies already have one approved artwork image per shot, so those
@@ -3104,7 +3170,7 @@ def _wait_for_gpu(pid: str, poll_interval: float = 2.0):
 
 def _ensure_llm_loaded(params: dict):
     """Load/reload LLM if needed. Shared between legacy and new planning."""
-    from services import llm_service
+    from . import llm_service
 
     services_cfg = _wgp.server_config.get("services", {}) if _wgp else {}
     desired_model = params.get("llm_model_id") or services_cfg.get("llm_model_id", "Abhiray/gemma-4-E4B-it-heretic-GGUF")
@@ -6149,16 +6215,23 @@ def _run_comic_renderer_pipeline(
     return [final_name]
 
 
-def _minimax_h3_frame_segments(duration_sec: float, fps: int = 24) -> list[int]:
+def _minimax_h3_frame_segments(
+    duration_sec: float,
+    fps: int = 24,
+    target_frames: int = 124,
+) -> list[int]:
     """Split a requested duration into H3's 17n+5 frame lattice.
 
-    Open H3 accepts 107..362 frames per request.  Director shots can be much
-    longer, so keep every segment valid while making the assembled duration
-    as close as possible to the authored shot duration.
+    Open H3 accepts 107..362 frames per request. Director targets the model's
+    recommended 124-frame (~5.2 s) clip length instead of filling the 15 s
+    maximum: shorter segments follow a small sequence of actions much more
+    reliably and make continuity failures cheaper to reroll.
     """
     minimum, maximum, step, offset = 107, 362, 17, 5
     requested = max(minimum, round(max(0.0, float(duration_sec)) * fps))
-    count = max(1, (requested + maximum - 1) // maximum)
+    target_frames = max(minimum, min(maximum, int(target_frames or 124)))
+    count = max(1, round(requested / target_frames))
+    count = min(count, max(1, requested // minimum))
     target = requested / count
 
     def quantize(value: float) -> int:
@@ -6183,7 +6256,12 @@ def _minimax_h3_frame_segments(duration_sec: float, fps: int = 24) -> list[int]:
     return segments
 
 
-def _minimax_h3_audio_direction(plan: dict, global_direction: str = "") -> str:
+def _minimax_h3_audio_direction(
+    plan: dict,
+    global_direction: str = "",
+    segment_index: int = 0,
+    segment_count: int = 1,
+) -> str:
     """Render Director's structured per-shot sound plan for H3."""
     audio_plan = plan.get("audio_plan") if isinstance(plan.get("audio_plan"), dict) else {}
     parts: list[str] = []
@@ -6200,7 +6278,14 @@ def _minimax_h3_audio_direction(plan: dict, global_direction: str = "") -> str:
         parts.append(f"Sound effects: {', '.join(effects)}.")
 
     dialogue_lines: list[str] = []
-    for beat in plan.get("dialogue_beats") or []:
+    all_dialogue_beats = list(plan.get("dialogue_beats") or [])
+    if segment_count > 1 and all_dialogue_beats:
+        start = segment_index * len(all_dialogue_beats) // segment_count
+        end = (segment_index + 1) * len(all_dialogue_beats) // segment_count
+        dialogue_beats = all_dialogue_beats[start:end]
+    else:
+        dialogue_beats = all_dialogue_beats
+    for beat in dialogue_beats:
         if not isinstance(beat, dict):
             continue
         spoken = " ".join(str(beat.get("spoken_text") or beat.get("text") or "").split())
@@ -6233,13 +6318,134 @@ def _minimax_h3_audio_direction(plan: dict, global_direction: str = "") -> str:
     return " ".join(parts)
 
 
+def _h3_sentence_windows(prompt: str, segment_count: int) -> list[str]:
+    """Split a long Story prompt into non-repeating action windows."""
+    text = re.sub(r"\s*\bAudio\s*:.*$", "", str(prompt or "").strip(), flags=re.I | re.S)
+    if segment_count <= 1 or not text:
+        return [text]
+
+    marker = "Animate the artwork without changing its visual medium."
+    marker_index = text.casefold().find(marker.casefold())
+    if marker_index >= 0:
+        split_at = marker_index + len(marker)
+        prefix, action_text = text[:split_at].strip(), text[split_at:].strip()
+    else:
+        sentences = [item.strip() for item in re.split(r"(?<=[.!?])\s+", text) if item.strip()]
+        prefix_parts: list[str] = []
+        action_parts: list[str] = []
+        for sentence in sentences:
+            lower = sentence.casefold()
+            if not action_parts and any(token in lower for token in (
+                "exact first frame", "preserve its visual medium", "visual style lock:",
+                "match this authored medium", "do not restyle",
+            )):
+                prefix_parts.append(sentence)
+            else:
+                action_parts.append(sentence)
+        prefix = " ".join(prefix_parts)
+        action_text = " ".join(action_parts) if action_parts else text
+
+    actions = [item.strip() for item in re.split(r"(?<=[.!?])\s+", action_text) if item.strip()]
+    if not actions:
+        actions = [action_text]
+    windows: list[str] = []
+    for index in range(segment_count):
+        start = index * len(actions) // segment_count
+        end = (index + 1) * len(actions) // segment_count
+        selected = actions[start:end]
+        if not selected:
+            selected = [actions[min(index, len(actions) - 1)]]
+        continuity = (
+            "Continue directly from the supplied continuity frame; do not repeat "
+            "actions from earlier segments. " if index else ""
+        )
+        action_window = " ".join(selected)
+        windows.append(
+            " ".join(part for part in (
+                prefix,
+                continuity + "Perform only these actions in this segment:",
+                action_window,
+            ) if part).strip()
+        )
+    return windows
+
+
+def _h3_apply_reference_contract(prompt: str, reference_mode: str) -> str:
+    text = str(prompt or "").strip()
+    exact = "Use the supplied image as the exact first frame."
+    exact_pattern = r"use the supplied images? as the exact first frame\."
+    if reference_mode == "references":
+        replacement = (
+            "Use the supplied images as visual references for identity, wardrobe, "
+            "environment and style. Compose a new opening frame from that reference set."
+        )
+        text, replacements = re.subn(exact_pattern, replacement, text, flags=re.I)
+        if not replacements and "compose a new opening frame" not in text.casefold():
+            text = f"{replacement} {text}".strip()
+        return text
+    authority = (
+        "The visible wardrobe and environment in that first frame are authoritative; "
+        "ignore later wording that conflicts with their colors or design."
+    )
+    if "visible wardrobe and environment" not in text.casefold():
+        remainder = re.sub(exact_pattern, "", text, flags=re.I).strip()
+        text = f"{exact} {authority} {remainder}".strip()
+    return text
+
+
+def _h3_authored_segment_windows(prompts: list[str], segment_count: int) -> list[str]:
+    """Split authored windows across H3 segments without replaying whole windows."""
+    if not prompts:
+        return []
+    if segment_count <= 1:
+        return [" ".join(prompts)]
+
+    assignments = [
+        min(len(prompts) - 1, index * len(prompts) // segment_count)
+        for index in range(segment_count)
+    ]
+    windows: list[str] = []
+    for index, source_index in enumerate(assignments):
+        assigned_indices = [
+            candidate
+            for candidate, assignment in enumerate(assignments)
+            if assignment == source_index
+        ]
+        local_index = assigned_indices.index(index)
+        local_windows = _h3_sentence_windows(
+            prompts[source_index],
+            len(assigned_indices),
+        )
+        windows.append(local_windows[local_index])
+    return windows
+
+
 def _minimax_h3_segment_prompt(
     plan: dict,
     segment_index: int,
     segment_count: int,
     global_audio_direction: str = "",
+    reference_mode: str = "first_frame",
 ) -> str:
     """Choose the authored continuation and attach its explicit audio plan."""
+    optimized = plan.get("h3_segment_prompts") or []
+    if len(optimized) == segment_count and segment_index < len(optimized):
+        prompt = str(optimized[segment_index] or "").strip()
+        prompt = _h3_apply_reference_contract(prompt, reference_mode)
+        try:
+            from services import minimax_h3_service
+        except ImportError:  # pytest imports this module through app.services
+            from app.services import minimax_h3_service
+        return minimax_h3_service.ensure_audio_prompt(
+            prompt,
+            _minimax_h3_audio_direction(
+                plan,
+                global_audio_direction,
+                segment_index,
+                segment_count,
+            ),
+        )
+
     window_prompts = plan.get("window_prompts") or []
     normalized = [
         str(item.get("prompt", item.get("text", ""))) if isinstance(item, dict) else str(item)
@@ -6247,10 +6453,11 @@ def _minimax_h3_segment_prompt(
     ]
     normalized = [item for item in normalized if item.strip()]
     if normalized:
-        prompt_index = min(len(normalized) - 1, segment_index * len(normalized) // segment_count)
-        prompt = normalized[prompt_index]
+        prompt = _h3_authored_segment_windows(normalized, segment_count)[segment_index]
     else:
-        prompt = str(plan.get("video_prompt") or "")
+        source = str(plan.get("video_prompt") or "")
+        prompt = _h3_sentence_windows(source, segment_count)[segment_index]
+    prompt = _h3_apply_reference_contract(prompt, reference_mode)
 
     try:
         from services import minimax_h3_service
@@ -6258,8 +6465,204 @@ def _minimax_h3_segment_prompt(
         from app.services import minimax_h3_service
     return minimax_h3_service.ensure_audio_prompt(
         prompt,
-        _minimax_h3_audio_direction(plan, global_audio_direction),
+        _minimax_h3_audio_direction(
+            plan,
+            global_audio_direction,
+            segment_index,
+            segment_count,
+        ),
     )
+
+
+def _h3_parse_optimized_prompts(response: str) -> list[dict]:
+    """Parse the grammar-constrained H3 validator response defensively."""
+    text = re.sub(r"```(?:json)?\s*|```", "", str(response or ""), flags=re.I).strip()
+    try:
+        parsed = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        match = re.search(r"\[[\s\S]*\]", text)
+        if not match:
+            return []
+        try:
+            parsed = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return []
+    if isinstance(parsed, dict):
+        parsed = parsed.get("segments") or []
+    return [item for item in parsed if isinstance(item, dict)] if isinstance(parsed, list) else []
+
+
+def _h3_preserve_audio_contract(candidate: str, draft: str) -> str:
+    """Accept visual phrasing from the validator while keeping authored audio verbatim."""
+    draft_parts = re.split(r"\bAudio\s*:", draft, maxsplit=1, flags=re.I)
+    if len(draft_parts) != 2:
+        return candidate.strip()
+    visual = re.split(r"\bAudio\s*:", candidate, maxsplit=1, flags=re.I)[0].strip()
+    return f"{visual}\nAudio: {draft_parts[1].strip()}".strip()
+
+
+def _h3_validated_candidate(candidate: str, draft: str, reference_mode: str) -> str:
+    """Reject optimizer drift and reapply contracts the LLM is not allowed to alter."""
+    candidate = _h3_preserve_audio_contract(str(candidate or ""), draft)
+    candidate = _h3_apply_reference_contract(candidate, reference_mode)
+    if len(candidate) < max(40, len(draft) // 3) or len(candidate) > max(6000, len(draft) * 2):
+        return ""
+    if "audio:" not in candidate.casefold():
+        return ""
+    if "visual style lock:" in draft.casefold() and "visual style lock:" not in candidate.casefold():
+        return ""
+    for quoted in re.findall(r'"([^"\n]+)"', draft):
+        if quoted not in candidate:
+            return ""
+    if reference_mode == "references" and "exact first frame" in candidate.casefold():
+        return ""
+    if reference_mode == "first_frame" and "exact first frame" not in candidate.casefold():
+        return ""
+    return candidate
+
+
+def _optimize_minimax_h3_story_prompts(
+    pid: str,
+    params: dict,
+    clip_plans: list[dict],
+    planned_clips: list[dict],
+) -> list[dict]:
+    """Run one guarded LLM pass over the exact segment prompts H3 will receive."""
+    if params.get("video_model") != "minimax_h3" or not clip_plans:
+        return clip_plans
+
+    video_params = params.get("video_params") or {}
+    reference_mode = str(video_params.get("h3_reference_mode") or "first_frame").strip().lower()
+    reference_mode = {
+        "fl2va": "first_frame",
+        "ref2va": "references",
+        "reference": "references",
+    }.get(reference_mode, reference_mode)
+    if reference_mode not in {"first_frame", "references"}:
+        reference_mode = "first_frame"
+
+    entries: list[dict] = []
+    counts: list[int] = []
+    for shot_index, plan in enumerate(clip_plans):
+        planned = planned_clips[shot_index] if shot_index < len(planned_clips) else {}
+        duration = planned.get("duration_sec") or (
+            float(planned.get("end", 0) or 0) - float(planned.get("start", 0) or 0)
+        )
+        if duration <= 0:
+            duration_frames = planned.get("duration_frames")
+            duration = float(duration_frames) / 24 if duration_frames else 5.0
+        count = len(_minimax_h3_frame_segments(duration, 24))
+        counts.append(count)
+        draft_plan = {**plan, "h3_segment_prompts": []}
+        for segment_index in range(count):
+            entries.append({
+                "shot_index": shot_index,
+                "segment_index": segment_index,
+                "prompt": _minimax_h3_segment_prompt(
+                    draft_plan,
+                    segment_index,
+                    count,
+                    str(video_params.get("h3_audio_prompt") or ""),
+                    reference_mode,
+                ),
+            })
+
+    schema = {
+        "type": "array",
+        "minItems": len(entries),
+        "maxItems": len(entries),
+        "items": {
+            "type": "object",
+            "properties": {
+                "shot_index": {"type": "integer"},
+                "segment_index": {"type": "integer"},
+                "prompt": {"type": "string"},
+            },
+            "required": ["shot_index", "segment_index", "prompt"],
+            "additionalProperties": False,
+        },
+    }
+    system_prompt = (
+        "You validate and optimize prompts specifically for MiniMax H3 video with native audio. "
+        "Return only the JSON array required by the schema, with exactly the same shot_index and "
+        "segment_index pairs. Make motion chronological, concrete and visually executable; use at "
+        "most one coherent camera move per segment. Never add, remove, reorder or repeat story "
+        "events, characters, props, wardrobe, colors or locations. Preserve style-lock language, "
+        "all quoted dialogue and the complete Audio clause verbatim. FL2VA exact-first-frame and "
+        "Ref2VA new-opening-frame contracts are immutable. Do not copy actions from another segment."
+    )
+    user_prompt = (
+        f"Conditioning mode: {reference_mode}. Optimize these exact H3 segment prompts:\n"
+        + json.dumps(entries, ensure_ascii=False)
+    )
+
+    from . import llm_service
+    writing_llm = _scoped_writing_llm(params)
+    if writing_llm:
+        response = llm_service.generate_openai_compatible(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            model_id=writing_llm["model"],
+            base_url=writing_llm["base_url"],
+            api_key=writing_llm["api_key"],
+            max_new_tokens=min(12288, max(2048, sum(len(item["prompt"]) for item in entries) // 2)),
+            temperature=0.15,
+            top_p=0.9,
+            frequency_penalty=0.2,
+            presence_penalty=0.0,
+            json_schema=schema,
+        )
+        with _pipeline_lock:
+            pipeline = _pipelines.get(pid)
+            if pipeline:
+                pipeline.setdefault("_llm_passes", []).append({
+                    "pass": "minimax_h3_prompt_validation",
+                    "provider": writing_llm["provider"],
+                    "model_id": writing_llm["model"],
+                    "system_prompt": system_prompt,
+                    "user_prompt": user_prompt,
+                    "response_text": response,
+                    "thinking_text": None,
+                })
+    else:
+        response = llm_service.generate(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_new_tokens=min(12288, max(2048, sum(len(item["prompt"]) for item in entries) // 2)),
+            temperature=0.15,
+            top_p=0.9,
+            thinking_budget=0,
+            enable_thinking=False,
+            frequency_penalty=0.2,
+            json_schema=schema,
+        )
+        _capture_llm_pass(pid, "minimax_h3_prompt_validation")
+
+    parsed = _h3_parse_optimized_prompts(response)
+    by_key = {
+        (item.get("shot_index"), item.get("segment_index")): str(item.get("prompt") or "")
+        for item in parsed
+    }
+    if len(by_key) != len(entries):
+        raise ValueError("H3 prompt validator returned an incomplete segment set")
+
+    per_shot: list[list[str]] = [[] for _ in clip_plans]
+    for entry in entries:
+        key = (entry["shot_index"], entry["segment_index"])
+        validated = _h3_validated_candidate(by_key.get(key, ""), entry["prompt"], reference_mode)
+        if not validated:
+            raise ValueError(f"H3 prompt validator changed protected content at {key}")
+        per_shot[entry["shot_index"]].append(validated)
+    for shot_index, prompts in enumerate(per_shot):
+        if len(prompts) != counts[shot_index]:
+            raise ValueError("H3 prompt validator changed segment ordering")
+        if len({re.sub(r"\s+", " ", item).casefold() for item in prompts}) != len(prompts):
+            raise ValueError("H3 prompt validator repeated a segment")
+        clip_plans[shot_index]["h3_segment_prompts"] = prompts
+        metadata = clip_plans[shot_index].setdefault("metadata", {})
+        if isinstance(metadata, dict):
+            metadata["h3_prompt_validation"] = "optimized"
+    return clip_plans
 
 
 def _run_minimax_h3_story_video(
@@ -6275,6 +6678,16 @@ def _run_minimax_h3_story_video(
 ) -> list[str]:
     """Render a complete Story short film as sequential native-audio H3 clips."""
     fps = 24
+    reference_mode = str(
+        video_params.get("h3_reference_mode") or "first_frame"
+    ).strip().lower()
+    reference_mode = {
+        "fl2va": "first_frame",
+        "ref2va": "references",
+        "reference": "references",
+    }.get(reference_mode, reference_mode)
+    if reference_mode not in {"first_frame", "references"}:
+        reference_mode = "first_frame"
     global_image_refs: list[str] = []
     for candidate in [
         params.get("reference_image_path"),
@@ -6288,6 +6701,10 @@ def _run_minimax_h3_story_video(
     audio_refs = [str(path) for path in (video_params.get("h3_ref_audios") or []) if path]
     if len(video_refs) > 3 or len(audio_refs) > 3:
         raise ValueError("MiniMax H3 Ref2VA accepts at most 3 videos and 3 audio files.")
+    if reference_mode == "first_frame" and (video_refs or audio_refs):
+        raise ValueError(
+            "MiniMax H3 video/audio references require Ref2VA References mode."
+        )
 
     # Ref2VA has 12 slots total and H3 Story reserves one for each generated
     # shot's continuity frame. Build the remaining image references per shot:
@@ -6295,37 +6712,72 @@ def _run_minimax_h3_story_video(
     # eligible for that shot.
     image_budget = max(0, min(8, 11 - len(video_refs) - len(audio_refs)))
     shot_image_refs: list[list[str]] = []
+    reference_manifest: list[dict] = []
     for shot_index, plan in enumerate(clip_plans):
         location_ref, location_label = _director_location_ref_for_plan(plan, params)
+        metadata = plan.get("metadata") if isinstance(plan.get("metadata"), dict) else {}
+        requested_location = str(
+            plan.get("location_ref_label")
+            or metadata.get("location_ref_label")
+            or ""
+        ).strip()
         selected: list[str] = []
-        base_budget = image_budget - 1 if location_ref and image_budget > 0 else image_budget
-        for candidate in global_image_refs[:base_budget]:
-            if candidate and candidate not in selected:
-                selected.append(candidate)
-        if location_ref and image_budget > 0 and location_ref not in selected:
-            selected.append(location_ref)
+        if reference_mode == "references":
+            base_budget = image_budget - 1 if location_ref and image_budget > 0 else image_budget
+            for candidate in global_image_refs[:base_budget]:
+                if candidate and candidate not in selected:
+                    selected.append(candidate)
+            if location_ref and image_budget > 0 and location_ref not in selected:
+                selected.append(location_ref)
         available = list(dict.fromkeys([
             *[candidate for candidate in global_image_refs if candidate],
             *([location_ref] if location_ref else []),
         ]))
-        if len(available) > len(selected):
+        if reference_mode == "references" and len(available) > len(selected):
             dropped = len(available) - len(selected)
             print(
                 f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1} omitted "
                 f"{dropped} lower-priority image reference(s) to fit the "
                 "Ref2VA 12-slot limit."
             )
-        if location_ref and location_ref in selected:
+        if reference_mode == "references" and location_ref and location_ref in selected:
             print(
                 f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1} location ref: "
                 f"{location_label or os.path.basename(location_ref)}"
             )
-        elif len(params.get("location_ref_paths") or []) > 1:
+        elif reference_mode == "references" and len(params.get("location_ref_paths") or []) > 1:
             print(
                 f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1}: no "
                 "unambiguous location reference; sending none instead of all locations."
             )
         shot_image_refs.append(selected)
+        reference_manifest.append({
+            "shot_index": shot_index,
+            "mode": reference_mode,
+            "shot_frame": (
+                clip_images[shot_index]
+                if shot_index < len(clip_images)
+                else ""
+            ),
+            "image_references": selected,
+            "location_reference": location_ref if location_ref in selected else "",
+            "location_label": location_label if location_ref in selected else "",
+            "requested_location_label": requested_location,
+            "video_references": video_refs if reference_mode == "references" else [],
+            "audio_references": audio_refs if reference_mode == "references" else [],
+            "note": (
+                "FL2VA exact first frame; character and location references were used "
+                "to author the shot frame but are not sent to the video model."
+                if reference_mode == "first_frame"
+                else "Ref2VA composes a new shot from these references; no exact first-frame guarantee."
+            ),
+            "warnings": ([
+                f'No reference matched the requested location "{requested_location}".'
+            ] if reference_mode == "references" and requested_location and not location_ref else []),
+        })
+
+    _update_pipeline(pid, h3_reference_manifest=reference_manifest)
+    _save_pipeline_state(pid)
 
     jobs: list[tuple[int, int, int, int, str]] = []
     for shot_index, plan in enumerate(clip_plans):
@@ -6348,6 +6800,7 @@ def _run_minimax_h3_story_video(
                     segment_index,
                     len(frame_segments),
                     str(video_params.get("h3_audio_prompt") or ""),
+                    reference_mode,
                 ),
             ))
 
@@ -6387,7 +6840,8 @@ def _run_minimax_h3_story_video(
                 "h3_audio_shift": video_params.get("h3_audio_shift", 3),
                 "h3_audio_prompt": video_params.get("h3_audio_prompt", ""),
                 "h3_ref_image_size": video_params.get("h3_ref_image_size", "match"),
-                "h3_model_profile": video_params.get("h3_model_profile", "balanced"),
+                "h3_model_profile": video_params.get("h3_model_profile", "quality"),
+                "h3_reference_mode": reference_mode,
                 "_director_pipeline_id": pid,
             }
             user_image_refs = (
@@ -6395,7 +6849,7 @@ def _run_minimax_h3_story_video(
                 if shot_index < len(shot_image_refs)
                 else list(global_image_refs[:image_budget])
             )
-            uses_ref2va = bool(user_image_refs or video_refs or audio_refs)
+            uses_ref2va = reference_mode == "references"
             if uses_ref2va:
                 image_refs = [segment_start, *user_image_refs] if segment_start else list(user_image_refs)
                 gen_params["image_refs"] = [path for path in image_refs if path]

@@ -185,6 +185,7 @@ export function InputsPanel() {
     input.multiple = true
     input.onchange = () => {
       const files = Array.from(input.files || [])
+      if (isH3 && files.length > 0) setParam('h3_reference_mode', 'references')
       const available = isH3 ? Math.max(0, Math.min(9 - imageRefs.length, 12 - h3ReferenceCount)) : files.length
       files.slice(0, available).forEach(addImageRef)
     }
@@ -473,6 +474,7 @@ export function InputsPanel() {
   const addH3Reference = async (kind: 'video' | 'audio', file: File) => {
     try {
       if (h3ReferenceCount >= 12) return
+      setParam('h3_reference_mode', 'references')
       const result = await api.uploadImage(file)
       if (kind === 'video') {
         if (h3RefVideos.length < 3) setParam('h3_ref_videos', [...h3RefVideos, result.path])

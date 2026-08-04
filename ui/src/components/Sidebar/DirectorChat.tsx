@@ -1594,8 +1594,10 @@ function AdditionalRefsSection() {
   const setVoiceRef = useStore(s => s.setDirectorVoiceRef)
   const identityScale = useStore(s => s.directorIdentityGuidanceScale)
   const setIdentityScale = useStore(s => s.setDirectorIdentityGuidanceScale)
+  const clipPlans = useStore(s => s.directorClipPlans)
+  const h3ReferenceMode = useStore(s => s.savedParamsPerMode.video?.h3_reference_mode || 'first_frame')
   const isH3 = videoModel === 'minimax_h3'
-  const h3UserRefCount = (referenceImage ? 1 : 0) + charRefs.length + locRefs.length + h3VideoRefs.length + h3AudioRefs.length
+  const h3UserRefCount = (referenceImage ? 1 : 0) + charRefs.length + (locRefs.length ? 1 : 0) + h3VideoRefs.length + h3AudioRefs.length
   const [expanded, setExpanded] = useState(
     charRefs.length > 0 || locRefs.length > 0 || h3VideoRefs.length > 0 || h3AudioRefs.length > 0 || voiceRef !== null
   )
@@ -1603,10 +1605,11 @@ function AdditionalRefsSection() {
   const handleFiles = useCallback((files: FileList | null, type: 'char' | 'loc') => {
     if (!files) return
     const add = type === 'char' ? addCharRef : addLocRef
-    const imageCount = charRefs.length + locRefs.length + (referenceImage ? 1 : 0)
-    const available = isH3 ? Math.max(0, Math.min(8 - imageCount, 11 - h3UserRefCount)) : files.length
+    const imageCount = charRefs.length + (locRefs.length ? 1 : 0) + (referenceImage ? 1 : 0)
+    const shouldLimit = isH3 && h3ReferenceMode === 'references' && type === 'char'
+    const available = shouldLimit ? Math.max(0, Math.min(8 - imageCount, 11 - h3UserRefCount)) : files.length
     Array.from(files).slice(0, available).forEach(f => { if (f.type.startsWith('image/')) add(f) })
-  }, [addCharRef, addLocRef, charRefs.length, locRefs.length, referenceImage, isH3, h3UserRefCount])
+  }, [addCharRef, addLocRef, charRefs.length, locRefs.length, referenceImage, isH3, h3ReferenceMode, h3UserRefCount])
 
   const totalRefs = charRefs.length + locRefs.length + h3VideoRefs.length + h3AudioRefs.length + (voiceRef ? 1 : 0)
 
@@ -1704,16 +1707,18 @@ function AdditionalRefsSection() {
           {isH3 && <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-2 space-y-2">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-medium text-cyan-200">H3 Ref2VA omni references</span>
-                <span className="text-[9px] text-text-muted">
-                  {h3UserRefCount}/11
+                <span className="text-[10px] font-medium text-cyan-200">
+                  {h3ReferenceMode === 'first_frame' ? 'H3 FL2VA exact frame' : 'H3 Ref2VA omni references'}
                 </span>
+                {h3ReferenceMode === 'references' && <span className="text-[9px] text-text-muted">{h3UserRefCount}/11 per shot</span>}
               </div>
               <p className="text-[9px] text-text-muted leading-tight mt-0.5">
-                The generated shot frame reserves slot 12 for continuity. Images above are included automatically.
+                {h3ReferenceMode === 'first_frame'
+                  ? 'Only the approved generated frame is sent to H3. Character and location images above still guide frame creation, but cannot conflict with the video model.'
+                  : 'The generated shot frame plus character refs and exactly one matched location are sent. Ref2VA composes a new opening rather than preserving that frame exactly.'}
               </p>
             </div>
-            <div>
+            {h3ReferenceMode === 'references' && <><div>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[10px] text-text-secondary"><Film size={9} className="inline mr-0.5" />Video refs ({h3VideoRefs.length}/3)</span>
                 {h3VideoRefs.length < 3 && h3UserRefCount < 11 && <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
@@ -1754,6 +1759,23 @@ function AdditionalRefsSection() {
               ))}
               <p className="text-[9px] text-text-muted/70">Each video/audio: 2–15 s; each category totals at most 15 s.</p>
             </div>
+            {clipPlans.length > 0 && <div className="border-t border-cyan-500/15 pt-1.5 space-y-1">
+              <p className="text-[9px] font-medium text-cyan-200">References that will be sent per shot</p>
+              {clipPlans.map((plan, index) => {
+                const metadata = plan.metadata || {}
+                const requested = String(metadata.location_ref_label || '')
+                const match = requested
+                  ? locLabels.findIndex(label => label.trim().toLocaleLowerCase() === requested.trim().toLocaleLowerCase())
+                  : (locRefs.length === 1 ? 0 : -1)
+                const location = match >= 0 ? `${locLabels[match] || 'Location'} · ${locRefs[match]?.name || ''}` : 'No exact location match'
+                const characters = charRefs.map((file, charIndex) => charLabels[charIndex] || file.name)
+                return <div key={index} className="rounded bg-bg-tertiary px-1.5 py-1 text-[9px] leading-tight">
+                  <div className="text-text-secondary">Shot {index + 1}: generated frame</div>
+                  {characters.length > 0 && <div className="text-text-muted">Characters: {characters.join(', ')}</div>}
+                  <div className={match >= 0 ? 'text-text-muted' : 'text-amber-300'}>Location: {location}</div>
+                </div>
+              })}
+            </div>}</>}
           </div>}
         </div>
       )}
@@ -2261,8 +2283,10 @@ function DirectorLoraAccordion() {
   const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
   const selectDirectorImageModel = useStore(s => s.selectDirectorImageModel)
   const selectDirectorVideoModel = useStore(s => s.selectDirectorVideoModel)
-  const h3Profile = useStore(s => s.savedParamsPerMode.video?.h3_model_profile || 'balanced')
+  const h3Profile = useStore(s => s.savedParamsPerMode.video?.h3_model_profile || 'quality')
   const setH3Profile = useStore(s => s.setDirectorH3Profile)
+  const h3ReferenceMode = useStore(s => s.savedParamsPerMode.video?.h3_reference_mode || 'first_frame')
+  const setH3ReferenceMode = useStore(s => s.setDirectorH3ReferenceMode)
   const minimaxImageReady = useStore(s => Boolean(s.servicesConfig?.minimax_api_key_set))
   const [imageOpen, setImageOpen] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
@@ -2282,17 +2306,33 @@ function DirectorLoraAccordion() {
         )}
         <DirectorModelPicker mode="video" value={videoModel} onChange={selectDirectorVideoModel} />
         {videoModel === 'minimax_h3' && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-text-muted uppercase tracking-wider w-11 shrink-0">Profile</span>
-            <select
-              value={h3Profile}
-              onChange={e => setH3Profile(e.target.value as 'balanced' | 'quality' | 'low_memory')}
-              className="flex-1 min-w-0 bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
-            >
-              <option value="balanced">Balanced 4090 · MIXED</option>
-              <option value="quality">Quality 4090 · INT8</option>
-              <option value="low_memory">Low VRAM · INT4</option>
-            </select>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-text-muted uppercase tracking-wider w-11 shrink-0">Mode</span>
+              <select value={h3ReferenceMode}
+                onChange={e => setH3ReferenceMode(e.target.value as 'first_frame' | 'references')}
+                className="flex-1 min-w-0 bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue">
+                <option value="first_frame">Exact shot frame · FL2VA</option>
+                <option value="references">Omni references · Ref2VA</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-text-muted uppercase tracking-wider w-11 shrink-0">Profile</span>
+              <select
+                value={h3Profile}
+                onChange={e => setH3Profile(e.target.value as 'balanced' | 'quality' | 'low_memory')}
+                className="flex-1 min-w-0 bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
+              >
+                <option value="quality">Quality 4090 · INT8</option>
+                <option value="balanced">Legacy Balanced · INT8</option>
+                <option value="low_memory">Low VRAM fallback · INT4</option>
+              </select>
+            </div>
+            <p className="pl-[50px] text-[9px] leading-tight text-text-muted">
+              {h3ReferenceMode === 'first_frame'
+                ? 'Preserves each approved shot frame exactly; additional images guide shot-frame creation only.'
+                : 'Composes a new frame from the references below; the opening frame is not locked.'}
+            </p>
           </div>
         )}
       </div>

@@ -78,7 +78,9 @@ export interface GenerateParams {
   /** Sound direction appended as an Audio: clause when the prompt has none. */
   h3_audio_prompt?: string
   h3_ref_image_size?: 'match' | 'max'
-  /** Quantized MiniMax H3 checkpoint pair; balanced is tuned for RTX 4090. */
+  /** Explicit H3 conditioning contract: exact start frame or omni references. */
+  h3_reference_mode?: 'first_frame' | 'references'
+  /** Quantized MiniMax H3 checkpoint pair; quality/INT8 is recommended for RTX 4090. */
   h3_model_profile?: 'balanced' | 'quality' | 'low_memory'
   frames_positions?: string
   injection_strength?: number
@@ -813,6 +815,9 @@ export interface SpeakerMapping {
 export interface ClipPlan {
   video_prompt: string
   image_prompt: string
+  window_prompts?: Array<string | { prompt?: string; text?: string }>
+  h3_segment_prompts?: string[]
+  metadata?: Record<string, unknown>
 }
 
 /** Partial plan returned from single-phase LLM calls */
@@ -972,6 +977,23 @@ export interface PipelineClipState {
   tag: 'good' | 'needs_work' | null
   image_gen_time_sec: number | null
   video_gen_time_sec: number | null
+  h3_references?: H3ShotReferenceManifest | null
+  h3_segment_prompts?: string[]
+  h3_prompt_validation?: 'optimized' | 'deterministic_fallback' | null
+}
+
+export interface H3ShotReferenceManifest {
+  shot_index: number
+  mode: 'first_frame' | 'references'
+  shot_frame: string
+  image_references: string[]
+  location_reference: string
+  location_label: string
+  requested_location_label?: string
+  video_references: string[]
+  audio_references: string[]
+  note: string
+  warnings?: string[]
 }
 
 export interface PipelineLlmPass {
@@ -1008,6 +1030,12 @@ export interface SavedPipelineState {
   seamless: boolean
   image_model: string
   video_model: string
+  h3_reference_manifest?: H3ShotReferenceManifest[]
+  h3_prompt_validation?: {
+    status: 'optimized' | 'deterministic_fallback'
+    segments?: number
+    error?: string
+  } | null
   llm_log: PipelineLlmLog | null
   clips: PipelineClipState[]
   output_files: string[]

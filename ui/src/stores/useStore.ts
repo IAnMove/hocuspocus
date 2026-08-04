@@ -298,6 +298,7 @@ const _PRIMARY_MODEL_DEFAULT_FIELDS: ReadonlyArray<string> = [
   'h3_audio_shift',
   'h3_audio_prompt',
   'h3_ref_image_size',
+  'h3_reference_mode',
   'h3_model_profile',
   'sample_solver',
   'embedded_guidance_scale',
@@ -1181,6 +1182,7 @@ interface AppState {
   selectDirectorImageModel: (modelType: string) => void
   selectDirectorVideoModel: (modelType: string) => Promise<void>
   setDirectorH3Profile: (profile: 'balanced' | 'quality' | 'low_memory') => void
+  setDirectorH3ReferenceMode: (mode: 'first_frame' | 'references') => void
   directorSetLora: (mode: 'image' | 'video', activated_loras: string[], loras_multipliers: string, loraWeights: Record<string, number[]>, availableLoras: string[]) => void
   setSidebarMode: (mode: 'director' | 'studio') => void
   directorSetSpeakerMapping: (speakerId: string, name: string, role: SpeakerMapping['role']) => void
@@ -3717,8 +3719,12 @@ export const useStore = create<AppState>((set, get) => ({
       params.image_mode = 0
     }
 
-    // Image references (from ImageRefSection)
-    if (state.imageRefType && state.imageRefs.length > 0) {
+    // Image references (from ImageRefSection). H3 FL2VA intentionally sends
+    // only its first/last frame; omni references remain visible in the UI but
+    // are submitted only after the user explicitly chooses Ref2VA.
+    const h3FirstFrameMode = params.model_type === 'minimax_h3'
+      && (params.h3_reference_mode ?? 'first_frame') === 'first_frame'
+    if (!h3FirstFrameMode && state.imageRefType && state.imageRefs.length > 0) {
       const refPaths: string[] = []
       for (const file of state.imageRefs) {
         try {
@@ -3770,6 +3776,12 @@ export const useStore = create<AppState>((set, get) => ({
       if (params.image_refs !== undefined && (!params.image_refs || (params.image_refs as string[]).length === 0)) {
         delete params.image_refs
       }
+    }
+
+    if (h3FirstFrameMode) {
+      delete params.image_refs
+      delete params.h3_ref_videos
+      delete params.h3_ref_audios
     }
 
     // Image conditioning alone does not guarantee that a video model will
@@ -4348,6 +4360,7 @@ export const useStore = create<AppState>((set, get) => ({
           h3_audio_shift: params.h3_audio_shift,
           h3_audio_prompt: params.h3_audio_prompt,
           h3_ref_image_size: params.h3_ref_image_size,
+          h3_reference_mode: params.h3_reference_mode,
           h3_model_profile: params.h3_model_profile,
           self_refiner_setting: params.self_refiner_setting,
           stage2_steps: params.stage2_steps,
@@ -4879,6 +4892,25 @@ export const useStore = create<AppState>((set, get) => ({
     }, s.loraIdByFilename)
   },
 
+  setDirectorH3ReferenceMode: (mode) => {
+    set(s => ({
+      savedParamsPerMode: {
+        ...s.savedParamsPerMode,
+        video: { ...(s.savedParamsPerMode.video || {}), h3_reference_mode: mode },
+      },
+      ...(s.generationMode === 'video' ? {
+        params: { ...s.params, h3_reference_mode: mode },
+      } : {}),
+    }))
+    const s = get()
+    _saveSettings({
+      generationMode: s.generationMode,
+      selectedModelPerMode: s.selectedModelPerMode,
+      savedParamsPerMode: s.savedParamsPerMode,
+      savedLoraPerMode: s.savedLoraPerMode,
+    }, s.loraIdByFilename)
+  },
+
   directorSetLora: (mode, activated_loras, loras_multipliers, loraWeights, availableLoras) => {
     const s = get()
     const updatedLoraPerMode = {
@@ -5241,20 +5273,28 @@ export const useStore = create<AppState>((set, get) => ({
     const [lF] = labels.splice(from, 1); labels.splice(to, 0, lF)
     return { directorLocationRefs: refs, directorLocationRefPaths: paths, directorLocationRefLabels: labels }
   }),
-  directorAddH3VideoRef: (file) => set(s => (
-    s.directorH3VideoRefs.length >= 3
-      ? {}
-      : { directorH3VideoRefs: [...s.directorH3VideoRefs, file] }
-  )),
+  directorAddH3VideoRef: (file) => {
+    set(s => s.directorH3VideoRefs.length >= 3 ? {} : ({
+      directorH3VideoRefs: [...s.directorH3VideoRefs, file],
+      savedParamsPerMode: {
+        ...s.savedParamsPerMode,
+        video: { ...(s.savedParamsPerMode.video || {}), h3_reference_mode: 'references' },
+      },
+    }))
+  },
   directorRemoveH3VideoRef: (index) => set(s => ({
     directorH3VideoRefs: s.directorH3VideoRefs.filter((_, i) => i !== index),
     directorH3VideoRefPaths: s.directorH3VideoRefPaths.filter((_, i) => i !== index),
   })),
-  directorAddH3AudioRef: (file) => set(s => (
-    s.directorH3AudioRefs.length >= 3
-      ? {}
-      : { directorH3AudioRefs: [...s.directorH3AudioRefs, file] }
-  )),
+  directorAddH3AudioRef: (file) => {
+    set(s => s.directorH3AudioRefs.length >= 3 ? {} : ({
+      directorH3AudioRefs: [...s.directorH3AudioRefs, file],
+      savedParamsPerMode: {
+        ...s.savedParamsPerMode,
+        video: { ...(s.savedParamsPerMode.video || {}), h3_reference_mode: 'references' },
+      },
+    }))
+  },
   directorRemoveH3AudioRef: (index) => set(s => ({
     directorH3AudioRefs: s.directorH3AudioRefs.filter((_, i) => i !== index),
     directorH3AudioRefPaths: s.directorH3AudioRefPaths.filter((_, i) => i !== index),
@@ -6489,6 +6529,7 @@ export const useStore = create<AppState>((set, get) => ({
     newParams.h3_audio_shift = (p.h3_audio_shift as number) ?? undefined
     newParams.h3_audio_prompt = (p.h3_audio_prompt as string) || undefined
     newParams.h3_ref_image_size = (p.h3_ref_image_size as 'match' | 'max') ?? undefined
+    newParams.h3_reference_mode = (p.h3_reference_mode as 'first_frame' | 'references') ?? undefined
     newParams.self_refiner_setting = (p.self_refiner_setting as number) ?? undefined
     newParams.audio_guide = (p.audio_guide as string) || ''
     newParams.audio_guide2 = (p.audio_guide2 as string) || ''
@@ -6999,9 +7040,10 @@ export const useStore = create<AppState>((set, get) => ({
     // the selected renderer; generic /upload accepts video while audio keeps
     // its dedicated normalization endpoint.
     const isH3 = selectedModelPerMode.video === 'minimax_h3'
+    const h3ReferenceMode = savedParamsPerMode.video?.h3_reference_mode || 'first_frame'
     const h3VideoRefPaths = [...state.directorH3VideoRefPaths]
     const h3AudioRefPaths = [...state.directorH3AudioRefPaths]
-    if (isH3) {
+    if (isH3 && h3ReferenceMode === 'references') {
       for (let i = h3VideoRefPaths.length; i < state.directorH3VideoRefs.length; i++) {
         try {
           const uploaded = await api.uploadImage(state.directorH3VideoRefs[i])
@@ -7092,7 +7134,7 @@ export const useStore = create<AppState>((set, get) => ({
       video_params: {
         ...(savedParamsPerMode.video || { num_inference_steps: 8, guidance_scale: 1 }),
         resolution: directorRes,
-        ...(isH3 ? {
+        ...(isH3 && h3ReferenceMode === 'references' ? {
           h3_ref_videos: h3VideoRefPaths,
           h3_ref_audios: h3AudioRefPaths,
         } : {}),
