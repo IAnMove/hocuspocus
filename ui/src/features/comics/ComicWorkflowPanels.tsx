@@ -29,6 +29,18 @@ const motionLevelLabel = (level: number) => (
         : '3 · authored action'
 )
 
+const motionMethodLabel = (renderer?: string) => (
+  renderer === 'hold'
+    ? 'Exact still'
+    : renderer === 'parallax'
+      ? 'Deterministic push'
+      : renderer === 'cinemagraph'
+        ? 'AI living still'
+        : renderer === 'ltx'
+          ? 'Model-driven I2V'
+          : 'Automatic'
+)
+
 const VIDEO_OVERRIDE_BY_PROPERTY: Partial<Record<keyof ComicPlanPanel, ComicVideoOverrideField>> = {
   videoIncluded: 'included',
   videoOrder: 'order',
@@ -711,6 +723,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       .sort((left, right) => left.name.localeCompare(right.name)),
     [enabledModels, videoModels],
   )
+  const effectiveVideoModel = selectedVideoModel || 'ltx2_22B_distilled_1_1'
+  const effectiveVideoModelName = videoModels.find(
+    model => model.model_type === effectiveVideoModel,
+  )?.name || effectiveVideoModel
   const resolution = aspect === 'portrait'
     ? { width: 1080, height: 1920 }
     : aspect === 'square' ? { width: 1080, height: 1080 } : { width: 1920, height: 1080 }
@@ -887,7 +903,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     }
     if (!window.confirm(
       `Render a quick non-generative storyboard preview from ${panelCount} still panels? `
-      + 'This does not call LTX or animate characters; it only holds the drawings and optionally applies FFmpeg pans, zooms and transitions.',
+      + 'This does not call the selected video model or animate characters; it only holds the drawings and optionally applies FFmpeg pans, zooms and transitions.',
     )) return
     setBusy('animatic')
     setResult(null)
@@ -990,7 +1006,8 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       + `source beat${requestedPanelCount === 1 ? '' : 's'} into an estimated ${totalSeconds}s film edit? `
       + `Global motion treatment: ${motionTreatmentLabel(movieMotionMode)}; per-shot overrides are shown in the shot plan. `
       + `${isTestRun ? 'This uses the final model, resolution, prompts and shot settings; it is not a lower-quality preview. ' : ''}`
-      + 'Director may omit or fuse source beats. Only adapted LTX and AI-living-still shots use I2V; holds and subtle centered pushes are deterministic.',
+      + `Selected video engine: ${effectiveVideoModelName} (${effectiveVideoModel}). `
+      + 'Director may omit or fuse source beats. Only model-driven and AI-living-still shots use I2V; holds and subtle centered pushes are deterministic.',
     )) return
 
     const activityId = `comic-video:${project.id}:${Date.now()}`
@@ -1183,7 +1200,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       ) {
         throw new Error(
           'The selected video model does not support end frames. '
-          + 'Choose an LTX model or use “No end frame”.',
+          + 'Choose a model with end-frame support or use “No end frame”.',
         )
       }
       const qualityResolution = movieQuality === '1080p'
@@ -1386,9 +1403,42 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         <p className="mt-1 text-[10px] text-text-muted">
           {storyboard
             ? 'Each approved first frame and its editable I2V prompt go directly to Director. Missing prompts alone are completed by the LLM.'
-            : 'Adapt the comic into a film shot list first. Shots can be omitted, reordered or routed to an exact hold, deterministic subtle push, AI living still or authored LTX render without changing the printed comic.'}
+            : 'Adapt the comic into a film shot list first. Shots can be omitted, reordered or routed to an exact hold, deterministic subtle push, AI living still or model-driven I2V without changing the printed comic.'}
         </p>
       </div>
+      <label className="block rounded-lg border border-accent-blue/35 bg-accent-blue/5 p-3 text-[10px] text-text-muted">
+        <span className="flex items-center justify-between gap-2">
+          <b className="text-xs text-text-primary">Video engine for this movie</b>
+          <span className="rounded-full border border-emerald-400/35 bg-emerald-400/10 px-2 py-0.5 text-[9px] text-emerald-200">
+            Selected
+          </span>
+        </span>
+        <select
+          className={`${input} mt-2`}
+          value={effectiveVideoModel}
+          disabled={Boolean(busy)}
+          onChange={event => selectDirectorVideoModel(event.target.value)}
+        >
+          {!selectableVideoModels.some(model => model.model_type === effectiveVideoModel) && (
+            <option value={effectiveVideoModel}>{effectiveVideoModelName}</option>
+          )}
+          {selectableVideoModels.map(model => (
+            <option key={model.model_type} value={model.model_type}>
+              {model.name}{model.is_downloaded === false ? ' · not installed' : ''}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-[9px] text-accent-blue">
+          Director will submit <b>{effectiveVideoModelName}</b> · <code>{effectiveVideoModel}</code>
+        </span>
+        <span className="mt-1 block text-[9px] text-text-muted">
+          {effectiveVideoModel.includes('ltx2')
+            ? 'LTX Distilled uses Maestro’s validated two-stage 8+3 recipe.'
+            : effectiveVideoModel.includes('minimax')
+              ? 'MiniMax is the actual generative engine; “model-driven I2V” below describes a shot method, not a different model.'
+              : 'The selected engine is frozen into PRE and shown again before generation.'}
+        </span>
+      </label>
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-tertiary/30 p-1">
         <button
           className={`${button} border-0 ${videoTab === 'settings' ? 'bg-accent-blue/15 text-accent-blue' : ''}`}
@@ -1422,19 +1472,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
               </select>
             </label>
           </div>
-          <label className="block text-[10px] text-text-muted">Global LTX direction
+          <label className="block text-[10px] text-text-muted">Global AI motion direction
             <select className={`${input} mt-1`} value={movieMotionMode} onChange={event => setMovieMotionMode(event.target.value as typeof movieMotionMode)}>
               <option value="contextual">Context-aware performance · fixed camera · recommended</option>
               <option value="living-still">Living still · micro-motion only</option>
               <option value="action">Authored action · prompt and camera</option>
             </select>
-          </label>
-          <label className="block text-[10px] text-text-muted">Video model
-            <select className={`${input} mt-1`} value={selectedVideoModel || 'ltx2_22B_distilled_1_1'} onChange={event => selectDirectorVideoModel(event.target.value)}>
-              {!selectableVideoModels.some(model => model.model_type === selectedVideoModel) && selectedVideoModel && <option value={selectedVideoModel}>{selectedVideoModel}</option>}
-              {selectableVideoModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}{model.is_downloaded === false ? ' · not installed' : ''}</option>)}
-            </select>
-            <span className="mt-1 block text-[9px] text-text-muted">LTX-2.3 Distilled INT8 is the measured RTX 4090 recommendation. Maestro keeps its two-stage 8+3 recipe.</span>
           </label>
           <label className="block text-[10px] text-text-muted">Default video framing
             <select className={`${input} mt-1`} value={movieImageFit} onChange={event => setMovieImageFit(event.target.value as typeof movieImageFit)}>
@@ -1500,7 +1543,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           <details className="border-t border-border pt-3">
             <summary className="cursor-pointer text-xs font-semibold text-text-muted">FFmpeg animatic · no generative video</summary>
             <div className="mt-2 space-y-2 rounded border border-amber-400/25 bg-amber-400/5 p-2">
-              <p className="text-[10px] text-amber-100/80">Useful for timing only. Camera movement here is programmatic and is never confused with LTX generation.</p>
+              <p className="text-[10px] text-amber-100/80">Useful for timing only. Camera movement here is programmatic and does not call the selected video model.</p>
               <select className={input} value={animaticMotion} onChange={event => setAnimaticMotion(event.target.value as typeof animaticMotion)}>
                 <option value="none">Static panels · recommended</option>
                 <option value="shot-settings">Use programmed pan/zoom settings</option>
@@ -1529,7 +1572,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             <p className="mt-1">These are source comic beats, not the final film-shot count. Director may merge adjacent beats, so these controls are adaptation hints. PRE is the authoritative, editable list of effective film shots and render settings.</p>
           </div>
           <div className="grid grid-cols-2 gap-1.5">
-            <button className={`${button} border-accent-blue/40 text-accent-blue`} onClick={() => updateAllShots({ videoMotion: 'auto' }, `All ${videoShotRows.length} shots now follow the global LTX direction.`)}>All follow global motion</button>
+            <button className={`${button} border-accent-blue/40 text-accent-blue`} onClick={() => updateAllShots({ videoMotion: 'auto' }, `All ${videoShotRows.length} shots now follow the global AI motion direction.`)}>All follow global motion</button>
             <button className={`${button} border-purple-400/40 text-purple-200`} onClick={() => updateAllShots({
               videoIncluded: undefined,
               videoOrder: undefined,
@@ -1569,7 +1612,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                   <summary className="cursor-pointer p-2 text-[10px] text-text-primary">
                     <span className="font-semibold">{rowIndex + 1}. Source {pageIndex + 1}.{panelIndex + 1}</span>
                     <span className="ml-1 text-text-muted">· {planned.narrativeRole}</span>
-                    <span className="ml-2 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-purple-200">{rendererLabel}</span>
+                    <span className="ml-2 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-purple-200">{motionMethodLabel(rendererLabel)}</span>
                     <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-amber-200">fit {resolvedFit(planned)}</span>
                     {overrides.size > 0 && <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-emerald-200">{overrides.size} manual lock{overrides.size === 1 ? '' : 's'}</span>}
                     {(!renderer || renderer === 'ltx') && <span className="ml-1 rounded bg-bg-secondary px-1 py-0.5 text-[9px] text-cyan-200">{overrides.has('motion_mode') ? `${motion} override` : `${motion} global`}</span>}
@@ -1587,7 +1630,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                       <textarea className={`${input} mt-1`} rows={4} value={planned.videoPrompt || ''} onChange={event => updateShot(pageIndex, panelIndex, { videoPrompt: event.target.value })} placeholder="Describe only what changes: action, restrained movement, camera and final beat…" />
                     </label>
                     <div className="grid grid-cols-2 gap-1.5">
-                      <label className="text-[9px] text-text-muted">Renderer hint
+                      <label className="text-[9px] text-text-muted">Motion method hint
                         <select
                           className={`${input} mt-1`}
                           value={rendererLabel}
@@ -1619,7 +1662,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                           <option value="hold">Hold · exact still</option>
                           <option value="parallax">Subtle centered push · deterministic</option>
                           <option value="cinemagraph">AI living still · subtle full-frame I2V</option>
-                          <option value="ltx">LTX I2V · performance/action</option>
+                          <option value="ltx">Model-driven I2V · performance/action</option>
                         </select>
                       </label>
                       <label className="text-[9px] text-text-muted">Frame-fit hint
@@ -1645,7 +1688,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                           <option value="pan-right">Pan right</option>
                         </select>
                       </label>
-                      <label className="text-[9px] text-text-muted">LTX direction hint
+                      <label className="text-[9px] text-text-muted">AI motion direction hint
                         <select className={`${input} mt-1`} value={planned.videoMotion || 'auto'} disabled={renderer !== 'ltx'} onChange={event => updateShot(pageIndex, panelIndex, { videoMotion: event.target.value as ComicPlanPanel['videoMotion'] })}>
                           <option value="auto">Follow global · {movieMotionMode}</option>
                           <option value="contextual">Context-aware</option>
@@ -1677,11 +1720,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           {busy === 'preflight' ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}
           {busy === 'preflight' && progress ? progress : `Prepare PRE for ${includedVideoShots.length} enabled film shots`}
         </button>
-        <p className="text-[9px] text-red-200/80">PRE opens as its own full comic workspace tab. It shows the exact source, prepared frame, prompt, renderer, seed and LTX parameters before any video generation.</p>
+        <p className="text-[9px] text-red-200/80">PRE opens as its own full comic workspace tab. It shows the exact source, prepared frame, prompt, motion method, seed and video-model parameters before any generation.</p>
+        <p className="text-[9px] text-accent-blue">Current engine: <b>{effectiveVideoModelName}</b> · <code>{effectiveVideoModel}</code></p>
         {preflightStatus?.status === 'preview_ready' && (
           <button className={`${button} w-full ${preflightIsStale ? 'border-amber-400/50 text-amber-200' : 'border-emerald-400/50 text-emerald-300'}`} onClick={() => window.dispatchEvent(new CustomEvent('maestro:comic-pre-open', { detail: { pipelineId: preflightPipelineId } }))}>
             {preflightIsStale ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
-            {preflightIsStale ? 'Open stale PRE · rebuild before approval' : `Open prepared PRE · ${preflightStatus.preview_clips?.length || 0} shots`}
+            {preflightIsStale ? 'Open stale PRE · rebuild before approval' : `Open prepared PRE · ${preflightStatus.preview_clips?.length || 0} shots · ${preflightStatus.preview_clips?.[0]?.video_model || effectiveVideoModel}`}
           </button>
         )}
         {preflightStatus?.status === 'failed' && <div className="rounded border border-red-500/40 bg-red-500/10 p-2 text-[10px] text-red-200">{preflightStatus.error || 'Comic video PRE failed.'}</div>}
@@ -2196,6 +2240,9 @@ export function ComicVideoPreflightPanel({
     )) > .38
   const enabledDrafts = drafts.filter(clip => clip.included)
   const selectedDrafts = enabledDrafts.filter(clip => clip.test_selected)
+  const preparedVideoModels = [...new Set(
+    drafts.map(clip => clip.video_model).filter(Boolean),
+  )]
   const unresolvedRisks = enabledDrafts.filter(clip =>
     clip.needs_reframe
     && !(clip.reframe_approved && clip.used_prepared_keyframe))
@@ -2243,7 +2290,7 @@ export function ComicVideoPreflightPanel({
       test_selected: selected.has(clip.index),
     })))
     setDirty(true)
-    notify('ok', `Selected ${selected.size} representative PRE shots by aspect risk, renderer and motion.`)
+    notify('ok', `Selected ${selected.size} representative PRE shots by aspect risk, motion method and motion level.`)
   }
   const applyDurationToPreparedShots = () => {
     if (frontendSourceStale) {
@@ -2343,7 +2390,8 @@ export function ComicVideoPreflightPanel({
     }
     if (!window.confirm(
       `${mode === 'all' ? 'Generate the approved film' : 'Generate this quality test'} `
-      + `from ${chosen.length} exact PRE shot${chosen.length === 1 ? '' : 's'}?`,
+      + `from ${chosen.length} exact PRE shot${chosen.length === 1 ? '' : 's'} `
+      + `with ${[...new Set(chosen.map(clip => clip.video_model))].join(', ')}?`,
     )) return
     setBusy(mode)
     try {
@@ -2383,6 +2431,9 @@ export function ComicVideoPreflightPanel({
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold text-text-primary"><ListVideo size={16} className="text-red-300" /> Comic film PRE · {drafts.length} planned shots</div>
             <p className="mt-1 text-[10px] text-text-muted">This is a separate review workspace. Changes are saved into the durable PRE checkpoint before generation.</p>
+            <p className="mt-1 text-[10px] text-accent-blue">
+              Frozen video engine: <b>{preparedVideoModels.join(', ') || 'not reported'}</b>
+            </p>
           </div>
           <div className="ml-auto flex flex-wrap gap-1.5">
             <button className={button} disabled={busy !== null || hasUnsavedLocalChanges} onClick={() => void loadPreview(pipelineId)}>Reload</button>
@@ -2473,8 +2524,8 @@ export function ComicVideoPreflightPanel({
                 <span className="text-xs font-semibold text-text-primary">{position + 1}. {clip.label || `Shot ${clip.index + 1}`}</span>
                 <span className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[9px] text-purple-200">
                   {clip.effective_renderer && clip.effective_renderer !== clip.renderer
-                    ? `${clip.renderer} → ${clip.effective_renderer} effective`
-                    : clip.effective_renderer || clip.renderer}
+                    ? `${motionMethodLabel(clip.renderer)} → ${motionMethodLabel(clip.effective_renderer)}`
+                    : motionMethodLabel(clip.effective_renderer || clip.renderer)}
                 </span>
                 {risk && <span className="rounded bg-amber-400/10 px-1.5 py-0.5 text-[9px] text-amber-200">aspect risk</span>}
                 <div className="ml-auto flex gap-1"><button className={button} disabled={position === 0} onClick={() => moveDraft(position, -1)}><ArrowUp size={12} /></button><button className={button} disabled={position === drafts.length - 1} onClick={() => moveDraft(position, 1)}><ArrowDown size={12} /></button></div>
@@ -2571,7 +2622,7 @@ export function ComicVideoPreflightPanel({
               </div>
               {clip.guidance_note && <p className="mt-1 rounded border border-border bg-bg-tertiary/50 px-2 py-1 text-[9px] text-text-muted">{clip.guidance_note}</p>}
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <label className="text-[9px] text-text-muted">Renderer<select className={`${input} mt-1`} value={clip.renderer} onChange={event => {
+                <label className="text-[9px] text-text-muted">Motion method<select className={`${input} mt-1`} value={clip.renderer} onChange={event => {
                   const renderer = event.target.value as PreviewDraft['renderer']
                   patchDraft(clip.index, {
                     renderer,
@@ -2581,7 +2632,7 @@ export function ComicVideoPreflightPanel({
                         ? { motion_level: 1 }
                         : {}),
                   })
-                }}><option value="hold">Hold · exact still</option><option value="parallax">Subtle centered push · deterministic</option><option value="cinemagraph">AI living still · subtle full-frame I2V</option><option value="ltx">LTX I2V · authored action</option></select></label>
+                }}><option value="hold">Hold · exact still</option><option value="parallax">Subtle centered push · deterministic</option><option value="cinemagraph">AI living still · subtle full-frame I2V</option><option value="ltx">Model-driven I2V · authored action</option></select></label>
                 <label className="text-[9px] text-text-muted">Fit
                   <select className={`${input} mt-1`} value={clip.fit_mode} onChange={event => patchDraft(clip.index, { fit_mode: event.target.value as PreviewDraft['fit_mode'] })}>
                     {(clip.fit_mode === 'reframe' || clip.used_prepared_keyframe) && (
@@ -2625,8 +2676,8 @@ export function ComicVideoPreflightPanel({
                   <p className="mt-1 text-[9px] text-text-muted">
                     {(clip.effective_renderer || clip.renderer) === 'ltx'
                       || (clip.effective_renderer || clip.renderer) === 'cinemagraph'
-                      ? 'Automatic LTX prompts include a bounded excerpt as a performance and native-audio cue. LTX audio is not deterministic TTS: exact wording, timing and voice identity are not guaranteed. A manual prompt must include any words that must be attempted.'
-                      : 'This deterministic renderer preserves the line for later dubbing or subtitles; it does not synthesize speech.'}
+                      ? 'Automatic video-model prompts include a bounded excerpt as a performance and native-audio cue. Native model audio is not deterministic TTS: exact wording, timing and voice identity are not guaranteed. A manual prompt must include any words that must be attempted.'
+                      : 'This deterministic motion method preserves the line for later dubbing or subtitles; it does not synthesize speech.'}
                   </p>
                 </div>
               )}
