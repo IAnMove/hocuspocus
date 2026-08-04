@@ -1290,6 +1290,58 @@ interface AppState {
   pollPipelineStatus: () => void
 }
 
+function beginAppActivity(
+  get: () => AppState,
+  options: { kind: string; title: string; phase: string; message: string; total?: number },
+) {
+  const id = `${options.kind}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+  const report = (
+    phase: string,
+    message: string,
+    current = 0,
+    total = options.total || 0,
+  ) => get().upsertActivity({
+    id,
+    kind: options.kind,
+    title: options.title,
+    status: 'running',
+    phase,
+    message,
+    current,
+    total,
+  })
+  report(options.phase, options.message, 0, options.total || 0)
+  return {
+    id,
+    report,
+    finish: (message = 'Complete') => {
+      get().upsertActivity({
+        id,
+        kind: options.kind,
+        title: options.title,
+        status: 'completed',
+        phase: 'completed',
+        message,
+        current: options.total || 1,
+        total: options.total || 1,
+      })
+      window.setTimeout(() => get().removeActivity(id), 4000)
+    },
+    fail: (error: unknown, phase = options.phase) => {
+      const message = error instanceof Error ? error.message : String(error)
+      get().upsertActivity({
+        id,
+        kind: options.kind,
+        title: options.title,
+        status: 'failed',
+        phase,
+        message,
+        error: message,
+      })
+    },
+  }
+}
+
 const defaultParams: GenerateParams = {
   prompt: '',
   model_type: 'ltx2_22B_distilled_1_1',
@@ -5275,23 +5327,38 @@ export const useStore = create<AppState>((set, get) => ({
     const s = get()
     const description = s.directorSongDescription.trim()
     if (!description) return
+    const activity = beginAppActivity(get, {
+      kind: 'director_songwriting',
+      title: 'Music Video Director',
+      phase: 'writing_song',
+      message: 'Writing the music prompt and structured lyrics…',
+      total: 2,
+    })
     let refPath = s.directorReferenceImagePath
-    if (!refPath && s.directorReferenceImage) {
-      try {
-        refPath = (await api.uploadImage(s.directorReferenceImage)).path
-        set({ directorReferenceImagePath: refPath })
-      } catch { /* image upload is best-effort */ }
+    try {
+      if (!refPath && s.directorReferenceImage) {
+        activity.report('uploading_artwork', 'Uploading the visual reference…', 1, 2)
+        try {
+          refPath = (await api.uploadImage(s.directorReferenceImage)).path
+          set({ directorReferenceImagePath: refPath })
+        } catch { /* image upload is best-effort */ }
+      }
+      activity.report('writing_song', 'Writing the music prompt and structured lyrics…', 1, 2)
+      set({ directorError: null })
+      const r = await api.writeSong({
+        description,
+        instrumental: s.directorSongInstrumental,
+        reference_image_path: refPath || undefined,
+      })
+      set({
+        directorSongStyle: r.style || '',
+        directorSongLyrics: s.directorSongInstrumental ? '[Instrumental]' : (r.lyrics || ''),
+      })
+      activity.finish('Song prompt and lyrics ready')
+    } catch (error) {
+      activity.fail(error)
+      throw error
     }
-    set({ directorError: null })
-    const r = await api.writeSong({
-      description,
-      instrumental: s.directorSongInstrumental,
-      reference_image_path: refPath || undefined,
-    })
-    set({
-      directorSongStyle: r.style || '',
-      directorSongLyrics: s.directorSongInstrumental ? '[Instrumental]' : (r.lyrics || ''),
-    })
   },
 
   // Music Video: generate the track (writing the song first if the user only
@@ -5308,6 +5375,13 @@ export const useStore = create<AppState>((set, get) => ({
       set({ directorError: 'Describe your song (or fill in Style / Lyrics) first.' })
       return
     }
+    const activity = beginAppActivity(get, {
+      kind: 'director_music',
+      title: 'Music Video Director',
+      phase: 'generating_music',
+      message: 'Preparing music generation…',
+      total: 2,
+    })
     // Upload the reference image so it can inform BOTH the music and visuals.
     let refPath = s.directorReferenceImagePath
     if (!refPath && s.directorReferenceImage) {
@@ -5340,6 +5414,7 @@ export const useStore = create<AppState>((set, get) => ({
       })
       setTimeout(() => { void get().reconnectJobs() }, 1200)
       setTimeout(() => { void get().reconnectJobs() }, 5000)
+      activity.report('generating_music', 'Generating the music track…', 1, 2)
       const r = await trackPromise
       // Persist the (possibly LLM-written) song back into the editable fields.
       set({
@@ -5353,6 +5428,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (!get().directorSceneDescription.trim() && description) {
         set({ directorSceneDescription: description })
       }
+      activity.finish('Music track ready; starting audio analysis')
       // Same analyze → plan-structure chain as the upload flow. Instrumental
       // tracks skip transcription (no lyrics to find). For vocal tracks we
       // KNOW the written lyrics — seed Whisper with them so the timed
@@ -5381,12 +5457,17 @@ export const useStore = create<AppState>((set, get) => ({
         directorError: msg,
         directorStep: 'upload',
       })
+      activity.fail(e, 'generating_music')
     }
   },
 
   directorSetEnergyBias: async (bias) => {
     const { directorAnalysis } = get()
     if (!directorAnalysis) return
+    const activity = beginAppActivity(get, {
+      kind: 'clip_replanning', title: 'Director', phase: 'planning_clips',
+      message: 'Recalculating clip structure…', total: 1,
+    })
     set({ directorLoading: true, directorEnergyBias: bias })
     try {
       const structure = await api.planClipStructure({
@@ -5398,9 +5479,11 @@ export const useStore = create<AppState>((set, get) => ({
         video_model: get().selectedModelPerMode.video || undefined,
       })
       set({ directorPlannedClips: structure.clips, directorLoading: false })
+      activity.finish(`${structure.clips.length} clips replanned`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to update structure'
       set({ directorLoading: false, directorError: msg })
+      activity.fail(e, 'planning_clips')
     }
   },
 
@@ -5408,6 +5491,10 @@ export const useStore = create<AppState>((set, get) => ({
     const { directorAnalysis } = get()
     set({ directorPacingProfile: profile })
     if (!directorAnalysis) return
+    const activity = beginAppActivity(get, {
+      kind: 'clip_replanning', title: 'Music Video Director', phase: 'planning_clips',
+      message: `Applying ${profile} editing rhythm…`, total: 1,
+    })
     set({ directorLoading: true, directorError: null })
     try {
       const structure = await api.planClipStructure({
@@ -5419,9 +5506,11 @@ export const useStore = create<AppState>((set, get) => ({
         video_model: get().selectedModelPerMode.video || undefined,
       })
       set({ directorPlannedClips: structure.clips, directorLoading: false })
+      activity.finish(`${structure.clips.length} clips planned with ${profile} pacing`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to update music-video pacing'
       set({ directorLoading: false, directorError: msg })
+      activity.fail(e, 'planning_clips')
     }
   },
 
@@ -5539,10 +5628,18 @@ export const useStore = create<AppState>((set, get) => ({
   directorPlanPrompts: async () => {
     const { directorPlannedClips, directorSceneDescription, directorAnalysis } = get()
     if (!directorPlannedClips.length || !directorSceneDescription.trim()) return
+    const activity = beginAppActivity(get, {
+      kind: 'director_planning',
+      title: 'Music Video Director',
+      phase: 'uploading_artwork',
+      message: 'Preparing visual references…',
+      total: 3,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan' })
     try {
       // Upload all reference images
       const { refImagePath, charPaths, locPaths } = await get()._uploadDirectorRefs()
+      activity.report('planning', `Planning ${directorPlannedClips.length} shots with the LLM…`, 1, 3)
       const { directorCharacterRefLabels: charLabels, directorLocationRefLabels: locLabels } = get()
       const extraRefs = {
         ...(charPaths.length > 0 ? { character_ref_paths: charPaths, character_ref_labels: charLabels } : {}),
@@ -5605,6 +5702,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review',
         directorLoading: false,
       })
+      activity.finish(`${plans.length} visual shot plans ready for review`)
 
       // Auto-mode: skip review, proceed to image gen. directorGenerateStartImages
       // now generates an establishing/anchor image first when no reference was
@@ -5617,12 +5715,20 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : 'Planning failed'
       console.error('Director planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'style' })
+      activity.fail(e, 'planning')
     }
   },
 
   directorPlanVideoPrompts: async () => {
     const { directorPlannedClips, directorSceneDescription, directorAnalysis, directorClipPlans, directorReferenceImagePath } = get()
     if (!directorPlannedClips.length || !directorClipPlans.length) return
+    const activity = beginAppActivity(get, {
+      kind: 'director_video_prompts',
+      title: 'Music Video Director',
+      phase: 'planning',
+      message: `Planning motion for ${directorPlannedClips.length} clips…`,
+      total: directorPlannedClips.length,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan_video' })
     try {
       // Build speaker_mappings
@@ -5658,6 +5764,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review_video',
         directorLoading: false,
       })
+      activity.finish(`${updatedPlans.length} video prompts ready`)
 
       // Auto-mode: skip review, apply to editor and start generation
       if (get().directorAutoMode) {
@@ -5667,6 +5774,7 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : 'Video prompt planning failed'
       console.error('Director video planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'generate_images' })
+      activity.fail(e, 'planning')
     }
   },
 
@@ -5683,6 +5791,15 @@ export const useStore = create<AppState>((set, get) => ({
   directorGenerateStartImages: async () => {
     const { directorClipPlans, directorPlannedClips, params, selectedModelPerMode, savedParamsPerMode, savedLoraPerMode, directorResolution, directorAspectRatio, directorSceneDescription } = get()
     if (!directorClipPlans.length) return
+    const needsAnchor = !get().directorReferenceImage && !get().directorReferenceImagePath
+    const activityTotal = directorClipPlans.length + (needsAnchor ? 1 : 0)
+    const activity = beginAppActivity(get, {
+      kind: 'director_images',
+      title: 'Music Video Director',
+      phase: 'generating_images',
+      message: `Preparing ${activityTotal} start images…`,
+      total: activityTotal,
+    })
 
     // Use saved image-mode settings if available, otherwise fall back to defaults
     const imageModel = selectedModelPerMode.image || 'flux2_klein_9b'
@@ -5729,12 +5846,19 @@ export const useStore = create<AppState>((set, get) => ({
         ...buildImgPostProc(),
       }
       const { job_id } = await api.submitGeneration(genParams)
+      void get().reconnectJobs()
       let outputFiles: string[] = []
       let attempts = 0
       const maxAttempts = 300  // 300 × 2s = 10 minutes
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 2000))
         const status = await api.fetchJobStatus(job_id)
+        activity.report(
+          'generating_images',
+          `${label} · ${status.message || `${Math.round(status.progress)}%`}`,
+          Math.min(activityTotal, get().directorClipImages.length),
+          activityTotal,
+        )
         if (status.status === 'completed') { outputFiles = status.output_files; break }
         if (status.status === 'failed') throw new Error(status.error || `${label} generation failed`)
         attempts++
@@ -5774,6 +5898,7 @@ export const useStore = create<AppState>((set, get) => ({
           },
         })
         const anchorPrompt = directorSceneDescription.trim() || directorClipPlans[0]?.image_prompt || 'cinematic establishing shot'
+        activity.report('generating_images', 'Generating the shared establishing image…', 0, activityTotal)
         const { file: anchorFile } = await genImage(anchorPrompt, [], 'Establishing image')
         // Adopt as the reference image (uploaded just below via _uploadDirectorRefs).
         set({ directorReferenceImage: anchorFile, directorReferenceImagePath: null })
@@ -5795,6 +5920,7 @@ export const useStore = create<AppState>((set, get) => ({
         set({
           directorImageGenProgress: { current: base + i, total, currentClipLabel: clipLabel, status: 'generating' },
         })
+        activity.report('generating_images', `Generating ${clipLabel}…`, base + i, total)
         const { file, filename } = await genImage(plan.image_prompt, allRefs, clipLabel)
         generatedImages.push({ clipIndex: i, prompt: plan.image_prompt, file, filename })
         set({ directorClipImages: [...generatedImages] })
@@ -5804,6 +5930,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorImageGenProgress: { current: total, total, currentClipLabel: '', status: 'done' },
         directorLoading: false,
       })
+      activity.finish(`${total} start images ready`)
 
       // Video prompts already generated in the combined LLM pass — go straight to review
       const hasVideoPrompts = get().directorClipPlans.some(p => p.video_prompt)
@@ -5826,6 +5953,7 @@ export const useStore = create<AppState>((set, get) => ({
           ? { ...get().directorImageGenProgress!, status: 'error' }
           : null,
       })
+      activity.fail(e, 'generating_images')
     }
   },
 
@@ -6053,6 +6181,13 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmSetPreserveVisualStyle: (v) => set({ shortFilmPreserveVisualStyle: v }),
 
   shortFilmUploadAndAnalyze: async (file) => {
+    const activity = beginAppActivity(get, {
+      kind: 'short_film_audio',
+      title: 'Short Film Director',
+      phase: 'uploading_audio',
+      message: `Uploading “${file.name}”…`,
+      total: 10,
+    })
     set({
       directorLoading: true,
       directorLoadingMessage: 'Uploading audio...',
@@ -6060,35 +6195,29 @@ export const useStore = create<AppState>((set, get) => ({
       directorAudioFile: file,
       directorStep: 'analyze',
     })
-    // Same polling pattern as directorUploadAndAnalyze — see comment
-    // there for the full rationale on /api/v1/audio/analyze/status.
-    let analyzePoll: ReturnType<typeof setInterval> | null = null
-    const startAnalyzePolling = () => {
-      analyzePoll = setInterval(async () => {
-        try {
-          const status = await api.fetchAudioAnalyzeStatus()
-          if (!status.step) return
-          set({ directorLoadingMessage: `${status.detail}...` })
-        } catch { /* polling errors are non-fatal */ }
-      }, 1000)
-    }
-    const stopAnalyzePolling = () => {
-      if (analyzePoll !== null) {
-        clearInterval(analyzePoll)
-        analyzePoll = null
-      }
-    }
     try {
       const uploaded = await api.uploadAudio(file)
       set({ directorAudioPath: uploaded.path, directorLoadingMessage: 'Analyzing audio...' })
-
-      startAnalyzePolling()
-      const analysis = await api.analyzeAudio({
+      const accepted = await api.startAudioAnalysisJob({
         audio_path: uploaded.path,
         transcribe: true,
         extract_vocals: true,
       })
-      stopAnalyzePolling()
+      void get().reconnectJobs()
+      let analysis: AudioAnalysisResult | null = null
+      for (;;) {
+        const status = await api.fetchAudioAnalysisJob(accepted.job_id)
+        set({ directorLoadingMessage: status.message })
+        activity.report(status.phase || 'analyzing_audio', status.message, status.step, 10)
+        if (status.status === 'completed') {
+          analysis = status.result
+          break
+        }
+        if (status.status === 'failed') throw new Error(status.error || status.message)
+        if (status.status === 'cancelled') throw new Error('Audio analysis cancelled')
+        await new Promise(resolve => window.setTimeout(resolve, 1000))
+      }
+      if (!analysis) throw new Error('Audio analysis completed without a result')
 
       set({ directorAnalysis: analysis })
 
@@ -6112,6 +6241,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Plan dialogue-paced clip structure (not beat-aligned)
       set({ directorLoadingMessage: 'Planning scenes...' })
+      activity.report('planning_clips', 'Planning dialogue-paced scenes…', 9, 10)
       const structure = await api.planDialogueScenes({
         analysis,
         pacing_bias: get().directorEnergyBias,
@@ -6125,18 +6255,22 @@ export const useStore = create<AppState>((set, get) => ({
         directorLoading: false,
         directorLoadingMessage: null,
       })
+      activity.finish(`${structure.clips.length} dialogue scenes ready for review`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Analysis failed'
       console.error('Short film analysis failed:', e)
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
-    } finally {
-      stopAnalyzePolling()
+      activity.fail(e, 'analyzing_audio')
     }
   },
 
   shortFilmSetPacingBias: async (bias) => {
     const { directorAnalysis } = get()
     if (!directorAnalysis) return
+    const activity = beginAppActivity(get, {
+      kind: 'scene_replanning', title: 'Short Film Director', phase: 'planning_clips',
+      message: 'Recalculating dialogue scene pacing…', total: 1,
+    })
     set({ directorLoading: true, directorEnergyBias: bias })
     try {
       const structure = await api.planDialogueScenes({
@@ -6147,9 +6281,11 @@ export const useStore = create<AppState>((set, get) => ({
         frames_minimum: get().modelOptions?.frames_minimum ?? 5,
       })
       set({ directorPlannedClips: structure.clips, directorLoading: false })
+      activity.finish(`${structure.clips.length} scenes replanned`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to update structure'
       set({ directorLoading: false, directorError: msg })
+      activity.fail(e, 'planning_clips')
     }
   },
 
@@ -6157,6 +6293,13 @@ export const useStore = create<AppState>((set, get) => ({
     const { directorPlannedClips, directorSceneDescription, directorAnalysis,
             shortFilmCharacters } = get()
     if (!directorPlannedClips.length || !directorSceneDescription.trim()) return
+    const activity = beginAppActivity(get, {
+      kind: 'short_film_planning',
+      title: 'Short Film Director',
+      phase: 'planning',
+      message: `Planning ${directorPlannedClips.length} scenes…`,
+      total: directorPlannedClips.length,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan' })
     try {
       // Upload all reference images
@@ -6221,6 +6364,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review',
         directorLoading: false,
       })
+      activity.finish(`${plans.length} short-film scenes ready for review`)
 
       // Auto-mode: skip review
       if (get().directorAutoMode) {
@@ -6235,6 +6379,7 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : 'Planning failed'
       console.error('Short film planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'style' })
+      activity.fail(e, 'planning')
     }
   },
 
@@ -6242,6 +6387,13 @@ export const useStore = create<AppState>((set, get) => ({
     const { directorPlannedClips, directorSceneDescription, directorAnalysis,
             directorClipPlans, directorReferenceImagePath, shortFilmCharacters } = get()
     if (!directorPlannedClips.length || !directorClipPlans.length) return
+    const activity = beginAppActivity(get, {
+      kind: 'short_film_video_prompts',
+      title: 'Short Film Director',
+      phase: 'planning',
+      message: `Planning motion for ${directorPlannedClips.length} scenes…`,
+      total: directorPlannedClips.length,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan_video' })
     try {
       const speakerMappings: Record<string, { name: string; role: string }> = {}
@@ -6279,6 +6431,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review_video',
         directorLoading: false,
       })
+      activity.finish(`${updatedPlans.length} scene motion prompts ready`)
 
       if (get().directorAutoMode) {
         get().directorGenerate()
@@ -6287,6 +6440,7 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : 'Video prompt planning failed'
       console.error('Short film video planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'generate_images' })
+      activity.fail(e, 'planning')
     }
   },
 
@@ -6295,6 +6449,13 @@ export const useStore = create<AppState>((set, get) => ({
             shortFilmCharacters, shortFilmTargetDuration, shortFilmNarrative,
             shortFilmVisualStyle, shortFilmPreserveVisualStyle } = get()
     if (!directorSceneDescription.trim()) return
+    const activity = beginAppActivity(get, {
+      kind: 'story_film_planning',
+      title: 'Short Film Director',
+      phase: 'planning',
+      message: 'Planning the Story adaptation with the LLM…',
+      total: 3,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan', llmStreamText: '', llmStreamDone: false })
     try {
       // Upload all reference images
@@ -6386,6 +6547,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review',
         directorLoading: false,
       })
+      activity.finish(`${plans.length} Story film scenes ready for review`)
 
       // Auto-mode: skip review steps
       if (get().directorAutoMode) {
@@ -6401,6 +6563,7 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : 'Story planning failed'
       console.error('Short film story planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'style' })
+      activity.fail(e, 'planning')
     }
   },
 

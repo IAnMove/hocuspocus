@@ -2038,7 +2038,13 @@ export function StoryLabPanel() {
       return
     }
     setProductionBusy('music')
+    const activity = beginStoryActivity(
+      'preparing_music_video',
+      `Loading “${candidate.name}” and its Story references…`,
+      3,
+    )
     try {
+      activity.update('Loading character and world references…', 'preparing_music_video', 1, 3)
       const loaded = await loadMusicVideoProduction(
         project,
         cue,
@@ -2047,6 +2053,7 @@ export function StoryLabPanel() {
         options.pacing || musicProductionPacing,
         options.mode === 'trailer' ? options.excerpt : undefined,
       )
+      activity.update('Saving the independent production snapshot…', 'preparing_music_video', 2, 3)
       if (options.saveProduction !== false) {
         patch({
           productions: [...project.productions, {
@@ -2088,8 +2095,10 @@ export function StoryLabPanel() {
           : `The song, lyrics and visual references for “${loaded.adaptation.focusLabel}” are loaded in Director.`,
       })
     } catch (error) {
+      activity.fail(error, 'preparing_music_video')
       setNotice({ kind: 'error', text: `The music video could not load the song: ${(error as Error).message}` })
     } finally {
+      activity.finish()
       setProductionBusy(null)
     }
   }

@@ -35,6 +35,7 @@ const PHASE_LABELS: Record<string, string> = {
   classifying_sections: 'Classifying song sections',
   planning_clips: 'Planning clips',
   ready_for_visual_brief: 'Ready for visual brief',
+  preparing_music_video: 'Preparing music video',
 }
 
 type ActivityStatus = 'queued' | 'running' | 'completed' | 'failed'
