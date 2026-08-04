@@ -131,10 +131,11 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         inputs = workflow["10"]["inputs"]
         self.assertEqual(workflow["10"]["class_type"], "MiniMaxH3ReferenceToVideo")
         self.assertEqual(inputs["ref_image_size"], "max")
-        self.assertIn("ref_image_1", inputs)
-        self.assertIn("ref_video_1", inputs)
-        self.assertIn("ref_video_audio_1", inputs)
-        self.assertIn("ref_audio_1", inputs)
+        self.assertIn("ref_images.ref_image_0", inputs)
+        self.assertIn("ref_videos.ref_video_0", inputs)
+        self.assertIn("ref_video_audios.ref_video_audio_0", inputs)
+        self.assertIn("ref_audios.ref_audio_0", inputs)
+        self.assertNotIn("ref_image_1", inputs)
 
     def test_audio_only_reference_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(h3, "INPUT_DIR", Path(tmp) / "input"):

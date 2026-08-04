@@ -486,24 +486,28 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
     inputs = {"clip": ["3", 0], "vae": ["4", 0], "audio_vae": ["5", 0],
               "prompt": prompt, "width": width, "height": height, "length": length,
               "ref_image_size": params.get("h3_ref_image_size", "match")}
-    for index, source in enumerate(image_refs, 1):
+    # ComfyUI V3 autogrow inputs use dotted API keys.  The executor expands
+    # ``ref_images.ref_image_0`` into ``ref_images={"ref_image_0": tensor}``
+    # before calling the node.  Bare ``ref_image_1`` keys bypass that expansion
+    # and are forwarded as unexpected execute() keyword arguments.
+    for index, source in enumerate(image_refs):
         copy_index += 1
         node_id = str(40 + copy_index)
         workflow[node_id] = _node("LoadImage", image=_copy_input(source, job_id, copy_index))
-        inputs[f"ref_image_{index}"] = [node_id, 0]
-    for index, source in enumerate(video_refs, 1):
+        inputs[f"ref_images.ref_image_{index}"] = [node_id, 0]
+    for index, source in enumerate(video_refs):
         copy_index += 1
         load_id = str(50 + copy_index * 2)
         components_id = str(51 + copy_index * 2)
         workflow[load_id] = _node("LoadVideo", file=_copy_input(source, job_id, copy_index))
         workflow[components_id] = _node("GetVideoComponents", video=[load_id, 0])
-        inputs[f"ref_video_{index}"] = [components_id, 0]
-        inputs[f"ref_video_audio_{index}"] = [components_id, 1]
-    for index, source in enumerate(audio_refs, 1):
+        inputs[f"ref_videos.ref_video_{index}"] = [components_id, 0]
+        inputs[f"ref_video_audios.ref_video_audio_{index}"] = [components_id, 1]
+    for index, source in enumerate(audio_refs):
         copy_index += 1
         node_id = str(80 + copy_index)
         workflow[node_id] = _node("LoadAudio", audio=_copy_input(source, job_id, copy_index))
-        inputs[f"ref_audio_{index}"] = [node_id, 0]
+        inputs[f"ref_audios.ref_audio_{index}"] = [node_id, 0]
     workflow["10"] = _node("MiniMaxH3ReferenceToVideo", **inputs)
     return workflow, pipeline
 
