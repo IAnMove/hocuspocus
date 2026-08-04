@@ -3003,6 +3003,7 @@ export function StoryLabPanel() {
                         </div>
                         {musicProductionMode === 'trailer' && selectedMusicOption && (
                           <AudioRangeSelector
+                            key={selectedMusicOption.candidate.id}
                             src={selectedMusicOption.candidate.source}
                             durationHint={selectedMusicOption.candidate.durationSeconds}
                             start={musicTrailerRange.start}

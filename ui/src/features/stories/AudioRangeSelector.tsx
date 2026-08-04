@@ -5,7 +5,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value))
 }
 
-export function formatAudioTime(seconds: number): string {
+function formatAudioTime(seconds: number): string {
   const safe = Math.max(0, Number.isFinite(seconds) ? seconds : 0)
   const minutes = Math.floor(safe / 60)
   const remainder = Math.floor(safe % 60)
@@ -13,7 +13,7 @@ export function formatAudioTime(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, '0')}.${tenths}`
 }
 
-export function parseAudioTime(value: string): number | null {
+function parseAudioTime(value: string): number | null {
   const trimmed = value.trim()
   if (!trimmed) return null
   const parts = trimmed.split(':')
@@ -33,7 +33,6 @@ function TimeEditor({
   onCommit: (value: number) => void
 }) {
   const [draft, setDraft] = useState(() => formatAudioTime(value))
-  useEffect(() => setDraft(formatAudioTime(value)), [value])
   const commit = () => {
     const parsed = parseAudioTime(draft)
     if (parsed === null) {
@@ -84,12 +83,6 @@ export function AudioRangeSelector({
   const [playhead, setPlayhead] = useState(start)
   const minimumSelection = Math.min(3, Math.max(1, duration || durationHint || 1))
   const safeEnd = end > start ? end : duration
-
-  useEffect(() => {
-    setDuration(Math.max(0, durationHint))
-    setPlaying(false)
-    setPlayhead(0)
-  }, [src, durationHint])
 
   useEffect(() => {
     if (!duration) return
@@ -214,12 +207,14 @@ export function AudioRangeSelector({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <TimeEditor
+            key={`start-${start.toFixed(3)}`}
             label="From"
             value={start}
             maximum={Math.max(0, safeEnd - minimumSelection)}
             onCommit={value => onChange({ start: Math.min(value, safeEnd - minimumSelection), end: safeEnd, duration })}
           />
           <TimeEditor
+            key={`end-${safeEnd.toFixed(3)}`}
             label="To"
             value={safeEnd}
             maximum={duration}
