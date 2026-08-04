@@ -6873,6 +6873,13 @@ def list_saved_pipelines():
     return {"pipelines": pipelines}
 
 
+@api.get("/api/v1/director/pipelines/active")
+def list_active_director_pipelines():
+    """List in-memory Director runs so the browser can recover after refresh."""
+    from services.director_pipeline import list_active_pipelines
+    return {"pipelines": list_active_pipelines(_get_active_workspace())}
+
+
 @api.get("/api/v1/director/pipelines/{pid}")
 def get_saved_pipeline(pid: str):
     """Get a full saved pipeline state."""

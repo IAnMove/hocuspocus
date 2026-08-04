@@ -1511,6 +1511,37 @@ def get_pipeline(pid: str) -> Optional[dict]:
         return dict(p) if p else None
 
 
+def list_active_pipelines(workspace: Optional[str] = None) -> list[dict]:
+    """Return lightweight snapshots of live pipelines for UI reconnection.
+
+    Active Director runs live in memory while their worker is executing. The
+    saved-state scanner cannot see a run until its next checkpoint, so the
+    frontend needs this separate view after a browser refresh.
+    """
+    active_statuses = {"running", "queued", "paused"}
+    normalized_workspace = workspace or "default"
+    with _pipeline_lock:
+        pipelines = [dict(p) for p in _pipelines.values()]
+
+    results = []
+    for pipeline in pipelines:
+        if pipeline.get("status") not in active_statuses:
+            continue
+        pipeline_workspace = pipeline.get("workspace") or "default"
+        if pipeline_workspace != normalized_workspace:
+            continue
+        pipeline_type = pipeline.get("pipeline_type") or (
+            pipeline.get("params") or {}
+        ).get("pipeline_type", "")
+        pipeline.pop("params", None)
+        pipeline.pop("_llm_passes", None)
+        pipeline["pipeline_type"] = pipeline_type
+        results.append(pipeline)
+
+    results.sort(key=lambda item: item.get("created_at") or 0, reverse=True)
+    return results
+
+
 def continue_pipeline(pid: str, updates: Optional[dict] = None):
     """Resume a paused pipeline, optionally with updated clip_plans."""
     with _pipeline_lock:
@@ -3067,6 +3098,16 @@ def _run_pipeline(pid: str, resume: bool = False):
                     video_loras=video_loras, image_loras=image_loras,
                     image_paths=ref_paths or None,
                     characters=characters,
+                    progress_callback=lambda current, total: _update_pipeline(
+                        pid,
+                        progress={
+                            "current": current,
+                            "total": total,
+                            "message": f"Polishing prompts (3rd pass): {current}/{total}",
+                            "step": current,
+                            "total_steps": total,
+                        },
+                    ),
                 )
                 _capture_llm_pass(pid, "third_pass_polish")
                 print(f"[Pipeline] Third-pass polish completed for {len(clip_plans)} clips")

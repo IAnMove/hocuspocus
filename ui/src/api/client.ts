@@ -731,6 +731,20 @@ export interface PipelineStatus {
   lora_warnings?: string[]
 }
 
+export interface ActiveDirectorPipeline {
+  id: string
+  status: 'running' | 'queued' | 'paused'
+  phase: string
+  auto_mode?: boolean
+  progress: { current: number; total: number; message: string; step: number; total_steps: number }
+  output_files?: string[]
+  error?: string | null
+  pipeline_type?: string
+  workspace?: string
+  created_at?: number
+  updated_at?: number
+}
+
 export async function startPipeline(params: Record<string, unknown>): Promise<{ pipeline_id: string }> {
   const res = await fetch(`${BASE}/api/v1/director/pipeline/start`, {
     method: 'POST',
@@ -747,6 +761,12 @@ export async function startPipeline(params: Record<string, unknown>): Promise<{ 
 export async function fetchPipelineStatus(pid: string): Promise<PipelineStatus> {
   const res = await fetch(`${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}`)
   if (!res.ok) throw new Error('Failed to fetch pipeline status')
+  return res.json()
+}
+
+export async function fetchActiveDirectorPipelines(): Promise<{ pipelines: ActiveDirectorPipeline[] }> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/active`)
+  if (!res.ok) throw new Error('Failed to fetch active Director pipelines')
   return res.json()
 }
 

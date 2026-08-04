@@ -1016,6 +1016,7 @@ interface AppState {
   stopGeneration: (jobId?: string) => void
   dismissJob: (jobId: string) => void
   reconnectJobs: () => Promise<void>
+  reconnectDirectorPipelines: () => Promise<void>
 
   // LoRA state
   availableLoras: string[]
@@ -1283,6 +1284,7 @@ interface AppState {
   removeActivity: (activityId: string) => void
   pipelineId: string | null
   pipelineStatus: import('../api/client').PipelineStatus | null
+  activeDirectorPipelines: import('../api/client').ActiveDirectorPipeline[]
   pipelinePolling: boolean
   startDirectorPipeline: () => Promise<void>
   continuePipeline: (updates?: { clip_plans?: Array<{ video_prompt: string; image_prompt: string }> }) => Promise<void>
@@ -1341,6 +1343,8 @@ function beginAppActivity(
     },
   }
 }
+
+let directorReconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 const defaultParams: GenerateParams = {
   prompt: '',
@@ -4109,6 +4113,72 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  reconnectDirectorPipelines: async () => {
+    if (directorReconnectTimer) clearTimeout(directorReconnectTimer)
+    const refresh = async () => {
+      try {
+        const data = await api.fetchActiveDirectorPipelines()
+        set({ activeDirectorPipelines: data.pipelines })
+
+        // Restore the primary pipeline state so Director's existing inspector
+        // can reconnect to the same run, while the footer displays every live
+        // pipeline returned by the backend.
+        const primary = data.pipelines[0]
+        if (primary && !get().pipelineId) {
+          set({
+            pipelineId: primary.id,
+            pipelineStatus: primary as import('../api/client').PipelineStatus,
+            pipelinePolling: true,
+            directorLoading: primary.status === 'running' || primary.status === 'queued',
+          })
+          get().pollPipelineStatus()
+        }
+        directorReconnectTimer = data.pipelines.length > 0
+          ? setTimeout(refresh, 2000)
+          : null
+      } catch {
+        // Older backends do not expose the in-memory endpoint. Story Lab
+        // productions still persist their pipeline id, so recover those runs
+        // directly and keep the footer useful during a rolling backend update.
+        try {
+          const library = await api.fetchStoryLibrary(get().activeWorkspace)
+          const pipelineIds = Object.values(library.projects)
+            .flatMap(project => project.productions || [])
+            .map(production => production.targetSnapshot?.pipelineId)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+          const uniqueIds = [...new Set(pipelineIds)]
+          const statuses = await Promise.allSettled(uniqueIds.map(id => api.fetchPipelineStatus(id)))
+          const active = statuses
+            .filter((result): result is PromiseFulfilledResult<import('../api/client').PipelineStatus> => result.status === 'fulfilled')
+            .map(result => result.value)
+            .filter((status): status is import('../api/client').PipelineStatus & { status: 'running' | 'paused' } =>
+              status.status === 'running' || status.status === 'paused')
+            .map(status => ({
+              ...status,
+              pipeline_type: 'music_video',
+              created_at: 0,
+              updated_at: Date.now(),
+            }))
+          set({ activeDirectorPipelines: active })
+          const primary = active[0]
+          if (primary && !get().pipelineId) {
+            set({
+              pipelineId: primary.id,
+              pipelineStatus: primary,
+              pipelinePolling: true,
+              directorLoading: true,
+            })
+            get().pollPipelineStatus()
+          }
+          directorReconnectTimer = active.length > 0 ? setTimeout(refresh, 2000) : null
+        } catch {
+          directorReconnectTimer = null
+        }
+      }
+    }
+    await refresh()
+  },
+
   // LoRA state
   availableLoras: [],
   lorasLoading: false,
@@ -4876,6 +4946,7 @@ export const useStore = create<AppState>((set, get) => ({
   activities: {},
   pipelineId: null,
   pipelineStatus: null,
+  activeDirectorPipelines: [],
   pipelinePolling: false,
   upsertActivity: (activity) => set(state => {
     const previous = state.activities[activity.id]

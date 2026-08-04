@@ -70,6 +70,7 @@ function activityProgress(current: number, total: number, explicit?: number): nu
 export function ActivityFooter() {
   const jobs = useStore(s => s.jobs)
   const pipelineStatus = useStore(s => s.pipelineStatus)
+  const activeDirectorPipelines = useStore(s => s.activeDirectorPipelines)
   const activities = useStore(s => s.activities)
   const stopGeneration = useStore(s => s.stopGeneration)
   const removeActivity = useStore(s => s.removeActivity)
@@ -91,8 +92,24 @@ export function ActivityFooter() {
       dismissible: activity.status === 'failed' ? 'activity' as const : undefined,
     }))
 
+    const recoveredPipelines: ActivityView[] = activeDirectorPipelines.map(pipeline => ({
+      id: `pipeline:${pipeline.id}`,
+      title: pipeline.pipeline_type === 'music_video' ? 'Music video' : 'Director pipeline',
+      status: pipeline.status === 'paused' ? 'queued' : 'running',
+      phase: pipeline.phase,
+      message: pipeline.error || pipeline.progress?.message || 'Director is working…',
+      current: pipeline.progress?.total_steps ? pipeline.progress.step : pipeline.progress?.current || 0,
+      total: pipeline.progress?.total_steps || pipeline.progress?.total || 0,
+      percent: activityProgress(
+        pipeline.progress?.total_steps ? pipeline.progress.step : pipeline.progress?.current || 0,
+        pipeline.progress?.total_steps || pipeline.progress?.total || 0,
+      ),
+      updatedAt: pipeline.updated_at || pipeline.created_at || 2,
+    }))
+
     const pipeline: ActivityView[] = pipelineStatus
       && ['running', 'failed', 'completed'].includes(pipelineStatus.status)
+      && !activeDirectorPipelines.some(pipeline => pipeline.id === pipelineStatus.id)
       ? [{
           id: `pipeline:${pipelineStatus.id}`,
           title: 'Director pipeline',
@@ -131,9 +148,9 @@ export function ActivityFooter() {
         dismissible: job.status === 'failed' ? 'job' as const : undefined,
       }))
 
-    return [...registered, ...pipeline, ...visibleJobs]
+    return [...registered, ...recoveredPipelines, ...pipeline, ...visibleJobs]
       .sort((left, right) => right.updatedAt - left.updatedAt)
-  }, [activities, jobs, pipelineStatus])
+  }, [activities, jobs, pipelineStatus, activeDirectorPipelines])
 
   const activeRows = rows.filter(row => row.status === 'running' || row.status === 'queued')
   const failedRows = rows.filter(row => row.status === 'failed')

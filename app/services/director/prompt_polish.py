@@ -1230,6 +1230,7 @@ def polish_prompts_third_pass(
     image_loras: list[str] = None,
     image_paths: list[str] = None,
     characters: list = None,
+    progress_callback=None,
 ) -> list[dict]:
     """Post-process clip plans through the enhance LLM pipeline (third pass).
 
@@ -2270,6 +2271,12 @@ def polish_prompts_third_pass(
                     else:
                         polished_kfs.append(kf)
                 plan["keyframe_prompts"] = polished_kfs
+
+        if progress_callback:
+            try:
+                progress_callback(plan_idx + 1, total)
+            except Exception:
+                pass
 
 
     # Report all four outcomes so silent-failure modes are visible.
