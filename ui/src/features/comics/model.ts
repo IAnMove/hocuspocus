@@ -126,12 +126,20 @@ function compactPanelCopy(
     seen,
   )
   const soundEffects = compactUnique(
-    Array.isArray(panel.soundEffects) ? panel.soundEffects : [],
+    (Array.isArray(panel.soundEffects) ? panel.soundEffects : [])
+      .filter(value => !isIncompleteSoundEffect(value)),
     value => value,
     Math.max(0, maxElements - captions.length - dialogue.length),
     seen,
   )
   return { captions, dialogue, soundEffects }
+}
+
+/** A trailing dash is how truncated LLM lettering commonly leaks into a plan.
+ * It is not useful reader-facing copy and should not become a floating glyph. */
+function isIncompleteSoundEffect(value: unknown): boolean {
+  const text = String(value ?? '').trim()
+  return !text || !/[\p{L}\p{N}]/u.test(text) || /[-–—]\s*$/u.test(text)
 }
 
 /** Accept a structurally valid plan even when an LLM response was repaired
@@ -502,6 +510,7 @@ export function textElement(
     rotation: 0,
     zIndex: 20 + order,
     visible: true,
+    letteringType: bubble === 'caption' ? 'caption' : 'dialogue',
     content,
     fontSize,
     fontFamily: '"Comic Sans MS", "Trebuchet MS", sans-serif',
@@ -520,9 +529,9 @@ export function textElement(
 
 /** Build display lettering with a box sized for its final large font.
  *
- * Generated SFX used to inherit a normal 17–19px text box and then change
- * only ``fontSize`` to 30/34px, so the canvas clipped the glyphs. Keeping the
- * geometry here also prevents regenerated effects from sharing one position.
+ * Generated SFX use an explicit burst container so their contrast does not
+ * depend on the underlying artwork. Keeping the geometry here also prevents
+ * regenerated effects from sharing one position or clipping large glyphs.
  */
 export function soundEffectElement(
   panel: ComicPanelElement,
@@ -535,8 +544,8 @@ export function soundEffectElement(
   const width = Math.min(
     panel.width - 16,
     Math.max(
-      panel.width * 0.44,
-      Math.min(panel.width * 0.84, content.length * fontSize * 0.64 + padding * 2),
+      panel.width * 0.56,
+      Math.min(panel.width * 0.88, content.length * fontSize * 0.64 + padding * 4),
     ),
   )
   const charactersPerLine = Math.max(
@@ -546,7 +555,7 @@ export function soundEffectElement(
   const lineCount = Math.max(1, Math.ceil(content.length / charactersPerLine))
   const height = Math.min(
     panel.height * 0.36,
-    Math.max(fontSize * 1.45, lineCount * fontSize * 1.15 + padding * 2),
+    Math.max(fontSize * 1.9, lineCount * fontSize * 1.2 + padding * 4),
   )
   const preferredY = panel.height * 0.42 + order * (height + 7)
   return {
@@ -560,18 +569,20 @@ export function soundEffectElement(
     rotation: order % 2 === 0 ? -2 : 2,
     zIndex: 24 + order,
     visible: true,
+    letteringType: 'sound-effect',
     content,
     fontSize,
     fontFamily: '"Comic Sans MS", "Trebuchet MS", sans-serif',
-    color: '#facc15',
+    color: '#111111',
     bold: true,
     italic: false,
     align: 'center',
-    bubble: 'none',
-    bubbleBackground: '#ffffff',
+    bubble: 'burst',
+    bubbleBackground: '#fff4a3',
     bubbleStrokeColor: '#111111',
-    bubbleStrokeWidth: 0,
-    bubblePadding: padding,
+    bubbleStrokeWidth: 3,
+    bubblePadding: padding * 2,
+    bubbleShadow: true,
     autoFit: true,
   }
 }
@@ -709,11 +720,13 @@ export function planWithCanvasText(project: ComicProject): ComicPlan | null {
         .filter((element): element is ComicTextElement =>
           element.type === 'text' && element.parentId === panel.id && element.visible !== false)
         .sort((a, b) => a.zIndex - b.zIndex)
-      planned.captions = text.filter(element => element.bubble === 'caption').map(element => element.content)
-      planned.soundEffects = text.filter(element => element.bubble === 'none').map(element => element.content)
+      const letteringType = (element: ComicTextElement) => element.letteringType
+        ?? (element.bubble === 'caption' ? 'caption' : element.bubble === 'none' ? 'sound-effect' : 'dialogue')
+      planned.captions = text.filter(element => letteringType(element) === 'caption').map(element => element.content)
+      planned.soundEffects = text.filter(element => letteringType(element) === 'sound-effect').map(element => element.content)
       const existingDialogue = planned.dialogue
       planned.dialogue = text
-        .filter(element => element.bubble !== 'caption' && element.bubble !== 'none')
+        .filter(element => letteringType(element) === 'dialogue')
         .map((element, dialogueIndex) => ({
           speakerId: existingDialogue[dialogueIndex]?.speakerId,
           text: element.content,
@@ -785,6 +798,30 @@ export function normalizeComicProject(raw: unknown): ComicProject {
     project.translationGlossary = Array.isArray(project.translationGlossary)
       ? project.translationGlossary
       : []
+    project.pages = project.pages.map(page => ({
+      ...page,
+      elements: page.elements.flatMap<ComicElement>(element => {
+        if (element.type !== 'text') return [element]
+        const letteringType = element.letteringType
+          ?? (element.bubble === 'caption' ? 'caption' : element.bubble === 'none' ? 'sound-effect' : 'dialogue')
+        if (letteringType === 'sound-effect' && isIncompleteSoundEffect(element.content)) return []
+        if (letteringType !== 'sound-effect' || element.bubble !== 'none') {
+          return [{ ...element, letteringType }]
+        }
+        // Upgrade legacy floating yellow SFX to the readable generated style.
+        return [{
+          ...element,
+          letteringType,
+          bubble: 'burst' as const,
+          color: '#111111',
+          bubbleBackground: '#fff4a3',
+          bubbleStrokeColor: '#111111',
+          bubbleStrokeWidth: 3,
+          bubblePadding: Math.max(12, element.bubblePadding ?? 0),
+          bubbleShadow: true,
+        }]
+      }),
+    }))
     if (project.director) {
       project.director.scriptVersion = Number(project.director.scriptVersion || 1)
       project.director.plan = normalizeComicPlan(

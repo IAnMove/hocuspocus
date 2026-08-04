@@ -581,6 +581,7 @@ function InspectorPanel() {
       y: selectedPanel ? selectedPanel.height * .7 : page.height * .4,
       width: selectedPanel ? selectedPanel.width * .7 : page.width * .5,
       height: 100, rotation: 0, zIndex: 30, visible: true,
+      letteringType: bubble === 'caption' ? 'caption' : bubble === 'none' ? 'sound-effect' : 'dialogue',
       content, fontSize: bubble === 'scream' || bubble === 'electric' ? 34 : 22, fontFamily: project.style.fontFamily,
       color: '#111111', bold: false, italic: bubble === 'thought' || bubble === 'whisper', align: 'center',
       bubble,
@@ -772,7 +773,19 @@ function InspectorPanel() {
           {element.type === 'text' && (
             <div className="space-y-2">
               <Field label="Text"><textarea className={input} rows={4} value={element.content} onChange={event => patch({ content: event.target.value })} /></Field>
-              <Field label="Bubble"><select className={input} value={element.bubble} onChange={event => patch({ bubble: event.target.value as ComicTextElement['bubble'] })}><option value="none">None / SFX</option><option value="speech">Speech</option><option value="ellipse">Ellipse</option><option value="rect">Rounded rectangle</option><option value="thought">Thought</option><option value="whisper">Whisper</option><option value="caption">Caption</option><option value="scream">Scream</option><option value="electric">Electric</option><option value="burst">Burst</option><option value="cloud">Cloud</option></select></Field>
+              <Field label="Bubble"><select className={input} value={element.bubble} onChange={event => {
+                const bubble = event.target.value as ComicTextElement['bubble']
+                patch({
+                  bubble,
+                  letteringType: bubble === 'caption'
+                    ? 'caption'
+                    : bubble === 'none'
+                      ? 'sound-effect'
+                      : element.letteringType === 'sound-effect'
+                        ? 'sound-effect'
+                        : 'dialogue',
+                })
+              }}><option value="none">None / SFX</option><option value="speech">Speech</option><option value="ellipse">Ellipse</option><option value="rect">Rounded rectangle</option><option value="thought">Thought</option><option value="whisper">Whisper</option><option value="caption">Caption</option><option value="scream">Scream</option><option value="electric">Electric</option><option value="burst">Burst</option><option value="cloud">Cloud</option></select></Field>
               <Field label="Font size"><input className={input} type="number" value={element.fontSize} onChange={event => patch({ fontSize: Number(event.target.value) })} /></Field>
               <Field label="Font"><select className={input} value={element.fontFamily} onChange={event => patch({ fontFamily: event.target.value })}><option value='"Comic Sans MS", "Trebuchet MS", sans-serif'>Comic</option><option value='"Arial Black", Impact, sans-serif'>Impact</option><option value='Georgia, serif'>Classic serif</option><option value='"Courier New", monospace'>Typewriter</option><option value='Arial, sans-serif'>Clean sans</option></select></Field>
               <div className="grid grid-cols-2 gap-2">

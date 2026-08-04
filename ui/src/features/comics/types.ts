@@ -2,6 +2,7 @@ export type ComicElementType = 'panel' | 'image' | 'text'
 export type ComicBubbleType =
   | 'none' | 'speech' | 'ellipse' | 'rect' | 'thought' | 'whisper'
   | 'caption' | 'scream' | 'electric' | 'burst' | 'cloud'
+export type ComicLetteringType = 'caption' | 'dialogue' | 'sound-effect'
 export type ComicImageFilter = 'none' | 'bw' | 'sepia' | 'contrast' | 'posterize' | 'halftone'
 
 export interface ComicAsset {
@@ -77,6 +78,8 @@ export interface ComicImageElement extends ComicBaseElement {
 
 export interface ComicTextElement extends ComicBaseElement {
   type: 'text'
+  /** Semantic role is independent from the visual bubble shape. */
+  letteringType?: ComicLetteringType
   content: string
   fontSize: number
   fontFamily: string
