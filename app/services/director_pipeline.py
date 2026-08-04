@@ -6393,6 +6393,26 @@ def _h3_apply_reference_contract(prompt: str, reference_mode: str) -> str:
     return text
 
 
+def _h3_apply_identity_contract(prompt: str) -> str:
+    """Keep recurring faces stable when H3 has to reveal them after occlusion."""
+    text = str(prompt or "").strip()
+    marker = "IDENTITY CONTINUITY LOCK:"
+    if marker.casefold() in text.casefold():
+        return text
+    identity = (
+        "IDENTITY CONTINUITY LOCK: Every recurring character is the exact same "
+        "person throughout. Preserve facial geometry, eye shape, nose, mouth, "
+        "age, hairline and distinguishing features from the supplied frame and "
+        "character references. If a face is hidden, turned away or leaves frame, "
+        "restore that same identity when it becomes visible; never substitute a "
+        "generic or newly invented face."
+    )
+    parts = re.split(r"\bAudio\s*:", text, maxsplit=1, flags=re.I)
+    if len(parts) == 2:
+        return f"{parts[0].strip()} {identity}\nAudio: {parts[1].strip()}".strip()
+    return f"{text} {identity}".strip()
+
+
 def _h3_authored_segment_windows(prompts: list[str], segment_count: int) -> list[str]:
     """Split authored windows across H3 segments without replaying whole windows."""
     if not prompts:
@@ -6697,6 +6717,17 @@ def _run_minimax_h3_story_video(
         path = str(candidate or "").strip()
         if path and path not in global_image_refs:
             global_image_refs.append(path)
+    identity_reference_paths = [
+        str(path)
+        for path in [
+            params.get("reference_image_path"),
+            *(params.get("character_ref_paths") or []),
+        ]
+        if str(path or "").strip()
+    ]
+    identity_safe_continuation = bool(
+        reference_mode == "first_frame" and identity_reference_paths
+    )
     video_refs = [str(path) for path in (video_params.get("h3_ref_videos") or []) if path]
     audio_refs = [str(path) for path in (video_params.get("h3_ref_audios") or []) if path]
     if len(video_refs) > 3 or len(audio_refs) > 3:
@@ -6722,7 +6753,7 @@ def _run_minimax_h3_story_video(
             or ""
         ).strip()
         selected: list[str] = []
-        if reference_mode == "references":
+        if reference_mode == "references" or identity_safe_continuation:
             base_budget = image_budget - 1 if location_ref and image_budget > 0 else image_budget
             for candidate in global_image_refs[:base_budget]:
                 if candidate and candidate not in selected:
@@ -6733,19 +6764,19 @@ def _run_minimax_h3_story_video(
             *[candidate for candidate in global_image_refs if candidate],
             *([location_ref] if location_ref else []),
         ]))
-        if reference_mode == "references" and len(available) > len(selected):
+        if (reference_mode == "references" or identity_safe_continuation) and len(available) > len(selected):
             dropped = len(available) - len(selected)
             print(
                 f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1} omitted "
                 f"{dropped} lower-priority image reference(s) to fit the "
                 "Ref2VA 12-slot limit."
             )
-        if reference_mode == "references" and location_ref and location_ref in selected:
+        if (reference_mode == "references" or identity_safe_continuation) and location_ref and location_ref in selected:
             print(
                 f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1} location ref: "
                 f"{location_label or os.path.basename(location_ref)}"
             )
-        elif reference_mode == "references" and len(params.get("location_ref_paths") or []) > 1:
+        elif (reference_mode == "references" or identity_safe_continuation) and len(params.get("location_ref_paths") or []) > 1:
             print(
                 f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1}: no "
                 "unambiguous location reference; sending none instead of all locations."
@@ -6754,6 +6785,11 @@ def _run_minimax_h3_story_video(
         reference_manifest.append({
             "shot_index": shot_index,
             "mode": reference_mode,
+            "continuity_mode": (
+                "identity_safe_hybrid"
+                if identity_safe_continuation
+                else reference_mode
+            ),
             "shot_frame": (
                 clip_images[shot_index]
                 if shot_index < len(clip_images)
@@ -6766,10 +6802,16 @@ def _run_minimax_h3_story_video(
             "video_references": video_refs if reference_mode == "references" else [],
             "audio_references": audio_refs if reference_mode == "references" else [],
             "note": (
-                "FL2VA exact first frame; character and location references were used "
-                "to author the shot frame but are not sent to the video model."
-                if reference_mode == "first_frame"
-                else "Ref2VA composes a new shot from these references; no exact first-frame guarantee."
+                "FL2VA preserves the approved first frame. Internal continuation "
+                "segments switch to Ref2VA with the continuity frame and character "
+                "references so an occluded face is not invented again."
+                if identity_safe_continuation
+                else (
+                    "FL2VA exact first frame; no character identity reference is "
+                    "available to protect later continuation segments."
+                    if reference_mode == "first_frame"
+                    else "Ref2VA composes a new shot from these references; no exact first-frame guarantee."
+                )
             ),
             "warnings": ([
                 f'No reference matched the requested location "{requested_location}".'
@@ -6779,7 +6821,7 @@ def _run_minimax_h3_story_video(
     _update_pipeline(pid, h3_reference_manifest=reference_manifest)
     _save_pipeline_state(pid)
 
-    jobs: list[tuple[int, int, int, int, str]] = []
+    jobs: list[tuple[int, int, int, int, str, str]] = []
     for shot_index, plan in enumerate(clip_plans):
         planned = planned_clips[shot_index] if shot_index < len(planned_clips) else {}
         duration = planned.get("duration_sec") or (
@@ -6790,6 +6832,13 @@ def _run_minimax_h3_story_video(
             duration = float(duration_frames) / fps if duration_frames else 5.0
         frame_segments = _minimax_h3_frame_segments(duration, fps)
         for segment_index, frames in enumerate(frame_segments):
+            segment_reference_mode = (
+                "references"
+                if identity_safe_continuation
+                and segment_index > 0
+                and shot_image_refs[shot_index]
+                else reference_mode
+            )
             jobs.append((
                 shot_index,
                 segment_index,
@@ -6800,8 +6849,9 @@ def _run_minimax_h3_story_video(
                     segment_index,
                     len(frame_segments),
                     str(video_params.get("h3_audio_prompt") or ""),
-                    reference_mode,
+                    segment_reference_mode,
                 ),
+                segment_reference_mode,
             ))
 
     if not jobs:
@@ -6812,7 +6862,7 @@ def _run_minimax_h3_story_video(
     current_shot = -1
     segment_start = ""
     try:
-        for job_index, (shot_index, segment_index, segment_count, frames, prompt) in enumerate(jobs):
+        for job_index, (shot_index, segment_index, segment_count, frames, prompt, segment_reference_mode) in enumerate(jobs):
             if _pipeline_cancel_requested(pid):
                 raise PipelineCancelled("Director pipeline was cancelled.")
 
@@ -6824,14 +6874,20 @@ def _run_minimax_h3_story_video(
 
             gen_params: dict = {
                 "model_type": "minimax_h3",
-                "prompt": prompt,
+                "prompt": _h3_apply_identity_contract(prompt),
                 "image_mode": 0,
                 "image_prompt_type": "S" if segment_start else "",
                 "num_inference_steps": video_params.get("num_inference_steps", 20),
                 "guidance_scale": video_params.get("guidance_scale", 1),
                 "resolution": resolution,
                 "video_length": frames,
-                "seed": -1,
+                "seed": (
+                    _comic_shot_seed(
+                        params,
+                        shot_index,
+                        clip_plans[shot_index],
+                    ) + segment_index
+                ) & 0x7FFFFFFF,
                 "settings_version": 2.52,
                 "generation_mode": "video",
                 "repeat_generation": 1,
@@ -6841,7 +6897,7 @@ def _run_minimax_h3_story_video(
                 "h3_audio_prompt": video_params.get("h3_audio_prompt", ""),
                 "h3_ref_image_size": video_params.get("h3_ref_image_size", "match"),
                 "h3_model_profile": video_params.get("h3_model_profile", "quality"),
-                "h3_reference_mode": reference_mode,
+                "h3_reference_mode": segment_reference_mode,
                 "_director_pipeline_id": pid,
             }
             user_image_refs = (
@@ -6849,7 +6905,7 @@ def _run_minimax_h3_story_video(
                 if shot_index < len(shot_image_refs)
                 else list(global_image_refs[:image_budget])
             )
-            uses_ref2va = reference_mode == "references"
+            uses_ref2va = segment_reference_mode == "references"
             if uses_ref2va:
                 image_refs = [segment_start, *user_image_refs] if segment_start else list(user_image_refs)
                 gen_params["image_refs"] = [path for path in image_refs if path]
@@ -6877,7 +6933,10 @@ def _run_minimax_h3_story_video(
             generated_path = generated[-1] if os.path.isabs(generated[-1]) else os.path.join(out_dir, generated[-1])
 
             if segment_index + 1 < segment_count:
-                from services.video_editor import extract_frame, probe_media
+                try:
+                    from services.video_editor import extract_frame, probe_media
+                except ImportError:  # pragma: no cover - package import mode
+                    from app.services.video_editor import extract_frame, probe_media
                 continuation_path = os.path.join(
                     out_dir,
                     f".minimax_h3_{pid}_{shot_index + 1}_{segment_index + 1}_continuation.png",
