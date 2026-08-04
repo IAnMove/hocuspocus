@@ -8,6 +8,8 @@ const PHASE_LABELS: Record<string, string> = {
   preview_ready: 'Ready for review',
   generating_video: 'Generating video',
   post_processing: 'Post-processing',
+  preparing_comic_video: 'Preparing comic video',
+  uploading_artwork: 'Uploading artwork',
 }
 
 function clampPercent(value: number): number {
@@ -22,6 +24,7 @@ function clampPercent(value: number): number {
 export function ActivityFooter() {
   const jobs = useStore(s => s.jobs)
   const pipelineStatus = useStore(s => s.pipelineStatus)
+  const foregroundActivity = useStore(s => s.foregroundActivity)
   const setProductionsOpen = useStore(s => s.setDashboardOpen)
 
   const activeJobs = jobs.filter(job => job.status === 'running' || job.status === 'queued')
@@ -29,16 +32,23 @@ export function ActivityFooter() {
   const failedJob = jobs.find(job => job.status === 'failed') ?? null
   const pipelineRunning = pipelineStatus?.status === 'running'
   const pipelineFailed = pipelineStatus?.status === 'failed'
-  const isActive = Boolean(primaryJob || pipelineRunning)
-  const hasError = Boolean(!isActive && (failedJob || pipelineFailed))
+  const foregroundRunning = foregroundActivity?.status === 'running'
+  const foregroundFailed = foregroundActivity?.status === 'failed'
+  const isActive = Boolean(primaryJob || pipelineRunning || foregroundRunning)
+  const hasError = Boolean(!isActive && (failedJob || pipelineFailed || foregroundFailed))
 
   const pipelineSteps = pipelineRunning ? pipelineStatus?.progress : undefined
   const currentStep = primaryJob?.totalSteps
     ? primaryJob.step
     : pipelineSteps?.total_steps
       ? pipelineSteps.step
-      : 0
-  const totalSteps = primaryJob?.totalSteps || pipelineSteps?.total_steps || 0
+      : foregroundRunning
+        ? foregroundActivity?.current || 0
+        : 0
+  const totalSteps = primaryJob?.totalSteps
+    || pipelineSteps?.total_steps
+    || (foregroundRunning ? foregroundActivity?.total : 0)
+    || 0
   const percent = clampPercent(
     totalSteps > 0
       ? (currentStep / totalSteps) * 100
@@ -46,18 +56,28 @@ export function ActivityFooter() {
         ? primaryJob.progress * 100
         : pipelineSteps?.total
           ? (pipelineSteps.current / pipelineSteps.total) * 100
+          : foregroundRunning && foregroundActivity?.total
+            ? ((foregroundActivity.current || 0) / foregroundActivity.total) * 100
           : 0,
   )
 
   const phase = pipelineRunning
     ? PHASE_LABELS[pipelineStatus?.phase || ''] || pipelineStatus?.phase?.replaceAll('_', ' ')
     : primaryJob?.phase?.replaceAll('_', ' ')
+      || (foregroundRunning
+        ? PHASE_LABELS[foregroundActivity?.phase || ''] || foregroundActivity?.phase?.replaceAll('_', ' ')
+        : undefined)
   const message = isActive
-    ? pipelineSteps?.message || primaryJob?.message || phase || 'Working…'
+    ? pipelineSteps?.message || primaryJob?.message || foregroundActivity?.message || phase || 'Working…'
     : hasError
-      ? pipelineStatus?.error || failedJob?.error || failedJob?.message || 'The latest job failed'
+      ? pipelineStatus?.error
+        || failedJob?.error
+        || failedJob?.message
+        || foregroundActivity?.error
+        || foregroundActivity?.message
+        || 'The latest job failed'
       : 'Ready — no active jobs'
-  const activeCount = activeJobs.length
+  const activeCount = activeJobs.length + (pipelineRunning ? 1 : 0) + (foregroundRunning ? 1 : 0)
 
   return (
     <footer className="h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">

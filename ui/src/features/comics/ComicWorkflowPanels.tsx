@@ -993,8 +993,27 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       + 'Director may omit or fuse source beats. Only adapted LTX and AI-living-still shots use I2V; holds and subtle centered pushes are deterministic.',
     )) return
 
+    const activityId = `comic-video:${project.id}:${Date.now()}`
+    const reportActivity = (
+      message: string,
+      phase = 'preparing_comic_video',
+      current = 0,
+      total = 0,
+    ) => {
+      setProgress(message)
+      useStore.getState().setForegroundActivity({
+        id: activityId,
+        status: 'running',
+        phase,
+        message,
+        current,
+        total,
+      })
+    }
+    let activityFailed = false
     setBusy(preflightOnly ? 'preflight' : 'movie')
     setResult(null)
+    reportActivity('Preparing comic video…')
     if (preflightOnly) {
       setPreflightPipelineId(null)
       setPreflightStatus(null)
@@ -1047,7 +1066,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       await forEachComicPanelCapture(async (capture, current, total) => {
         const row = rowByPosition.get(`${capture.pageNumber}.${capture.panelNumber}`)
         if (!row) return
-        setProgress(`Preparing artwork ${current}/${total}`)
+        reportActivity(`Preparing artwork ${current}/${total}`, 'uploading_artwork', current, total)
         const blob = await (await fetch(capture.dataUrl)).blob()
         const upload = await api.uploadImage(new File(
           [blob],
@@ -1113,7 +1132,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             project.director?.plan.styleBible || '',
           ].filter(Boolean).join('. '),
         })
-      }, (current, total) => setProgress(`Capturing clean artwork ${current}/${total}`), {
+      }, (current, total) => reportActivity(
+        `Capturing clean artwork ${current}/${total}`,
+        'preparing_comic_video',
+        current,
+        total,
+      ), {
         // Lettering remains in the comic/script but is removed from I2V first
         // frames so the video model cannot warp speech bubbles or captions.
         includeLettering: false,
@@ -1188,7 +1212,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         return clips
       }, [])
 
-      setProgress('Submitting comic movie to Director…')
+      reportActivity('Submitting comic movie to Director…', 'planning')
       const { pipeline_id } = await api.startPipeline({
         pipeline_type: 'comic_movie',
         comic_id: project.id,
@@ -1272,7 +1296,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           await new Promise(resolve => window.setTimeout(resolve, 900))
           const status = await api.fetchPipelineStatus(pipeline_id)
           setPreflightStatus(status)
-          setProgress(status.progress?.message || 'Preparing comic video PRE…')
+          reportActivity(
+            status.progress?.message || 'Preparing comic video PRE…',
+            status.phase,
+            status.progress?.current || status.progress?.step || 0,
+            status.progress?.total || status.progress?.total_steps || 0,
+          )
           if (status.status === 'preview_ready') {
             window.localStorage.setItem(preflightStorageKey, pipeline_id)
             window.localStorage.setItem(
@@ -1316,6 +1345,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         shortFilmPath: 'story',
         shortFilmTargetDuration: totalSeconds,
       })
+      useStore.getState().setForegroundActivity(null)
       useStore.getState().pollPipelineStatus()
       window.dispatchEvent(new Event('maestro:director-open'))
       notify(
@@ -1327,8 +1357,21 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             : 'Comic movie started. End-frame conditioning is enabled for selected shots, but completed clips are still joined with clean cuts.',
       )
     } catch (error) {
+      activityFailed = true
+      const message = (error as Error).message
+      useStore.getState().setForegroundActivity({
+        id: activityId,
+        status: 'failed',
+        phase: 'preparing_comic_video',
+        message,
+        error: message,
+      })
       notify('error', (error as Error).message)
     } finally {
+      const foregroundActivity = useStore.getState().foregroundActivity
+      if (!activityFailed && foregroundActivity?.id === activityId) {
+        useStore.getState().setForegroundActivity(null)
+      }
       setBusy(null)
       setProgress('')
     }

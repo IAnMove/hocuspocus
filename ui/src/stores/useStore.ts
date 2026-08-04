@@ -573,6 +573,16 @@ function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], m
   return ''
 }
 
+export interface ForegroundActivity {
+  id: string
+  status: 'running' | 'failed'
+  phase: string
+  message: string
+  current?: number
+  total?: number
+  error?: string | null
+}
+
 interface AppState {
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1257,6 +1267,8 @@ interface AppState {
   llmStreamDone: boolean
 
   // Director Pipeline (server-side)
+  foregroundActivity: ForegroundActivity | null
+  setForegroundActivity: (activity: ForegroundActivity | null) => void
   pipelineId: string | null
   pipelineStatus: import('../api/client').PipelineStatus | null
   pipelinePolling: boolean
@@ -4781,9 +4793,11 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmPreserveVisualStyle: true,
   llmStreamText: '',
   llmStreamDone: true,
+  foregroundActivity: null,
   pipelineId: null,
   pipelineStatus: null,
   pipelinePolling: false,
+  setForegroundActivity: (activity) => set({ foregroundActivity: activity }),
   setDirectorAutoMode: (v) => set({ directorAutoMode: v }),
   setDirectorSeamless: (v) => set({ directorSeamless: v }),
   directorAppendLlmLog: (stage, text) => set(s => {
