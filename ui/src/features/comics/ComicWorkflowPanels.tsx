@@ -19,7 +19,9 @@ import type {
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
-type ComicMovieQuality = '480p' | '540p' | '720p' | '1080p'
+type ComicMovieQuality =
+  | '480p' | '720p' | '1080p'
+  | 'h3-fast' | 'h3-default' | 'h3-balanced' | 'h3-native'
 type ComicMovieAspect = 'landscape' | 'portrait' | 'square'
 
 type ComicMovieResolution = {
@@ -29,6 +31,11 @@ type ComicMovieResolution = {
   recommended?: boolean
 }
 
+const resolutionMegapixels = (value: string): number => {
+  const [width, height] = value.split('x').map(Number)
+  return (width * height) / 1_000_000
+}
+
 const comicMovieResolutions = (
   modelId: string,
   aspect: ComicMovieAspect,
@@ -36,16 +43,18 @@ const comicMovieResolutions = (
   if (modelId === 'minimax_h3') {
     if (aspect === 'square') {
       return [
-        { quality: '480p', value: '640x640', label: '≈480p · 640×640' },
-        { quality: '540p', value: '736x736', label: '≈540p · 736×736', recommended: true },
-        { quality: '720p', value: '992x992', label: '≈720p · 992×992 · high' },
+        { quality: 'h3-fast', value: '640x640', label: 'Fast preview · 640×640 · 0.41 MP' },
+        { quality: 'h3-default', value: '736x736', label: 'RTX 4090 default · 736×736 · 0.54 MP', recommended: true },
+        { quality: 'h3-balanced', value: '864x864', label: 'Balanced · 864×864 · 0.75 MP' },
+        { quality: 'h3-native', value: '992x992', label: 'Native quality · 992×992 · 0.98 MP' },
       ]
     }
     const portrait = aspect === 'portrait'
     return [
-      { quality: '480p', value: portrait ? '448x832' : '832x448', label: `≈480p · ${portrait ? '448×832' : '832×448'}` },
-      { quality: '540p', value: portrait ? '544x960' : '960x544', label: `≈540p · ${portrait ? '544×960' : '960×544'} · recommended`, recommended: true },
-      { quality: '720p', value: portrait ? '704x1280' : '1280x704', label: `≈720p · ${portrait ? '704×1280' : '1280×704'} · high` },
+      { quality: 'h3-fast', value: portrait ? '480x864' : '864x480', label: `Fast preview · ${portrait ? '480×864' : '864×480'} · 0.41 MP` },
+      { quality: 'h3-default', value: portrait ? '544x960' : '960x544', label: `RTX 4090 default · ${portrait ? '544×960' : '960×544'} · 0.52 MP`, recommended: true },
+      { quality: 'h3-balanced', value: portrait ? '640x1152' : '1152x640', label: `Balanced · ${portrait ? '640×1152' : '1152×640'} · 0.74 MP` },
+      { quality: 'h3-native', value: portrait ? '768x1344' : '1344x768', label: `Native quality · ${portrait ? '768×1344' : '1344×768'} · 1.03 MP` },
     ]
   }
   return [
@@ -1579,9 +1588,15 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
               <span className="mt-1 block text-[9px] text-text-muted">
                 Exact request: <b className="text-text-primary">{selectedMovieResolution.value.replace('x', '×')}</b>
                 {effectiveVideoModel === 'minimax_h3'
-                  ? ' · MiniMax H3-compatible, 32-pixel aligned and below its Base canvas limit.'
+                  ? ` · ${resolutionMegapixels(selectedMovieResolution.value).toFixed(2)} MP, H3-native 32-pixel grid.`
                   : ' · compatible preset for the selected engine.'}
               </span>
+              {effectiveVideoModel === 'minimax_h3' && (
+                <span className="mt-1 block rounded border border-cyan-400/25 bg-cyan-400/5 px-1.5 py-1 text-[9px] text-cyan-100">
+                  Optimized H3 presets: Fast is about 46% of the pixels of the old 1280×704 setting;
+                  the 960×544 RTX 4090 default is about 58%. Native 1344×768 gives full Base quality but is the slowest.
+                </span>
+              )}
             </label>
           </div>
           <label className="block text-[10px] text-text-muted">Global AI motion direction
