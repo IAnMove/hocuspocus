@@ -1,6 +1,6 @@
 import type {
   StoryBeat, StoryCharacter, StoryLocation, StoryProject, StoryRelationship,
-  StoryVisualAsset,
+  StoryMusicCandidate, StoryMusicCue, StoryVisualAsset,
 } from './types'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
@@ -88,6 +88,46 @@ export function applyStoryVisualStyle(
 
 export function storyId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function normalizeMusicCandidate(value: unknown, now: string): StoryMusicCandidate | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<StoryMusicCandidate>
+  if (!text(candidate.source)) return null
+  return {
+    id: text(candidate.id) || storyId('song'),
+    name: text(candidate.name, 'Story song'),
+    source: text(candidate.source),
+    prompt: text(candidate.prompt),
+    lyrics: text(candidate.lyrics),
+    provider: candidate.provider === 'local' ? 'local' : 'minimax',
+    model: text(candidate.model),
+    durationSeconds: Math.max(0, Number(candidate.durationSeconds) || 0),
+    createdAt: text(candidate.createdAt, now),
+  }
+}
+
+function normalizeMusicCue(value: unknown, index: number, now: string): StoryMusicCue | null {
+  if (!value || typeof value !== 'object') return null
+  const cue = value as Partial<StoryMusicCue>
+  const kind = cue.kind === 'world' || cue.kind === 'character' ? cue.kind : 'story'
+  const id = text(cue.id) || storyId(`music-${kind}`)
+  return {
+    id,
+    kind,
+    targetId: text(cue.targetId, kind === 'world' ? 'world' : `story-${index + 1}`),
+    title: text(cue.title, `Music cue ${index + 1}`),
+    purpose: text(cue.purpose),
+    referenceSong: text(cue.referenceSong),
+    brief: text(cue.brief),
+    style: text(cue.style),
+    lyrics: text(cue.lyrics),
+    instrumental: cue.instrumental === true,
+    durationSeconds: Math.max(20, Math.min(360, Number(cue.durationSeconds) || 90)),
+    candidates: Array.isArray(cue.candidates)
+      ? cue.candidates.flatMap(candidate => normalizeMusicCandidate(candidate, now) || []) : [],
+    selectedCandidateId: text(cue.selectedCandidateId) || undefined,
+  }
 }
 
 const text = (value: unknown, fallback = ''): string =>
@@ -236,6 +276,7 @@ export function createStoryProject(): StoryProject {
       lyrics: '',
       targetDurationSeconds: 90,
       candidateCount: 2,
+      cues: [],
       candidates: [],
     },
     productions: [],
@@ -368,21 +409,10 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       coverReferenceName: text(project.music?.coverReferenceName) || undefined,
       targetDurationSeconds: Math.max(20, Math.min(360, Number(project.music?.targetDurationSeconds) || 90)),
       candidateCount: project.music?.candidateCount === 3 ? 3 : 2,
+      cues: Array.isArray(project.music?.cues)
+        ? project.music.cues.flatMap((cue, index) => normalizeMusicCue(cue, index, now) || []) : [],
       candidates: Array.isArray(project.music?.candidates)
-        ? project.music.candidates.flatMap(candidate => {
-          if (!candidate || typeof candidate !== 'object' || !text(candidate.source)) return []
-          return [{
-            id: text(candidate.id) || storyId('song'),
-            name: text(candidate.name, 'Story song'),
-            source: text(candidate.source),
-            prompt: text(candidate.prompt),
-            lyrics: text(candidate.lyrics),
-            provider: candidate.provider === 'local' ? 'local' as const : 'minimax' as const,
-            model: text(candidate.model),
-            durationSeconds: Math.max(0, Number(candidate.durationSeconds) || 0),
-            createdAt: text(candidate.createdAt, now),
-          }]
-        })
+        ? project.music.candidates.flatMap(candidate => normalizeMusicCandidate(candidate, now) || [])
         : [],
       selectedCandidateId: text(project.music?.selectedCandidateId) || undefined,
     },

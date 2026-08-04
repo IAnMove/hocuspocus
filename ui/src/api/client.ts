@@ -180,7 +180,7 @@ export interface MiniMaxMusicCandidate {
 export async function generateStoryMusicCandidates(params: {
   prompt: string
   lyrics: string
-  count: 2 | 3
+  count: 1 | 2 | 3
   model?: 'music-3.0' | 'music-2.6' | 'music-cover'
   reference_audio_filename?: string
   instrumental?: boolean

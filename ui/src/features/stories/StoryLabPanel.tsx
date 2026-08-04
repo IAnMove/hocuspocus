@@ -26,7 +26,7 @@ import {
 } from './model'
 import type {
   StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
-  StoryRelationship, StoryVisualAsset, StoryWritingProvider,
+  StoryMusicCue, StoryRelationship, StoryVisualAsset, StoryWritingProvider,
 } from './types'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
@@ -75,7 +75,7 @@ function storySongBrief(project: StoryProject, durationSeconds: number): string 
   ].filter(Boolean).join('\n')
 }
 
-type StoryTab = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'productions'
+type StoryTab = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'productions'
 type PendingDraft = {
   scope: StoryGenerationScope
   result: Record<string, unknown>
@@ -137,6 +137,15 @@ function draftPaths(result: Record<string, unknown>): string[] {
         .forEach(key => paths.push(`structure.${id}.${key}`))
     }
   })
+  const music = result.music && typeof result.music === 'object'
+    ? result.music as Record<string, unknown> : null
+  if (music && Array.isArray(music.cues)) {
+    music.cues.forEach((item, index) => {
+      if (!item || typeof item !== 'object') return
+      const record = item as Record<string, unknown>
+      paths.push(`music.${String(record.id || index)}`)
+    })
+  }
   return paths
 }
 
@@ -376,6 +385,8 @@ export function StoryLabPanel() {
   const [imageBusy, setImageBusy] = useState('')
   const [referenceBatchBusy, setReferenceBatchBusy] = useState(false)
   const [productionBusy, setProductionBusy] = useState<'film' | 'music' | null>(null)
+  const [musicCueBusy, setMusicCueBusy] = useState('')
+  const [musicQueue, setMusicQueue] = useState<{ ids: string[]; index: number } | null>(null)
   const [instruction, setInstruction] = useState('')
   const [comicDirection, setComicDirection] = useState(DEFAULT_COMIC_CHAPTER_DIRECTION)
   const [comicPageCount, setComicPageCount] = useState(4)
@@ -633,6 +644,30 @@ export function StoryLabPanel() {
             .every(field => chosen.has(`structure.${item.id}.${field}`)))
         next.beats = replaceCollections && allBeatFieldsSelected
           ? selectedBeats : [...kept, ...selectedBeats]
+      }
+      const generatedMusic = result.music && typeof result.music === 'object'
+        ? result.music as Record<string, unknown> : null
+      if (generatedMusic && Array.isArray(generatedMusic.cues)) {
+        const normalizedCues = normalizeStoryProject({
+          ...next,
+          music: { ...next.music, cues: generatedMusic.cues },
+        }).music.cues
+        const selectedCues = normalizedCues.flatMap(cue => {
+          if (!chosen.has(`music.${cue.id}`)) return []
+          const existing = current.music.cues.find(item =>
+            item.id === cue.id || (item.kind === cue.kind && item.targetId === cue.targetId))
+          return [{
+            ...cue,
+            candidates: existing?.candidates || [],
+            selectedCandidateId: existing?.selectedCandidateId,
+          }]
+        })
+        const replacedKeys = new Set(selectedCues.map(cue => `${cue.kind}:${cue.targetId}`))
+        const kept = current.music.cues.filter(cue =>
+          !replacedKeys.has(`${cue.kind}:${cue.targetId}`))
+        const allSelected = normalizedCues.every(cue => chosen.has(`music.${cue.id}`))
+        next.music.cues = replaceCollections && allSelected
+          ? selectedCues : [...kept, ...selectedCues]
       }
       return next
     })
@@ -1487,8 +1522,151 @@ export function StoryLabPanel() {
     }
   }
 
+  const patchMusicCue = (cueId: string, changes: Partial<StoryMusicCue>) => {
+    update(current => {
+      const cue = current.music.cues.find(item => item.id === cueId)
+      if (cue) Object.assign(cue, changes)
+      return current
+    })
+  }
+
+  const adaptMusicCueWithLlm = async (cueId: string) => {
+    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    if (!cue) return
+    if (!cue.referenceSong.trim()) {
+      setNotice({ kind: 'error', text: 'Add an example reference song before adapting this proposal.' })
+      return
+    }
+    setMusicCueBusy(`llm:${cueId}`)
+    try {
+      const target = cue.kind === 'character'
+        ? project.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
+        : cue.kind === 'world' ? 'the Story world' : 'the complete Story'
+      const written = await api.writeSong({
+        instrumental: cue.instrumental,
+        description: [
+          `Create an entirely original ${cue.instrumental ? 'instrumental music cue' : 'song'} for ${target}.`,
+          `Purpose in this Story: ${cue.purpose}.`,
+          `Creative brief: ${cue.brief}.`,
+          `Reference input: ${cue.referenceSong}. Use only its broad tempo, instrumentation or emotional architecture; do not copy melody, lyrics, title phrases or distinctive arrangement.`,
+          storySongBrief(project, cue.durationSeconds),
+        ].join('\n'),
+      })
+      patchMusicCue(cueId, { style: written.style, lyrics: written.lyrics })
+      setNotice({ kind: 'ok', text: `“${cue.title}” now has an editable, Story-specific prompt${cue.instrumental ? '' : ' and lyrics'}.` })
+    } catch (error) {
+      setNotice({ kind: 'error', text: `The music proposal could not be adapted: ${(error as Error).message}` })
+    } finally {
+      setMusicCueBusy('')
+    }
+  }
+
+  const generateMusicCueAudio = async (cueId: string, queued = false): Promise<boolean> => {
+    if (!servicesConfig?.minimax_api_key_set) {
+      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
+      return false
+    }
+    const current = useStoryStore.getState().project
+    const cue = current.music.cues.find(item => item.id === cueId)
+    if (!cue) return false
+    if (!cue.style.trim() || (!cue.instrumental && !cue.lyrics.trim())) {
+      setNotice({ kind: 'error', text: `Review or adapt the prompt${cue.instrumental ? '' : ' and lyrics'} for “${cue.title}” first.` })
+      return false
+    }
+    setMusicCueBusy(`audio:${cueId}`)
+    try {
+      const prompt = [
+        cue.style,
+        cue.referenceSong.trim()
+          ? `High-level inspiration only: ${cue.referenceSong}; wholly original melody and arrangement.` : '',
+        cue.purpose,
+      ].filter(Boolean).join(' ').slice(0, 300)
+      const result = await api.generateStoryMusicCandidates({
+        prompt,
+        lyrics: cue.instrumental ? '' : cue.lyrics,
+        instrumental: cue.instrumental,
+        count: 1,
+        model: current.music.model,
+        workspace: activeWorkspace,
+      })
+      const createdAt = new Date().toISOString()
+      const candidates = result.candidates.map(candidate => ({
+        id: storyId('song'),
+        name: candidate.filename,
+        source: candidate.source,
+        prompt,
+        lyrics: cue.lyrics,
+        provider: 'minimax' as const,
+        model: candidate.model,
+        durationSeconds: candidate.duration_seconds,
+        createdAt,
+      }))
+      update(latest => {
+        const target = latest.music.cues.find(item => item.id === cueId)
+        if (target) {
+          target.candidates.push(...candidates)
+          target.selectedCandidateId = candidates[0]?.id || target.selectedCandidateId
+        }
+        return latest
+      })
+      if (!queued) {
+        setNotice({ kind: 'ok', text: `MiniMax generated “${cue.title}”. The result is saved under this proposal.` })
+      }
+      return true
+    } catch (error) {
+      setNotice({ kind: 'error', text: `“${cue.title}” could not be generated: ${(error as Error).message}` })
+      return false
+    } finally {
+      if (!queued) setMusicCueBusy('')
+    }
+  }
+
+  const generateAllMusicCues = async () => {
+    const cues = useStoryStore.getState().project.music.cues
+    if (!cues.length) {
+      setNotice({ kind: 'error', text: 'Generate and review the LLM music proposals first.' })
+      return
+    }
+    const incomplete = cues.filter(cue => !cue.style.trim() || (!cue.instrumental && !cue.lyrics.trim()))
+    if (incomplete.length) {
+      setNotice({ kind: 'error', text: `Review ${incomplete.length} incomplete music proposal${incomplete.length === 1 ? '' : 's'} before generating the complete queue.` })
+      return
+    }
+    if (!servicesConfig?.minimax_api_key_set) {
+      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
+      return
+    }
+    if (!window.confirm(
+      `Generate ${cues.length} MiniMax track${cues.length === 1 ? '' : 's'} sequentially? This consumes one paid music request per proposal.`,
+    )) return
+    const ids = cues.map(cue => cue.id)
+    setMusicQueue({ ids, index: 0 })
+    let completed = 0
+    try {
+      for (let index = 0; index < ids.length; index += 1) {
+        setMusicQueue({ ids, index })
+        const ready = await generateMusicCueAudio(ids[index], true)
+        if (!ready) break
+        completed += 1
+      }
+      if (completed === ids.length) {
+        setNotice({ kind: 'ok', text: `Music queue completed: ${completed} tracks generated one after another.` })
+      } else {
+        setNotice(current => current?.kind === 'error' ? current : {
+          kind: 'error', text: `Music queue stopped after ${completed}/${ids.length}; completed tracks were preserved.`,
+        })
+      }
+    } finally {
+      setMusicCueBusy('')
+      setMusicQueue(null)
+    }
+  }
+
   const openMusicalTrailer = async (candidateId?: string) => {
+    const cue = project.music.cues.find(item =>
+      item.candidates.some(candidate => candidate.id === candidateId))
     const candidate = project.music.candidates.find(item => item.id === candidateId)
+      || cue?.candidates.find(item => item.id === candidateId)
     const director = useStore.getState()
     director.directorReset()
     const store = useStore.getState()
@@ -1501,10 +1679,10 @@ export function StoryLabPanel() {
     )
     useStore.setState({
       directorMusicSource: candidate ? 'upload' : 'generate',
-      directorSongDescription: project.music.brief || storySongBrief(project, project.music.targetDurationSeconds),
-      directorSongStyle: project.music.style,
-      directorSongLyrics: project.music.lyrics,
-      directorSongDuration: project.music.targetDurationSeconds,
+      directorSongDescription: cue?.brief || project.music.brief || storySongBrief(project, project.music.targetDurationSeconds),
+      directorSongStyle: cue?.style || project.music.style,
+      directorSongLyrics: cue?.lyrics || project.music.lyrics,
+      directorSongDuration: cue?.durationSeconds || project.music.targetDurationSeconds,
       directorStep: 'upload',
     })
     window.dispatchEvent(new Event('maestro:director-open'))
@@ -1596,6 +1774,7 @@ export function StoryLabPanel() {
     { id: 'overview', label: 'Story', icon: BookOpen },
     { id: 'world', label: 'World', icon: Boxes },
     { id: 'characters', label: 'Characters', icon: Users },
+    { id: 'music', label: 'Music', icon: Music },
     { id: 'relationships', label: 'Relationships', icon: Network },
     { id: 'structure', label: 'Structure', icon: ChevronRight },
     { id: 'productions', label: 'Productions', icon: Film },
@@ -1897,13 +2076,223 @@ export function StoryLabPanel() {
               </>
             )}
 
+            {tab === 'music' && (
+              <>
+                <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-text-primary">Music bible</h2>
+                    <p className="text-xs text-text-muted mt-1">LLM-authored ambience, character presentation themes and three story songs. Suggestions cost no MiniMax music credits until you generate audio.</p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2 xl:max-w-[760px]">
+                    <input className={`${input} sm:w-72`} value={instruction}
+                      onChange={event => setInstruction(event.target.value)}
+                      placeholder="Optional music direction…" />
+                    <button className={button} disabled={Boolean(busy || musicQueue)} onClick={() => generate('music')}>
+                      {busy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate LLM suggestions
+                    </button>
+                    <button className={`${button} border-pink-500/60 text-pink-300`}
+                      disabled={Boolean(busy || musicQueue || musicCueBusy) || !project.music.cues.length || !servicesConfig?.minimax_api_key_set}
+                      onClick={() => void generateAllMusicCues()}>
+                      {musicQueue ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
+                      {musicQueue ? `Queue ${musicQueue.index + 1}/${musicQueue.ids.length}` : 'Generate all sequentially'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`${panel} mb-4 grid md:grid-cols-[1fr_1fr_2fr] gap-3 items-end`}>
+                  <label className="block text-[10px] text-text-muted">MiniMax model for proposed tracks
+                    <select className={`${input} mt-1`} value={project.music.model}
+                      onChange={event => patch({ music: { ...project.music, model: event.target.value === 'music-2.6' ? 'music-2.6' : 'music-3.0' } })}>
+                      <option value="music-3.0">Music 3.0 · recommended</option>
+                      <option value="music-2.6">Music 2.6 · compatibility</option>
+                    </select>
+                  </label>
+                  <div className="text-[10px] text-text-muted">
+                    One audio result per proposal and click. Repeating a cue adds another candidate without deleting the previous one.
+                  </div>
+                  <div className={`rounded-md border px-3 py-2 text-[10px] ${servicesConfig?.minimax_api_key_set ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/40 text-amber-300'}`}>
+                    {servicesConfig?.minimax_api_key_set
+                      ? 'MiniMax is configured. Audio generation is available and always remains explicit.'
+                      : 'Configure the shared MiniMax key in Settings → Services before generating audio.'}
+                  </div>
+                </div>
+
+                {(['world', 'character', 'story'] as const).map(kind => {
+                  const cues = project.music.cues.filter(cue => cue.kind === kind)
+                  if (!cues.length) return null
+                  const heading = kind === 'world' ? 'World ambience'
+                    : kind === 'character' ? 'Character presentation themes' : 'Three songs of the Story'
+                  return (
+                    <section key={kind} className="mb-5">
+                      <h3 className="mb-2 text-sm font-semibold text-text-primary">{heading}</h3>
+                      <div className="grid xl:grid-cols-2 gap-3">
+                        {cues.map(cue => {
+                          const targetName = cue.kind === 'character'
+                            ? project.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
+                            : cue.kind === 'world' ? (project.title || 'Story world') : cue.targetId
+                          const generatingAudio = musicCueBusy === `audio:${cue.id}`
+                          const adapting = musicCueBusy === `llm:${cue.id}`
+                          const queued = musicQueue?.ids.includes(cue.id)
+                          return (
+                            <article key={cue.id} className={`${panel} space-y-2.5 ${generatingAudio ? 'border-pink-500/60' : ''}`}>
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <span className="text-[9px] uppercase tracking-wide text-pink-300">{kind} · {targetName}</span>
+                                  <input className={`${input} mt-1 font-medium`} value={cue.title}
+                                    onChange={event => patchMusicCue(cue.id, { title: event.target.value })}
+                                    aria-label={`Music title for ${targetName}`} />
+                                </div>
+                                {queued && <span className="rounded bg-pink-500/10 px-2 py-1 text-[9px] text-pink-300">queued</span>}
+                              </div>
+                              <Field label="Purpose in this Story" value={cue.purpose}
+                                onChange={purpose => patchMusicCue(cue.id, { purpose })} rows={2} />
+                              <Field label="Example song · editable LLM input" value={cue.referenceSong}
+                                onChange={referenceSong => patchMusicCue(cue.id, { referenceSong })} rows={2}
+                                placeholder="Song title — Artist" />
+                              <p className="text-[9px] text-text-muted">The LLM uses only high-level tempo, instrumentation and emotional architecture; the resulting melody and wording must be original.</p>
+                              <Field label="Creative brief" value={cue.brief}
+                                onChange={brief => patchMusicCue(cue.id, { brief })} rows={3} />
+                              <Field label="MiniMax style prompt" value={cue.style}
+                                onChange={style => patchMusicCue(cue.id, { style })} rows={3} />
+                              <div className="grid grid-cols-2 gap-2">
+                                <label className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[10px] text-text-secondary">
+                                  <input type="checkbox" checked={cue.instrumental}
+                                    onChange={event => patchMusicCue(cue.id, { instrumental: event.target.checked })} />
+                                  Instrumental
+                                </label>
+                                <label className="block text-[10px] text-text-muted">Duration · seconds
+                                  <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
+                                    value={cue.durationSeconds}
+                                    onChange={event => patchMusicCue(cue.id, { durationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) })} />
+                                </label>
+                              </div>
+                              {!cue.instrumental && <Field label="Editable lyrics" value={cue.lyrics}
+                                onChange={lyrics => patchMusicCue(cue.id, { lyrics })} rows={8} />}
+                              <div className="grid sm:grid-cols-2 gap-2">
+                                <button className={button} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
+                                  onClick={() => void adaptMusicCueWithLlm(cue.id)}>
+                                  {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Adapt prompt{cue.instrumental ? '' : ' + lyrics'} with LLM
+                                </button>
+                                <button className={`${button} border-pink-500/60 text-pink-300`}
+                                  disabled={Boolean(musicCueBusy || musicQueue) || !servicesConfig?.minimax_api_key_set || !cue.style.trim() || (!cue.instrumental && !cue.lyrics.trim())}
+                                  onClick={() => void generateMusicCueAudio(cue.id)}>
+                                  {generatingAudio ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />} Generate this track
+                                </button>
+                              </div>
+                              {cue.candidates.length > 0 && (
+                                <div className="space-y-2 border-t border-border pt-2">
+                                  {cue.candidates.map(candidate => {
+                                    const selected = cue.selectedCandidateId === candidate.id
+                                    return (
+                                      <div key={candidate.id} className={`rounded border p-2 space-y-1.5 ${selected ? 'border-pink-400 bg-pink-500/5' : 'border-border'}`}>
+                                        <button type="button" className="w-full flex items-center justify-between gap-2 text-left text-[10px]"
+                                          onClick={() => patchMusicCue(cue.id, { selectedCandidateId: candidate.id })}>
+                                          <span className="text-text-primary">{getOutputReference({ name: candidate.name, type: 'audio' })} · {candidate.model}</span>
+                                          <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
+                                        </button>
+                                        <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
+                                        <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue)}
+                                          onClick={() => void openMusicalTrailer(candidate.id)}>
+                                          <Film size={12} /> Use in musical trailer
+                                        </button>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </article>
+                          )
+                        })}
+                      </div>
+                    </section>
+                  )
+                })}
+
+                {!project.music.cues.length && (
+                  <div className={`${panel} mb-5 py-12 text-center`}>
+                    <Music size={30} className="mx-auto mb-3 text-pink-400" />
+                    <p className="text-sm text-text-primary">No music bible yet</p>
+                    <p className="mt-1 text-xs text-text-muted">Generate the complete Story or click “Generate LLM suggestions” here. No MiniMax music credits are used at this stage.</p>
+                  </div>
+                )}
+
+                <details className={`${panel} group`}>
+                  <summary className="cursor-pointer list-none flex items-center justify-between gap-2">
+                    <span>
+                      <span className="block text-sm font-semibold text-text-primary">Manual song / cover and musical trailer</span>
+                      <span className="block text-[10px] text-text-muted mt-1">The original free-form workflow remains available for a custom song outside the LLM suggestions.</span>
+                    </span>
+                    <ChevronDown size={15} className="group-open:rotate-180 transition-transform" />
+                  </summary>
+                  <div className="mt-4 grid lg:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="block text-[10px] text-text-muted">Mode
+                          <select className={`${input} mt-1`} value={project.music.mode}
+                            onChange={event => patch({ music: { ...project.music, mode: event.target.value === 'cover' ? 'cover' : 'original' } })}>
+                            <option value="original">Original song</option><option value="cover">Cover</option>
+                          </select>
+                        </label>
+                        <label className="block text-[10px] text-text-muted">Candidates
+                          <select className={`${input} mt-1`} value={project.music.candidateCount}
+                            onChange={event => patch({ music: { ...project.music, candidateCount: Number(event.target.value) === 3 ? 3 : 2 } })}>
+                            <option value={2}>2</option><option value={3}>3</option>
+                          </select>
+                        </label>
+                      </div>
+                      {project.music.mode === 'cover' && <>
+                        <input ref={musicCoverRef} type="file" accept="audio/*" className="hidden"
+                          onChange={event => void uploadCoverReference(event.target.files?.[0])} />
+                        <button className={`${button} w-full`} disabled={productionBusy === 'music'} onClick={() => musicCoverRef.current?.click()}>
+                          <Upload size={13} /> {project.music.coverReferenceName ? `Replace ${project.music.coverReferenceName}` : 'Upload cover reference'}
+                        </button>
+                      </>}
+                      <Field label="Song brief" value={project.music.brief || storySongBrief(project, project.music.targetDurationSeconds)}
+                        onChange={brief => patch({ music: { ...project.music, brief } })} rows={5} />
+                      <button className={`${button} w-full`} disabled={productionBusy === 'music'} onClick={() => void writeStorySong()}>
+                        <Sparkles size={13} /> Write prompt + lyrics with LLM
+                      </button>
+                      <Field label="Source lyrics / structure to adapt" value={project.music.sourceLyrics}
+                        onChange={sourceLyrics => patch({ music: { ...project.music, sourceLyrics } })} rows={5} />
+                      <button className={`${button} w-full`} disabled={productionBusy === 'music' || !project.music.sourceLyrics.trim()}
+                        onClick={() => void adaptStoryLyrics()}><Sparkles size={13} /> Adapt lyrics to this Story</button>
+                    </div>
+                    <div className="space-y-2">
+                      <Field label="MiniMax style prompt" value={project.music.style}
+                        onChange={style => patch({ music: { ...project.music, style } })} rows={3} />
+                      <Field label="Editable lyrics" value={project.music.lyrics}
+                        onChange={lyrics => patch({ music: { ...project.music, lyrics } })} rows={8} />
+                      <label className="block text-[10px] text-text-muted">Approx. duration · seconds
+                        <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
+                          value={project.music.targetDurationSeconds}
+                          onChange={event => patch({ music: { ...project.music, targetDurationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) } })} />
+                      </label>
+                      <button className={`${button} w-full border-pink-500/60 text-pink-300`}
+                        disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
+                        onClick={() => void generateMinimaxSongs()}><Music size={13} /> Generate manual candidates</button>
+                      {project.music.candidates.map(candidate => (
+                        <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">
+                          <span className="text-[10px] text-text-primary">{getOutputReference({ name: candidate.name, type: 'audio' })} · {candidate.model}</span>
+                          <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
+                          <button className={`${button} w-full`} onClick={() => void openMusicalTrailer(candidate.id)}><Film size={12} /> Use in musical trailer</button>
+                        </div>
+                      ))}
+                      <button className={`${button} w-full`} onClick={() => void openMusicalTrailer()}>
+                        <ChevronRight size={13} /> Open Musical Video Director
+                      </button>
+                    </div>
+                  </div>
+                </details>
+              </>
+            )}
+
             {tab === 'productions' && (
               <>
                 <div className="mb-4">
                   <h2 className="text-lg font-semibold text-text-primary">Productions</h2>
                   <p className="text-xs text-text-muted mt-1">Adapt the same approved material without destroying the source story.</p>
                 </div>
-                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className="grid md:grid-cols-2 gap-4">
                   <div className={`${panel} space-y-3`}>
                     <BookOpen size={26} className="text-accent-blue" />
                     <h3 className="font-semibold text-text-primary">Comic adaptation</h3>
@@ -2033,7 +2422,7 @@ export function StoryLabPanel() {
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> Open in Short Film Director</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
                   </div>
-                  <div className={`${panel} space-y-3`}>
+                  <div className="hidden" aria-hidden="true">
                     <Music size={26} className="text-pink-400" />
                     <h3 className="font-semibold text-text-primary">Musical trailer</h3>
                     <p className="text-xs text-text-muted">Turns the Story into a song-led video. Maestro analyzes the selected track’s duration, BPM, sections and beats, then plans cuts to fit the complete song.</p>

@@ -111,6 +111,23 @@ export interface StoryMusicCandidate {
   createdAt: string
 }
 
+export interface StoryMusicCue {
+  id: string
+  kind: 'world' | 'character' | 'story'
+  targetId: string
+  title: string
+  purpose: string
+  /** Editable inspiration input; generation must reinterpret, never copy it. */
+  referenceSong: string
+  brief: string
+  style: string
+  lyrics: string
+  instrumental: boolean
+  durationSeconds: number
+  candidates: StoryMusicCandidate[]
+  selectedCandidateId?: string
+}
+
 export interface StoryMusicDraft {
   mode: 'original' | 'cover'
   model: 'music-3.0' | 'music-2.6'
@@ -122,6 +139,7 @@ export interface StoryMusicDraft {
   coverReferenceName?: string
   targetDurationSeconds: number
   candidateCount: 2 | 3
+  cues: StoryMusicCue[]
   candidates: StoryMusicCandidate[]
   selectedCandidateId?: string
 }
@@ -175,4 +193,4 @@ export interface StoryProject {
   updatedAt: string
 }
 
-export type StoryGenerationScope = 'all' | 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
+export type StoryGenerationScope = 'all' | 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'music'
