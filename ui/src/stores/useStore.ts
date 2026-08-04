@@ -7265,10 +7265,14 @@ export const useStore = create<AppState>((set, get) => ({
 
         // Handle failure
         if (status.status === 'failed' || status.status === 'cancelled') {
+          const imageProgress = get().directorImageGenProgress
           set({
             pipelinePolling: false,
             directorLoading: false,
             directorError: status.error || 'Pipeline stopped',
+            directorImageGenProgress: imageProgress
+              ? { ...imageProgress, status: 'error' }
+              : null,
           })
           return  // Stop polling
         }

@@ -403,7 +403,9 @@ export function DirectorChat() {
   const shortFilmPreserveVisualStyle = useStore(s => s.shortFilmPreserveVisualStyle)
   const shortFilmSetPreserveVisualStyle = useStore(s => s.shortFilmSetPreserveVisualStyle)
   const startDirectorPipeline = useStore(s => s.startDirectorPipeline)
-  const pipelinePhase = useStore(s => s.pipelineStatus?.phase)
+  const pipelineStatus = useStore(s => s.pipelineStatus)
+  const pipelinePhase = pipelineStatus?.phase
+  const pipelineIsActive = pipelineStatus?.status === 'running'
 
   const isShortFilm = skill === 'short_film'
   const isStoryPath = isShortFilm && shortFilmPath === 'story'
@@ -797,13 +799,6 @@ export function DirectorChat() {
           </SystemBubble>
         )}
 
-        {/* Error */}
-        {error && (
-          <div className="text-[11px] text-red-400 bg-red-500/10 rounded px-2 py-1.5 border border-red-500/20">
-            {error}
-          </div>
-        )}
-
         {/* Structure step — hidden for story path */}
         {!isStoryPath && (atStep('structure') || pastStep('structure')) && (
           <>
@@ -1035,10 +1030,22 @@ export function DirectorChat() {
               // auto generation. The label flips to "Auto Generating…"
               // when the pipeline is what's running, so it's clear
               // *why* the button is disabled.
-              isGenerating={isGenerating || pipelinePhase !== undefined}
-              isAutoGenerating={autoMode && pipelinePhase !== undefined}
+              isGenerating={isGenerating || pipelineIsActive}
+              isAutoGenerating={autoMode && pipelineIsActive}
+              generationError={error}
             />
           </SystemBubble>
+        )}
+
+        {/* Keep failures adjacent to the activity that produced them. Video
+            generation renders its error directly below the Generate status
+            control; earlier-stage failures land here, after the current step,
+            instead of appearing near the first line of the conversation. */}
+        {error && !atStep('review_video') && (
+          <div role="alert" className="text-[11px] text-red-300 bg-red-500/10 rounded px-2 py-2 border border-red-500/30 flex items-start gap-1.5">
+            <X size={12} className="mt-0.5 shrink-0" />
+            <span><strong className="font-semibold">Error:</strong> {error}</span>
+          </div>
         )}
 
         <div ref={messagesEndRef} />
@@ -2613,7 +2620,7 @@ function ImageGenView({
 function VideoPromptsReview({
   clipPlans, plannedClips, clipImages, speakerMappings, editClipPlan,
   planVideoPrompts, directorGenerate, applyToClips, loading, isShortFilm,
-  isGenerating, isAutoGenerating,
+  isGenerating, isAutoGenerating, generationError,
 }: {
   clipPlans: ReturnType<typeof useStore.getState>['directorClipPlans']
   plannedClips: ReturnType<typeof useStore.getState>['directorPlannedClips']
@@ -2636,6 +2643,9 @@ function VideoPromptsReview({
    *  the user knows the system is driving itself, not waiting on
    *  them to click. */
   isAutoGenerating?: boolean
+  /** Terminal generation failure shown in place, immediately below the
+   *  status control that previously said "Auto Generating...". */
+  generationError?: string | null
 }) {
   return (
     <div className="space-y-2">
@@ -2713,7 +2723,19 @@ function VideoPromptsReview({
                   was already running, confusing the user.
                 * Manual mode after the user clicked Generate — guards
                   against double-submission. */}
-        {isGenerating ? (
+        {generationError ? (
+          <div className="space-y-2">
+            <button
+              disabled
+              className="w-full py-2.5 rounded-lg bg-red-500/10 border border-red-500/40 text-red-300 text-sm font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed"
+            >
+              <X size={14} /> Error
+            </button>
+            <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-[11px] leading-snug text-red-200">
+              {generationError}
+            </div>
+          </div>
+        ) : isGenerating ? (
           // Muted disabled state. opacity-60 dims the whole control
           // (including the spinner) so it reads as "not interactive"
           // even against the bright accent backgrounds Golden Hour and
