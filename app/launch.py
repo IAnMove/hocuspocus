@@ -11823,16 +11823,21 @@ def _parse_comic_director_json(
         )
         parsed = repair_json(cleaned, return_objects=True)
     # Some OpenAI-compatible providers occasionally honor an object schema by
-    # returning either its sole array directly or JSON encoded as a JSON
-    # string. Both forms preserve all lettering, so normalize them before the
-    # strict structural validation instead of spending another generation.
+    # returning either a one-item array or JSON encoded as a JSON string.
+    # Normalize those losslessly before spending another provider request.
     if isinstance(parsed, str):
         nested = parsed.strip()
         if nested and nested != cleaned:
             try:
                 parsed = json.loads(nested)
             except json.JSONDecodeError:
-                pass
+                from json_repair import repair_json
+                parsed = repair_json(nested, return_objects=True)
+    if not root_array_key and isinstance(parsed, list) and len(parsed) == 1:
+        sole_item = parsed[0]
+        if isinstance(sole_item, dict):
+            print(f"[Comic Director] Unwrapped one-item array while {stage}")
+            parsed = sole_item
     if root_array_key and isinstance(parsed, list):
         print(
             f"[Comic Director] Wrapped top-level array as "
@@ -11882,24 +11887,40 @@ def _generate_comic_director_json(
         "presence_penalty": 0.1,
         "json_schema": schema,
     }
-    if llm_override:
-        raw = llm_service.generate_openai_compatible(
-            **common,
-            model_id=llm_override["model"],
-            base_url=llm_override["base_url"],
-            api_key=llm_override["api_key"],
-        )
-    else:
-        raw = llm_service.generate_streaming(
-            **common,
-            enable_thinking=False,
-            thinking_budget=0,
-        )
-    return _parse_comic_director_json(
-        raw,
-        stage,
-        root_array_key=root_array_key,
-    )
+    parse_error = None
+    for attempt in range(1, 3):
+        request = dict(common)
+        if parse_error is not None:
+            request["prompt"] = (
+                f"{prompt}\n\nJSON CORRECTION RETRY: Your previous response could not be "
+                "decoded as the required JSON object. Return exactly one complete JSON "
+                "object matching the supplied schema, with no prose, markdown or outer array."
+            )
+            print(f"[Comic Director] Retrying malformed {stage} response once")
+        if llm_override:
+            raw = llm_service.generate_openai_compatible(
+                **request,
+                model_id=llm_override["model"],
+                base_url=llm_override["base_url"],
+                api_key=llm_override["api_key"],
+            )
+        else:
+            raw = llm_service.generate_streaming(
+                **request,
+                enable_thinking=False,
+                thinking_budget=0,
+            )
+        try:
+            return _parse_comic_director_json(
+                raw,
+                f"{stage}, attempt {attempt}",
+                root_array_key=root_array_key,
+            )
+        except (ValueError, json.JSONDecodeError) as exc:
+            parse_error = exc
+            if attempt >= 2:
+                raise
+    raise parse_error  # pragma: no cover - the loop always returns or raises
 
 
 def _comic_writing_llm(body: dict) -> dict | None:
