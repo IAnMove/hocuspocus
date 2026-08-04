@@ -1070,10 +1070,7 @@ def rerun_h3_segment(
                 previous_path = previous_name if os.path.isabs(previous_name) else os.path.join(clip_out_dir, previous_name)
                 if not os.path.isfile(previous_path):
                     raise ValueError(f"Previous H3 segment is missing: {previous_name}")
-                try:
-                    from services.video_editor import extract_frame, probe_media
-                except ImportError:  # pragma: no cover - package import mode
-                    from app.services.video_editor import extract_frame, probe_media
+                from .video_editor import extract_frame, probe_media
                 start_path = os.path.join(
                     clip_out_dir,
                     f".minimax_h3_{pid}_{clip_index + 1}_{index}_edit_continuation.png",
@@ -7225,10 +7222,7 @@ def _run_minimax_h3_story_video(
             _update_pipeline(pid, _h3_segments=copy.deepcopy(segment_states))
 
             if segment_index + 1 < segment_count:
-                try:
-                    from services.video_editor import extract_frame, probe_media
-                except ImportError:  # pragma: no cover - package import mode
-                    from app.services.video_editor import extract_frame, probe_media
+                from .video_editor import extract_frame, probe_media
                 continuation_path = os.path.join(
                     out_dir,
                     f".minimax_h3_{pid}_{shot_index + 1}_{segment_index + 1}_continuation.png",
@@ -7281,6 +7275,14 @@ def _run_minimax_h3_story_video(
     with open(os.path.splitext(final_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
         json.dump(sidecar, handle, indent=2)
     return [*outputs, final_name]
+
+
+def _stop_minimax_h3_runtime() -> None:
+    try:
+        from services import minimax_h3_service
+    except ImportError:  # pragma: no cover - package import mode
+        from app.services import minimax_h3_service
+    minimax_h3_service.stop_runtime()
 
 
 def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
@@ -7413,17 +7415,23 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
     # WanGP multi-clip/sliding-window contract. Story mode therefore runs its
     # planned shots explicitly and assembles them with their embedded audio.
     if video_model == "minimax_h3" and pipeline_type == "short_film_story":
-        return _run_minimax_h3_story_video(
-            pid,
-            params,
-            clip_plans,
-            planned_clips,
-            clip_images,
-            video_params,
-            resolution,
-            out_dir,
-            workspace,
-        )
+        try:
+            return _run_minimax_h3_story_video(
+                pid,
+                params,
+                clip_plans,
+                planned_clips,
+                clip_images,
+                video_params,
+                resolution,
+                out_dir,
+                workspace,
+            )
+        finally:
+            # Keep one warm sidecar across all Story segments, then release it
+            # after assembly (or any failure/cancel) so idle H3 does not retain
+            # almost the whole GPU indefinitely.
+            _stop_minimax_h3_runtime()
 
     # Quantize helper
     try:

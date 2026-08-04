@@ -9930,6 +9930,9 @@ def _run_generation(job_id: str):
                     job["out_dir"],
                     _h3_progress,
                     lambda: bool(job.get("_cancel_requested")),
+                    # Director owns one warm runtime across all of its H3
+                    # segments and releases it after final assembly.
+                    keep_runtime=bool(raw_params.get("_director_pipeline_id")),
                 )
                 output_names = [os.path.basename(path) for path in generated]
                 job["output_files"] = output_names

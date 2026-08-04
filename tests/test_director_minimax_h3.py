@@ -131,6 +131,34 @@ def test_h3_story_renders_each_shot_and_assembles_native_audio(tmp_path: Path):
     assert (tmp_path / "minimax_h3_h3story_multiclip.mp4").is_file()
 
 
+def test_h3_story_wrapper_releases_runtime_after_failure(tmp_path: Path):
+    params = {
+        "video_model": "minimax_h3",
+        "pipeline_type": "short_film_story",
+        "video_params": {"resolution": "960x544"},
+    }
+    with patch.object(
+        director_pipeline,
+        "_run_minimax_h3_story_video",
+        side_effect=RuntimeError("render failed"),
+    ), patch.object(director_pipeline, "_stop_minimax_h3_runtime") as stop_runtime:
+        try:
+            director_pipeline._run_video_generation(
+                "h3failure",
+                params,
+                [],
+                [],
+                [],
+                out_dir=str(tmp_path),
+            )
+        except RuntimeError as exc:
+            assert str(exc) == "render failed"
+        else:  # pragma: no cover - regression assertion
+            raise AssertionError("Expected the simulated H3 render failure")
+
+    stop_runtime.assert_called_once()
+
+
 def test_h3_story_first_frame_mode_does_not_silently_send_omni_refs(tmp_path: Path):
     shot = tmp_path / "shot.png"
     portrait = tmp_path / "portrait.png"

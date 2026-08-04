@@ -669,7 +669,7 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
 
 
 def generate(params: dict, job_id: str, out_dir: str, progress: Callable[[str, int, int, int], None],
-             cancelled: Callable[[], bool]) -> list[str]:
+             cancelled: Callable[[], bool], *, keep_runtime: bool = False) -> list[str]:
     try:
         try:
             return _generate_impl(params, job_id, out_dir, progress, cancelled)
@@ -701,6 +701,8 @@ def generate(params: dict, job_id: str, out_dir: str, progress: Callable[[str, i
                     staged.unlink()
                 except OSError:
                     pass
+        if not keep_runtime:
+            stop_runtime()
 
 
 atexit.register(stop_runtime)

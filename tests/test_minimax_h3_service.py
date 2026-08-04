@@ -240,10 +240,39 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
 
         self.assertEqual(result, ["fallback.mp4"])
         self.assertEqual(generate_impl.call_count, 2)
-        stop_runtime.assert_called_once()
+        self.assertEqual(stop_runtime.call_count, 2)
         self.assertEqual(params["h3_model_profile"], "low_memory")
         self.assertEqual(params["h3_model_fallback_from"], "quality")
         self.assertTrue(any("INT4 fallback" in update[0] for update in updates))
+
+    def test_standalone_generation_always_releases_runtime(self):
+        with patch.object(h3, "_generate_impl", return_value=["clip.mp4"]), \
+                patch.object(h3, "stop_runtime") as stop_runtime:
+            result = h3.generate(
+                {**h3.DEFAULTS, "prompt": "test"},
+                "jobstandalone",
+                "/tmp",
+                lambda *_args: None,
+                lambda: False,
+            )
+
+        self.assertEqual(result, ["clip.mp4"])
+        stop_runtime.assert_called_once()
+
+    def test_director_batch_can_keep_runtime_warm(self):
+        with patch.object(h3, "_generate_impl", return_value=["clip.mp4"]), \
+                patch.object(h3, "stop_runtime") as stop_runtime:
+            result = h3.generate(
+                {**h3.DEFAULTS, "prompt": "test"},
+                "jobdirector",
+                "/tmp",
+                lambda *_args: None,
+                lambda: False,
+                keep_runtime=True,
+            )
+
+        self.assertEqual(result, ["clip.mp4"])
+        stop_runtime.assert_not_called()
 
 
 if __name__ == "__main__":
