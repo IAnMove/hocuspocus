@@ -249,8 +249,8 @@ Multiple isolated output directories with a quick switcher in the sidebar. Usefu
 - **NSFW mode** is opt-in with a disclaimer step. Disabled by default. Gates uncensored model variants, NSFW LoRAs in the CivitAI browser, and the Settings → Services NSFW toggle.
 - **Experimental features gate** hides power-user toggles (external API keys, Voice Reference, Inpaint, Restyle, Wan2GP Enhancer) by default for a focused first-launch experience.
 
-### 📊 Director Pipeline Dashboard
-View all past Director runs with their full state — clip plans, generated images, generated clips, polish diffs. Re-run any clip without re-running the whole pipeline.
+### 📊 Productions + global activity footer
+The persistent footer shows what Maestro is doing from every screen, including live sampling steps and a direct link to **Productions**. Productions keeps all past Director runs with their full state — clip plans, generated images, generated clips, and polish diffs — so interrupted work and individual clips can be recovered without re-running the whole pipeline.
 
 ## Requirements
 
@@ -301,7 +301,8 @@ Click **Reset** to wipe the install and start over. Removes `app/env/`, `ui/node
 After clicking **Start**, the launcher shows an **Open Web UI** button once the server is up.
 
 - **Sidebar** — mode toggle (Studio / Director), model picker, prompt, LoRAs, advanced settings
-- **Main feed** — generated outputs, dashboard, Director pipeline status
+- **Main feed** — generated outputs and Director pipeline status
+- **Activity footer** — persistent live job progress and access to current or past **Productions**
 - **Settings drawer** (gear icon) — model visibility, performance auto-tune, services (LLM, API keys, NSFW, theme)
 - **Pinokio menu** — Update, Reset, Install Inpaint Support, LoRA folder shortcuts
 

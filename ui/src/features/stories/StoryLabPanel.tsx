@@ -1169,7 +1169,7 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'ok',
         text: autoStart
-          ? 'The short-film episode is running in Director; its pipeline remains recoverable from the Dashboard.'
+          ? 'The short-film episode is running in Director; its pipeline remains recoverable from Productions.'
           : 'The complete story canon and approved visual references are loaded in Short Film Director.',
       })
     } catch (error) {

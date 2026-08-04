@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -89,6 +90,18 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         }, "jobaudioauthored")
 
         self.assertEqual(workflow["10"]["inputs"]["prompt"], prompt)
+
+    def test_comfy_sampling_progress_is_exposed_to_maestro_jobs(self):
+        update = h3._comfy_progress_event(json.dumps({
+            "type": "progress",
+            "data": {"value": 7, "max": 20, "prompt_id": "prompt-1", "node": "20"},
+        }), "prompt-1")
+
+        self.assertEqual(update, ("MiniMax H3 sampling — step 7/20", 40, 7, 20))
+        self.assertIsNone(h3._comfy_progress_event(json.dumps({
+            "type": "progress",
+            "data": {"value": 7, "max": 20, "prompt_id": "another-prompt"},
+        }), "prompt-1"))
 
     def test_first_and_last_frames_are_optional_fl2va_inputs(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(h3, "INPUT_DIR", Path(tmp) / "input"):

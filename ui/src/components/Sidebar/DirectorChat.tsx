@@ -594,9 +594,9 @@ export function DirectorChat() {
             <button
               onClick={() => useStore.getState().setDashboardOpen(true)}
               className="text-[10px] text-accent-blue hover:text-accent-blue/80 flex items-center gap-0.5 transition-colors"
-              title="Open pipeline dashboard"
+              title="Open current and past productions"
             >
-              Dashboard
+              Productions
             </button>
             {(skill || step !== 'upload') && (
               <button

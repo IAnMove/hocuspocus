@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Callable
 
 import requests
+import websocket as websocket_client
 
 
 MODEL_ID = "minimax_h3"
@@ -512,7 +513,36 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
     return workflow, pipeline
 
 
-def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[str, int], None],
+def _comfy_progress_event(raw: object, prompt_id: str) -> tuple[str, int, int, int] | None:
+    """Turn a ComfyUI websocket sampling event into Maestro job progress."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if payload.get("type") != "progress":
+        return None
+    data = payload.get("data") or {}
+    if data.get("prompt_id") != prompt_id:
+        return None
+    try:
+        current = int(data.get("value", 0))
+        total = int(data.get("max", 0))
+    except (TypeError, ValueError):
+        return None
+    if total <= 0:
+        return None
+    current = max(0, min(current, total))
+    percent = max(10, min(95, 10 + round((current / total) * 85)))
+    if current >= total:
+        message = f"MiniMax H3 sampling complete ({current}/{total}); decoding video and audio…"
+    else:
+        message = f"MiniMax H3 sampling — step {current}/{total}"
+    return message, percent, current, total
+
+
+def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[str, int, int, int], None],
                    cancelled: Callable[[], bool]) -> list[str]:
     global _active_prompt
     workflow, pipeline = build_workflow(params, job_id)
@@ -521,30 +551,67 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
         raise RuntimeError(
             "MiniMax H3 support is not installed. Run Update (or Install) from the Pinokio menu first."
         )
-    _ensure_models(pipeline, profile, lambda message: progress(message, 3))
-    base_url = ensure_runtime(lambda message: progress(message, 8), profile)
-    progress("Loading MiniMax H3 and generating native video + stereo audio…", 10)
+    _ensure_models(pipeline, profile, lambda message: progress(message, 3, 0, 0))
+    base_url = ensure_runtime(lambda message: progress(message, 8, 0, 0), profile)
+    progress("Loading MiniMax H3 and generating native video + stereo audio…", 10, 0, 0)
+    client_id = f"maestro-{job_id}"
     response = requests.post(
-        f"{base_url}/prompt", json={"prompt": workflow, "client_id": f"maestro-{job_id}"}, timeout=30
+        f"{base_url}/prompt", json={"prompt": workflow, "client_id": client_id}, timeout=30
     )
     response.raise_for_status()
     payload = response.json()
     if payload.get("node_errors"):
         raise RuntimeError(f"MiniMax H3 workflow validation failed: {payload['node_errors']}")
     prompt_id = payload["prompt_id"]
+    ws = None
+    try:
+        ws_scheme = "wss" if base_url.startswith("https://") else "ws"
+        ws_host = base_url.split("://", 1)[-1]
+        ws = websocket_client.create_connection(
+            f"{ws_scheme}://{ws_host}/ws?clientId={client_id}",
+            timeout=2,
+        )
+        ws.settimeout(1)
+    except Exception:
+        # Progress telemetry is an enhancement; history polling remains the
+        # reliable completion path if a websocket cannot be established.
+        if ws is not None:
+            ws.close()
+        ws = None
     _active_prompt = prompt_id
     deadline = time.time() + 6 * 60 * 60
     history = None
-    while time.time() < deadline:
-        if cancelled():
-            cancel()
-            raise InterruptedError("MiniMax H3 generation cancelled")
-        result = requests.get(f"{base_url}/history/{prompt_id}", timeout=10).json()
-        if prompt_id in result:
-            history = result[prompt_id]
-            break
-        time.sleep(1)
-    _active_prompt = None
+    last_history_poll = 0.0
+    try:
+        while time.time() < deadline:
+            if cancelled():
+                cancel()
+                raise InterruptedError("MiniMax H3 generation cancelled")
+
+            if ws is not None:
+                try:
+                    update = _comfy_progress_event(ws.recv(), prompt_id)
+                    if update is not None:
+                        progress(*update)
+                except websocket_client.WebSocketTimeoutException:
+                    pass
+                except Exception:
+                    ws.close()
+                    ws = None
+
+            now = time.time()
+            if now - last_history_poll >= 1:
+                result = requests.get(f"{base_url}/history/{prompt_id}", timeout=10).json()
+                last_history_poll = now
+                if prompt_id in result:
+                    history = result[prompt_id]
+                    break
+            if ws is None:
+                time.sleep(1)
+    finally:
+        _active_prompt = None
+        if ws is not None:
+            ws.close()
     if history is None:
         cancel()
         raise TimeoutError("MiniMax H3 generation exceeded the 6-hour safety timeout")
@@ -571,11 +638,11 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
                     output_files.append(str(destination))
     if not output_files:
         raise RuntimeError("MiniMax H3 completed but ComfyUI returned no saved video")
-    progress("MiniMax H3 generation complete", 100)
+    progress("MiniMax H3 generation complete", 100, 0, 0)
     return output_files
 
 
-def generate(params: dict, job_id: str, out_dir: str, progress: Callable[[str, int], None],
+def generate(params: dict, job_id: str, out_dir: str, progress: Callable[[str, int, int, int], None],
              cancelled: Callable[[], bool]) -> list[str]:
     try:
         return _generate_impl(params, job_id, out_dir, progress, cancelled)

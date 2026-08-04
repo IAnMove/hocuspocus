@@ -9,6 +9,7 @@ import { RetakeDialog } from './components/RetakeDialog'
 import { OomRecoveryBanner } from './components/OomRecoveryBanner'
 import { DownloadStatusBanner } from './components/DownloadStatusBanner'
 import { PreflightBanner } from './components/PreflightBanner'
+import { ActivityFooter } from './components/ActivityFooter'
 import { WelcomeModal } from './components/WelcomeModal'
 import { RecipesOverlay } from './components/Recipes/RecipesOverlay'
 import { useStore } from './stores/useStore'
@@ -46,7 +47,7 @@ function App() {
   }, [loadLlmStatus])
 
   return (
-    <div className="flex flex-col md:flex-row h-full w-full bg-bg-primary">
+    <div className="flex flex-col h-full w-full bg-bg-primary">
       {/* Mobile header */}
       {isMobile && (
         <header className="h-12 shrink-0 px-4 border-b border-border flex items-center justify-between bg-bg-secondary">
@@ -71,8 +72,11 @@ function App() {
         </header>
       )}
 
-      <Sidebar />
-      <MainContent />
+      <div className="flex flex-1 min-h-0 w-full">
+        <Sidebar />
+        <MainContent />
+      </div>
+      <ActivityFooter />
       <SettingsDrawer />
       <LoraBrowser />
       <DirectorDashboard />

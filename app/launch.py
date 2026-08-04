@@ -9889,9 +9889,12 @@ def _run_generation(job_id: str):
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
-                def _h3_progress(message: str, value: int) -> None:
+                def _h3_progress(message: str, value: int, step: int = 0, total: int = 0) -> None:
                     job["message"] = message
                     job["progress"] = max(0, min(100, int(value)))
+                    job["step"] = max(0, int(step))
+                    job["total_steps"] = max(0, int(total))
+                    job["phase"] = "MiniMax H3 sampling" if total > 0 else ""
 
                 generated = minimax_h3_service.generate(
                     raw_params,

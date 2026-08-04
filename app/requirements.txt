@@ -40,6 +40,7 @@ torchcodec==0.10.0
 
 # UI & interaction
 gradio==5.29.0
+websocket-client==1.9.0
 dashscope==1.25.12
 loguru
 s3tokenizer

@@ -2020,6 +2020,12 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const { pipelines } = await api.fetchPipelineList()
       set({ dashboardPipelineList: pipelines })
+      // Opening Productions should take the user straight back to live work,
+      // even if an older production was selected the last time it was open.
+      const active = pipelines.find(pipeline => pipeline.status === 'running')
+      if (active && get().dashboardSelectedPipeline?.pipeline_id !== active.id) {
+        await get().loadSavedPipeline(active.id)
+      }
     } catch (e) {
       console.error('Failed to load pipeline list:', e)
     }

@@ -12,7 +12,7 @@ function safeStr(val: unknown): string {
   return String(val)
 }
 
-/** Error boundary to prevent dashboard crash from bad data */
+/** Error boundary to prevent the productions view crashing on bad saved data. */
 class DashboardErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   state = { error: null as string | null }
   static getDerivedStateFromError(err: Error) { return { error: err.message } }
@@ -20,7 +20,7 @@ class DashboardErrorBoundary extends Component<{ children: ReactNode }, { error:
     if (this.state.error) {
       return (
         <div className="p-4 text-center">
-          <p className="text-red-400 text-sm mb-2">Dashboard render error: {this.state.error}</p>
+          <p className="text-red-400 text-sm mb-2">Productions view error: {this.state.error}</p>
           <button onClick={() => this.setState({ error: null })}
             className="text-xs text-accent-blue hover:underline">Try again</button>
         </div>
@@ -539,7 +539,7 @@ function DirectorDashboardInner() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-bg-primary">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2 shrink-0">
-        <h1 className="text-sm font-semibold text-text-primary shrink-0">Dashboard</h1>
+        <h1 className="text-sm font-semibold text-text-primary shrink-0">Productions</h1>
 
         {/* Pipeline selector */}
         <select
@@ -547,7 +547,7 @@ function DirectorDashboardInner() {
           onChange={e => { if (e.target.value) loadPipeline(e.target.value) }}
           className="flex-1 min-w-0 max-w-md bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue truncate"
         >
-          <option value="">Select pipeline...</option>
+          <option value="">Select production...</option>
           {pipelineList.map(p => (
             <option key={p.id} value={p.id}>
               {formatDate(p.created_at)} — {p.pipeline_type} ({p.clip_count} clips) [{p.status}]
@@ -651,8 +651,8 @@ function DirectorDashboardInner() {
 
         {!loading && !selectedPipeline && pipelineList.length === 0 && (
           <div className="text-center py-12 text-text-muted">
-            <p className="text-sm">No saved pipelines yet</p>
-            <p className="text-xs mt-1">Run a Director pipeline and it will appear here</p>
+            <p className="text-sm">No saved productions yet</p>
+            <p className="text-xs mt-1">Run a Director production and it will appear here</p>
           </div>
         )}
 
