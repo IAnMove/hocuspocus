@@ -6255,6 +6255,8 @@ def _run_audio_analysis_job(job_id: str, body: dict) -> None:
         job.update(status="running", phase="loading_audio", message="Loading audio…")
 
         def report(step: str, detail: str) -> None:
+            if job.get("_cancel_requested"):
+                raise RuntimeError("Audio analysis cancelled")
             if not step:
                 return
             current = _AUDIO_ANALYSIS_STEPS.get(step, job.get("step", 1))
@@ -6289,15 +6291,25 @@ def _run_audio_analysis_job(job_id: str, body: dict) -> None:
                     updated_at=time.time(),
                 )
         except Exception as exc:
-            traceback.print_exc()
-            job.update(
-                status="failed",
-                message=f"Audio analysis failed: {exc}",
-                error=str(exc),
-                updated_at=time.time(),
-            )
+            if job.get("_cancel_requested"):
+                job.update(
+                    status="cancelled",
+                    message="Cancelled",
+                    error=None,
+                    progress=0,
+                    updated_at=time.time(),
+                )
+            else:
+                traceback.print_exc()
+                job.update(
+                    status="failed",
+                    message=f"Audio analysis failed: {exc}",
+                    error=str(exc),
+                    updated_at=time.time(),
+                )
         finally:
             audio_analysis.set_progress_callback(None)
+            audio_analysis.clear_progress()
 
 
 @api.post("/api/v1/audio/analyze/jobs")

@@ -50,6 +50,13 @@ def set_progress_callback(callback) -> None:
     _PROGRESS_CONTEXT.callback = callback
 
 
+def clear_progress() -> None:
+    """Clear the legacy global status without invoking a worker callback."""
+    with _PROGRESS_LOCK:
+        _PROGRESS["step"] = ""
+        _PROGRESS["detail"] = ""
+
+
 def _set_progress(step: str, detail: str = "") -> None:
     """Update the shared progress state read by the status polling endpoint."""
     with _PROGRESS_LOCK:
@@ -960,6 +967,14 @@ def plan_clip_structure(
             section_spans.append((s_start, min(s_end, song_duration), label, energy))
     if not section_spans:
         section_spans = [(0.0, song_duration, "verse", 0.5)]
+    if profile:
+        # Music-video presets target a whole-song shot rhythm. Planning each
+        # detected section independently over-splits tracks with many short
+        # sections (e.g. five 18s sections became ten "cinematic" clips).
+        # Labels/energy are still sampled from the underlying section at each
+        # clip midpoint below.
+        average_energy = sum(span[3] for span in section_spans) / len(section_spans)
+        section_spans = [(0.0, song_duration, "verse", average_energy)]
 
     # ── Plan clips per section ───────────────────────────────────────
     clips: list = []
@@ -1037,7 +1052,10 @@ def plan_clip_structure(
                 continue
 
             actual_beats = max(1, round(clip_duration_s / beat_duration))
-            energy_desc = "high energy" if sec_energy > 0.6 else ("low energy" if sec_energy < 0.3 else "moderate energy")
+            clip_label, clip_energy, _section_end = _section_at((clip_start + clip_end) / 2)
+            if not profile:
+                clip_label, clip_energy = sec_label, sec_energy
+            energy_desc = "high energy" if clip_energy > 0.6 else ("low energy" if clip_energy < 0.3 else "moderate energy")
 
             # Find dominant speaker in this clip
             clip_speaker = None
@@ -1056,9 +1074,9 @@ def plan_clip_structure(
                 "start": round(clip_start, 3),
                 "end": round(clip_end, 3),
                 "beat_count": actual_beats,
-                "section_label": sec_label,
-                "energy": round(sec_energy, 3),
-                "suggested_prompt_hint": f"{sec_label}, {energy_desc}",
+                "section_label": clip_label,
+                "energy": round(clip_energy, 3),
+                "suggested_prompt_hint": f"{clip_label}, {energy_desc}",
                 "duration_frames": _snap_to_valid_frames(clip_duration_s, fps, frames_steps, frames_minimum),
                 "dominant_speaker": clip_speaker,
             })

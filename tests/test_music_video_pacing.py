@@ -4,8 +4,9 @@ from app.services.audio_analysis import plan_clip_structure
 from app.services.llm_service import structure_from_tagged_lyrics
 
 
-def _analysis(duration: float = 92.0) -> dict:
+def _analysis(duration: float = 92.0, section_count: int = 5) -> dict:
     beat_seconds = 0.5
+    section_duration = duration / section_count
     return {
         "duration": duration,
         "bpm": 120.0,
@@ -13,7 +14,15 @@ def _analysis(duration: float = 92.0) -> dict:
             {"time": round(index * beat_seconds, 3), "strength": 0.5}
             for index in range(int(duration / beat_seconds) + 1)
         ],
-        "sections": [{"start": 0.0, "end": duration, "label": "verse", "energy": 0.5}],
+        "sections": [
+            {
+                "start": index * section_duration,
+                "end": (index + 1) * section_duration,
+                "label": ["intro", "verse", "chorus", "bridge", "outro"][index % 5],
+                "energy": 0.3 + index * 0.1,
+            }
+            for index in range(section_count)
+        ],
         "lyrics": [],
     }
 
@@ -28,6 +37,7 @@ def test_pacing_profiles_create_distinct_useful_clip_counts():
     assert 12 <= len(balanced) <= 16
     assert 18 <= len(rhythmic) <= 26
     assert len(cinematic) < len(balanced) < len(rhythmic)
+    assert {clip["section_label"] for clip in balanced}.issuperset({"verse", "chorus", "bridge"})
 
 
 def test_profile_clips_cover_the_complete_song():

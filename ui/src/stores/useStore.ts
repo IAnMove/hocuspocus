@@ -5437,15 +5437,11 @@ export const useStore = create<AppState>((set, get) => ({
         transcribe: !instrumental,
         lyricsHint: instrumental ? undefined : (r.lyrics || lyrics || undefined),
       })
-      // The song description doubles as the scene description, so the manual
-      // 'style' step isn't needed — proceed straight to planning. Auto runs the
-      // full server-side pipeline; manual runs the frontend plan→review chain.
-      if (get().directorStep === 'style') {
-        if (get().directorAutoMode) {
-          await get().startDirectorPipeline()
-        } else {
-          await get().directorPlanPrompts()
-        }
+      // Manual mode now pauses on the visible structure review. Auto mode
+      // accepts the selected pacing profile and continues hands-free.
+      if (get().directorStep === 'structure' && get().directorAutoMode) {
+        get().directorConfirmStructure()
+        await get().startDirectorPipeline()
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Music generation failed'

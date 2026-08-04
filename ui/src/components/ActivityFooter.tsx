@@ -50,6 +50,7 @@ interface ActivityView {
   total: number
   percent: number
   updatedAt: number
+  dismissible?: 'activity' | 'job'
 }
 
 function clampPercent(value: number): number {
@@ -71,6 +72,8 @@ export function ActivityFooter() {
   const pipelineStatus = useStore(s => s.pipelineStatus)
   const activities = useStore(s => s.activities)
   const stopGeneration = useStore(s => s.stopGeneration)
+  const removeActivity = useStore(s => s.removeActivity)
+  const dismissJob = useStore(s => s.dismissJob)
   const setVideoWorkflowsOpen = useStore(s => s.setDashboardOpen)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -85,6 +88,7 @@ export function ActivityFooter() {
       total: activity.total || 0,
       percent: activityProgress(activity.current || 0, activity.total || 0, activity.progress),
       updatedAt: activity.updatedAt || activity.startedAt || 3,
+      dismissible: activity.status === 'failed' ? 'activity' as const : undefined,
     }))
 
     const pipeline: ActivityView[] = pipelineStatus
@@ -124,6 +128,7 @@ export function ActivityFooter() {
         total: job.totalSteps || 0,
         percent: activityProgress(job.step, job.totalSteps, job.progress),
         updatedAt: 1,
+        dismissible: job.status === 'failed' ? 'job' as const : undefined,
       }))
 
     return [...registered, ...pipeline, ...visibleJobs]
@@ -171,6 +176,17 @@ export function ActivityFooter() {
                             onClick={() => stopGeneration(row.id.startsWith('job:') ? row.id.slice(4) : row.id)}
                           >
                             Cancel
+                          </button>
+                        )}
+                        {row.status === 'failed' && row.dismissible && (
+                          <button
+                            type="button"
+                            className="rounded border border-border px-1.5 py-0.5 text-[9px] text-text-muted hover:text-text-primary"
+                            onClick={() => row.dismissible === 'job'
+                              ? dismissJob(row.id.slice(4))
+                              : removeActivity(row.id)}
+                          >
+                            Dismiss
                           </button>
                         )}
                       </div>
