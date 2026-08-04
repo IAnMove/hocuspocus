@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
   BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Download, Film, ImagePlus, Loader2,
-  Network, Plus, Sparkles, Trash2, Upload, Users,
+  Music, Network, Plus, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, useStore } from '../../stores/useStore'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
+import { getOutputReference } from '../../lib/outputReference'
 import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
 import {
@@ -52,6 +53,22 @@ function stableTextKey(value: string): string {
     hash = Math.imul(hash, 16777619)
   }
   return (hash >>> 0).toString(36)
+}
+
+function storySongBrief(project: StoryProject, durationSeconds: number): string {
+  const cast = project.characters.slice(0, 5).map(character =>
+    `${character.name}: ${character.desire}; arc: ${character.arc}`).join(' | ')
+  const beats = project.beats.map(beat => `${beat.title}: ${beat.summary}`).join(' → ')
+  return [
+    `Create an original theme song that tells the story “${project.title}”.`,
+    `Write all lyrics in ${project.language}. Target approximately ${durationSeconds} seconds.`,
+    `Genre and emotional direction: ${project.genre}; ${project.tone}. Theme: ${project.theme}.`,
+    `Premise: ${project.premise}. Synopsis: ${project.synopsis}. Ending: ${project.ending}.`,
+    cast ? `Character journeys: ${cast}.` : '',
+    beats ? `Narrative progression: ${beats}.` : '',
+    project.world.visualLanguage ? `Choose music that feels native to this visual world: ${project.world.visualLanguage}.` : '',
+    'Use a memorable recurring chorus, concrete story imagery, and a clear emotional progression; do not merely summarize the synopsis.',
+  ].filter(Boolean).join('\n')
 }
 
 type StoryTab = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'productions'
@@ -353,7 +370,7 @@ export function StoryLabPanel() {
   const [tab, setTab] = useState<StoryTab>('overview')
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
   const [imageBusy, setImageBusy] = useState('')
-  const [productionBusy, setProductionBusy] = useState<'film' | null>(null)
+  const [productionBusy, setProductionBusy] = useState<'film' | 'music' | null>(null)
   const [instruction, setInstruction] = useState('')
   const [comicDirection, setComicDirection] = useState(DEFAULT_COMIC_CHAPTER_DIRECTION)
   const [comicPageCount, setComicPageCount] = useState(4)
@@ -1182,6 +1199,120 @@ export function StoryLabPanel() {
     }
   }
 
+  const writeStorySong = async () => {
+    setProductionBusy('music')
+    try {
+      const brief = project.music.brief.trim()
+        || storySongBrief(project, project.music.targetDurationSeconds)
+      const written = await api.writeSong({ description: brief })
+      patch({
+        music: {
+          ...project.music,
+          brief,
+          style: written.style,
+          lyrics: written.lyrics,
+        },
+      })
+      setNotice({ kind: 'ok', text: 'Song prompt and editable lyrics are ready. Review them before spending MiniMax credits.' })
+      return { brief, style: written.style, lyrics: written.lyrics }
+    } catch (error) {
+      setNotice({ kind: 'error', text: `The song draft could not be written: ${(error as Error).message}` })
+      return null
+    } finally {
+      setProductionBusy(null)
+    }
+  }
+
+  const generateMinimaxSongs = async () => {
+    if (!servicesConfig?.minimax_api_key_set) {
+      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
+      return
+    }
+    setProductionBusy('music')
+    try {
+      const brief = project.music.brief.trim()
+        || storySongBrief(project, project.music.targetDurationSeconds)
+      let style = project.music.style.trim()
+      let lyrics = project.music.lyrics.trim()
+      if (!style || !lyrics) {
+        const written = await api.writeSong({ description: brief })
+        style = written.style
+        lyrics = written.lyrics
+      }
+      const result = await api.generateStoryMusicCandidates({
+        prompt: style,
+        lyrics,
+        count: project.music.candidateCount,
+        workspace: activeWorkspace,
+      })
+      const createdAt = new Date().toISOString()
+      const candidates = result.candidates.map(candidate => ({
+        id: storyId('song'),
+        name: candidate.filename,
+        source: candidate.source,
+        prompt: style,
+        lyrics,
+        provider: 'minimax' as const,
+        model: candidate.model,
+        durationSeconds: candidate.duration_seconds,
+        createdAt,
+      }))
+      patch({
+        music: {
+          ...project.music,
+          brief,
+          style,
+          lyrics,
+          candidates: [...project.music.candidates, ...candidates],
+          selectedCandidateId: candidates[0]?.id || project.music.selectedCandidateId,
+        },
+      })
+      setNotice({ kind: 'ok', text: `${candidates.length} MiniMax Music candidates generated. Listen and choose one for the musical trailer.` })
+    } catch (error) {
+      setNotice({ kind: 'error', text: `MiniMax Music could not generate the candidates: ${(error as Error).message}` })
+    } finally {
+      setProductionBusy(null)
+    }
+  }
+
+  const openMusicalTrailer = async (candidateId?: string) => {
+    const candidate = project.music.candidates.find(item => item.id === candidateId)
+    const director = useStore.getState()
+    director.directorReset()
+    const store = useStore.getState()
+    store.setGenerationMode('video')
+    store.setSidebarMode('director')
+    store.setDirectorSkill('music_video')
+    store.setDirectorAutoMode(false)
+    store.directorSetSceneDescription(
+      `${project.title}. ${project.synopsis}\nVisual direction: ${project.world.visualLanguage}`,
+    )
+    useStore.setState({
+      directorMusicSource: candidate ? 'upload' : 'generate',
+      directorSongDescription: project.music.brief || storySongBrief(project, project.music.targetDurationSeconds),
+      directorSongStyle: project.music.style,
+      directorSongLyrics: project.music.lyrics,
+      directorSongDuration: project.music.targetDurationSeconds,
+      directorStep: 'upload',
+    })
+    window.dispatchEvent(new Event('maestro:director-open'))
+    if (!candidate) return
+    setProductionBusy('music')
+    try {
+      const blob = await fetch(candidate.source).then(response => {
+        if (!response.ok) throw new Error('The selected song file is unavailable')
+        return response.blob()
+      })
+      await useStore.getState().directorUploadAndAnalyze(new File(
+        [blob], candidate.name, { type: blob.type || 'audio/mpeg' },
+      ))
+    } catch (error) {
+      setNotice({ kind: 'error', text: `The musical trailer could not load the song: ${(error as Error).message}` })
+    } finally {
+      setProductionBusy(null)
+    }
+  }
+
   const reopenProduction = async (productionId: string) => {
     const production = project.productions.find(item => item.id === productionId)
     if (!production) return
@@ -1537,7 +1668,7 @@ export function StoryLabPanel() {
                   <h2 className="text-lg font-semibold text-text-primary">Productions</h2>
                   <p className="text-xs text-text-muted mt-1">Adapt the same approved material without destroying the source story.</p>
                 </div>
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
                   <div className={`${panel} space-y-3`}>
                     <BookOpen size={26} className="text-accent-blue" />
                     <h3 className="font-semibold text-text-primary">Comic adaptation</h3>
@@ -1666,6 +1797,79 @@ export function StoryLabPanel() {
                     <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmImageReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate complete short film</button>
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> Open in Short Film Director</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
+                  </div>
+                  <div className={`${panel} space-y-3`}>
+                    <Music size={26} className="text-pink-400" />
+                    <h3 className="font-semibold text-text-primary">Musical trailer</h3>
+                    <p className="text-xs text-text-muted">Turns the Story into a song-led video. Maestro analyzes the selected track’s duration, BPM, sections and beats, then plans cuts to fit the complete song.</p>
+                    <textarea
+                      className={input}
+                      rows={6}
+                      value={project.music.brief || storySongBrief(project, project.music.targetDurationSeconds)}
+                      onChange={event => patch({ music: { ...project.music, brief: event.target.value } })}
+                      aria-label="Story song brief"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="block text-[10px] text-text-muted">Approx. duration · seconds
+                        <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
+                          value={project.music.targetDurationSeconds}
+                          onChange={event => patch({ music: { ...project.music, targetDurationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) } })} />
+                      </label>
+                      <label className="block text-[10px] text-text-muted">Candidates
+                        <select className={`${input} mt-1`} value={project.music.candidateCount}
+                          onChange={event => patch({ music: { ...project.music, candidateCount: Number(event.target.value) === 3 ? 3 : 2 } })}>
+                          <option value={2}>2 songs</option>
+                          <option value={3}>3 songs</option>
+                        </select>
+                      </label>
+                    </div>
+                    <button className={`${button} w-full`} disabled={productionBusy === 'music'} onClick={() => void writeStorySong()}>
+                      {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Write song prompt + lyrics
+                    </button>
+                    {project.music.style && (
+                      <textarea className={input} rows={3} value={project.music.style}
+                        onChange={event => patch({ music: { ...project.music, style: event.target.value } })}
+                        aria-label="MiniMax Music style prompt" />
+                    )}
+                    {project.music.lyrics && (
+                      <textarea className={input} rows={8} value={project.music.lyrics}
+                        onChange={event => patch({ music: { ...project.music, lyrics: event.target.value } })}
+                        aria-label="Song lyrics" />
+                    )}
+                    <button className={`${button} w-full border-pink-500/60 text-pink-300`}
+                      disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
+                      onClick={() => void generateMinimaxSongs()}>
+                      {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
+                      Generate {project.music.candidateCount} songs with MiniMax Music
+                    </button>
+                    {!servicesConfig?.minimax_api_key_set && <p className="text-[9px] text-amber-300">Configure MiniMax in Settings → Services to generate candidates.</p>}
+                    <p className="text-[9px] text-text-muted">Optional local generation is also supported through Director’s internal ACE-Step engine; it can be selected instead of MiniMax without changing the video workflow.</p>
+                    {project.music.candidates.length > 0 && (
+                      <div className="space-y-2">
+                        {project.music.candidates.map(candidate => {
+                          const reference = getOutputReference({ name: candidate.name, type: 'audio' })
+                          const selected = project.music.selectedCandidateId === candidate.id
+                          return (
+                            <div key={candidate.id} className={`rounded border p-2 space-y-1.5 ${selected ? 'border-pink-400 bg-pink-500/5' : 'border-border'}`}>
+                              <button type="button" onClick={() => patch({ music: { ...project.music, selectedCandidateId: candidate.id } })}
+                                className="w-full flex items-center justify-between text-[10px] text-left">
+                                <span className="text-text-primary">{reference} · {candidate.model}</span>
+                                <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
+                              </button>
+                              <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
+                              <button className={`${button} w-full ${selected ? 'border-pink-500/50 text-pink-300' : ''}`}
+                                onClick={() => void openMusicalTrailer(candidate.id)} disabled={productionBusy === 'music'}>
+                                <Film size={12} /> Use this song in musical trailer
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <button className={`${button} w-full`} onClick={() => void openMusicalTrailer()} disabled={productionBusy === 'music'}>
+                      <ChevronRight size={13} /> Open Musical Video Director
+                    </button>
+                    <p className="text-[9px] text-text-muted">Uploaded songs work too. Beat-aware cuts synchronize editing rhythm; generated motion itself is not guaranteed to hit every beat semantically.</p>
                   </div>
                 </div>
                 {productionIssues.length > 0 && (

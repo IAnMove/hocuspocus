@@ -144,6 +144,14 @@ export function createStoryProject(): StoryProject {
     beats: [],
     assets: {},
     visualJobs: {},
+    music: {
+      brief: '',
+      style: '',
+      lyrics: '',
+      targetDurationSeconds: 90,
+      candidateCount: 2,
+      candidates: [],
+    },
     productions: [],
     approvals: {},
     createdAt: now,
@@ -261,6 +269,30 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       ? Object.fromEntries(Object.entries(project.visualJobs).flatMap(([key, value]) =>
         typeof value === 'string' && value.trim() ? [[key, value]] : []))
       : {},
+    music: {
+      brief: text(project.music?.brief),
+      style: text(project.music?.style),
+      lyrics: text(project.music?.lyrics),
+      targetDurationSeconds: Math.max(20, Math.min(360, Number(project.music?.targetDurationSeconds) || 90)),
+      candidateCount: project.music?.candidateCount === 3 ? 3 : 2,
+      candidates: Array.isArray(project.music?.candidates)
+        ? project.music.candidates.flatMap(candidate => {
+          if (!candidate || typeof candidate !== 'object' || !text(candidate.source)) return []
+          return [{
+            id: text(candidate.id) || storyId('song'),
+            name: text(candidate.name, 'Story song'),
+            source: text(candidate.source),
+            prompt: text(candidate.prompt),
+            lyrics: text(candidate.lyrics),
+            provider: candidate.provider === 'local' ? 'local' as const : 'minimax' as const,
+            model: text(candidate.model),
+            durationSeconds: Math.max(0, Number(candidate.durationSeconds) || 0),
+            createdAt: text(candidate.createdAt, now),
+          }]
+        })
+        : [],
+      selectedCandidateId: text(project.music?.selectedCandidateId) || undefined,
+    },
     productions: Array.isArray(project.productions)
       ? project.productions.filter(item => item && typeof item === 'object').map(item => ({
         id: text(item.id) || storyId('production'),

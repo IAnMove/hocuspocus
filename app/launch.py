@@ -12654,6 +12654,36 @@ def generate_story_lab_section(body: dict):
     return {"result": _generate_story_lab_stage(body, scope)}
 
 
+@api.post("/api/v1/stories/music-candidates")
+async def generate_story_music_candidates(body: dict):
+    """Generate 1–3 durable MiniMax Music candidates from an approved song draft."""
+    from services import minimax_music_service
+
+    services = wgp.server_config.get("services", {})
+    workspace = str(body.get("workspace") or _get_active_workspace())
+    try:
+        candidates = await asyncio.to_thread(
+            minimax_music_service.generate_candidates,
+            api_key=str(services.get("minimax_api_key") or ""),
+            prompt=str(body.get("prompt") or ""),
+            lyrics=str(body.get("lyrics") or ""),
+            count=int(body.get("count") or 2),
+            output_dir=_workspace_dir(workspace),
+            instrumental=bool(body.get("instrumental")),
+        )
+    except minimax_music_service.MiniMaxMusicError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return {
+        "candidates": [
+            {
+                **candidate,
+                "source": f"/api/v1/file/{candidate['filename']}",
+            }
+            for candidate in candidates
+        ]
+    }
+
+
 @api.post("/api/v1/stories/generate/start")
 def start_story_lab_generation(body: dict):
     scope = str(body.get("scope") or "all").strip().lower()

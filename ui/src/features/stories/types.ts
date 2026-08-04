@@ -99,6 +99,28 @@ export interface StoryProduction {
   status: 'draft' | 'staged'
 }
 
+export interface StoryMusicCandidate {
+  id: string
+  name: string
+  source: string
+  prompt: string
+  lyrics: string
+  provider: 'minimax' | 'local'
+  model: string
+  durationSeconds: number
+  createdAt: string
+}
+
+export interface StoryMusicDraft {
+  brief: string
+  style: string
+  lyrics: string
+  targetDurationSeconds: number
+  candidateCount: 2 | 3
+  candidates: StoryMusicCandidate[]
+  selectedCandidateId?: string
+}
+
 export interface StoryProviderSettings {
   writingProvider: StoryWritingProvider
   writingModel: string
@@ -131,6 +153,7 @@ export interface StoryProject {
   assets: Record<string, StoryVisualAsset>
   /** Durable local Maestro image jobs, keyed by world/character/location target. */
   visualJobs: Record<string, string>
+  music: StoryMusicDraft
   productions: StoryProduction[]
   approvals: {
     overview?: { approvedAt: string; version: number }

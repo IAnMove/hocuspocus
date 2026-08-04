@@ -168,6 +168,34 @@ export async function writeSong(params: {
   return res.json()
 }
 
+export interface MiniMaxMusicCandidate {
+  filename: string
+  audio_path: string
+  source: string
+  duration_seconds: number
+  provider: 'minimax'
+  model: string
+}
+
+export async function generateStoryMusicCandidates(params: {
+  prompt: string
+  lyrics: string
+  count: 2 | 3
+  instrumental?: boolean
+  workspace?: string
+}): Promise<{ candidates: MiniMaxMusicCandidate[] }> {
+  const res = await fetch(`${BASE}/api/v1/stories/music-candidates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'MiniMax Music generation failed' }))
+    throw new Error(error.detail || 'MiniMax Music generation failed')
+  }
+  return res.json()
+}
+
 // Director Music Video: generate a music track (writes the song first if only
 // a description is given) and return the ABSOLUTE audio path so it can flow
 // straight into the existing analyze → plan-structure → pipeline chain.
