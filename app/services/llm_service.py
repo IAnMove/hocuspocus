@@ -8,6 +8,7 @@ Runs on CPU by default to avoid VRAM conflicts with WanGP.
 import os
 import gc
 import json
+import re
 import time
 import subprocess
 import threading
@@ -2825,15 +2826,15 @@ def plan_angle_prompts(
 # Song section classification via LLM
 # ---------------------------------------------------------------------------
 
-_VALID_SECTION_LABELS = {"intro", "verse", "chorus", "bridge", "outro", "instrumental"}
+_VALID_SECTION_LABELS = {"intro", "verse", "pre-chorus", "chorus", "bridge", "outro", "instrumental"}
 
 # Label normalization: maps common LLM output keywords to valid labels.
 # Checked in order — "pre-chorus"/"pre chorus" must match before "chorus".
 _LABEL_MAP = [
     ("intro", "intro"),
     ("outro", "outro"),
-    ("pre-chorus", "bridge"),
-    ("pre chorus", "bridge"),
+    ("pre-chorus", "pre-chorus"),
+    ("pre chorus", "pre-chorus"),
     ("bridge", "bridge"),
     ("hook", "chorus"),
     ("chorus", "chorus"),
@@ -3321,6 +3322,48 @@ def _map_labels_to_sections(sections: list, structure: list) -> list:
     return labels
 
 
+def structure_from_tagged_lyrics(lyrics_text: str, duration: float) -> list:
+    """Turn editable [Verse]/[Chorus]/… lyrics into approximate timestamps.
+
+    Generated Story songs already carry authoritative section tags. Using
+    those tags is more reliable than asking Whisper and a second LLM to infer
+    the same structure from sung audio. Section lengths are apportioned by
+    lyric word count; instrumental/empty sections retain a small time weight.
+    """
+    if not lyrics_text or not duration:
+        return []
+    supported = re.compile(
+        r"^\s*\[(Intro|Verse(?:\s+\d+)?|Pre[- ]?Chorus|Chorus|Bridge|Outro|Inst(?:rumental)?|Solo)\]\s*$",
+        re.IGNORECASE,
+    )
+    parsed: list[dict] = []
+    current: dict | None = None
+    for raw_line in lyrics_text.splitlines():
+        match = supported.match(raw_line)
+        if match:
+            display = match.group(1).strip()
+            current = {"display_label": display, "label": _normalize_label(display), "words": 0}
+            parsed.append(current)
+            continue
+        if current is not None:
+            current["words"] += len(re.findall(r"\b[\wÀ-ÿ']+\b", raw_line))
+    if not parsed:
+        return []
+
+    weights = [max(0.5, float(section["words"])) for section in parsed]
+    total_weight = sum(weights) or float(len(weights))
+    elapsed = 0.0
+    structure = []
+    for section, weight in zip(parsed, weights):
+        structure.append({
+            "label": section["label"],
+            "display_label": section["display_label"],
+            "start": round(elapsed, 3),
+        })
+        elapsed += duration * (weight / total_weight)
+    return structure
+
+
 def classify_song_sections(
     sections: list,
     lyrics: list,
@@ -3404,6 +3447,7 @@ def classify_song_sections(
         system_prompt=system_prompt,
         max_new_tokens=400,
         temperature=0.2,
+        enable_thinking=False,
     )
 
     print(f"[LLM] Raw classification output:\n{raw}")

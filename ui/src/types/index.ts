@@ -789,6 +789,7 @@ export interface AudioAnalysisResult {
   onset_envelope: number[]
   lyrics: LyricSegment[] | null
   vocals_path: string | null
+  warnings?: string[] | null
   song_structure?: SongStructureEntry[] | null
 }
 

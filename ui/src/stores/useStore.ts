@@ -1141,6 +1141,7 @@ interface AppState {
   directorAnalysis: AudioAnalysisResult | null
   directorPlannedClips: PlannedClip[]
   directorEnergyBias: number
+  directorPacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
   directorClipPlans: ClipPlan[]
   directorSceneDescription: string
   directorLoading: boolean
@@ -1223,6 +1224,7 @@ interface AppState {
   directorGenerateTrack: () => Promise<void>
   directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; activityId?: string }) => Promise<void>
   directorSetEnergyBias: (bias: number) => Promise<void>
+  directorSetPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
   directorConfirmStructure: () => void
   directorSetSceneDescription: (prompt: string) => void
   directorSetReferenceImage: (file: File | null) => void
@@ -4752,6 +4754,7 @@ export const useStore = create<AppState>((set, get) => ({
   directorAnalysis: null,
   directorPlannedClips: [],
   directorEnergyBias: 0,
+  directorPacingProfile: 'balanced',
   directorClipPlans: [],
   directorSceneDescription: '',
   directorLoading: false,
@@ -4877,7 +4880,7 @@ export const useStore = create<AppState>((set, get) => ({
     return { directorLlmLog: [...s.directorLlmLog, { stage, text: t }] }
   }),
   setDirectorSkill: (skill) => {
-    set({ directorSkill: skill })
+    set({ directorSkill: skill, ...(skill === 'music_video' ? { directorPacingProfile: 'balanced' as const } : {}) })
     // Music director default for image-to-video reference strength is
     // 0.7 (loosens the lock to the start frame so motion can develop
     // naturally) rather than 1.0 (rigid frame). Only initialize when
@@ -5088,7 +5091,7 @@ export const useStore = create<AppState>((set, get) => ({
   // identical regardless of where the audio came from.
   directorAnalyzeAndPlan: async (audioPath, opts) => {
     const transcribe = opts?.transcribe !== false
-    const activityId = opts?.activityId
+    let activityId = opts?.activityId
       || `director-audio:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
     const analysisSteps: Record<string, number> = {
       loading_audio: 2,
@@ -5122,44 +5125,42 @@ export const useStore = create<AppState>((set, get) => ({
       directorError: null,
       directorStep: 'analyze',
     })
-    // Poll the backend's audio-analyze status during the long synchronous
-    // /audio/analyze call so the UI can show "Loading transcription model
-    // (first use downloads ~300MB)..." vs "Transcribing audio..." instead of
-    // a single "Analyzing audio..." for the entire first-run wait. Cleared on
-    // success or failure in the finally block.
-    let analyzePoll: ReturnType<typeof setInterval> | null = null
-    const startAnalyzePolling = () => {
-      analyzePoll = setInterval(async () => {
-        try {
-          const status = await api.fetchAudioAnalyzeStatus()
-          if (!status.step) return  // No analyze in flight or just cleared
-          set({ directorLoadingMessage: `${status.detail}...` })
-          reportActivity(status.step, `${status.detail}…`)
-        } catch { /* polling errors are non-fatal */ }
-      }, 1000)
-    }
-    const stopAnalyzePolling = () => {
-      if (analyzePoll !== null) {
-        clearInterval(analyzePoll)
-        analyzePoll = null
-      }
-    }
     try {
-      startAnalyzePolling()
-      let analysis = await api.analyzeAudio({
+      const accepted = await api.startAudioAnalysisJob({
         audio_path: audioPath,
         transcribe,
         extract_vocals: transcribe,
         lyrics_hint: opts?.lyricsHint || undefined,
       })
-      stopAnalyzePolling()
+      if (activityId !== accepted.job_id) get().removeActivity(activityId)
+      activityId = accepted.job_id
+      reportActivity('queued', 'Audio analysis queued…', 1)
+      void get().reconnectJobs()
+
+      let analysis: AudioAnalysisResult | null = null
+      for (;;) {
+        const status = await api.fetchAudioAnalysisJob(accepted.job_id)
+        set({ directorLoadingMessage: status.message })
+        reportActivity(status.phase || 'analyzing_audio', status.message, status.step)
+        if (status.status === 'completed') {
+          analysis = status.result
+          break
+        }
+        if (status.status === 'failed') throw new Error(status.error || status.message)
+        if (status.status === 'cancelled') throw new Error('Audio analysis cancelled')
+        await new Promise(resolve => window.setTimeout(resolve, 1000))
+      }
+      if (!analysis) throw new Error('Audio analysis completed without a result')
 
       // Try LLM-based section classification (falls back to heuristic)
       if (analysis.lyrics && analysis.lyrics.length > 0) {
         try {
           set({ directorLoadingMessage: 'Identifying sections (LLM)...' })
           reportActivity('classifying_sections', 'Classifying verses, choruses and bridges…', 8)
-          const classified = await api.classifySections({ analysis })
+          const classified = await api.classifySections({
+            analysis,
+            lyrics_hint: opts?.lyricsHint || undefined,
+          })
           analysis = {
             ...analysis,
             sections: classified.sections,
@@ -5196,6 +5197,7 @@ export const useStore = create<AppState>((set, get) => ({
       const structure = await api.planClipStructure({
         analysis,
         energy_bias: get().directorEnergyBias,
+        pacing_profile: get().directorSkill === 'music_video' ? get().directorPacingProfile : undefined,
         fps: get().modelOptions?.fps ?? 16,
         frames_steps: get().modelOptions?.frames_steps ?? 4,
         frames_minimum: get().modelOptions?.frames_minimum ?? 5,
@@ -5204,12 +5206,9 @@ export const useStore = create<AppState>((set, get) => ({
         // whose fps fallback of 16 used to shrink clips by 16/25).
         video_model: get().selectedModelPerMode.video || undefined,
       })
-      // Music Video skips the manual clip-structure review step entirely —
-      // the beat-aligned clips are used as-is. Short Film keeps it.
-      const skipStructure = get().directorSkill === 'music_video'
       set({
         directorPlannedClips: structure.clips,
-        directorStep: skipStructure ? 'style' : 'structure',
+        directorStep: 'structure',
         directorLoading: false,
         directorLoadingMessage: null,
       })
@@ -5218,8 +5217,8 @@ export const useStore = create<AppState>((set, get) => ({
         kind: 'audio_analysis',
         title: 'Prepare music video',
         status: 'completed',
-        phase: 'ready_for_visual_brief',
-        message: `${structure.clips.length} clips planned — ready for the visual brief`,
+        phase: 'ready_for_structure_review',
+        message: `${structure.clips.length} clips planned — review the pacing`,
         current: 10,
         total: 10,
       })
@@ -5227,6 +5226,11 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Analysis failed'
       console.error('Director analysis failed:', e)
+      if (msg === 'Audio analysis cancelled') {
+        set({ directorLoading: false, directorLoadingMessage: null, directorError: null, directorStep: 'upload' })
+        get().removeActivity(activityId)
+        return
+      }
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
       get().upsertActivity({
         id: activityId,
@@ -5238,8 +5242,6 @@ export const useStore = create<AppState>((set, get) => ({
         error: msg,
       })
       throw e
-    } finally {
-      stopAnalyzePolling()
     }
   },
 
@@ -5375,6 +5377,27 @@ export const useStore = create<AppState>((set, get) => ({
       set({ directorPlannedClips: structure.clips, directorLoading: false })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to update structure'
+      set({ directorLoading: false, directorError: msg })
+    }
+  },
+
+  directorSetPacingProfile: async (profile) => {
+    const { directorAnalysis } = get()
+    set({ directorPacingProfile: profile })
+    if (!directorAnalysis) return
+    set({ directorLoading: true, directorError: null })
+    try {
+      const structure = await api.planClipStructure({
+        analysis: directorAnalysis,
+        pacing_profile: profile,
+        fps: get().modelOptions?.fps ?? 16,
+        frames_steps: get().modelOptions?.frames_steps ?? 4,
+        frames_minimum: get().modelOptions?.frames_minimum ?? 5,
+        video_model: get().selectedModelPerMode.video || undefined,
+      })
+      set({ directorPlannedClips: structure.clips, directorLoading: false })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to update music-video pacing'
       set({ directorLoading: false, directorError: msg })
     }
   },
@@ -5945,6 +5968,7 @@ export const useStore = create<AppState>((set, get) => ({
       directorAnalysis: null,
       directorPlannedClips: [],
       directorEnergyBias: 0,
+      directorPacingProfile: 'balanced',
       directorClipPlans: [],
       directorSceneDescription: '',
       directorLoading: false,

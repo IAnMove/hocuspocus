@@ -228,6 +228,7 @@ api.add_middleware(
 _jobs: dict = {}
 _gen_lock = threading.Lock()
 _active_gen_states: dict = {}  # job_id -> wgp gen state dict (for abort signaling)
+_audio_analysis_execution_lock = threading.Lock()
 
 # --- Workspace support ---
 # Base path read from wgp.server_config["save_path"] wherever needed
@@ -6150,13 +6151,14 @@ async def analyze_audio(request: Request):
         raise HTTPException(status_code=404, detail=f"Audio file not found: {audio_path}")
 
     try:
-        result = audio_analysis.analyze(
-            audio_path=audio_path,
-            transcribe=body.get("transcribe", False),
-            extract_vocals_for_transcription=body.get("extract_vocals", True),
-            # Known written lyrics (generated tracks) → Whisper initial_prompt
-            lyrics_hint=body.get("lyrics_hint") or None,
-        )
+        with _audio_analysis_execution_lock:
+            result = audio_analysis.analyze(
+                audio_path=audio_path,
+                transcribe=body.get("transcribe", False),
+                extract_vocals_for_transcription=body.get("extract_vocals", True),
+                # Known written lyrics (generated tracks) → Whisper initial_prompt
+                lyrics_hint=body.get("lyrics_hint") or None,
+            )
         return result
     except ImportError as e:
         raise HTTPException(status_code=501, detail=str(e))
@@ -6180,6 +6182,143 @@ def audio_analyze_status():
     """
     from services.audio_analysis import get_progress
     return get_progress()
+
+
+_AUDIO_ANALYSIS_STEPS = {
+    "loading_audio": 1,
+    "detecting_beats": 2,
+    "identifying_sections": 3,
+    "loading_vocal_model": 4,
+    "extracting_vocals": 5,
+    "loading_transcription_model": 5,
+    "transcribing": 6,
+    "loading_diarization_model": 7,
+    "identifying_speakers": 8,
+    "finalizing": 9,
+}
+
+
+def _run_audio_analysis_job(job_id: str, body: dict) -> None:
+    """Run one serialized audio-analysis job with reconnectable progress."""
+    job = _jobs[job_id]
+    from services import audio_analysis
+
+    with _audio_analysis_execution_lock:
+        if job.get("_cancel_requested"):
+            job.update(status="cancelled", message="Cancelled", progress=0)
+            return
+        job.update(status="running", phase="loading_audio", message="Loading audio…")
+
+        def report(step: str, detail: str) -> None:
+            if not step:
+                return
+            current = _AUDIO_ANALYSIS_STEPS.get(step, job.get("step", 1))
+            job.update(
+                phase=step,
+                message=f"{detail}…" if detail else step.replace("_", " ").capitalize(),
+                step=current,
+                total_steps=10,
+                progress=int((current / 10) * 100),
+                updated_at=time.time(),
+            )
+
+        audio_analysis.set_progress_callback(report)
+        try:
+            result = audio_analysis.analyze(
+                audio_path=body["audio_path"],
+                transcribe=body.get("transcribe", False),
+                extract_vocals_for_transcription=body.get("extract_vocals", True),
+                lyrics_hint=body.get("lyrics_hint") or None,
+            )
+            if job.get("_cancel_requested"):
+                job.update(status="cancelled", message="Cancelled", progress=0, result=None)
+            else:
+                job.update(
+                    status="completed",
+                    phase="completed",
+                    message="Audio analysis complete",
+                    progress=100,
+                    step=10,
+                    total_steps=10,
+                    result=result,
+                    updated_at=time.time(),
+                )
+        except Exception as exc:
+            traceback.print_exc()
+            job.update(
+                status="failed",
+                message=f"Audio analysis failed: {exc}",
+                error=str(exc),
+                updated_at=time.time(),
+            )
+        finally:
+            audio_analysis.set_progress_callback(None)
+
+
+@api.post("/api/v1/audio/analyze/jobs")
+async def start_audio_analysis_job(request: Request):
+    """Queue audio analysis and return immediately with a durable job id."""
+    body = await request.json()
+    audio_path = body.get("audio_path", "")
+    if not audio_path:
+        raise HTTPException(status_code=400, detail="audio_path is required")
+    if not os.path.isfile(audio_path):
+        raise HTTPException(status_code=404, detail=f"Audio file not found: {audio_path}")
+
+    job_id = f"audio-analysis-{uuid.uuid4().hex[:12]}"
+    _jobs[job_id] = {
+        "id": job_id,
+        "status": "queued",
+        "progress": 0,
+        "step": 0,
+        "total_steps": 10,
+        "phase": "queued",
+        "message": "Audio analysis queued",
+        "output_files": [],
+        "error": None,
+        "task_timings": [],
+        "result": None,
+        "created_at": time.time(),
+        "updated_at": time.time(),
+        "_cancel_requested": False,
+    }
+    threading.Thread(
+        target=_run_audio_analysis_job,
+        args=(job_id, dict(body)),
+        name=f"audio-analysis-{job_id[-6:]}",
+        daemon=True,
+    ).start()
+    return {"job_id": job_id}
+
+
+@api.get("/api/v1/audio/analyze/jobs/{job_id}")
+def get_audio_analysis_job(job_id: str):
+    job = _jobs.get(job_id)
+    if not job or not job_id.startswith("audio-analysis-"):
+        raise HTTPException(status_code=404, detail="Audio analysis job not found")
+    return {
+        "job_id": job_id,
+        "status": job["status"],
+        "progress": job["progress"],
+        "step": job.get("step", 0),
+        "total_steps": job.get("total_steps", 10),
+        "phase": job.get("phase", ""),
+        "message": job.get("message", ""),
+        "error": job.get("error"),
+        "result": job.get("result") if job["status"] == "completed" else None,
+    }
+
+
+@api.post("/api/v1/audio/analyze/jobs/{job_id}/cancel")
+def cancel_audio_analysis_job(job_id: str):
+    job = _jobs.get(job_id)
+    if not job or not job_id.startswith("audio-analysis-"):
+        raise HTTPException(status_code=404, detail="Audio analysis job not found")
+    if job["status"] not in ("queued", "running"):
+        return {"job_id": job_id, "status": job["status"]}
+    job["_cancel_requested"] = True
+    job["message"] = "Cancelling after the current analysis phase…"
+    return {"job_id": job_id, "status": "cancelling"}
 
 
 @api.post("/api/v1/audio/suggest-clips")
@@ -6295,6 +6434,7 @@ async def plan_audio_structure(request: Request):
         clips = audio_analysis.plan_clip_structure(
             analysis=analysis,
             energy_bias=body.get("energy_bias", 0),
+            pacing_profile=body.get("pacing_profile"),
             fps=fps,
             frames_steps=frames_steps,
             frames_minimum=frames_minimum,
@@ -6319,12 +6459,24 @@ async def director_classify_sections(request: Request):
     sections = analysis.get("sections", [])
     lyrics = analysis.get("lyrics")
     duration = analysis.get("duration", 0)
+    lyrics_hint = body.get("lyrics_hint", "")
 
-    # If no lyrics or no sections, return unchanged
-    if not lyrics or not sections:
+    if not sections:
         return {"sections": sections, "method": "heuristic"}
 
     try:
+        tagged_structure = llm_service.structure_from_tagged_lyrics(lyrics_hint, duration)
+        if tagged_structure:
+            updated = audio_analysis.replace_sections_with_structure(analysis, tagged_structure)
+            return {
+                "sections": updated["sections"],
+                "song_structure": tagged_structure,
+                "method": "lyrics_hint",
+            }
+        # Unknown uploads still need a transcription before either repetition
+        # detection or the classifier can identify semantic sections.
+        if not lyrics:
+            return {"sections": sections, "song_structure": [], "method": "heuristic"}
         _ensure_llm_loaded()
         result = llm_service.classify_song_sections(
             sections=sections,
@@ -11028,6 +11180,13 @@ def cancel_job(job_id: str):
     """Cancel a queued or running generation job."""
     if job_id not in _jobs:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    if job_id.startswith("audio-analysis-"):
+        job = _jobs[job_id]
+        if job["status"] in ("queued", "running"):
+            job["_cancel_requested"] = True
+            job["message"] = "Cancelling after the current analysis phase…"
+        return {"job_id": job_id, "status": job["status"]}
 
     return _request_generation_cancel(job_id)
 

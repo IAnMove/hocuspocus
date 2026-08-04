@@ -2250,6 +2250,45 @@ export async function analyzeAudio(params: {
   return res.json()
 }
 
+export interface AudioAnalysisJobStatus {
+  job_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  step: number
+  total_steps: number
+  phase: string
+  message: string
+  error: string | null
+  result: import('../types').AudioAnalysisResult | null
+}
+
+export async function startAudioAnalysisJob(params: {
+  audio_path: string
+  transcribe?: boolean
+  extract_vocals?: boolean
+  lyrics_hint?: string
+}): Promise<{ job_id: string }> {
+  const res = await fetch(`${BASE}/api/v1/audio/analyze/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Analysis queue failed' }))
+    throw new Error(err.detail || 'Audio analysis could not be queued')
+  }
+  return res.json()
+}
+
+export async function fetchAudioAnalysisJob(jobId: string): Promise<AudioAnalysisJobStatus> {
+  const res = await fetch(`${BASE}/api/v1/audio/analyze/jobs/${encodeURIComponent(jobId)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Analysis job unavailable' }))
+    throw new Error(err.detail || 'Audio analysis job unavailable')
+  }
+  return res.json()
+}
+
 /** Read live progress of the in-flight audio analyze call. Backed by
  *  audio_analysis._PROGRESS — updated at each phase boundary in the
  *  synchronous analyze() call. Polled by the Director sidebar to
@@ -2319,6 +2358,7 @@ export async function planClipPrompts(params: {
 export async function planClipStructure(params: {
   analysis: import('../types').AudioAnalysisResult
   energy_bias?: number
+  pacing_profile?: 'cinematic' | 'balanced' | 'rhythmic'
   fps?: number
   frames_steps?: number
   frames_minimum?: number
@@ -2343,10 +2383,11 @@ export async function planClipStructure(params: {
 
 export async function classifySections(params: {
   analysis: import('../types').AudioAnalysisResult
+  lyrics_hint?: string
 }): Promise<{
   sections: import('../types').AudioSection[]
   song_structure: { label: string; display_label: string; start: number }[]
-  method: 'llm' | 'heuristic'
+  method: 'lyrics_hint' | 'llm' | 'heuristic'
 }> {
   const res = await fetch(`${BASE}/api/v1/director/classify-sections`, {
     method: 'POST',

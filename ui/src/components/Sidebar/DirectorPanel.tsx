@@ -13,6 +13,7 @@ function formatTime(s: number): string {
 const sectionColors: Record<string, string> = {
   intro: 'bg-blue-500/20 text-blue-400',
   verse: 'bg-green-500/20 text-green-400',
+  'pre-chorus': 'bg-pink-500/20 text-pink-400',
   chorus: 'bg-purple-500/20 text-purple-400',
   bridge: 'bg-yellow-500/20 text-yellow-400',
   outro: 'bg-gray-500/20 text-gray-400',
@@ -22,6 +23,7 @@ const sectionColors: Record<string, string> = {
 const sectionBarColors: Record<string, string> = {
   intro: 'bg-blue-500',
   verse: 'bg-green-500',
+  'pre-chorus': 'bg-pink-500',
   chorus: 'bg-purple-500',
   bridge: 'bg-yellow-500',
   outro: 'bg-gray-500',

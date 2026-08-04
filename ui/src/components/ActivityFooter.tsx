@@ -68,6 +68,7 @@ export function ActivityFooter() {
   const jobs = useStore(s => s.jobs)
   const pipelineStatus = useStore(s => s.pipelineStatus)
   const activities = useStore(s => s.activities)
+  const stopGeneration = useStore(s => s.stopGeneration)
   const setVideoWorkflowsOpen = useStore(s => s.setDashboardOpen)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -107,7 +108,8 @@ export function ActivityFooter() {
       : []
 
     const visibleJobs = jobs
-      .filter((job, index) => job.status === 'running' || job.status === 'queued' || index === 0)
+      .filter((job, index) => !activities[job.id]
+        && (job.status === 'running' || job.status === 'queued' || index === 0))
       .map((job): ActivityView => ({
         id: `job:${job.id}`,
         title: 'Generation job',
@@ -157,7 +159,19 @@ export function ActivityFooter() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium text-text-primary">{row.title}</span>
-                      <span className="shrink-0 capitalize text-text-muted">{PHASE_LABELS[row.phase] || row.phase?.replaceAll('_', ' ')}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="shrink-0 capitalize text-text-muted">{PHASE_LABELS[row.phase] || row.phase?.replaceAll('_', ' ')}</span>
+                        {(row.status === 'running' || row.status === 'queued')
+                          && (row.id.startsWith('job:') || row.id.startsWith('audio-analysis-')) && (
+                          <button
+                            type="button"
+                            className="rounded border border-border px-1.5 py-0.5 text-[9px] text-text-muted hover:border-red-400/50 hover:text-red-400"
+                            onClick={() => stopGeneration(row.id.startsWith('job:') ? row.id.slice(4) : row.id)}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <p className={row.status === 'failed' ? 'text-red-400' : 'text-text-secondary'}>{row.message}</p>
                     {(row.status === 'running' || row.status === 'queued') && (

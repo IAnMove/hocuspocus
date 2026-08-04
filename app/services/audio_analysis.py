@@ -42,6 +42,12 @@ logger = logging.getLogger(__name__)
 # for the active analyze call.
 _PROGRESS_LOCK = threading.Lock()
 _PROGRESS = {"step": "", "detail": ""}
+_PROGRESS_CONTEXT = threading.local()
+
+
+def set_progress_callback(callback) -> None:
+    """Attach a progress listener to the current analysis worker thread."""
+    _PROGRESS_CONTEXT.callback = callback
 
 
 def _set_progress(step: str, detail: str = "") -> None:
@@ -49,6 +55,9 @@ def _set_progress(step: str, detail: str = "") -> None:
     with _PROGRESS_LOCK:
         _PROGRESS["step"] = step
         _PROGRESS["detail"] = detail
+    callback = getattr(_PROGRESS_CONTEXT, "callback", None)
+    if callback is not None:
+        callback(step, detail)
     if step:
         print(f"[AudioAnalysis][progress] {step}{(': ' + detail) if detail else ''}")
 
@@ -93,6 +102,7 @@ class AudioAnalysis:
     onset_envelope: List[float]
     lyrics: Optional[List[LyricSegment]] = None
     vocals_path: Optional[str] = None
+    warnings: Optional[List[str]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -684,6 +694,7 @@ def analyze(
         downbeats=[round(d, 3) for d in downbeats],
         sections=sections,
         onset_envelope=onset_envelope,
+        warnings=[],
     )
 
     if transcribe:
@@ -728,6 +739,10 @@ def analyze(
                 _set_progress("loading_diarization_model", "Loading speaker-diarization model (first use downloads ~100MB)")
                 _set_progress("identifying_speakers", "Identifying speakers")
                 result.lyrics = _diarize(audio_path, result.lyrics)
+                if not any(segment.speaker for segment in result.lyrics):
+                    result.warnings.append(
+                        "Speaker identification is unavailable; continuing without singer labels."
+                    )
                 unload_diarizer()  # Free VRAM immediately
             unload_whisper()  # Free Whisper VRAM before LLM loads
         except ImportError as e:
@@ -739,6 +754,7 @@ def analyze(
     print(f"[AudioAnalysis] Done: {bpm:.1f} BPM, {len(beats)} beats, {len(sections)} sections")
     # Clear progress so subsequent /status polls don't show stale state.
     _set_progress("", "")
+    _PROGRESS_CONTEXT.callback = None
     return asdict(result)
 
 
@@ -860,6 +876,7 @@ MIN_CLIP_SECONDS = 8.0   # don't create clips shorter than this
 def plan_clip_structure(
     analysis: dict,
     energy_bias: int = 0,
+    pacing_profile: Optional[str] = None,
     fps: int = 16,
     frames_steps: int = 4,
     frames_minimum: int = 5,
@@ -867,10 +884,9 @@ def plan_clip_structure(
 ) -> List[dict]:
     """Plan variable-duration clips aligned to beat positions.
 
-    Strategy: maximise clip duration (up to MAX_CLIP_SECONDS) to minimise
-    clip count.  For each section, compute the fewest clips needed, then
-    divide evenly and snap boundaries to the nearest beat.  Speaker changes
-    can split a clip only when both halves remain >= MIN_CLIP_SECONDS.
+    The legacy strategy maximises clip duration. Music-video pacing profiles
+    instead target an intentional editing rhythm while retaining beat-aligned
+    boundaries: cinematic (8–16s), balanced (5–8s), rhythmic (3–5s).
 
     *energy_bias* shifts the preference: negative = longer clips,
     positive = shorter clips (adjusts MAX by ±2s per unit).
@@ -887,11 +903,24 @@ def plan_clip_structure(
     if not beat_times:
         beat_times = [i * beat_duration for i in range(int(song_duration / beat_duration) + 1)]
 
-    # energy_bias shifts the max clip length: -2 → 26s, 0 → 22s, +2 → 18s
-    effective_max = max(MIN_CLIP_SECONDS + 2, MAX_CLIP_SECONDS - (energy_bias + 2) * 2)
+    pacing_profiles = {
+        "cinematic": {"min": 8.0, "target": 12.0, "max": 16.0},
+        "balanced": {"min": 5.0, "target": 6.5, "max": 8.0},
+        "rhythmic": {"min": 3.0, "target": 4.0, "max": 5.0},
+    }
+    profile = pacing_profiles.get(pacing_profile or "")
+    if profile:
+        effective_max = profile["max"]
+        preferred_duration = profile["target"]
+        requested_min = profile["min"]
+    else:
+        # energy_bias shifts the max clip length: -2 → 26s, 0 → 22s, +2 → 18s
+        effective_max = max(MIN_CLIP_SECONDS + 2, MAX_CLIP_SECONDS - (energy_bias + 2) * 2)
+        preferred_duration = effective_max
+        requested_min = MIN_CLIP_SECONDS
 
     min_duration_from_frames = frames_minimum / fps
-    min_clip_duration = max(MIN_CLIP_SECONDS, min_duration_from_frames)
+    min_clip_duration = max(requested_min, min_duration_from_frames)
 
     def _find_nearest_beat(target_time: float) -> float:
         if not beat_times:
@@ -941,16 +970,21 @@ def plan_clip_structure(
             continue  # section too short for even one clip — skip
 
         # How many clips do we need for this section?
-        # Allow up to 5% over effective_max as a single clip rather than
-        # splitting into two clips that are each ~50% of max
-        overshoot_tolerance = effective_max * 1.05
-        if sec_duration <= overshoot_tolerance:
-            num_clips = 1
+        if profile:
+            minimum_count = max(1, int(math.ceil(sec_duration / effective_max)))
+            maximum_count = max(1, int(math.floor(sec_duration / min_clip_duration)))
+            desired_count = max(1, int(round(sec_duration / preferred_duration)))
+            num_clips = max(minimum_count, min(desired_count, maximum_count))
         else:
-            num_clips = max(1, int(math.ceil(sec_duration / effective_max)))
-            # If splitting makes clips less than 75% of max, use fewer clips
-            while num_clips > 1 and (sec_duration / num_clips) < effective_max * 0.75:
-                num_clips -= 1
+            # Allow up to 5% over effective_max as a single clip rather than
+            # splitting into two clips that are each ~50% of max.
+            overshoot_tolerance = effective_max * 1.05
+            if sec_duration <= overshoot_tolerance:
+                num_clips = 1
+            else:
+                num_clips = max(1, int(math.ceil(sec_duration / effective_max)))
+                while num_clips > 1 and (sec_duration / num_clips) < effective_max * 0.75:
+                    num_clips -= 1
         target_clip_len = sec_duration / num_clips
 
         # Build evenly-spaced cut points within the section, snap to beats
@@ -1048,7 +1082,7 @@ def plan_clip_structure(
 # LLM-assisted section relabeling
 # ---------------------------------------------------------------------------
 
-_VALID_LABELS = {"intro", "verse", "chorus", "bridge", "outro", "instrumental"}
+_VALID_LABELS = {"intro", "verse", "pre-chorus", "chorus", "bridge", "outro", "instrumental"}
 
 
 def classify_sections_with_lyrics(

@@ -56,6 +56,7 @@ function formatTime(s: number): string {
 const sectionColors: Record<string, string> = {
   intro: 'bg-blue-500/20 text-blue-400',
   verse: 'bg-green-500/20 text-green-400',
+  'pre-chorus': 'bg-pink-500/20 text-pink-400',
   chorus: 'bg-purple-500/20 text-purple-400',
   bridge: 'bg-yellow-500/20 text-yellow-400',
   outro: 'bg-gray-500/20 text-gray-400',
@@ -71,6 +72,7 @@ const sectionColors: Record<string, string> = {
 const sectionBarColors: Record<string, string> = {
   intro: 'bg-blue-500',
   verse: 'bg-green-500',
+  'pre-chorus': 'bg-pink-500',
   chorus: 'bg-purple-500',
   bridge: 'bg-yellow-500',
   outro: 'bg-gray-500',
@@ -349,6 +351,7 @@ export function DirectorChat() {
   const analysis = useStore(s => s.directorAnalysis)
   const plannedClips = useStore(s => s.directorPlannedClips)
   const energyBias = useStore(s => s.directorEnergyBias)
+  const pacingProfile = useStore(s => s.directorPacingProfile)
   const clipPlans = useStore(s => s.directorClipPlans)
   const sceneDescription = useStore(s => s.directorSceneDescription)
   const audioFile = useStore(s => s.directorAudioFile)
@@ -357,6 +360,7 @@ export function DirectorChat() {
   const imageGenProgress = useStore(s => s.directorImageGenProgress)
   const uploadAndAnalyze = useStore(s => s.directorUploadAndAnalyze)
   const setEnergyBias = useStore(s => s.directorSetEnergyBias)
+  const setPacingProfile = useStore(s => s.directorSetPacingProfile)
   const confirmStructure = useStore(s => s.directorConfirmStructure)
   const setSceneDescription = useStore(s => s.directorSetSceneDescription)
   const setReferenceImage = useStore(s => s.directorSetReferenceImage)
@@ -816,6 +820,9 @@ export function DirectorChat() {
                 confirmStructure={confirmStructure}
                 isActive={atStep('structure')}
                 isShortFilm={isShortFilm}
+                isMusicVideo={isMusicVideo}
+                pacingProfile={pacingProfile}
+                setPacingProfile={setPacingProfile}
               />
             </SystemBubble>
             {pastStep('structure') && (
@@ -1801,6 +1808,11 @@ function AnalysisSummary({
       <p className="text-xs text-text-secondary mb-1">
         {isShortFilm ? 'Transcription complete' : 'Analysis complete'}
       </p>
+      {analysis.warnings?.map((warning, index) => (
+        <p key={index} className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-300">
+          {warning}
+        </p>
+      ))}
       <button
         onClick={() => setShowDetails(v => !v)}
         className="flex items-center gap-3 text-[11px] text-text-muted w-full hover:text-text-secondary transition-colors"
@@ -1899,6 +1911,7 @@ function AnalysisSummary({
 function StructureView({
   plannedClips, energyBias, localBias, setLocalBias, sliderRef, setEnergyBias,
   loading, totalClipDuration, beatDistribution, confirmStructure, isActive, isShortFilm,
+  isMusicVideo, pacingProfile, setPacingProfile,
 }: {
   plannedClips: ReturnType<typeof useStore.getState>['directorPlannedClips']
   energyBias: number
@@ -1912,6 +1925,9 @@ function StructureView({
   confirmStructure: () => void
   isActive: boolean
   isShortFilm?: boolean
+  isMusicVideo?: boolean
+  pacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
+  setPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
 }) {
   return (
     <div className="space-y-3">
@@ -1921,7 +1937,39 @@ function StructureView({
           : 'Here\'s the clip structure based on the audio analysis. Adjust the cut speed if needed.'}
       </p>
 
-      {isActive && (
+      {isActive && isMusicVideo && (
+        <div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-[11px] uppercase tracking-wider text-text-muted">Editing rhythm</label>
+            <span className="text-[10px] text-text-muted">{plannedClips.length} generated clips</span>
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            {([
+              ['cinematic', 'Cinematic', '8–16s'],
+              ['balanced', 'Balanced', '5–8s'],
+              ['rhythmic', 'Rhythmic', '3–5s'],
+            ] as const).map(([value, label, duration]) => (
+              <button
+                key={value}
+                type="button"
+                disabled={loading}
+                onClick={() => void setPacingProfile(value)}
+                className={`rounded-md border px-1.5 py-1.5 text-center transition-colors disabled:opacity-50 ${pacingProfile === value
+                  ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
+                  : 'border-border text-text-secondary hover:border-accent-blue/50'}`}
+              >
+                <span className="block text-[10px] font-medium">{label}</span>
+                <span className="block text-[9px] text-text-muted">{duration}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-[9px] leading-relaxed text-text-muted">
+            More cuts create more start images and video generations, increasing render time and credits.
+          </p>
+        </div>
+      )}
+
+      {isActive && !isMusicVideo && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-[11px] text-text-muted uppercase tracking-wider">{isShortFilm ? 'Scene Pacing' : 'Cut Speed'}</label>
