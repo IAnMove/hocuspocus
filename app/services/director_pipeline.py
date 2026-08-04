@@ -19,6 +19,8 @@ import copy
 import hashlib
 import secrets
 import subprocess
+import re
+import unicodedata
 from typing import Optional
 
 # These will be set by launch.py on startup
@@ -4121,6 +4123,94 @@ def _generate_minimax_director_image(
     return str(generated.get("name") or "")
 
 
+_LOCATION_MATCH_STOP_WORDS = frozenset({
+    "and", "at", "de", "del", "el", "en", "la", "las", "los", "of",
+    "the", "un", "una", "y", "world", "scene", "location", "setting",
+})
+
+
+def _normalize_location_match_text(value: object) -> str:
+    text = unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode()
+    return " ".join(re.findall(r"[a-z0-9]+", text.casefold()))
+
+
+def _director_location_ref_for_plan(plan: dict, params: dict) -> tuple[str, str]:
+    """Resolve at most one labelled Story location reference for a shot.
+
+    New plans carry an exact ``metadata.location_ref_label`` chosen by the
+    planner. Resumed plans created before that field existed get a conservative
+    text match; an ambiguous result returns no location instead of conditioning
+    a shot on every unrelated place.
+    """
+    paths = [str(path or "").strip() for path in (params.get("location_ref_paths") or [])]
+    labels = [str(label or "").strip() for label in (params.get("location_ref_labels") or [])]
+    pairs = [
+        (paths[index], labels[index] if index < len(labels) else "")
+        for index in range(len(paths))
+        if paths[index]
+    ]
+    if not pairs:
+        return "", ""
+    if len(pairs) == 1:
+        return pairs[0]
+
+    metadata = plan.get("metadata") if isinstance(plan.get("metadata"), dict) else {}
+    requested_label = str(
+        plan.get("location_ref_label")
+        or metadata.get("location_ref_label")
+        or ""
+    ).strip()
+    normalized_requested = _normalize_location_match_text(requested_label)
+    if normalized_requested:
+        for path, label in pairs:
+            if _normalize_location_match_text(label) == normalized_requested:
+                return path, label
+
+    requested_index = plan.get("location_ref_index", metadata.get("location_ref_index"))
+    try:
+        index = int(requested_index)
+    except (TypeError, ValueError):
+        index = -1
+    if 0 <= index < len(pairs):
+        return pairs[index]
+
+    searchable_parts = [
+        plan.get("image_prompt"),
+        plan.get("video_prompt"),
+        plan.get("scene_goal"),
+        plan.get("environment"),
+        metadata.get("title"),
+        *(plan.get("window_prompts") or []),
+    ]
+    searchable = _normalize_location_match_text(" ".join(
+        str(item.get("prompt", item.get("text", ""))) if isinstance(item, dict) else str(item or "")
+        for item in searchable_parts
+    ))
+    searchable_tokens = set(searchable.split())
+    scored: list[tuple[int, int, str, str]] = []
+    for pair_index, (path, label) in enumerate(pairs):
+        normalized_label = _normalize_location_match_text(label)
+        label_tokens = [
+            token for token in normalized_label.split()
+            if len(token) >= 4 and token not in _LOCATION_MATCH_STOP_WORDS
+        ]
+        exact_phrase = bool(normalized_label and normalized_label in searchable)
+        token_hits = sum(token in searchable_tokens for token in label_tokens)
+        prefix_hits = sum(
+            1 for token in label_tokens
+            if any(len(candidate) >= 5 and token[:5] == candidate[:5] for candidate in searchable_tokens)
+        )
+        score = (100 if exact_phrase else 0) + token_hits * 10 + prefix_hits
+        if score:
+            scored.append((score, -pair_index, path, label))
+    if not scored:
+        return "", ""
+    scored.sort(reverse=True)
+    if len(scored) > 1 and scored[0][0] == scored[1][0]:
+        return "", ""
+    return scored[0][2], scored[0][3]
+
+
 def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_dir: str = None, workspace: str = None) -> tuple[list[str], list[list[str]]]:
     """Generate start images and keyframe images per clip.
 
@@ -4226,9 +4316,14 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
     film_grain_intensity = params.get("image_film_grain_intensity", 0)
     film_grain_saturation = params.get("image_film_grain_saturation", 0.5)
 
-    # Build full refs list: main scene + character refs + location refs
-    extra_refs = [p for p in (character_ref_paths + location_ref_paths) if p and os.path.isfile(p)]
-    print(f"[Pipeline {pid}] Image refs: main={ref_image_path}, chars={len(character_ref_paths)}, locs={len(location_ref_paths)}, extra_valid={len(extra_refs)}")
+    # Character identity is global; location conditioning is selected per shot.
+    # Sending every Story location to every image was both wasteful and
+    # contradictory when the locations had different visual identities.
+    character_refs = [p for p in character_ref_paths if p and os.path.isfile(p)]
+    print(
+        f"[Pipeline {pid}] Image refs: main={ref_image_path}, "
+        f"chars={len(character_ref_paths)}, available_locs={len(location_ref_paths)}"
+    )
 
     if not out_dir:
         out_dir = _wgp.save_path
@@ -4247,10 +4342,17 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
     clip_keyframes: list[list[str]] = []
     image_count = 0
 
-    def _gen_image(prompt: str, source_ref: str, include_extra_refs: bool = True) -> str:
+    def _gen_image(
+        prompt: str,
+        source_ref: str,
+        shot_extra_refs: list[str] | None = None,
+    ) -> str:
         """Generate a single image using source_ref + optional extra refs."""
         nonlocal image_count
-        all_refs = [r for r in ([source_ref] + (extra_refs if include_extra_refs else [])) if r]
+        all_refs: list[str] = []
+        for candidate in [source_ref, *(shot_extra_refs or [])]:
+            if candidate and candidate not in all_refs:
+                all_refs.append(candidate)
         # WanGP treats newlines as separate queue prompts. Director prompts are
         # prose and may contain a multi-line story bible, so flatten them
         # before submission to guarantee one requested image means one job.
@@ -4324,7 +4426,16 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
         })
         print(f"[Pipeline {pid}] No reference image — generating clip 1 as the shared visual anchor.")
         anchor_started = time.time()
-        anchor_file = _gen_image(anchor_prompt, "", include_extra_refs=True)
+        anchor_location, anchor_location_label = _director_location_ref_for_plan(
+            clip_plans[0] if clip_plans else {}, params
+        )
+        anchor_extras = [*character_refs, *([anchor_location] if anchor_location else [])]
+        if anchor_location:
+            print(
+                f"[Pipeline {pid}] Shot 1 location ref: "
+                f"{anchor_location_label or os.path.basename(anchor_location)}"
+            )
+        anchor_file = _gen_image(anchor_prompt, "", anchor_extras)
         first_clip_anchor_elapsed = time.time() - anchor_started
         anchor_path = os.path.join(out_dir, anchor_file) if anchor_file else ""
         if anchor_path and os.path.isfile(anchor_path):
@@ -4343,6 +4454,18 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
         # ── Determine image source: original reference or previous scene's output ──
         image_source = plan.get("image_source", "original")
         source_ref = ref_image_path  # default: user's original reference
+        location_ref, location_label = _director_location_ref_for_plan(plan, params)
+        shot_extra_refs = [*character_refs, *([location_ref] if location_ref else [])]
+        if location_ref:
+            print(
+                f"[Pipeline {pid}] Shot {i + 1} location ref: "
+                f"{location_label or os.path.basename(location_ref)}"
+            )
+        elif len(location_ref_paths) > 1:
+            print(
+                f"[Pipeline {pid}] Shot {i + 1}: no unambiguous location "
+                "reference; sending none instead of all locations."
+            )
 
         if image_source == "previous" and i > 0 and clip_images[i - 1]:
             prev_img_path = os.path.join(out_dir, clip_images[i - 1])
@@ -4371,14 +4494,13 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
                 )
             elif image_source == "previous" and source_ref != ref_image_path:
                 # Dual reference: previous scene output as primary + original reference for character identity
-                # _gen_image puts source_ref first, then extra_refs (which includes character/location refs).
-                # We temporarily prepend the original ref to extra_refs so the model sees both.
-                saved_extras = extra_refs[:]
-                extra_refs.insert(0, ref_image_path)
-                start_img = _gen_image(prompt, source_ref, include_extra_refs=True)
-                extra_refs[:] = saved_extras  # restore
+                start_img = _gen_image(
+                    prompt,
+                    source_ref,
+                    [ref_image_path, *shot_extra_refs],
+                )
             else:
-                start_img = _gen_image(prompt, ref_image_path)
+                start_img = _gen_image(prompt, ref_image_path, shot_extra_refs)
             clip_images.append(start_img)
         except Exception as e:
             print(f"[Pipeline {pid}] Shot {i+1} start image failed: {e}")
@@ -4425,7 +4547,7 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
                 print(f"[Pipeline {pid}] Shot {i+1} keyframe {ki+1}: chain_ref='{os.path.basename(chain_ref)}', prompt='{str(kf_prompt)[:60]}...'")
 
                 try:
-                    kf_img = _gen_image(kf_prompt, chain_ref)
+                    kf_img = _gen_image(kf_prompt, chain_ref, shot_extra_refs)
                     shot_keyframes.append(kf_img)
                     # Chain: next keyframe edits from this one
                     if kf_img:
@@ -6127,7 +6249,6 @@ def _run_minimax_h3_story_video(
     for candidate in [
         params.get("reference_image_path"),
         *(params.get("character_ref_paths") or []),
-        *(params.get("location_ref_paths") or []),
         *(video_params.get("image_refs") or []),
     ]:
         path = str(candidate or "").strip()
@@ -6139,20 +6260,42 @@ def _run_minimax_h3_story_video(
         raise ValueError("MiniMax H3 Ref2VA accepts at most 3 videos and 3 audio files.")
 
     # Ref2VA has 12 slots total and H3 Story reserves one for each generated
-    # shot's continuity frame. Character references are appended before
-    # locations above, so trimming the tail preserves identity and the first
-    # Story locations instead of failing an otherwise valid production.
-    image_budget = min(8, 11 - len(video_refs) - len(audio_refs))
-    if len(global_image_refs) > image_budget:
-        dropped = len(global_image_refs) - image_budget
-        global_image_refs = global_image_refs[:image_budget]
-        print(
-            f"[Pipeline {pid}] MiniMax H3 Ref2VA selected the first "
-            f"{image_budget} user image reference(s) and omitted {dropped} "
-            "lower-priority Story location/reference image(s) to fit the "
-            "12-slot limit."
-        )
-    uses_ref2va = bool(global_image_refs or video_refs or audio_refs)
+    # shot's continuity frame. Build the remaining image references per shot:
+    # identity references stay global, while exactly one matching location is
+    # eligible for that shot.
+    image_budget = max(0, min(8, 11 - len(video_refs) - len(audio_refs)))
+    shot_image_refs: list[list[str]] = []
+    for shot_index, plan in enumerate(clip_plans):
+        location_ref, location_label = _director_location_ref_for_plan(plan, params)
+        selected: list[str] = []
+        base_budget = image_budget - 1 if location_ref and image_budget > 0 else image_budget
+        for candidate in global_image_refs[:base_budget]:
+            if candidate and candidate not in selected:
+                selected.append(candidate)
+        if location_ref and image_budget > 0 and location_ref not in selected:
+            selected.append(location_ref)
+        available = list(dict.fromkeys([
+            *[candidate for candidate in global_image_refs if candidate],
+            *([location_ref] if location_ref else []),
+        ]))
+        if len(available) > len(selected):
+            dropped = len(available) - len(selected)
+            print(
+                f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1} omitted "
+                f"{dropped} lower-priority image reference(s) to fit the "
+                "Ref2VA 12-slot limit."
+            )
+        if location_ref and location_ref in selected:
+            print(
+                f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1} location ref: "
+                f"{location_label or os.path.basename(location_ref)}"
+            )
+        elif len(params.get("location_ref_paths") or []) > 1:
+            print(
+                f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1}: no "
+                "unambiguous location reference; sending none instead of all locations."
+            )
+        shot_image_refs.append(selected)
 
     jobs: list[tuple[int, int, int, int, str]] = []
     for shot_index, plan in enumerate(clip_plans):
@@ -6217,8 +6360,14 @@ def _run_minimax_h3_story_video(
                 "h3_model_profile": video_params.get("h3_model_profile", "balanced"),
                 "_director_pipeline_id": pid,
             }
+            user_image_refs = (
+                shot_image_refs[shot_index]
+                if shot_index < len(shot_image_refs)
+                else list(global_image_refs[:image_budget])
+            )
+            uses_ref2va = bool(user_image_refs or video_refs or audio_refs)
             if uses_ref2va:
-                image_refs = [segment_start, *global_image_refs] if segment_start else list(global_image_refs)
+                image_refs = [segment_start, *user_image_refs] if segment_start else list(user_image_refs)
                 gen_params["image_refs"] = [path for path in image_refs if path]
                 gen_params["h3_ref_videos"] = video_refs
                 gen_params["h3_ref_audios"] = audio_refs

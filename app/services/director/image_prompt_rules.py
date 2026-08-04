@@ -86,11 +86,13 @@ Keep consecutive scenes visually compatible — avoid jarring pose or location j
                 label = (location_ref_labels[i] if location_ref_labels and i < len(location_ref_labels) else "") or f"(unlabeled location {i+1})"
                 lines.append(f"  - Location ref {i+1}: {label}")
         extra_refs_block = f"""
-MULTIPLE REFERENCE IMAGES:
-The image model receives the main scene image PLUS these additional references:
+REFERENCE IMAGES AVAILABLE TO THE PLANNER:
+The image model receives the main scene image, the character references, and
+only the ONE location reference selected for the current shot:
 {chr(10).join(lines)}
 
-The model sees ALL images together. Use the labels to map characters/locations to references.
+Set location_ref_label to the exact label of the location visible in each shot.
+Never put multiple location labels in one shot. Use the labels to map characters/locations to references.
 Add "use images as reference" at the end of prompts for strong identity matching.
 When featuring a specific character, mention them by their label description so the model
 matches them to the correct reference image.

@@ -1,6 +1,7 @@
 """Regression tests for Story Director's MiniMax H3 duration adapter."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.services import director_pipeline
@@ -153,7 +154,7 @@ def test_h3_story_routes_director_omni_references_to_ref2va(tmp_path: Path):
     assert "image_start" not in submitted[0]
 
 
-def test_h3_story_trims_secondary_images_instead_of_failing_ref2va(tmp_path: Path):
+def test_h3_story_routes_only_the_location_selected_for_the_shot(tmp_path: Path):
     shot = tmp_path / "shot.png"
     character = tmp_path / "character.png"
     locations = [tmp_path / f"location_{index}.png" for index in range(9)]
@@ -174,8 +175,12 @@ def test_h3_story_trims_secondary_images_instead_of_failing_ref2va(tmp_path: Pat
             {
                 "character_ref_paths": [str(character)],
                 "location_ref_paths": [str(path) for path in locations],
+                "location_ref_labels": [f"Location {index}" for index in range(9)],
             },
-            [{"video_prompt": "keep the cast and primary locations consistent"}],
+            [{
+                "video_prompt": "keep the cast and selected location consistent",
+                "metadata": {"location_ref_label": "Location 7"},
+            }],
             [{"start": 0, "end": 5}],
             [shot.name],
             {"num_inference_steps": 20},
@@ -184,10 +189,86 @@ def test_h3_story_trims_secondary_images_instead_of_failing_ref2va(tmp_path: Pat
         )
 
     assert outputs == ["clip.mp4"]
-    # One generated continuity frame + eight user references = nine Ref2VA
-    # image slots. Identity stays first and only the final two locations drop.
     assert submitted[0]["image_refs"] == [
         str(shot),
         str(character),
-        *[str(path) for path in locations[:7]],
+        str(locations[7]),
     ]
+
+
+def test_h3_story_legacy_plan_matches_one_location_from_prompt(tmp_path: Path):
+    shot = tmp_path / "shot.png"
+    desert = tmp_path / "desert.png"
+    harbor = tmp_path / "harbor.png"
+    for path in (shot, desert, harbor):
+        path.write_bytes(b"frame")
+
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        (tmp_path / "clip.mp4").write_bytes(b"video")
+        return ["clip.mp4"]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch.object(director_pipeline, "_save_pipeline_state"):
+        director_pipeline._run_minimax_h3_story_video(
+            "h3legacy",
+            {
+                "location_ref_paths": [str(desert), str(harbor)],
+                "location_ref_labels": ["Crystal Desert", "Moon Harbor"],
+            },
+            [{"video_prompt": "A wide view across the silent Crystal Desert."}],
+            [{"start": 0, "end": 5}],
+            [shot.name],
+            {"num_inference_steps": 20},
+            "960x544",
+            str(tmp_path),
+        )
+
+    assert submitted[0]["image_refs"] == [str(shot), str(desert)]
+
+
+def test_story_image_generation_routes_only_one_location_per_shot(tmp_path: Path):
+    main = tmp_path / "main.png"
+    character = tmp_path / "character.png"
+    desert = tmp_path / "desert.png"
+    harbor = tmp_path / "harbor.png"
+    for path in (main, character, desert, harbor):
+        path.write_bytes(b"frame")
+
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        name = "frame.png"
+        (tmp_path / name).write_bytes(b"generated")
+        return [name]
+
+    old_pipelines = director_pipeline._pipelines
+    director_pipeline._pipelines = {"images": {"status": "running"}}
+    try:
+        with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+                patch.object(director_pipeline, "_update_pipeline"), \
+                patch.object(director_pipeline, "_wgp", SimpleNamespace(save_path=str(tmp_path))):
+            images, _ = director_pipeline._run_image_generation(
+                "images",
+                {
+                    "reference_image_path": str(main),
+                    "character_ref_paths": [str(character)],
+                    "location_ref_paths": [str(desert), str(harbor)],
+                    "location_ref_labels": ["Crystal Desert", "Moon Harbor"],
+                    "image_model": "flux2_klein_9b",
+                    "image_params": {"resolution": "1280x720"},
+                },
+                [{
+                    "image_prompt": "A static frame at the harbor.",
+                    "metadata": {"location_ref_label": "Moon Harbor"},
+                }],
+                out_dir=str(tmp_path),
+            )
+    finally:
+        director_pipeline._pipelines = old_pipelines
+
+    assert images == ["frame.png"]
+    assert submitted[0]["image_refs"] == [str(main), str(character), str(harbor)]

@@ -87,6 +87,25 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         }))
         self.assertFalse(_has_visual_references({}))
 
+    def test_short_film_plan_preserves_per_shot_location_label(self):
+        shots = ShortFilmPlanner()._convert_story_shots(
+            [{
+                "title": "Harbor arrival",
+                "duration_sec": 5,
+                "scene_goal": "Reach the harbor",
+                "location_ref_label": "Moon Harbor",
+                "video_prompt": "A boat reaches the pier.",
+                "image_prompt": "A still boat beside the pier.",
+            }],
+            [],
+            True,
+            24,
+            17,
+            107,
+        )
+
+        self.assertEqual(shots[0].metadata["location_ref_label"], "Moon Harbor")
+
     def test_story_screenplay_recovery_always_produces_clip_plans(self):
         profiles = [
             CharacterProfile(

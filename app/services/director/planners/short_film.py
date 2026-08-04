@@ -123,6 +123,7 @@ _SHOT_PROPERTIES = {
     "subjects_on_screen": {"type": "array", "items": _SUBJECT_SCHEMA},
     "spatial_setup": {"type": "string"},
     "environment": {"type": "string"},
+    "location_ref_label": {"type": "string"},
     "visual_style": {"type": "string"},
     "lighting": {"type": "string"},
     "mood": {"type": "string"},
@@ -521,6 +522,20 @@ class ShortFilmPlanner(BasePlanner):
             seamless=getattr(self, '_seamless', True),
             image_model=image_model,
         )
+        location_labels = [
+            str(label).strip()
+            for label in (getattr(self, '_location_ref_labels', None) or [])
+            if str(label).strip()
+        ]
+        location_selection_block = ""
+        if location_labels:
+            location_selection_block = (
+                "\nLOCATION REFERENCE ROUTING:\n"
+                "For every shot, set location_ref_label to exactly ONE label from "
+                f"this list: {location_labels}. Use the location actually visible in "
+                "that shot. Use an empty string only when none of the supplied "
+                "locations appears. Never combine multiple location labels in one shot.\n"
+            )
 
         system_prompt = f"""You are a cinematic scene planner for a short film with dialogue audio. Output ONLY the JSON array.
 
@@ -571,6 +586,8 @@ VIDEO PROMPT (video_prompt) — follow the LTX-2 style guide below closely:
 
 {image_prompt_rules}
 
+{location_selection_block}
+
 REFERENCE — LTX-2 video style guide:
 {video_guide if video_guide else "(no guide loaded)"}
 
@@ -584,6 +601,7 @@ OUTPUT FORMAT — respond with ONLY a JSON array:
     ],
     "spatial_setup": "How subjects are arranged",
     "environment": "Setting description",
+    "location_ref_label": "Exact matching location reference label, or empty string",
     "visual_style": "Visual look",
     "lighting": "Lighting description",
     "mood": "Emotional tone",
@@ -660,6 +678,7 @@ CRITICAL OUTPUT REQUIREMENTS:
 - Output EXACTLY {len(clips)} shots, one per audio clip below
 - The audio is already recorded — write video_prompt and image_prompt that bring each segment to life visually
 - Use keyframes ONLY when the video model needs visual info not in the start image; the model handles dialogue, gestures, and expressions on its own
+{f'- Set location_ref_label to exactly one supplied location label per shot (or an empty string when none applies)' if location_labels else ''}
 
 Shots to plan:
 {chr(10).join(clip_contexts)}"""
@@ -678,16 +697,19 @@ Shots to plan:
         # grammar-enforced, not just prompted: the model cannot close the
         # array early or run past the clip count. keyframe_prompts /
         # window_prompts stay optional (spec tags them OPTIONAL).
+        audio_required = [
+            "scene_goal", "scene_type", "subjects_on_screen",
+            "spatial_setup", "environment", "visual_style", "lighting",
+            "mood", "action_beats", "dialogue_beats", "camera_plan",
+            "audio_plan", "ending_beat", "image_source", "image_prompt",
+            "visual_changes", "video_prompt",
+        ]
+        if location_labels:
+            audio_required.insert(audio_required.index("visual_style"), "location_ref_label")
         audio_schema = _shot_list_schema(
             min_items=len(clips),
             max_items=len(clips),
-            required=[
-                "scene_goal", "scene_type", "subjects_on_screen",
-                "spatial_setup", "environment", "visual_style", "lighting",
-                "mood", "action_beats", "dialogue_beats", "camera_plan",
-                "audio_plan", "ending_beat", "image_source", "image_prompt",
-                "visual_changes", "video_prompt",
-            ],
+            required=audio_required,
         )
 
         shot_dicts = self._call_llm_json(
@@ -761,6 +783,7 @@ Shots to plan:
                 metadata={
                     "clip_start": clip.get("start", 0),
                     "clip_end": clip.get("end", 0),
+                    "location_ref_label": raw.get("location_ref_label", ""),
                 },
                 # LLM-generated prompts (used directly, skipping renderer pass 2)
                 video_prompt=raw.get("video_prompt"),
@@ -1029,6 +1052,20 @@ WHY THIS MATTERS:
             seamless=getattr(self, '_seamless', True),
             image_model=image_model,
         )
+        location_labels = [
+            str(label).strip()
+            for label in (getattr(self, '_location_ref_labels', None) or [])
+            if str(label).strip()
+        ]
+        location_selection_block = ""
+        if location_labels:
+            location_selection_block = (
+                "\nLOCATION REFERENCE ROUTING:\n"
+                "For every shot, set location_ref_label to exactly ONE label from "
+                f"this list: {location_labels}. Select the location visible in that "
+                "shot. Use an empty string only when none applies. Never combine "
+                "multiple location labels in one shot.\n"
+            )
 
         # Load all guide content from .md files. Video shot-breakdown
         # currently routes only to LTX-2 vs. a generic fallback —
@@ -1062,6 +1099,8 @@ WHY THIS MATTERS:
 
 {image_prompt_rules}
 
+{location_selection_block}
+
 
 OUTPUT — respond with ONLY a JSON array:
 [
@@ -1073,6 +1112,7 @@ OUTPUT — respond with ONLY a JSON array:
     "scene_type": "dialogue|action|opening|closing",
     "subjects_on_screen": [{{"visual_description": "woman in red", "character_id": "char_0", "speaker_name": "Nancy"}}],
     "environment": "Setting details",
+    "location_ref_label": "Exact matching location reference label, or empty string",
     "visual_style": "Style",
     "lighting": "Lighting",
     "mood": "Tone",
@@ -1470,6 +1510,10 @@ CRITICAL OUTPUT REQUIREMENTS (these override any conflicting system-prompt guida
    Each window is a full paragraph (80-150 words) describing 20s of action.
    {multishot_user_anchor}
 
+{'''4b. LOCATION REFERENCE: set location_ref_label to exactly ONE supplied
+    location label matching this shot, or an empty string when none applies.
+    Never list several locations for one shot.''' if location_labels else ''}
+
 5. THE VIDEO MODEL HANDLES INTRA-SHOT PROGRESSION. ONE 20s shot can show
    the woman walking closer, raising her hand to his chest, kneeling, and
    beginning a new action — the model renders all of that from a single
@@ -1531,17 +1575,20 @@ SCREENPLAY:
         # unrepresentable. keyframe_prompts stays optional (spec tags it
         # OPTIONAL); window_prompts is required because the ≤20s/≥21s
         # pairing rule expects an explicit [] on short shots.
+        pass2_required = [
+            "title", "duration_sec", "scene_goal", "narrative_role",
+            "scene_type", "subjects_on_screen", "environment",
+            "visual_style", "lighting", "mood", "action_beats",
+            "camera_plan", "ending_beat", "image_source", "image_prompt",
+            "visual_changes", "video_prompt", "multishot",
+            "window_prompts",
+        ]
+        if location_labels:
+            pass2_required.insert(pass2_required.index("visual_style"), "location_ref_label")
         pass2_schema = _shot_list_schema(
             min_items=shot_count_low,
             max_items=shot_count_high,
-            required=[
-                "title", "duration_sec", "scene_goal", "narrative_role",
-                "scene_type", "subjects_on_screen", "environment",
-                "visual_style", "lighting", "mood", "action_beats",
-                "camera_plan", "ending_beat", "image_source", "image_prompt",
-                "visual_changes", "video_prompt", "multishot",
-                "window_prompts",
-            ],
+            required=pass2_required,
         )
 
         shot_dicts = self._call_llm_json(
@@ -2741,6 +2788,7 @@ SCREENPLAY:
                 metadata={
                     "title": raw.get("title", ""),
                     "duration_frames": snapped,
+                    "location_ref_label": raw.get("location_ref_label", ""),
                 },
                 # LLM-generated prompts (used directly, skipping renderer pass 2)
                 video_prompt=raw.get("video_prompt"),
@@ -2779,6 +2827,16 @@ SCREENPLAY:
 
         char_rules = build_character_rules_block(has_reference, char_profiles if char_profiles else None)
         # video_guide now merged into ltx2_shot_breakdown.md — no separate load needed
+        location_labels = [
+            str(label).strip()
+            for label in (getattr(self, '_location_ref_labels', None) or [])
+            if str(label).strip()
+        ]
+        location_fallback_rule = (
+            "- Include location_ref_label with exactly one matching label from "
+            f"{location_labels}, or an empty string when none applies."
+            if location_labels else ""
+        )
 
         system_prompt = f"""You are a short film director. Create a scene plan. Output ONLY the JSON array.
 
@@ -2791,6 +2849,7 @@ SCREENPLAY:
 - Only cut when the location changes or a clear story beat transition happens.
 - Prefer 20-40s shots. Shots over 20s need window_prompts.
 - Output ONLY a JSON array with title, duration_sec, scene_goal, video_prompt, image_prompt per scene.
+{location_fallback_rule}
 - image_prompt is the FIRST FRAME BEFORE action begins — initial state, static poses, zero motion verbs.
   If something changes in the scene, the image shows the BEFORE state (clothing on, room empty, etc.).
 
@@ -2818,10 +2877,13 @@ Go:"""
         # _call_llm_json). The fallback spec asks for just five fields; the
         # rest of _SHOT_PROPERTIES stays available but optional. +2 slack
         # on maxItems since the prompt lets the LLM choose the scene count.
+        fallback_required = ["title", "duration_sec", "scene_goal", "image_prompt", "video_prompt"]
+        if location_labels:
+            fallback_required.insert(3, "location_ref_label")
         fallback_schema = _shot_list_schema(
             min_items=2,
             max_items=max(4, target_scenes + 2),
-            required=["title", "duration_sec", "scene_goal", "image_prompt", "video_prompt"],
+            required=fallback_required,
         )
         shot_dicts = self._call_llm_json(
             user_prompt=f"Story: {story_description}",
