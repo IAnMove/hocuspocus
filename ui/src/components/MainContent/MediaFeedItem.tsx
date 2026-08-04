@@ -5,6 +5,7 @@ import { useStore } from '../../stores/useStore'
 import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
 import { modelDisplayName } from '../../lib/modelDisplay'
+import { getOutputReference } from '../../lib/outputReference'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
 import { useComicStore } from '../../features/comics/store'
 
@@ -101,6 +102,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const confirmRef = useRef(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [copied, setCopied] = useState(false)
+  const [referenceCopied, setReferenceCopied] = useState(false)
   const [rejoining, setRejoining] = useState(false)
   const [sentToInput, setSentToInput] = useState(false)
   const [showMoveMenu, setShowMoveMenu] = useState(false)
@@ -189,6 +191,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const resolution = isAudio ? '' : ((params?.resolution as string) || '')
   const seed = params?.seed as number | undefined
   const generationTime = meta?.generation_time
+  const outputReference = getOutputReference(file)
 
   const multiClipInfo = params?.multi_clip_info as { group_id: string; index: number; total: number } | undefined
   const groupId = multiClipInfo?.group_id
@@ -261,6 +264,37 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }
+  }
+
+  const handleCopyReference = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    const markCopied = () => {
+      setReferenceCopied(true)
+      setTimeout(() => setReferenceCopied(false), 1500)
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(outputReference).then(markCopied).catch(() => {
+        const ta = document.createElement('textarea')
+        ta.value = outputReference
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+        markCopied()
+      })
+      return
+    }
+    const ta = document.createElement('textarea')
+    ta.value = outputReference
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    markCopied()
   }
 
   const handleDelete = async () => {
@@ -396,6 +430,16 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
     >
       {/* Media player */}
       <div className="w-full aspect-video flex items-center justify-center bg-bg-tertiary relative">
+        <button
+          type="button"
+          onClick={handleCopyReference}
+          className="absolute top-2 left-2 z-10 flex items-center gap-1.5 rounded-md border border-white/20 bg-black/70 px-2 py-1 font-mono text-[10px] text-white shadow-sm transition-colors hover:bg-black/90"
+          title={`Copy output ID ${outputReference}`}
+          aria-label={`Copy output ID ${outputReference}`}
+        >
+          {referenceCopied ? <Check size={11} className="text-accent-green" /> : <Copy size={11} />}
+          {outputReference}
+        </button>
         {file.type === 'video' ? (
           <video
             ref={videoRef}
