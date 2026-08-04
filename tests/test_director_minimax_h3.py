@@ -151,3 +151,43 @@ def test_h3_story_routes_director_omni_references_to_ref2va(tmp_path: Path):
     assert submitted[0]["h3_ref_audios"] == ["/refs/voice.wav"]
     assert submitted[0]["h3_model_profile"] == "balanced"
     assert "image_start" not in submitted[0]
+
+
+def test_h3_story_trims_secondary_images_instead_of_failing_ref2va(tmp_path: Path):
+    shot = tmp_path / "shot.png"
+    character = tmp_path / "character.png"
+    locations = [tmp_path / f"location_{index}.png" for index in range(9)]
+    for path in [shot, character, *locations]:
+        path.write_bytes(b"frame")
+
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        (tmp_path / "clip.mp4").write_bytes(b"video")
+        return ["clip.mp4"]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch.object(director_pipeline, "_save_pipeline_state"):
+        outputs = director_pipeline._run_minimax_h3_story_video(
+            "h3manyrefs",
+            {
+                "character_ref_paths": [str(character)],
+                "location_ref_paths": [str(path) for path in locations],
+            },
+            [{"video_prompt": "keep the cast and primary locations consistent"}],
+            [{"start": 0, "end": 5}],
+            [shot.name],
+            {"num_inference_steps": 20},
+            "960x544",
+            str(tmp_path),
+        )
+
+    assert outputs == ["clip.mp4"]
+    # One generated continuity frame + eight user references = nine Ref2VA
+    # image slots. Identity stays first and only the final two locations drop.
+    assert submitted[0]["image_refs"] == [
+        str(shot),
+        str(character),
+        *[str(path) for path in locations[:7]],
+    ]

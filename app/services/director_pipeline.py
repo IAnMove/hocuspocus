@@ -6135,19 +6135,24 @@ def _run_minimax_h3_story_video(
             global_image_refs.append(path)
     video_refs = [str(path) for path in (video_params.get("h3_ref_videos") or []) if path]
     audio_refs = [str(path) for path in (video_params.get("h3_ref_audios") or []) if path]
-    uses_ref2va = bool(global_image_refs or video_refs or audio_refs)
-    if len(global_image_refs) > 8:
-        raise ValueError(
-            "MiniMax H3 Story supports at most 8 user reference images because "
-            "the generated shot frame occupies Ref2VA image slot 9."
-        )
     if len(video_refs) > 3 or len(audio_refs) > 3:
         raise ValueError("MiniMax H3 Ref2VA accepts at most 3 videos and 3 audio files.")
-    if uses_ref2va and len(global_image_refs) + len(video_refs) + len(audio_refs) + 1 > 12:
-        raise ValueError(
-            "MiniMax H3 Ref2VA accepts at most 12 references total, including "
-            "the generated shot frame used for continuity."
+
+    # Ref2VA has 12 slots total and H3 Story reserves one for each generated
+    # shot's continuity frame. Character references are appended before
+    # locations above, so trimming the tail preserves identity and the first
+    # Story locations instead of failing an otherwise valid production.
+    image_budget = min(8, 11 - len(video_refs) - len(audio_refs))
+    if len(global_image_refs) > image_budget:
+        dropped = len(global_image_refs) - image_budget
+        global_image_refs = global_image_refs[:image_budget]
+        print(
+            f"[Pipeline {pid}] MiniMax H3 Ref2VA selected the first "
+            f"{image_budget} user image reference(s) and omitted {dropped} "
+            "lower-priority Story location/reference image(s) to fit the "
+            "12-slot limit."
         )
+    uses_ref2va = bool(global_image_refs or video_refs or audio_refs)
 
     jobs: list[tuple[int, int, int, int, str]] = []
     for shot_index, plan in enumerate(clip_plans):
