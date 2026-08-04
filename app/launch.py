@@ -12661,6 +12661,14 @@ async def generate_story_music_candidates(body: dict):
 
     services = wgp.server_config.get("services", {})
     workspace = str(body.get("workspace") or _get_active_workspace())
+    model = str(body.get("model") or "music-3.0").strip()
+    reference_audio_path = None
+    if model in {"music-cover", "music-cover-free"}:
+        reference_name = os.path.basename(str(body.get("reference_audio_filename") or "").strip())
+        upload_root = os.path.realpath(os.path.join(os.getcwd(), "uploads", "audio"))
+        reference_audio_path = _safe_join(upload_root, reference_name) if reference_name else None
+        if not reference_audio_path or not os.path.isfile(reference_audio_path):
+            raise HTTPException(status_code=400, detail="Upload a valid reference song before generating a cover")
     try:
         candidates = await asyncio.to_thread(
             minimax_music_service.generate_candidates,
@@ -12670,6 +12678,8 @@ async def generate_story_music_candidates(body: dict):
             count=int(body.get("count") or 2),
             output_dir=_workspace_dir(workspace),
             instrumental=bool(body.get("instrumental")),
+            model=model,
+            reference_audio_path=reference_audio_path,
         )
     except minimax_music_service.MiniMaxMusicError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

@@ -398,6 +398,7 @@ export function StoryLabPanel() {
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const uploadRef = useRef<HTMLInputElement>(null)
+  const musicCoverRef = useRef<HTMLInputElement>(null)
   const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
   const selectableVideoModels = useMemo(
@@ -1223,9 +1224,74 @@ export function StoryLabPanel() {
     }
   }
 
+  const adaptStoryLyrics = async () => {
+    const sourceLyrics = project.music.sourceLyrics.trim()
+    if (!sourceLyrics) {
+      setNotice({ kind: 'error', text: 'Paste the source lyrics you are authorized to adapt first.' })
+      return
+    }
+    setProductionBusy('music')
+    try {
+      const storyBrief = project.music.brief.trim()
+        || storySongBrief(project, project.music.targetDurationSeconds)
+      const written = await api.writeSong({
+        description: [
+          storyBrief,
+          'Write completely original replacement lyrics for this Story.',
+          'Keep only the broad section order, approximate meter and singability of the source; do not copy distinctive wording, names or lines.',
+          'SOURCE LYRICS / STRUCTURE REFERENCE:',
+          sourceLyrics.slice(0, 6000),
+        ].join('\n\n'),
+      })
+      patch({
+        music: {
+          ...project.music,
+          brief: storyBrief,
+          style: written.style || project.music.style,
+          lyrics: written.lyrics,
+        },
+      })
+      setNotice({ kind: 'ok', text: 'The Story lyrics were adapted and remain fully editable before generation.' })
+    } catch (error) {
+      setNotice({ kind: 'error', text: `The lyrics could not be adapted: ${(error as Error).message}` })
+    } finally {
+      setProductionBusy(null)
+    }
+  }
+
+  const uploadCoverReference = async (file?: File) => {
+    if (!file) return
+    if (file.size > 50 * 1024 * 1024) {
+      setNotice({ kind: 'error', text: 'MiniMax Cover accepts reference audio up to 50 MB.' })
+      return
+    }
+    setProductionBusy('music')
+    try {
+      const uploaded = await api.uploadAudio(file)
+      patch({
+        music: {
+          ...project.music,
+          mode: 'cover',
+          coverReferenceFilename: uploaded.filename,
+          coverReferenceName: file.name,
+        },
+      })
+      setNotice({ kind: 'ok', text: 'Cover reference uploaded. You can keep its lyrics or replace them with the editable Story lyrics.' })
+    } catch (error) {
+      setNotice({ kind: 'error', text: `The cover reference could not be uploaded: ${(error as Error).message}` })
+    } finally {
+      setProductionBusy(null)
+      if (musicCoverRef.current) musicCoverRef.current.value = ''
+    }
+  }
+
   const generateMinimaxSongs = async () => {
     if (!servicesConfig?.minimax_api_key_set) {
       setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
+      return
+    }
+    if (project.music.mode === 'cover' && !project.music.coverReferenceFilename) {
+      setNotice({ kind: 'error', text: 'Upload a reference song before generating a cover.' })
       return
     }
     setProductionBusy('music')
@@ -1234,7 +1300,7 @@ export function StoryLabPanel() {
         || storySongBrief(project, project.music.targetDurationSeconds)
       let style = project.music.style.trim()
       let lyrics = project.music.lyrics.trim()
-      if (!style || !lyrics) {
+      if (!style || (project.music.mode === 'original' && !lyrics)) {
         const written = await api.writeSong({ description: brief })
         style = written.style
         lyrics = written.lyrics
@@ -1243,6 +1309,9 @@ export function StoryLabPanel() {
         prompt: style,
         lyrics,
         count: project.music.candidateCount,
+        model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
+        reference_audio_filename: project.music.mode === 'cover'
+          ? project.music.coverReferenceFilename : undefined,
         workspace: activeWorkspace,
       })
       const createdAt = new Date().toISOString()
@@ -1802,6 +1871,39 @@ export function StoryLabPanel() {
                     <Music size={26} className="text-pink-400" />
                     <h3 className="font-semibold text-text-primary">Musical trailer</h3>
                     <p className="text-xs text-text-muted">Turns the Story into a song-led video. Maestro analyzes the selected track’s duration, BPM, sections and beats, then plans cuts to fit the complete song.</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="block text-[10px] text-text-muted">Generation mode
+                        <select className={`${input} mt-1`} value={project.music.mode}
+                          onChange={event => patch({ music: { ...project.music, mode: event.target.value === 'cover' ? 'cover' : 'original' } })}>
+                          <option value="original">Original song</option>
+                          <option value="cover">Cover from reference</option>
+                        </select>
+                      </label>
+                      <label className="block text-[10px] text-text-muted">MiniMax model
+                        <select className={`${input} mt-1`} value={project.music.mode === 'cover' ? 'music-cover' : project.music.model}
+                          disabled={project.music.mode === 'cover'}
+                          onChange={event => patch({ music: { ...project.music, model: event.target.value === 'music-2.6' ? 'music-2.6' : 'music-3.0' } })}>
+                          {project.music.mode === 'cover'
+                            ? <option value="music-cover">Music Cover</option>
+                            : <>
+                              <option value="music-3.0">Music 3.0 · recommended</option>
+                              <option value="music-2.6">Music 2.6 · compatibility</option>
+                            </>}
+                        </select>
+                      </label>
+                    </div>
+                    {project.music.mode === 'cover' && (
+                      <div className="space-y-1.5 rounded-md border border-pink-500/30 bg-pink-500/5 p-2">
+                        <input ref={musicCoverRef} type="file" accept="audio/*" className="hidden"
+                          onChange={event => void uploadCoverReference(event.target.files?.[0])} />
+                        <button className={`${button} w-full`} disabled={productionBusy === 'music'}
+                          onClick={() => musicCoverRef.current?.click()}>
+                          <Upload size={13} /> {project.music.coverReferenceName ? 'Replace cover reference' : 'Upload cover reference'}
+                        </button>
+                        {project.music.coverReferenceName && <p className="text-[9px] text-pink-200">Reference: {project.music.coverReferenceName}</p>}
+                        <p className="text-[9px] text-text-muted">MiniMax accepts 6 seconds–6 minutes and up to 50 MB. Leave final lyrics empty to retain/extract the original, or provide your editable Story lyrics below.</p>
+                      </div>
+                    )}
                     <textarea
                       className={input}
                       rows={6}
@@ -1826,6 +1928,17 @@ export function StoryLabPanel() {
                     <button className={`${button} w-full`} disabled={productionBusy === 'music'} onClick={() => void writeStorySong()}>
                       {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Write song prompt + lyrics
                     </button>
+                    <div className="space-y-1.5 rounded-md border border-border p-2">
+                      <textarea className={input} rows={6} value={project.music.sourceLyrics}
+                        placeholder="Optional source lyrics / section structure to adapt into this Story…"
+                        onChange={event => patch({ music: { ...project.music, sourceLyrics: event.target.value } })}
+                        aria-label="Source lyrics to adapt" />
+                      <button className={`${button} w-full`} disabled={productionBusy === 'music' || !project.music.sourceLyrics.trim()}
+                        onClick={() => void adaptStoryLyrics()}>
+                        <Sparkles size={13} /> Adapt lyrics automatically to this Story
+                      </button>
+                      <p className="text-[9px] text-text-muted">Creates new wording from the Story while preserving only broad structure and singability. Use source material you are allowed to adapt.</p>
+                    </div>
                     {project.music.style && (
                       <textarea className={input} rows={3} value={project.music.style}
                         onChange={event => patch({ music: { ...project.music, style: event.target.value } })}
@@ -1840,7 +1953,7 @@ export function StoryLabPanel() {
                       disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
                       onClick={() => void generateMinimaxSongs()}>
                       {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
-                      Generate {project.music.candidateCount} songs with MiniMax Music
+                      Generate {project.music.candidateCount} {project.music.mode === 'cover' ? 'covers' : 'songs'} with MiniMax {project.music.mode === 'cover' ? 'Music Cover' : project.music.model === 'music-3.0' ? 'Music 3.0' : 'Music 2.6'}
                     </button>
                     {!servicesConfig?.minimax_api_key_set && <p className="text-[9px] text-amber-300">Configure MiniMax in Settings → Services to generate candidates.</p>}
                     <p className="text-[9px] text-text-muted">Optional local generation is also supported through Director’s internal ACE-Step engine; it can be selected instead of MiniMax without changing the video workflow.</p>

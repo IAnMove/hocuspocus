@@ -145,8 +145,11 @@ export function createStoryProject(): StoryProject {
     assets: {},
     visualJobs: {},
     music: {
+      mode: 'original',
+      model: 'music-3.0',
       brief: '',
       style: '',
+      sourceLyrics: '',
       lyrics: '',
       targetDurationSeconds: 90,
       candidateCount: 2,
@@ -270,9 +273,14 @@ export function normalizeStoryProject(value: unknown): StoryProject {
         typeof value === 'string' && value.trim() ? [[key, value]] : []))
       : {},
     music: {
+      mode: project.music?.mode === 'cover' ? 'cover' : 'original',
+      model: project.music?.model === 'music-2.6' ? 'music-2.6' : 'music-3.0',
       brief: text(project.music?.brief),
       style: text(project.music?.style),
+      sourceLyrics: text(project.music?.sourceLyrics),
       lyrics: text(project.music?.lyrics),
+      coverReferenceFilename: text(project.music?.coverReferenceFilename) || undefined,
+      coverReferenceName: text(project.music?.coverReferenceName) || undefined,
       targetDurationSeconds: Math.max(20, Math.min(360, Number(project.music?.targetDurationSeconds) || 90)),
       candidateCount: project.music?.candidateCount === 3 ? 3 : 2,
       candidates: Array.isArray(project.music?.candidates)

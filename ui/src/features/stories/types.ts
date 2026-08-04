@@ -112,9 +112,14 @@ export interface StoryMusicCandidate {
 }
 
 export interface StoryMusicDraft {
+  mode: 'original' | 'cover'
+  model: 'music-3.0' | 'music-2.6'
   brief: string
   style: string
+  sourceLyrics: string
   lyrics: string
+  coverReferenceFilename?: string
+  coverReferenceName?: string
   targetDurationSeconds: number
   candidateCount: 2 | 3
   candidates: StoryMusicCandidate[]
