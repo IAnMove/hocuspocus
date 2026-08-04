@@ -1950,7 +1950,7 @@ export function StoryLabPanel() {
           className={`${input} w-44`}
           value={project.id}
           disabled={Boolean(busy || imageBusy)}
-          title={`Story library · ${activeWorkspace}`}
+          title={`Story Lab library · ${activeWorkspace}`}
           onChange={event => openProject(event.target.value)}
         >
           {Object.values(projects)
@@ -1979,7 +1979,7 @@ export function StoryLabPanel() {
         <button className={button} disabled={Boolean(busy || imageBusy)} onClick={newProject}><Plus size={13} /> New</button>
         <button className={button} disabled={Boolean(busy || imageBusy)} onClick={() => duplicateProject()} title="Duplicate current story">Duplicate</button>
         <button className={button} onClick={() => {
-          if (window.confirm(`Delete "${project.title}" from this workspace's story library?`)) deleteProject(project.id)
+          if (window.confirm(`Delete "${project.title}" from this workspace's Story Lab library?`)) deleteProject(project.id)
         }} disabled={Boolean(busy || imageBusy)} title="Delete current story"><Trash2 size={13} /></button>
         <input ref={importRef} type="file" accept=".storypack,.zip,.json" className="hidden" onChange={event => importStorypack(event.target.files?.[0])} />
       </div>
@@ -1989,64 +1989,6 @@ export function StoryLabPanel() {
           {notice.text}
         </div>
       )}
-      {pendingDraft && (
-        <div className="border-b border-border bg-amber-500/5 px-3 py-3">
-          <div className="flex flex-col xl:flex-row xl:items-start gap-3">
-            <div className="min-w-56">
-              <p className="text-xs font-semibold text-amber-200">Generated draft · {pendingDraft.scope}</p>
-              <p className="text-[10px] text-text-muted mt-1">Choose exactly which generated items to apply. Existing references are preserved.</p>
-              <label className="mt-2 flex items-center gap-2 text-[10px] text-text-secondary">
-                <input
-                  type="checkbox"
-                  checked={pendingDraft.replaceCollections}
-                  onChange={event => setPendingDraft(current => current ? {
-                    ...current, replaceCollections: event.target.checked,
-                  } : current)}
-                />
-                Replace complete selected collections
-              </label>
-            </div>
-            <div className="flex-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-1 max-h-36 overflow-y-auto">
-              {draftPaths(pendingDraft.result).map(path => (
-                <label key={path} className="flex items-center gap-2 rounded bg-bg-tertiary px-2 py-1 text-[10px] text-text-secondary">
-                  <input
-                    type="checkbox"
-                    checked={pendingDraft.selected.includes(path)}
-                    onChange={event => setPendingDraft(current => {
-                      if (!current) return current
-                      const selected = event.target.checked
-                        ? [...current.selected, path]
-                        : current.selected.filter(item => item !== path)
-                      return { ...current, selected }
-                    })}
-                  />
-                  <span className="truncate">{path}</span>
-                </label>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button className={`${button} border-emerald-500/50 text-emerald-300`} disabled={!pendingDraft.selected.length} onClick={() => applyGeneratedResult(
-                pendingDraft.result,
-                pendingDraft.selected,
-                pendingDraft.replaceCollections,
-              )}><Check size={13} /> Apply selected</button>
-              <button className={button} onClick={() => {
-                setPendingDraft(null)
-                window.localStorage.removeItem(storyResultKey(activeWorkspace, project.id))
-                window.localStorage.removeItem(storyJobKey(activeWorkspace, project.id))
-                setRecoveryJobId('')
-              }}>Discard</button>
-              <details className="text-[10px] text-text-muted">
-                <summary className="cursor-pointer py-2">Raw JSON</summary>
-                <pre className="absolute z-30 right-4 mt-1 max-w-[70vw] max-h-[50vh] overflow-auto rounded-lg border border-border bg-bg-primary p-3 shadow-xl whitespace-pre-wrap">
-                  {JSON.stringify(pendingDraft.result, null, 2)}
-                </pre>
-              </details>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="flex-1 min-h-0 flex">
         <nav className="w-36 md:w-48 shrink-0 border-r border-border bg-bg-secondary p-2 overflow-y-auto">
           {tabs.map(item => (
@@ -2063,6 +2005,63 @@ export function StoryLabPanel() {
 
         <div className="flex-1 min-w-0 overflow-y-auto p-3 md:p-5">
           <div className="max-w-[1500px] mx-auto">
+            {pendingDraft && (
+              <div className="mb-4 rounded-xl border border-amber-400/25 bg-amber-500/5 p-3">
+                <div className="flex flex-col xl:flex-row xl:items-start gap-3">
+                  <div className="min-w-56">
+                    <p className="text-xs font-semibold text-amber-200">Generated draft · {pendingDraft.scope}</p>
+                    <p className="text-[10px] text-text-muted mt-1">Choose exactly which generated items to apply. Existing references are preserved.</p>
+                    <label className="mt-2 flex items-center gap-2 text-[10px] text-text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={pendingDraft.replaceCollections}
+                        onChange={event => setPendingDraft(current => current ? {
+                          ...current, replaceCollections: event.target.checked,
+                        } : current)}
+                      />
+                      Replace complete selected collections
+                    </label>
+                  </div>
+                  <div className="flex-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-1 max-h-36 overflow-y-auto">
+                    {draftPaths(pendingDraft.result).map(path => (
+                      <label key={path} className="flex items-center gap-2 rounded bg-bg-tertiary px-2 py-1 text-[10px] text-text-secondary">
+                        <input
+                          type="checkbox"
+                          checked={pendingDraft.selected.includes(path)}
+                          onChange={event => setPendingDraft(current => {
+                            if (!current) return current
+                            const selected = event.target.checked
+                              ? [...current.selected, path]
+                              : current.selected.filter(item => item !== path)
+                            return { ...current, selected }
+                          })}
+                        />
+                        <span className="truncate">{path}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className={`${button} border-emerald-500/50 text-emerald-300`} disabled={!pendingDraft.selected.length} onClick={() => applyGeneratedResult(
+                      pendingDraft.result,
+                      pendingDraft.selected,
+                      pendingDraft.replaceCollections,
+                    )}><Check size={13} /> Apply selected</button>
+                    <button className={button} onClick={() => {
+                      setPendingDraft(null)
+                      window.localStorage.removeItem(storyResultKey(activeWorkspace, project.id))
+                      window.localStorage.removeItem(storyJobKey(activeWorkspace, project.id))
+                      setRecoveryJobId('')
+                    }}>Discard</button>
+                    <details className="text-[10px] text-text-muted">
+                      <summary className="cursor-pointer py-2">Raw JSON</summary>
+                      <pre className="absolute z-30 right-4 mt-1 max-w-[70vw] max-h-[50vh] overflow-auto rounded-lg border border-border bg-bg-primary p-3 shadow-xl whitespace-pre-wrap">
+                        {JSON.stringify(pendingDraft.result, null, 2)}
+                      </pre>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            )}
             {tab === 'overview' && (
               <>
                 <SectionHeader title="Story and intent" description="Define what the story is about before choosing shots or panels." scope="overview" busy={busy} approved={isApproved('overview')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('overview')} />
