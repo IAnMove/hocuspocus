@@ -268,6 +268,7 @@ def _save_pipeline_state(pid: str) -> bool:
     clip_timings = p.get("_clip_timings", {})
     clip_validations = p.get("_clip_validations", [])
     h3_reference_manifest = p.get("h3_reference_manifest", [])
+    h3_segments = p.get("_h3_segments", [])
 
     clips = []
     for i, plan in enumerate(clip_plans):
@@ -318,6 +319,11 @@ def _save_pipeline_state(pid: str) -> bool:
                 else None
             ),
             "h3_segment_prompts": plan.get("h3_segment_prompts", []) or [],
+            "h3_segments": (
+                copy.deepcopy(h3_segments[i])
+                if i < len(h3_segments)
+                else []
+            ),
             "h3_prompt_validation": (
                 plan.get("metadata", {}).get("h3_prompt_validation")
                 if isinstance(plan.get("metadata"), dict)
@@ -480,8 +486,63 @@ def _pipeline_media_for_job(pid: str, out_dir: str, expected_clips: int) -> Opti
     return max(candidates, key=lambda item: item["created_at"]) if candidates else None
 
 
+def _ensure_h3_segment_state(data: dict) -> dict:
+    """Backfill editable H3 segment records for legacy saved productions."""
+    if data.get("video_model") != "minimax_h3":
+        return data
+    clips = data.get("clips") if isinstance(data.get("clips"), list) else []
+    if not clips or all(isinstance(clip.get("h3_segments"), list) and clip["h3_segments"] for clip in clips):
+        return data
+    candidates = [
+        str(name)
+        for name in (data.get("output_files") or [])
+        if str(name).lower().endswith((".mp4", ".webm", ".mkv", ".mov"))
+        and "_multiclip" not in str(name).lower()
+        and "_rejoin_" not in str(name).lower()
+    ]
+    cursor = 0
+    params = data.get("_params_snapshot") if isinstance(data.get("_params_snapshot"), dict) else {}
+    video_params = data.get("video_params") if isinstance(data.get("video_params"), dict) else {}
+    base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
+    for clip_index, clip in enumerate(clips):
+        if isinstance(clip.get("h3_segments"), list) and clip["h3_segments"]:
+            cursor += len(clip["h3_segments"])
+            continue
+        planned = clip.get("planned_clip") if isinstance(clip.get("planned_clip"), dict) else {}
+        duration = planned.get("duration_sec") or (
+            float(planned.get("end", 0) or 0) - float(planned.get("start", 0) or 0)
+        )
+        if duration <= 0:
+            duration = 5.0
+        frames = _minimax_h3_frame_segments(duration, 24)
+        prompts = clip.get("h3_segment_prompts") or []
+        shot_seed = int(clip.get("seed") or _comic_shot_seed(params, clip_index, clip))
+        continuity_mode = str((clip.get("h3_references") or {}).get("continuity_mode") or "")
+        records = []
+        for segment_index, segment_frames in enumerate(frames):
+            if cursor >= len(candidates):
+                break
+            records.append({
+                "index": segment_index,
+                "filename": candidates[cursor],
+                "prompt": str(prompts[segment_index] if segment_index < len(prompts) else clip.get("video_prompt") or ""),
+                "frames": segment_frames,
+                "seed": (shot_seed + segment_index) & 0x7FFFFFFF,
+                "reference_mode": (
+                    "references"
+                    if segment_index > 0 and continuity_mode == "identity_safe_hybrid"
+                    else base_mode
+                ),
+                "stale": False,
+            })
+            cursor += 1
+        clip["h3_segments"] = records
+    return data
+
+
 def _reconcile_pipeline_state_file(filepath: str, data: dict) -> dict:
     """Promote a timed-out checkpoint when its generation actually finished."""
+    data = _ensure_h3_segment_state(data)
     pid = str(data.get("pipeline_id") or "")
     clips = data.get("clips") if isinstance(data.get("clips"), list) else []
     if not pid or not clips:
@@ -762,6 +823,16 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
     video_model = state.get("video_model") or "ltx2_22B_distilled_1_1"
     video_loras = state.get("video_loras") or {}
     video_params = state.get("video_params") or {}
+    if video_model == "minimax_h3":
+        return rerun_h3_segment(
+            out_dir,
+            pid,
+            clip_index,
+            0,
+            prompt_override=prompt_override,
+            cascade=True,
+            replace_shot_prompt=bool(prompt_override),
+        )
 
     # Determine the output directory
     pipeline_file = _find_pipeline_file(out_dir, pid)
@@ -906,6 +977,189 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
     return {"filename": new_filename, "clip_index": clip_index}
 
 
+def _replace_saved_pipeline(out_dir: str, pid: str, state: dict) -> None:
+    def replace(saved: dict) -> None:
+        saved.clear()
+        saved.update(copy.deepcopy(state))
+
+    if _update_saved_pipeline(out_dir, pid, replace) is None:
+        raise ValueError(f"Pipeline {pid} not found")
+
+
+def _h3_edit_references(state: dict, clip_index: int) -> tuple[list[str], list[str], list[str]]:
+    snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else state
+    video_params = state.get("video_params") if isinstance(state.get("video_params"), dict) else {}
+    video_refs = [str(path) for path in (video_params.get("h3_ref_videos") or []) if path]
+    audio_refs = [str(path) for path in (video_params.get("h3_ref_audios") or []) if path]
+    image_budget = max(0, min(8, 11 - len(video_refs) - len(audio_refs)))
+    selected: list[str] = []
+    for candidate in [
+        snapshot.get("reference_image_path"),
+        *(snapshot.get("character_ref_paths") or state.get("character_ref_paths") or []),
+    ]:
+        path = str(candidate or "").strip()
+        if path and path not in selected and len(selected) < image_budget:
+            selected.append(path)
+    clip_plans = state.get("clip_plans") if isinstance(state.get("clip_plans"), list) else []
+    clips = state.get("clips") or []
+    plan = clip_plans[clip_index] if clip_index < len(clip_plans) else clips[clip_index]
+    location_ref, _label = _director_location_ref_for_plan(plan, snapshot)
+    if location_ref and location_ref not in selected and len(selected) < image_budget:
+        selected.append(location_ref)
+    return selected, video_refs, audio_refs
+
+
+def rerun_h3_segment(
+    out_dir: str,
+    pid: str,
+    clip_index: int,
+    segment_index: int,
+    prompt_override: str = None,
+    cascade: bool = True,
+    replace_shot_prompt: bool = False,
+) -> dict:
+    """Regenerate one H3 segment and, by default, every dependent continuation."""
+    state = load_pipeline_state(out_dir, pid)
+    if not state or state.get("video_model") != "minimax_h3":
+        raise ValueError("This operation requires a saved MiniMax H3 production")
+    state = _ensure_h3_segment_state(state)
+    clips = state.get("clips") or []
+    if clip_index < 0 or clip_index >= len(clips):
+        raise ValueError(f"Clip index {clip_index} out of range")
+    clip = clips[clip_index]
+    segments = clip.get("h3_segments") or []
+    if segment_index < 0 or segment_index >= len(segments):
+        raise ValueError(f"Segment index {segment_index} out of range")
+
+    pipeline_file = _find_pipeline_file(out_dir, pid)
+    clip_out_dir = os.path.dirname(pipeline_file) if pipeline_file else out_dir
+    video_params = state.get("video_params") or {}
+    base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
+    image_refs, video_refs, audio_refs = _h3_edit_references(state, clip_index)
+    identity_safe = base_mode == "first_frame" and bool(image_refs)
+    if replace_shot_prompt and prompt_override:
+        plan = {**clip, "video_prompt": prompt_override, "h3_segment_prompts": []}
+        for index, record in enumerate(segments):
+            mode = "references" if identity_safe and index > 0 else base_mode
+            record["prompt"] = _minimax_h3_segment_prompt(
+                plan,
+                index,
+                len(segments),
+                str(video_params.get("h3_audio_prompt") or ""),
+                mode,
+            )
+        clip["video_prompt"] = prompt_override
+    elif prompt_override:
+        segments[segment_index]["prompt"] = prompt_override
+
+    final_index = len(segments) - 1 if cascade else segment_index
+    for record in segments[segment_index:]:
+        record["stale"] = True
+    _replace_saved_pipeline(out_dir, pid, state)
+
+    regenerated: list[str] = []
+    temporary_frames: list[str] = []
+    try:
+        for index in range(segment_index, final_index + 1):
+            record = segments[index]
+            if index == 0:
+                start_name = str(clip.get("start_image_filename") or "")
+                start_path = start_name if os.path.isabs(start_name) else os.path.join(clip_out_dir, start_name)
+            else:
+                previous_name = str(segments[index - 1].get("filename") or "")
+                previous_path = previous_name if os.path.isabs(previous_name) else os.path.join(clip_out_dir, previous_name)
+                if not os.path.isfile(previous_path):
+                    raise ValueError(f"Previous H3 segment is missing: {previous_name}")
+                try:
+                    from services.video_editor import extract_frame, probe_media
+                except ImportError:  # pragma: no cover - package import mode
+                    from app.services.video_editor import extract_frame, probe_media
+                start_path = os.path.join(
+                    clip_out_dir,
+                    f".minimax_h3_{pid}_{clip_index + 1}_{index}_edit_continuation.png",
+                )
+                extract_frame(previous_path, start_path, float(probe_media(previous_path)["duration"]))
+                temporary_frames.append(start_path)
+            if not start_path or not os.path.isfile(start_path):
+                raise ValueError(f"Start image for H3 segment {index + 1} is missing")
+
+            segment_mode = "references" if identity_safe and index > 0 else base_mode
+            prompt = _h3_apply_identity_contract(
+                _h3_apply_reference_contract(str(record.get("prompt") or ""), segment_mode)
+            )
+            gen_params = {
+                "model_type": "minimax_h3",
+                "prompt": prompt,
+                "image_mode": 0,
+                "image_prompt_type": "S",
+                "num_inference_steps": video_params.get("num_inference_steps", 20),
+                "guidance_scale": video_params.get("guidance_scale", 1),
+                "resolution": video_params.get("resolution", "960x544"),
+                "video_length": int(record.get("frames") or 124),
+                "seed": int(record.get("seed") or 0),
+                "settings_version": 2.52,
+                "generation_mode": "video",
+                "repeat_generation": 1,
+                "negative_prompt": "",
+                "flow_shift": video_params.get("flow_shift", 12),
+                "h3_audio_shift": video_params.get("h3_audio_shift", 3),
+                "h3_audio_prompt": video_params.get("h3_audio_prompt", ""),
+                "h3_ref_image_size": video_params.get("h3_ref_image_size", "match"),
+                "h3_model_profile": video_params.get("h3_model_profile", "quality"),
+                "h3_reference_mode": segment_mode,
+                "_director_pipeline_id": pid,
+            }
+            if segment_mode == "references":
+                gen_params["image_refs"] = [start_path, *image_refs]
+                gen_params["h3_ref_videos"] = video_refs
+                gen_params["h3_ref_audios"] = audio_refs
+            else:
+                gen_params["image_start"] = start_path
+            generated = _submit_and_wait(
+                gen_params,
+                timeout_s=7200,
+                workspace=None if state.get("workspace") == "default" else state.get("workspace"),
+                out_dir=clip_out_dir,
+            )
+            if not generated:
+                raise RuntimeError(f"MiniMax H3 returned no video for segment {index + 1}")
+            generated_path = generated[-1]
+            new_name = os.path.basename(generated_path)
+            old_name = str(record.get("filename") or "")
+            record.update({
+                "filename": new_name,
+                "prompt": prompt,
+                "reference_mode": segment_mode,
+                "start_image_filename": os.path.basename(start_path),
+                "stale": False,
+                "updated_at": time.time(),
+            })
+            output_files = list(state.get("output_files") or [])
+            if old_name in output_files:
+                output_files = [new_name if item == old_name else item for item in output_files]
+            elif new_name not in output_files:
+                output_files.append(new_name)
+            state["output_files"] = output_files
+            regenerated.append(new_name)
+            _replace_saved_pipeline(out_dir, pid, state)
+    finally:
+        for path in temporary_frames:
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                pass
+
+    return {
+        "filename": regenerated[0],
+        "filenames": regenerated,
+        "clip_index": clip_index,
+        "segment_index": segment_index,
+        "cascade": cascade,
+        "requires_rejoin": True,
+    }
+
+
 def rejoin_clips(out_dir: str, pid: str) -> dict:
     """Re-join all clips from a saved pipeline using current best versions. Returns {filename}."""
     state = load_pipeline_state(out_dir, pid)
@@ -915,14 +1169,28 @@ def rejoin_clips(out_dir: str, pid: str) -> dict:
     pipeline_file = _find_pipeline_file(out_dir, pid)
     clip_out_dir = os.path.dirname(pipeline_file) if pipeline_file else out_dir
 
+    state = _ensure_h3_segment_state(state)
     clips = state.get("clips", [])
     video_files = []
-    for clip in clips:
-        vf = clip.get("video_filename")
-        if vf:
-            full_path = os.path.join(clip_out_dir, vf)
-            if os.path.isfile(full_path):
-                video_files.append(full_path)
+    if state.get("video_model") == "minimax_h3":
+        stale = []
+        for clip in clips:
+            for segment in (clip.get("h3_segments") or []):
+                if segment.get("stale"):
+                    stale.append((clip.get("index", 0), segment.get("index", 0)))
+                filename = str(segment.get("filename") or "")
+                full_path = filename if os.path.isabs(filename) else os.path.join(clip_out_dir, filename)
+                if filename and os.path.isfile(full_path):
+                    video_files.append(full_path)
+        if stale:
+            raise ValueError("Regenerate stale H3 continuations before rejoining the final video")
+    else:
+        for clip in clips:
+            vf = clip.get("video_filename")
+            if vf:
+                full_path = os.path.join(clip_out_dir, vf)
+                if os.path.isfile(full_path):
+                    video_files.append(full_path)
 
     if len(video_files) < 2:
         raise ValueError(f"Need at least 2 video clips to rejoin, found {len(video_files)}")
@@ -930,17 +1198,27 @@ def rejoin_clips(out_dir: str, pid: str) -> dict:
     # Use wgp's concatenation
     import time as _time
     timestamp = _time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    output_name = f"{timestamp}_rejoin_multiclip.mp4"
+    output_name = (
+        f"minimax_h3_{pid}_rejoin_{timestamp}.mp4"
+        if state.get("video_model") == "minimax_h3"
+        else f"{timestamp}_rejoin_multiclip.mp4"
+    )
     output_path = os.path.join(clip_out_dir, output_name)
 
     try:
-        _wgp.concatenate_videos(video_files, output_path)
+        concatenate_native = getattr(_wgp, "concatenate_multi_clip_videos", None)
+        if state.get("video_model") == "minimax_h3" and callable(concatenate_native):
+            if not concatenate_native(video_files, output_path, None):
+                raise RuntimeError("native-audio concatenation returned no output")
+        else:
+            _wgp.concatenate_videos(video_files, output_path)
         print(f"[Pipeline] Rejoined {len(video_files)} clips → {output_name}")
 
         # Update pipeline state
         def _update(s):
             if output_name not in s.get("output_files", []):
                 s.setdefault("output_files", []).append(output_name)
+            s["final_output_filename"] = output_name
         _update_saved_pipeline(out_dir, pid, _update)
 
         return {"filename": output_name}
@@ -6858,6 +7136,8 @@ def _run_minimax_h3_story_video(
         raise RuntimeError("MiniMax H3 received no planned Story shots to render.")
 
     outputs: list[str] = []
+    segment_states: list[list[dict]] = [[] for _ in clip_plans]
+    _update_pipeline(pid, _h3_segments=segment_states)
     continuation_frames: list[str] = []
     current_shot = -1
     segment_start = ""
@@ -6931,6 +7211,18 @@ def _run_minimax_h3_story_video(
                 )
             outputs.extend(generated)
             generated_path = generated[-1] if os.path.isabs(generated[-1]) else os.path.join(out_dir, generated[-1])
+            segment_states[shot_index].append({
+                "index": segment_index,
+                "filename": os.path.basename(generated_path),
+                "prompt": gen_params["prompt"],
+                "frames": frames,
+                "seed": gen_params["seed"],
+                "reference_mode": segment_reference_mode,
+                "start_image_filename": os.path.basename(segment_start) if segment_start else "",
+                "stale": False,
+                "created_at": time.time(),
+            })
+            _update_pipeline(pid, _h3_segments=copy.deepcopy(segment_states))
 
             if segment_index + 1 < segment_count:
                 try:

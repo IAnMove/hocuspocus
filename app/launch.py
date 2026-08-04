@@ -6637,6 +6637,34 @@ async def rerun_pipeline_clip_video(pid: str, clip_index: int, request: Request)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@api.post("/api/v1/director/pipelines/{pid}/clips/{clip_index}/segments/{segment_index}/rerun")
+async def rerun_pipeline_h3_segment(
+    pid: str,
+    clip_index: int,
+    segment_index: int,
+    request: Request,
+):
+    """Regenerate one editable H3 segment and its dependent continuations."""
+    _init_pipeline()
+    from services.director_pipeline import rerun_h3_segment
+    body = await request.json()
+    base = wgp.server_config.get("save_path", "outputs")
+    try:
+        return rerun_h3_segment(
+            base,
+            pid,
+            clip_index,
+            segment_index,
+            prompt_override=body.get("prompt"),
+            cascade=body.get("cascade", True) is not False,
+        )
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @api.post("/api/v1/director/pipelines/{pid}/rejoin")
 async def rejoin_pipeline_clips(pid: str):
     """Re-join all clips from a saved pipeline using current best versions."""
