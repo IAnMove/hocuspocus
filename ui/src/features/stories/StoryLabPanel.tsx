@@ -10,6 +10,7 @@ import { EditableLanguageInput } from '../../components/common/EditableLanguageI
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { getOutputReference } from '../../lib/outputReference'
+import { AudioRangeSelector } from './AudioRangeSelector'
 import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
 import {
@@ -413,6 +414,8 @@ export function StoryLabPanel() {
       || '',
   )
   const [musicProductionPacing, setMusicProductionPacing] = useState<'cinematic' | 'balanced' | 'rhythmic'>('balanced')
+  const [musicProductionMode, setMusicProductionMode] = useState<'full' | 'trailer'>('full')
+  const [musicTrailerRange, setMusicTrailerRange] = useState({ start: 0, end: 0, duration: 0 })
   const [jobProgress, setJobProgress] = useState('')
   const [recoveryJobId, setRecoveryJobId] = useState(() =>
     window.localStorage.getItem(storyJobKey(activeWorkspace, project.id)) || '')
@@ -461,6 +464,11 @@ export function StoryLabPanel() {
       || musicCandidateOptions[0]
     setMusicProductionCandidateId(preferred.candidate.id)
   }, [musicCandidateOptions, selectedMusicOption])
+
+  useEffect(() => {
+    const duration = selectedMusicOption?.candidate.durationSeconds || 0
+    setMusicTrailerRange({ start: 0, end: duration, duration })
+  }, [selectedMusicOption?.candidate.id, selectedMusicOption?.candidate.durationSeconds])
   const beginStoryActivity = (phase: string, message: string, total = 0) => {
     const id = `story-lab:${project.id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
     let failed = false
@@ -1934,6 +1942,7 @@ export function StoryLabPanel() {
     candidate: StoryMusicCandidate,
     autoStart = false,
     pacing: 'cinematic' | 'balanced' | 'rhythmic' = 'balanced',
+    excerpt?: { start: number; end: number },
   ) => {
     const resolvedCue = effectiveMusicCue(source, cue, candidate)
     const adaptation = buildMusicVideoAdaptation(source, resolvedCue)
@@ -1950,7 +1959,7 @@ export function StoryLabPanel() {
       directorSongDescription: resolvedCue.brief,
       directorSongStyle: resolvedCue.style,
       directorSongLyrics: resolvedCue.lyrics,
-      directorSongDuration: resolvedCue.durationSeconds,
+      directorSongDuration: excerpt ? excerpt.end - excerpt.start : resolvedCue.durationSeconds,
       directorPacingProfile: pacing,
       directorStep: 'upload',
     })
@@ -1993,7 +2002,11 @@ export function StoryLabPanel() {
     })
     await useStore.getState().directorUploadAndAnalyze(new File(
       [blob], candidate.name, { type: blob.type || 'audio/mpeg' },
-    ), { lyricsHint: resolvedCue.lyrics || undefined })
+    ), {
+      lyricsHint: resolvedCue.lyrics || undefined,
+      trimStart: excerpt?.start,
+      trimEnd: excerpt?.end,
+    })
     if (autoStart && useStore.getState().directorStep === 'structure') {
       useStore.getState().directorConfirmStructure()
       await useStore.getState().startDirectorPipeline()
@@ -2003,7 +2016,13 @@ export function StoryLabPanel() {
 
   const openMusicalTrailer = async (
     candidateId?: string,
-    options: { autoStart?: boolean; saveProduction?: boolean; pacing?: 'cinematic' | 'balanced' | 'rhythmic' } = {},
+    options: {
+      autoStart?: boolean
+      saveProduction?: boolean
+      pacing?: 'cinematic' | 'balanced' | 'rhythmic'
+      mode?: 'full' | 'trailer'
+      excerpt?: { start: number; end: number }
+    } = {},
   ) => {
     const cue = musicCueForCandidate(project, candidateId)
     const candidate = musicCandidateById(project, candidateId)
@@ -2026,13 +2045,14 @@ export function StoryLabPanel() {
         candidate,
         options.autoStart === true,
         options.pacing || musicProductionPacing,
+        options.mode === 'trailer' ? options.excerpt : undefined,
       )
       if (options.saveProduction !== false) {
         patch({
           productions: [...project.productions, {
             id: storyId('production'),
             kind: 'music_video',
-            title: `${loaded.adaptation.focusLabel} · music video`,
+            title: `${loaded.adaptation.focusLabel} · ${options.mode === 'trailer' ? 'musical trailer' : 'music video'}`,
             createdAt: new Date().toISOString(),
             sourceVersion: project.revision,
             sourceSnapshot: { ...structuredClone(project), productions: [] },
@@ -2050,6 +2070,9 @@ export function StoryLabPanel() {
               focusTargetId: loaded.adaptation.focusTargetId,
               sceneDescription: loaded.adaptation.sceneDescription,
               pacing: options.pacing || musicProductionPacing,
+              mode: options.mode || 'full',
+              trimStart: options.mode === 'trailer' ? options.excerpt?.start : undefined,
+              trimEnd: options.mode === 'trailer' ? options.excerpt?.end : undefined,
               imageModel: filmImageModel,
               videoModel: filmVideoModel,
               pipelineId: loaded.pipelineId,
@@ -2061,7 +2084,7 @@ export function StoryLabPanel() {
       setNotice({
         kind: 'ok',
         text: options.autoStart
-          ? `The music video for “${loaded.adaptation.focusLabel}” is running in Director.`
+          ? `The ${options.mode === 'trailer' ? 'musical trailer' : 'music video'} for “${loaded.adaptation.focusLabel}” is running in Director.`
           : `The song, lyrics and visual references for “${loaded.adaptation.focusLabel}” are loaded in Director.`,
       })
     } catch (error) {
@@ -2076,13 +2099,21 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'Generate or import a song in Music before creating a music video.' })
       return
     }
+    if (musicProductionMode === 'trailer' && musicTrailerRange.end <= musicTrailerRange.start + 0.99) {
+      setNotice({ kind: 'error', text: 'Choose and preview a trailer excerpt of at least one second.' })
+      return
+    }
     if (autoStart && !window.confirm(
-      `Generate the complete music video for “${selectedMusicOption.label}”? `
+      `Generate the ${musicProductionMode === 'trailer' ? 'musical trailer' : 'complete music video'} for “${selectedMusicOption.label}”? `
       + 'This creates one start image and one video render per planned clip and may consume provider credits.',
     )) return
     await openMusicalTrailer(selectedMusicOption.candidate.id, {
       autoStart,
       pacing: musicProductionPacing,
+      mode: musicProductionMode,
+      excerpt: musicProductionMode === 'trailer'
+        ? { start: musicTrailerRange.start, end: musicTrailerRange.end }
+        : undefined,
     })
   }
 
@@ -2102,6 +2133,12 @@ export function StoryLabPanel() {
       const pacingValue = production.targetSnapshot?.pacing
       const pacing = pacingValue === 'cinematic' || pacingValue === 'rhythmic'
         ? pacingValue : 'balanced'
+      const mode = production.targetSnapshot?.mode === 'trailer' ? 'trailer' : 'full'
+      const trimStart = Number(production.targetSnapshot?.trimStart)
+      const trimEnd = Number(production.targetSnapshot?.trimEnd)
+      const excerpt = mode === 'trailer' && Number.isFinite(trimStart) && Number.isFinite(trimEnd) && trimEnd > trimStart
+        ? { start: trimStart, end: trimEnd }
+        : undefined
       const current = useStore.getState()
       const hasWork = Boolean(current.directorSceneDescription.trim() || current.directorPlannedClips.length)
       if (hasWork && !window.confirm(
@@ -2109,7 +2146,7 @@ export function StoryLabPanel() {
       )) return
       setProductionBusy('music')
       try {
-        await loadMusicVideoProduction(source, cue, candidate, false, pacing)
+        await loadMusicVideoProduction(source, cue, candidate, false, pacing, excerpt)
       } catch (error) {
         setNotice({ kind: 'error', text: `The music-video production could not be reopened: ${(error as Error).message}` })
       } finally {
@@ -2937,6 +2974,33 @@ export function StoryLabPanel() {
                             <audio src={selectedMusicOption.candidate.source} controls preload="metadata" className="h-8 w-full" />
                           </div>
                         )}
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setMusicProductionMode('full')}
+                            className={`${button} flex-col ${musicProductionMode === 'full' ? 'border-pink-500/60 text-pink-300' : ''}`}
+                          >
+                            <span>Complete music video</span>
+                            <span className="text-[9px] text-text-muted">Uses the entire song</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMusicProductionMode('trailer')}
+                            className={`${button} flex-col ${musicProductionMode === 'trailer' ? 'border-pink-500/60 text-pink-300' : ''}`}
+                          >
+                            <span>Musical trailer</span>
+                            <span className="text-[9px] text-text-muted">Uses a selected excerpt</span>
+                          </button>
+                        </div>
+                        {musicProductionMode === 'trailer' && selectedMusicOption && (
+                          <AudioRangeSelector
+                            src={selectedMusicOption.candidate.source}
+                            durationHint={selectedMusicOption.candidate.durationSeconds}
+                            start={musicTrailerRange.start}
+                            end={musicTrailerRange.end}
+                            onChange={setMusicTrailerRange}
+                          />
+                        )}
                         <div>
                           <div className="mb-1.5 flex items-center justify-between">
                             <span className="text-[10px] text-text-muted">Editing rhythm</span>
@@ -2966,14 +3030,14 @@ export function StoryLabPanel() {
                             onClick={() => void stageMusicVideo(true)}
                           >
                             {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                            Generate complete music video
+                            Generate {musicProductionMode === 'trailer' ? 'musical trailer' : 'complete music video'}
                           </button>
                           <button
                             className={`${button} w-full`}
                             disabled={Boolean(productionBusy) || Boolean(productionIssues.length)}
                             onClick={() => void stageMusicVideo(false)}
                           >
-                            <ChevronRight size={13} /> Open in Music Video Director
+                            <ChevronRight size={13} /> Open {musicProductionMode === 'trailer' ? 'trailer' : 'music video'} in Director
                           </button>
                         </div>
                         <p className="text-[9px] text-text-muted">

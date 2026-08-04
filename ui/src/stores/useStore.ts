@@ -1205,7 +1205,7 @@ interface AppState {
   setSidebarMode: (mode: 'director' | 'studio') => void
   directorSetSpeakerMapping: (speakerId: string, name: string, role: SpeakerMapping['role']) => void
   directorInsertSpeakerMention: (speakerId: string) => void
-  directorUploadAndAnalyze: (file: File, opts?: { lyricsHint?: string }) => Promise<void>
+  directorUploadAndAnalyze: (file: File, opts?: { lyricsHint?: string; trimStart?: number; trimEnd?: number }) => Promise<void>
   // Music Video: generate-the-track source + song setup
   directorMusicSource: 'upload' | 'generate' | null
   directorSongDescription: string
@@ -1222,7 +1222,7 @@ interface AppState {
   setDirectorSongDuration: (v: number) => void
   directorWriteSong: () => Promise<void>
   directorGenerateTrack: () => Promise<void>
-  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; activityId?: string }) => Promise<void>
+  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string }) => Promise<void>
   directorSetEnergyBias: (bias: number) => Promise<void>
   directorSetPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
   directorConfirmStructure: () => void
@@ -5062,9 +5062,32 @@ export const useStore = create<AppState>((set, get) => ({
     })
     try {
       const uploaded = await api.uploadAudio(file)
-      await get().directorAnalyzeAndPlan(uploaded.path, {
+      const shouldTrim = Number.isFinite(opts?.trimStart)
+        && Number.isFinite(opts?.trimEnd)
+        && Number(opts?.trimEnd) > Number(opts?.trimStart) + 0.99
+      if (shouldTrim) {
+        get().upsertActivity({
+          id: activityId,
+          kind: 'audio_analysis',
+          title: 'Prepare musical trailer',
+          status: 'running',
+          phase: 'trimming_audio',
+          message: `Cutting ${Number(opts?.trimStart).toFixed(1)}s–${Number(opts?.trimEnd).toFixed(1)}s…`,
+          current: 1,
+          total: 10,
+        })
+      }
+      const prepared = shouldTrim
+        ? await api.trimAudio({
+            audio_path: uploaded.path,
+            start: Number(opts?.trimStart),
+            end: Number(opts?.trimEnd),
+          })
+        : uploaded
+      await get().directorAnalyzeAndPlan(prepared.path, {
         transcribe: true,
         lyricsHint: opts?.lyricsHint,
+        classifyLyricsHint: shouldTrim ? '' : opts?.lyricsHint,
         activityId,
       })
     } catch (e: unknown) {
@@ -5159,7 +5182,7 @@ export const useStore = create<AppState>((set, get) => ({
           reportActivity('classifying_sections', 'Classifying verses, choruses and bridges…', 8)
           const classified = await api.classifySections({
             analysis,
-            lyrics_hint: opts?.lyricsHint || undefined,
+            lyrics_hint: (opts?.classifyLyricsHint ?? opts?.lyricsHint) || undefined,
           })
           analysis = {
             ...analysis,

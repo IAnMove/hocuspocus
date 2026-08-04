@@ -2229,6 +2229,21 @@ export async function uploadAudio(file: File): Promise<{ filename: string; path:
   return res.json()
 }
 
+export async function trimAudio(params: { audio_path: string; start: number; end: number }): Promise<{
+  filename: string; path: string; url: string; start: number; end: number; duration: number
+}> {
+  const res = await fetch(`${BASE}/api/v1/audio/trim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Audio trim failed' }))
+    throw new Error(err.detail || 'Audio trim failed')
+  }
+  return res.json()
+}
+
 export async function analyzeAudio(params: {
   audio_path: string
   transcribe?: boolean

@@ -20,6 +20,7 @@ const PHASE_LABELS: Record<string, string> = {
   music_queue: 'Music queue',
   uploading_music_reference: 'Uploading music reference',
   uploading_audio: 'Uploading audio',
+  trimming_audio: 'Trimming audio',
   analyzing_audio: 'Analyzing audio',
   loading_audio: 'Loading audio',
   detecting_beats: 'Detecting beats',

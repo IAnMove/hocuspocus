@@ -6029,6 +6029,51 @@ def serve_audio_upload(filename: str):
     return share_delete_file_response(filepath)
 
 
+@api.post("/api/v1/audio/trim")
+async def trim_uploaded_audio(request: Request):
+    """Create a PCM WAV excerpt used by musical-trailer productions."""
+    body = await request.json()
+    audio_path = body.get("audio_path", "")
+    if not audio_path or not os.path.isfile(audio_path):
+        raise HTTPException(status_code=404, detail="Uploaded audio file not found")
+    try:
+        start = max(0.0, float(body.get("start", 0)))
+        end = float(body.get("end", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="start and end must be seconds")
+    if end <= start + 0.99:
+        raise HTTPException(status_code=400, detail="The selected trailer excerpt must be at least one second")
+
+    upload_dir = os.path.join(os.getcwd(), "uploads", "audio")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4().hex[:8]}-excerpt.wav"
+    output_path = os.path.join(upload_dir, filename)
+    try:
+        import ffmpeg as _ffmpeg
+        (
+            _ffmpeg
+            .input(audio_path, ss=start)
+            .output(output_path, t=end - start, acodec="pcm_s16le", vn=None)
+            .overwrite_output()
+            .run(quiet=True)
+        )
+    except Exception as exc:
+        if os.path.isfile(output_path):
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
+        raise HTTPException(status_code=500, detail=f"Audio trim failed: {exc}") from exc
+    return {
+        "filename": filename,
+        "path": output_path,
+        "url": f"/api/v1/uploads/audio/{filename}",
+        "start": start,
+        "end": end,
+        "duration": end - start,
+    }
+
+
 @api.post("/api/v1/audio/mix")
 async def mix_audio(request: Request):
     """Mix multiple audio tracks into one file using ffmpeg.
