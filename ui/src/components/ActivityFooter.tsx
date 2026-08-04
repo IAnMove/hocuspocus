@@ -1,4 +1,5 @@
-import { AlertCircle, CheckCircle2, ListVideo, Loader2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ListVideo, Loader2 } from 'lucide-react'
 import { useStore } from '../stores/useStore'
 
 const PHASE_LABELS: Record<string, string> = {
@@ -18,78 +19,172 @@ const PHASE_LABELS: Record<string, string> = {
   generating_music: 'Generating music',
   music_queue: 'Music queue',
   uploading_music_reference: 'Uploading music reference',
+  uploading_audio: 'Uploading audio',
+  analyzing_audio: 'Analyzing audio',
+  loading_audio: 'Loading audio',
+  detecting_beats: 'Detecting beats',
+  identifying_sections: 'Identifying sections',
+  loading_vocal_model: 'Loading vocal model',
+  extracting_vocals: 'Extracting vocals',
+  loading_transcription_model: 'Loading transcription model',
+  transcribing: 'Transcribing',
+  loading_diarization_model: 'Loading speaker model',
+  identifying_speakers: 'Identifying speakers',
+  finalizing: 'Finalizing analysis',
+  classifying_sections: 'Classifying song sections',
+  planning_clips: 'Planning clips',
+  ready_for_visual_brief: 'Ready for visual brief',
+}
+
+type ActivityStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+interface ActivityView {
+  id: string
+  title: string
+  status: ActivityStatus
+  phase: string
+  message: string
+  current: number
+  total: number
+  percent: number
+  updatedAt: number
 }
 
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))
 }
 
+function activityProgress(current: number, total: number, explicit?: number): number {
+  if (total > 0) return clampPercent((current / total) * 100)
+  return clampPercent((explicit || 0) * (explicit && explicit <= 1 ? 100 : 1))
+}
+
 /**
- * Persistent, app-wide activity readout. Unlike a page-local spinner, this is
- * backed by Maestro's durable job queue, so reloading or navigating elsewhere
- * immediately reconnects it to work that is still running on the server.
+ * App-wide activity readout. Durable generation jobs and Director pipelines
+ * are normalized together with user-visible foreground workflows, but each
+ * row keeps its own message and progress so concurrent work is never mixed.
  */
 export function ActivityFooter() {
   const jobs = useStore(s => s.jobs)
   const pipelineStatus = useStore(s => s.pipelineStatus)
-  const foregroundActivity = useStore(s => s.foregroundActivity)
+  const activities = useStore(s => s.activities)
   const setVideoWorkflowsOpen = useStore(s => s.setDashboardOpen)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
-  const activeJobs = jobs.filter(job => job.status === 'running' || job.status === 'queued')
-  const primaryJob = activeJobs[0] ?? null
-  const failedJob = jobs.find(job => job.status === 'failed') ?? null
-  const pipelineRunning = pipelineStatus?.status === 'running'
-  const pipelineFailed = pipelineStatus?.status === 'failed'
-  const foregroundRunning = foregroundActivity?.status === 'running'
-  const foregroundFailed = foregroundActivity?.status === 'failed'
-  const isActive = Boolean(primaryJob || pipelineRunning || foregroundRunning)
-  const hasError = Boolean(!isActive && (failedJob || pipelineFailed || foregroundFailed))
+  const rows = useMemo<ActivityView[]>(() => {
+    const registered = Object.values(activities).map(activity => ({
+      id: activity.id,
+      title: activity.title || 'Maestro',
+      status: activity.status,
+      phase: activity.phase,
+      message: activity.error || activity.message,
+      current: activity.current || 0,
+      total: activity.total || 0,
+      percent: activityProgress(activity.current || 0, activity.total || 0, activity.progress),
+      updatedAt: activity.updatedAt || activity.startedAt || 3,
+    }))
 
-  const pipelineSteps = pipelineRunning ? pipelineStatus?.progress : undefined
-  const currentStep = primaryJob?.totalSteps
-    ? primaryJob.step
-    : pipelineSteps?.total_steps
-      ? pipelineSteps.step
-      : foregroundRunning
-        ? foregroundActivity?.current || 0
-        : 0
-  const totalSteps = primaryJob?.totalSteps
-    || pipelineSteps?.total_steps
-    || (foregroundRunning ? foregroundActivity?.total : 0)
-    || 0
-  const percent = clampPercent(
-    totalSteps > 0
-      ? (currentStep / totalSteps) * 100
-      : primaryJob
-        ? primaryJob.progress * 100
-        : pipelineSteps?.total
-          ? (pipelineSteps.current / pipelineSteps.total) * 100
-          : foregroundRunning && foregroundActivity?.total
-            ? ((foregroundActivity.current || 0) / foregroundActivity.total) * 100
-          : 0,
-  )
+    const pipeline: ActivityView[] = pipelineStatus
+      && ['running', 'failed', 'completed'].includes(pipelineStatus.status)
+      ? [{
+          id: `pipeline:${pipelineStatus.id}`,
+          title: 'Director pipeline',
+          status: pipelineStatus.status === 'failed'
+            ? 'failed'
+            : pipelineStatus.status === 'completed' ? 'completed' : 'running',
+          phase: pipelineStatus.phase,
+          message: pipelineStatus.error || pipelineStatus.progress?.message || 'Director is working…',
+          current: pipelineStatus.progress?.total_steps
+            ? pipelineStatus.progress.step
+            : pipelineStatus.progress?.current || 0,
+          total: pipelineStatus.progress?.total_steps || pipelineStatus.progress?.total || 0,
+          percent: activityProgress(
+            pipelineStatus.progress?.total_steps ? pipelineStatus.progress.step : pipelineStatus.progress?.current || 0,
+            pipelineStatus.progress?.total_steps || pipelineStatus.progress?.total || 0,
+          ),
+          updatedAt: 2,
+        }]
+      : []
 
-  const phase = pipelineRunning
-    ? PHASE_LABELS[pipelineStatus?.phase || ''] || pipelineStatus?.phase?.replaceAll('_', ' ')
-    : primaryJob?.phase?.replaceAll('_', ' ')
-      || (foregroundRunning
-        ? PHASE_LABELS[foregroundActivity?.phase || ''] || foregroundActivity?.phase?.replaceAll('_', ' ')
-        : undefined)
-  const message = isActive
-    ? pipelineSteps?.message || primaryJob?.message || foregroundActivity?.message || phase || 'Working…'
-    : hasError
-      ? pipelineStatus?.error
-        || failedJob?.error
-        || failedJob?.message
-        || foregroundActivity?.error
-        || foregroundActivity?.message
-        || 'The latest job failed'
-      : 'Ready — no active jobs'
-  const activeCount = activeJobs.length + (pipelineRunning ? 1 : 0) + (foregroundRunning ? 1 : 0)
+    const visibleJobs = jobs
+      .filter((job, index) => job.status === 'running' || job.status === 'queued' || index === 0)
+      .map((job): ActivityView => ({
+        id: `job:${job.id}`,
+        title: 'Generation job',
+        status: job.status === 'failed'
+          ? 'failed'
+          : job.status === 'completed' ? 'completed' : 'running',
+        phase: job.phase,
+        message: job.error || job.message || 'Generation is running…',
+        current: job.totalSteps ? job.step : 0,
+        total: job.totalSteps || 0,
+        percent: activityProgress(job.step, job.totalSteps, job.progress),
+        updatedAt: 1,
+      }))
+
+    return [...registered, ...pipeline, ...visibleJobs]
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+  }, [activities, jobs, pipelineStatus])
+
+  const activeRows = rows.filter(row => row.status === 'running' || row.status === 'queued')
+  const failedRows = rows.filter(row => row.status === 'failed')
+  const completedRows = rows.filter(row => row.status === 'completed')
+  const primary = activeRows[0] || failedRows[0] || completedRows[0] || null
+  const isActive = activeRows.length > 0
+  const hasError = !isActive && failedRows.length > 0
+  const phase = primary
+    ? PHASE_LABELS[primary.phase] || primary.phase?.replaceAll('_', ' ')
+    : ''
+  const message = primary?.message || 'Ready — no active jobs'
 
   return (
-    <footer className="h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
-      <div className="flex items-center gap-1.5 shrink-0">
+    <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
+      {detailsOpen && rows.length > 0 && (
+        <div className="absolute bottom-full left-3 mb-2 w-[min(34rem,calc(100vw-1.5rem))] max-h-72 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
+          <div className="mb-1.5 flex items-center justify-between px-1">
+            <span className="font-semibold text-text-primary">Current activity</span>
+            <span className="text-text-muted">{activeRows.length} active</span>
+          </div>
+          <div className="space-y-1.5">
+            {rows.map(row => (
+              <div key={row.id} className="rounded-md border border-border bg-bg-primary p-2">
+                <div className="flex items-start gap-2">
+                  {row.status === 'running' || row.status === 'queued'
+                    ? <Loader2 size={12} className="mt-0.5 shrink-0 animate-spin text-accent-blue" />
+                    : row.status === 'failed'
+                      ? <AlertCircle size={12} className="mt-0.5 shrink-0 text-red-400" />
+                      : <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-emerald-400" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-text-primary">{row.title}</span>
+                      <span className="shrink-0 capitalize text-text-muted">{PHASE_LABELS[row.phase] || row.phase?.replaceAll('_', ' ')}</span>
+                    </div>
+                    <p className={row.status === 'failed' ? 'text-red-400' : 'text-text-secondary'}>{row.message}</p>
+                    {(row.status === 'running' || row.status === 'queued') && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
+                          <div className="h-full rounded-full bg-accent-blue transition-[width] duration-300" style={{ width: `${Math.max(row.percent, row.percent > 0 ? 2 : 0)}%` }} />
+                        </div>
+                        <span className="w-10 text-right tabular-nums text-text-muted">
+                          {row.total > 0 ? `${row.current}/${row.total}` : `${Math.round(row.percent)}%`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setDetailsOpen(open => !open)}
+        className="flex items-center gap-1.5 shrink-0"
+        aria-expanded={detailsOpen}
+        title="Show all current activities"
+      >
         {isActive ? (
           <Loader2 size={13} className="animate-spin text-accent-blue" />
         ) : hasError ? (
@@ -98,15 +193,16 @@ export function ActivityFooter() {
           <CheckCircle2 size={13} className="text-emerald-400" />
         )}
         <span className="font-medium text-text-primary">Activity</span>
-        {activeCount > 1 && (
+        {activeRows.length > 0 && (
           <span className="rounded-full bg-accent-blue/15 px-1.5 py-0.5 text-accent-blue tabular-nums">
-            {activeCount}
+            {activeRows.length}
           </span>
         )}
-      </div>
+        {detailsOpen ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
+      </button>
 
       <div className="min-w-0 flex-1 flex items-center gap-2">
-        {phase && isActive && (
+        {phase && primary && (
           <span className="hidden sm:inline shrink-0 text-text-muted capitalize">{phase}</span>
         )}
         <span
@@ -117,16 +213,16 @@ export function ActivityFooter() {
         </span>
       </div>
 
-      {isActive && (
+      {isActive && primary && (
         <div className="hidden sm:flex items-center gap-2 w-44 shrink-0">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
             <div
               className="h-full rounded-full bg-accent-blue transition-[width] duration-500"
-              style={{ width: `${Math.max(percent, percent > 0 ? 2 : 0)}%` }}
+              style={{ width: `${Math.max(primary.percent, primary.percent > 0 ? 2 : 0)}%` }}
             />
           </div>
           <span className="w-9 text-right tabular-nums text-text-secondary">
-            {totalSteps > 0 ? `${currentStep}/${totalSteps}` : `${Math.round(percent)}%`}
+            {primary.total > 0 ? `${primary.current}/${primary.total}` : `${Math.round(primary.percent)}%`}
           </span>
         </div>
       )}

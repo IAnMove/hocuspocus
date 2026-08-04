@@ -575,12 +575,18 @@ function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], m
 
 export interface ForegroundActivity {
   id: string
-  status: 'running' | 'failed'
+  status: 'queued' | 'running' | 'completed' | 'failed'
   phase: string
   message: string
+  title?: string
+  kind?: string
+  parentId?: string
   current?: number
   total?: number
+  progress?: number
   error?: string | null
+  startedAt?: number
+  updatedAt?: number
 }
 
 interface AppState {
@@ -1198,7 +1204,7 @@ interface AppState {
   setSidebarMode: (mode: 'director' | 'studio') => void
   directorSetSpeakerMapping: (speakerId: string, name: string, role: SpeakerMapping['role']) => void
   directorInsertSpeakerMention: (speakerId: string) => void
-  directorUploadAndAnalyze: (file: File) => Promise<void>
+  directorUploadAndAnalyze: (file: File, opts?: { lyricsHint?: string }) => Promise<void>
   // Music Video: generate-the-track source + song setup
   directorMusicSource: 'upload' | 'generate' | null
   directorSongDescription: string
@@ -1215,7 +1221,7 @@ interface AppState {
   setDirectorSongDuration: (v: number) => void
   directorWriteSong: () => Promise<void>
   directorGenerateTrack: () => Promise<void>
-  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string }) => Promise<void>
+  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; activityId?: string }) => Promise<void>
   directorSetEnergyBias: (bias: number) => Promise<void>
   directorConfirmStructure: () => void
   directorSetSceneDescription: (prompt: string) => void
@@ -1270,6 +1276,9 @@ interface AppState {
   // Director Pipeline (server-side)
   foregroundActivity: ForegroundActivity | null
   setForegroundActivity: (activity: ForegroundActivity | null) => void
+  activities: Record<string, ForegroundActivity>
+  upsertActivity: (activity: ForegroundActivity) => void
+  removeActivity: (activityId: string) => void
   pipelineId: string | null
   pipelineStatus: import('../api/client').PipelineStatus | null
   pipelinePolling: boolean
@@ -4809,10 +4818,53 @@ export const useStore = create<AppState>((set, get) => ({
   llmStreamText: '',
   llmStreamDone: true,
   foregroundActivity: null,
+  activities: {},
   pipelineId: null,
   pipelineStatus: null,
   pipelinePolling: false,
-  setForegroundActivity: (activity) => set({ foregroundActivity: activity }),
+  upsertActivity: (activity) => set(state => {
+    const previous = state.activities[activity.id]
+    const now = Date.now()
+    return {
+      activities: {
+        ...state.activities,
+        [activity.id]: {
+          ...previous,
+          ...activity,
+          startedAt: previous?.startedAt || activity.startedAt || now,
+          updatedAt: activity.updatedAt || now,
+        },
+      },
+    }
+  }),
+  removeActivity: (activityId) => set(state => {
+    if (!state.activities[activityId]) return {}
+    const activities = { ...state.activities }
+    delete activities[activityId]
+    return { activities }
+  }),
+  // Compatibility bridge for older feature panels. New workflows should use
+  // the registry directly so concurrent activities cannot overwrite one another.
+  setForegroundActivity: (activity) => set(state => {
+    const activities = { ...state.activities }
+    if (!activity) {
+      if (state.foregroundActivity?.id) delete activities[state.foregroundActivity.id]
+      return { foregroundActivity: null, activities }
+    }
+    if (state.foregroundActivity?.id && state.foregroundActivity.id !== activity.id) {
+      delete activities[state.foregroundActivity.id]
+    }
+    const previous = activities[activity.id]
+    const now = Date.now()
+    const normalized = {
+      ...previous,
+      ...activity,
+      startedAt: previous?.startedAt || activity.startedAt || now,
+      updatedAt: activity.updatedAt || now,
+    }
+    activities[activity.id] = normalized
+    return { foregroundActivity: normalized, activities }
+  }),
   setDirectorAutoMode: (v) => set({ directorAutoMode: v }),
   setDirectorSeamless: (v) => set({ directorSeamless: v }),
   directorAppendLlmLog: (stage, text) => set(s => {
@@ -4986,7 +5038,18 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  directorUploadAndAnalyze: async (file) => {
+  directorUploadAndAnalyze: async (file, opts) => {
+    const activityId = `director-audio:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+    get().upsertActivity({
+      id: activityId,
+      kind: 'audio_analysis',
+      title: 'Prepare music video',
+      status: 'running',
+      phase: 'uploading_audio',
+      message: `Uploading “${file.name}”…`,
+      current: 1,
+      total: 10,
+    })
     set({
       directorLoading: true,
       directorLoadingMessage: 'Uploading audio...',
@@ -4996,11 +5059,26 @@ export const useStore = create<AppState>((set, get) => ({
     })
     try {
       const uploaded = await api.uploadAudio(file)
-      await get().directorAnalyzeAndPlan(uploaded.path, { transcribe: true })
+      await get().directorAnalyzeAndPlan(uploaded.path, {
+        transcribe: true,
+        lyricsHint: opts?.lyricsHint,
+        activityId,
+      })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Upload failed'
       console.error('Director upload failed:', e)
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
+      if (get().activities[activityId]?.status !== 'failed') {
+        get().upsertActivity({
+          id: activityId,
+          kind: 'audio_analysis',
+          title: 'Prepare music video',
+          status: 'failed',
+          phase: 'uploading_audio',
+          message: msg,
+          error: msg,
+        })
+      }
     }
   },
 
@@ -5010,6 +5088,33 @@ export const useStore = create<AppState>((set, get) => ({
   // identical regardless of where the audio came from.
   directorAnalyzeAndPlan: async (audioPath, opts) => {
     const transcribe = opts?.transcribe !== false
+    const activityId = opts?.activityId
+      || `director-audio:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+    const analysisSteps: Record<string, number> = {
+      loading_audio: 2,
+      detecting_beats: 3,
+      identifying_sections: 4,
+      loading_vocal_model: 4,
+      extracting_vocals: 5,
+      loading_transcription_model: 5,
+      transcribing: 6,
+      loading_diarization_model: 6,
+      identifying_speakers: 7,
+      finalizing: 8,
+    }
+    const reportActivity = (phase: string, message: string, current?: number) => {
+      get().upsertActivity({
+        id: activityId,
+        kind: 'audio_analysis',
+        title: 'Prepare music video',
+        status: 'running',
+        phase,
+        message,
+        current: current ?? analysisSteps[phase] ?? 2,
+        total: 10,
+      })
+    }
+    reportActivity('analyzing_audio', 'Analyzing audio…', 2)
     set({
       directorAudioPath: audioPath,
       directorLoading: true,
@@ -5029,6 +5134,7 @@ export const useStore = create<AppState>((set, get) => ({
           const status = await api.fetchAudioAnalyzeStatus()
           if (!status.step) return  // No analyze in flight or just cleared
           set({ directorLoadingMessage: `${status.detail}...` })
+          reportActivity(status.step, `${status.detail}…`)
         } catch { /* polling errors are non-fatal */ }
       }, 1000)
     }
@@ -5052,6 +5158,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (analysis.lyrics && analysis.lyrics.length > 0) {
         try {
           set({ directorLoadingMessage: 'Identifying sections (LLM)...' })
+          reportActivity('classifying_sections', 'Classifying verses, choruses and bridges…', 8)
           const classified = await api.classifySections({ analysis })
           analysis = {
             ...analysis,
@@ -5085,6 +5192,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Plan beat-aligned clip structure
       set({ directorLoadingMessage: 'Planning clip structure...' })
+      reportActivity('planning_clips', 'Planning beat-aligned clips…', 9)
       const structure = await api.planClipStructure({
         analysis,
         energy_bias: get().directorEnergyBias,
@@ -5105,10 +5213,30 @@ export const useStore = create<AppState>((set, get) => ({
         directorLoading: false,
         directorLoadingMessage: null,
       })
+      get().upsertActivity({
+        id: activityId,
+        kind: 'audio_analysis',
+        title: 'Prepare music video',
+        status: 'completed',
+        phase: 'ready_for_visual_brief',
+        message: `${structure.clips.length} clips planned — ready for the visual brief`,
+        current: 10,
+        total: 10,
+      })
+      window.setTimeout(() => get().removeActivity(activityId), 5000)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Analysis failed'
       console.error('Director analysis failed:', e)
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
+      get().upsertActivity({
+        id: activityId,
+        kind: 'audio_analysis',
+        title: 'Prepare music video',
+        status: 'failed',
+        phase: 'analyzing_audio',
+        message: msg,
+        error: msg,
+      })
       throw e
     } finally {
       stopAnalyzePolling()

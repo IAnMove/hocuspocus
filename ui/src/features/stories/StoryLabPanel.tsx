@@ -434,8 +434,10 @@ export function StoryLabPanel() {
   const beginStoryActivity = (phase: string, message: string, total = 0) => {
     const id = `story-lab:${project.id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
     let failed = false
-    useStore.getState().setForegroundActivity({
+    useStore.getState().upsertActivity({
       id,
+      kind: 'story_lab',
+      title: 'Story Lab',
       status: 'running',
       phase,
       message,
@@ -448,10 +450,10 @@ export function StoryLabPanel() {
       current = 0,
       nextTotal = total,
     ) => {
-      const active = useStore.getState().foregroundActivity
-      if (active && active.id !== id) return
-      useStore.getState().setForegroundActivity({
+      useStore.getState().upsertActivity({
         id,
+        kind: 'story_lab',
+        title: 'Story Lab',
         status: 'running',
         phase: nextPhase,
         message: nextMessage,
@@ -463,11 +465,11 @@ export function StoryLabPanel() {
       update: updateActivity,
       fail: (error: unknown, nextPhase = phase) => {
         failed = true
-        const active = useStore.getState().foregroundActivity
-        if (active?.id !== id) return
         const errorMessage = error instanceof Error ? error.message : String(error)
-        useStore.getState().setForegroundActivity({
+        useStore.getState().upsertActivity({
           id,
+          kind: 'story_lab',
+          title: 'Story Lab',
           status: 'failed',
           phase: nextPhase,
           message: errorMessage,
@@ -476,9 +478,7 @@ export function StoryLabPanel() {
       },
       finish: () => {
         if (failed) return
-        if (useStore.getState().foregroundActivity?.id === id) {
-          useStore.getState().setForegroundActivity(null)
-        }
+        useStore.getState().removeActivity(id)
       },
     }
   }
@@ -1901,7 +1901,7 @@ export function StoryLabPanel() {
       })
       await useStore.getState().directorUploadAndAnalyze(new File(
         [blob], candidate.name, { type: blob.type || 'audio/mpeg' },
-      ))
+      ), { lyricsHint: cue?.lyrics || project.music.lyrics || undefined })
     } catch (error) {
       setNotice({ kind: 'error', text: `The musical trailer could not load the song: ${(error as Error).message}` })
     } finally {
