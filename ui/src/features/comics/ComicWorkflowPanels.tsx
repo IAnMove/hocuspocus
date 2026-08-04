@@ -969,8 +969,27 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       `Render a quick non-generative storyboard preview from ${panelCount} still panels? `
       + 'This does not call the selected video model or animate characters; it only holds the drawings and optionally applies FFmpeg pans, zooms and transitions.',
     )) return
+    const activityId = `comic-animatic:${project.id}:${Date.now()}`
+    const reportAnimaticActivity = (
+      message: string,
+      phase = 'rendering_animatic',
+      current = 0,
+      total = 0,
+    ) => {
+      setProgress(message)
+      useStore.getState().setForegroundActivity({
+        id: activityId,
+        status: 'running',
+        phase,
+        message,
+        current,
+        total,
+      })
+    }
+    let activityFailed = false
     setBusy('animatic')
     setResult(null)
+    reportAnimaticActivity('Preparing comic animatic…')
     try {
       const panels: Array<{
         source: string
@@ -982,7 +1001,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         script: string
       }> = []
       await forEachComicPanelCapture(async (capture, current, total) => {
-        setProgress(`Uploading shot ${current}/${total}`)
+        reportAnimaticActivity(`Uploading shot ${current}/${total}`, 'uploading_artwork', current, total)
         const blob = await (await fetch(capture.dataUrl)).blob()
         const upload = await api.uploadImage(new File(
           [blob],
@@ -1001,8 +1020,13 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             : 'none',
           script: planned ? scriptForPanel(planned) : '',
         })
-      }, (current, total) => setProgress(`Capturing panel ${current}/${total}`))
-      setProgress('Starting FFmpeg animatic…')
+      }, (current, total) => reportAnimaticActivity(
+        `Capturing panel ${current}/${total}`,
+        'preparing_comic_video',
+        current,
+        total,
+      ))
+      reportAnimaticActivity('Starting FFmpeg animatic…')
       const started = await api.startComicAnimatic({
         comic_id: project.id,
         comic_title: project.title,
@@ -1015,7 +1039,12 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       for (;;) {
         await new Promise(resolve => window.setTimeout(resolve, 1000))
         const job = await api.fetchVideoEditorExport(started.job_id)
-        setProgress(`${job.message} · ${job.progress}%`)
+        reportAnimaticActivity(
+          `${job.message} · ${job.progress}%`,
+          'rendering_animatic',
+          job.progress,
+          100,
+        )
         if (job.status === 'failed') throw new Error(job.error || job.message)
         if (job.status === 'completed' && job.url && job.filename) {
           const completed = { name: job.filename, url: job.url }
@@ -1027,8 +1056,21 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         }
       }
     } catch (error) {
-      notify('error', (error as Error).message)
+      activityFailed = true
+      const message = (error as Error).message
+      useStore.getState().setForegroundActivity({
+        id: activityId,
+        status: 'failed',
+        phase: 'rendering_animatic',
+        message,
+        error: message,
+      })
+      notify('error', message)
     } finally {
+      const foregroundActivity = useStore.getState().foregroundActivity
+      if (!activityFailed && foregroundActivity?.id === activityId) {
+        useStore.getState().setForegroundActivity(null)
+      }
       setBusy(null)
       setProgress('')
     }
