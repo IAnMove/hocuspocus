@@ -19,6 +19,55 @@ import type {
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
+type ComicMovieQuality = '480p' | '540p' | '720p' | '1080p'
+type ComicMovieAspect = 'landscape' | 'portrait' | 'square'
+
+type ComicMovieResolution = {
+  quality: ComicMovieQuality
+  value: string
+  label: string
+  recommended?: boolean
+}
+
+const comicMovieResolutions = (
+  modelId: string,
+  aspect: ComicMovieAspect,
+): ComicMovieResolution[] => {
+  if (modelId === 'minimax_h3') {
+    if (aspect === 'square') {
+      return [
+        { quality: '480p', value: '640x640', label: '≈480p · 640×640' },
+        { quality: '540p', value: '736x736', label: '≈540p · 736×736', recommended: true },
+        { quality: '720p', value: '992x992', label: '≈720p · 992×992 · high' },
+      ]
+    }
+    const portrait = aspect === 'portrait'
+    return [
+      { quality: '480p', value: portrait ? '448x832' : '832x448', label: `≈480p · ${portrait ? '448×832' : '832×448'}` },
+      { quality: '540p', value: portrait ? '544x960' : '960x544', label: `≈540p · ${portrait ? '544×960' : '960×544'} · recommended`, recommended: true },
+      { quality: '720p', value: portrait ? '704x1280' : '1280x704', label: `≈720p · ${portrait ? '704×1280' : '1280×704'} · high` },
+    ]
+  }
+  return [
+    {
+      quality: '480p',
+      value: aspect === 'portrait' ? '448x832' : aspect === 'square' ? '640x640' : '832x448',
+      label: `≈480p · ${aspect === 'portrait' ? '448×832' : aspect === 'square' ? '640×640' : '832×448'} · test`,
+    },
+    {
+      quality: '720p',
+      value: aspect === 'portrait' ? '704x1280' : aspect === 'square' ? '1024x1024' : '1280x704',
+      label: `≈720p · ${aspect === 'portrait' ? '704×1280' : aspect === 'square' ? '1024×1024' : '1280×704'} · recommended`,
+      recommended: true,
+    },
+    {
+      quality: '1080p',
+      value: aspect === 'portrait' ? '1088x1920' : aspect === 'square' ? '1408x1408' : '1920x1088',
+      label: `≈1080p · ${aspect === 'portrait' ? '1088×1920' : aspect === 'square' ? '1408×1408' : '1920×1088'} · heavy`,
+    },
+  ]
+}
+
 const motionLevelLabel = (level: number) => (
   level <= 0
     ? '0 · exact hold'
@@ -75,10 +124,10 @@ function overrideChangesForPatch(patch: Partial<ComicPlanPanel>): {
 }
 
 type SavedComicVideoSettings = {
-  aspect?: 'landscape' | 'portrait' | 'square'
+  aspect?: ComicMovieAspect
   defaultDuration?: number
   targetFilmShots?: number
-  quality?: '480p' | '720p' | '1080p'
+  quality?: ComicMovieQuality
   motionMode?: 'contextual' | 'living-still' | 'action'
   imageFit?: 'reframe' | 'cover' | 'contain'
   endFrameMode?: 'none' | 'smart' | 'all'
@@ -551,7 +600,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const setMovieSelfRefiner = useStore(state => state.setDirectorVideoSelfRefiner)
   const storyboard = project.director?.input.productionMode === 'storyboard'
   const restoredSettings = readComicVideoSettings(activeWorkspace, project.id)
-  const [aspect, setAspect] = useState<'landscape' | 'portrait' | 'square'>(() =>
+  const [aspect, setAspect] = useState<ComicMovieAspect>(() =>
     restoredSettings.aspect || project.director?.input.storyboardAspect || 'landscape')
   const [defaultDuration, setDefaultDuration] = useState(
     restoredSettings.defaultDuration || 3,
@@ -563,7 +612,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   )
   const [transition, setTransition] = useState('none')
   const [animaticMotion, setAnimaticMotion] = useState<'none' | 'shot-settings'>('none')
-  const [movieQuality, setMovieQuality] = useState<'480p' | '720p' | '1080p'>(
+  const [movieQuality, setMovieQuality] = useState<ComicMovieQuality>(
     restoredSettings.quality || '720p',
   )
   const [movieMotionMode, setMovieMotionMode] = useState<'contextual' | 'living-still' | 'action'>(
@@ -727,6 +776,20 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const effectiveVideoModelName = videoModels.find(
     model => model.model_type === effectiveVideoModel,
   )?.name || effectiveVideoModel
+  const movieResolutionOptions = useMemo(
+    () => comicMovieResolutions(effectiveVideoModel, aspect),
+    [aspect, effectiveVideoModel],
+  )
+  const selectedMovieResolution = movieResolutionOptions.find(
+    option => option.quality === movieQuality,
+  ) || movieResolutionOptions.find(option => option.recommended) || movieResolutionOptions[0]
+  useEffect(() => {
+    if (movieResolutionOptions.some(option => option.quality === movieQuality)) return
+    setMovieQuality(
+      movieResolutionOptions.find(option => option.recommended)?.quality
+      || movieResolutionOptions[0].quality,
+    )
+  }, [movieQuality, movieResolutionOptions])
   const resolution = aspect === 'portrait'
     ? { width: 1080, height: 1920 }
     : aspect === 'square' ? { width: 1080, height: 1080 } : { width: 1920, height: 1080 }
@@ -736,12 +799,13 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     aspect,
     defaultDuration,
     movieQuality,
+    movieResolution: selectedMovieResolution.value,
     movieMotionMode,
     movieImageFit,
     movieEndFrameMode,
     movieFidelity,
     movieSelfRefiner,
-    selectedVideoModel,
+    selectedVideoModel: effectiveVideoModel,
     savedVideoLoras,
     targetFilmShots,
     videoRuntime: {
@@ -1007,6 +1071,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       + `Global motion treatment: ${motionTreatmentLabel(movieMotionMode)}; per-shot overrides are shown in the shot plan. `
       + `${isTestRun ? 'This uses the final model, resolution, prompts and shot settings; it is not a lower-quality preview. ' : ''}`
       + `Selected video engine: ${effectiveVideoModelName} (${effectiveVideoModel}). `
+      + `Exact output request: ${selectedMovieResolution.value}. `
       + 'Director may omit or fuse source beats. Only model-driven and AI-living-still shots use I2V; holds and subtle centered pushes are deterministic.',
     )) return
 
@@ -1203,11 +1268,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           + 'Choose a model with end-frame support or use “No end frame”.',
         )
       }
-      const qualityResolution = movieQuality === '1080p'
-        ? (aspect === 'portrait' ? '1088x1920' : aspect === 'square' ? '1408x1408' : '1920x1088')
-        : movieQuality === '720p'
-          ? (aspect === 'portrait' ? '704x1280' : aspect === 'square' ? '1024x1024' : '1280x704')
-          : (aspect === 'portrait' ? '448x832' : aspect === 'square' ? '640x640' : '832x448')
+      const qualityResolution = selectedMovieResolution.value
       const fps = state.modelOptions?.fps || 16
       const savedVideoSteps = Number(state.savedParamsPerMode.video?.num_inference_steps ?? 8)
       const validVideoSteps = Number.isFinite(savedVideoSteps) ? savedVideoSteps : 8
@@ -1368,7 +1429,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       notify(
         'ok',
         isTestRun
-          ? `${requestedPanelCount}-clip quality test started with the real ${movieQuality} settings. The remaining ${panelCount - requestedPanelCount} panels were not submitted.`
+          ? `${requestedPanelCount}-clip quality test started at ${selectedMovieResolution.value} with the real ${effectiveVideoModelName} settings. The remaining ${panelCount - requestedPanelCount} panels were not submitted.`
           : movieEndFrameMode === 'none'
             ? 'Comic movie started. Panels without an explicit end-frame override are independent I2V shots; completed clips are joined with clean cuts.'
             : 'Comic movie started. End-frame conditioning is enabled for selected shots, but completed clips are still joined with clean cuts.',
@@ -1431,6 +1492,9 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         <span className="mt-1 block text-[9px] text-accent-blue">
           Director will submit <b>{effectiveVideoModelName}</b> · <code>{effectiveVideoModel}</code>
         </span>
+        <span className="mt-1 block text-[9px] text-text-primary">
+          Current output: <b>{selectedMovieResolution.label}</b>
+        </span>
         <span className="mt-1 block text-[9px] text-text-muted">
           {effectiveVideoModel.includes('ltx2')
             ? 'LTX Distilled uses Maestro’s validated two-stage 8+3 recipe.'
@@ -1458,18 +1522,24 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-[10px] text-text-muted">Movie format
-              <select className={`${input} mt-1`} value={aspect} onChange={event => setAspect(event.target.value as typeof aspect)}>
+              <select className={`${input} mt-1`} value={aspect} onChange={event => setAspect(event.target.value as ComicMovieAspect)}>
                 <option value="landscape">Landscape · TV</option>
                 <option value="portrait">Portrait · mobile</option>
                 <option value="square">Square</option>
               </select>
             </label>
-            <label className="block text-[10px] text-text-muted">I2V quality
-              <select className={`${input} mt-1`} value={movieQuality} onChange={event => setMovieQuality(event.target.value as typeof movieQuality)}>
-                <option value="1080p">1080p · heavy</option>
-                <option value="720p">720p · recommended</option>
-                <option value="480p">480p · test only</option>
+            <label className="block text-[10px] text-text-muted">Output resolution
+              <select className={`${input} mt-1`} value={movieQuality} onChange={event => setMovieQuality(event.target.value as ComicMovieQuality)}>
+                {movieResolutionOptions.map(option => (
+                  <option key={option.value} value={option.quality}>{option.label}</option>
+                ))}
               </select>
+              <span className="mt-1 block text-[9px] text-text-muted">
+                Exact request: <b className="text-text-primary">{selectedMovieResolution.value.replace('x', '×')}</b>
+                {effectiveVideoModel === 'minimax_h3'
+                  ? ' · MiniMax H3-compatible, 32-pixel aligned and below its Base canvas limit.'
+                  : ' · compatible preset for the selected engine.'}
+              </span>
             </label>
           </div>
           <label className="block text-[10px] text-text-muted">Global AI motion direction
@@ -1846,11 +1916,21 @@ export function ComicVideoPreflightPanel({
     try {
       const built = JSON.parse(builtValue) as Record<string, unknown>
       const saved = readComicVideoSettings(activeWorkspace, project.id)
+      const savedAspect = (
+        saved.aspect || project.director?.input.storyboardAspect || 'landscape'
+      ) as ComicMovieAspect
+      const savedQuality = saved.quality || '720p'
+      const currentVideoModel = selectedVideoModel || 'ltx2_22B_distilled_1_1'
+      const currentResolutionOptions = comicMovieResolutions(currentVideoModel, savedAspect)
+      const currentResolution = currentResolutionOptions.find(
+        option => option.quality === savedQuality,
+      ) || currentResolutionOptions.find(option => option.recommended) || currentResolutionOptions[0]
       return built.comicId !== project.id
         || built.updatedAt !== project.updatedAt
-        || built.aspect !== (saved.aspect || project.director?.input.storyboardAspect || 'landscape')
+        || built.aspect !== savedAspect
         || Number(built.defaultDuration || 3) !== Number(saved.defaultDuration || 3)
-        || built.movieQuality !== (saved.quality || '720p')
+        || built.movieQuality !== savedQuality
+        || built.movieResolution !== currentResolution.value
         || built.movieMotionMode !== (
           saved.motionMode
           || (project.director?.input.productionMode === 'storyboard' ? 'action' : 'contextual')
@@ -1860,7 +1940,7 @@ export function ComicVideoPreflightPanel({
         || built.movieFidelity !== (saved.fidelity || 'faithful')
         || Number(built.targetFilmShots || 0) !== Number(saved.targetFilmShots || 0)
         || built.movieSelfRefiner !== movieSelfRefiner
-        || built.selectedVideoModel !== selectedVideoModel
+        || built.selectedVideoModel !== currentVideoModel
         || JSON.stringify(built.savedVideoLoras || {}) !== JSON.stringify(savedVideoLoras || {})
         || JSON.stringify(built.videoRuntime || {}) !== JSON.stringify({
           savedVideoParams,
