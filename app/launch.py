@@ -12078,6 +12078,27 @@ def _story_lab_schema(scope: str) -> dict:
         "required": ["id", "stage", "title", "summary", "goal", "conflict", "turn"],
         "additionalProperties": False,
     }
+    music_cue = {
+        "type": "object",
+        "properties": {
+            "id": string,
+            "kind": {"type": "string", "enum": ["world", "character", "story"]},
+            "targetId": string,
+            "title": string,
+            "purpose": string,
+            "referenceSong": string,
+            "brief": string,
+            "style": string,
+            "lyrics": string,
+            "instrumental": {"type": "boolean"},
+            "durationSeconds": {"type": "integer", "minimum": 20, "maximum": 360},
+        },
+        "required": [
+            "id", "kind", "targetId", "title", "purpose", "referenceSong",
+            "brief", "style", "lyrics", "instrumental", "durationSeconds",
+        ],
+        "additionalProperties": False,
+    }
     properties = {
         "overview": {
             "type": "object",
@@ -12092,6 +12113,14 @@ def _story_lab_schema(scope: str) -> dict:
         "characters": {"type": "array", "items": character, "minItems": 1, "maxItems": 12},
         "relationships": {"type": "array", "items": relationship, "maxItems": 24},
         "beats": {"type": "array", "items": beat, "minItems": 6, "maxItems": 14},
+        "music": {
+            "type": "object",
+            "properties": {
+                "cues": {"type": "array", "items": music_cue, "minItems": 4, "maxItems": 16},
+            },
+            "required": ["cues"],
+            "additionalProperties": False,
+        },
     }
     keys = list(properties) if scope == "all" else [scope]
     return {
@@ -12129,6 +12158,42 @@ def _normalize_story_stage_ids(
                 candidate = f"{base}-{suffix}"
                 suffix += 1
             character["id"] = candidate
+            used.add(candidate)
+        return normalized
+
+    if scope == "music" and isinstance(normalized.get("music"), dict):
+        cues = normalized["music"].get("cues")
+        if not isinstance(cues, list):
+            return normalized
+        characters = [
+            character for character in project.get("characters", [])
+            if isinstance(character, dict) and str(character.get("id") or "").strip()
+        ]
+        character_lookup = {}
+        for character in characters:
+            canonical = str(character["id"]).strip()
+            for alias in (character.get("id"), character.get("name")):
+                token = _story_id_token(alias)
+                if token:
+                    character_lookup[token] = canonical
+        used: set[str] = set()
+        for index, cue in enumerate(cues):
+            if not isinstance(cue, dict):
+                continue
+            kind = str(cue.get("kind") or "").strip().lower()
+            target = str(cue.get("targetId") or "").strip()
+            if kind == "character":
+                target = character_lookup.get(_story_id_token(target), target)
+            elif kind == "world":
+                target = "world"
+            cue["targetId"] = target
+            candidate = _story_id_token(cue.get("id")) or f"music-{kind or 'cue'}-{index + 1}"
+            base = candidate
+            suffix = 2
+            while candidate in used:
+                candidate = f"{base}-{suffix}"
+                suffix += 1
+            cue["id"] = candidate
             used.add(candidate)
         return normalized
 
@@ -12190,7 +12255,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
         return "response root is not a JSON object"
     key = "beats" if scope == "structure" else scope
     value = result.get(key)
-    if scope in {"overview", "world"} and not isinstance(value, dict):
+    if scope in {"overview", "world", "music"} and not isinstance(value, dict):
         return f"{key} is not an object"
     if scope in {"characters", "relationships", "structure"} and not isinstance(value, list):
         return f"{key} is not an array"
@@ -12247,6 +12312,53 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
             }:
                 if not isinstance(location.get(field), str):
                     return f"location {index + 1} field {field} is not a string"
+        return None
+    if scope == "music":
+        cues = value.get("cues")
+        if not isinstance(cues, list):
+            return "music cues is not an array"
+        character_ids = {
+            str(item.get("id") or "").strip()
+            for item in project.get("characters", []) if isinstance(item, dict)
+        }
+        expected_count = len(character_ids) + 4
+        if len(cues) != expected_count:
+            return f"music must contain exactly {expected_count} cues"
+        required_cue = {
+            "id", "kind", "targetId", "title", "purpose", "referenceSong",
+            "brief", "style", "lyrics", "instrumental", "durationSeconds",
+        }
+        ids = []
+        for index, cue in enumerate(cues):
+            if not isinstance(cue, dict):
+                return f"music cue {index + 1} is not an object"
+            missing = required_cue - set(cue)
+            if missing:
+                return f"music cue {index + 1} is missing {', '.join(sorted(missing))}"
+            for field in required_cue - {"instrumental", "durationSeconds"}:
+                if not isinstance(cue.get(field), str):
+                    return f"music cue {index + 1} field {field} is not a string"
+            if not isinstance(cue.get("instrumental"), bool):
+                return f"music cue {index + 1} instrumental is not a boolean"
+            duration = cue.get("durationSeconds")
+            if not isinstance(duration, int) or isinstance(duration, bool) or not 20 <= duration <= 360:
+                return f"music cue {index + 1} durationSeconds is outside 20–360"
+            ids.append(cue["id"])
+        if len(ids) != len(set(ids)):
+            return "music contains duplicate IDs"
+        world_cues = [cue for cue in cues if cue["kind"] == "world" and cue["targetId"] == "world"]
+        character_targets = {
+            cue["targetId"] for cue in cues if cue["kind"] == "character"
+        }
+        story_cues = [cue for cue in cues if cue["kind"] == "story"]
+        if len(world_cues) != 1:
+            return "music needs exactly one world ambience cue"
+        if character_targets != character_ids or len(character_targets) != len([
+            cue for cue in cues if cue["kind"] == "character"
+        ]):
+            return "music needs exactly one presentation cue per character ID"
+        if len(story_cues) != 3:
+            return "music needs exactly three story songs"
         return None
     if not value and scope != "relationships":
         return f"{key} is empty"
@@ -12309,11 +12421,11 @@ def _story_project_prompt_context(project: dict, scope: str) -> str:
                 }
                 for item in raw_characters if isinstance(item, dict)
             ]
-    if scope in {"world", "relationships", "structure"} and isinstance(project.get("world"), dict):
+    if scope in {"world", "relationships", "structure", "music"} and isinstance(project.get("world"), dict):
         compact["world"] = project["world"]
-    if scope in {"relationships", "structure"} and isinstance(project.get("relationships"), list):
+    if scope in {"relationships", "structure", "music"} and isinstance(project.get("relationships"), list):
         compact["relationships"] = project["relationships"]
-    if scope == "structure" and isinstance(project.get("beats"), list):
+    if scope in {"structure", "music"} and isinstance(project.get("beats"), list):
         compact["beats"] = project["beats"]
 
     def bounded(value, string_limit: int):
@@ -12362,6 +12474,15 @@ def _story_checkpoint_request(body: dict) -> dict:
             for location in world.get("locations", []):
                 if isinstance(location, dict):
                     location.pop("referenceAssetIds", None)
+        music = project.get("music")
+        if isinstance(music, dict):
+            music.pop("candidates", None)
+            music.pop("selectedCandidateId", None)
+            music.pop("coverReferenceFilename", None)
+            for cue in music.get("cues", []):
+                if isinstance(cue, dict):
+                    cue.pop("candidates", None)
+                    cue.pop("selectedCandidateId", None)
     return request
 
 
@@ -12430,6 +12551,23 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     if not llm_override:
         _ensure_llm_loaded()
     current = _story_project_prompt_context(project, scope)
+    music_direction = ""
+    if scope == "music":
+        character_count = len([
+            item for item in project.get("characters", []) if isinstance(item, dict)
+        ])
+        music_direction = f"""
+Music-specific contract:
+- Return exactly one instrumental ambient cue for targetId "world".
+- Return exactly one presentation cue for each of the {character_count} existing character IDs.
+- Return exactly three distinct vocal story songs covering different emotional/narrative angles.
+- referenceSong is an editable input example in "Title — Artist" form. Choose a useful,
+  recognizable reference for tempo, instrumentation or emotional architecture only.
+- Every style prompt, melody concept and lyric must be newly written for this Story. Never
+  reproduce the reference song's melody, lyrics, title phrases or distinctive arrangement.
+- Write vocal lyrics in {language}; use an empty lyrics string for instrumental cues.
+- Make brief and purpose explain how the cue maps to this exact world, character or story arc.
+"""
     base_prompt = f"""Create the requested editable Story Lab material.
 Generation scope: {scope}
 Premise: {premise}
@@ -12442,6 +12580,7 @@ Apply that style as a mandatory render-time constraint: {'yes' if enforce_visual
 Optional user instruction: {instruction or 'none'}
 Current manually edited project (preserve useful established facts and stable IDs):
 {current}
+{music_direction}
 
 Return only the JSON required by the schema. This is a reusable story bible, not a comic
 page plan and not a screenplay. Build one causal dramatic arc with setup, inciting incident,
@@ -12468,7 +12607,7 @@ Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instr
                     "designer and production bible author. Return strict JSON only."
                 ),
                 schema=_story_lab_schema(schema_scope),
-                max_new_tokens=2600,
+                max_new_tokens=6000 if scope == "music" else 2600,
                 stage=f"Story Lab {scope}, attempt {attempt}",
                 llm_override=llm_override,
             )
@@ -12518,6 +12657,12 @@ def _merge_story_stage_project(project: dict, result: dict) -> dict:
             merged[key] = copy.deepcopy(result[key])
     if "structure" in result:
         merged["beats"] = copy.deepcopy(result["structure"])
+    if isinstance(result.get("music"), dict):
+        music = merged.get("music") if isinstance(merged.get("music"), dict) else {}
+        merged["music"] = {
+            **music,
+            "cues": copy.deepcopy(result["music"].get("cues") or []),
+        }
     return merged
 
 
@@ -12597,7 +12742,7 @@ def _run_story_plan_job_inner(job_id: str) -> None:
     body = copy.deepcopy(job.get("request") or {})
     requested_scope = str(body.get("scope") or "all")
     stages = (
-        ["overview", "characters", "world", "relationships", "structure"]
+        ["overview", "characters", "world", "relationships", "structure", "music"]
         if requested_scope == "all" else [requested_scope]
     )
     completed = job.get("completedStages")
@@ -12675,7 +12820,7 @@ def _run_story_plan_job(job_id: str) -> None:
 def generate_story_lab_section(body: dict):
     """Compatibility synchronous endpoint; new clients should use durable jobs."""
     scope = str(body.get("scope") or "all").strip().lower()
-    allowed = {"overview", "world", "characters", "relationships", "structure"}
+    allowed = {"overview", "world", "characters", "relationships", "structure", "music"}
     if scope == "all":
         raise HTTPException(
             status_code=400,
@@ -12729,7 +12874,7 @@ async def generate_story_music_candidates(body: dict):
 @api.post("/api/v1/stories/generate/start")
 def start_story_lab_generation(body: dict):
     scope = str(body.get("scope") or "all").strip().lower()
-    allowed = {"all", "overview", "world", "characters", "relationships", "structure"}
+    allowed = {"all", "overview", "world", "characters", "relationships", "structure", "music"}
     if scope not in allowed:
         raise HTTPException(status_code=400, detail="Unsupported Story Lab generation scope")
     if not str(body.get("premise") or "").strip():
@@ -12741,7 +12886,7 @@ def start_story_lab_generation(body: dict):
         "message": "Story generation queued.",
         "stage": "queued",
         "current": 0,
-        "total": 5 if scope == "all" else 1,
+        "total": 6 if scope == "all" else 1,
         "request": _story_checkpoint_request(body),
         "completedStages": {},
         "result": None,
