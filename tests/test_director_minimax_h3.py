@@ -229,6 +229,33 @@ def test_h3_story_legacy_plan_matches_one_location_from_prompt(tmp_path: Path):
     assert submitted[0]["image_refs"] == [str(shot), str(desert)]
 
 
+def test_legacy_location_matching_handles_spanish_labels_and_english_prompts():
+    params = {
+        "location_ref_paths": [
+            "/refs/crystal-desert.png",
+            "/refs/plateau-tree.png",
+            "/refs/horizon.png",
+        ],
+        "location_ref_labels": [
+            "Gran Desierto de Cristales",
+            "Meseta del Último Árbol",
+            "Línea del Horizonte",
+        ],
+    }
+
+    desert = director_pipeline._director_location_ref_for_plan({
+        "image_prompt": "A crystal desert under a turquoise sky.",
+        "video_prompt": "She walks across prisms toward the horizon.",
+    }, params)
+    plateau = director_pipeline._director_location_ref_for_plan({
+        "image_prompt": "A dark plateau with cracked earth and dry roots.",
+        "video_prompt": "A glowing tree grows beside the robot.",
+    }, params)
+
+    assert desert == ("/refs/crystal-desert.png", "Gran Desierto de Cristales")
+    assert plateau == ("/refs/plateau-tree.png", "Meseta del Último Árbol")
+
+
 def test_story_image_generation_routes_only_one_location_per_shot(tmp_path: Path):
     main = tmp_path / "main.png"
     character = tmp_path / "character.png"

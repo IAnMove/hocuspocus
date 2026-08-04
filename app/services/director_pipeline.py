@@ -4128,10 +4128,43 @@ _LOCATION_MATCH_STOP_WORDS = frozenset({
     "the", "un", "una", "y", "world", "scene", "location", "setting",
 })
 
+_LOCATION_TOKEN_ALIASES = {
+    # Conservative bilingual aliases used only for resumable plans created
+    # before location_ref_label existed. New plans always carry the exact
+    # user-supplied label and never need this heuristic.
+    "arbol": "tree",
+    "camara": "chamber",
+    "cielo": "sky",
+    "claro": "clearing",
+    "cristal": "crystal",
+    "cristales": "crystal",
+    "desierto": "desert",
+    "flotante": "floating",
+    "flotantes": "floating",
+    "horizonte": "horizon",
+    "linea": "line",
+    "meseta": "plateau",
+    "playa": "beach",
+    "ruina": "ruin",
+    "ruinas": "ruin",
+    "semilla": "seed",
+    "siembra": "planting",
+    "transformacion": "transformation",
+    "ultimo": "last",
+}
+
 
 def _normalize_location_match_text(value: object) -> str:
     text = unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode()
     return " ".join(re.findall(r"[a-z0-9]+", text.casefold()))
+
+
+def _canonical_location_tokens(value: object) -> set[str]:
+    return {
+        _LOCATION_TOKEN_ALIASES.get(token, token)
+        for token in _normalize_location_match_text(value).split()
+        if len(token) >= 4 and token not in _LOCATION_MATCH_STOP_WORDS
+    }
 
 
 def _director_location_ref_for_plan(plan: dict, params: dict) -> tuple[str, str]:
@@ -4186,14 +4219,11 @@ def _director_location_ref_for_plan(plan: dict, params: dict) -> tuple[str, str]
         str(item.get("prompt", item.get("text", ""))) if isinstance(item, dict) else str(item or "")
         for item in searchable_parts
     ))
-    searchable_tokens = set(searchable.split())
+    searchable_tokens = _canonical_location_tokens(searchable)
     scored: list[tuple[int, int, str, str]] = []
     for pair_index, (path, label) in enumerate(pairs):
         normalized_label = _normalize_location_match_text(label)
-        label_tokens = [
-            token for token in normalized_label.split()
-            if len(token) >= 4 and token not in _LOCATION_MATCH_STOP_WORDS
-        ]
+        label_tokens = _canonical_location_tokens(normalized_label)
         exact_phrase = bool(normalized_label and normalized_label in searchable)
         token_hits = sum(token in searchable_tokens for token in label_tokens)
         prefix_hits = sum(
