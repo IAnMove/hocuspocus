@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
-  BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Download, Film, ImagePlus, Loader2,
+  BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, Film, ImagePlus, Loader2,
   Music, Network, Palette, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
@@ -73,6 +73,18 @@ function storySongBrief(project: StoryProject, durationSeconds: number): string 
     project.world.visualLanguage ? `Choose music that feels native to this visual world: ${project.world.visualLanguage}.` : '',
     'Use a memorable recurring chorus, concrete story imagery, and a clear emotional progression; do not merely summarize the synopsis.',
   ].filter(Boolean).join('\n')
+}
+
+const MINIMAX_LYRIC_SECTION = /^\[(Intro|Verse|Pre Chorus|Chorus|Post Chorus|Interlude|Bridge|Transition|Build Up|Break|Hook|Inst|Solo|Outro)\]\s*$/m
+
+function miniMaxCuePayload(cue: StoryMusicCue, model: StoryProject['music']['model']): string {
+  return JSON.stringify({
+    model,
+    prompt: cue.style.trim().slice(0, 300),
+    lyrics: cue.instrumental ? '' : cue.lyrics,
+    instrumental: cue.instrumental,
+    count: 1,
+  }, null, 2)
 }
 
 type StoryTab = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'productions'
@@ -2263,7 +2275,7 @@ export function StoryLabPanel() {
                   return (
                     <section key={kind} className="mb-5">
                       <h3 className="mb-2 text-sm font-semibold text-text-primary">{heading}</h3>
-                      <div className="grid xl:grid-cols-2 gap-3">
+                      <div className="space-y-3">
                         {cues.map(cue => {
                           const targetName = cue.kind === 'character'
                             ? project.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
@@ -2272,7 +2284,7 @@ export function StoryLabPanel() {
                           const adapting = musicCueBusy === `llm:${cue.id}`
                           const queued = musicQueue?.ids.includes(cue.id)
                           return (
-                            <article key={cue.id} className={`${panel} space-y-2.5 ${generatingAudio ? 'border-pink-500/60' : ''}`}>
+                            <article key={cue.id} className={`${panel} space-y-3 ${generatingAudio ? 'border-pink-500/60' : ''}`}>
                               <div className="flex items-start justify-between gap-2">
                                 <div>
                                   <span className="text-[9px] uppercase tracking-wide text-pink-300">{kind} · {targetName}</span>
@@ -2282,41 +2294,67 @@ export function StoryLabPanel() {
                                 </div>
                                 {queued && <span className="rounded bg-pink-500/10 px-2 py-1 text-[9px] text-pink-300">queued</span>}
                               </div>
-                              <Field label="Purpose in this Story" value={cue.purpose}
-                                onChange={purpose => patchMusicCue(cue.id, { purpose })} rows={2} />
-                              <Field label="Example song · editable LLM input" value={cue.referenceSong}
-                                onChange={referenceSong => patchMusicCue(cue.id, { referenceSong })} rows={2}
-                                placeholder="Song title — Artist" />
-                              <p className="text-[9px] text-text-muted">The LLM uses only high-level tempo, instrumentation and emotional architecture; the resulting melody and wording must be original.</p>
-                              <Field label="Desired style + Story role · editable LLM input" value={cue.brief}
-                                onChange={brief => patchMusicCue(cue.id, { brief })} rows={3} />
-                              <Field label="Final MiniMax prompt · English · max 300 characters" value={cue.style}
-                                onChange={style => patchMusicCue(cue.id, { style })} rows={3} />
-                              <p className="text-[9px] text-text-muted">Final order: genre, mood, instruments, voice, tempo and production. The example song is sent only to the LLM, never appended to this MiniMax prompt.</p>
-                              <div className="grid grid-cols-2 gap-2">
-                                <label className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[10px] text-text-secondary">
-                                  <input type="checkbox" checked={cue.instrumental}
-                                    onChange={event => patchMusicCue(cue.id, { instrumental: event.target.checked })} />
-                                  Instrumental
-                                </label>
-                                <label className="block text-[10px] text-text-muted">Duration · seconds
-                                  <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
-                                    value={cue.durationSeconds}
-                                    onChange={event => patchMusicCue(cue.id, { durationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) })} />
-                                </label>
-                              </div>
-                              {!cue.instrumental && <Field label="Editable lyrics" value={cue.lyrics}
-                                onChange={lyrics => patchMusicCue(cue.id, { lyrics })} rows={8} />}
-                              <div className="grid sm:grid-cols-2 gap-2">
-                                <button className={button} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
-                                  onClick={() => void adaptMusicCueWithLlm(cue.id)}>
-                                  {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Adapt prompt{cue.instrumental ? '' : ' + lyrics'} with LLM
-                                </button>
-                                <button className={`${button} border-pink-500/60 text-pink-300`}
-                                  disabled={Boolean(musicCueBusy || musicQueue) || !servicesConfig?.minimax_api_key_set || !cue.style.trim() || (!cue.instrumental && !cue.lyrics.trim())}
-                                  onClick={() => void generateMusicCueAudio(cue.id)}>
-                                  {generatingAudio ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />} Generate this track
-                                </button>
+                              <div className="grid xl:grid-cols-[minmax(0,0.85fr)_minmax(360px,1.15fr)] gap-3">
+                                <div className="space-y-2.5">
+                                  <Field label="Purpose in this Story" value={cue.purpose}
+                                    onChange={purpose => patchMusicCue(cue.id, { purpose })} rows={2} />
+                                  <Field label="Example song · editable LLM input" value={cue.referenceSong}
+                                    onChange={referenceSong => patchMusicCue(cue.id, { referenceSong })} rows={2}
+                                    placeholder="Song title — Artist" />
+                                  <p className="text-[9px] text-text-muted">The LLM uses only high-level tempo, instrumentation and emotional architecture; the resulting melody and wording must be original.</p>
+                                  <Field label="Desired style + Story role · editable LLM input" value={cue.brief}
+                                    onChange={brief => patchMusicCue(cue.id, { brief })} rows={3} />
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <label className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[10px] text-text-secondary">
+                                      <input type="checkbox" checked={cue.instrumental}
+                                        onChange={event => patchMusicCue(cue.id, { instrumental: event.target.checked })} />
+                                      Instrumental
+                                    </label>
+                                    <label className="block text-[10px] text-text-muted">Duration · seconds
+                                      <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
+                                        value={cue.durationSeconds}
+                                        onChange={event => patchMusicCue(cue.id, { durationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) })} />
+                                    </label>
+                                  </div>
+                                  <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
+                                    onClick={() => void adaptMusicCueWithLlm(cue.id)}>
+                                    {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Adapt provider prompt{cue.instrumental ? '' : ' + lyrics'} with LLM
+                                  </button>
+                                </div>
+                                <div className="space-y-2.5 rounded-lg border border-pink-500/30 bg-pink-500/5 p-3">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <h4 className="text-xs font-semibold text-pink-200">Exact MiniMax request · editable</h4>
+                                      <p className="mt-0.5 text-[9px] text-text-muted">Maestro sends style and lyrics as separate fields. Editing these fields changes the next request.</p>
+                                    </div>
+                                    <span className="shrink-0 rounded border border-pink-500/30 px-2 py-1 text-[9px] text-pink-200">{project.music.model}</span>
+                                  </div>
+                                  <Field label={`prompt · ${cue.style.trim().length}/300 characters`} value={cue.style}
+                                    onChange={style => patchMusicCue(cue.id, { style })} rows={3} />
+                                  <p className="text-[9px] text-text-muted">Genre, mood, instruments, voice, tempo and production. Anything after character 300 is not sent.</p>
+                                  {!cue.instrumental && <Field label="lyrics · structured separately" value={cue.lyrics}
+                                    onChange={lyrics => patchMusicCue(cue.id, { lyrics })} rows={10} />}
+                                  {!cue.instrumental && cue.lyrics.trim() && !MINIMAX_LYRIC_SECTION.test(cue.lyrics) && (
+                                    <p className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[9px] text-amber-200">
+                                      These lyrics have no supported section tags. Use the LLM adaptation or add [Verse], [Pre Chorus], [Chorus], [Bridge] and [Outro] before generating.
+                                    </p>
+                                  )}
+                                  <details className="rounded border border-border bg-bg-tertiary/70 p-2">
+                                    <summary className="cursor-pointer text-[9px] text-text-secondary">Inspect the complete Maestro → MiniMax payload</summary>
+                                    <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-[9px] text-text-muted">{miniMaxCuePayload(cue, project.music.model)}</pre>
+                                  </details>
+                                  <div className="grid sm:grid-cols-2 gap-2">
+                                    <button className={button} onClick={() => {
+                                      void navigator.clipboard.writeText(miniMaxCuePayload(cue, project.music.model))
+                                      setNotice({ kind: 'ok', text: `MiniMax payload for “${cue.title}” copied.` })
+                                    }}><Copy size={12} /> Copy exact payload</button>
+                                    <button className={`${button} border-pink-500/60 text-pink-300`}
+                                      disabled={Boolean(musicCueBusy || musicQueue) || !servicesConfig?.minimax_api_key_set || !cue.style.trim() || (!cue.instrumental && (!cue.lyrics.trim() || !MINIMAX_LYRIC_SECTION.test(cue.lyrics)))}
+                                      onClick={() => void generateMusicCueAudio(cue.id)}>
+                                      {generatingAudio ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />} Generate this track
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
                               {cue.candidates.length > 0 && (
                                 <div className="space-y-2 border-t border-border pt-2">
