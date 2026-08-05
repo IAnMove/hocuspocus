@@ -101,6 +101,11 @@ export interface StoryProduction {
 
 export interface StoryMusicCandidate {
   id: string
+  /** Human-readable identity; the provider filename remains in `name`. */
+  displayName?: string
+  title?: string
+  language?: string
+  version?: number
   name: string
   source: string
   prompt: string
@@ -122,6 +127,8 @@ export interface StoryMusicCue {
   brief: string
   style: string
   lyrics: string
+  /** Language of the current editable lyrics, updated by lyric translation. */
+  lyricsLanguage?: string
   /** Paste-ready Google AI Studio prompt; Maestro does not call Lyria directly. */
   lyriaPrompt: string
   instrumental: boolean
@@ -137,6 +144,7 @@ export interface StoryMusicDraft {
   style: string
   sourceLyrics: string
   lyrics: string
+  lyricsLanguage?: string
   coverReferenceFilename?: string
   coverReferenceName?: string
   targetDurationSeconds: number

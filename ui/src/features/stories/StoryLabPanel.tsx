@@ -89,6 +89,31 @@ function miniMaxCuePayload(cue: StoryMusicCue, model: StoryProject['music']['mod
   }, null, 2)
 }
 
+function musicCandidateDisplayName(
+  candidate: StoryMusicCandidate,
+  title: string,
+  fallbackLanguage: string,
+  fallbackVersion: number,
+): string {
+  if (candidate.displayName?.trim()) return candidate.displayName
+  const language = candidate.language?.trim() || fallbackLanguage.trim() || 'Original'
+  const version = candidate.version || fallbackVersion
+  return `${candidate.title?.trim() || title.trim() || 'Story song'} · ${language} · v${version}`
+}
+
+function nextMusicCandidateVersion(
+  candidates: StoryMusicCandidate[],
+  language: string,
+  fallbackLanguage: string,
+): number {
+  const normalizedLanguage = (language || fallbackLanguage).trim().toLocaleLowerCase()
+  return candidates.reduce((highest, candidate, index) => {
+    const candidateLanguage = (candidate.language || fallbackLanguage).trim().toLocaleLowerCase()
+    if (candidateLanguage !== normalizedLanguage) return highest
+    return Math.max(highest, candidate.version || index + 1)
+  }, 0) + 1
+}
+
 type StoryTab = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'productions'
 type PendingDraft = {
   scope: StoryGenerationScope
@@ -455,12 +480,19 @@ export function StoryLabPanel() {
     project.music.cues.forEach(cue => cue.candidates.forEach(candidate => {
       if (seen.has(candidate.id)) return
       seen.add(candidate.id)
-      options.push({ candidate, cue, label: `${cue.title} · ${candidate.model}` })
+      options.push({
+        candidate,
+        cue,
+        label: musicCandidateDisplayName(candidate, cue.title, cue.lyricsLanguage || project.language, cue.candidates.indexOf(candidate) + 1),
+      })
     }))
     project.music.candidates.forEach(candidate => {
       if (seen.has(candidate.id)) return
       seen.add(candidate.id)
-      options.push({ candidate, label: `Story song · ${candidate.model}` })
+      options.push({
+        candidate,
+        label: musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1),
+      })
     })
     return options
   }, [project.music.candidates, project.music.cues])
@@ -1578,6 +1610,7 @@ export function StoryLabPanel() {
           brief,
           style: written.style,
           lyrics: written.lyrics,
+          lyricsLanguage: project.language,
         },
       })
       setNotice({ kind: 'ok', text: 'Song prompt and editable lyrics are ready. Review them before spending MiniMax credits.' })
@@ -1619,6 +1652,7 @@ export function StoryLabPanel() {
           brief: storyBrief,
           style: written.style || project.music.style,
           lyrics: written.lyrics,
+          lyricsLanguage: project.language,
         },
       })
       setNotice({ kind: 'ok', text: 'The Story lyrics were adapted and remain fully editable before generation.' })
@@ -1711,8 +1745,14 @@ export function StoryLabPanel() {
         workspace: activeWorkspace,
       })
       const createdAt = new Date().toISOString()
-      const candidates = result.candidates.map(candidate => ({
+      const language = project.music.lyricsLanguage || project.language
+      const firstVersion = nextMusicCandidateVersion(project.music.candidates, language, project.music.lyricsLanguage || project.language)
+      const candidates = result.candidates.map((candidate, index) => ({
         id: storyId('song'),
+        displayName: `${project.title || 'Story song'} · ${language} · v${firstVersion + index}`,
+        title: project.title || 'Story song',
+        language,
+        version: firstVersion + index,
         name: candidate.filename,
         source: candidate.source,
         prompt: style,
@@ -1728,6 +1768,7 @@ export function StoryLabPanel() {
           brief,
           style,
           lyrics,
+          lyricsLanguage: project.music.lyricsLanguage || project.language,
           candidates: [...project.music.candidates, ...candidates],
           selectedCandidateId: candidates[0]?.id || project.music.selectedCandidateId,
         },
@@ -1768,7 +1809,7 @@ export function StoryLabPanel() {
         writingModel: project.provider.writingModel,
         writingBaseUrl: project.provider.writingBaseUrl,
       })
-      patchMusicCue(cueId, { lyrics: translated.lyrics })
+      patchMusicCue(cueId, { lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage })
       setNotice({ kind: 'ok', text: `“${cue.title}” lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
     } catch (error) {
       activity.fail(error, 'writing_song')
@@ -1797,7 +1838,7 @@ export function StoryLabPanel() {
         writingModel: project.provider.writingModel,
         writingBaseUrl: project.provider.writingBaseUrl,
       })
-      patch({ music: { ...project.music, lyrics: translated.lyrics } })
+      patch({ music: { ...project.music, lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage } })
       setNotice({ kind: 'ok', text: `Manual song lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
     } catch (error) {
       activity.fail(error, 'writing_song')
@@ -1838,6 +1879,7 @@ export function StoryLabPanel() {
       patchMusicCue(cueId, {
         style: written.style,
         lyrics: written.lyrics,
+        lyricsLanguage: project.language,
         lyriaPrompt: written.lyria_prompt,
       })
       setNotice({ kind: 'ok', text: `“${cue.title}” now has editable MiniMax and Google Lyria prompts${cue.instrumental ? '' : ' with structured lyrics'}.` })
@@ -1859,8 +1901,14 @@ export function StoryLabPanel() {
     setMusicCueBusy(`lyria-upload:${cueId}`)
     try {
       const uploaded = await api.uploadAudio(file)
+      const language = cue.lyricsLanguage || project.language
+      const version = nextMusicCandidateVersion(cue.candidates, language, project.language)
       const candidate = {
         id: storyId('song'),
+        displayName: `${cue.title} · ${language} · v${version}`,
+        title: cue.title,
+        language,
+        version,
         name: file.name || uploaded.filename,
         source: uploaded.url,
         prompt: cue.lyriaPrompt,
@@ -1924,8 +1972,14 @@ export function StoryLabPanel() {
         workspace: activeWorkspace,
       })
       const createdAt = new Date().toISOString()
-      const candidates = result.candidates.map(candidate => ({
+      const language = cue.lyricsLanguage || current.language
+      const firstVersion = nextMusicCandidateVersion(cue.candidates, language, current.language)
+      const candidates = result.candidates.map((candidate, index) => ({
         id: storyId('song'),
+        displayName: `${cue.title} · ${language} · v${firstVersion + index}`,
+        title: cue.title,
+        language,
+        version: firstVersion + index,
         name: candidate.filename,
         source: candidate.source,
         prompt,
@@ -2035,7 +2089,7 @@ export function StoryLabPanel() {
     id: 'story-song',
     kind: 'story',
     targetId: source.id,
-    title: candidate.name,
+    title: candidate.title || candidate.displayName || candidate.name,
     purpose: source.music.brief || `Tell ${source.title} as a song-led visual story.`,
     referenceSong: '',
     brief: source.music.brief,
@@ -2168,7 +2222,7 @@ export function StoryLabPanel() {
     setProductionBusy('music')
     const activity = beginStoryActivity(
       'preparing_music_video',
-      `Loading “${candidate.name}” and its Story references…`,
+      `Loading “${candidate.displayName || candidate.title || candidate.name}” and its Story references…`,
       3,
     )
     try {
@@ -2871,11 +2925,12 @@ export function StoryLabPanel() {
                                 <div className="space-y-2 border-t border-border pt-2">
                                   {cue.candidates.map(candidate => {
                                     const selected = cue.selectedCandidateId === candidate.id
+                                    const label = musicCandidateDisplayName(candidate, cue.title, cue.lyricsLanguage || project.language, cue.candidates.indexOf(candidate) + 1)
                                     return (
                                       <div key={candidate.id} className={`rounded border p-2 space-y-1.5 ${selected ? 'border-pink-400 bg-pink-500/5' : 'border-border'}`}>
                                         <button type="button" className="w-full flex items-center justify-between gap-2 text-left text-[10px]"
                                           onClick={() => patchMusicCue(cue.id, { selectedCandidateId: candidate.id })}>
-                                          <span className="text-text-primary">{getOutputReference({ name: candidate.name, type: 'audio' })} · {candidate.model}</span>
+                                          <span className="text-text-primary">{label} · {candidate.model}</span>
                                           <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
                                         </button>
                                         <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
@@ -2971,7 +3026,7 @@ export function StoryLabPanel() {
                         onClick={() => void generateMinimaxSongs()}><Music size={13} /> Generate manual candidates</button>
                       {project.music.candidates.map(candidate => (
                         <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">
-                          <span className="text-[10px] text-text-primary">{getOutputReference({ name: candidate.name, type: 'audio' })} · {candidate.model}</span>
+                          <span className="text-[10px] text-text-primary">{musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1)} · {candidate.model}</span>
                           <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
                           <button className={`${button} w-full`} onClick={() => void openMusicalTrailer(candidate.id)}><Film size={12} /> Use in musical trailer</button>
                         </div>
@@ -3414,13 +3469,13 @@ export function StoryLabPanel() {
                     {project.music.candidates.length > 0 && (
                       <div className="space-y-2">
                         {project.music.candidates.map(candidate => {
-                          const reference = getOutputReference({ name: candidate.name, type: 'audio' })
                           const selected = project.music.selectedCandidateId === candidate.id
+                          const label = musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1)
                           return (
                             <div key={candidate.id} className={`rounded border p-2 space-y-1.5 ${selected ? 'border-pink-400 bg-pink-500/5' : 'border-border'}`}>
                               <button type="button" onClick={() => patch({ music: { ...project.music, selectedCandidateId: candidate.id } })}
                                 className="w-full flex items-center justify-between text-[10px] text-left">
-                                <span className="text-text-primary">{reference} · {candidate.model}</span>
+                                <span className="text-text-primary">{label} · {candidate.model}</span>
                                 <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
                               </button>
                               <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
