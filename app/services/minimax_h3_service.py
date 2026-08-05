@@ -690,7 +690,11 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
 
             now = time.time()
             if now - last_history_poll >= 1:
-                result = requests.get(f"{base_url}/history/{prompt_id}", timeout=10).json()
+                # H3 can still be decoding and writing the final video/audio
+                # when ComfyUI receives this status request.  Ten seconds is
+                # too short on large local renders and incorrectly reports a
+                # completed prompt as failed.
+                result = requests.get(f"{base_url}/history/{prompt_id}", timeout=60).json()
                 last_history_poll = now
                 if prompt_id in result:
                     history = result[prompt_id]
