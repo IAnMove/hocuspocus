@@ -13366,10 +13366,15 @@ async def translate_story_lyrics(body: dict):
         raise HTTPException(status_code=400, detail="Choose a target language")
     system_prompt = (
         "Translate song lyrics accurately. Return only the translated lyrics, "
-        "with no explanation, title, markdown or code fence."
+        "with no explanation, title, markdown or code fence. Translate only the sung "
+        "lyric lines. Copy every song instruction enclosed in square brackets exactly "
+        "as written, preserving its English text and capitalization (for example "
+        "[Verse], [Pre Chorus], [Chorus], [Bridge], [Outro] or [Female vocal])."
     )
     prompt = (
-        f"Translate the following lyrics into {target_language}:\n\n{lyrics}"
+        f"Translate the following lyrics into {target_language}. Do not translate or "
+        "alter any text enclosed in square brackets; copy those instructions verbatim.\n\n"
+        f"{lyrics}"
     )
     llm_override = _comic_writing_llm(body)
     try:
