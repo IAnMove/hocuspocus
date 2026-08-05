@@ -3,15 +3,35 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.services import minimax_h3_service as h3
 
 
 class TestMiniMaxH3Workflow(unittest.TestCase):
+    def test_reference_duration_converts_pyav_microseconds_to_seconds(self):
+        class Container:
+            duration = 14_083_333
+            streams = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        fake_av = SimpleNamespace(
+            time_base=1_000_000,
+            open=lambda _source: Container(),
+        )
+        with patch.dict(sys.modules, {"av": fake_av}):
+            self.assertAlmostEqual(h3._probe_duration("reference.mp4"), 14.083333)
+
     def test_runtime_enables_fused_triton_int8_backend(self):
         command = h3._runtime_command(43123, "balanced")
 

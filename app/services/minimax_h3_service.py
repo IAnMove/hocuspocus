@@ -442,7 +442,12 @@ def _probe_duration(source: str) -> float:
 
     with av.open(source) as container:
         if container.duration is not None:
-            return float(container.duration * av.time_base)
+            # PyAV exposes a container duration in AV_TIME_BASE units
+            # (microseconds), while ``av.time_base`` is the number of those
+            # units per second. Multiplying produces absurd durations such as
+            # 14,083,333,000,000s for a 14.083s MP4; convert to seconds by
+            # dividing instead.
+            return float(container.duration / av.time_base)
         durations = [float(stream.duration * stream.time_base)
                      for stream in container.streams if stream.duration is not None]
         if durations:
