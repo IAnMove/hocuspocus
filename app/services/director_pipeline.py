@@ -486,7 +486,32 @@ def _pipeline_media_for_job(pid: str, out_dir: str, expected_clips: int) -> Opti
     return max(candidates, key=lambda item: item["created_at"]) if candidates else None
 
 
-def _ensure_h3_segment_state(data: dict) -> dict:
+def _legacy_h3_multiclip_output(filename: str, out_dir: str = "") -> bool:
+    """Whether a legacy H3 file is one malformed multi-shot request.
+
+    Before Director gained the sequential H3 adapter, it sent the generic
+    LTX multi-clip payload to H3.  H3 then rendered only its first request,
+    while its sidecar still recorded every ``---CLIP_BOUNDARY---`` prompt and
+    start frame.  Such a file must remain visible to the user, but it is not
+    a checkpoint for *any* individual H3 shot and must never be reused on
+    resume.
+    """
+    path = filename if os.path.isabs(filename) else os.path.join(out_dir, filename)
+    meta_path = os.path.splitext(path)[0] + ".meta.json"
+    try:
+        with open(meta_path, "r", encoding="utf-8") as handle:
+            metadata = json.load(handle)
+        params = metadata.get("params") if isinstance(metadata, dict) else {}
+        if not isinstance(params, dict) or int(params.get("multi_prompts_gen_type") or 0) != 3:
+            return False
+        prompt = str(params.get("prompt") or "")
+        starts = params.get("image_start")
+        return "---CLIP_BOUNDARY---" in prompt or isinstance(starts, list) and len(starts) > 1
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return False
+
+
+def _ensure_h3_segment_state(data: dict, out_dir: str = "") -> dict:
     """Backfill editable H3 segment records for legacy saved productions."""
     if data.get("video_model") != "minimax_h3":
         return data
@@ -499,6 +524,7 @@ def _ensure_h3_segment_state(data: dict) -> dict:
         if str(name).lower().endswith((".mp4", ".webm", ".mkv", ".mov"))
         and "_multiclip" not in str(name).lower()
         and "_rejoin_" not in str(name).lower()
+        and not _legacy_h3_multiclip_output(str(name), out_dir)
     ]
     cursor = 0
     params = data.get("_params_snapshot") if isinstance(data.get("_params_snapshot"), dict) else {}
@@ -575,7 +601,7 @@ def _h3_checkpoint_is_complete(data: dict, out_dir: str) -> bool:
 
 def _reconcile_pipeline_state_file(filepath: str, data: dict) -> dict:
     """Promote a timed-out checkpoint when its generation actually finished."""
-    data = _ensure_h3_segment_state(data)
+    data = _ensure_h3_segment_state(data, os.path.dirname(filepath))
     pid = str(data.get("pipeline_id") or "")
     clips = data.get("clips") if isinstance(data.get("clips"), list) else []
     if not pid or not clips:
@@ -857,6 +883,41 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
     video_loras = state.get("video_loras") or {}
     video_params = state.get("video_params") or {}
     if video_model == "minimax_h3":
+        # A saved legacy production can have its planned shot and frame but no
+        # editable H3 checkpoint yet.  Initialise that shot here so its card
+        # can be regenerated independently instead of failing with the vague
+        # "Segment index 0 out of range" error.
+        state = _ensure_h3_segment_state(state, os.path.dirname(_find_pipeline_file(out_dir, pid) or out_dir))
+        clip = state["clips"][clip_index]
+        if not clip.get("h3_segments"):
+            planned = clip.get("planned_clip") if isinstance(clip.get("planned_clip"), dict) else {}
+            duration = planned.get("duration_sec") or (
+                float(planned.get("end", 0) or 0) - float(planned.get("start", 0) or 0)
+            )
+            if duration <= 0:
+                duration = 5.0
+            snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
+            plans = state.get("clip_plans") if isinstance(state.get("clip_plans"), list) else []
+            plan = plans[clip_index] if clip_index < len(plans) else clip
+            seed = int(clip.get("seed") or _comic_shot_seed(snapshot, clip_index, plan))
+            base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
+            segment_frames = _minimax_h3_frame_segments(float(duration), 24)
+            clip["h3_segments"] = [{
+                "index": segment_index,
+                "filename": "",
+                "prompt": _minimax_h3_segment_prompt(
+                    plan,
+                    segment_index,
+                    len(segment_frames),
+                    str(video_params.get("h3_audio_prompt") or ""),
+                    base_mode,
+                ),
+                "frames": frames,
+                "seed": (seed + segment_index) & 0x7FFFFFFF,
+                "reference_mode": base_mode,
+                "stale": True,
+            } for segment_index, frames in enumerate(segment_frames)]
+            _replace_saved_pipeline(out_dir, pid, state)
         return rerun_h3_segment(
             out_dir,
             pid,

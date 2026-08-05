@@ -49,6 +49,21 @@ function formatDate(ts: number): string {
   })
 }
 
+function h3ExpectedSegmentCount(clip: PipelineClipState): number {
+  const planned = clip.planned_clip
+  const duration = planned ? Math.max(0, planned.end - planned.start) : 5
+  const requestedFrames = Math.max(107, Math.round(duration * 24))
+  const targetFrames = 124
+  return Math.min(
+    Math.max(1, Math.round(requestedFrames / targetFrames)),
+    Math.max(1, Math.floor(requestedFrames / 107)),
+  )
+}
+
+function completedH3Segments(clip: PipelineClipState): number {
+  return (clip.h3_segments || []).filter(segment => Boolean(segment.filename) && !segment.stale).length
+}
+
 function PipelineProgressBar({ pipeline }: { pipeline: SavedPipelineState }) {
   const phases = [
     { key: 'planning', label: 'LLM Planning', time: pipeline.llm_log?.planning_time_sec },
@@ -660,11 +675,17 @@ function DirectorDashboardInner() {
   const goodCount = selectedPipeline?.clips.filter(c => c.tag === 'good').length || 0
   const needsWorkCount = selectedPipeline?.clips.filter(c => c.tag === 'needs_work').length || 0
   const totalClips = selectedPipeline?.clips.length || 0
+  const isH3Pipeline = selectedPipeline?.video_model === 'minimax_h3'
   const missingImages = selectedPipeline?.clips.filter(c => !c.start_image_filename).length || 0
-  const missingVideos = selectedPipeline?.clips.filter(c => !c.video_filename && !c.h3_segments?.length && c.start_image_filename).length || 0
+  const missingVideos = isH3Pipeline
+    ? (selectedPipeline?.clips.reduce(
+      (total, clip) => total + Math.max(0, h3ExpectedSegmentCount(clip) - completedH3Segments(clip)),
+      0,
+    ) || 0)
+    : (selectedPipeline?.clips.filter(c => !c.video_filename && c.start_image_filename).length || 0)
   const hasMissing = missingImages > 0 || missingVideos > 0
   const videoPartCount = selectedPipeline?.clips.reduce(
-    (count, clip) => count + (clip.h3_segments?.length || (clip.video_filename ? 1 : 0)),
+    (count, clip) => count + (isH3Pipeline ? completedH3Segments(clip) : (clip.video_filename ? 1 : 0)),
     0,
   ) || 0
   const finalOutputFilename = selectedPipeline?.final_output_filename || [...(selectedPipeline?.output_files || [])]
@@ -678,6 +699,14 @@ function DirectorDashboardInner() {
     setRegenError(null)
     const pid = selectedPipeline.pipeline_id
     try {
+      // H3 has a sequential, dependency-aware renderer.  Missing work must
+      // resume the whole production so it can reuse valid prefixes and keep
+      // the continuation frame chain intact; a missing shot has no segment
+      // record for the per-card rerun endpoint yet.
+      if (isH3Pipeline) {
+        await resumePipeline(pid)
+        return
+      }
       // Generate missing images first
       for (const clip of selectedPipeline.clips) {
         if (!clip.start_image_filename && clip.image_prompt) {
@@ -771,10 +800,14 @@ function DirectorDashboardInner() {
                 onClick={generateMissing}
                 disabled={loading}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] bg-orange-500/10 border border-orange-500/30 rounded text-orange-400 hover:bg-orange-500/20 disabled:opacity-40 transition-colors"
-                title={`Generate ${missingImages} missing images + ${missingVideos} missing videos`}
+                title={isH3Pipeline
+                  ? `Resume the sequential H3 render for ${missingVideos} missing segment${missingVideos === 1 ? '' : 's'}`
+                  : `Generate ${missingImages} missing images + ${missingVideos} missing videos`}
               >
                 <Play size={10} />
-                Generate {missingImages + missingVideos} missing
+                {isH3Pipeline
+                  ? `Resume ${missingVideos} missing`
+                  : `Generate ${missingImages + missingVideos} missing`}
               </button>
             )}
             <button
