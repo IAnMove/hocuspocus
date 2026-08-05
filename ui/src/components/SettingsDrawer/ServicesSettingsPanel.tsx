@@ -218,7 +218,7 @@ function NsfwToggleSection() {
               {nsfwEnabled ? (
                 <ShieldAlert size={14} className="text-red-400 shrink-0" />
               ) : (
-                <ShieldCheck size={14} className="text-green-400 shrink-0" />
+                <ShieldCheck size={14} className="text-indicator-success shrink-0" />
               )}
               NSFW Mode
               {isPublicProvider && <Lock size={11} className="text-text-muted" />}
@@ -239,7 +239,7 @@ function NsfwToggleSection() {
                 : nsfwEnabled ? 'bg-red-500' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               nsfwEnabled && !isPublicProvider ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>
@@ -347,7 +347,7 @@ export function ServicesSettingsPanel() {
                 : 'Auto-loads when needed'}
             </div>
           </div>
-          <div className={`w-2 h-2 rounded-full shrink-0 ${llmStatus?.loaded ? 'bg-green-400' : 'bg-text-muted/30'}`} />
+          <div className={`w-2 h-2 rounded-full shrink-0 ${llmStatus?.loaded ? 'bg-indicator-success' : 'bg-text-muted/30'}`} />
         </div>
 
         {/* Provider selector */}
@@ -608,7 +608,7 @@ export function ServicesSettingsPanel() {
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3">
             <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
-              Director v2 Engine <span className="text-[10px] text-text-muted/70 font-normal">(default)</span>
+              Director v2 Engine <span className="text-[10px] text-text-muted font-normal">(default)</span>
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
               Layered architecture with structured shot planning, mode-specific renderers, and prompt validation.
@@ -621,7 +621,7 @@ export function ServicesSettingsPanel() {
               servicesConfig.use_director_v2 ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.use_director_v2 ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>
@@ -681,33 +681,22 @@ export function ServicesSettingsPanel() {
               servicesConfig.director_multishot_lora_mode ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.director_multishot_lora_mode ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>
         </label>
 
-        {/* Voice Reference (ID-LoRA) toggle — experimental.
-            Disabled by default. Currently relies on third-party ID-LoRAs
-            whose distilled-model compatibility is inconsistent (most
-            produce noise on distilled pipelines unless retrained on the
-            target architecture). Surfaces a voice-sample dropzone in
-            Studio Video and Director when enabled.
-            Wrapped in the show_experimental gate so the entire affordance
-            stays out of the way for non-power users. */}
-        {servicesConfig.show_experimental && (
+        {/* Voice Reference (ID-LoRA) is a standard setting, independent of
+            the in-development feature gate and enabled by default. */}
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3">
-            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors flex items-center gap-2">
+            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
               Voice Reference (ID-LoRA)
-              <span className="text-[9px] uppercase tracking-wider text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-1.5 py-px">
-                Experimental
-              </span>
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
               Adds a voice-sample dropzone to Studio Video and Director for speaker identity preservation across clips.
-              Most third-party ID-LoRAs produce noise on distilled models — best results require a LoRA trained against
-              the active model. Disabled by default.
+              Maestro loads the matching ID-LoRA when a reference is supplied. Enabled by default.
             </div>
           </div>
           <div
@@ -716,12 +705,11 @@ export function ServicesSettingsPanel() {
               servicesConfig.voice_reference_enabled ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.voice_reference_enabled ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>
         </label>
-        )}
       </div>
 
       <hr className="border-border" />
@@ -897,10 +885,9 @@ export function ServicesSettingsPanel() {
               unstable, or require additional setup. Default off keeps the UI
               focused on features known to work well.
             </div>
-            <div className="text-[10px] text-text-muted/70 mt-1 leading-relaxed">
-              Currently gates: Director v2 engine, Voice Reference, external
-              LLM APIs (Google / OpenAI / Anthropic), Studio Prompt Enhancer
-              config, Inpaint and Restyle edit modes.
+            <div className="text-[10px] text-text-muted mt-1 leading-relaxed">
+              Currently gates: external LLM APIs (Google / OpenAI / Anthropic),
+              Studio Prompt Enhancer config, and the Inpaint edit mode.
             </div>
           </div>
           <div
@@ -909,7 +896,7 @@ export function ServicesSettingsPanel() {
               servicesConfig.show_experimental ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.show_experimental ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>

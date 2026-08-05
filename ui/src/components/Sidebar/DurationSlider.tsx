@@ -80,7 +80,12 @@ export function DurationSlider() {
 
 /** Exposed for Advanced Settings popup */
 export function WindowSettings() {
-  const duration = useStore(s => s.durationSeconds)
+  const studioDuration = useStore(s => s.durationSeconds)
+  const generationMode = useStore(s => s.generationMode)
+  const editSubMode = useStore(s => s.editSubMode)
+  const outpaintTrimStart = useStore(s => s.outpaintTrimStart)
+  const outpaintTrimEnd = useStore(s => s.outpaintTrimEnd)
+  const editVideoDuration = useStore(s => s.editVideoDuration)
   const windowSize = useStore(s => s.slidingWindowSeconds)
   const setWindowSize = useStore(s => s.setSlidingWindowSeconds)
   const overlap = useStore(s => s.slidingWindowOverlap)
@@ -88,6 +93,11 @@ export function WindowSettings() {
   const locked = useStore(s => s.slidingWindowLocked)
   const setLocked = useStore(s => s.setSlidingWindowLocked)
   const modelOptions = useStore(s => s.modelOptions)
+  const isOutpaint = generationMode === 'avatar' && editSubMode === 'outpaint'
+  const trimmedOutpaintDuration = outpaintTrimEnd > outpaintTrimStart
+    ? outpaintTrimEnd - outpaintTrimStart
+    : editVideoDuration
+  const duration = isOutpaint ? trimmedOutpaintDuration : studioDuration
 
   const fps = modelOptions?.fps ?? 16
   const swDefaults = (modelOptions as Record<string, unknown> | null)?.sliding_window_defaults as Record<string, number> | undefined
@@ -122,7 +132,7 @@ export function WindowSettings() {
               className={`p-0.5 rounded transition-colors ${
                 locked
                   ? 'text-accent-blue hover:text-accent-blue/70'
-                  : 'text-text-muted/30 hover:text-text-muted'
+                  : 'text-text-muted hover:text-text-secondary'
               }`}
               title={locked ? 'Window size locked — click to unlock (auto-track)' : 'Click to lock window size'}
             >

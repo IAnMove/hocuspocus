@@ -54,19 +54,19 @@ function formatTime(s: number): string {
 }
 
 const sectionColors: Record<string, string> = {
-  intro: 'bg-blue-500/20 text-blue-400',
-  verse: 'bg-green-500/20 text-green-400',
-  'pre-chorus': 'bg-pink-500/20 text-pink-400',
-  chorus: 'bg-purple-500/20 text-purple-400',
-  bridge: 'bg-yellow-500/20 text-yellow-400',
-  outro: 'bg-gray-500/20 text-gray-400',
-  instrumental: 'bg-cyan-500/20 text-cyan-400',
+  intro: 'bg-blue-500/20 text-chip-blue',
+  verse: 'bg-green-500/20 text-chip-green',
+  'pre-chorus': 'bg-pink-500/20 text-chip-pink',
+  chorus: 'bg-purple-500/20 text-chip-purple',
+  bridge: 'bg-yellow-500/20 text-chip-yellow',
+  outro: 'bg-gray-500/20 text-chip-gray',
+  instrumental: 'bg-cyan-500/20 text-chip-cyan',
   // Short film scene types
-  dialogue: 'bg-green-500/20 text-green-400',
-  action: 'bg-orange-500/20 text-orange-400',
-  opening: 'bg-blue-500/20 text-blue-400',
-  closing: 'bg-gray-500/20 text-gray-400',
-  scene: 'bg-teal-500/20 text-teal-400',
+  dialogue: 'bg-green-500/20 text-chip-green',
+  action: 'bg-orange-500/20 text-chip-orange',
+  opening: 'bg-blue-500/20 text-chip-blue',
+  closing: 'bg-gray-500/20 text-chip-gray',
+  scene: 'bg-teal-500/20 text-chip-teal',
 }
 
 const sectionBarColors: Record<string, string> = {
@@ -109,15 +109,29 @@ const sectionBarColors: Record<string, string> = {
  * scroll instead of bubbling up to the chat panel, so the user
  * can't scroll the chat when their cursor happens to be over a
  * prompt field.
+ *
+ * Optional `minHeight`/`maxHeight` (px) bound the growth — used by the
+ * chat composer (issue #11), which keeps its resting 2-row size when
+ * empty and stops growing at a cap. Past the cap the textarea scrolls
+ * itself, so overflow flips to `auto` there; that's fine for the
+ * composer because it sits OUTSIDE the scrollable chat panel — the
+ * wheel-capture concern above doesn't apply.
  */
-function AutoResizeTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+function AutoResizeTextarea({ minHeight, maxHeight, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  minHeight?: number
+  maxHeight?: number
+}) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [props.value])
+    let h = el.scrollHeight
+    if (minHeight) h = Math.max(h, minHeight)
+    if (maxHeight) h = Math.min(h, maxHeight)
+    el.style.height = `${h}px`
+    if (maxHeight) el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [props.value, minHeight, maxHeight])
   // Merge any incoming style with our scrollbar-hiding override.
   // OUR override comes last so it wins — wheel-capture is the whole
   // point of the component, can't let a caller silently break it.
@@ -134,7 +148,7 @@ function SectionBadge({ label }: { label: string }) {
 }
 
 function EnergyDot({ energy }: { energy: number }) {
-  const color = energy > 0.6 ? 'bg-red-400' : energy < 0.3 ? 'bg-blue-400' : 'bg-yellow-400'
+  const color = energy > 0.6 ? 'bg-chip-red' : energy < 0.3 ? 'bg-chip-blue' : 'bg-chip-yellow'
   return <span className={`inline-block w-2 h-2 rounded-full ${color}`} title={`Energy: ${(energy * 100).toFixed(0)}%`} />
 }
 
@@ -828,7 +842,7 @@ export function DirectorChat() {
             {pastStep('structure') && (
               <UserBubble>
                 <div className="flex items-center gap-1.5 text-xs text-text-primary">
-                  <Check size={12} className="text-green-400" />
+                  <Check size={12} className="text-indicator-success" />
                   <span>{plannedClips.length} {isShortFilm ? 'scenes' : 'clips'} confirmed</span>
                   <span className="text-text-muted">({formatTime(totalClipDuration)})</span>
                 </div>
@@ -1095,7 +1109,13 @@ export function DirectorChat() {
           </div>
         )}
         <div className="flex items-end gap-2">
-          <textarea
+          {/* Auto-grows with content (issue #11). The composer bar is the
+              last child of the panel's flex column, so extra height is
+              taken from the messages area above — the box visually
+              expands UPWARD from its bottom-anchored position. Rests at
+              2 rows (min 56px), caps at 240px (~11 lines), scrolls with
+              a visible thumb past that. */}
+          <AutoResizeTextarea
             value={mvGenerateSetup ? songDescription : resolvedChatInput}
             onChange={e => {
               const v = e.target.value
@@ -1112,7 +1132,9 @@ export function DirectorChat() {
             placeholder={chatInputPlaceholder}
             disabled={!chatInputEnabled}
             rows={2}
-            className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-accent-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            minHeight={56}
+            maxHeight={240}
+            className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-accent-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed scrollbar-visible"
           />
           <button
             onClick={handleChatSubmit}
@@ -1456,7 +1478,7 @@ function ReferenceImageUpload({
             <input type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
               onChange={e => setParam('input_video_strength', parseFloat(e.target.value))}
               className="w-full h-1 accent-accent-blue" />
-            <p className="text-[9px] text-text-muted/60">Lower values can increase motion</p>
+            <p className="text-[9px] text-text-muted">Lower values can increase motion</p>
           </div>
         )}
       </div>
@@ -1523,7 +1545,7 @@ function ReferenceImageUpload({
           <input type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
             onChange={e => setParam('input_video_strength', parseFloat(e.target.value))}
             className="w-full h-1 accent-accent-blue" />
-          <p className="text-[9px] text-text-muted/60">Lower values can increase motion</p>
+          <p className="text-[9px] text-text-muted">Lower values can increase motion</p>
         </div>
       )}
     </div>
@@ -1570,7 +1592,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
         value={label}
         onChange={e => onLabelChange(index, e.target.value)}
         placeholder={placeholder}
-        className="flex-1 min-w-0 bg-bg-secondary border border-border rounded px-1.5 py-0.5 text-[10px] text-text-primary placeholder:text-text-muted/40 focus:border-accent-blue outline-none"
+        className="flex-1 min-w-0 bg-bg-secondary border border-border rounded px-1.5 py-0.5 text-[10px] text-text-primary placeholder:text-text-muted focus:border-accent-blue outline-none"
       />
     </div>
   )
@@ -1653,7 +1675,7 @@ function AdditionalRefsSection() {
               </div>
             )}
             {charRefs.length === 0 && (
-              <p className="text-[9px] text-text-muted/50 italic">Individual character close-ups improve identity</p>
+              <p className="text-[9px] text-text-muted italic">Individual character close-ups improve identity</p>
             )}
           </div>
           {/* Location References */}
@@ -1676,7 +1698,7 @@ function AdditionalRefsSection() {
               </div>
             )}
             {locRefs.length === 0 && (
-              <p className="text-[9px] text-text-muted/50 italic">Scene/environment reference images</p>
+              <p className="text-[9px] text-text-muted italic">Scene/environment reference images</p>
             )}
           </div>
           {/* Voice Reference (ID-LoRA) — gated by Services toggle */}
@@ -1708,7 +1730,7 @@ function AdditionalRefsSection() {
                 </div>
               </div>
             ) : (
-              <p className="text-[9px] text-text-muted/50 italic">~5 sec voice sample for consistent voice across clips</p>
+              <p className="text-[9px] text-text-muted italic">~5 sec voice sample for consistent voice across clips</p>
             )}
           </div>}
           {isH3 && <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-2 space-y-2">
@@ -2628,7 +2650,7 @@ function ImageGenView({
       {loraWarnings.length > 0 && (
         <div className="space-y-1.5">
           {loraWarnings.map((w, i) => (
-            <div key={i} className="px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-100 leading-snug whitespace-pre-line">
+            <div key={i} className="px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-text-primary leading-snug whitespace-pre-line">
               {w}
             </div>
           ))}

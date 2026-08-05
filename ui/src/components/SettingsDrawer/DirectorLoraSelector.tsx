@@ -3,7 +3,8 @@ import { Search, X, Loader2, FolderOpen, Globe, Sparkles, BookOpen } from 'lucid
 import { useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails } from '../../api/client'
-import { LoraGuideTooltip } from './LoraSelector'
+import { LoraGuideTooltip, LoraAgeChip, LoraSortToggle, sortLoraNames } from './LoraSelector'
+import type { LoraDates } from './LoraSelector'
 import type { LoraRecommendedWeights } from '../../types'
 
 function serializeMultipliers(loras: string[], weights: Record<string, number[]>): string {
@@ -80,6 +81,10 @@ export function DirectorLoraSelector({ mode, modelType }: {
   const [loraWeightRecs, setLoraWeightRecs] = useState<Record<string, LoraRecommendedWeights>>({})
   const [guideStatus, setGuideStatus] = useState<Record<string, 'none' | 'exists' | 'generating' | 'done'>>({})
   const [guideTexts, setGuideTexts] = useState<Record<string, string>>({})
+  const [loraDates, setLoraDates] = useState<Record<string, LoraDates>>({})
+  // Sticky list order shared with the Studio picker via the store.
+  const sortMode = useStore(s => s.loraPickerSort)
+  const setSortSticky = useStore(s => s.setLoraPickerSort)
 
   const persist = useCallback((newLoras: string[], newWeights: Record<string, number[]>) => {
     const multipliers = serializeMultipliers(newLoras, newWeights)
@@ -141,14 +146,19 @@ export function DirectorLoraSelector({ mode, modelType }: {
       const recs: Record<string, LoraRecommendedWeights> = {}
       const guides: Record<string, string> = {}
       const statuses: Record<string, 'exists' | 'none'> = {}
+      const dates: Record<string, LoraDates> = {}
       for (const info of r.loras) {
         if (info.recommended_weights) recs[info.filename] = info.recommended_weights
         if (info.guide) { guides[info.filename] = info.guide; statuses[info.filename] = 'exists' }
         else if (info.has_guide) statuses[info.filename] = 'exists'
+        if (info.released_at || info.downloaded_at) {
+          dates[info.filename] = { released: info.released_at, downloaded: info.downloaded_at }
+        }
       }
       setLoraWeightRecs(recs)
       setGuideTexts(prev => ({ ...prev, ...guides }))
       setGuideStatus(prev => ({ ...prev, ...statuses }))
+      setLoraDates(dates)
 
       // Auto-apply recommended defaults to newly activated LoRAs at 1.0 fill
       for (const lora of activatedLoras) {
@@ -241,8 +251,12 @@ export function DirectorLoraSelector({ mode, modelType }: {
   const displayName = (filename: string) =>
     filename.replace(/\.(safetensors|sft)$/i, '')
 
-  const filtered = availableLoras.filter(name =>
-    displayName(name).toLowerCase().includes(search.toLowerCase())
+  const filtered = sortLoraNames(
+    availableLoras.filter(name =>
+      displayName(name).toLowerCase().includes(search.toLowerCase())
+    ),
+    sortMode,
+    loraDates,
   )
 
   if (loading) {
@@ -276,13 +290,16 @@ export function DirectorLoraSelector({ mode, modelType }: {
       {/* Header with Browse */}
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-[10px] text-text-muted uppercase tracking-wider">LoRAs</label>
-        <button
-          onClick={() => openBrowser(true, modelType)}
-          className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5 transition-colors"
-          title="Browse CivitAI"
-        >
-          <Globe size={10} /> Browse
-        </button>
+        <div className="flex items-center gap-2">
+          <LoraSortToggle sort={sortMode} onChange={setSortSticky} />
+          <button
+            onClick={() => openBrowser(true, modelType)}
+            className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5 transition-colors"
+            title="Browse CivitAI"
+          >
+            <Globe size={10} /> Browse
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -319,6 +336,12 @@ export function DirectorLoraSelector({ mode, modelType }: {
                 )}
               </div>
               <span className="truncate flex-1">{displayName(filename)}</span>
+              {loraDates[filename] && (
+                <LoraAgeChip
+                  released={loraDates[filename].released}
+                  downloaded={loraDates[filename].downloaded}
+                />
+              )}
               {guideTexts[filename] && (
                 <span onClick={e => e.stopPropagation()}>
                   <LoraGuideTooltip guide={guideTexts[filename]} />
@@ -326,8 +349,12 @@ export function DirectorLoraSelector({ mode, modelType }: {
               )}
               {loraWeightRecs[filename] && (
                 <span
+                  // Functional indicator tokens, not accent-green: Golden
+                  // Hour remaps accent-green to amber, which made every
+                  // CivitAI dot (and weight zone) look like the fallback
+                  // orange. Mirrors LoraSelector.
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    loraWeightRecs[filename].source === 'civitai' ? 'bg-accent-green' : 'bg-amber-400'
+                    loraWeightRecs[filename].source === 'civitai' ? 'bg-indicator-success' : 'bg-indicator-warning'
                   }`}
                   title={loraWeightRecs[filename].source === 'civitai' ? 'CivitAI recommended settings' : 'Default settings'}
                 />
@@ -364,7 +391,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
                   </span>
                   <div className="flex items-center gap-0.5 shrink-0">
                     {guideStatus[filename] === 'exists' || guideStatus[filename] === 'done' ? (
-                      <span className="p-0.5 text-accent-green" title="LoRA guide available">
+                      <span className="p-0.5 text-indicator-success" title="LoRA guide available">
                         <BookOpen size={11} />
                       </span>
                     ) : guideStatus[filename] === 'generating' ? (
@@ -400,10 +427,10 @@ export function DirectorLoraSelector({ mode, modelType }: {
                   const zoneWidth = ((recMax - recMin) / sliderMax) * 100
                   const inZone = w >= recMin && w <= recMax
                   const zoneColor = isCivitai
-                    ? 'bg-accent-green/20 border-accent-green/30'
-                    : 'bg-amber-400/15 border-amber-400/25'
+                    ? 'bg-indicator-success/20 border-indicator-success/30'
+                    : 'bg-indicator-warning/15 border-indicator-warning/25'
                   const valueColor = inZone
-                    ? (isCivitai ? 'text-accent-green' : 'text-amber-400')
+                    ? (isCivitai ? 'text-indicator-success' : 'text-indicator-warning')
                     : 'text-text-muted'
 
                   return (

@@ -204,23 +204,33 @@ def recommend_settings(hw: dict) -> dict:
     gpu_name = hw.get("gpu_name", "GPU")
     vram_gb = hw.get("gpu_vram_gb", 0)
     ram_gb = hw.get("ram_gb", 0)
+    # Audio gets its own tiering. The shared profile table is calibrated
+    # for 20+ GB VIDEO models, but the whole ACE-Step 1.5 audio stack
+    # (XL transformer int8 ~5.3 GB + LM 4B int8 ~4.4 GB + codec) fits in
+    # VRAM on much smaller cards — and the fast LM decoders (vllm/cg)
+    # only engage when int(profile) is 1 or 3 (wgp.py gate: models
+    # resident in VRAM). Inheriting the video profile silently condemned
+    # every card under 24 GB to the legacy LM decoder at <1 token/sec,
+    # making LM songs take 10-15 minutes and look hung — exactly the
+    # hand-tuning Auto-Tune exists to prevent. On 12 GB+ cards pick
+    # profile 3 (LowRAM_HighVRAM) for audio; below 12 GB keep the
+    # conservative shared profile (the LM stack wouldn't fit anyway).
+    if (vram_gb or 0) >= 12 and int(profile) not in (1, 3):
+        audio_profile = 3
+    else:
+        audio_profile = profile
+
     reason = (
         f"{gpu_name} ({vram_gb} GB VRAM, {ram_gb} GB RAM): "
         f"VRAM tier={vram_tier}, RAM tier={ram_tier} → profile {profile:g}, "
+        f"audio profile {audio_profile:g}, "
         f"{quant.upper()}, VAE config {vae}, coefficient {coef}"
     )
 
     return {
         "video_profile": profile,
         "image_profile": profile,
-        # Audio uses the same profile as video/image — the hardware is
-        # the same hardware regardless of mode. Wan2GP's historical
-        # default of 3.5 (VeryLowRAM_HighVRAM) was a one-size-fits-all
-        # fallback that's actively wrong on machines with plenty of
-        # RAM: a user with 128 GB RAM + 24 GB VRAM should get Profile 1
-        # for audio too, not be artificially constrained to a "very low
-        # RAM" profile.
-        "audio_profile": profile,
+        "audio_profile": audio_profile,
         "transformer_quantization": quant,
         "vae_config": vae,
         "vram_safety_coefficient": coef,
@@ -365,6 +375,7 @@ def compute_per_job_coefficient(
     stage_count: int = 1,
     resolution: Optional[str] = None,
     video_length_frames: Optional[int] = None,
+    model_activation_gb: float = 0.0,
 ) -> dict:
     """Compute a per-job VRAM safety coefficient.
 
@@ -397,6 +408,14 @@ def compute_per_job_coefficient(
             None skips the compute-size penalty/bonus entirely.
         video_length_frames: Total output frames. None or 0 skips the
             compute-size penalty/bonus. (For images, pass 1.)
+        model_activation_gb: Flat activation surcharge in GB for model
+            classes whose conditioning inflates the attention sequence
+            beyond what resolution × frames predicts (e.g. SCAIL-2
+            appends the driving video as in-context tokens and prepends
+            reference latents — ~35% more sequence than a classic Wan
+            job at the same size). The generic compute curve rates such
+            jobs "lighter than baseline" and would loosen the cap; this
+            surcharge tightens it instead so activations fit. 0 = no-op.
 
     Returns:
         Dict with keys:
@@ -518,8 +537,18 @@ def compute_per_job_coefficient(
                 f"vs baseline ({width}×{height} × {frames} frames, lighter than baseline)"
             )
 
+    # 3b. Model-class activation surcharge — see docstring. Sized by the
+    # caller from measurement; applied as a straight cap reduction.
+    model_activation_penalty = 0.0
+    if model_activation_gb and model_activation_gb > 0:
+        model_activation_penalty = float(model_activation_gb) / total_vram_gb
+        reasons.append(
+            f"-{model_activation_penalty:.3f} for model-class activation "
+            f"overhead ({model_activation_gb:.1f} GB)"
+        )
+
     # 4. Apply all adjustments, then clamp to floor/ceiling.
-    raw_effective = base_coef - lora_penalty - pass_penalty - compute_penalty
+    raw_effective = base_coef - lora_penalty - pass_penalty - compute_penalty - model_activation_penalty
     effective = min(max(raw_effective, _COEFFICIENT_FLOOR), _COEFFICIENT_CEILING)
     floored = raw_effective < _COEFFICIENT_FLOOR
     ceilinged = raw_effective > _COEFFICIENT_CEILING

@@ -102,6 +102,10 @@ export interface GenerateParams {
   // index signature widens explicit fields to `unknown` in some contexts).
   progressive_pipeline?: boolean
   single_stage_pipeline?: boolean
+  // Runs the reference two-stage pipeline (baked-in TenStrip 10Eros V5
+  // workflow config) instead of the standard one. Only sent for models
+  // whose def declares reference_pipeline support.
+  reference_pipeline?: boolean
   progressive_stage1_image_weight?: number
   progressive_stage2_steps?: number
   progressive_stage2_sigma?: number
@@ -109,6 +113,13 @@ export interface GenerateParams {
   progressive_stage3_sigma?: number
   progressive_stage3_image_weight?: number
   stg_scale?: number
+  // STG only runs when the backend sees perturbation_switch === 2 with the
+  // model-correct perturbation_layers; startGeneration derives the switch
+  // from stg_scale and _applyModelDefaults supplies the layers/window.
+  perturbation_switch?: number
+  perturbation_layers?: number[]
+  perturbation_start_perc?: number
+  perturbation_end_perc?: number
   cfg_rescale?: number
   use_gradient_estimation?: boolean
   ge_gamma?: number
@@ -378,9 +389,37 @@ export interface Scene {
 export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
 export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
+export type ScailResolutionProfile = '480p' | '512p' | '704p'
+/** Backward-compatible name for saved Recast/API callers. */
+export type RecastResolutionProfile = ScailResolutionProfile
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
-export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything'
+export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything' | 'recast'
 export type AudioSubMode = 'speech' | 'music' | 'sfx' | 'mixer'
+
+export interface RecastReferenceAsset {
+  file: File | null
+  path: string
+  url: string
+}
+
+export interface RecastCharacterMapping {
+  id: string
+  target: string
+  refFile: File | null
+  refPath: string
+  refUrl: string
+  additionalRefs: RecastReferenceAsset[]
+  referenceAlignedToSource: boolean
+}
+
+/** Optional SCAIL-2 Repaint correspondence. The source phrase is tracked
+ * through the control video and the target phrase is segmented in the edited
+ * first frame; both receive the same stable semantic color. */
+export interface RepaintRegionMapping {
+  id: string
+  source: string
+  target: string
+}
 
 export interface ChoiceConfig {
   selection?: string[]
@@ -416,11 +455,17 @@ export interface ModelOptions {
   image_ref_choices: ChoiceConfig | null
   audio_prompt_type_sources: ChoiceConfig | null
   background_removal_label: string | null
+  max_image_refs?: number | null
   sample_solvers: [string, string][] | null
   self_refiner: boolean
   self_refiner_max_plans: number
-  perturbation?: boolean
   sliding_window_defaults: Record<string, number> | null
+  // LTX-2 Dev pipeline capabilities (guidance controls in Advanced Settings)
+  perturbation?: boolean
+  reference_pipeline?: boolean
+  cfg_star?: boolean
+  adaptive_projected_guidance?: boolean
+  audio_guidance?: boolean
   fps: number
   frames_minimum: number
   frames_steps: number
@@ -439,6 +484,9 @@ export interface ModelOptions {
 }
 
 export interface SystemConfig {
+  // Maestro release version (repo-root VERSION file), shown next to the
+  // app title. Optional: older backends don't send it.
+  app_version?: string
   attention_mode: string
   transformer_quantization: string
   vae_config: number
@@ -452,6 +500,20 @@ export interface SystemConfig {
   prompt_enhancer_quantization: string
   attention_modes_available: string[]
   vram_safety_coefficient: number
+  // Linked model folders (absolute paths outside the Maestro install,
+  // e.g. an existing Wan2GP install's ckpts). Searched read-only for
+  // already-downloaded checkpoints; new downloads always go to Maestro's
+  // own ckpts folder.
+  model_folders: string[]
+}
+
+export interface ModelFolderCandidate {
+  app: string
+  path: string
+  files: number
+  folders: number
+  size_gb: number
+  linked: boolean
 }
 
 export interface OutputMetadata {
@@ -512,8 +574,11 @@ export interface ServicesConfig {
    *  (default), the Services panel hides Director v2 engine, Voice
    *  Reference, external API keys (Google/OpenAI/Anthropic), and the
    *  Studio prompt enhancer config; the Edit mode picker hides
-   *  Inpaint and Restyle. Flipping this on surfaces all of them. */
+   *  Inpaint. Flipping this on surfaces all of them. */
   show_experimental: boolean
+  /** Storage Manager opt-in: allow removing duplicate files FROM linked
+   *  installs (Recycle Bin only). Default off — informed consent. */
+  storage_allow_linked_removal?: boolean
   /** Performance auto-tune master switch. When true (default for fresh
    *  installs), Settings → System Performance shows a single auto card
    *  with detected hardware + recommended profile, and the underlying
@@ -623,6 +688,9 @@ export interface CivitAIModelVersion {
   images: CivitAIImage[]
   description?: string
   localArch?: string | null
+  /** Version release date from CivitAI — persisted into the download
+   *  sidecar so My LoRAs can sort by newest release. */
+  publishedAt?: string
 }
 
 export interface CivitAIFile {
@@ -656,6 +724,11 @@ export interface CivitAIDownload {
   bytes_downloaded: number
   bytes_total: number
   error: string | null
+  /** Unix timestamps (seconds) supplied by the download registry. */
+  started_at: number | null
+  completed_at: number | null
+  /** Present after a downloaded checkpoint is registered as a model. */
+  model_type?: string | null
   // Non-fatal warnings raised after the download finished — most
   // commonly the architecture-mismatch warning when a Klein-4B-trained
   // LoRA lands in flux2_klein_9b/ or vice versa. UI shows these inline
@@ -696,6 +769,13 @@ export interface LoraInfo {
    *  at a glance which LoRAs they've corrected vs which are using CivitAI's
    *  raw flag. */
   nsfw_overridden?: boolean
+  /** ISO timestamp of when the file was downloaded — sidecar `downloadedAt`
+   *  when present, else the weight file's mtime. Shown as an age chip in
+   *  the Studio/Director LoRA pickers. */
+  downloaded_at?: string | null
+  /** ISO timestamp of the CivitAI version's publish date (sidecar
+   *  `publishedAt`). Null for HF/hand-installed LoRAs without sidecar data. */
+  released_at?: string | null
   /** Stable identifier that survives version updates.
    *  Format: `civitai:{modelId}` when sidecar has a CivitAI modelId,
    *  otherwise `local:{filename}`. Use this as the persistence key for
@@ -975,6 +1055,7 @@ export interface PipelineClipState {
   start_image_filename: string | null
   keyframe_filenames: string[]
   video_filename: string | null
+  video_stale?: boolean
   tag: 'good' | 'needs_work' | null
   image_gen_time_sec: number | null
   video_gen_time_sec: number | null
@@ -1030,6 +1111,31 @@ export interface PipelineLlmLog {
   planning_time_sec: number
 }
 
+export type PipelineRepairStatus =
+  | 'queued'
+  | 'running'
+  | 'cancelling'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted'
+
+export interface PipelineRepairState {
+  operation_id: string
+  status: PipelineRepairStatus
+  phase: 'queued' | 'images' | 'videos' | 'rejoin' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  current: number
+  total: number
+  clip_index: number | null
+  message: string
+  error: string | null
+  cancel_requested?: boolean
+  started_at: number
+  updated_at: number
+  completed_at: number | null
+  result_filename: string | null
+}
+
 export interface SavedPipelineState {
   version: number
   pipeline_id: string
@@ -1057,6 +1163,7 @@ export interface SavedPipelineState {
   output_files: string[]
   final_output_filename?: string
   total_time_sec: number | null
+  repair?: PipelineRepairState | null
 }
 
 export interface PipelineListItem {
@@ -1069,4 +1176,5 @@ export interface PipelineListItem {
   output_count: number
   scene_description: string
   workspace: string
+  repair_status?: PipelineRepairStatus | null
 }

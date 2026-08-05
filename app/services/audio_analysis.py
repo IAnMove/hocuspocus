@@ -339,9 +339,43 @@ def unload_whisper():
 # ---------------------------------------------------------------------------
 
 _diarizer_pipe = None
+_diarizer_profile: Optional[str] = None  # profile the cached pipeline is instantiated with
+
+# Clustering hyperparameters per content type. The embedding model was
+# trained on SPEECH — singing voice drifts far more (pitch, vibrato,
+# effects, backing vocals), so the speech-tuned profile shatters one
+# singer into many "speakers" (observed: 6 on a solo track). The music
+# profile requires sustained singing per cluster (pyannote's default 12
+# instead of the AI-dialogue-tuned 6) and merges more aggressively.
+#
+# Threshold 0.85 chosen from a grid sweep over 7 real ACE-Step outputs
+# (0.82 / 0.85 / 0.88 × min_cluster 12 / 18): at 0.82 a male-rapper +
+# female-singer duet read as 3 (her verse/chorus deliveries split); at
+# 0.85 every solo track reads 1 and every two-voice track reads 2; at
+# 0.88 the duet's rapper and singer MERGE to 1. 0.85 is the midpoint of
+# the safe window. min_cluster_size 12 vs 18 changed nothing — the
+# threshold is the only active lever on this content.
+_DIARIZER_PROFILES = {
+    "speech": {
+        "clustering": {
+            "method": "centroid",
+            "min_cluster_size": 6,
+            "threshold": 0.7045654963945799,
+        },
+        "segmentation": {"min_duration_off": 0.0},
+    },
+    "music": {
+        "clustering": {
+            "method": "centroid",
+            "min_cluster_size": 12,
+            "threshold": 0.85,
+        },
+        "segmentation": {"min_duration_off": 0.0},
+    },
+}
 
 
-def get_diarizer_pipeline():
+def get_diarizer_pipeline(profile: str = "speech"):
     """Load (or return cached) pyannote 3.1 diarization pipeline.
 
     Public so postprocessing modules (voice_clone.py) can reuse the
@@ -377,10 +411,19 @@ def get_diarizer_pipeline():
 
     Module-level cache via _diarizer_pipe means second+ calls in the
     same process are free, shared between audio_analysis._diarize
-    and voice_clone.
+    and voice_clone. `profile` selects the clustering hyperparameters
+    (see _DIARIZER_PROFILES) — a cached pipeline is re-instantiated in
+    place when a different profile is requested (cheap: instantiate()
+    only sets hyperparameters, no model reload).
     """
-    global _diarizer_pipe
+    global _diarizer_pipe, _diarizer_profile
     if _diarizer_pipe is not None:
+        if profile != _diarizer_profile:
+            try:
+                _diarizer_pipe.instantiate(_DIARIZER_PROFILES[profile])
+                _diarizer_profile = profile
+            except Exception as e:
+                print(f"[Diarization] Profile switch to '{profile}' failed (keeping '{_diarizer_profile}'): {e}")
         return _diarizer_pipe
 
     try:
@@ -404,15 +447,49 @@ def get_diarizer_pipeline():
     torch.load = _safe_load
 
     try:
-        # ── Path 1: manual assembly from local .bin files ──────────
-        # The Maestro install ships these .bin files (and Music Video
-        # mode references them too via speakers_separator.py). Resolve
-        # via absolute path from this module's location, since CWD
-        # isn't guaranteed to be the app/ folder at every entry point.
+        # ── Path 0: fetch the ungated .bin files when missing ───────
+        # These are the same two checkpoints wgp's shared-model download
+        # provides (DeepBeepMeep/Wan2.1, pyannote/ subfolder — an ungated
+        # mirror of the pyannote 3.1 models). That shared download only
+        # runs when a generation model loads, so a fresh install that
+        # reaches audio analysis first (e.g. Director on an uploaded
+        # song) has no local files, no HF cache, and — without an
+        # HF_TOKEN for the gated upstream repo — diarization silently
+        # skipped. Fetch the two files directly so first use just works.
         embedding_path = os.path.join(_app_root, "ckpts", "pyannote",
                                        "pyannote_model_wespeaker-voxceleb-resnet34-LM.bin")
         segmentation_path = os.path.join(_app_root, "ckpts", "pyannote",
                                           "pytorch_model_segmentation-3.0.bin")
+        if not (os.path.isfile(embedding_path) and os.path.isfile(segmentation_path)):
+            try:
+                import shutil
+                import tempfile
+                from huggingface_hub import hf_hub_download
+                target_dir = os.path.join(_app_root, "ckpts", "pyannote")
+                os.makedirs(target_dir, exist_ok=True)
+                for fname in ("pyannote_model_wespeaker-voxceleb-resnet34-LM.bin",
+                              "pytorch_model_segmentation-3.0.bin"):
+                    dest = os.path.join(target_dir, fname)
+                    if os.path.isfile(dest):
+                        continue
+                    print(f"[Diarization] Downloading {fname} (ungated mirror, first use)...")
+                    tmp_dir = tempfile.mkdtemp(prefix="pyannote_dl_")
+                    try:
+                        got = hf_hub_download(repo_id="DeepBeepMeep/Wan2.1", filename=fname,
+                                              subfolder="pyannote", local_dir=tmp_dir)
+                        shutil.move(got, dest)
+                    finally:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+                print("[Diarization] Checkpoints downloaded")
+            except Exception as e:
+                print(f"[Diarization] Auto-download failed (trying other load paths): {e}")
+
+        # ── Path 1: manual assembly from local .bin files ──────────
+        # wgp's shared-model download (or Path 0 above) provides these
+        # .bin files; Music Video mode references them too via
+        # speakers_separator.py. Resolve via absolute path from this
+        # module's location, since CWD isn't guaranteed to be the app/
+        # folder at every entry point.
         if os.path.isfile(embedding_path) and os.path.isfile(segmentation_path):
             try:
                 from pyannote.audio import Model
@@ -425,30 +502,14 @@ def get_diarizer_pipeline():
                     embedding=embedding_model,
                     clustering="AgglomerativeClustering",
                 )
-                # Hyperparameters: start from pyannote 3.1's HF config.yaml
-                # values, with two adjustments tuned for AI-generated speech
-                # (LTX-2, Wan, Multitalk) which tends to have shorter
-                # utterances and slightly lower SNR than the pyannote test
-                # corpus:
-                #   - min_cluster_size: 12 → 6. Lets shorter speech bursts
-                #     (a single line of dialogue without sustained
-                #     conversation) form a valid cluster. Default 12 means
-                #     ~6+ seconds of speech-per-speaker required.
-                #   - clustering threshold: 0.7045 unchanged (default).
-                pipeline.instantiate({
-                    "clustering": {
-                        "method": "centroid",
-                        "min_cluster_size": 6,
-                        "threshold": 0.7045654963945799,
-                    },
-                    "segmentation": {
-                        "min_duration_off": 0.0,
-                    },
-                })
+                # Hyperparameters come from the requested profile — see
+                # _DIARIZER_PROFILES for the speech vs music rationale.
+                pipeline.instantiate(_DIARIZER_PROFILES[profile])
                 if device == "cuda":
                     pipeline.to(torch.device(device))
                 _diarizer_pipe = pipeline
-                print(f"[Diarization] Pipeline loaded from local .bin files on {device}")
+                _diarizer_profile = profile
+                print(f"[Diarization] Pipeline loaded from local .bin files on {device} (profile: {profile})")
                 return _diarizer_pipe
             except Exception as e:
                 print(f"[Diarization] Manual assembly failed, falling back: {e}")
@@ -464,14 +525,30 @@ def get_diarizer_pipeline():
         )
         local_config = os.path.join(local_model_dir, "config.yaml")
         hf_token = os.environ.get("HF_TOKEN", "")
+
+        # Apply the requested profile to a from_pretrained pipeline (it
+        # arrives instantiated with the HF config defaults). Guarded so an
+        # instantiate hiccup degrades to defaults instead of losing the
+        # loaded pipeline; _diarizer_profile stays None so the next call
+        # retries the switch.
+        def _apply_profile(pipe):
+            global _diarizer_profile
+            try:
+                pipe.instantiate(_DIARIZER_PROFILES[profile])
+                _diarizer_profile = profile
+            except Exception as e:
+                _diarizer_profile = None
+                print(f"[Diarization] Profile instantiate failed (using model defaults): {e}")
+            return pipe
+
         if os.path.isfile(local_config):
             hf_home = os.path.join(_project_root, "cache", "HF_HOME")
             os.environ.setdefault("HF_HOME", os.path.normpath(hf_home))
             try:
                 print(f"[Diarization] Loading from HF_HOME cache on {device}...")
-                _diarizer_pipe = PyannotePipeline.from_pretrained(
+                _diarizer_pipe = _apply_profile(PyannotePipeline.from_pretrained(
                     "pyannote/speaker-diarization-3.1",
-                ).to(torch.device(device))
+                ).to(torch.device(device)))
                 print("[Diarization] Pipeline loaded from HF_HOME cache")
                 return _diarizer_pipe
             except Exception as e:
@@ -481,10 +558,10 @@ def get_diarizer_pipeline():
         if hf_token:
             try:
                 print(f"[Diarization] Downloading from HuggingFace on {device}...")
-                _diarizer_pipe = PyannotePipeline.from_pretrained(
+                _diarizer_pipe = _apply_profile(PyannotePipeline.from_pretrained(
                     "pyannote/speaker-diarization-3.1",
                     use_auth_token=hf_token,
-                ).to(torch.device(device))
+                ).to(torch.device(device)))
                 print("[Diarization] Pipeline downloaded + loaded")
                 return _diarizer_pipe
             except Exception as e:
@@ -508,72 +585,30 @@ def _diarize(audio_path: str, lyrics: List[LyricSegment]) -> List[LyricSegment]:
 
     Uses temporal overlap to assign the dominant speaker to each segment.
     Runs on CUDA if available, offloads immediately after to free VRAM.
-    """
-    global _diarizer_pipe
 
+    Model loading goes through get_diarizer_pipeline() — this function
+    used to carry its own legacy loader that only knew the HF-clone and
+    gated-token paths, so fresh installs (no local clone, no HF_TOKEN)
+    silently skipped diarization even though the shared loader can
+    assemble the pipeline from ungated .bin files (auto-downloaded on
+    first use).
+    """
     try:
         import torch
         import numpy as np
         import pandas as pd
-        from pyannote.audio import Pipeline as PyannotePipeline  # noqa: F401 — kept for import-error early exit symmetry
     except ImportError as e:
         print(f"[Diarization] Skipped (missing dependency): {e}")
         return lyrics
 
-    _base = os.path.dirname(os.path.abspath(__file__))
-    _project_root = os.path.normpath(os.path.join(_base, "..", ".."))
-    # Local clone of pyannote/speaker-diarization-3.1
-    local_model_dir = os.path.join(
-        _project_root, "cache", "HF_HOME", "hub", "speaker-diarization-3.1"
-    )
-    # Sub-models cache (segmentation-3.0, wespeaker) downloads here
-    cache_dir = os.path.join(_base, "..", "ckpts", "diarization")
-    os.makedirs(cache_dir, exist_ok=True)
-
-    hf_token = os.environ.get("HF_TOKEN", "")
-
-    # Determine model source: prefer local clone, fall back to HuggingFace
-    local_config = os.path.join(local_model_dir, "config.yaml")
-    if os.path.isfile(local_config):
-        model_source = local_model_dir
-    elif hf_token:
-        model_source = "pyannote/speaker-diarization-3.1"
-    else:
-        print(
-            "[Diarization] Skipped — no local model and no HF_TOKEN set.\n"
-            "  To enable: clone pyannote/speaker-diarization-3.1 to\n"
-            f"  {local_model_dir}\n"
-            "  or set HF_TOKEN env var."
-        )
-        return lyrics
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Music profile: this function's only production caller is the song
+    # analysis flow. voice_clone loads the speech profile via the same
+    # shared loader (a cached pipeline switches profiles in place).
+    pipe = get_diarizer_pipeline(profile="music")
+    if pipe is None:
+        return lyrics  # loader already printed the reason
 
     try:
-        # Load pipeline (cached after first run)
-        if _diarizer_pipe is None:
-            # PyTorch 2.6+ defaults weights_only=True which breaks pyannote's
-            # pickle-based checkpoints. Temporarily patch torch.load.
-            _orig_torch_load = torch.load
-            def _safe_load(*args, **kwargs):
-                kwargs["weights_only"] = False
-                return _orig_torch_load(*args, **kwargs)
-            torch.load = _safe_load
-
-            # Point HF cache to our local directory so sub-models are found
-            hf_home = os.path.join(_project_root, "cache", "HF_HOME")
-            os.environ.setdefault("HF_HOME", os.path.normpath(hf_home))
-
-            try:
-                print(f"[Diarization] Loading pyannote pipeline on {device}...")
-                _diarizer_pipe = PyannotePipeline.from_pretrained(
-                    "pyannote/speaker-diarization-3.1",
-                    use_auth_token=hf_token or None,
-                ).to(torch.device(device))
-                print("[Diarization] Pipeline loaded")
-            finally:
-                torch.load = _orig_torch_load
-
         # Load audio at 16kHz mono via ffmpeg
         import subprocess
         cmd = [
@@ -589,7 +624,10 @@ def _diarize(audio_path: str, lyrics: List[LyricSegment]) -> List[LyricSegment]:
         }
 
         print("[Diarization] Running speaker diarization...")
-        segments = _diarizer_pipe(audio_data)
+        # Hard cap as a backstop on top of the music profile's clustering:
+        # songs have 1-3 vocalists; anything beyond that is the embedding
+        # model mistaking a register/effect change for a new person.
+        segments = pipe(audio_data, min_speakers=1, max_speakers=3)
 
         # Build DataFrame of speaker segments
         diarize_df = pd.DataFrame(
@@ -631,10 +669,11 @@ def _diarize(audio_path: str, lyrics: List[LyricSegment]) -> List[LyricSegment]:
 
 def unload_diarizer():
     """Free the diarization pipeline and reclaim VRAM."""
-    global _diarizer_pipe
+    global _diarizer_pipe, _diarizer_profile
     if _diarizer_pipe is not None:
         del _diarizer_pipe
         _diarizer_pipe = None
+    _diarizer_profile = None
     try:
         import torch
         if torch.cuda.is_available():
@@ -743,7 +782,7 @@ def analyze(
             # Run speaker diarization on the original mix (needs both voices)
             if result.lyrics:
                 # _diarize loads pyannote on first call (~100MB cached).
-                _set_progress("loading_diarization_model", "Loading speaker-diarization model (first use downloads ~100MB)")
+                _set_progress("loading_diarization_model", "Loading speaker-diarization model (first use downloads ~30MB)")
                 _set_progress("identifying_speakers", "Identifying speakers")
                 result.lyrics = _diarize(audio_path, result.lyrics)
                 if not any(segment.speaker for segment in result.lyrics):

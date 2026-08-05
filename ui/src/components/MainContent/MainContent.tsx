@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useCallback, useState, useEffect, useMemo, type JSX } from 'react'
-import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked } from 'lucide-react'
+import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked, Upload, Trash2 } from 'lucide-react'
 import { TabFilter } from './TabFilter'
 import { ThumbnailGallery } from './ThumbnailGallery'
 import { MediaFeedItem } from './MediaFeedItem'
@@ -30,12 +30,37 @@ function PanelLoadingFallback() {
 function WorkspaceSelector() {
   const workspaces = useStore(s => s.workspaces)
   const activeWorkspace = useStore(s => s.activeWorkspace)
+  const browsingUploads = useStore(s => s.browsingUploads)
   const switchWorkspace = useStore(s => s.switchWorkspace)
   const createWorkspace = useStore(s => s.createWorkspace)
+  const deleteWorkspace = useStore(s => s.deleteWorkspace)
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const handleDelete = async (name: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (confirmDelete !== name) {
+      setConfirmDelete(name)
+      setTimeout(() => setConfirmDelete(c => (c === name ? null : c)), 4000)
+      return
+    }
+    setConfirmDelete(null)
+    setDeleting(name)
+    setDeleteError(null)
+    try {
+      await deleteWorkspace(name)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err))
+      setTimeout(() => setDeleteError(null), 6000)
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   // Close on outside click
   useEffect(() => {
@@ -71,7 +96,7 @@ function WorkspaceSelector() {
         title="Switch workspace"
       >
         <FolderOpen size={12} />
-        <span className="max-w-[120px] truncate">{activeWorkspace}</span>
+        <span className="max-w-[120px] truncate">{browsingUploads ? 'Uploads' : activeWorkspace}</span>
       </button>
 
       {open && (
@@ -81,17 +106,54 @@ function WorkspaceSelector() {
           </div>
           <div className="max-h-[200px] overflow-y-auto">
             {workspaces.map(ws => (
-              <button
-                key={ws.name}
-                onClick={() => { switchWorkspace(ws.name); setOpen(false) }}
-                className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-bg-hover transition-colors ${
-                  ws.name === activeWorkspace ? 'text-accent-blue' : 'text-text-secondary'
-                }`}
-              >
-                <span className="truncate">{ws.name}</span>
-                {ws.name === activeWorkspace && <Check size={12} />}
-              </button>
+              <div key={ws.name} className="flex items-center group hover:bg-bg-hover transition-colors">
+                <button
+                  onClick={() => { switchWorkspace(ws.name); setOpen(false) }}
+                  className={`flex-1 min-w-0 text-left px-3 py-2 text-xs flex items-center justify-between ${
+                    ws.name === activeWorkspace && !browsingUploads ? 'text-accent-blue' : 'text-text-secondary'
+                  }`}
+                >
+                  <span className="truncate">{ws.name}</span>
+                  {ws.name === activeWorkspace && !browsingUploads && <Check size={12} className="shrink-0" />}
+                </button>
+                {/* default IS the outputs folder itself — not deletable */}
+                {ws.name !== 'default' && (
+                  <button
+                    onClick={e => handleDelete(ws.name, e)}
+                    disabled={deleting === ws.name}
+                    className={`px-2 py-2 shrink-0 transition-colors ${
+                      confirmDelete === ws.name
+                        ? 'text-red-400 bg-red-500/15'
+                        : deleting === ws.name
+                          ? 'text-text-muted cursor-wait'
+                          : 'text-text-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400'
+                    }`}
+                    title={confirmDelete === ws.name
+                      ? `Click again to permanently delete "${ws.name}" and its ${ws.file_count ?? 0} files`
+                      : `Delete workspace (${ws.file_count ?? 0} files)`}
+                  >
+                    {deleting === ws.name ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                  </button>
+                )}
+              </div>
             ))}
+          </div>
+          {deleteError && (
+            <div className="px-3 py-1.5 text-[10px] text-red-400 border-t border-border leading-snug">{deleteError}</div>
+          )}
+          {/* Virtual Uploads view — browse user-uploaded media (read-only;
+              generations keep saving to the real active workspace). */}
+          <div className="border-t border-border">
+            <button
+              onClick={() => { switchWorkspace('__uploads__'); setOpen(false) }}
+              className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-bg-hover transition-colors ${
+                browsingUploads ? 'text-accent-blue' : 'text-text-secondary'
+              }`}
+              title="Browse media you've uploaded — reuse as inputs"
+            >
+              <span className="flex items-center gap-1.5"><Upload size={12} /> Uploads</span>
+              {browsingUploads && <Check size={12} />}
+            </button>
           </div>
           <div className="border-t border-border p-2">
             {creating ? (
@@ -160,7 +222,7 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
         {isFailed && (
           <button
             onClick={onDismiss}
-            className="absolute top-2 right-2 p-1.5 rounded-full bg-black/40 text-white/80 hover:bg-red-600 hover:text-white transition-colors z-10"
+            className="absolute top-2 right-2 p-1.5 rounded-full bg-bg-active text-text-secondary hover:bg-red-600 hover:text-white transition-colors z-10"
             title="Dismiss"
           >
             <X size={14} />
@@ -658,7 +720,7 @@ export function MainContent() {
                     <li><span className="text-accent-blue font-medium">2.</span> Type a prompt — e.g. <span className="text-text-secondary italic">“{example}”</span></li>
                     <li><span className="text-accent-blue font-medium">3.</span> Hit Generate.</li>
                   </ol>
-                  <p className="text-[11px] text-text-muted/70 leading-snug">
+                  <p className="text-[11px] text-text-muted leading-snug">
                     Heads up: the first time you use a model, its weights download
                     once (often tens of GB) before generation starts — later runs
                     are fast. Progress shows at the bottom-right.

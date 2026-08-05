@@ -1,5 +1,5 @@
-import { useState, useEffect, Component, type ReactNode } from 'react'
-import { X, ChevronDown, ChevronRight, Play, ImageIcon, Check, AlertTriangle, Clock, Brain, Sparkles, Loader2, Camera, Film, Combine, Pencil, Copy, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useRef, Component, type ReactNode } from 'react'
+import { X, ChevronDown, ChevronRight, Play, ImageIcon, Check, AlertTriangle, Clock, Brain, Sparkles, Loader2, Camera, Film, Combine, Pencil, Copy, RefreshCw, Trash2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { getFileUrl } from '../../api/client'
 import { getOutputReference } from '../../lib/outputReference'
@@ -77,7 +77,7 @@ function PipelineProgressBar({ pipeline }: { pipeline: SavedPipelineState }) {
           </span>
         ))}
         <span className="flex items-center gap-1">
-          {isComplete ? <Check size={9} className="text-green-400" /> : <Clock size={9} />}
+          {isComplete ? <Check size={9} className="text-indicator-success" /> : <Clock size={9} />}
           Total: {formatTime(pipeline.total_time_sec)}
         </span>
       </div>
@@ -129,12 +129,12 @@ function LlmPassView({ pass: p, index }: { pass: { pass: string; system_prompt: 
       {p.thinking_text && (
         <>
           <button onClick={() => setShowThinking(!showThinking)}
-            className="flex items-center gap-1 text-[9px] text-amber-400/80 hover:text-amber-300 w-full text-left">
+            className="flex items-center gap-1 text-[9px] text-indicator-warning hover:text-indicator-warning/80 w-full text-left">
             {showThinking ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
             <Sparkles size={8} /> Thinking ({p.thinking_text.length} chars)
           </button>
           {showThinking && (
-            <pre className="text-[8px] text-amber-400/50 bg-bg-tertiary rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono">
+            <pre className="text-[8px] text-text-muted bg-bg-tertiary rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono">
               {p.thinking_text}
             </pre>
           )}
@@ -164,9 +164,9 @@ function LlmLogPanel({ pipeline }: { pipeline: SavedPipelineState }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-[10px] text-text-muted">
-        <Brain size={12} className="text-purple-400" />
+        <Brain size={12} className="text-chip-purple" />
         <span>{log.provider}/{log.model_id || 'unknown'}</span>
-        <span className="ml-1 text-text-muted/50">({passes?.length || 1} pass{(passes?.length || 1) > 1 ? 'es' : ''})</span>
+        <span className="ml-1 text-text-muted">({passes?.length || 1} pass{(passes?.length || 1) > 1 ? 'es' : ''})</span>
         <span className="ml-auto">{formatTime(log.planning_time_sec)}</span>
       </div>
 
@@ -265,8 +265,10 @@ function H3SegmentCard({ segment, shotIndex, onRerun }: {
   )
 }
 
-function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }: {
+function ClipCard({ clip, pipeline: _pipeline, busy = false, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }: {
   clip: PipelineClipState
+  pipeline: SavedPipelineState
+  busy?: boolean
   onTag: (tag: 'good' | 'needs_work' | null) => void
   onRerunImage: (clipIndex: number, prompt?: string) => void
   onRerunVideo: (clipIndex: number, prompt?: string) => void
@@ -305,7 +307,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
             <span className="text-text-muted font-normal ml-1">({Math.round((clip.planned_clip as unknown as Record<string, unknown>).duration_sec as number)}s)</span>
           ) : null}
           {clip.window_count > 1 && (
-            <span className="text-purple-400 font-normal ml-1 text-[9px]">{clip.window_count}W</span>
+            <span className="text-chip-purple font-normal ml-1 text-[9px]">{clip.window_count}W</span>
           )}
         </span>
         <div className="flex items-center gap-1">
@@ -317,12 +319,14 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
           )}
           {/* Tag buttons */}
           <button onClick={() => onTag(clip.tag === 'good' ? null : 'good')}
-            className={`ml-2 p-0.5 rounded ${clip.tag === 'good' ? 'bg-green-500 text-white' : 'text-text-muted hover:text-green-400'}`}
+            disabled={busy}
+            className={`ml-2 p-0.5 rounded disabled:opacity-40 ${clip.tag === 'good' ? 'bg-green-500 text-white' : 'text-text-muted hover:text-indicator-success'}`}
             title="Mark as good">
             <Check size={12} />
           </button>
           <button onClick={() => onTag(clip.tag === 'needs_work' ? null : 'needs_work')}
-            className={`p-0.5 rounded ${clip.tag === 'needs_work' ? 'bg-amber-500 text-white' : 'text-text-muted hover:text-amber-400'}`}
+            disabled={busy}
+            className={`p-0.5 rounded disabled:opacity-40 ${clip.tag === 'needs_work' ? 'bg-amber-500 text-white' : 'text-text-muted hover:text-indicator-warning'}`}
             title="Needs work">
             <AlertTriangle size={12} />
           </button>
@@ -338,7 +342,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
               <img src={getFileUrl(clip.start_image_filename)} alt={`Shot ${clip.index + 1}`}
                 className="w-full h-full object-cover" loading="lazy" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-text-muted/30">
+              <div className="w-full h-full flex items-center justify-center text-text-muted">
                 <ImageIcon size={16} />
               </div>
             )}
@@ -349,12 +353,13 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
               <span className="text-[9px] text-text-muted uppercase tracking-wider">Image Prompt</span>
               <div className="flex items-center gap-1">
                 <button onClick={() => { setEditingImage(!editingImage); setEditImagePrompt(clip.image_prompt || '') }}
-                  className={`p-0.5 rounded transition-colors ${editingImage ? 'text-accent-blue' : 'text-text-muted/40 hover:text-text-muted'}`}
+                  className={`p-0.5 rounded transition-colors ${editingImage ? 'text-accent-blue' : 'text-text-muted hover:text-text-secondary'}`}
                   title="Edit prompt">
                   <Pencil size={9} />
                 </button>
                 <button onClick={() => onRerunImage(clip.index, editingImage ? editImagePrompt : undefined)}
-                  className="p-0.5 rounded text-text-muted/40 hover:text-accent-blue transition-colors"
+                  disabled={busy}
+                  className="p-0.5 rounded text-text-muted hover:text-accent-blue transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   title="Re-generate start image">
                   <Camera size={10} />
                 </button>
@@ -370,7 +375,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
             ) : (
               <p className={`text-[10px] text-text-secondary ${expandImage ? '' : 'line-clamp-3'} cursor-pointer`}
                 onClick={() => setExpandImage(!expandImage)}>
-                {clip.image_prompt || <span className="italic text-text-muted/50">No image prompt</span>}
+                {clip.image_prompt || <span className="italic text-text-muted">No image prompt</span>}
               </p>
             )}
           </div>
@@ -436,7 +441,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
               {/* Show prompts without images if more prompts than files */}
               {clip.keyframe_prompts?.slice(clip.keyframe_filenames?.length || 0).map((kp, ki) => (
                 <div key={`p${ki}`} className="shrink-0 w-14 h-14 rounded border border-dashed border-border flex items-center justify-center">
-                  <p className="text-[7px] text-text-muted/50 p-1 line-clamp-3">{safeStr(kp)}</p>
+                  <p className="text-[7px] text-text-muted p-1 line-clamp-3">{safeStr(kp)}</p>
                 </div>
               ))}
             </div>
@@ -476,7 +481,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
                 setEditVideoPrompt(clip.video_prompt || '')
                 setEditWindowPrompts(clip.window_prompts || [])
               }}
-                className={`p-0.5 rounded transition-colors ${editingVideo ? 'text-accent-blue' : 'text-text-muted/40 hover:text-text-muted'}`}
+                className={`p-0.5 rounded transition-colors ${editingVideo ? 'text-accent-blue' : 'text-text-muted hover:text-text-secondary'}`}
                 title="Edit prompt">
                 <Pencil size={9} />
               </button>
@@ -487,8 +492,9 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
                   onRerunVideo(clip.index, editingVideo ? editVideoPrompt : undefined)
                 }
               }}
-                className="p-0.5 rounded text-text-muted/40 hover:text-green-400 transition-colors"
-                title="Re-generate video clip">
+                disabled={busy || !clip.start_image_filename}
+                className="p-0.5 rounded text-text-muted hover:text-indicator-success transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title={busy ? 'Wait for pipeline repair to finish' : clip.start_image_filename ? 'Re-generate video clip' : 'Generate the start image first'}>
                 <Film size={10} />
               </button>
             </div>
@@ -544,7 +550,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
             ) : (
               <p className={`text-[10px] text-text-secondary ${expandVideo ? '' : 'line-clamp-3'} cursor-pointer`}
                 onClick={() => setExpandVideo(!expandVideo)}>
-                {clip.video_prompt || <span className="italic text-text-muted/50">No video prompt</span>}
+                {clip.video_prompt || <span className="italic text-text-muted">No video prompt</span>}
               </p>
             )
           )}
@@ -582,7 +588,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
                       <div className="text-[8px] text-text-muted uppercase">Image — Before Polish</div>
                       <p className="text-[9px] text-red-400/70 line-through">{clip.image_prompt_pre_polish}</p>
                       <div className="text-[8px] text-text-muted uppercase mt-0.5">After</div>
-                      <p className="text-[9px] text-green-400/70">{clip.image_prompt}</p>
+                      <p className="text-[9px] text-indicator-success/80">{clip.image_prompt}</p>
                     </div>
                   )}
                   {videoChanged && (
@@ -590,7 +596,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
                       <div className="text-[8px] text-text-muted uppercase">Video — Before Polish</div>
                       <p className="text-[9px] text-red-400/70 line-through">{clip.video_prompt_pre_polish}</p>
                       <div className="text-[8px] text-text-muted uppercase mt-0.5">After</div>
-                      <p className="text-[9px] text-green-400/70">{clip.video_prompt}</p>
+                      <p className="text-[9px] text-indicator-success/80">{clip.video_prompt}</p>
                     </div>
                   )}
                   {windowDiffs.map(({ pre, post, i }) => (
@@ -598,7 +604,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
                       <div className="text-[8px] text-text-muted uppercase">Window {i + 1} — Before Polish</div>
                       <p className="text-[9px] text-red-400/70 line-through">{pre}</p>
                       <div className="text-[8px] text-text-muted uppercase mt-0.5">After</div>
-                      <p className="text-[9px] text-green-400/70">{post}</p>
+                      <p className="text-[9px] text-indicator-success/80">{post}</p>
                     </div>
                   ))}
                   {keyframeDiffs.map(({ pre, post, i }) => (
@@ -606,7 +612,7 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
                       <div className="text-[8px] text-text-muted uppercase">Keyframe {i + 1} — Before Polish</div>
                       <p className="text-[9px] text-red-400/70 line-through">{pre}</p>
                       <div className="text-[8px] text-text-muted uppercase mt-0.5">After</div>
-                      <p className="text-[9px] text-green-400/70">{post}</p>
+                      <p className="text-[9px] text-indicator-success/80">{post}</p>
                     </div>
                   ))}
                   {!anyChange && (
@@ -641,6 +647,8 @@ function DirectorDashboardInner() {
   const loading = useStore(s => s.dashboardLoading)
   const loadPipeline = useStore(s => s.loadSavedPipeline)
   const tagClip = useStore(s => s.tagClip)
+  const startPipelineRepair = useStore(s => s.startPipelineRepair)
+  const cancelPipelineRepair = useStore(s => s.cancelPipelineRepair)
   const rerunClipImage = useStore(s => s.rerunClipImage)
   const rerunClipVideo = useStore(s => s.rerunClipVideo)
   const rerunH3Segment = useStore(s => s.rerunH3Segment)
@@ -648,12 +656,49 @@ function DirectorDashboardInner() {
   const resumePipeline = useStore(s => s.resumePipeline)
   const setMediaFilter = useStore(s => s.setMediaFilter)
   const activeWorkspace = useStore(s => s.activeWorkspace)
+  const deletePipeline = useStore(s => s.deletePipeline)
   const [resuming, setResuming] = useState(false)
+  // Keyed by pipeline id — a bare boolean would let "arm on pipeline A,
+  // switch to B, click once" delete B without a confirm.
+  const [confirmDeletePid, setConfirmDeletePid] = useState<string | null>(null)
+  const [deletingPipeline, setDeletingPipeline] = useState(false)
+  const [repairStartingPid, setRepairStartingPid] = useState<string | null>(null)
+  const [repairCancellingPid, setRepairCancellingPid] = useState<string | null>(null)
+  const [regenErrors, setRegenErrors] = useState<Record<string, string>>({})
+  const autoLoadAttemptedPid = useRef<string | null>(null)
+  const selectedPid = selectedPipeline?.pipeline_id || null
+  const repairStarting = repairStartingPid === selectedPid
+  const repairCancelling = repairCancellingPid === selectedPid
+  const regenError = selectedPid ? regenErrors[selectedPid] || null : null
+  const setRegenError = (message: string | null) => {
+    const pid = selectedPid
+    if (!pid) return
+    setRegenErrors(current => {
+      const next = { ...current }
+      if (message) next[pid] = message
+      else delete next[pid]
+      return next
+    })
+  }
 
   // Auto-load first pipeline when list loads
   useEffect(() => {
+    if (selectedPipeline) {
+      autoLoadAttemptedPid.current = null
+      return
+    }
     if (pipelineList.length > 0 && !selectedPipeline && !loading) {
-      loadPipeline(pipelineList[0].id)
+      const active = pipelineList.find(p =>
+        p.repair_status === 'queued'
+        || p.repair_status === 'running'
+        || p.repair_status === 'cancelling')
+      const pid = (active || pipelineList[0]).id
+      // A stale list entry (for example, a pipeline removed outside Maestro)
+      // must not create an endless load/fail/render loop. Explicit selection
+      // and closing/reopening the Dashboard still provide retry paths.
+      if (autoLoadAttemptedPid.current === pid) return
+      autoLoadAttemptedPid.current = pid
+      void loadPipeline(pid)
     }
   }, [pipelineList, selectedPipeline, loading, loadPipeline])
 
@@ -661,7 +706,10 @@ function DirectorDashboardInner() {
   const needsWorkCount = selectedPipeline?.clips.filter(c => c.tag === 'needs_work').length || 0
   const totalClips = selectedPipeline?.clips.length || 0
   const missingImages = selectedPipeline?.clips.filter(c => !c.start_image_filename).length || 0
-  const missingVideos = selectedPipeline?.clips.filter(c => !c.video_filename && !c.h3_segments?.length && c.start_image_filename).length || 0
+  const missingVideos = selectedPipeline?.clips.filter(c =>
+    ((!c.video_filename && !c.h3_segments?.length) || c.video_stale || !c.start_image_filename)).length || 0
+  const incompleteClips = selectedPipeline?.clips.filter(c =>
+    !c.start_image_filename || (!c.video_filename && !c.h3_segments?.length) || c.video_stale).length || 0
   const hasMissing = missingImages > 0 || missingVideos > 0
   const videoPartCount = selectedPipeline?.clips.reduce(
     (count, clip) => count + (clip.h3_segments?.length || (clip.video_filename ? 1 : 0)),
@@ -670,28 +718,30 @@ function DirectorDashboardInner() {
   const finalOutputFilename = selectedPipeline?.final_output_filename || [...(selectedPipeline?.output_files || [])]
     .reverse()
     .find(filename => /(?:rejoin|multiclip|_movie)\.(?:mp4|webm|mkv|mov)$/i.test(filename))
-
-  const [regenError, setRegenError] = useState<string | null>(null)
+  const repair = selectedPipeline?.repair
+  const repairActive = repair?.status === 'queued'
+    || repair?.status === 'running'
+    || repair?.status === 'cancelling'
+  const repairRetryable = repair?.status === 'failed'
+    || repair?.status === 'cancelled'
+    || repair?.status === 'interrupted'
+  const repairBusy = repairActive || repairStarting || repairCancelling
+  const pipelineTerminal = !!selectedPipeline && [
+    'completed', 'failed', 'crashed', 'cancelled',
+  ].includes(selectedPipeline.status)
+  const showRepairAction = hasMissing || repairActive || repairRetryable || pipelineTerminal
 
   const generateMissing = async () => {
     if (!selectedPipeline) return
-    setRegenError(null)
     const pid = selectedPipeline.pipeline_id
+    setRegenError(null)
+    setRepairStartingPid(pid)
     try {
-      // Generate missing images first
-      for (const clip of selectedPipeline.clips) {
-        if (!clip.start_image_filename && clip.image_prompt) {
-          await rerunClipImage(pid, clip.index)
-        }
-      }
-      // Then missing videos
-      for (const clip of selectedPipeline.clips) {
-        if (!clip.video_filename && !clip.h3_segments?.length && clip.video_prompt) {
-          await rerunClipVideo(pid, clip.index)
-        }
-      }
+      await startPipelineRepair(pid)
     } catch (e) {
       setRegenError(String(e instanceof Error ? e.message : e))
+    } finally {
+      setRepairStartingPid(current => current === pid ? null : current)
     }
   }
 
@@ -710,6 +760,7 @@ function DirectorDashboardInner() {
           <option value="">Select an independent creation...</option>
           {pipelineList.map(p => (
             <option key={p.id} value={p.id}>
+              {p.repair_status ? `[repair: ${p.repair_status}] ` : ''}
               {formatDate(p.created_at)} — {p.pipeline_type} ({p.clip_count} clips) [{p.status}]
               {p.scene_description ? ` — ${p.scene_description}` : ''}
             </option>
@@ -719,10 +770,10 @@ function DirectorDashboardInner() {
         {/* Summary badges */}
         {selectedPipeline && (
           <div className="flex items-center gap-2 text-[10px] shrink-0">
-            <span className="flex items-center gap-0.5 text-green-400">
+            <span className="flex items-center gap-0.5 text-indicator-success">
               <Check size={10} /> {goodCount}
             </span>
-            <span className="flex items-center gap-0.5 text-amber-400">
+            <span className="flex items-center gap-0.5 text-indicator-warning">
               <AlertTriangle size={10} /> {needsWorkCount}
             </span>
             <span className="text-text-muted">
@@ -741,8 +792,8 @@ function DirectorDashboardInner() {
                     setResuming(false)
                   }
                 }}
-                disabled={resuming || loading}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] bg-green-500/10 border border-green-500/30 rounded text-green-400 hover:bg-green-500/20 disabled:opacity-40 transition-colors"
+                disabled={resuming || loading || repairBusy}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] bg-green-500/10 border border-green-500/30 rounded text-indicator-success hover:bg-green-500/20 disabled:opacity-40 transition-colors"
                 title="Re-run this pipeline from where it crashed — reuses the planning and start images that already completed"
               >
                 <Play size={10} />
@@ -766,29 +817,125 @@ function DirectorDashboardInner() {
                 Open comic PRE
               </button>
             )}
-            {hasMissing && (
+            {repairActive ? (
+              <>
+                <span
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] bg-orange-500/10 border border-orange-500/30 rounded text-chip-orange"
+                  title={repair?.message || 'Repair running'}
+                >
+                  <Loader2 size={10} className="animate-spin" />
+                  {repair?.message || 'Repairing'}
+                  {repair && repair.total > 0 ? ` (${repair.current}/${repair.total})` : ''}
+                </span>
+                <button
+                  onClick={async () => {
+                    if (!selectedPipeline) return
+                    const pid = selectedPipeline.pipeline_id
+                    setRepairCancellingPid(pid); setRegenError(null)
+                    try {
+                      await cancelPipelineRepair(pid)
+                    } catch (e) {
+                      setRegenError(String(e instanceof Error ? e.message : e))
+                    } finally {
+                      setRepairCancellingPid(current => current === pid ? null : current)
+                    }
+                  }}
+                  disabled={repairCancelling || repair?.status === 'cancelling'}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] bg-red-500/10 border border-red-500/30 rounded text-red-400 hover:bg-red-500/20 disabled:opacity-40 transition-colors"
+                  title="Stop after aborting the current model step"
+                >
+                  {repairCancelling ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
+                  {repair?.status === 'cancelling' ? 'Cancelling...' : 'Stop'}
+                </button>
+              </>
+            ) : showRepairAction ? (
               <button
                 onClick={generateMissing}
-                disabled={loading}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] bg-orange-500/10 border border-orange-500/30 rounded text-orange-400 hover:bg-orange-500/20 disabled:opacity-40 transition-colors"
-                title={`Generate ${missingImages} missing images + ${missingVideos} missing videos`}
+                disabled={loading || repairBusy}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] bg-orange-500/10 border border-orange-500/30 rounded text-chip-orange hover:bg-orange-500/20 disabled:opacity-40 transition-colors"
+                title={hasMissing
+                  ? `Repair ${missingImages} missing images + ${missingVideos} missing or stale videos, then join when possible`
+                  : 'Check saved clip files and repair anything missing or invalid, then join when possible'}
               >
-                <Play size={10} />
-                Generate {missingImages + missingVideos} missing
+                {repairStarting ? <Loader2 size={10} className="animate-spin" /> : <Play size={10} />}
+                {repairRetryable && !hasMissing
+                  ? 'Retry repair'
+                  : missingImages > 0
+                    ? `Repair ${incompleteClips} clip${incompleteClips === 1 ? '' : 's'}`
+                    : missingVideos > 0
+                      ? `Repair ${missingVideos} video${missingVideos === 1 ? '' : 's'}`
+                      : 'Check + repair'}
               </button>
+            ) : null}
+            {repair?.status === 'completed' && (
+              repair.result_filename ? (
+                <a
+                  href={getFileUrl(repair.result_filename)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] bg-green-500/10 border border-green-500/30 rounded text-indicator-success hover:bg-green-500/20 transition-colors"
+                  title="Open the repaired joined video"
+                >
+                  <Check size={10} /> Repaired + joined
+                </a>
+              ) : (
+                <span className="flex items-center gap-1 px-2 py-1 text-[10px] text-indicator-success">
+                  <Check size={10} /> Repair complete
+                </span>
+              )
             )}
             <button
-              onClick={() => selectedPipeline && rejoinClips(selectedPipeline.pipeline_id)}
-              disabled={loading || videoPartCount < 2}
+              onClick={() => {
+                if (!selectedPipeline) return
+                setRegenError(null)
+                // Surface failures in the existing error slot — a bare
+                // rejected promise here looked like the button doing nothing.
+                rejoinClips(selectedPipeline.pipeline_id).catch(e =>
+                  setRegenError(e instanceof Error ? e.message : 'Rejoin failed'))
+              }}
+              disabled={loading || repairBusy || videoPartCount < 2}
               className="flex items-center gap-1 px-2 py-1 text-[10px] bg-accent-blue/10 border border-accent-blue/30 rounded text-accent-blue hover:bg-accent-blue/20 disabled:opacity-40 transition-colors"
               title="Re-join all clips into a new video"
             >
               <Combine size={10} />
               Re-join
             </button>
-            {regenError && (
-              <span className="text-[9px] text-red-400 max-w-[200px] truncate" title={regenError}>
-                {regenError}
+            <button
+              onClick={async () => {
+                if (!selectedPipeline) return
+                const pid = selectedPipeline.pipeline_id
+                if (confirmDeletePid !== pid) {
+                  setConfirmDeletePid(pid)
+                  setTimeout(() => setConfirmDeletePid(c => (c === pid ? null : c)), 4000)
+                  return
+                }
+                setConfirmDeletePid(null)
+                setDeletingPipeline(true)
+                setRegenError(null)
+                try {
+                  await deletePipeline(pid)
+                } catch (e) {
+                  setRegenError(e instanceof Error ? e.message : 'Delete failed')
+                } finally {
+                  setDeletingPipeline(false)
+                }
+              }}
+              disabled={loading || deletingPipeline || repairBusy}
+              className={`flex items-center gap-1 px-2 py-1 text-[10px] border rounded transition-colors disabled:opacity-40 ${
+                confirmDeletePid === selectedPipeline.pipeline_id
+                  ? 'bg-red-500/20 border-red-500/50 text-red-400'
+                  : 'bg-red-500/10 border-red-500/30 text-red-400/80 hover:bg-red-500/20'
+              }`}
+              title={confirmDeletePid === selectedPipeline.pipeline_id
+                ? `Click again to permanently delete this pipeline and its ${selectedPipeline.output_files?.length ?? 0} media files (they disappear from the gallery too)`
+                : 'Delete this pipeline and ALL media it generated'}
+            >
+              {deletingPipeline ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+              {confirmDeletePid === selectedPipeline.pipeline_id ? 'Confirm?' : 'Delete'}
+            </button>
+            {(regenError || (repairRetryable ? repair?.error || repair?.message : null)) && (
+              <span className="text-[9px] text-red-400 max-w-[200px] truncate" title={regenError || repair?.error || repair?.message || undefined}>
+                {regenError || repair?.error || repair?.message}
               </span>
             )}
           </div>
@@ -822,9 +969,9 @@ function DirectorDashboardInner() {
             <div className="bg-bg-secondary rounded-lg border border-border p-3 space-y-2">
               <div className="flex items-center gap-2 text-xs">
                 <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                  selectedPipeline.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                  selectedPipeline.status === 'failed' || selectedPipeline.status === 'crashed' ? 'bg-red-500/20 text-red-400' :
-                  'bg-blue-500/20 text-blue-400'
+                  selectedPipeline.status === 'completed' ? 'bg-green-500/20 text-indicator-success' :
+                  selectedPipeline.status === 'failed' || selectedPipeline.status === 'crashed' ? 'bg-red-500/20 text-chip-red' :
+                  'bg-blue-500/20 text-chip-blue'
                 }`}>
                   {selectedPipeline.status === 'crashed' ? 'crashed (process died)' : selectedPipeline.status}
                 </span>
@@ -872,6 +1019,8 @@ function DirectorDashboardInner() {
                   <ClipCard
                     key={clip.index}
                     clip={clip}
+                    pipeline={selectedPipeline}
+                    busy={repairBusy}
                     onTag={(tag) => tagClip(selectedPipeline.pipeline_id, clip.index, tag)}
                     onRerunImage={(idx, prompt) => { setRegenError(null); rerunClipImage(selectedPipeline.pipeline_id, idx, prompt).catch(e => setRegenError(String(e instanceof Error ? e.message : e))) }}
                     onRerunVideo={(idx, prompt) => { setRegenError(null); rerunClipVideo(selectedPipeline.pipeline_id, idx, prompt).catch(e => setRegenError(String(e instanceof Error ? e.message : e))) }}

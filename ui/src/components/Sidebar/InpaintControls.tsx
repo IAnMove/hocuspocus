@@ -128,11 +128,11 @@ export function InpaintControls() {
           which Pinokio menu item to click. Inpaint won't work at all
           without SAM so this needs to be unmissable. */}
       {samStatus === 'not_installed' && (
-        <div className="flex items-start gap-2 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/40 rounded-lg px-3 py-2.5">
+        <div className="flex items-start gap-2 text-[11px] text-text-primary bg-amber-500/10 border border-amber-500/40 rounded-lg px-3 py-2.5">
           <Download size={14} className="shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="font-medium text-amber-200">Inpaint requires SAM 3.1 (not installed)</p>
-            <p className="text-amber-300/80">
+            <p className="font-medium text-text-primary">Inpaint requires SAM 3.1 (not installed)</p>
+            <p className="text-text-secondary">
               {samStatusError || "Open the Pinokio menu and click 'Install Inpaint Support (SAM 3.1)' to enable inpainting. ~5 min one-time setup."}
             </p>
           </div>
@@ -143,11 +143,11 @@ export function InpaintControls() {
           than the not-installed case because the on-demand startup
           might still recover. */}
       {samStatus === 'unavailable' && editVideoPath && !editMasksPath && (
-        <div className="flex items-start gap-2 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+        <div className="flex items-start gap-2 text-[10px] text-indicator-warning bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
           <AlertTriangle size={14} className="shrink-0 mt-0.5" />
           <div>
             <p className="font-medium">SAM service not available</p>
-            <p className="text-amber-400/70 mt-0.5">Check SAM installation or run Preview Mask to start it on demand.</p>
+            <p className="text-text-secondary mt-0.5">Check SAM installation or run Preview Mask to start it on demand.</p>
           </div>
         </div>
       )}
@@ -213,14 +213,14 @@ export function InpaintControls() {
       {/* SAM Target — what to segment */}
       <div>
         <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">
-          What to select <span className="normal-case text-text-muted/50">(for SAM segmentation)</span>
+          What to select <span className="normal-case text-text-muted">(for SAM segmentation)</span>
         </label>
         <input
           type="text"
           value={samTarget}
           onChange={e => setSamTarget(e.target.value)}
           placeholder='e.g. "the woman", "his hands", "the sky"'
-          className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted/40 focus:outline-none focus:border-accent-blue"
+          className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
         />
         <label className="flex items-center gap-2 mt-1.5 cursor-pointer">
           <input type="checkbox"
@@ -228,7 +228,7 @@ export function InpaintControls() {
             onChange={e => useStore.setState({ editInvertMask: e.target.checked, editMasksPath: null, editMaskPreview: null })}
             className="w-3 h-3 rounded border-border accent-accent-blue" />
           <span className="text-[10px] text-text-secondary">Invert mask</span>
-          <span className="text-[9px] text-text-muted/50 ml-auto">Edit everything except selection</span>
+          <span className="text-[9px] text-text-muted ml-auto">Edit everything except selection</span>
         </label>
       </div>
 
@@ -241,8 +241,8 @@ export function InpaintControls() {
           {previewing ? 'Segmenting...' : 'Preview Mask'}
         </button>
         {editMasksPath && (
-          <div className="flex items-center gap-1 text-[9px] text-green-400 shrink-0">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+          <div className="flex items-center gap-1 text-[9px] text-indicator-success shrink-0">
+            <div className="w-1.5 h-1.5 rounded-full bg-indicator-success" />
             Cached
           </div>
         )}
@@ -267,7 +267,7 @@ export function InpaintControls() {
               onChange={e => setPromptStrength(parseFloat(e.target.value))}
               className="w-full"
             />
-            <p className="text-[9px] text-text-muted/60 mt-0.5">
+            <p className="text-[9px] text-text-muted mt-0.5">
               CFG — how hard the model follows your prompt inside the masked region.
               1.0 ≈ prompt ignored (output looks like original). 3–4 ≈ balanced. 5+ ≈ strong, may distort.
             </p>
@@ -284,7 +284,7 @@ export function InpaintControls() {
               onChange={e => setRetakeStrength(parseFloat(e.target.value))}
               className="w-full"
             />
-            <p className="text-[9px] text-text-muted/60 mt-0.5">
+            <p className="text-[9px] text-text-muted mt-0.5">
               How aggressively the masked region is re-generated. 0.1–0.4 = subtle tweak, keeps source look.
               0.7–0.9 = full replacement with prompt content.
             </p>
@@ -295,7 +295,7 @@ export function InpaintControls() {
       {/* Status */}
       {error && <div className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1.5">{error}</div>}
 
-      <p className="text-[9px] text-text-muted/60 text-center">
+      <p className="text-[9px] text-text-muted text-center">
         Preview Mask checks targeting. Use the prompt below for what to generate, then click Generate.
       </p>
     </div>

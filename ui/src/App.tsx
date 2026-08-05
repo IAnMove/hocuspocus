@@ -5,6 +5,7 @@ import { MainContent } from './components/MainContent/MainContent'
 import { SettingsDrawer } from './components/SettingsDrawer/SettingsDrawer'
 import { LoraBrowser } from './components/LoraBrowser/LoraBrowser'
 import { DirectorDashboard } from './components/DirectorDashboard/DirectorDashboard'
+import { StorageDashboard } from './components/StorageDashboard/StorageDashboard'
 import { RetakeDialog } from './components/RetakeDialog'
 import { OomRecoveryBanner } from './components/OomRecoveryBanner'
 import { DownloadStatusBanner } from './components/DownloadStatusBanner'
@@ -25,9 +26,11 @@ function App() {
   const loadServicesConfig = useStore(s => s.loadServicesConfig)
   const loadLlmStatus = useStore(s => s.loadLlmStatus)
   const loadLlmModels = useStore(s => s.loadLlmModels)
+  const loadPipelineList = useStore(s => s.loadPipelineList)
   const toggleSidebar = useStore(s => s.toggleSidebar)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
   const toggleSettings = useStore(s => s.toggleSettings)
+  const appVersion = useStore(s => s.systemConfig?.app_version)
   const isMobile = useIsMobile()
 
   useEffect(() => {
@@ -38,9 +41,10 @@ function App() {
     loadServicesConfig()
     loadLlmStatus()
     loadLlmModels()
+    loadPipelineList()
     reconnectJobs()
     reconnectDirectorPipelines()
-  }, [loadModels, loadWorkspaces, loadOutputs, loadSystemConfig, loadServicesConfig, loadLlmStatus, loadLlmModels, reconnectJobs, reconnectDirectorPipelines])
+  }, [loadModels, loadWorkspaces, loadOutputs, loadSystemConfig, loadServicesConfig, loadLlmStatus, loadLlmModels, loadPipelineList, reconnectJobs, reconnectDirectorPipelines])
 
   // Poll LLM status to stay in sync with backend auto-load/unload
   useEffect(() => {
@@ -64,6 +68,7 @@ function App() {
               M
             </div>
             <span className="font-semibold text-sm">Maestro</span>
+            {appVersion && <span className="text-[10px] text-text-muted font-normal mt-0.5">v{appVersion}</span>}
           </div>
           <button
             onClick={() => { setSidebarOpen(false); toggleSettings() }}
@@ -82,6 +87,7 @@ function App() {
       <SettingsDrawer />
       <LoraBrowser />
       <DirectorDashboard />
+      <StorageDashboard />
       <RecipesOverlay />
       <RetakeDialog />
       {/* OomRecoveryBanner is a fixed-position overlay — renders nothing

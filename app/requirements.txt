@@ -119,3 +119,5 @@ pytest==8.3.5
 # transformers==4.46.3  # for llamallava pre-patch
 # rembg==2.0.65         # non-GPU fallback
 # huggingface_hub[hf_xet]  # slows down everything
+iopath>=0.1.10
+pycocotools

@@ -1230,6 +1230,18 @@ def load_model(
 
         if mmproj_path:
             cmd += ["--mmproj", mmproj_path]
+            # Force ONE image per encode batch. llama-server's
+            # clip_image_batch_encode sizes its output buffer for a single
+            # image, but the mtmd batcher groups same-processed-shape images
+            # from one request into one batch — two identically-sized images
+            # (e.g. Director's start-frame references, both 432x768) then
+            # abort the server ("Output buffer size mismatch", build 9632)
+            # and the client sees a bare connection reset. A cap of 1 token
+            # per batch means every image always exceeds it and is encoded
+            # alone (the batcher always admits at least one image).
+            # Verified against the exact crashing request.
+            if "--mtmd-batch-max-tokens" not in extra_flags:
+                cmd += ["--mtmd-batch-max-tokens", "1"]
 
         if device == "cuda":
             # Use -ngl from extra_flags if present, otherwise default to all layers
@@ -1346,16 +1358,47 @@ def _start_log_reader(proc: subprocess.Popen) -> None:
 
     Prevents the OS pipe from filling (which deadlocks the server) and
     keeps a rolling tail for crash diagnosis. The thread ends on its own
-    when the pipe closes (i.e. the process exits)."""
+    when the pipe closes (i.e. the process exits).
+
+    Also mirrors every line to logs/llm/llama-server.log (fresh file per
+    server launch) — the in-memory tail dies with the process, and a
+    server crash mid-request is exactly the moment a postmortem needs
+    the full output."""
     global _log_reader
     _server_log.clear()
+    log_path = None
+    try:
+        log_dir = os.path.join(_BASE_DIR, "..", "..", "logs", "llm")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "llama-server.log")
+    except Exception:
+        pass
 
     def _drain():
+        log_file = None
+        if log_path:
+            try:
+                log_file = open(log_path, "w", encoding="utf-8", errors="replace")
+            except Exception:
+                log_file = None
         try:
             for raw in iter(proc.stdout.readline, b""):
-                _server_log.append(raw.decode(errors="replace").rstrip("\n"))
+                line = raw.decode(errors="replace").rstrip("\n")
+                _server_log.append(line)
+                if log_file:
+                    try:
+                        log_file.write(line + "\n")
+                        log_file.flush()
+                    except Exception:
+                        log_file = None
         except Exception:
             pass
+        finally:
+            if log_file:
+                try:
+                    log_file.close()
+                except Exception:
+                    pass
 
     _log_reader = threading.Thread(target=_drain, name="llama-log-reader", daemon=True)
     _log_reader.start()
@@ -1375,22 +1418,42 @@ def _diagnose_llm_request_failure(exc: Exception) -> "RuntimeError":
     the pipeline error the user sees names the real cause.
     """
     proc = _process
+    if _provider == "local" and proc is not None:
+        # A reset socket usually means the subprocess is mid-death; poll()
+        # can race the actual exit by a moment. Give it a beat to finish
+        # dying so a crash is reported as a crash (with the server's last
+        # words) instead of a generic connection error.
+        try:
+            proc.wait(timeout=3)
+        except Exception:
+            pass
     if _provider == "local" and proc is not None and proc.poll() is not None:
         code = proc.returncode
-        tail = _server_log_tail()
+        tail = _server_log_tail(40)
         _unload_inner()  # reset singleton so the next call relaunches cleanly
+        # Only use OOM wording when the server log actually shows an OOM —
+        # services/oom_detect.py substring-matches "out of memory" on error
+        # text, so speculative OOM wording here made every server crash pop
+        # the "lower VRAM headroom?" recovery banner even when the GPU was
+        # nearly empty (e.g. the clip.cpp image-batch abort).
+        tail_l = tail.lower()
+        if any(s in tail_l for s in ("out of memory", "cudamalloc", "erralloc", "alloc failed")):
+            cause = "The GPU ran out of memory mid-request (e.g. a video/image model was still resident)."
+        else:
+            cause = "This is an internal llama-server failure; see its last output below."
         return RuntimeError(
-            f"The local LLM server (llama-server) exited unexpectedly "
-            f"(code {code}) while generating. This usually means the model "
-            f"ran out of VRAM/RAM at load, or the GGUF is incompatible with "
-            f"the installed llama-server build. Last server output:\n{tail}"
+            f"The local LLM server (llama-server) crashed while generating "
+            f"(exit code {code}). {cause} "
+            f"Full log: logs/llm/llama-server.log. "
+            f"Last server output:\n{tail}"
         )
     if _provider == "local" and proc is None:
         return RuntimeError(
             "The local LLM server is not running. It may have been unloaded "
             "or failed to start — retry, or check the Services settings."
         )
-    # Server still alive (or a remote provider) — a real network/timeout issue.
+    # Server still alive (or a remote provider) — retain response details when
+    # available, and include local server output for CUDA/process diagnostics.
     response = getattr(exc, "response", None)
     response_detail = ""
     if response is not None:
@@ -1400,6 +1463,12 @@ def _diagnose_llm_request_failure(exc: Exception) -> "RuntimeError":
                 response_detail = f" — server response: {body[:1000]}"
         except Exception:
             pass
+    if _provider == "local":
+        tail = _server_log_tail(15)
+        return RuntimeError(
+            f"LLM request failed: {exc}{response_detail}"
+            f"\nRecent llama-server output:\n{tail}"
+        )
     return RuntimeError(f"LLM request failed: {exc}{response_detail}")
 
 
@@ -1447,7 +1516,10 @@ def _image_to_data_url(image_path: str, max_size: int = 768) -> Optional[str]:
         if max(w, h) > max_size:
             scale = max_size / max(w, h)
             img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-            print(f"[LLM] Resized image for LLM: {w}x{h} → {img.size[0]}x{img.size[1]}")
+            # ASCII arrow on purpose: a cp1252 console (plain cmd, some CI
+            # shells) can't encode U+2192 and the print would crash the
+            # whole vision request mid-flight.
+            print(f"[LLM] Resized image for LLM: {w}x{h} -> {img.size[0]}x{img.size[1]}")
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
         data = base64.b64encode(buf.getvalue()).decode("ascii")
@@ -2277,6 +2349,10 @@ def enhance_prompt(
     lora_system_hint: str = "",
     raw_enhancer_mode: bool = False,
 ) -> str:
+    is_h3_context_ir = (
+        mode in ("video", "avatar")
+        and (model_type or "").lower().startswith("minimax_h3")
+    )
     # If caller provides a system prompt override, use it directly (e.g., Director third-pass)
     if system_override:
         # Do NOT append the full model-specific enhance guide — the override is self-contained.
@@ -2484,7 +2560,11 @@ def enhance_prompt(
     # who anyone is). Appended for video so EVERY path gets it: per-model guides
     # (Sulphur, 10Eros) that don't include the generic LTX video guide, plus the
     # generic guide itself. Mirrors the Director-mode character-reference rule.
-    if mode in ("video", "avatar"):
+    # H3's guide already carries its own identity, pacing, and silence rules.
+    # The generic appendix says to remove all character names and to write one
+    # paragraph per sliding window, both of which conflict with H3's
+    # knowledge-aware Context-IR format and single native timeline.
+    if mode in ("video", "avatar") and not is_h3_context_ir:
         from services.guide_loader import load_guide as _load_vid_guide
         vid_block = _load_vid_guide("enhance", "video_shared")
         if vid_block:
@@ -2512,17 +2592,39 @@ def enhance_prompt(
             '\n\nSTRUCTURAL RULES for image prompts:'
             '\n- If the prompt starts with "create new scene", keep that prefix.'
             '\n- If the prompt ends with "Use original reference images" or similar, keep that suffix.'
-            '\n- ALWAYS end the prompt with: "Preserve character identity, attire, and body attributes from the reference image."'
+            '\n- ALWAYS end the prompt with: "Preserve character identity, attire, body attributes, and the art style of the reference image."'
             '\n- NEVER include LoRA names or filenames in the output.'
         )
 
-    # Reinforce output constraint — prevents verbose models from adding explanations
-    system += "\n\nCRITICAL: Output ONLY the enhanced prompt text. No headers, no labels, no markdown, no explanation, no \"Enhancement Logic\", no \"Edit Prompt:\". No LoRA filenames (.safetensors). Just the raw prompt text."
+    # Reinforce the output constraint. MiniMax H3 is intentionally different:
+    # its field labels and <d> blocks are part of the model input, not prose
+    # headers to strip. The generic "no labels" rule previously contradicted
+    # the H3 guide and encouraged ordinary quote-mark dialogue.
+    if is_h3_context_ir:
+        system += (
+            "\n\nCRITICAL MINIMAX H3 OUTPUT CONTRACT: Output ONLY the structured "
+            "H3 prompt, with the exact field labels "
+            "integrated_multimodal_description:, overall_soundscape:, and "
+            "non_diegetic_music:. These labels are required model syntax, not "
+            "explanatory headers. Every spoken line must have a stable (S1), "
+            "(S2), etc. speaker ID and use <d>[Language] literal words</d>. "
+            "When the user requests a discussion without supplying lines, write "
+            "short meaningful dialogue that fits the supplied Duration. Once the "
+            "last line ends, describe silent visible action and closed mouths; do "
+            "not invent more speech. No markdown, explanation, or LoRA filenames."
+        )
+    else:
+        system += "\n\nCRITICAL: Output ONLY the enhanced prompt text. No headers, no labels, no markdown, no explanation, no \"Enhancement Logic\", no \"Edit Prompt:\". No LoRA filenames (.safetensors). Just the raw prompt text."
 
     # Scale max tokens for multi-window video prompts
     effective_max_tokens = max_new_tokens
     if window_count and window_count > 1:
         effective_max_tokens = max(max_new_tokens, window_count * 300 + 256)
+    if is_h3_context_ir:
+        # Leave enough room for the three required fields plus a compact timed
+        # dialogue. Most H3 prompts finish well below this ceiling, but 512 can
+        # truncate a vision-assisted 15-second rewrite before its sound fields.
+        effective_max_tokens = max(effective_max_tokens, 768)
 
     # TTS: thinking mode for creative dialogue, disabled for fast mode
     is_tts = bool(tts_enhance_mode)
@@ -3778,6 +3880,13 @@ def plan_clip_prompts_and_images(
     shared_rules = (
         "- Use the Scene Concept as your PRIMARY guide for locations, outfits, "
         "props, and activities.\n"
+        "- LOCATIONS ARE BINDING: if the Scene Concept names a specific location "
+        "or setting, EVERY clip stays in that location unless the Scene Concept "
+        "itself calls for a move. Do NOT invent new locations for visual variety — "
+        "vary the camera angle, framing, distance, and lighting instead.\n"
+        "- Do NOT add subjects, creatures, or objects the Scene Concept and "
+        "reference photos don't contain. Any examples in these instructions "
+        "show FORMAT only — never copy their content into prompts.\n"
         "- Use the lyrics to inspire mood and visual metaphors, NOT literal text.\n"
         "- If a clip says 'Performer:', that person must appear.\n"
         f"{char_rule}\n"
@@ -3814,6 +3923,12 @@ def plan_clip_prompts_and_images(
                 f"{shared_rules}"
                 "- Use a mix of shot types (close-ups, wide shots, over-shoulder, etc.) "
                 "where appropriate — but continuity between consecutive clips is fine when it fits.\n"
+                "- The PERFORMER IS the person/character in the reference photo. Anchor them "
+                "explicitly in EVERY prompt ('the [descriptor] from the reference image') — "
+                "describing them loosely as a new character makes the image model invent a "
+                "different-looking one.\n"
+                "- NO motion blur, speed lines, or long-exposure effects — the image is a sharp "
+                "still frame; motion belongs to the video prompt.\n"
                 "- Focus on WHAT TO CHANGE from the reference. Do not re-describe things that stay the same.\n"
                 "- Do NOT start with 'Edit the provided image' — just describe the changes.\n"
                 "- Do NOT use preservation meta-language ('preserve', 'maintain', 'keep unchanged').\n"
@@ -3869,6 +3984,8 @@ def plan_clip_prompts_and_images(
             "show the room without them. Focus on WHAT TO CHANGE from reference. "
             "Describe POSES as static states (standing, seated, leaning). "
             "No motion verbs (walking, running, reaching, heaving, turning). "
+            "No motion blur, speed lines, or long-exposure effects — the frame is sharp. "
+            "Anchor the performer as 'the [descriptor] from the reference image'. "
             "NEVER use names. Actions belong ONLY in V, never in I.\n"
         ) if has_image else (
             "- I (image): the FIRST FRAME BEFORE action begins — a frozen still photograph. "
@@ -4236,6 +4353,7 @@ def plan_short_film_prompts(
                 "appropriate — but continuity between consecutive scenes is fine when it fits.\n"
                 "- Focus on WHAT TO CHANGE from the reference. Do not re-describe things that stay the same.\n"
                 "- When setting changes to a new location, describe the new setting AND re-describe characters by appearance.\n"
+                "- Stay faithful to each scene's scripted location — do NOT relocate a scene or invent new places for visual variety.\n"
                 "- Match the mood and tone of the dialogue for that scene.\n"
                 f"{char_rule}\n"
                 "- Do NOT start with 'Edit the provided image'.\n"
@@ -4295,6 +4413,8 @@ def plan_short_film_prompts(
             "show the room without them. Focus on WHAT TO CHANGE from reference. "
             "Describe POSES as static states (standing, seated, leaning). "
             "No motion verbs (walking, running, reaching, heaving, turning). "
+            "No motion blur, speed lines, or long-exposure effects — the frame is sharp. "
+            "Anchor the performer as 'the [descriptor] from the reference image'. "
             "NEVER use names. Actions belong ONLY in V, never in I.\n"
         ) if has_image else (
             "- I (image): the FIRST FRAME BEFORE action begins — a frozen still photograph. "
@@ -4691,6 +4811,9 @@ def plan_short_film_from_story(
         "stay the same.\n"
         "- When setting changes to a new location, describe the new setting AND "
         "re-describe which characters are present by clothing/appearance.\n"
+        "- If the user's concept pins the story to a specific location, every scene "
+        "stays in that location — do NOT relocate scenes or invent new places for "
+        "visual variety.\n"
         "- When setting stays the same, you can keep the same framing or adjust it — "
         "only mention characters whose positions change.\n"
         "- NEVER use character names — describe people by clothing/appearance only, "

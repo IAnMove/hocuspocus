@@ -114,20 +114,30 @@ function useAdvancedActiveItems(): string[] {
   const modelOptions = useStore(s => s.modelOptions)
   const spatialUpsampling = useStore(s => s.spatialUpsampling)
   const filmGrainIntensity = useStore(s => s.filmGrainIntensity)
+  const generationMode = useStore(s => s.generationMode)
+  const editSubMode = useStore(s => s.editSubMode)
+  const isScailEdit = (
+    generationMode === 'avatar'
+    && (editSubMode === 'recast' || editSubMode === 'restyle')
+  )
+  const isScailHq = isScailEdit && params.model_type === 'scail2_14B'
 
   const items: string[] = []
   if (params.seed !== -1) items.push(`Seed ${params.seed}`)
-  if ((params.negative_prompt?.length ?? 0) > 0) items.push('Negative prompt')
+  if (
+    (params.negative_prompt?.length ?? 0) > 0
+    && (!isScailEdit || isScailHq)
+  ) items.push('Negative prompt')
   for (const l of params.activated_loras) items.push(`LoRA: ${l.replace(/\.(safetensors|sft)$/i, '')}`)
-  if (spatialUpsampling) items.push(`Upscaling (${spatialUpsampling})`)
-  if (filmGrainIntensity > 0) items.push('Film grain')
-  if ((params.self_refiner_setting ?? 0) > 0) items.push('Self refiner')
+  if (!isScailEdit && spatialUpsampling) items.push(`Upscaling (${spatialUpsampling})`)
+  if (!isScailEdit && filmGrainIntensity > 0) items.push('Film grain')
+  if (!isScailEdit && (params.self_refiner_setting ?? 0) > 0) items.push('Self refiner')
   // injection_strength only matters when injected frames actually exist.
   // The persisted snapshot strips image_refs (file paths are ephemeral)
   // but kept the strength value — counting it alone produced a ghost
   // badge with nothing visibly active in the panel.
   const refCount = Array.isArray(params.image_refs) ? params.image_refs.length : (params.image_refs ? 1 : 0)
-  if (params.injection_strength != null && params.injection_strength !== 1.0 && refCount > 0) items.push('Injection strength')
+  if (!isScailEdit && params.injection_strength != null && params.injection_strength !== 1.0 && refCount > 0) items.push('Injection strength')
   if (params.preserve_source_style === false) items.push('Source restyling allowed')
   if (params.image_fit_mode === 'crop') items.push('I2V crop to canvas')
   // Process letter codes persist by design (the dropdown remembers the
@@ -139,7 +149,7 @@ function useAdvancedActiveItems(): string[] {
   // a TRAILING "T" (the extend-alignment flag); an internal "T" is a real
   // process letter (depth_temporal: TVG/PTVG/TEVG) and must survive.
   const vptVisible = (params.video_prompt_type || '').replace(/T$/, '')
-  if (modelOptions?.guide_custom_choices && vptVisible) {
+  if (!isScailEdit && modelOptions?.guide_custom_choices && vptVisible) {
     const effective = vptVisible.includes('F')
       ? refCount > 0
       : vptVisible.includes('V')
@@ -156,12 +166,42 @@ export function AdvancedSettings() {
   const setParam = useStore(s => s.setParam)
   const modelOptions = useStore(s => s.modelOptions)
   const generationMode = useStore(s => s.generationMode)
+  const editSubMode = useStore(s => s.editSubMode)
   const audioSubMode = useStore(s => s.audioSubMode)
   const isAudio = generationMode === 'audio'
   const isSfx = isAudio && audioSubMode === 'sfx'
-  const isAudioOnly = modelOptions?.audio_only || isSfx
+  const isAudioOnly = modelOptions?.audio_only === true || isSfx
   const isVideo = generationMode === 'video'
   const isAvatar = generationMode === 'avatar'
+  const isOutpaint = isAvatar && editSubMode === 'outpaint'
+  const isRecast = isAvatar && editSubMode === 'recast'
+  const isRepaint = isAvatar && editSubMode === 'restyle'
+  const isScailEdit = isRecast || isRepaint
+  const scailModelType = String(params.model_type || '')
+  const isScailFast = (
+    isScailEdit
+    && (
+      scailModelType === 'scail2_14B_fast'
+      || scailModelType === 'scail2_14B_recast_fast'
+    )
+  )
+  const isScailHq = isScailEdit && scailModelType === 'scail2_14B'
+  const showInferenceSteps = (
+    !isAudioOnly
+    && (isScailEdit || !modelOptions?.lock_inference_steps)
+  )
+  const showGuidanceScale = (
+    !isAudioOnly
+    && (
+      isScailEdit
+        ? isScailHq
+        : !modelOptions?.lock_guidance_scale
+    )
+  )
+  const showNegativePrompt = (
+    !modelOptions?.no_negative_prompt
+    && (!isScailEdit || isScailHq)
+  )
   const hasStartImage = useStore(s => !!(s.startImage || s.params.image_start))
   const hasEndImage = useStore(s => !!(s.endImage || s.params.image_end))
   const hasImageRefs = useStore(s => {
@@ -223,16 +263,18 @@ export function AdvancedSettings() {
 
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-              {/* Resolution + Aspect */}
-              {!isAudio && (
+              {/* Recast/Repaint own their output-quality profiles in the main
+                  workflow. Their dedicated endpoints also choose adaptive
+                  windows, so generic controls would be misleading here. */}
+              {!isAudio && !isScailEdit && (
                 <>
-                  {!modelOptions?.hide_resolution_presets && <ResolutionPresets />}
+                  {!isOutpaint && !modelOptions?.hide_resolution_presets && <ResolutionPresets />}
                   {!isAvatar && <AspectRatioGrid />}
                 </>
               )}
 
               {/* Window Settings */}
-              {(isVideo || isAvatar) && <WindowSettings />}
+              {(isVideo || (isAvatar && !isScailEdit)) && <WindowSettings />}
 
               {/* TTS Settings */}
               {isAudioOnly && (
@@ -327,52 +369,52 @@ export function AdvancedSettings() {
                   ))}
 
                   {/* Compressor Settings — shown when Smooth Speaker Volumes is enabled */}
-                  {params.tts_dynaudnorm && (
+                  {params.tts_dynaudnorm === true && (
                     <div className="space-y-3 p-2.5 bg-bg-tertiary/50 rounded-lg border border-border/50">
                       <label className="text-[10px] text-text-muted uppercase tracking-wider block">Speaker Transition Compressor</label>
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-text-muted">Threshold</label>
-                          <span className="text-[10px] text-text-secondary">{params.tts_comp_threshold || -25}dB</span>
+                          <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_threshold ?? -25)}dB</span>
                         </div>
                         <input type="range" min={-50} max={-10} step={1}
-                          value={params.tts_comp_threshold || -25}
+                          value={Number(params.tts_comp_threshold ?? -25)}
                           onChange={e => setParam('tts_comp_threshold', parseInt(e.target.value))}
                           className="w-full" />
-                        <p className="text-[9px] text-text-muted/60">Volume level where boosting kicks in. Lower = catches quieter parts.</p>
+                        <p className="text-[9px] text-text-muted">Volume level where boosting kicks in. Lower = catches quieter parts.</p>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-text-muted">Attack</label>
-                          <span className="text-[10px] text-text-secondary">{params.tts_comp_attack || 5}ms</span>
+                          <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_attack ?? 5)}ms</span>
                         </div>
                         <input type="range" min={1} max={50} step={1}
-                          value={params.tts_comp_attack || 5}
+                          value={Number(params.tts_comp_attack ?? 5)}
                           onChange={e => setParam('tts_comp_attack', parseInt(e.target.value))}
                           className="w-full" />
-                        <p className="text-[9px] text-text-muted/60">How fast the compressor reacts. Low = catches brief dips at speaker transitions.</p>
+                        <p className="text-[9px] text-text-muted">How fast the compressor reacts. Low = catches brief dips at speaker transitions.</p>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-text-muted">Release</label>
-                          <span className="text-[10px] text-text-secondary">{params.tts_comp_release || 100}ms</span>
+                          <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_release ?? 100)}ms</span>
                         </div>
                         <input type="range" min={20} max={500} step={10}
-                          value={params.tts_comp_release || 100}
+                          value={Number(params.tts_comp_release ?? 100)}
                           onChange={e => setParam('tts_comp_release', parseInt(e.target.value))}
                           className="w-full" />
-                        <p className="text-[9px] text-text-muted/60">How fast it returns to normal after boosting. Higher = smoother.</p>
+                        <p className="text-[9px] text-text-muted">How fast it returns to normal after boosting. Higher = smoother.</p>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-text-muted">Makeup Gain</label>
-                          <span className="text-[10px] text-text-secondary">{params.tts_comp_makeup || 4}dB</span>
+                          <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_makeup ?? 4)}dB</span>
                         </div>
                         <input type="range" min={0} max={12} step={1}
-                          value={params.tts_comp_makeup || 4}
+                          value={Number(params.tts_comp_makeup ?? 4)}
                           onChange={e => setParam('tts_comp_makeup', parseInt(e.target.value))}
                           className="w-full" />
-                        <p className="text-[9px] text-text-muted/60">How much to boost the quiet parts. Higher = louder transitions.</p>
+                        <p className="text-[9px] text-text-muted">How much to boost the quiet parts. Higher = louder transitions.</p>
                       </div>
                     </div>
                   )}
@@ -380,9 +422,9 @@ export function AdvancedSettings() {
               )}
 
               {/* Post Processing */}
-              {!isAudio && <PostProcessing />}
+              {!isAudio && !isScailEdit && <PostProcessing />}
 
-              {/* Seed */}
+              {(
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[11px] text-text-muted uppercase tracking-wider">Seed</label>
@@ -392,15 +434,16 @@ export function AdvancedSettings() {
                 </div>
                 <input
                   type="number"
-                  value={params.seed}
+                  value={Number(params.seed)}
                   onChange={e => setParam('seed', Number(e.target.value))}
                   className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
                   placeholder="-1 for random"
                 />
               </div>
+              ) as any}
 
               {/* Self Refiner */}
-              {modelOptions?.self_refiner === true ? (
+              {!isScailEdit && modelOptions?.self_refiner === true ? (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Self Refiner</label>
                   <select
@@ -452,7 +495,7 @@ export function AdvancedSettings() {
 
               {/* Stage 2 Steps */}
               {/* Pipeline Mode Toggle — distilled LTX models only */}
-              {modelOptions?.lock_inference_steps && (
+              {!isScailEdit && modelOptions?.lock_inference_steps && (
                 <div className="space-y-3">
                   {/* Single / 2-Stage / 3-Stage segmented control — mutually exclusive */}
                   <div>
@@ -601,8 +644,33 @@ export function AdvancedSettings() {
                 </div>
               )}
 
-              {/* Inference Steps (hidden for distilled/locked models and TTS) */}
-              {!modelOptions?.lock_inference_steps && !isAudioOnly && (
+              {/* Reference Pipeline (10Eros — runs the author's published
+                  ComfyUI workflow config: 9+3 eased steps, per-step CFG
+                  2.0/1.5 then off, STG on blocks 14+19 for the first 4
+                  steps, RF euler_ancestral). Shown only for models whose
+                  def declares reference_pipeline support. */}
+              {!isScailEdit && (modelOptions as Record<string, unknown> | null)?.reference_pipeline && (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input type="checkbox"
+                      checked={!!params.reference_pipeline}
+                      onChange={e => setParam('reference_pipeline', e.target.checked ? true : undefined)}
+                      className="accent-accent-blue" />
+                    <span className="text-[11px] text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
+                      Reference Pipeline (10Eros)
+                    </span>
+                  </label>
+                  <p className="text-[9px] text-text-muted">
+                    Runs the model author&apos;s ComfyUI workflow config: 9+3 steps on hand-tuned sigmas,
+                    CFG only on the first 2 steps, STG on the first 4, ancestral sampling.
+                    Steps / CFG / STG sliders below are ignored while this is on.
+                  </p>
+                </div>
+              )}
+
+              {/* Dedicated SCAIL edit endpoints honor this value for both
+                  Fast and HQ; other distilled models retain their lock. */}
+              {showInferenceSteps && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-[11px] text-text-muted uppercase tracking-wider">Inference Steps</label>
@@ -619,11 +687,17 @@ export function AdvancedSettings() {
                     onChange={e => setParam('num_inference_steps', Number(e.target.value))}
                     className="w-full"
                   />
+                  {isScailFast && (
+                    <p className="text-[9px] text-text-muted mt-0.5">
+                      Fast keeps its distilled CFG 1 recipe; guidance and
+                      negative-prompt controls do not apply.
+                    </p>
+                  )}
                 </div>
               )}
 
               {/* Guidance Scale (hidden for TTS — shown in TTS section above) */}
-              {!modelOptions?.lock_guidance_scale && !isAudioOnly && (
+              {showGuidanceScale && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-[11px] text-text-muted uppercase tracking-wider">Guidance Scale</label>
@@ -645,19 +719,19 @@ export function AdvancedSettings() {
               )}
 
               {/* LTX-2 Dev Pipeline Controls — only for models with perturbation/CFG-Star support */}
-              {modelOptions?.perturbation && (
+              {!isScailEdit && (modelOptions as Record<string, unknown> | null)?.perturbation && (
                 <>
                   {/* STG Scale */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-[11px] text-text-muted uppercase tracking-wider">STG Scale</label>
-                      <span className="text-xs text-text-secondary">{(params.stg_scale ?? 1.0).toFixed(1)}</span>
+                      <span className="text-xs text-text-secondary">{(params.stg_scale ?? 0) > 0 ? (params.stg_scale as number).toFixed(1) : 'Off'}</span>
                     </div>
                     <input type="range" min={0} max={3} step={0.1}
-                      value={params.stg_scale ?? 1.0}
+                      value={params.stg_scale ?? 0}
                       onChange={e => setParam('stg_scale', parseFloat(e.target.value))}
                       className="w-full" />
-                    <p className="text-[9px] text-text-muted/60 mt-0.5">Spatio-temporal guidance strength. 0=off, 1.0=default</p>
+                    <p className="text-[9px] text-text-muted mt-0.5">Spatio-temporal guidance. 0 = off. Sharpens structure &amp; motion via a third denoising pass (~50% slower). Try 1.0.</p>
                   </div>
 
                   {/* CFG Rescale */}
@@ -670,7 +744,7 @@ export function AdvancedSettings() {
                       value={params.cfg_rescale ?? 0}
                       onChange={e => setParam('cfg_rescale', parseFloat(e.target.value))}
                       className="w-full" />
-                    <p className="text-[9px] text-text-muted/60 mt-0.5">Reduces over-saturation. 0.7 recommended.</p>
+                    <p className="text-[9px] text-text-muted mt-0.5">Reduces over-saturation. 0.7 recommended.</p>
                   </div>
 
                   {/* Gradient Estimation */}
@@ -704,7 +778,7 @@ export function AdvancedSettings() {
               )}
 
               {/* Keyframe Conditioning Mode — Start/End frames */}
-              {(isVideo || isAvatar) && (hasStartImage || hasEndImage) && (
+              {!isScailEdit && (isVideo || isAvatar) && (hasStartImage || hasEndImage) && (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Start/End Frame Mode</label>
                   <select
@@ -715,12 +789,12 @@ export function AdvancedSettings() {
                     <option value="replace">Replace (Default)</option>
                     <option value="additive">Additive (Smooth)</option>
                   </select>
-                  <p className="text-[9px] text-text-muted/60 mt-0.5">Replace: exact adherence to source image. Additive: smoother blending.</p>
+                  <p className="text-[9px] text-text-muted mt-0.5">Replace: exact adherence to source image. Additive: smoother blending.</p>
                 </div>
               )}
 
               {/* Keyframe Conditioning Mode — Injected keyframes */}
-              {(isVideo || isAvatar) && hasImageRefs && (
+              {!isScailEdit && (isVideo || isAvatar) && hasImageRefs && (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Injected Keyframe Mode</label>
                   <select
@@ -731,12 +805,12 @@ export function AdvancedSettings() {
                     <option value="additive">Additive (Default)</option>
                     <option value="replace">Replace (Strict)</option>
                   </select>
-                  <p className="text-[9px] text-text-muted/60 mt-0.5">Additive: smooth transitions at injected frames. Replace: strict adherence.</p>
+                  <p className="text-[9px] text-text-muted mt-0.5">Additive: smooth transitions at injected frames. Replace: strict adherence.</p>
                 </div>
               )}
 
               {/* Negative Prompt */}
-              {!modelOptions?.no_negative_prompt && (
+              {showNegativePrompt && (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Negative Prompt</label>
                   <textarea
@@ -773,7 +847,7 @@ export function AdvancedSettings() {
                           value={(params.MMAudio_prompt) || ''}
                           onChange={e => setParam('MMAudio_prompt', e.target.value)}
                           placeholder="e.g. rain, thunder"
-                          className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted/40 focus:outline-none focus:border-accent-blue"
+                          className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                         />
                       </div>
                       <div>
@@ -783,7 +857,7 @@ export function AdvancedSettings() {
                           value={(params.MMAudio_neg_prompt) || ''}
                           onChange={e => setParam('MMAudio_neg_prompt', e.target.value)}
                           placeholder="e.g. talking, speech"
-                          className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted/40 focus:outline-none focus:border-accent-blue"
+                          className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                         />
                       </div>
                     </div>
@@ -794,16 +868,18 @@ export function AdvancedSettings() {
               {/* Presets */}
               <PresetManager />
 
-              {/* LoRAs */}
-              <LoraSelector />
+              {/* Official Outpaint owns its stage-one-only IC-LoRA schedule. */}
+              {!isOutpaint && <LoraSelector />}
 
-              {/* Control Video / Frames Injection */}
-              {(modelOptions?.guide_preprocessing || modelOptions?.guide_custom_choices) && (
+              {/* Dedicated SCAIL edit endpoints own their source video,
+                  edited/reference frames, masks, and process selection. */}
+              {(modelOptions?.guide_preprocessing || modelOptions?.guide_custom_choices) &&
+                !isScailEdit && (
                 <ControlVideoSection />
               )}
 
-              {/* Output Count */}
-              <div>
+              {/* Dedicated Recast/Repaint submissions create one edit job. */}
+              {!isScailEdit && <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[11px] text-text-muted uppercase tracking-wider">Output Count</label>
                   <span className="text-xs text-text-secondary">{params.repeat_generation || 1}</span>
@@ -814,7 +890,7 @@ export function AdvancedSettings() {
                   onChange={e => setParam('repeat_generation', Number(e.target.value))}
                   className="w-full"
                 />
-              </div>
+              </div>}
             </div>
           </div>
     </>

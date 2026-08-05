@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Search, Loader2, BookOpen, HardDrive, Tag, Link2, ArrowUpCircle, RefreshCw, KeyRound, ExternalLink, Boxes } from 'lucide-react'
+import { X, Search, Loader2, BookOpen, HardDrive, Tag, Link2, ArrowUpCircle, RefreshCw, KeyRound, ExternalLink, Boxes, Trash2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
-import { fetchCivitAIModelFilters, startLoraScan, fetchLoraScanStatus, fetchInstalledLoras, importHuggingFaceLora, checkLoraUpdates } from '../../api/client'
+import { fetchCivitAIModelFilters, startLoraScan, fetchLoraScanStatus, fetchInstalledLoras, importHuggingFaceLora, checkLoraUpdates, deleteLoraFile } from '../../api/client'
+import { formatBytes } from '../../lib/format'
 import type { CivitAIModelFilter, InstalledLora } from '../../api/client'
 import { ModelCard } from './ModelCard'
 import { ModelDetail } from './ModelDetail'
@@ -35,6 +36,7 @@ export function LoraBrowser() {
   const clearSelection = useStore(s => s.clearCivitSelection)
   const setDefaultDir = useStore(s => s.setLoraBrowserDefaultDir)
   const searchError = useStore(s => s.civitSearchError)
+  const pollDownloads = useStore(s => s.pollCivitAIDownloads)
   // API-key onboarding state. Without a CivitAI key, downloads of any
   // restricted/mature model produce error-page payloads — we now reject
   // those at download time, but a passive banner here saves the user a
@@ -56,7 +58,15 @@ export function LoraBrowser() {
   // LoRA (adapter) vs Checkpoint (full model) browse mode. Checkpoint mode
   // searches CivitAI Checkpoints and imports them as finetune model variants.
   const [browseKind, setBrowseKind] = useState<'lora' | 'checkpoint'>('lora')
-  const [nsfw, setNsfw] = useState(false)
+  // Sticky across sessions (localStorage) — the master nsfw_mode gate below
+  // still applies, so a persisted "on" is inert until Mature Mode is enabled.
+  const [nsfw, setNsfw] = useState(() => {
+    try { return localStorage.getItem('maestro_civitai_nsfw') === '1' } catch { return false }
+  })
+  const setNsfwSticky = (v: boolean) => {
+    setNsfw(v)
+    try { localStorage.setItem('maestro_civitai_nsfw', v ? '1' : '0') } catch { /* private mode */ }
+  }
   // Master gate from Settings → Services. NSFW filter UI + data flow
   // is only honored when the user has enabled NSFW mode (which itself
   // requires the disclaimer acknowledgement). Without this gate, the
@@ -109,6 +119,39 @@ export function LoraBrowser() {
   // button (in case the user is already on My LoRAs view).
   const updatableCount = installedLoras.filter(l => l.update_status === 'available').length
 
+  // Installed-view sort. "released" falls back to downloaded date so
+  // files whose sidecars predate publishedAt capture still order sanely.
+  const [installedSort, setInstalledSort] = useState<'name' | 'downloaded' | 'released' | 'largest'>('name')
+
+  // Per-card delete with two-step confirm, keyed by directory/filename.
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null)
+  const [deletingKey, setDeletingKey] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const handleDeleteLora = useCallback(async (directory: string, filename: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const key = `${directory}/${filename}`
+    if (confirmDeleteKey !== key) {
+      setConfirmDeleteKey(key)
+      setTimeout(() => setConfirmDeleteKey(c => (c === key ? null : c)), 4000)
+      return
+    }
+    setConfirmDeleteKey(null)
+    setDeletingKey(key)
+    setDeleteError(null)
+    try {
+      await deleteLoraFile(directory, filename)
+      // The endpoint response confirms exactly what was removed — drop the
+      // row locally instead of re-running the server's full multi-root
+      // sidecar rescan for every single delete.
+      setInstalledLoras(prev => prev.filter(l => !(l.directory === directory && l.filename === filename)))
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err))
+      setTimeout(() => setDeleteError(null), 8000)
+    } finally {
+      setDeletingKey(null)
+    }
+  }, [confirmDeleteKey])
+
   const sentinelRef = useRef<HTMLDivElement>(null)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -121,6 +164,12 @@ export function LoraBrowser() {
       fetchCivitAIModelFilters().then(r => setModelFilters(r.filters)).catch(() => {})
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Adopt any server-side download, including imports started before this
+  // browser session. The store action is singleton-safe across all callers.
+  useEffect(() => {
+    if (open) pollDownloads()
+  }, [open, pollDownloads])
 
   // Run initial search when opened
   useEffect(() => {
@@ -185,6 +234,7 @@ export function LoraBrowser() {
       const result = await importHuggingFaceLora(trimmed)
       setImportStatus(`Downloading ${result.filename} → ${result.target_dir}/ (base: ${result.base_model || 'auto-detected'})`)
       setImportUrl('')
+      pollDownloads()
       // The download runs in background on the server — it'll appear in the download bar
       setTimeout(() => setImportStatus(''), 10000)
     } catch (e) {
@@ -193,7 +243,7 @@ export function LoraBrowser() {
     } finally {
       setImporting(false)
     }
-  }, [importUrl, importing])
+  }, [importUrl, importing, pollDownloads])
 
   if (!open) return null
 
@@ -281,7 +331,7 @@ export function LoraBrowser() {
                   setTimeout(() => { setScanning(false); setScanProgress('') }, 5000)
                 }
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-bg-tertiary border border-border rounded-lg hover:border-amber-400 text-text-secondary hover:text-amber-400 transition-colors shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-bg-tertiary border border-border rounded-lg hover:border-indicator-warning text-text-secondary hover:text-indicator-warning transition-colors shrink-0"
               title="Regenerate ALL guides (overwrites existing)"
             >
               <span className="hidden sm:inline">Regenerate All</span>
@@ -315,7 +365,7 @@ export function LoraBrowser() {
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
                 placeholder="HuggingFace repo or CivitAI model URL"
-                className="flex-1 bg-bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted/40 focus:outline-none focus:border-accent-blue"
+                className="flex-1 bg-bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                 onKeyDown={e => {
                   if (e.key === 'Enter' && importUrl.trim() && !importing) {
                     e.preventDefault()
@@ -378,8 +428,8 @@ export function LoraBrowser() {
           a failed download. */}
       {!civitaiKeySet && !apiKeyBannerDismissed && (
         <div className="px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/30 flex items-start gap-2.5 shrink-0">
-          <KeyRound size={14} className="text-amber-400 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0 text-xs text-amber-100 leading-relaxed">
+          <KeyRound size={14} className="text-indicator-warning shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 text-xs text-text-primary leading-relaxed">
             <span className="font-semibold">No CivitAI API key configured.</span>{' '}
             Most NSFW, restricted, and early-access LoRAs require a key to
             download — without one, those downloads will fail with an error.
@@ -388,16 +438,16 @@ export function LoraBrowser() {
                 href="https://civitai.com/user/account"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 underline decoration-amber-400/40 hover:decoration-amber-300 hover:text-amber-300 transition-colors"
+                className="inline-flex items-center gap-1 text-indicator-warning underline decoration-indicator-warning/40 hover:decoration-indicator-warning hover:text-indicator-warning/80 transition-colors"
                 title="Opens CivitAI's account page in a new tab — scroll to 'API Keys'"
               >
                 <ExternalLink size={10} />
                 Get a key from civitai.com
               </a>
-              <span className="text-amber-200/60">→</span>
+              <span className="text-text-secondary">→</span>
               <button
                 onClick={goToCivitaiKeySettings}
-                className="inline-flex items-center gap-1 underline decoration-amber-400/40 hover:decoration-amber-300 hover:text-amber-300 transition-colors"
+                className="inline-flex items-center gap-1 text-indicator-warning underline decoration-indicator-warning/40 hover:decoration-indicator-warning hover:text-indicator-warning/80 transition-colors"
                 title="Opens Settings → Services where you can paste your key"
               >
                 <KeyRound size={10} />
@@ -407,7 +457,7 @@ export function LoraBrowser() {
           </div>
           <button
             onClick={() => setApiKeyBannerDismissed(true)}
-            className="p-1 rounded hover:bg-amber-500/20 text-amber-300 hover:text-amber-100 shrink-0 transition-colors"
+            className="p-1 rounded hover:bg-amber-500/20 text-indicator-warning hover:text-indicator-warning/80 shrink-0 transition-colors"
             title="Dismiss for this session"
             aria-label="Dismiss"
           >
@@ -457,7 +507,7 @@ export function LoraBrowser() {
             <input
               type="checkbox"
               checked={nsfw}
-              onChange={e => setNsfw(e.target.checked)}
+              onChange={e => setNsfwSticky(e.target.checked)}
               className="w-3.5 h-3.5 rounded accent-red-500"
             />
             NSFW
@@ -483,12 +533,29 @@ export function LoraBrowser() {
                 className="w-3.5 h-3.5 rounded accent-amber-500 disabled:opacity-40"
               />
               <span className={`flex items-center gap-0.5 ${
-                updatableOnly ? 'text-amber-400' : updatableCount > 0 ? 'text-text-secondary' : 'text-text-muted/50'
+                updatableOnly ? 'text-indicator-warning' : updatableCount > 0 ? 'text-text-secondary' : 'text-text-muted'
               }`}>
                 <ArrowUpCircle size={11} />
                 Updates
               </span>
             </label>
+          )}
+
+          {/* Sort control for the installed view — the storage story:
+              newest-download and newest-release make it obvious which of
+              a creator's renamed variants is current and what's stale. */}
+          {browseKind === 'lora' && showInstalled && (
+            <select
+              value={installedSort}
+              onChange={e => setInstalledSort(e.target.value as typeof installedSort)}
+              className="px-2 py-1 text-xs rounded-lg border border-border bg-bg-tertiary text-text-secondary focus:outline-none focus:border-accent-blue shrink-0"
+              title="Sort installed LoRAs"
+            >
+              <option value="name">Name</option>
+              <option value="downloaded">Newest download</option>
+              <option value="released">Newest release</option>
+              <option value="largest">Largest file</option>
+            </select>
           )}
 
           {/* Check-for-updates button. Always visible so the user can
@@ -511,7 +578,7 @@ export function LoraBrowser() {
                 : <RefreshCw size={11} />}
               Check
               {updatableCount > 0 && !checkingUpdates && (
-                <span className="ml-0.5 px-1 rounded bg-amber-500/20 text-amber-400 text-[10px] font-medium">
+                <span className="ml-0.5 px-1 rounded bg-amber-500/20 text-indicator-warning text-[10px] font-medium">
                   {updatableCount}
                 </span>
               )}
@@ -540,7 +607,7 @@ export function LoraBrowser() {
                   the CivitAI search view too, so the user knows there
                   are updates worth investigating without clicking through. */}
               {updatableCount > 0 && (
-                <span className="ml-0.5 px-1 rounded bg-amber-500/20 text-amber-400 text-[10px] font-medium">
+                <span className="ml-0.5 px-1 rounded bg-amber-500/20 text-indicator-warning text-[10px] font-medium">
                   {updatableCount}
                 </span>
               )}
@@ -610,6 +677,13 @@ export function LoraBrowser() {
                 }
                 return true
               })
+              if (installedSort !== 'name') {
+                filtered.sort((a, b) => {
+                  if (installedSort === 'largest') return (b.size_bytes ?? 0) - (a.size_bytes ?? 0)
+                  const dateOf = (l: typeof a) => (installedSort === 'released' ? (l.released_at || l.downloaded_at) : l.downloaded_at) || ''
+                  return dateOf(b).localeCompare(dateOf(a))
+                })
+              }
               return filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-text-muted">
                   <Search size={32} className="mb-3 opacity-50" />
@@ -617,29 +691,40 @@ export function LoraBrowser() {
                   <p className="text-xs mt-1">{installedLoras.length} installed, try different filters</p>
                 </div>
               ) : (
+              <>
+              {deleteError && (
+                <div className="mb-3 px-3 py-2 text-[11px] text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg leading-snug">{deleteError}</div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-3">
-                {filtered.map(lora => (
-                  <button
-                    key={`${lora.directory}/${lora.filename}`}
-                    onClick={() => {
-                      if (lora.civitai_model_id) {
-                        selectModel(lora.civitai_model_id)
-                      } else if (lora.hf_repo_id) {
-                        window.open(`https://huggingface.co/${lora.hf_repo_id}`, '_blank')
-                      }
-                    }}
-                    className={`relative rounded-lg border overflow-hidden bg-bg-tertiary text-left transition-all ${
-                      lora.civitai_model_id || lora.hf_repo_id
-                        ? 'border-border hover:border-accent-blue cursor-pointer group'
+                {filtered.map(lora => {
+                  const cardKey = `${lora.directory}/${lora.filename}`
+                  const clickable = Boolean(lora.civitai_model_id || lora.hf_repo_id)
+                  const openCard = () => {
+                    if (lora.civitai_model_id) {
+                      selectModel(lora.civitai_model_id)
+                    } else if (lora.hf_repo_id) {
+                      window.open(`https://huggingface.co/${lora.hf_repo_id}`, '_blank')
+                    }
+                  }
+                  return (
+                  <div
+                    key={cardKey}
+                    onClick={openCard}
+                    role={clickable ? 'button' : undefined}
+                    tabIndex={clickable ? 0 : undefined}
+                    onKeyDown={e => { if (clickable && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openCard() } }}
+                    className={`relative rounded-lg border overflow-hidden bg-bg-tertiary text-left transition-all group ${
+                      clickable
+                        ? 'border-border hover:border-accent-blue cursor-pointer'
                         : 'border-border/50 opacity-75'
                     }`}
                   >
                     <div className="aspect-[3/4] bg-bg-active overflow-hidden">
                       {lora.preview_url ? (
                         lora.preview_url.endsWith('.mp4') || lora.preview_url.endsWith('.webm') ? (
-                          <video src={lora.preview_url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" muted loop autoPlay playsInline />
+                          <video src={lora.preview_url} className={`w-full h-full object-cover transition-transform duration-300 ${clickable ? 'group-hover:scale-105' : ''}`} muted loop autoPlay playsInline />
                         ) : (
-                          <img src={lora.preview_url} alt={lora.name || lora.filename} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" referrerPolicy="no-referrer" />
+                          <img src={lora.preview_url} alt={lora.name || lora.filename} className={`w-full h-full object-cover transition-transform duration-300 ${clickable ? 'group-hover:scale-105' : ''}`} loading="lazy" referrerPolicy="no-referrer" />
                         )
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-text-muted gap-1">
@@ -652,9 +737,32 @@ export function LoraBrowser() {
                       <div className="text-xs font-medium text-white truncate">{lora.name || lora.filename.replace(/\.(safetensors|sft)$/i, '')}</div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-black/60 text-white/80">{lora.directory}</span>
+                        {lora.linked && (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-accent-blue/70 text-white"
+                            title="From a linked install's loras folder (read-only) — guides and metadata are stored in Maestro"
+                          >
+                            Linked
+                          </span>
+                        )}
                         {lora.has_guide && <BookOpen size={9} className="text-accent-green" />}
                         {lora.base_model && <span className="text-[9px] text-white/50">{lora.base_model}</span>}
+                        {typeof lora.size_bytes === 'number' && (
+                          <span className="text-[9px] text-white/50 ml-auto shrink-0">{formatBytes(lora.size_bytes)}</span>
+                        )}
                       </div>
+                      {(lora.downloaded_at || lora.released_at) && (
+                        <div
+                          className="text-[9px] text-white/40 mt-0.5 truncate"
+                          title={`Downloaded ${lora.downloaded_at ? new Date(lora.downloaded_at).toLocaleDateString() : 'unknown'}${lora.released_at ? ` — released ${new Date(lora.released_at).toLocaleDateString()}` : ''}`}
+                        >
+                          {installedSort === 'released' && lora.released_at
+                            ? `released ${new Date(lora.released_at).toLocaleDateString()}`
+                            : lora.downloaded_at
+                              ? `added ${new Date(lora.downloaded_at).toLocaleDateString()}`
+                              : `released ${new Date(lora.released_at as string).toLocaleDateString()}`}
+                        </div>
+                      )}
                       {lora.trained_words.length > 0 && (
                         <div className="flex items-center gap-0.5 mt-1 overflow-hidden">
                           <Tag size={8} className="text-white/50 shrink-0" />
@@ -687,9 +795,33 @@ export function LoraBrowser() {
                         </span>
                       </div>
                     )}
-                  </button>
-                ))}
+                    {/* Delete — primary-root files only; linked copies are
+                        read-only (deleting them would break the other install). */}
+                    {!lora.linked && (
+                      <button
+                        onClick={e => handleDeleteLora(lora.directory, lora.filename, e)}
+                        disabled={deletingKey === cardKey}
+                        className={`absolute bottom-1.5 right-1.5 p-1 rounded transition-all ${
+                          confirmDeleteKey === cardKey
+                            ? 'bg-red-500/90 text-white opacity-100'
+                            : deletingKey === cardKey
+                              ? 'bg-black/60 text-white/70 opacity-100 cursor-wait'
+                              : 'bg-black/60 text-white/70 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400'
+                        }`}
+                        title={confirmDeleteKey === cardKey
+                          ? 'Click again to permanently delete this LoRA (weights + metadata + guide)'
+                          : 'Delete this LoRA from disk'}
+                      >
+                        {deletingKey === cardKey
+                          ? <Loader2 size={11} className="animate-spin" />
+                          : <Trash2 size={11} />}
+                      </button>
+                    )}
+                  </div>
+                  )
+                })}
               </div>
+              </>
               )
             })()}
           </div>
@@ -711,9 +843,9 @@ export function LoraBrowser() {
 
             {!loading && results.length === 0 && searchError && (
               <div className="flex flex-col items-center justify-center py-16 text-text-muted">
-                <div className="max-w-md w-full px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-100 text-sm leading-relaxed">
+                <div className="max-w-md w-full px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-text-primary text-sm leading-relaxed">
                   <div className="font-semibold mb-1">CivitAI is unavailable</div>
-                  <div className="text-[12px] text-amber-200/80">{searchError}</div>
+                  <div className="text-[12px] text-text-secondary">{searchError}</div>
                 </div>
               </div>
             )}

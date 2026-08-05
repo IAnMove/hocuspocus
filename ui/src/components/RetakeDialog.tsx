@@ -118,7 +118,7 @@ export function RetakeDialog() {
               onChange={e => setPrompt(e.target.value)}
               placeholder="Describe the new content for the selected time range..."
               rows={2}
-              className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/40 focus:outline-none focus:border-accent-blue"
+              className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
               style={{ resize: 'vertical', minHeight: 48 }} />
           </div>
 
@@ -128,7 +128,7 @@ export function RetakeDialog() {
               onChange={e => setRegenerateAudio(e.target.checked)}
               className="w-3.5 h-3.5 rounded border-border accent-accent-blue" />
             <span className="text-xs text-text-secondary">Regenerate Audio</span>
-            <span className="text-[9px] text-text-muted/60 ml-auto">
+            <span className="text-[9px] text-text-muted ml-auto">
               {regenerateAudio ? 'New audio from prompt' : 'Keep source audio'}
             </span>
           </label>
@@ -145,7 +145,7 @@ export function RetakeDialog() {
                 <input type="text" value={negPrompt}
                   onChange={e => setNegPrompt(e.target.value)}
                   placeholder="What to avoid..."
-                  className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted/40 focus:outline-none focus:border-accent-blue" />
+                  className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue" />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
@@ -169,14 +169,14 @@ export function RetakeDialog() {
           )}
 
           {/* Model + LoRA info */}
-          <p className="text-[9px] text-text-muted/50">
+          <p className="text-[9px] text-text-muted">
             <span title={modelType}>Model: {modelLabel}</span> | Engine: Native
             {activatedLoras.length > 0 && ` | LoRAs: ${activatedLoras.length}`}
           </p>
 
           {/* Error/Success */}
           {error && <div className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1.5">{error}</div>}
-          {success && <div className="text-[10px] text-green-400 bg-green-500/10 border border-green-500/20 rounded px-2 py-1.5">{success}</div>}
+          {success && <div className="text-[10px] text-indicator-success bg-green-500/10 border border-green-500/20 rounded px-2 py-1.5">{success}</div>}
 
           {/* Submit */}
           <button onClick={handleSubmit} disabled={submitting || !prompt}

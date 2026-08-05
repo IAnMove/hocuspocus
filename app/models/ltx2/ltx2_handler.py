@@ -36,6 +36,7 @@ _ARCH_SPECS = {
         "distilled_lora": "ltx-2.3-22b-distilled-lora-384.safetensors",
         "union_control_lora": "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
         "outpaint_ic_lora": "ltx-2.3-22b-ic-lora-outpaint.safetensors",
+        "inpaint_ic_lora": "ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors",
         # ID-LoRA voice-identity LoRA — auto-loaded by get_loras_transformer
         # when a voice_reference is provided. Per upstream WanGP v11.77,
         # works on both dev and distilled despite being trained on dev.
@@ -452,7 +453,11 @@ class family_handler:
             dtype=dtype,
             VAE_dtype=VAE_dtype,
             text_encoder_filename=text_encoder_filename,
-            text_encoder_filepath = model_def.get("text_encoder_folder", os.path.dirname(text_encoder_filename)),
+            # dict.get evaluates its default EAGERLY — os.path.dirname(None)
+            # here crashed even when text_encoder_folder was present in the
+            # def (issue #15's secondary crash). Guard the fallback.
+            text_encoder_filepath = (model_def.get("text_encoder_folder")
+                or (os.path.dirname(text_encoder_filename) if text_encoder_filename else None)),
             checkpoint_paths=checkpoint_paths,
         )
 

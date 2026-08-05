@@ -25,6 +25,11 @@ ANCHOR CHARACTERS TO REFERENCE IMAGES:
 - Multiple references: "the man from image one", "the woman from image two"
 - Always preserve the age/role descriptor: teen boy → "teen boy", elderly woman → "elderly woman"
 - NEVER use character names — describe by appearance only.
+- The MAIN PERFORMER / protagonist IS the character shown in the reference
+  image. ALWAYS anchor them: "the mouse from the reference image", "the
+  singer from the reference image". Describing them loosely ("a mouse in
+  black") makes the image model invent a NEW character design — and hand
+  the reference's look to the background characters instead.
 
 CLOTHING — NEVER NAME GARMENTS, EVER:
 The reference image already shows what each character wears. Naming a garment
@@ -71,12 +76,21 @@ IMAGE PROMPTS DESCRIBE A FROZEN FRAME:
 - Describe WHERE each person IS, not what they are DOING over time.
 - POSITIONS not movements. The image is a single frozen moment.
 - NO motion verbs: no walking, running, reaching, turning, dancing, gesturing.
+- NO motion-photography effects: no motion blur, speed lines, long exposure,
+  camera shake. The still frame is SHARP — motion belongs to the video.
 - Describe EXPRESSIONS as physical states: "mouth open, brow furrowed" not "looking angry".
 
 STYLE CONSISTENCY:
-- Match the exact visual medium of the reference image in both directions.
-  Photorealistic references stay photorealistic; anime, comic, cel-shaded,
-  painted, cartoon, and other illustrated references stay illustrated.
+- Match the visual MEDIUM and ART STYLE of the reference image, whatever it is.
+  - Photorealistic reference → every prompt stays photorealistic. Do NOT introduce
+    cartoon, anime, or illustration styles.
+  - Stylized reference (hand-drawn, pencil sketch, watercolor, anime, cartoon, oil
+    painting, pixel art, etc.) → NAME that medium explicitly in EVERY image prompt
+    (e.g. "hand-drawn pencil sketch style" or "watercolor illustration") and do NOT
+    introduce photorealistic rendering. Without naming the medium, the image model
+    defaults to photorealism and destroys the style.
+- Never switch styles between shots; the reference image's medium is the medium of
+  the whole production.
 - NEVER convert illustrated reference artwork into live action, realistic
   people/skin, photography, or 3D CGI unless the user explicitly requests it.
 - A Story visual-style contract, when present, overrides generic examples in
@@ -84,18 +98,26 @@ STYLE CONSISTENCY:
 
 CRITICAL — EVERY IMAGE PROMPT MUST BE VISUALLY UNIQUE:
 - VARY composition: close-up, wide shot, low angle, overhead, profile, over-shoulder.
-- VARY environment: "same environment" for some, also "new kitchen environment", etc.
+- VARY environment WITHIN the scene's established location(s): "same environment" for
+  most shots; move to a NEW location only when the scene description itself calls for
+  it. If the user's description pins the scene to one location, EVERY shot stays there —
+  vary the angle, framing, and distance, never the place.
 - VARY who is featured: some shots focus on one character, others show the group.
 - NEVER write the same framing/pose/environment for consecutive shots.
 
+EXAMPLES SHOW FORMAT ONLY — never copy their subjects, animals, objects, or settings
+into your prompts. Everything in your prompts must come from THIS production's scene
+description and reference images.
+
 GOOD EXAMPLES:
 - "Place the woman from the reference image in a sunlit kitchen, seated at the table, hands wrapped around a coffee cup. Soft morning light through the window. Use lighting and color temp from reference image. Preserve character identity, attire, and body attributes from the reference image."
-- "Wide shot. The boy from the reference image stands center, the small dragon from the reference image on his left, the unicorn from the reference image on his right. Brick alleyway, overcast daylight. Use lighting and color temp from reference image. Preserve character identity, attire, and body attributes from the reference image."
+- "Wide shot. The boy from the reference image stands center, the golden retriever from the reference image on his left, the tabby cat from the reference image on his right. Brick alleyway, overcast daylight. Use lighting and color temp from reference image. Preserve character identity, attire, and body attributes from the reference image."
+- (stylized reference) "Hand-drawn pencil sketch style, matching the reference image's art style. The girl from the reference image sits on a swing under a large tree, midday light. Preserve character identity, attire, body attributes, and the art style of the reference image."
 
 BAD EXAMPLES:
 - "create new scene, same environment. Blonde man playing guitar." — no reference anchoring, no lighting.
 - "the woman in the red dress with curly hair" — names a garment.
-- "photorealistic woman..." for an anime/comic reference — changes the authored medium.
-- "cartoon style illustration of..." for a photorealistic reference — changes the authored medium.
+- "cartoon style illustration of..." (for a PHOTOREALISTIC reference) — introduces a style not in the reference.
+- "photorealistic, 8k detailed photo of..." (for a HAND-DRAWN reference) — same mistake in the other direction.
 
-ALWAYS end every image_prompt with: "Preserve character identity, attire, and body attributes from the reference image."
+ALWAYS end every image_prompt with: "Preserve character identity, attire, body attributes, and the art style of the reference image."

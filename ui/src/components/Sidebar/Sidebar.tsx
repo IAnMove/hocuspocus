@@ -3,7 +3,6 @@ import { Settings, X, Globe, BookMarked, PanelLeftClose, PanelLeftOpen } from 'l
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { GenerationModeSelector } from './GenerationModeSelector'
-import { ImageUpload } from './ImageUpload'
 import { InputsPanel } from './InputsPanel'
 import { PromptInput } from './PromptInput'
 import { ImageRefSection } from './ImageRefSection'
@@ -25,6 +24,7 @@ import { InpaintControls } from './InpaintControls'
 import { OutpaintControls } from './OutpaintControls'
 import { RetakeControls } from './RetakeControls'
 import { EditAnythingControls } from './EditAnythingControls'
+import { RecastControls } from './RecastControls'
 import { BlendControls } from './BlendControls'
 import { AnchorReturnBanner } from './AnchorReturnBanner'
 import { VoiceRefSection } from './VoiceRefSection'
@@ -40,6 +40,7 @@ export function Sidebar() {
   const imageMode = useStore(s => s.params.image_mode)
   const modelOptions = useStore(s => s.modelOptions)
   const sidebarOpen = useStore(s => s.sidebarOpen)
+  const appVersion = useStore(s => s.systemConfig?.app_version)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
   const sidebarMode = useStore(s => s.sidebarMode)
   const setSidebarMode = useStore(s => s.setSidebarMode)
@@ -60,6 +61,7 @@ export function Sidebar() {
   const isInpaint = isEdit && editSubMode === 'inpaint'
   const isOutpaint = isEdit && editSubMode === 'outpaint'
   const isEditAnything = isEdit && editSubMode === 'edit_anything'
+  const isRecast = isEdit && editSubMode === 'recast'
   const isMultiClip = isVideo && imageMode === 2
   const isContinue = isVideo && imageMode === 3
   const isBlend = isVideo && imageMode === 4
@@ -130,8 +132,6 @@ export function Sidebar() {
       {isRestyle && (
         <>
           <RestyleControls />
-          <DurationSlider />
-          <ImageUpload />
           <PromptInput />
         </>
       )}
@@ -141,14 +141,19 @@ export function Sidebar() {
           <PromptInput />
         </>
       )}
+      {isRecast && (
+        <>
+          <RecastControls />
+          <PromptInput />
+        </>
+      )}
     </>
   )
 
   const studioControls = (
     <>
-      {/* Edit Anything → Image Mode round-trip banner. Visible whenever
-          the user is in the middle of editing boundary anchors via the
-          Image Mode workflow; null otherwise. */}
+      {/* Edit Anything/Recast → Image Mode round-trip banner. Visible while
+          a boundary anchor or Recast reference is being edited; null otherwise. */}
       <AnchorReturnBanner />
 
       {/* [&>*]:shrink-0 — keep every section at its natural height and let
@@ -178,7 +183,7 @@ export function Sidebar() {
         {isVideo && !isMultiClip && !isBlend && (
           <div>
             {isI2vOnly && !isContinue && (
-              <div className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5 mb-2">
+              <div className="text-[10px] text-indicator-warning bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1.5 mb-2">
                 This model requires a start image to generate video.
               </div>
             )}
@@ -235,13 +240,15 @@ export function Sidebar() {
           >
             <BookMarked size={14} />
           </button>
-          <button
-            onClick={() => openLoraBrowser(true, modelType)}
-            className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
-            title="Browse LoRAs on CivitAI"
-          >
-            <Globe size={14} />
-          </button>
+          {!isOutpaint && (
+            <button
+              onClick={() => openLoraBrowser(true, modelType)}
+              className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
+              title="Browse LoRAs on CivitAI"
+            >
+              <Globe size={14} />
+            </button>
+          )}
           <div className="flex-1 min-w-0">
             <ModelSelector />
           </div>
@@ -274,6 +281,7 @@ export function Sidebar() {
                 M
               </div>
               <span className="font-semibold text-sm">Maestro</span>
+              {appVersion && <span className="text-[10px] text-text-muted font-normal mt-0.5">v{appVersion}</span>}
             </div>
             <div className="flex items-center gap-1.5">
               {modeToggle('sm')}
@@ -320,6 +328,7 @@ export function Sidebar() {
             M
           </div>
           <span className="font-semibold text-sm">Maestro</span>
+              {appVersion && <span className="text-[10px] text-text-muted font-normal mt-0.5">v{appVersion}</span>}
         </div>
         <div className="flex items-center gap-2">
           {modeToggle('md')}

@@ -1,5 +1,6 @@
 import { rememberPrompt } from '../lib/promptHistory'
 import type { ProductionPlan } from '../types'
+import type { ScailResolutionProfile } from '../types'
 
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
 
@@ -87,6 +88,33 @@ export async function fetchModels(): Promise<{ families: ApiFamily[]; models: Ap
   return res.json()
 }
 
+export interface ModelVisibilitySettings {
+  configured: boolean
+  enabled_models: string[]
+  initialized_mature_models: string[]
+  defaults_version: number
+}
+
+export async function fetchModelVisibility(): Promise<ModelVisibilitySettings> {
+  const res = await fetch(`${BASE}/api/v1/model-visibility`)
+  if (!res.ok) throw new Error('Failed to fetch model visibility')
+  return res.json()
+}
+
+export async function updateModelVisibility(params: {
+  enabled_models: string[]
+  initialized_mature_models: string[]
+  defaults_version: number
+}): Promise<ModelVisibilitySettings> {
+  const res = await fetch(`${BASE}/api/v1/model-visibility`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) throw new Error('Failed to save model visibility')
+  return res.json()
+}
+
 // Re-scan defaults/ + finetunes/ on the server so a newly-imported checkpoint
 // appears in the model list without a restart. Returns model_types that appeared.
 export async function reloadModels(): Promise<{ status: string; model_count: number; added: string[] }> {
@@ -98,6 +126,20 @@ export async function reloadModels(): Promise<{ status: string; model_count: num
 export async function deleteModel(modelType: string): Promise<{ deleted: string[]; model_type: string; affected_models?: string[] }> {
   const res = await fetch(`${BASE}/api/v1/models/${encodeURIComponent(modelType)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete model')
+  return res.json()
+}
+
+export type ModelDownloadStatus = 'downloading' | 'completed' | 'failed'
+
+export async function downloadModel(modelType: string): Promise<{ status: ModelDownloadStatus; model_type: string }> {
+  const res = await fetch(`${BASE}/api/v1/models/${encodeURIComponent(modelType)}/download`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to start model download')
+  return res.json()
+}
+
+export async function fetchModelDownloads(): Promise<{ downloads: Record<string, { status: ModelDownloadStatus; error: string | null }> }> {
+  const res = await fetch(`${BASE}/api/v1/models/downloads/status`)
+  if (!res.ok) throw new Error('Failed to fetch model download status')
   return res.json()
 }
 
@@ -279,6 +321,7 @@ export async function submitToolRevoice(params: {
 export interface Workspace {
   name: string
   path: string
+  file_count?: number
 }
 
 export async function fetchWorkspaces(): Promise<{ workspaces: Workspace[]; active: string }> {
@@ -306,6 +349,15 @@ export async function createWorkspace(name: string): Promise<void> {
     const err = await res.json().catch(() => ({ detail: 'Failed to create workspace' }))
     throw new Error(err.detail || 'Failed to create workspace')
   }
+}
+
+export async function deleteWorkspace(name: string): Promise<{ switched_to_default: boolean; files_deleted: number }> {
+  const res = await fetch(`${BASE}/api/v1/workspaces/${encodeURIComponent(name)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to delete workspace' }))
+    throw new Error(err.detail || 'Failed to delete workspace')
+  }
+  return res.json()
 }
 
 // --- Job Management ---
@@ -349,13 +401,15 @@ export async function toggleFavorite(name: string): Promise<{ name: string; favo
 
 // --- Outputs ---
 
-export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string }): Promise<{ outputs: ApiOutput[]; total: number }> {
+export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string; workspace?: string }): Promise<{ outputs: ApiOutput[]; total: number }> {
   const params = new URLSearchParams()
   if (limit > 0) params.set('limit', String(limit))
   if (offset > 0) params.set('offset', String(offset))
   if (opts?.favoritesOnly) params.set('favorites_only', 'true')
   if (opts?.multiclipOnly) params.set('multiclip_only', 'true')
   if (opts?.search) params.set('search', opts.search)
+  // "__uploads__" browses the uploads folder (virtual Uploads view)
+  if (opts?.workspace) params.set('workspace', opts.workspace)
   const qs = params.toString()
   const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`)
   if (!res.ok) throw new Error('Failed to fetch outputs')
@@ -977,7 +1031,9 @@ export async function fetchPipelineList(): Promise<{ pipelines: import('../types
 }
 
 export async function fetchSavedPipeline(pid: string): Promise<import('../types').SavedPipelineState> {
-  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}`)
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}`, {
+    cache: 'no-store',
+  })
   if (!res.ok) throw new Error('Pipeline not found')
   return res.json()
 }
@@ -989,6 +1045,34 @@ export async function tagPipelineClip(pid: string, clipIndex: number, tag: strin
     body: JSON.stringify({ tag }),
   })
   if (!res.ok) throw new Error('Failed to tag clip')
+}
+
+export async function startPipelineRepair(pid: string): Promise<{
+  pipeline_id: string
+  repair: import('../types').PipelineRepairState
+}> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/repair`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Repair failed to start' }))
+    throw new Error(err.error || err.detail || 'Repair failed to start')
+  }
+  return res.json()
+}
+
+export async function cancelPipelineRepair(pid: string): Promise<{
+  pipeline_id: string
+  repair: import('../types').PipelineRepairState
+}> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/repair/cancel`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Repair cancel failed' }))
+    throw new Error(err.error || err.detail || 'Repair cancel failed')
+  }
+  return res.json()
 }
 
 export async function rerunClipImage(pid: string, clipIndex: number, prompt?: string): Promise<{ filename: string; clip_index: number }> {
@@ -1042,6 +1126,15 @@ export async function rejoinPipeline(pid: string): Promise<{ filename: string }>
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Rejoin failed' }))
     throw new Error(err.error || 'Rejoin failed')
+  }
+  return res.json()
+}
+
+export async function deletePipeline(pid: string): Promise<{ media_deleted: number; media_deferred: number }> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Delete failed' }))
+    throw new Error(err.detail || 'Delete failed')
   }
   return res.json()
 }
@@ -1260,14 +1353,241 @@ export async function submitEditAnything(params: {
   return res.json()
 }
 
+// --- Repaint (SCAIL-2 Animate: edited first frame + source motion) ---
+
+export interface RepaintRegionRequest {
+  id?: string;
+  /** Person/object phrase to track through the source video. */
+  source: string;
+  /** Corresponding person/object phrase in the edited first frame. */
+  target: string;
+}
+
+export async function submitRepaint(params: {
+  video_path: string;
+  target_frame_path: string;
+  region_mappings?: RepaintRegionRequest[];
+  prompt?: string;
+  start_time?: number;
+  end_time?: number;
+  model_type?: string;
+  negative_prompt?: string;
+  seed?: number;
+  num_inference_steps?: number;
+  /** SCAIL-2 HQ only. Fast is CFG-distilled and stays at 1. */
+  guidance_scale?: number;
+  resolution_profile?: ScailResolutionProfile;
+  activated_loras?: string[];
+  loras_multipliers?: string;
+  workspace?: string;
+}): Promise<{
+  job_id: string;
+  status: string;
+  frames?: number;
+  region_count?: number;
+  resolution_profile?: ScailResolutionProfile;
+  resolution?: string;
+  sliding_window_size?: number;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+}> {
+  const res = await fetch(`${BASE}/api/v1/repaint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Repaint failed' }))
+    throw new Error(err.detail || 'Repaint failed')
+  }
+  return res.json()
+}
+
+export async function repaintPreview(params: {
+  video_path: string;
+  target_frame_path: string;
+  region_mappings: RepaintRegionRequest[];
+  time?: number;
+  workspace?: string;
+}): Promise<{
+  found: boolean;
+  frame_index: number;
+  source_preview: string;
+  target_preview: string;
+  mapping_results: Array<{
+    mapping_index: number;
+    source: string;
+    target: string;
+    source_found: boolean;
+    target_found: boolean;
+    color: number[];
+  }>;
+}> {
+  const res = await fetch(`${BASE}/api/v1/repaint/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Repaint preview failed' }))
+    throw new Error(err.detail || 'Repaint preview failed')
+  }
+  return res.json()
+}
+
+// --- Recast (SCAIL-2 Replace: swap a person for a reference character) ---
+
+export async function submitRecast(params: {
+  video_path: string;
+  ref_image_path?: string;
+  /** Same-character views for the legacy single-mapping request. */
+  additional_ref_image_paths?: string[];
+  /** Deterministic source-person → replacement-reference assignments. */
+  character_mappings?: Array<{
+    id?: string;
+    target: string;
+    ref_image_path: string;
+    additional_ref_image_paths?: string[];
+    reference_aligned_to_source?: boolean;
+  }>;
+  /** Who to replace, as a SAM3 keyword ("woman", "man in red"). */
+  target?: string;
+  /** Number of matching people to track and replace (1-5). */
+  person_count?: number;
+  /** The reference is an edited copy of the selected source first frame. */
+  reference_aligned_to_source?: boolean;
+  /** Preserve original subject identity while neutralizing reference scenery. */
+  isolate_reference?: boolean;
+  /** Derive a tighter same-character identity view when none is supplied. */
+  auto_face_detail?: boolean;
+  /** Rewrite and append Maestro's identity/scene continuity guidance. */
+  enhance_prompt?: boolean;
+  /** Strict post-composite fallback; may create visible lighting/color seams. */
+  protect_bystanders?: boolean;
+  /** Experimental: preserve other visible identities with native SCAIL-2 color correspondence. */
+  preserve_bystanders?: boolean;
+  /** Apply the official SCAIL-2 replacement Relighting LoRA. */
+  use_relighting?: boolean;
+  /** Spatial quality only; does not select a model or change its step schedule. */
+  resolution_profile?: ScailResolutionProfile;
+  /** Optional scene/character description — a good one helps identity. */
+  prompt?: string;
+  start_time?: number;
+  end_time?: number;
+  model_type?: string;
+  negative_prompt?: string;
+  seed?: number;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+  activated_loras?: string[];
+  loras_multipliers?: string;
+  workspace?: string;
+}): Promise<{
+  job_id: string;
+  status: string;
+  frames?: number;
+  target?: string;
+  person_count?: number;
+  resolution_profile?: ScailResolutionProfile;
+  resolution?: string;
+  sliding_window_size?: number;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+}> {
+  const res = await fetch(`${BASE}/api/v1/recast`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Recast failed' }))
+    throw new Error(err.detail || 'Recast failed')
+  }
+  return res.json()
+}
+
+export async function recastPreview(params: {
+  video_path: string;
+  target?: string;
+  person_count?: number;
+  ref_image_path?: string;
+  additional_ref_image_paths?: string[];
+  character_mappings?: Array<{
+    id?: string;
+    target: string;
+    ref_image_path?: string;
+    additional_ref_image_paths?: string[];
+    reference_aligned_to_source?: boolean;
+  }>;
+  isolate_reference?: boolean;
+  auto_face_detail?: boolean;
+  resolution_profile?: ScailResolutionProfile;
+  time?: number;
+  end_time?: number;
+  workspace?: string;
+}): Promise<{
+  found: boolean;
+  matched_people: number;
+  requested_people: number;
+  frame_index: number;
+  time_seconds?: number;
+  timeline_start_seconds?: number;
+  timeline_end_seconds?: number;
+  sampled_frame_count?: number;
+  preview: string;
+  resolution_profile?: ScailResolutionProfile;
+  output_resolution?: number[];
+  mapping_results?: Array<{
+    mapping_index: number;
+    target: string;
+    found: boolean;
+    color: number[];
+    overlap_fraction: number;
+    first_frame_index?: number | null;
+    first_time_seconds?: number | null;
+    anchor_frame_index?: number | null;
+    anchor_time_seconds?: number | null;
+  }>;
+  reference_previews?: Array<{
+    mapping_index: number;
+    view_index: number;
+    kind: 'primary' | 'additional' | 'auto_face_detail';
+    mask_source: string;
+    source_size: number[];
+    prepared_size: number[];
+    crop_box?: number[];
+    detail_size?: number[];
+    detail_source?: string;
+    prepared_image: string;
+    clip_identity_image?: string;
+    semantic_mask: string;
+  }>;
+}> {
+  const res = await fetch(`${BASE}/api/v1/recast/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Preview failed' }))
+    throw new Error(err.detail || 'Preview failed')
+  }
+  return res.json()
+}
+
 // --- Outpaint ---
 
 export async function submitOutpaint(params: {
   video_path: string; prompt: string; model_type: string;
   pad_top?: number; pad_bottom?: number; pad_left?: number; pad_right?: number;
+  outpaint_aspect?: 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
   resolution_preset?: 'auto' | '480p' | '540p' | '720p' | '1080p';
   source_preservation?: number;
   outpaint_lora_strength?: number;
+  mask_preserving_outpaint?: boolean;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+  negative_prompt?: string;
   seed?: number;
   activated_loras?: string[]; loras_multipliers?: string;
   workspace?: string;
@@ -1382,7 +1702,7 @@ export async function mixAudio(tracks: { path: string; start_time: number; volum
 
 // --- Upload ---
 
-export async function uploadImage(file: File): Promise<{ filename: string; path: string; url: string }> {
+export async function uploadImage(file: File): Promise<{ filename: string; path: string; url: string; fps?: number; frame_count?: number }> {
   const form = new FormData()
   form.append('file', file)
   const res = await fetch(`${BASE}/api/v1/upload`, {
@@ -1870,6 +2190,12 @@ export async function fetchSystemConfig(): Promise<import('../types').SystemConf
   return res.json()
 }
 
+export async function scanModelFolders(): Promise<{ candidates: import('../types').ModelFolderCandidate[] }> {
+  const res = await fetch(`${BASE}/api/v1/model-folders/scan`)
+  if (!res.ok) throw new Error('Failed to scan for model folders')
+  return res.json()
+}
+
 export async function updateSystemConfig(
   partial: Partial<import('../types').SystemConfig>
 ): Promise<{ status: string; updated: Record<string, unknown> }> {
@@ -1902,6 +2228,19 @@ export async function fetchSystemDetect(): Promise<import('../types').SystemDete
 export async function fetchSystemStats(): Promise<import('../types').SystemStats> {
   const res = await fetch(`${BASE}/api/v1/system-stats`)
   if (!res.ok) throw new Error('Failed to fetch system stats')
+  return res.json()
+}
+
+/** Manually unload the resident generation model (and LLM) to free
+ *  VRAM/RAM. Models stay loaded between generations by design; this is
+ *  the explicit opt-out. 409s when a generation or Director run is
+ *  active. Returns which models were released. */
+export async function releaseModels(): Promise<{ released: string[] }> {
+  const res = await fetch(`${BASE}/api/v1/system/release-model`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Unload failed' }))
+    throw new Error(err.detail || 'Unload failed')
+  }
   return res.json()
 }
 
@@ -2657,7 +2996,7 @@ export async function startCivitAIDownload(params: {
   model_name: string; images: { url: string }[]
   description?: string; version_description?: string; base_model?: string
   example_prompts?: string[]; tags?: string[]
-  nsfw?: boolean; target_dir_name?: string
+  nsfw?: boolean; target_dir_name?: string; published_at?: string
   // Checkpoint imports: kind='checkpoint' routes the file into ckpts/ and
   // registers a finetune for target_architecture instead of saving a LoRA.
   // auto_quantize=true sets the finetune to load-time int8 (mmgp).
@@ -2701,7 +3040,7 @@ export async function fetchLoraGuide(modelType: string, filename: string): Promi
 }
 
 export async function importHuggingFaceLora(url: string, targetDir?: string, filename?: string): Promise<{
-  status: string; download_id: string; filename: string; target_dir: string; repo_id: string; base_model: string
+  status: string; download_id: string; filename: string; target_dir: string; repo_id?: string; base_model: string
 }> {
   const res = await fetch(`${BASE}/api/v1/huggingface/import-lora`, {
     method: 'POST',
@@ -2747,6 +3086,9 @@ export type LoraUpdateStatus = 'current' | 'available' | 'unknown' | 'local' | '
 export interface InstalledLora {
   filename: string
   directory: string
+  /** File lives in a linked install's loras folder (read-only), not
+   *  Maestro's own. Sidecars/guides for it live in Maestro's mirror. */
+  linked?: boolean
   trained_words: string[]
   preview_url: string | null
   civitai_model_id: number | null
@@ -2773,6 +3115,14 @@ export interface InstalledLora {
   current_version_id?: number | null
   latest_published_at?: string | null
   latest_changelog?: string | null
+  /** On-disk size of the .safetensors file (null when unreadable). */
+  size_bytes?: number | null
+  /** When the file arrived: sidecar downloadedAt (CivitAI downloads) or
+   *  the weight file's mtime (HF/hand-installed). ISO string. */
+  downloaded_at?: string | null
+  /** The version's CivitAI release date (publishedAt) — captured at
+   *  download time, backfilled for older files by Check Updates. */
+  released_at?: string | null
 }
 
 export async function fetchInstalledLoras(): Promise<{
@@ -2783,6 +3133,99 @@ export async function fetchInstalledLoras(): Promise<{
 }> {
   const res = await fetch(`${BASE}/api/v1/loras/installed`)
   if (!res.ok) throw new Error('Failed to fetch installed LoRAs')
+  return res.json()
+}
+
+// --- Storage (duplicates + usage analytics) ---
+
+export interface StorageDuplicate {
+  kind: 'checkpoint' | 'lora'
+  filename: string
+  rel_path: string
+  primary_path: string
+  size_bytes: number
+  linked_path: string
+  linked_size_bytes: number
+  linked_install: string
+}
+
+export interface StorageUsageModel {
+  model_type: string
+  name: string
+  size_bytes: number
+  /** Bytes living in the primary (deletable) roots — what deleting frees. */
+  primary_bytes: number
+  /** Display name of the base model whose weights this entry aliases
+   *  (finetunes with "URLs": "<base>") — deleting this row frees nothing. */
+  alias_of?: string | null
+  use_count: number
+  last_used: number | null
+}
+
+export interface StorageUsageLora {
+  filename: string
+  directory: string
+  linked: boolean
+  size_bytes: number
+  use_count: number
+  last_used: number | null
+}
+
+export interface StorageUsage {
+  models: StorageUsageModel[]
+  /** Globally deduped — per-model sizes overlap on shared weights
+   *  (base transformers, text encoders), so summing rows over-counts. */
+  models_total_bytes: number
+  loras: StorageUsageLora[]
+  workspaces: { name: string; file_count: number; size_bytes: number }[]
+  scanned_sidecars: number
+}
+
+export async function fetchStorageUsage(): Promise<StorageUsage> {
+  const res = await fetch(`${BASE}/api/v1/storage/usage`)
+  if (!res.ok) throw new Error('Failed to fetch storage usage')
+  return res.json()
+}
+
+export async function fetchStorageDuplicates(): Promise<{ duplicates: StorageDuplicate[]; conflicts: StorageDuplicate[]; total_reclaimable_bytes: number }> {
+  const res = await fetch(`${BASE}/api/v1/storage/duplicates`)
+  if (!res.ok) throw new Error('Failed to scan for duplicates')
+  return res.json()
+}
+
+export async function reclaimDuplicate(path: string): Promise<{ freed_bytes: number }> {
+  const res = await fetch(`${BASE}/api/v1/storage/duplicates/reclaim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Reclaim failed' }))
+    throw new Error(err.detail || 'Reclaim failed')
+  }
+  return res.json()
+}
+
+export async function removeLinkedDuplicate(path: string): Promise<{ freed_bytes: number; recycled: boolean }> {
+  const res = await fetch(`${BASE}/api/v1/storage/duplicates/remove-linked`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Remove failed' }))
+    throw new Error(err.detail || 'Remove failed')
+  }
+  return res.json()
+}
+
+export async function deleteLoraFile(directory: string, filename: string): Promise<{ deleted: string; deferred: boolean }> {
+  const params = new URLSearchParams({ directory: directory || '.', filename })
+  const res = await fetch(`${BASE}/api/v1/loras/file?${params.toString()}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to delete LoRA' }))
+    throw new Error(err.detail || 'Failed to delete LoRA')
+  }
   return res.json()
 }
 

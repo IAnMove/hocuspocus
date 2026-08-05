@@ -1,7 +1,107 @@
 import { create } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, ShortFilmCharacter, ShortFilmPath, CivitAIModel, CivitAIDownload, PipelineListItem, SavedPipelineState, SystemDetectResponse, SystemStats } from '../types'
+import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, ShortFilmCharacter, ShortFilmPath, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping } from '../types'
 import * as api from '../api/client'
-import { applyTheme, getStoredTheme, type ThemeId } from '../lib/theme'
+import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
+
+const CIVIT_DOWNLOAD_POLL_MS = 2000
+const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
+let _civitDownloadPollTask: Promise<void> | null = null
+let _civitDownloadPollController: AbortController | null = null
+let _civitDownloadPollRequested = false
+const _civitRefreshedCheckpointDownloads = new Set<string>()
+const DIRECTOR_REPAIR_POLL_MS = 2000
+const DIRECTOR_REPAIR_ACTIVE = new Set(['queued', 'running', 'cancelling'])
+type DirectorRepairPoll = {
+  operationId: string
+  timer: number | null
+}
+const _directorRepairPolls = new Map<string, DirectorRepairPoll>()
+const _directorRepairDiscoveries = new Map<string, object>()
+let _dashboardPipelineLoadToken = 0
+let _dashboardPipelineListLoadToken = 0
+
+type OutpaintAspect = 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
+
+const _OUTPAINT_ASPECT_RATIOS: Array<[Exclude<OutpaintAspect, 'source'>, number]> = [
+  ['16:9', 16 / 9],
+  ['9:16', 9 / 16],
+  ['1:1', 1],
+  ['4:3', 4 / 3],
+  ['3:4', 3 / 4],
+]
+
+function _inferOutpaintAspect(width: number, height: number): OutpaintAspect | null {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+  const ratio = width / height
+  let nearest: Exclude<OutpaintAspect, 'source'> | null = null
+  let nearestError = Number.POSITIVE_INFINITY
+  for (const [aspect, target] of _OUTPAINT_ASPECT_RATIOS) {
+    const relativeError = Math.abs(ratio - target) / target
+    if (relativeError < nearestError) {
+      nearest = aspect
+      nearestError = relativeError
+    }
+  }
+  // Grid alignment can move either dimension by several pixels. Four percent
+  // safely recognizes those canvases without pretending an arbitrary ratio
+  // is one of the six choices supported by the composer.
+  return nearestError <= 0.04 ? nearest : null
+}
+
+function _repairNeedsPolling(repair: PipelineRepairState | null | undefined): boolean {
+  return !!repair && DIRECTOR_REPAIR_ACTIVE.has(repair.status)
+}
+
+function _stopDirectorRepairPoll(pid: string): void {
+  const poll = _directorRepairPolls.get(pid)
+  if (poll?.timer != null) window.clearTimeout(poll.timer)
+  _directorRepairPolls.delete(pid)
+}
+
+function _downloadTimestampMs(value: number | null | undefined): number | null {
+  const timestamp = Number(value)
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return null
+  return timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp
+}
+
+function _downloadNeedsPolling(download: CivitAIDownload, now: number): boolean {
+  if (download.status === 'downloading') return true
+  if (download.status !== 'completed') return false
+  const completedAt = _downloadTimestampMs(download.completed_at)
+  return completedAt !== null && now - completedAt < CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS
+}
+
+function _waitForDownloadPoll(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal.aborted) {
+      resolve()
+      return
+    }
+    const timer = window.setTimeout(done, ms)
+    function done() {
+      window.clearTimeout(timer)
+      signal.removeEventListener('abort', done)
+      resolve()
+    }
+    signal.addEventListener('abort', done, { once: true })
+  })
+}
+
+// Vite can replace this module without a full page unload. Abort the old
+// async loop so HMR never leaves an orphaned polling timer behind.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    _civitDownloadPollController?.abort()
+    _civitDownloadPollController = null
+    _civitDownloadPollTask = null
+    _civitDownloadPollRequested = false
+    _civitRefreshedCheckpointDownloads.clear()
+    for (const pid of _directorRepairPolls.keys()) {
+      _stopDirectorRepairPoll(pid)
+    }
+    _directorRepairDiscoveries.clear()
+  })
+}
 
 // --- LocalStorage persistence for per-mode settings ---
 const STORAGE_KEY = 'maestro_mode_settings'
@@ -62,6 +162,11 @@ interface PersistedModeSettings {
   /** Runtime shape (filename-keyed). The on-disk shape is lora_id-keyed
    *  starting with v1; the persistence layer translates transparently. */
   savedLoraPerMode: Partial<Record<GenerationMode, LoraModeBlob>>
+  /** Per-mode main prompt (lyrics in audio mode). Tracked separately from
+   *  the params snapshot in memory. Still written for shape stability but
+   *  NO LONGER rehydrated on boot — a refresh starts with a clean prompt
+   *  (see the partial-hydration note in loadModels). */
+  savedPromptPerMode?: Partial<Record<GenerationMode, string>>
   /** Snapshot of lora_id → filename captured at last save. Returned by
    *  `_loadSettings` for use in mid-session reconciliation when the fresh
    *  lora map arrives, so we can rewrite filenames that changed since save. */
@@ -222,6 +327,7 @@ function _saveSettings(
         selectedModelPerMode: state.selectedModelPerMode,
         savedParamsPerMode: sanitizedParamsPerMode,
         savedLoraPerMode: translatedPerMode,
+        savedPromptPerMode: state.savedPromptPerMode,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
     } else {
@@ -259,6 +365,7 @@ function _loadSettings(): PersistedModeSettings | null {
         // ghost references.
         savedParamsPerMode: _stripEphemeralParams(parsed.savedParamsPerMode || {}),
         savedLoraPerMode: translated,
+        savedPromptPerMode: parsed.savedPromptPerMode || {},
         _loraFilenameSnapshot: snapshot,
       }
     }
@@ -303,7 +410,58 @@ const _PRIMARY_MODEL_DEFAULT_FIELDS: ReadonlyArray<string> = [
   'sample_solver',
   'embedded_guidance_scale',
   'audio_guidance_scale',
+  // Perturbation config for the STG slider. These are inert unless
+  // perturbation_switch === 2, which startGeneration derives from the
+  // STG slider — the server-side fallback layers ([9]) are wrong for
+  // LTX-2 22B (needs [28] from the model's settings file), so the
+  // model-correct values must ride along with the request.
+  // Deliberately NOT copied: perturbation_switch and stg_scale — older
+  // generated settings files carry perturbation_switch: 2 / stg_scale: 1.0
+  // from the settings-file era, and copying them would silently re-enable
+  // STG on every generation.
+  'perturbation_layers',
+  'perturbation_start_perc',
+  'perturbation_end_perc',
+  // Default state of the Reference Pipeline toggle (10Eros defs set it to
+  // true). Only copied when the model's settings carry the key, so models
+  // without it keep whatever the user last chose — and startGeneration
+  // strips it for models that lack the capability anyway. Unchecking the
+  // toggle holds until the model is re-selected, same as steps/guidance.
+  'reference_pipeline',
+  // LM sampling knobs for the ACE-Step 1.5 family (and other LM-staged
+  // audio models). Their handlers seed tuned values (temperature 0.85,
+  // top_p 0.9, top_k off, LM CFG 2.5); without hydration the UI showed
+  // and SENT its generic temperature 1.0. Only models whose defaults
+  // carry these keys are affected — video model settings don't include
+  // them, so nothing changes there.
+  'temperature',
+  'top_p',
+  'top_k',
+  'alt_guidance_scale',
+  // Sliding-window geometry. The UI only writes sliding_window_size when
+  // the user touches the Advanced slider, so without hydration a request
+  // carries NO window size and the backend inherits one from unrelated
+  // primary settings — SCAIL-2 (window default 81) then ran a 10s
+  // generation as a single 160-frame window and overflowed VRAM at
+  // resolutions that fit fine per-window. LTX-2's defaults carry 481
+  // (~19s), so typical LTX generations stay single-window as before.
+  'sliding_window_size',
+  'sliding_window_overlap',
+  // Control-video coupling for the SCAIL-2 / Wan-Animate class:
+  // force_fps "control" makes the output follow the guide video's frame
+  // rate (user-reported: 25fps source came out 16fps without it), and
+  // audio_prompt_type "R" remuxes the guide's audio track into the
+  // output (user-reported: outputs were silent). Only the scail2 model
+  // settings carry force_fps; every other model's audio_prompt_type
+  // defaults to "" which matches the UI default, so nothing changes
+  // elsewhere.
+  'force_fps',
+  'audio_prompt_type',
 ]
+
+// Monotonic sequence for loadModelOptions staleness detection — only the
+// most recently requested model's options may touch the store.
+let _modelOptionsSeq = 0
 
 function _applyModelDefaults(
   storeGet: () => { selectedModelPerMode: Partial<Record<GenerationMode, string>>; generationMode: GenerationMode; params: GenerateParams },
@@ -335,6 +493,7 @@ const familyModeMap: Record<string, GenerationMode> = {
   flux2: 'image',
   qwen: 'image',
   z_image: 'image',
+  krea2: 'image',
   hidream: 'image',
   wan: 'video',
   wan2_2: 'video',
@@ -371,6 +530,9 @@ const videoEditModelTypes = new Set([
   'chrono_edit_distill',
   'lucy_edit_fastwan',
   'lucy_edit_fastwan_1_1',
+  // Dedicated to Edit → Recast; the general SCAIL Fast profile remains in
+  // Studio Video/Animate.
+  'scail2_14B_recast_fast',
 ])
 
 // Audio sub-families: split the single "tts" family into Speech, Music, SFX
@@ -380,18 +542,20 @@ const audioSubFamilies: ModelFamily[] = [
   { id: 'tts_sfx', label: 'Sound Effects', order: 202 },
 ]
 
-// Model types that belong to the Music sub-family (everything else in tts → Speech)
-const musicModelTypes = new Set([
-  'ace_step_v1',
-  'ace_step_v1_5',
-  'ace_step_v1_5_turbo_lm_0_6b',
-  'ace_step_v1_5_turbo_lm_1_7b',
-  'ace_step_v1_5_turbo_lm_4b',
-  'ace_step_v1_5_xl',
-  'ace_step_v1_5_xl_turbo_lm_4b',
-  'heartmula_oss_3b',
-  'heartmula_rl_oss_3b_20260123',
-])
+// Model types that belong to the Music sub-family (everything else in
+// tts → Speech). Membership is prefix-based for the known music model
+// lines so newly added variants (e.g. new ACE-Step checkpoints)
+// classify correctly without touching this file — the XL SFT models
+// were invisible in the Music group because an id list here missed
+// them. Keep the explicit set for one-off ids that don't share a
+// prefix with their line.
+const musicModelTypes = new Set<string>([])
+const musicModelPrefixes = ['ace_step', 'heartmula']
+
+function isMusicModelType(modelType: string): boolean {
+  if (musicModelTypes.has(modelType)) return true
+  return musicModelPrefixes.some(p => modelType.startsWith(p))
+}
 
 // Model types that belong to the SFX sub-family (MMAudio variants)
 const sfxModelTypes = new Set([
@@ -421,11 +585,14 @@ const HUNYUAN3D_MODEL_TYPES = [
 // Default enabled models (shown by default in selectors)
 const DEFAULT_ENABLED_MODELS = new Set([
   // Image
-  // Only Flux 2 Klein is enabled by default. Qwen Image Edit and
-  // other image models stay available via Settings → System → Model
-  // Visibility but are off by default to keep the first-launch
-  // picker focused.
+  // Keep the general-purpose Flux default plus the complete Krea 2 family:
+  // base RAW/Turbo generation and their identity-preserving Edit variants.
+  // Other image models remain opt-in through Model Visibility.
   'flux2_klein_9b',
+  'krea2_raw',
+  'krea2_turbo',
+  'krea2_raw_edit',
+  'krea2_turbo_edit',
   // Video
   // Default to just the LTX-2.3 Distilled 1.1 22B checkpoint (newer /
   // better quality). The FP8 build and every other video model
@@ -433,6 +600,12 @@ const DEFAULT_ENABLED_MODELS = new Set([
   // Settings → System → Model Visibility but off by default so the
   // first-launch picker isn't overwhelming.
   'ltx2_22B_distilled_1_1',
+  // SCAIL-2 character animation (Animate a character with a control
+  // video). Fast = lightx2v distill bundled (6 steps, no CFG, ~13x).
+  'scail2_14B',
+  'scail2_14B_fast',
+  'scail2_14B_recast_fast',
+  // MiniMax H3 Base: text, first/last-frame video, and native stereo audio.
   'minimax_h3',
   // Audio — Speech
   'kugelaudio_0_open',
@@ -443,6 +616,8 @@ const DEFAULT_ENABLED_MODELS = new Set([
   'ace_step_v1_5_turbo_lm_4b',
   'ace_step_v1_5_xl',
   'ace_step_v1_5_xl_turbo_lm_4b',
+  'ace_step_v1_5_xl_sft',
+  'ace_step_v1_5_xl_sft_lm_4b',
   // Audio — SFX
   'mmaudio_v2',
   'mmaudio_nsfw',
@@ -450,14 +625,64 @@ const DEFAULT_ENABLED_MODELS = new Set([
   'animate',
 ])
 
+/* Version of the curated defaults list above. enabledModels is a stored
+ * whitelist, so existing installs never re-read DEFAULT_ENABLED_MODELS —
+ * without this, entries added to the curated list in an update stay
+ * invisible for everyone who ever opened the app before. Bump the
+ * version when adding entries and list them under that version below:
+ * they get merged into existing installs' whitelists exactly ONCE, so
+ * a user who then disables them stays disabled forever. (This is
+ * deliberately narrower than auto-enabling every unknown model — only
+ * the curated list's own additions are pushed.) */
+const DEFAULTS_VERSION = 6
+const DEFAULTS_ADDED_IN: Record<number, string[]> = {
+  // v1.2.0: the ACE-Step XL SFT pair; LM_4B becomes the music default.
+  2: ['ace_step_v1_5_xl_sft', 'ace_step_v1_5_xl_sft_lm_4b'],
+  // v1.3.0: SCAIL-2 character animation, base + lightx2v-distilled Fast.
+  3: ['scail2_14B', 'scail2_14B_fast'],
+  // Dedicated Recast recipe: native replacement + official I2V LightX point.
+  4: ['scail2_14B_recast_fast'],
+  // Krea 2 image generation + identity-preserving image editing.
+  5: ['krea2_raw', 'krea2_turbo', 'krea2_raw_edit', 'krea2_turbo_edit'],
+  // MiniMax H3 Base native audio-video generation.
+  6: ['minimax_h3'],
+}
+const DEFAULTS_VERSION_KEY = 'maestro_defaults_version'
+
+/* The music default changed in v1.2.0 (Turbo LM_4B -> SFT LM_4B).
+ * A saved selection equal to the OLD default means the user was riding
+ * the default rather than expressing a preference — follow them to the
+ * new one, once, at the same version transition. Users who picked any
+ * other model keep their choice. */
+const OLD_MUSIC_DEFAULT = 'ace_step_v1_5_xl_turbo_lm_4b'
+const NEW_MUSIC_DEFAULT = 'ace_step_v1_5_xl_sft_lm_4b'
+
 const ENABLED_MODELS_KEY = 'maestro_enabled_models'
 const HUNYUAN3D_VISIBILITY_MIGRATION_KEY = 'maestro_hunyuan3d_visibility_v2'
 const MINIMAX_H3_VISIBILITY_MIGRATION_KEY = 'maestro_minimax_h3_visibility_v1'
+let _initializedMatureModels = new Set<string>()
+let _modelVisibilityHydrated = false
+let _modelVisibilityDefaultsVersion = 1
+let _modelVisibilitySaveTask: Promise<void> = Promise.resolve()
 
 function _saveEnabledModels(models: Set<string>) {
   try {
     localStorage.setItem(ENABLED_MODELS_KEY, JSON.stringify([...models]))
   } catch { /* quota exceeded */ }
+  const payload = {
+    enabled_models: [...models],
+    initialized_mature_models: [..._initializedMatureModels],
+    defaults_version: _modelVisibilityDefaultsVersion,
+  }
+  _modelVisibilitySaveTask = _modelVisibilitySaveTask
+    .catch(() => { /* a later save should still run */ })
+    .then(async () => {
+      try {
+        await api.updateModelVisibility(payload)
+      } catch (error) {
+        console.warn('Failed to persist model visibility:', error)
+      }
+    })
 }
 
 function _loadEnabledModels(): Set<string> | null {
@@ -486,6 +711,40 @@ function _loadEnabledModels(): Set<string> | null {
   return null
 }
 
+function _markMatureModelsInitialized(
+  models: ModelDef[],
+  modelTypes?: Iterable<string>,
+) {
+  const requested = modelTypes ? new Set(modelTypes) : null
+  for (const model of models) {
+    if (
+      model.nsfw_only
+      && (requested == null || requested.has(model.model_type))
+    ) {
+      _initializedMatureModels.add(model.model_type)
+    }
+  }
+}
+
+function _enableUninitializedMatureModels(
+  models: ModelDef[],
+  enabledModels: Set<string>,
+): Set<string> | null {
+  const next = new Set(enabledModels)
+  let changed = false
+  for (const model of models) {
+    if (
+      model.nsfw_only
+      && !_initializedMatureModels.has(model.model_type)
+    ) {
+      _initializedMatureModels.add(model.model_type)
+      next.add(model.model_type)
+      changed = true
+    }
+  }
+  return changed ? next : null
+}
+
 // Default model_type per generation mode
 const modeDefaultModel: Record<GenerationMode, string> = {
   image: 'flux2_klein_9b',
@@ -507,10 +766,14 @@ export function getModelMode(modelType: string, familyId: string): GenerationMod
   return getFamilyMode(familyId)
 }
 
-export function getFamiliesForMode(mode: GenerationMode, allFamilies: ModelFamily[], _editSubMode?: string, audioSubMode?: string): ModelFamily[] {
+export function getFamiliesForMode(mode: GenerationMode, allFamilies: ModelFamily[], editSubMode?: string, audioSubMode?: string): ModelFamily[] {
   if (mode === 'tools') return []
   if (mode === 'avatar') {
-    // All edit sub-modes (retake, inpaint, restyle) use LTX models
+    // Recast and Repaint run on SCAIL-2, which lives under the Wan 2.1
+    // family. The remaining edit sub-modes use LTX models.
+    if (editSubMode === 'recast' || editSubMode === 'restyle') {
+      return allFamilies.filter(f => f.id === 'wan')
+    }
     return allFamilies.filter(f => f.id === 'ltx2' || f.id === 'ltxv')
   }
   if (mode === 'audio') {
@@ -525,12 +788,12 @@ export function getFamiliesForMode(mode: GenerationMode, allFamilies: ModelFamil
 }
 
 /** Get models for a family ID, optionally filtered by generation mode */
-export function getModelsForFamily(familyId: string, allModels: ModelDef[], mode?: GenerationMode): ModelDef[] {
+export function getModelsForFamily(familyId: string, allModels: ModelDef[], mode?: GenerationMode, editSubMode?: string): ModelDef[] {
   if (familyId === 'tts_speech') {
-    return allModels.filter(m => m.family === 'tts' && !musicModelTypes.has(m.model_type) && !sfxModelTypes.has(m.model_type))
+    return allModels.filter(m => m.family === 'tts' && !isMusicModelType(m.model_type) && !sfxModelTypes.has(m.model_type))
   }
   if (familyId === 'tts_music') {
-    return allModels.filter(m => m.family === 'tts' && musicModelTypes.has(m.model_type))
+    return allModels.filter(m => m.family === 'tts' && isMusicModelType(m.model_type))
   }
   if (familyId === 'tts_sfx') {
     return allModels.filter(m => m.family === 'tts' && sfxModelTypes.has(m.model_type))
@@ -538,7 +801,22 @@ export function getModelsForFamily(familyId: string, allModels: ModelDef[], mode
   const familyModels = allModels.filter(m => m.family === familyId)
   // When mode is specified and the family spans multiple modes, filter to matching models
   if (mode === 'avatar') {
-    // All edit sub-modes use LTX video models
+    // Recast exposes its dedicated native-replacement Fast recipe plus HQ.
+    if (editSubMode === 'recast') {
+      return familyModels.filter(m =>
+        m.model_type === 'scail2_14B_recast_fast'
+        || m.model_type === 'scail2_14B'
+      )
+    }
+    // Repaint intentionally mirrors Studio Video/Frames SCAIL Animate:
+    // the edited first frame is the primary image and the source video
+    // supplies motion/camera movement.
+    if (editSubMode === 'restyle') {
+      return familyModels.filter(m =>
+        m.model_type === 'scail2_14B_fast'
+        || m.model_type === 'scail2_14B'
+      )
+    }
     return familyModels.filter(m => !avatarModelTypes.has(m.model_type) && !videoEditModelTypes.has(m.model_type))
   }
   if (mode === 'video') {
@@ -552,10 +830,24 @@ export function getModelsForFamily(familyId: string, allModels: ModelDef[], mode
 export function getDisplayFamily(model: ModelDef): string {
   if (model.family === 'tts') {
     if (sfxModelTypes.has(model.model_type)) return 'tts_sfx'
-    if (musicModelTypes.has(model.model_type)) return 'tts_music'
+    if (isMusicModelType(model.model_type)) return 'tts_music'
     return 'tts_speech'
   }
   return model.family
+}
+
+// Transient: the LTX model selected before entering either SCAIL-2 edit
+// workflow, so leaving Recast/Repaint restores the user's prior edit model.
+let _preScail2AvatarModel = ''
+
+const DEFAULT_RECAST_MAPPING: RecastCharacterMapping = {
+  id: 'recast-a',
+  target: 'person',
+  refFile: null,
+  refPath: '',
+  refUrl: '',
+  additionalRefs: [],
+  referenceAlignedToSource: false,
 }
 
 function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], models: ModelDef[]): string {
@@ -622,6 +914,44 @@ interface AppState {
    *  man" effect). */
   editAnythingStartAnchor: string | null
   editAnythingEndAnchor: string | null
+  /** SCAIL-2 Repaint edited first frame (uploaded or returned from Image mode). */
+  editRepaintFrameFile: File | null
+  editRepaintFramePath: string
+  editRepaintFrameUrl: string
+  /** Optional source-video → edited-frame semantic correspondences. */
+  editRepaintMappings: RepaintRegionMapping[]
+  /** Spatial quality profile shared with Recast's SCAIL-2 canvas logic. */
+  editRepaintResolutionProfile: ScailResolutionProfile
+  setEditRepaintFrame: (file: File | null, path: string, url: string) => void
+  setEditRepaintMappings: (mappings: RepaintRegionMapping[]) => void
+  /** Recast (SCAIL-2 Replace): who to swap out, as a SAM3 keyword. */
+  editRecastTarget: string
+  /** Number of matching people to track and replace (SCAIL-2 supports 1-5). */
+  editRecastPersonCount: number
+  /** Recast reference character image (uploaded path + preview URL). */
+  editRecastRefFile: File | null
+  editRecastRefPath: string
+  editRecastRefUrl: string
+  /** Explicit source-person → replacement mappings in stable SCAIL color order. */
+  editRecastMappings: RecastCharacterMapping[]
+  setEditRecastMappings: (mappings: RecastCharacterMapping[]) => void
+  /** True when the reference preserves the selected source frame's layout. */
+  editRecastRefAligned: boolean
+  /** Remove unrelated reference scenery before SCAIL-2 encodes identity. */
+  editRecastIsolateReference: boolean
+  /** Derive a tighter same-character identity view when none is supplied. */
+  editRecastAutoFaceDetail: boolean
+  /** Rewrite and append Maestro's Recast identity/scene prompt guidance. */
+  editRecastEnhancePrompt: boolean
+  /** Strict source-pixel composite outside the tracked Recast target. */
+  editRecastProtectBystanders: boolean
+  /** Native SCAIL-2 color mapping for other visible identities. */
+  editRecastPreserveBystanders: boolean
+  /** Apply the official SCAIL-2 replacement Relighting LoRA. */
+  editRecastUseRelighting: boolean
+  /** Spatial quality profile, independent from the selected SCAIL-2 model. */
+  editRecastResolutionProfile: ScailResolutionProfile
+  setEditRecastRef: (file: File | null, path: string, url: string, aligned?: boolean) => void
   /** Round-trip marker for the "Edit Anchor in Image Mode" workflow.
    *  Populated when the user clicks "Edit Start" or "Edit End" on a
    *  boundary anchor slot. A banner at the top of the sidebar lets them
@@ -631,7 +961,7 @@ interface AppState {
    *  the user does them sequentially. */
   editReturnTarget: {
     /** Which anchor slot we're populating on return. */
-    anchor: 'start' | 'end'
+    anchor: 'start' | 'end' | 'recast' | 'repaint'
     /** The pre-extracted source frame at the corresponding trim handle.
      *  This is the frame the user is editing in Image mode; if they
      *  cancel without applying, no anchor is set and the model falls
@@ -653,9 +983,9 @@ interface AppState {
    *  sidebar to Studio Image mode (using the proper setGenerationMode
    *  so the model + LoRA + image-mode params all swap correctly) with
    *  that frame loaded as image_start. */
-  sendFrameToImageMode: (which: 'start' | 'end') => Promise<void>
-  /** Apply the latest Image-mode output as the anchor named by
-   *  editReturnTarget.anchor, then return to Edit Anything mode. */
+  sendFrameToImageMode: (which: 'start' | 'end' | 'recast' | 'repaint') => Promise<void>
+  /** Apply the latest Image-mode output to the requested anchor/reference,
+   *  then return to Edit Anything or Recast. */
   applyOutputAsAnchor: () => Promise<void>
   /** Skip applying — return to Edit Anything with the anchor unset
    *  (model will fall back to source-extracted frame at generation time,
@@ -750,6 +1080,10 @@ interface AppState {
   setOutpaintSourcePreservation: (v: number) => void
   outpaintLoraStrength: number
   setOutpaintLoraStrength: (v: number) => void
+  // Official LTX-2.3 binary-mask conditioning plus multiscale source blend.
+  // Enabled by default; false keeps the legacy black-sentinel path for A/B.
+  outpaintMaskPreserving: boolean
+  setOutpaintMaskPreserving: (v: boolean) => void
   outpaintPreserveSourceAudio: boolean
   setOutpaintPreserveSourceAudio: (v: boolean) => void
   // Lock source pixels: composite original source clip back into the source
@@ -805,11 +1139,14 @@ interface AppState {
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
 
-  // Theme — see lib/theme.ts. Persisted to localStorage; an inline
-  // script in index.html applies the persisted theme to <html>
-  // BEFORE React mounts to avoid a flash of the default theme.
-  theme: ThemeId
-  setTheme: (theme: ThemeId) => void
+  // Theme — see lib/theme.ts. Two-dimensional: a dark/light/auto mode
+  // plus a theme family (each family has a dark and a light variant).
+  // Persisted to localStorage; an inline script in index.html applies
+  // the resolved theme to <html> BEFORE React mounts to avoid a flash
+  // of the default theme.
+  themePrefs: ThemePrefs
+  setThemeMode: (mode: ThemeMode) => void
+  setThemeFamily: (family: FamilyId) => void
 
   // Retake Dialog
   retakeDialogOpen: boolean
@@ -827,11 +1164,15 @@ interface AppState {
   loadPipelineList: () => Promise<void>
   loadSavedPipeline: (pid: string) => Promise<void>
   tagClip: (pid: string, clipIndex: number, tag: string | null) => Promise<void>
+  startPipelineRepair: (pid: string) => Promise<PipelineRepairState>
+  cancelPipelineRepair: (pid: string) => Promise<PipelineRepairState>
+  pollPipelineRepair: (pid: string, operationId: string) => void
   rerunClipImage: (pid: string, clipIndex: number, prompt?: string) => Promise<unknown>
   rerunClipVideo: (pid: string, clipIndex: number, prompt?: string) => Promise<unknown>
   rerunH3Segment: (pid: string, clipIndex: number, segmentIndex: number, prompt?: string) => Promise<unknown>
   rejoinPipelineClips: (pid: string) => Promise<unknown>
   resumePipeline: (pid: string) => Promise<void>
+  deletePipeline: (pid: string) => Promise<void>
   loadDirectorFromPipeline: (pid: string) => Promise<void>
 
   // Recipes (one-click Studio presets)
@@ -873,6 +1214,8 @@ interface AppState {
   toggleModelEnabled: (modelType: string) => void
   resetEnabledModels: () => void
   setAllModelsEnabled: (enabled: boolean) => void
+  /** Bulk-toggle a list of models (family-level enable/disable, issue #14). */
+  setModelsEnabled: (modelTypes: string[], enabled: boolean) => void
   // ModelSelector "+N more" hint → open Settings and expand Enabled Models.
   modelVisibilityFocus: GenerationMode | null
   openModelVisibility: (mode: GenerationMode) => void
@@ -895,6 +1238,13 @@ interface AppState {
   setSlidingWindowOverlap: (frames: number) => void
   slidingWindowLocked: boolean
   setSlidingWindowLocked: (locked: boolean) => void
+
+  // Real frame rate of the uploaded guide/control video (probed server-side
+  // at upload). Used by force_fps="control" models (SCAIL-2 class) to
+  // convert durationSeconds to frames at the rate the output will actually
+  // play at, instead of the model's nominal fps.
+  guideVideoFps: number | null
+  setGuideVideoFps: (fps: number | null) => void
 
   // Output count
   outputCount: number
@@ -1084,11 +1434,26 @@ interface AppState {
   selectModel: (modelType: string) => void
 
   // Workspaces
-  workspaces: Array<{ name: string; path: string }>
+  workspaces: Array<{ name: string; path: string; file_count?: number }>
   activeWorkspace: string
+  /** Gallery is showing the virtual "Uploads" view (browse-only — the
+   *  server-side active workspace, and where generations save, is
+   *  untouched). Entered via switchWorkspace('__uploads__'). */
+  browsingUploads: boolean
   loadWorkspaces: () => Promise<void>
   switchWorkspace: (name: string) => Promise<void>
   createWorkspace: (name: string) => Promise<void>
+  deleteWorkspace: (name: string) => Promise<void>
+
+  // Storage Manager overlay
+  storageDashboardOpen: boolean
+  setStorageDashboardOpen: (open: boolean) => void
+
+  // LoRA picker sort order — store-backed (not per-component state) so
+  // simultaneously mounted pickers (e.g. Director's Image + Video
+  // accordions) stay in sync; persisted to localStorage.
+  loraPickerSort: 'name' | 'newest'
+  setLoraPickerSort: (sort: 'name' | 'newest') => void
 
   // Outputs
   outputs: OutputFile[]
@@ -1523,7 +1888,43 @@ export const useStore = create<AppState>((set, get) => ({
   // Generation mode
   generationMode: 'video',
   editSubMode: 'retake' as import('../types').EditSubMode,
-  setEditSubMode: (mode: import('../types').EditSubMode) => set({ editSubMode: mode }),
+  setEditSubMode: (mode: import('../types').EditSubMode) => {
+    const s = get()
+    const prev = s.editSubMode
+    set({ editSubMode: mode })
+    if (mode === prev || s.generationMode !== 'avatar') return
+    // Recast uses SCAIL-2 Replace; Repaint uses the proven SCAIL-2 Animate
+    // path from Studio Video/Frames. Swap recipes when moving between those
+    // modes and restore the previous LTX edit model when leaving both.
+    const current = (s.params.model_type as string) || ''
+    const isScail2 = (mt: string) => s.models.find(m => m.model_type === mt)?.architecture === 'scail2_14B'
+    const enteringScail2Edit = mode === 'recast' || mode === 'restyle'
+    const leavingScail2Edit = prev === 'recast' || prev === 'restyle'
+    if (enteringScail2Edit) {
+      const valid = mode === 'recast'
+        ? current === 'scail2_14B_recast_fast' || current === 'scail2_14B'
+        : current === 'scail2_14B_fast' || current === 'scail2_14B'
+      if (!valid) {
+        if (!leavingScail2Edit && !isScail2(current)) {
+          _preScail2AvatarModel = current
+        }
+        const preferred = mode === 'recast'
+          ? 'scail2_14B_recast_fast'
+          : 'scail2_14B_fast'
+        const target = s.models.some(m => m.model_type === preferred)
+          ? preferred
+          : s.models.some(m => m.model_type === 'scail2_14B')
+            ? 'scail2_14B'
+            : undefined
+        if (target) get().selectModel(target)
+      }
+    } else if (leavingScail2Edit && isScail2(current)) {
+      const restore = _preScail2AvatarModel && s.models.some(m => m.model_type === _preScail2AvatarModel)
+        ? _preScail2AvatarModel
+        : getDefaultModelForMode('avatar', s.families, s.models)
+      if (restore) get().selectModel(restore)
+    }
+  },
   editVideoPath: '',
   editVideoUrl: '',
   editVideoFile: null,
@@ -1536,10 +1937,62 @@ export const useStore = create<AppState>((set, get) => ({
   editAnythingLoraStrength: 1.0,
   editAnythingStartAnchor: null,
   editAnythingEndAnchor: null,
+  editRepaintFrameFile: null,
+  editRepaintFramePath: '',
+  editRepaintFrameUrl: '',
+  editRepaintMappings: [],
+  editRepaintResolutionProfile: '480p',
+  setEditRepaintFrame: (file, path, url) => set({
+    editRepaintFrameFile: file,
+    editRepaintFramePath: path,
+    editRepaintFrameUrl: url,
+  }),
+  setEditRepaintMappings: mappings => set({
+    editRepaintMappings: mappings.slice(0, 5),
+  }),
+  editRecastTarget: 'person',
+  editRecastPersonCount: 1,
+  editRecastRefFile: null,
+  editRecastRefPath: '',
+  editRecastRefUrl: '',
+  editRecastMappings: [{ ...DEFAULT_RECAST_MAPPING }],
+  editRecastRefAligned: false,
+  editRecastIsolateReference: true,
+  editRecastAutoFaceDetail: true,
+  editRecastEnhancePrompt: false,
+  editRecastProtectBystanders: false,
+  editRecastPreserveBystanders: true,
+  editRecastUseRelighting: false,
+  editRecastResolutionProfile: '480p',
+  setEditRecastMappings: mappings => set({
+    editRecastMappings: mappings,
+    editRecastTarget: mappings[0]?.target || 'person',
+    editRecastPersonCount: Math.min(5, Math.max(1, mappings.length || 1)),
+    editRecastRefFile: mappings[0]?.refFile || null,
+    editRecastRefPath: mappings[0]?.refPath || '',
+    editRecastRefUrl: mappings[0]?.refUrl || '',
+    editRecastRefAligned: mappings[0]?.referenceAlignedToSource === true,
+  }),
+  setEditRecastRef: (file, path, url, aligned = false) => set(s => ({
+    editRecastRefFile: file,
+    editRecastRefPath: path,
+    editRecastRefUrl: url,
+    editRecastRefAligned: aligned,
+    editRecastMappings: [
+      {
+        ...(s.editRecastMappings[0] || DEFAULT_RECAST_MAPPING),
+        refFile: file,
+        refPath: path,
+        refUrl: url,
+        referenceAlignedToSource: aligned,
+      },
+      ...s.editRecastMappings.slice(1),
+    ],
+  })),
   editReturnTarget: null,
   setEditAnythingStartAnchor: (path: string | null) => set({ editAnythingStartAnchor: path }),
   setEditAnythingEndAnchor: (path: string | null) => set({ editAnythingEndAnchor: path }),
-  sendFrameToImageMode: async (which: 'start' | 'end') => {
+  sendFrameToImageMode: async (which: 'start' | 'end' | 'recast' | 'repaint') => {
     const state = get()
     const clipPath = state.editVideoPath
     if (!clipPath) {
@@ -1562,20 +2015,30 @@ export const useStore = create<AppState>((set, get) => ({
     // Decide which timestamp to grab. End frame is one frame INSIDE the
     // exclusive end (at -0.04s = ~one frame at 25fps) so it matches what
     // the retake pipeline will pin during inference.
-    const tStart = which === 'start' ? startTime : Math.max(0, endTime - 0.04)
+    const tStart = which === 'end' ? Math.max(0, endTime - 0.04) : startTime
     try {
-      const res = await fetch('/api/v1/extract-frames', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          video_path: clipPath,
-          ...(which === 'start' ? { start_time: tStart } : { end_time: tStart }),
-        }),
-      })
-      if (!res.ok) throw new Error(`extract-frames failed: ${res.status}`)
-      const data = await res.json()
-      const framePath = (which === 'start' ? data.start_path : data.end_path) as string
-      const frameUrl = (which === 'start' ? data.start_url : data.end_url) as string
+      let framePath = ''
+      let frameUrl = ''
+      // Repaint can refine its existing edited frame. The first trip starts
+      // from the source trim frame; later trips start from the applied result.
+      if (which === 'repaint' && state.editRepaintFramePath) {
+        framePath = state.editRepaintFramePath
+        const frameName = framePath.replace(/\\/g, '/').split('/').pop() || ''
+        frameUrl = state.editRepaintFrameUrl || api.getFileUrl(frameName)
+      } else {
+        const res = await fetch('/api/v1/extract-frames', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            video_path: clipPath,
+            ...(which === 'end' ? { end_time: tStart } : { start_time: tStart }),
+          }),
+        })
+        if (!res.ok) throw new Error(`extract-frames failed: ${res.status}`)
+        const data = await res.json()
+        framePath = (which === 'end' ? data.end_path : data.start_path) as string
+        frameUrl = (which === 'end' ? data.end_url : data.start_url) as string
+      }
 
       // Use setGenerationMode rather than poking generationMode directly.
       // This is the proper switch — it picks the right model for image
@@ -1592,7 +2055,7 @@ export const useStore = create<AppState>((set, get) => ({
       // own useEffect picks the right imageRefType when imageRefs goes
       // from empty to populated; we leave that to it.
       const blob = await fetch(frameUrl).then(r => r.blob())
-      const file = new File([blob], `${which}_frame.png`, { type: 'image/png' })
+      const file = new File([blob], `${which}_frame.png`, { type: blob.type || 'image/png' })
       set(s => ({
         // Replace any pre-existing refs with just our extracted frame
         // for the duration of the round-trip. Restored from the
@@ -1632,7 +2095,30 @@ export const useStore = create<AppState>((set, get) => ({
     // gallery name is enough.
     const outputPath = latestImage.name
 
-    if (target.anchor === 'start') {
+    if (target.anchor === 'recast') {
+      set(s => ({
+        editRecastRefFile: null,
+        editRecastRefPath: outputPath,
+        editRecastRefUrl: latestImage.url,
+        editRecastRefAligned: true,
+        editRecastMappings: [
+          {
+            ...(s.editRecastMappings[0] || DEFAULT_RECAST_MAPPING),
+            refFile: null,
+            refPath: outputPath,
+            refUrl: latestImage.url,
+            referenceAlignedToSource: true,
+          },
+          ...s.editRecastMappings.slice(1),
+        ],
+      }))
+    } else if (target.anchor === 'repaint') {
+      set({
+        editRepaintFrameFile: null,
+        editRepaintFramePath: outputPath,
+        editRepaintFrameUrl: latestImage.url,
+      })
+    } else if (target.anchor === 'start') {
       set({ editAnythingStartAnchor: outputPath })
     } else {
       set({ editAnythingEndAnchor: outputPath })
@@ -1643,7 +2129,11 @@ export const useStore = create<AppState>((set, get) => ({
     // swap so they land back on their video model with the right LoRAs.
     get().setGenerationMode('avatar')
     set({
-      editSubMode: 'edit_anything',
+      editSubMode: target.anchor === 'recast'
+        ? 'recast'
+        : target.anchor === 'repaint'
+          ? 'restyle'
+          : 'edit_anything',
       editReturnTarget: null,
       imageRefs: target.savedImageRefs,
       imageRefType: target.savedImageRefType,
@@ -1656,7 +2146,11 @@ export const useStore = create<AppState>((set, get) => ({
     const target = get().editReturnTarget
     get().setGenerationMode('avatar')
     set({
-      editSubMode: 'edit_anything',
+      editSubMode: target?.anchor === 'recast'
+        ? 'recast'
+        : target?.anchor === 'repaint'
+          ? 'restyle'
+          : 'edit_anything',
       editReturnTarget: null,
       ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
     })
@@ -1665,7 +2159,11 @@ export const useStore = create<AppState>((set, get) => ({
     const target = get().editReturnTarget
     get().setGenerationMode('avatar')
     set({
-      editSubMode: 'edit_anything',
+      editSubMode: target?.anchor === 'recast'
+        ? 'recast'
+        : target?.anchor === 'repaint'
+          ? 'restyle'
+          : 'edit_anything',
       editReturnTarget: null,
       ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
     })
@@ -1748,6 +2246,8 @@ export const useStore = create<AppState>((set, get) => ({
   setOutpaintSourcePreservation: (v) => set({ outpaintSourcePreservation: v }),
   outpaintLoraStrength: 1.0,
   setOutpaintLoraStrength: (v) => set({ outpaintLoraStrength: v }),
+  outpaintMaskPreserving: true,
+  setOutpaintMaskPreserving: (v) => set({ outpaintMaskPreserving: v }),
   outpaintPreserveSourceAudio: true,
   setOutpaintPreserveSourceAudio: (v) => set({ outpaintPreserveSourceAudio: v }),
   outpaintLockSourcePixels: false,  // default OFF — visible rectangle seam outweighs benefit
@@ -1783,7 +2283,9 @@ export const useStore = create<AppState>((set, get) => ({
     // Determine model for target sub-mode
     const audioSubModeDefaults: Record<import('../types').AudioSubMode, string> = {
       speech: 'kugelaudio_0_open',
-      music: 'ace_step_v1_5_xl_turbo_lm_4b',
+      // XL SFT LM_4B: the premium CFG variant + strongest LM — the
+      // quality default. Turbo variants remain enabled for speed.
+      music: 'ace_step_v1_5_xl_sft_lm_4b',
       sfx: 'mmaudio_v2',
       mixer: '',  // Mixer doesn't use a model — it's an ffmpeg-based tool
     }
@@ -1830,7 +2332,7 @@ export const useStore = create<AppState>((set, get) => ({
         savedLoraPerMode: savedLoras,
         savedPromptPerMode: savedPrompts,
       })
-      _saveSettings({ generationMode: prev, selectedModelPerMode: savedModels, savedParamsPerMode: savedParams, savedLoraPerMode: savedLoras }, s.loraIdByFilename)
+      _saveSettings({ generationMode: prev, selectedModelPerMode: savedModels, savedParamsPerMode: savedParams, savedLoraPerMode: savedLoras, savedPromptPerMode: savedPrompts }, s.loraIdByFilename)
       return
     }
     const { families, models, generationMode: prevMode, params, selectedModelPerMode, savedLoraPerMode, savedParamsPerMode, loraWeights, availableLoras, savedPromptPerMode } = get()
@@ -1947,6 +2449,7 @@ export const useStore = create<AppState>((set, get) => ({
       selectedModelPerMode: savedModels,
       savedParamsPerMode: savedParams,
       savedLoraPerMode: savedLoras,
+      savedPromptPerMode: savedPrompts,
     }, get().loraIdByFilename)
   },
 
@@ -2032,18 +2535,20 @@ export const useStore = create<AppState>((set, get) => ({
         set({ clips: [], singlePromptMode: false })
       }
     }
-    // Persist the changed param to the current mode's snapshot so
-    // it survives a mode switch + return AND is restored across page
-    // reloads. Skip keys that are tracked in their own per-mode
-    // structures (model_type, prompt, LoRA fields) to avoid double-
-    // bookkeeping. Everything else — repeat_generation, negative_prompt,
+    // Snapshot the changed param into the current mode's IN-MEMORY
+    // record so it survives a mode switch + return within this session.
+    // Skip keys that are tracked in their own per-mode structures
+    // (model_type, prompt, LoRA fields) to avoid double-bookkeeping.
+    // Everything else — repeat_generation, negative_prompt,
     // num_inference_steps, video_prompt_type, video_guide, image_refs,
     // frames_positions, MMAudio_*, etc. — gets snapshotted here.
     //
-    // The previous version only persisted 4 specific keys, which meant
-    // settings like repeat_generation leaked between modes (set 10 in
-    // image, switch to video, video also tries to make 10) AND were
-    // lost across reloads. This generic version eliminates both bugs.
+    // Deliberately NOT written to localStorage: a page refresh starts
+    // the working state (prompt, seed, LoRA selection, Advanced values)
+    // from the model's defaults. v1.2.0 persisted every edit across
+    // refreshes and users found the stale text/seeds surprising —
+    // in-session mode-switch persistence is the wanted behavior,
+    // refresh is a clean slate (see loadModels).
     if (key !== 'model_type' && key !== 'prompt' && key !== 'activated_loras' && key !== 'loras_multipliers') {
       const s = get()
       const mode = s.generationMode
@@ -2057,15 +2562,11 @@ export const useStore = create<AppState>((set, get) => ({
         },
       }
       set({ savedParamsPerMode: updatedSavedParams })
-      _saveSettings({
-        generationMode: s.generationMode,
-        selectedModelPerMode: s.selectedModelPerMode,
-        savedParamsPerMode: updatedSavedParams,
-        savedLoraPerMode: s.savedLoraPerMode,
-      }, s.loraIdByFilename)
     }
   },
-  setParams: (partial) => set(s => ({ params: { ...s.params, ...partial } })),
+  setParams: (partial) => {
+    set(s => ({ params: { ...s.params, ...partial } }))
+  },
 
   settingsOpen: false,
   toggleSettings: () => set(s => ({ settingsOpen: !s.settingsOpen })),
@@ -2074,13 +2575,21 @@ export const useStore = create<AppState>((set, get) => ({
   toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
-  // Theme — initial value reads from localStorage so it matches what
-  // the inline script in index.html applied to <html>. setTheme writes
-  // both to the DOM and localStorage via applyTheme.
-  theme: getStoredTheme() as ThemeId,
-  setTheme: (theme) => {
-    applyTheme(theme)
-    set({ theme })
+  // Theme — initial value reads from localStorage (with legacy
+  // single-theme migration) so it matches what the inline script in
+  // index.html applied to <html>. The setters write to the DOM and
+  // localStorage via applyThemePrefs, which also installs the OS
+  // scheme listener that makes 'auto' live-switch.
+  themePrefs: getStoredPrefs(),
+  setThemeMode: (mode) => {
+    const prefs = { ...get().themePrefs, mode }
+    applyThemePrefs(prefs)
+    set({ themePrefs: prefs })
+  },
+  setThemeFamily: (family) => {
+    const prefs = { ...get().themePrefs, family }
+    applyThemePrefs(prefs)
+    set({ themePrefs: prefs })
   },
 
   // CivitAI LoRA Browser
@@ -2096,11 +2605,17 @@ export const useStore = create<AppState>((set, get) => ({
   dashboardLoading: false,
   setDashboardOpen: (open) => {
     set({ dashboardOpen: open })
-    if (open) get().loadPipelineList()
+    if (open) {
+      get().loadPipelineList()
+      const selected = get().dashboardSelectedPipeline
+      if (selected) get().loadSavedPipeline(selected.pipeline_id)
+    }
   },
   loadPipelineList: async () => {
+    const loadToken = ++_dashboardPipelineListLoadToken
     try {
       const { pipelines } = await api.fetchPipelineList()
+      if (loadToken !== _dashboardPipelineListLoadToken) return
       set({ dashboardPipelineList: pipelines })
       // Opening Productions should take the user straight back to live work,
       // even if an older production was selected the last time it was open.
@@ -2108,19 +2623,83 @@ export const useStore = create<AppState>((set, get) => ({
       if (active && get().dashboardSelectedPipeline?.pipeline_id !== active.id) {
         await get().loadSavedPipeline(active.id)
       }
+
+      // The repair worker belongs to the server, so a browser reload must
+      // rediscover active operations and resume UI polling without requiring
+      // the Dashboard to be opened first. Keep discovery separate from the
+      // selected pipeline so bootstrapping never opens or changes the overlay.
+      for (const item of pipelines) {
+        if (!item.repair_status || !DIRECTOR_REPAIR_ACTIVE.has(item.repair_status)) continue
+        if (_directorRepairPolls.has(item.id) || _directorRepairDiscoveries.has(item.id)) continue
+
+        const discovery = {}
+        _directorRepairDiscoveries.set(item.id, discovery)
+        void api.fetchSavedPipeline(item.id).then(pipeline => {
+          if (_directorRepairDiscoveries.get(item.id) !== discovery) return
+          if (_directorRepairPolls.has(item.id)) return
+
+          const repair = pipeline.repair
+          if (_repairNeedsPolling(repair)) {
+            get().pollPipelineRepair(item.id, repair!.operation_id)
+            return
+          }
+
+          // The operation may have finished between the list and detail
+          // requests. Reflect that terminal state and refresh newly-created
+          // media instead of waiting for another Dashboard visit.
+          set(s => ({
+            dashboardPipelineList: s.dashboardPipelineList.map(entry =>
+              entry.id === item.id
+                ? { ...entry, repair_status: repair?.status || null }
+                : entry),
+          }))
+          void get().loadOutputs()
+        }).catch(e => {
+          console.warn(`Failed to reconnect Director repair for ${item.id}:`, e)
+        }).finally(() => {
+          if (_directorRepairDiscoveries.get(item.id) === discovery) {
+            _directorRepairDiscoveries.delete(item.id)
+          }
+        })
+      }
     } catch (e) {
+      if (loadToken !== _dashboardPipelineListLoadToken) return
       console.error('Failed to load pipeline list:', e)
     }
   },
   loadSavedPipeline: async (pid) => {
+    const loadToken = ++_dashboardPipelineLoadToken
     set({ dashboardLoading: true })
     try {
       const pipeline = await api.fetchSavedPipeline(pid)
+      if (loadToken !== _dashboardPipelineLoadToken) return
       set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      if (_repairNeedsPolling(pipeline.repair)) {
+        get().pollPipelineRepair(pid, pipeline.repair!.operation_id)
+      }
     } catch (e) {
+      if (loadToken !== _dashboardPipelineLoadToken) return
       console.error('Failed to load pipeline:', e)
       set({ dashboardLoading: false })
     }
+  },
+  deletePipeline: async (pid) => {
+    // Clear the selection AND drop the pid from the list in the same
+    // update: the dashboard's auto-load effect selects pipelineList[0]
+    // whenever selection is null, so a stale list would immediately
+    // re-fetch the pipeline being deleted (re-mounting its <img>/<video>
+    // elements and re-locking the files on Windows).
+    _dashboardPipelineLoadToken += 1
+    _dashboardPipelineListLoadToken += 1
+    set(s => ({
+      dashboardSelectedPipeline: null,
+      dashboardPipelineList: s.dashboardPipelineList.filter(p => p.id !== pid),
+    }))
+    await api.deletePipeline(pid)
+    await get().loadPipelineList()
+    // Pipeline media were gallery items too — refresh the feed.
+    get().loadOutputs()
+    get().loadWorkspaces()
   },
   tagClip: async (pid, clipIndex, tag) => {
     try {
@@ -2138,6 +2717,96 @@ export const useStore = create<AppState>((set, get) => ({
       console.error('Failed to tag clip:', e)
     }
   },
+  startPipelineRepair: async (pid: string) => {
+    const { repair } = await api.startPipelineRepair(pid)
+    set(s => {
+      const dashboardPipelineList = s.dashboardPipelineList.map(item =>
+        item.id === pid ? { ...item, repair_status: repair.status } : item)
+      if (!s.dashboardSelectedPipeline || s.dashboardSelectedPipeline.pipeline_id !== pid) {
+        return { dashboardPipelineList }
+      }
+      return {
+        dashboardPipelineList,
+        dashboardSelectedPipeline: {
+          ...s.dashboardSelectedPipeline,
+          repair,
+        },
+      }
+    })
+    get().pollPipelineRepair(pid, repair.operation_id)
+    return repair
+  },
+  cancelPipelineRepair: async (pid: string) => {
+    const { repair } = await api.cancelPipelineRepair(pid)
+    set(s => {
+      const dashboardPipelineList = s.dashboardPipelineList.map(item =>
+        item.id === pid ? { ...item, repair_status: repair.status } : item)
+      if (!s.dashboardSelectedPipeline || s.dashboardSelectedPipeline.pipeline_id !== pid) {
+        return { dashboardPipelineList }
+      }
+      return {
+        dashboardPipelineList,
+        dashboardSelectedPipeline: {
+          ...s.dashboardSelectedPipeline,
+          repair,
+        },
+      }
+    })
+    get().pollPipelineRepair(pid, repair.operation_id)
+    return repair
+  },
+  pollPipelineRepair: (pid: string, operationId: string) => {
+    const existing = _directorRepairPolls.get(pid)
+    if (existing?.operationId === operationId) return
+    if (existing) _stopDirectorRepairPoll(pid)
+
+    const poll: DirectorRepairPoll = { operationId, timer: null }
+    _directorRepairPolls.set(pid, poll)
+
+    const tick = async () => {
+      if (_directorRepairPolls.get(pid) !== poll) return
+      poll.timer = null
+      try {
+        const pipeline = await api.fetchSavedPipeline(pid)
+        if (_directorRepairPolls.get(pid) !== poll) return
+
+        const repair = pipeline.repair
+        set(s => {
+          const dashboardPipelineList = s.dashboardPipelineList.map(item =>
+            item.id === pid ? { ...item, repair_status: repair?.status || null } : item)
+          if (!s.dashboardSelectedPipeline || s.dashboardSelectedPipeline.pipeline_id !== pid) {
+            return { dashboardPipelineList }
+          }
+          return { dashboardPipelineList, dashboardSelectedPipeline: pipeline }
+        })
+
+        if (repair?.operation_id !== operationId) {
+          _stopDirectorRepairPoll(pid)
+          if (_repairNeedsPolling(repair)) {
+            get().pollPipelineRepair(pid, repair!.operation_id)
+          } else {
+            void get().loadPipelineList()
+            void get().loadOutputs()
+          }
+          return
+        }
+        if (!_repairNeedsPolling(repair)) {
+          _stopDirectorRepairPoll(pid)
+          void get().loadPipelineList()
+          void get().loadOutputs()
+          return
+        }
+      } catch (e) {
+        console.warn(`Director repair poll failed for ${pid}; retrying:`, e)
+      }
+
+      if (_directorRepairPolls.get(pid) === poll) {
+        poll.timer = window.setTimeout(tick, DIRECTOR_REPAIR_POLL_MS)
+      }
+    }
+
+    void tick()
+  },
   rerunClipImage: async (pid: string, clipIndex: number, prompt?: string) => {
     set({ dashboardLoading: true })
     try {
@@ -2145,6 +2814,9 @@ export const useStore = create<AppState>((set, get) => ({
       // Refresh the pipeline to get updated state
       const pipeline = await api.fetchSavedPipeline(pid)
       set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      // New files (rerun clip / rejoin video) land in the outputs folder —
+      // refresh the gallery so they appear without a browser reload.
+      get().loadOutputs()
       return result
     } catch (e) {
       console.error('Re-run image failed:', e)
@@ -2158,6 +2830,9 @@ export const useStore = create<AppState>((set, get) => ({
       const result = await api.rerunClipVideo(pid, clipIndex, prompt)
       const pipeline = await api.fetchSavedPipeline(pid)
       set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      // New files (rerun clip / rejoin video) land in the outputs folder —
+      // refresh the gallery so they appear without a browser reload.
+      get().loadOutputs()
       return result
     } catch (e) {
       console.error('Re-run video failed:', e)
@@ -2185,6 +2860,9 @@ export const useStore = create<AppState>((set, get) => ({
       const result = await api.rejoinPipeline(pid)
       const pipeline = await api.fetchSavedPipeline(pid)
       set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      // New files (rerun clip / rejoin video) land in the outputs folder —
+      // refresh the gallery so they appear without a browser reload.
+      get().loadOutputs()
       return result
     } catch (e) {
       console.error('Rejoin failed:', e)
@@ -2307,6 +2985,7 @@ export const useStore = create<AppState>((set, get) => ({
       model_id: 0, version_id: 0, trained_words: [],
       model_name: lora.filename, images: [],
     })
+    get().pollCivitAIDownloads()
   },
   loadDirectorFromPipeline: async (pid) => {
     try {
@@ -2344,6 +3023,9 @@ export const useStore = create<AppState>((set, get) => ({
   setLoraBrowserOpen: (open, arch) => {
     if (open) {
       set({ loraBrowserOpen: true, loraBrowserArch: arch || null, civitSearchResults: [], civitSearchCursor: null, civitSelectedModel: null })
+      // Adopt downloads started by URL imports, recipes, or another browser
+      // session instead of assuming this store initiated every transfer.
+      get().pollCivitAIDownloads()
     } else {
       set({ loraBrowserOpen: false })
       // Refresh LoRA list after closing (may have downloaded new ones)
@@ -2404,18 +3086,83 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   pollCivitAIDownloads: () => {
+    // Mark every invocation, including calls made while the singleton loop is
+    // awaiting an older request. The active loop consumes this before exit
+    // and takes a new snapshot that was initiated after the caller arrived.
+    _civitDownloadPollRequested = true
+    if (_civitDownloadPollTask) return
+
+    const controller = new AbortController()
+    _civitDownloadPollController = controller
     const poll = async () => {
+      let consecutiveErrors = 0
       try {
-        const { downloads } = await api.fetchCivitAIDownloads()
-        set({ civitDownloads: downloads })
-        if (downloads.some(d => d.status === 'downloading')) {
-          setTimeout(poll, 2000)
+        while (!controller.signal.aborted) {
+          _civitDownloadPollRequested = false
+          try {
+            const { downloads } = await api.fetchCivitAIDownloads()
+            consecutiveErrors = 0
+            set({ civitDownloads: downloads })
+
+            // Checkpoint downloads are registered on the server before their
+            // terminal record is published. Refresh here, in the singleton
+            // poller, so navigating away from ModelDetail cannot skip it and
+            // a Content-Disposition filename change cannot break matching.
+            const completedCheckpoints = downloads.filter(download =>
+              download.status === 'completed'
+              && !!download.model_type
+              && !_civitRefreshedCheckpointDownloads.has(download.id)
+            )
+            if (completedCheckpoints.length > 0) {
+              try {
+                await api.reloadModels()
+                await get().loadModels()
+                completedCheckpoints.forEach(download => {
+                  _civitRefreshedCheckpointDownloads.add(download.id)
+                })
+              } catch (error) {
+                // Keep the IDs unmarked so a later poll retries the refresh.
+                console.warn('Checkpoint model refresh failed; will retry:', error)
+              }
+            }
+
+            // A caller joined while this request was in flight. Its freshness
+            // guarantee requires another request, even when this response has
+            // no active/recent downloads and would normally end the loop.
+            if (_civitDownloadPollRequested) continue
+
+            // Keep taking snapshots while work is active and through the
+            // completed row's 30-second display window. This guarantees a
+            // caller that joins late still observes the terminal record.
+            if (!downloads.some(download => _downloadNeedsPolling(download, Date.now()))) return
+            await _waitForDownloadPoll(CIVIT_DOWNLOAD_POLL_MS, controller.signal)
+          } catch (error) {
+            if (controller.signal.aborted) return
+            consecutiveErrors += 1
+            if (_civitDownloadPollRequested) continue
+            const knownWork = get().civitDownloads.some(download =>
+              _downloadNeedsPolling(download, Date.now())
+            )
+            // Retry transient failures while the browser is open or known
+            // work is active. A background adoption probe gets three retries
+            // before yielding; a later caller can safely start a fresh loop.
+            if (!get().loraBrowserOpen && !knownWork && consecutiveErrors > 3) {
+              console.warn('Download polling paused after repeated errors:', error)
+              return
+            }
+            const retryMs = Math.min(10_000, 1000 * (2 ** Math.min(consecutiveErrors - 1, 3)))
+            await _waitForDownloadPoll(retryMs, controller.signal)
+          }
         }
-      } catch {
-        // silent
+      } finally {
+        if (_civitDownloadPollController === controller) {
+          _civitDownloadPollController = null
+          _civitDownloadPollTask = null
+        }
       }
     }
-    poll()
+
+    _civitDownloadPollTask = poll()
   },
 
   // Models & families
@@ -2424,6 +3171,7 @@ export const useStore = create<AppState>((set, get) => ({
   modelsLoaded: false,
   enabledModels: _loadEnabledModels() ?? new Set(DEFAULT_ENABLED_MODELS),
   toggleModelEnabled: (modelType) => {
+    _markMatureModelsInitialized(get().models, [modelType])
     set(s => {
       const next = new Set(s.enabledModels)
       if (next.has(modelType)) next.delete(modelType)
@@ -2433,11 +3181,13 @@ export const useStore = create<AppState>((set, get) => ({
     })
   },
   resetEnabledModels: () => {
+    _markMatureModelsInitialized(get().models)
     const next = new Set(DEFAULT_ENABLED_MODELS)
     _saveEnabledModels(next)
     set({ enabledModels: next })
   },
   setAllModelsEnabled: (enabled) => {
+    _markMatureModelsInitialized(get().models)
     if (enabled) {
       const all = new Set(get().models.map(m => m.model_type))
       _saveEnabledModels(all)
@@ -2447,6 +3197,18 @@ export const useStore = create<AppState>((set, get) => ({
       _saveEnabledModels(empty)
       set({ enabledModels: empty })
     }
+  },
+  setModelsEnabled: (modelTypes, enabled) => {
+    _markMatureModelsInitialized(get().models, modelTypes)
+    set(s => {
+      const next = new Set(s.enabledModels)
+      for (const mt of modelTypes) {
+        if (enabled) next.add(mt)
+        else next.delete(mt)
+      }
+      _saveEnabledModels(next)
+      return { enabledModels: next }
+    })
   },
   // Open Settings → Performance and ask the Enabled Models section to
   // expand + scroll to the given mode (fired by the ModelSelector hint).
@@ -2463,7 +3225,16 @@ export const useStore = create<AppState>((set, get) => ({
       // /api/v1/models already lists them (family included) with real
       // download state, so re-adding them from the capabilities endpoint
       // would duplicate every variant in the selectors.
-      const data = await api.fetchModels()
+      const shouldHydrateVisibility = !_modelVisibilityHydrated
+      const [data, visibility] = await Promise.all([
+        api.fetchModels(),
+        shouldHydrateVisibility
+          ? api.fetchModelVisibility().catch(error => {
+              console.warn('Failed to load model visibility:', error)
+              return null
+            })
+          : Promise.resolve(null),
+      ])
       const families = data.families
       const backendModels = data.models.map(m => ({
         model_type: m.model_type,
@@ -2482,8 +3253,102 @@ export const useStore = create<AppState>((set, get) => ({
       // Inject models maintained by Maestro services alongside backend models.
       const models = [...backendModels, ...SFX_VIRTUAL_MODELS]
 
-      // Hydrate persisted per-mode settings from localStorage
+      // Pinokio can assign a different web-server port on every launch.
+      // Browser localStorage is origin-bound, so hydrate durable visibility
+      // once from the server config and keep localStorage only as a
+      // migration/cache layer.
+      if (shouldHydrateVisibility && visibility) {
+        let restoredModels: Set<string>
+        if (visibility.configured) {
+          restoredModels = new Set(visibility.enabled_models)
+          _initializedMatureModels = new Set(
+            visibility.initialized_mature_models,
+          )
+          _modelVisibilityDefaultsVersion = (
+            visibility.defaults_version || 1
+          )
+        } else {
+          const legacyModels = _loadEnabledModels()
+          restoredModels = legacyModels ?? new Set(DEFAULT_ENABLED_MODELS)
+          const legacyDefaultsVersion = parseInt(
+            localStorage.getItem(DEFAULTS_VERSION_KEY) || '',
+            10,
+          )
+          _modelVisibilityDefaultsVersion = legacyModels
+            ? (legacyDefaultsVersion || 1)
+            : DEFAULTS_VERSION
+          // An existing browser whitelist is an explicit snapshot. Mark the
+          // current Mature entries initialized so migration cannot re-enable
+          // one the user deliberately disabled.
+          _initializedMatureModels = legacyModels
+            ? new Set(
+                models
+                  .filter(model => model.nsfw_only)
+                  .map(model => model.model_type),
+              )
+            : new Set()
+        }
+        _modelVisibilityHydrated = true
+        set({ enabledModels: restoredModels })
+        if (!visibility.configured) _saveEnabledModels(restoredModels)
+      }
+
+      // One-time curated-defaults upgrade for existing installs (see
+      // DEFAULTS_VERSION). Fresh installs already start from the full
+      // DEFAULT_ENABLED_MODELS list; for them this only stamps the
+      // version key.
+      let migrateMusicDefault = false
+      try {
+        const storedVer = _modelVisibilityHydrated
+          ? _modelVisibilityDefaultsVersion
+          : (
+              parseInt(
+                localStorage.getItem(DEFAULTS_VERSION_KEY) || '1',
+                10,
+              ) || 1
+            )
+        if (storedVer < DEFAULTS_VERSION) {
+          const additions: string[] = []
+          for (let v = storedVer + 1; v <= DEFAULTS_VERSION; v++) {
+            additions.push(...(DEFAULTS_ADDED_IN[v] || []))
+          }
+          const present = additions.filter(id => models.some(m => m.model_type === id))
+          if (present.length > 0) {
+            set(s => {
+              const next = new Set(s.enabledModels)
+              present.forEach(id => next.add(id))
+              _saveEnabledModels(next)
+              return { enabledModels: next }
+            })
+          }
+          migrateMusicDefault = storedVer < 2
+          _modelVisibilityDefaultsVersion = DEFAULTS_VERSION
+          localStorage.setItem(DEFAULTS_VERSION_KEY, String(DEFAULTS_VERSION))
+          _saveEnabledModels(get().enabledModels)
+        }
+      } catch { /* localStorage blocked — defaults only apply this session */ }
+
+      // Hydrate persisted per-mode settings from localStorage.
+      //
+      // Deliberately PARTIAL: only the last generation mode and the
+      // per-mode model selections survive a page refresh. The working
+      // state — prompt text and Advanced settings (seed, steps, LoRA
+      // selection, …) — starts fresh from the model's defaults on every
+      // load. The per-mode snapshots (savedParamsPerMode /
+      // savedLoraPerMode / savedPromptPerMode) still carry edits across
+      // MODE SWITCHES within a session, in-memory only. v1.2.0 restored
+      // them here on refresh; stale text/seeds/LoRAs re-appearing after
+      // a reload felt wrong, so a refresh is a clean slate again.
       const saved = _loadSettings()
+      // v2 migration: users whose saved audio model IS the old music
+      // default follow it to the new default (see NEW_MUSIC_DEFAULT).
+      // (The old-model-params concern the migration used to handle is
+      // gone: saved params no longer rehydrate, and the defaults
+      // hydration below runs on every boot.)
+      if (migrateMusicDefault && saved?.selectedModelPerMode?.audio === OLD_MUSIC_DEFAULT
+          && models.some(m => m.model_type === NEW_MUSIC_DEFAULT)) {
+        saved.selectedModelPerMode = { ...saved.selectedModelPerMode, audio: NEW_MUSIC_DEFAULT }
+      }
       let mode = get().generationMode
       let initialModelType: string
 
@@ -2491,28 +3356,37 @@ export const useStore = create<AppState>((set, get) => ({
         // Restore saved generation mode
         mode = saved.generationMode || mode
         // Validate saved model for this mode still exists
-        const savedModel = saved.selectedModelPerMode?.[mode]
+        let savedModel = saved.selectedModelPerMode?.[mode]
         initialModelType = savedModel && models.some(m => m.model_type === savedModel)
           ? savedModel
           : getDefaultModelForMode(mode, families, models)
-        // Restore saved params for this mode
-        const savedParams = saved.savedParamsPerMode?.[mode]
+        const bootedIntoRecast = mode === 'avatar'
+          && (initialModelType === 'scail2_14B_recast_fast' || initialModelType === 'scail2_14B')
+        const bootedIntoRepaint = mode === 'avatar'
+          && initialModelType === 'scail2_14B_fast'
 
         set(s => ({
           families,
           models,
           modelsLoaded: true,
           generationMode: mode,
-          selectedModelPerMode: saved.selectedModelPerMode || {},
-          savedParamsPerMode: saved.savedParamsPerMode || {},
-          savedLoraPerMode: saved.savedLoraPerMode || {},
-          // Stash the lora_id → filename snapshot from disk so the upcoming
-          // refreshLoraIdMap() call can reconcile filename renames since save.
-          _loraFilenameSnapshotAtLoad: saved._loraFilenameSnapshot || {},
+          ...(bootedIntoRecast
+            ? { editSubMode: 'recast' as const }
+            : bootedIntoRepaint
+              ? { editSubMode: 'restyle' as const }
+              : {}),
+          // Seed the VALIDATED boot model into the map (the saved entry
+          // may point at a removed model) — _applyModelDefaults' race
+          // guard compares against selectedModelPerMode[mode].
+          selectedModelPerMode: { ...(saved.selectedModelPerMode || {}), [mode]: initialModelType },
+          // Mode-shaping mirrored from setGenerationMode: booting into
+          // image mode needs image_mode 1 + Auto resolution. These used
+          // to arrive via the restored params snapshot.
+          ...(mode === 'image' ? { resolutionPreset: 'auto' as ResolutionPreset, aspectRatio: 'auto' as AspectRatio } : {}),
           params: {
             ...s.params,
             model_type: initialModelType || s.params.model_type,
-            ...(savedParams || {}),
+            ...(mode === 'image' ? { image_mode: 1 } : {}),
           },
         }))
       } else {
@@ -2521,11 +3395,21 @@ export const useStore = create<AppState>((set, get) => ({
           families,
           models,
           modelsLoaded: true,
-          params: { ...s.params, model_type: initialModelType || s.params.model_type },
+          selectedModelPerMode: { [mode]: initialModelType },
+          ...(mode === 'image' ? { resolutionPreset: 'auto' as ResolutionPreset, aspectRatio: 'auto' as AspectRatio } : {}),
+          params: {
+            ...s.params,
+            model_type: initialModelType || s.params.model_type,
+            ...(mode === 'image' ? { image_mode: 1 } : {}),
+          },
         }))
       }
 
-      // Load LoRAs and model options for the initial model
+      // Load LoRAs, model options, and tuned defaults for the initial
+      // model. The defaults hydration (steps, guidance, LM sampling…)
+      // must run on every boot now that saved params don't rehydrate —
+      // without it the sliders would show INITIAL_PARAMS' generic values
+      // instead of the model's.
       const mt = initialModelType || get().params.model_type
       if (mt) {
         // Restore saved LoRA state for this mode if the model matches
@@ -2545,6 +3429,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (!sfxModelTypes.has(mt) && mode !== 'model3d') {
           get().loadLoras(mt)
           get().loadModelOptions(mt)
+          _applyModelDefaults(get, set, mt)
         }
       }
       // Refresh the lora_id ↔ filename map from /installed and reconcile
@@ -2553,28 +3438,20 @@ export const useStore = create<AppState>((set, get) => ({
       // filename without user intervention).
       get().refreshLoraIdMap()
 
-      // Cold-start case for nsfw_only auto-enable: if Mature Mode is
-      // already on (loaded from server config), make sure all nsfw_only
-      // models are in enabledModels. updateServicesConfig handles the
-      // toggle-on path, but on first launch / page refresh the persisted
-      // enabledModels set may pre-date the nsfw_only models existing in
-      // the registry — without this sweep they'd be hidden from selectors
-      // until the user manually flips Mature Mode off and back on.
+      // Auto-enable each Mature model once, then preserve an explicit
+      // disable. The initialized IDs live in the same server-side visibility
+      // record, so a changing Pinokio port cannot reset this decision.
       const cfg = get().servicesConfig
-      if (cfg?.nsfw_mode) {
-        const nsfwModels = models.filter(m => m.nsfw_only).map(m => m.model_type)
-        if (nsfwModels.length > 0) {
-          set(s => {
-            const next = new Set(s.enabledModels)
-            let changed = false
-            for (const mt of nsfwModels) {
-              if (!next.has(mt)) { next.add(mt); changed = true }
-            }
-            if (!changed) return s
-            _saveEnabledModels(next)
-            return { enabledModels: next }
-          })
-        }
+      if (cfg?.nsfw_mode && _modelVisibilityHydrated) {
+        set(s => {
+          const next = _enableUninitializedMatureModels(
+            models,
+            s.enabledModels,
+          )
+          if (!next) return s
+          _saveEnabledModels(next)
+          return { enabledModels: next }
+        })
       }
     } catch (e) {
       console.error('Failed to load models:', e)
@@ -2611,6 +3488,9 @@ export const useStore = create<AppState>((set, get) => ({
     }))
     get().syncClipCount()
   },
+
+  guideVideoFps: null,
+  setGuideVideoFps: (fps) => set({ guideVideoFps: fps }),
 
   slidingWindowSeconds: 5,
   setSlidingWindowSeconds: (s) => {
@@ -3064,11 +3944,14 @@ export const useStore = create<AppState>((set, get) => ({
 
     const state = get()
 
-    // Validate: i2v-only models require a start image
+    // Validate: i2v-only models require a start image — Video mode only.
+    // Edit sub-modes supply their own source media and validate in their
+    // own branches (Recast runs the i2v-only SCAIL-2 against a source
+    // video + reference image; this guard silently ate its clicks).
     const isI2vOnly = state.modelOptions?.i2v_class && !state.modelOptions?.t2v_class
     const hasStartImage = state.startImage || state.params.image_start
     const hasMultiClipImages = state.clips.some(c => c.startImage || c.startImagePath)
-    if (isI2vOnly && !hasStartImage && !hasMultiClipImages) {
+    if (state.generationMode === 'video' && isI2vOnly && !hasStartImage && !hasMultiClipImages) {
       console.error('This model requires a start image')
       // Could show a toast/notification here in the future
       return
@@ -3240,15 +4123,20 @@ export const useStore = create<AppState>((set, get) => ({
           pad_bottom: padBottom,
           pad_left: padLeft,
           pad_right: padRight,
+          outpaint_aspect: state.outpaintAspect,
           resolution_preset: state.outpaintResolutionPreset,
-          source_preservation: state.outpaintSourcePreservation,
-          outpaint_lora_strength: state.outpaintLoraStrength,
+          source_preservation: 1.0,
+          outpaint_lora_strength: 1.0,
+          mask_preserving_outpaint: state.outpaintMaskPreserving,
           preserve_source_audio: state.outpaintPreserveSourceAudio,
-          lock_source_pixels: state.outpaintLockSourcePixels,
+          lock_source_pixels: false,
           trim_window_smear: state.outpaintTrimSmear,
           sliding_window_size: windowFrames,
           sliding_window_overlap: overlapFrames,
           ...(sendTrim ? { start_time: trimStart, end_time: trimEnd } : {}),
+          num_inference_steps: (state.params.num_inference_steps as number) ?? undefined,
+          guidance_scale: (state.params.guidance_scale as number) ?? undefined,
+          negative_prompt: (state.params.negative_prompt as string) || undefined,
           seed: (state.params.seed as number) ?? -1,
           activated_loras: (state.params.activated_loras as string[]) || [],
           loras_multipliers: (state.params.loras_multipliers as string) || '',
@@ -3302,6 +4190,225 @@ export const useStore = create<AppState>((set, get) => ({
           isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
         }))
         console.error('Outpaint failed:', msg)
+      }
+      return
+    }
+
+    // ── Edit mode: Recast (SCAIL-2 Replace) ─────────────────────
+    // Standalone branch: the prompt is OPTIONAL here (the server has a
+    // sensible default), unlike the shared edit block below which
+    // hard-requires one.
+    // Repaint is the easy front door to the proven Studio Video/Frames
+    // SCAIL-2 Animate path: an edited first frame defines the finished look
+    // while the source video supplies motion and camera movement.
+    if (state.generationMode === 'avatar' && state.editSubMode === 'restyle') {
+      if (!state.editVideoPath || !state.editRepaintFramePath) return
+      const repaintMappings = state.editRepaintMappings.slice(0, 5)
+      if (repaintMappings.some(mapping => !mapping.source.trim() || !mapping.target.trim())) return
+      const promptText = ((state.params.prompt as string) || '').trim()
+      const newJob: GenerationJob = {
+        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+        phase: '', message: 'Submitting repaint...', outputFiles: [], error: null, oomInfo: null,
+      }
+      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+
+      try {
+        const repaintModel = (state.params.model_type as string) || ''
+        const repaintIsScail2 = repaintModel === 'scail2_14B_fast' || repaintModel === 'scail2_14B'
+        const result = await api.submitRepaint({
+          video_path: state.editVideoPath,
+          target_frame_path: state.editRepaintFramePath,
+          region_mappings: repaintMappings.map(mapping => ({
+            id: mapping.id,
+            source: mapping.source.trim(),
+            target: mapping.target.trim(),
+          })),
+          ...(promptText ? { prompt: promptText } : {}),
+          resolution_profile: state.editRepaintResolutionProfile,
+          ...(repaintIsScail2 ? {
+            model_type: repaintModel,
+            num_inference_steps: (state.params.num_inference_steps as number) ?? undefined,
+            ...(repaintModel === 'scail2_14B' ? {
+              guidance_scale: (state.params.guidance_scale as number) ?? undefined,
+            } : {}),
+          } : {}),
+          start_time: state.editStartTime,
+          end_time: state.editEndTime,
+          seed: (state.params.seed as number) ?? -1,
+          negative_prompt: (state.params.negative_prompt as string) || '',
+          activated_loras: (state.params.activated_loras as string[]) || [],
+          loras_multipliers: (state.params.loras_multipliers as string) || '',
+          workspace: state.activeWorkspace,
+        })
+
+        set(s => ({
+          jobs: s.jobs.map(j => j === newJob
+            ? { ...j, id: result.job_id, status: 'running', message: 'Queued...' }
+            : j),
+        }))
+
+        const pollInterval = setInterval(async () => {
+          if (!get().jobs.find(j => j.id === result.job_id)) {
+            clearInterval(pollInterval)
+            return
+          }
+          try {
+            const status = await api.fetchJobStatus(result.job_id)
+            set(s => ({
+              jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
+                ...j,
+                status: status.status,
+                progress: status.progress / 100,
+                step: status.step,
+                totalSteps: status.total_steps,
+                phase: status.phase,
+                message: status.message,
+                outputFiles: status.output_files,
+                error: status.error,
+                oomInfo: status.oom_info ?? null,
+              }),
+            }))
+            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'completed') {
+              clearInterval(pollInterval)
+              set(s => {
+                const remaining = s.jobs.filter(j => j.id !== result.job_id)
+                return {
+                  jobs: remaining,
+                  isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
+                }
+              })
+              get().loadOutputs()
+            } else if (status.status === 'failed' || status.status === 'cancelled') {
+              clearInterval(pollInterval)
+              set(s => ({
+                isGenerating: s.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')),
+              }))
+            }
+          } catch { /* ignore poll errors */ }
+        }, 2000)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Repaint failed'
+        set(s => ({
+          jobs: s.jobs.map(j => j === newJob
+            ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg }
+            : j),
+          isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
+        }))
+        console.error('Repaint failed:', msg)
+      }
+      return
+    }
+
+    if (state.generationMode === 'avatar' && state.editSubMode === 'recast') {
+      const recastMappings = state.editRecastMappings.slice(0, 5)
+      if (
+        !state.editVideoPath
+        || recastMappings.length === 0
+        || recastMappings.some(mapping => !mapping.target.trim() || !mapping.refPath)
+      ) return
+      const promptText = ((state.params.prompt as string) || '').trim()
+
+      const newJob: GenerationJob = {
+        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+        phase: '', message: 'Submitting recast...', outputFiles: [], error: null, oomInfo: null,
+      }
+      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+
+      try {
+        // Honor the selector's Recast SCAIL-2 choice (dedicated Fast vs
+        // native base). Guard on
+        // architecture so a stale LTX model_type can never reach the
+        // recast endpoint — the server then falls back to Fast.
+        const recastModel = (state.params.model_type as string) || ''
+        const recastIsScail2 = state.models.find(m => m.model_type === recastModel)?.architecture === 'scail2_14B'
+        const result = await api.submitRecast({
+          video_path: state.editVideoPath,
+          // Legacy fields remain populated for old sidecars/API clients, while
+          // the explicit cards provide deterministic target/color assignment.
+          ref_image_path: recastMappings[0].refPath,
+          target: recastMappings[0].target || 'person',
+          person_count: recastMappings.length,
+          reference_aligned_to_source: recastMappings[0].referenceAlignedToSource,
+          character_mappings: recastMappings.map(mapping => ({
+            id: mapping.id,
+            target: mapping.target.trim(),
+            ref_image_path: mapping.refPath,
+            additional_ref_image_paths: mapping.additionalRefs
+              .map(reference => reference.path)
+              .filter(Boolean),
+            reference_aligned_to_source: mapping.referenceAlignedToSource,
+          })),
+          // Simplified Recast recipe: identity preparation and native
+          // bystander preservation are automatic; prompt rewriting and the
+          // seam-prone post-composite remain off. The backend still accepts
+          // all legacy fields for saved/API callers.
+          isolate_reference: true,
+          auto_face_detail: true,
+          enhance_prompt: false,
+          protect_bystanders: false,
+          preserve_bystanders: true,
+          use_relighting: state.editRecastUseRelighting,
+          resolution_profile: state.editRecastResolutionProfile,
+          ...(promptText ? { prompt: promptText } : {}),
+          ...(recastIsScail2 ? {
+            model_type: recastModel,
+            num_inference_steps: (state.params.num_inference_steps as number) ?? undefined,
+            ...(recastModel === 'scail2_14B' ? {
+              guidance_scale: (state.params.guidance_scale as number) ?? undefined,
+            } : {}),
+          } : {}),
+          start_time: state.editStartTime,
+          end_time: state.editEndTime,
+          seed: (state.params.seed as number) ?? -1,
+          negative_prompt: (state.params.negative_prompt as string) || '',
+          activated_loras: (state.params.activated_loras as string[]) || [],
+          loras_multipliers: (state.params.loras_multipliers as string) || '',
+          workspace: state.activeWorkspace,
+        })
+
+        set(s => ({
+          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'running', message: 'Queued...' } : j),
+        }))
+
+        const pollInterval = setInterval(async () => {
+          if (!get().jobs.find(j => j.id === result.job_id)) { clearInterval(pollInterval); return }
+          try {
+            const status = await api.fetchJobStatus(result.job_id)
+            set(s => ({
+              jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
+                ...j, status: status.status, progress: status.progress / 100,
+                step: status.step, totalSteps: status.total_steps,
+                phase: status.phase, message: status.message,
+                outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
+              }),
+            }))
+            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'completed') {
+              clearInterval(pollInterval)
+              set(s => {
+                const remaining = s.jobs.filter(j => j.id !== result.job_id)
+                return {
+                  jobs: remaining,
+                  isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
+                }
+              })
+              get().loadOutputs()
+            } else if (status.status === 'failed' || status.status === 'cancelled') {
+              clearInterval(pollInterval)
+              set(s => ({
+                isGenerating: s.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')),
+              }))
+            }
+          } catch { /* ignore poll errors */ }
+        }, 2000)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Recast failed'
+        set(s => ({
+          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
+          isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
+        }))
+        console.error('Recast failed:', msg)
       }
       return
     }
@@ -3449,11 +4556,34 @@ export const useStore = create<AppState>((set, get) => ({
 
     const params: Record<string, unknown> = { ...state.params, generation_mode: state.generationMode, workspace: state.activeWorkspace }
 
+    // STG (Spatio-Temporal Guidance) wiring. The backend only runs STG when
+    // perturbation_switch === 2 (skip-self-attention) — stg_scale alone is
+    // inert. Derive the switch from the slider so an untouched slider keeps
+    // the exact request shape from before this feature existed, and strip
+    // all perturbation params for models without the capability so a stale
+    // value can't leak across a model switch.
+    if (state.modelOptions?.perturbation) {
+      const stg = params.stg_scale as number | undefined
+      if (stg !== undefined) {
+        params.perturbation_switch = stg > 0 ? 2 : 0
+      }
+    } else {
+      delete params.stg_scale
+      delete params.perturbation_switch
+      delete params.perturbation_layers
+      delete params.perturbation_start_perc
+      delete params.perturbation_end_perc
+    }
+    // Reference pipeline is a per-model capability — strip a stale toggle
+    // value if the user switched to a model that doesn't support it.
+    if (!(state.modelOptions as Record<string, unknown> | null)?.reference_pipeline) {
+      delete params.reference_pipeline
+    }
+
     // Tag avatar/edit-mode generations with their sub-mode so the gallery's
     // Edits filter and the loadSettingsFromOutput restore path can identify
-    // them. Restyle is the one edit sub-mode that flows through the standard
-    // submit (no dedicated endpoint); the others (retake/inpaint/outpaint/
-    // edit_anything) tag themselves on the server side.
+    // them. Dedicated edit endpoints tag their jobs on the server; this is
+    // retained for compatible generic edit submissions.
     if (state.generationMode === 'avatar' && state.editSubMode) {
       params.edit_sub_mode = state.editSubMode
     }
@@ -3468,6 +4598,35 @@ export const useStore = create<AppState>((set, get) => ({
       const mt = (params.model_type as string) || ''
       return mt.includes('distilled') ? 0.7 : 1.0
     })()
+
+    // force_fps="control" models (SCAIL-2 class) generate at the control
+    // video's frame rate, but durationSeconds→video_length math uses the
+    // model's nominal fps (16). Against a 25fps guide that under-counts
+    // frames by a third: a "10s" request would cover only 6.4s of the
+    // source performance. When the guide's real fps is known (probed at
+    // upload), recompute the frame count at the rate the output will
+    // actually play at.
+    if (
+      state.generationMode === 'video' &&
+      params.video_guide &&
+      params.force_fps === 'control' &&
+      state.guideVideoFps && state.guideVideoFps > 0
+    ) {
+      // Cap at 30fps to match the server's follow-rate cap — a 60fps
+      // guide would double the frame count (and sliding windows) for
+      // no visible gain.
+      const fpsUsed = Math.min(state.guideVideoFps, 30)
+      params.video_length = Math.max(5, Math.round(state.durationSeconds * fpsUsed))
+    }
+    // Always tell the server what duration the user actually asked for.
+    // For control-fps models the server recomputes video_length from
+    // this at the guide's REAL frame rate — the durable fix for stale
+    // restores (Load Settings from old sidecars carries frame counts
+    // computed under the wrong fps) and for sessions where the guide's
+    // fps never got probed. Underscore keys ride through harmlessly.
+    if (state.generationMode === 'video' && params.video_guide) {
+      ;(params as Record<string, unknown>)._duration_seconds = state.durationSeconds
+    }
 
     // Smart multi-line prompt handling for video Frames mode:
     // When there's no sliding window (single window), send all lines as ONE prompt
@@ -3517,6 +4676,16 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Audio mode: branch by sub-mode (Speech/Music vs SFX)
     if (state.generationMode === 'audio') {
+      // Record the active sub-tab in the request so it lands in the
+      // .meta.json sidecar — Load Settings uses it to restore Speech /
+      // Music / SFX, not just the Audio tab. Underscore keys ride
+      // through generation untouched, same as _tts_*. Music also saves
+      // its song-writer inputs (UI-only, not consumed by generation).
+      params._audio_sub_mode = state.audioSubMode
+      if (state.audioSubMode === 'music') {
+        params._music_description = state.musicDescription || ''
+        params._music_instrumental = !!state.musicInstrumental
+      }
       if (state.audioSubMode === 'sfx') {
         // SFX mode: use MMAudio to generate sound effects
         // MMAudio runs as post-processing on a video model, so use a video model as carrier
@@ -3525,6 +4694,9 @@ export const useStore = create<AppState>((set, get) => ({
         if (isSfxVirtual) {
           // Swap virtual MMAudio model for a real video model; backend uses MMAudio params
           params.model_type = 'ltx2_22B_distilled_1_1'
+          // Keep the virtual id so Load Settings can restore the SFX tab's
+          // model selection (the sidecar otherwise records only the carrier).
+          params._sfx_virtual_model = sfxModel
         }
         params.MMAudio_setting = 1
         // Always set MMAudio variant explicitly so backend doesn't fall back to server config
@@ -4284,6 +5456,7 @@ export const useStore = create<AppState>((set, get) => ({
           selectedModelPerMode: ns.selectedModelPerMode,
           savedParamsPerMode: ns.savedParamsPerMode,
           savedLoraPerMode: ns.savedLoraPerMode,
+          savedPromptPerMode: ns.savedPromptPerMode,
         }, byFilename)
       } else {
         set({ loraIdByFilename: byFilename, filenameByLoraId: byLoraId })
@@ -4315,11 +5488,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   toggleLora: (filename) => {
-    const { params, loraWeights, modelOptions } = get()
+    const { params, loraWeights, modelOptions, generationMode, editSubMode } = get()
     const current = [...params.activated_loras]
     const idx = current.indexOf(filename)
     const newWeights = { ...loraWeights }
-    const phases = modelOptions?.guidance_max_phases ?? 1
+    // SCAIL-2 Recast is intentionally a single-phase pipeline even though
+    // the shared Wan model family advertises support for up to three phases.
+    const recastSinglePhase = generationMode === 'avatar' && editSubMode === 'recast'
+    const phases = recastSinglePhase ? 1 : Math.max(1, modelOptions?.guidance_max_phases ?? 1)
 
     if (idx >= 0) {
       current.splice(idx, 1)
@@ -4332,7 +5508,10 @@ export const useStore = create<AppState>((set, get) => ({
     // Serialize multipliers
     const multipliers = current.map(name => {
       const w = newWeights[name] || [1.0]
-      return w.map(v => v.toFixed(2)).join(';')
+      return Array.from(
+        { length: phases },
+        (_, i) => w[i] ?? w[w.length - 1] ?? 1.0,
+      ).map(v => v.toFixed(2)).join(';')
     }).join(' ')
 
     set(s => ({
@@ -4351,7 +5530,7 @@ export const useStore = create<AppState>((set, get) => ({
       [mode]: { activated_loras: current, loras_multipliers: multipliers, loraWeights: newWeights, availableLoras: s.availableLoras },
     }
     set({ savedLoraPerMode: updatedLoraPerMode })
-    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode }, s.loraIdByFilename)
+    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode, savedPromptPerMode: s.savedPromptPerMode }, s.loraIdByFilename)
   },
 
   ensureTransitionLoraForBlend: async () => {
@@ -4456,16 +5635,26 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setLoraWeight: (filename, phaseIndex, value) => {
-    const { params, loraWeights } = get()
+    const { params, loraWeights, modelOptions, generationMode, editSubMode } = get()
     const newWeights = { ...loraWeights }
     if (!newWeights[filename]) return
-    newWeights[filename] = [...newWeights[filename]]
+    const recastSinglePhase = generationMode === 'avatar' && editSubMode === 'recast'
+    const phases = recastSinglePhase ? 1 : Math.max(1, modelOptions?.guidance_max_phases ?? 1)
+    if (phaseIndex < 0 || phaseIndex >= phases) return
+    const currentWeights = newWeights[filename]
+    newWeights[filename] = Array.from(
+      { length: phases },
+      (_, i) => currentWeights[i] ?? currentWeights[currentWeights.length - 1] ?? 1.0,
+    )
     newWeights[filename][phaseIndex] = value
 
     // Reserialize
     const multipliers = params.activated_loras.map(name => {
       const w = newWeights[name] || [1.0]
-      return w.map(v => v.toFixed(2)).join(';')
+      return Array.from(
+        { length: phases },
+        (_, i) => w[i] ?? w[w.length - 1] ?? 1.0,
+      ).map(v => v.toFixed(2)).join(';')
     }).join(' ')
 
     set(s => ({
@@ -4480,7 +5669,7 @@ export const useStore = create<AppState>((set, get) => ({
       [mode]: { activated_loras: s.params.activated_loras, loras_multipliers: multipliers, loraWeights: newWeights, availableLoras: s.availableLoras },
     }
     set({ savedLoraPerMode: updatedLoraPerMode })
-    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode }, s.loraIdByFilename)
+    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode, savedPromptPerMode: s.savedPromptPerMode }, s.loraIdByFilename)
   },
 
   // Presets
@@ -4558,9 +5747,16 @@ export const useStore = create<AppState>((set, get) => ({
   modelOptionsLoading: false,
 
   loadModelOptions: async (modelType) => {
+    const seq = ++_modelOptionsSeq
     set({ modelOptionsLoading: true })
     try {
       const options = await api.fetchModelOptions(modelType)
+      // Staleness guard: a newer loadModelOptions call was issued while this
+      // fetch was in flight (rapid model switching, or a settings restore
+      // that jumped models). Applying a superseded response would clobber
+      // params (default steps/guidance) and modelOptions with the WRONG
+      // model's values — last requested wins.
+      if (seq !== _modelOptionsSeq) return
       const { durationSeconds, slidingWindowSeconds, aspectRatio } = get()
       const fps = options.fps || 16
       const isH3 = modelType === 'minimax_h3'
@@ -4622,7 +5818,11 @@ export const useStore = create<AppState>((set, get) => ({
         },
       }))
     } catch {
-      set({ modelOptions: null, modelOptionsLoading: false })
+      // Same staleness rule as the success path — a superseded request's
+      // failure must not null out the newer request's options.
+      if (seq === _modelOptionsSeq) {
+        set({ modelOptions: null, modelOptionsLoading: false })
+      }
     }
   },
 
@@ -4689,6 +5889,21 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const config = await api.fetchServicesConfig()
       set({ servicesConfig: config, servicesConfigLoading: false })
+      if (
+        config.nsfw_mode
+        && _modelVisibilityHydrated
+        && get().models.length > 0
+      ) {
+        set(s => {
+          const next = _enableUninitializedMatureModels(
+            s.models,
+            s.enabledModels,
+          )
+          if (!next) return s
+          _saveEnabledModels(next)
+          return { enabledModels: next }
+        })
+      }
     } catch (e) {
       console.error('Failed to load services config:', e)
       set({ servicesConfigLoading: false })
@@ -4731,19 +5946,25 @@ export const useStore = create<AppState>((set, get) => ({
       // (they're filtered from view by the nsfw_only + nsfw_mode check
       // in ModelSelector / SystemSettingsPanel anyway). That way if the
       // user toggles mature mode back on later, their selections persist.
+      get().loadServicesConfig()
       if (partial.nsfw_mode === true) {
-        const nsfwModels = get().models.filter(m => m.nsfw_only).map(m => m.model_type)
-        if (nsfwModels.length > 0) {
+        if (_modelVisibilityHydrated) {
           set(s => {
-            const next = new Set(s.enabledModels)
-            let changed = false
-            for (const mt of nsfwModels) {
-              if (!next.has(mt)) { next.add(mt); changed = true }
-            }
-            if (!changed) return s
+            const next = _enableUninitializedMatureModels(s.models, s.enabledModels)
+            if (!next) return s
             _saveEnabledModels(next)
             return { enabledModels: next }
           })
+        } else {
+          const nsfwModels = get().models.filter(m => m.nsfw_only).map(m => m.model_type)
+          if (nsfwModels.length > 0) {
+            set(s => {
+              const next = new Set(s.enabledModels)
+              nsfwModels.forEach(modelType => next.add(modelType))
+              _saveEnabledModels(next)
+              return { enabledModels: next }
+            })
+          }
         }
       }
     } catch (e) {
@@ -4829,7 +6050,8 @@ export const useStore = create<AppState>((set, get) => ({
       const overlapSec = state.slidingWindowOverlap / fps
       const discardSec = discardFrames / fps
       const stride = state.slidingWindowSeconds - discardSec - overlapSec
-      const windowCount = stride > 0 && state.durationSeconds > state.slidingWindowSeconds
+      const supportsSlidingWindows = state.modelOptions?.sliding_window === true
+      const windowCount = supportsSlidingWindows && stride > 0 && state.durationSeconds > state.slidingWindowSeconds
         ? 1 + Math.ceil((state.durationSeconds - state.slidingWindowSeconds + discardSec) / stride)
         : 1
 
@@ -5035,6 +6257,7 @@ export const useStore = create<AppState>((set, get) => ({
       selectedModelPerMode: s.selectedModelPerMode,
       savedParamsPerMode: s.savedParamsPerMode,
       savedLoraPerMode: s.savedLoraPerMode,
+      savedPromptPerMode: s.savedPromptPerMode,
     }, s.loraIdByFilename)
   },
 
@@ -6666,6 +7889,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Workspaces
   workspaces: [],
   activeWorkspace: 'default',
+  browsingUploads: false,
   loadWorkspaces: async () => {
     try {
       const data = await api.fetchWorkspaces()
@@ -6675,9 +7899,17 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   switchWorkspace: async (name) => {
+    // Virtual "Uploads" view: browse the uploads folder WITHOUT touching
+    // the server-side active workspace — generations keep saving to the
+    // real workspace; uploads are read-only in the gallery.
+    if (name === '__uploads__') {
+      set({ browsingUploads: true, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
+      get().loadOutputs()
+      return
+    }
     try {
       await api.setActiveWorkspace(name)
-      set({ activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
+      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
       get().loadOutputs()
       get().loadWorkspaces()
     } catch (e) {
@@ -6688,13 +7920,37 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       await api.createWorkspace(name)
       await api.setActiveWorkspace(name)
-      set({ activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
+      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
       get().loadOutputs()
       get().loadWorkspaces()
     } catch (e) {
       console.error('Failed to create workspace:', e)
       throw e
     }
+  },
+  deleteWorkspace: async (name) => {
+    // The server refuses 'default', refuses while anything generates, and
+    // auto-switches to default when the deleted workspace was active —
+    // its switched_to_default answer is authoritative (a client-side
+    // activeWorkspace comparison could disagree after a desync and would
+    // widen it by force-resetting state the server never changed).
+    const result = await api.deleteWorkspace(name)
+    if (result.switched_to_default) {
+      set({ browsingUploads: false, activeWorkspace: 'default', outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
+      get().loadOutputs()
+    }
+    get().loadWorkspaces()
+  },
+
+  storageDashboardOpen: false,
+  setStorageDashboardOpen: (open) => set({ storageDashboardOpen: open }),
+
+  loraPickerSort: (() => {
+    try { return localStorage.getItem('maestro_lora_picker_sort') === 'newest' ? 'newest' as const : 'name' as const } catch { return 'name' as const }
+  })(),
+  setLoraPickerSort: (sort) => {
+    try { localStorage.setItem('maestro_lora_picker_sort', sort) } catch { /* private mode */ }
+    set({ loraPickerSort: sort })
   },
 
   outputs: [],
@@ -6746,8 +8002,9 @@ export const useStore = create<AppState>((set, get) => ({
   outputsLoading: false,
   loadOutputs: async () => {
     const PAGE_SIZE = 100
-    const { mediaFilter, outputSearchQuery } = get()
+    const { mediaFilter, outputSearchQuery, browsingUploads } = get()
     const isBackendFilter = mediaFilter === 'favorites' || mediaFilter === 'multiclip' || outputSearchQuery.trim()
+    const ws = browsingUploads ? '__uploads__' : undefined
     set({ outputsLoading: true })
     try {
       const { outputs: apiOutputs, total } = isBackendFilter
@@ -6755,8 +8012,9 @@ export const useStore = create<AppState>((set, get) => ({
             favoritesOnly: mediaFilter === 'favorites',
             multiclipOnly: mediaFilter === 'multiclip',
             search: outputSearchQuery.trim() || undefined,
+            workspace: ws,
           })
-        : await api.fetchOutputs(PAGE_SIZE, 0)
+        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace: ws })
       const outputs: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
@@ -6785,7 +8043,9 @@ export const useStore = create<AppState>((set, get) => ({
     const total = get().outputsTotal
     if (current.length >= total) return // All loaded
     try {
-      const { outputs: apiOutputs, total: newTotal } = await api.fetchOutputs(PAGE_SIZE, current.length)
+      const { outputs: apiOutputs, total: newTotal } = await api.fetchOutputs(PAGE_SIZE, current.length, {
+        workspace: get().browsingUploads ? '__uploads__' : undefined,
+      })
       const more: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
@@ -6895,8 +8155,25 @@ export const useStore = create<AppState>((set, get) => ({
     const uploadFilenames = selectedOutputMeta.upload_filenames as Record<string, string> | undefined
     console.log('[LoadSettings] applying settings — model_type:', p.model_type, '| param keys:', Object.keys(p).length)
 
-    const modelType = (p.model_type as string) || ''
+    let modelType = (p.model_type as string) || ''
     if (!modelType) return
+
+    // Migrate Recast sidecars made before the dedicated model existed. Those
+    // jobs used the general I2V Fast accelerator with replacement conditioning;
+    // loading them now should reproduce the corrected native-replacement recipe.
+    const migratedLegacyRecast = p.edit_sub_mode === 'recast'
+      && modelType === 'scail2_14B_fast'
+      && models.some(m => m.model_type === 'scail2_14B_recast_fast')
+    if (migratedLegacyRecast) modelType = 'scail2_14B_recast_fast'
+
+    // SFX generations swap the virtual MMAudio model for a video carrier
+    // at submit, so the sidecar records the carrier. Restore the virtual
+    // id — resubmitting re-swaps it, and mode/sub-tab detection below
+    // classifies it as audio/sfx instead of video.
+    const sfxVirtual = p._sfx_virtual_model as string | undefined
+    if ((p._audio_sub_mode === 'sfx' || p.sfx_mode) && sfxVirtual && models.some(m => m.model_type === sfxVirtual)) {
+      modelType = sfxVirtual
+    }
 
     // Per-sub-mode isolation: pencil-load may jump the sidebar to another
     // video sub-mode (or clobber the current one) by writing params
@@ -6920,14 +8197,66 @@ export const useStore = create<AppState>((set, get) => ({
     if (model) {
       const mode = getModelMode(modelType, model.family)
       set({ generationMode: mode })
+      // Audio outputs restore the SUB-TAB too (Speech / Music / SFX) —
+      // previously the pencil landed on the Audio tab but left whatever
+      // sub-tab was last open. Newer sidecars record _audio_sub_mode;
+      // older ones fall back to classifying the model. Direct set, NOT
+      // setAudioSubMode — that would call selectModel and clobber the
+      // params restored below.
+      if (mode === 'audio') {
+        const recordedSub = p._audio_sub_mode as import('../types').AudioSubMode | undefined
+        const inferredSub: import('../types').AudioSubMode =
+          sfxModelTypes.has(modelType) || p.sfx_mode ? 'sfx'
+          : isMusicModelType(modelType) ? 'music'
+          : 'speech'
+        const subMode = (recordedSub === 'speech' || recordedSub === 'music' || recordedSub === 'sfx')
+          ? recordedSub : inferredSub
+        const restoredLyrics = (p._tts_original_prompt as string) || (p.prompt as string) || ''
+        set(s => ({
+          audioSubMode: subMode,
+          selectedModelPerAudioSubMode: { ...s.selectedModelPerAudioSubMode, [subMode]: modelType },
+          // Music: restore the song-writer inputs alongside the fields.
+          // Older sidecars lack _music_description — clear rather than
+          // leave a stale description that didn't produce this song
+          // (instrumental still infers from the lyrics sentinel).
+          ...(subMode === 'music' ? {
+            musicDescription: (p._music_description as string) || '',
+            musicInstrumental: !!p._music_instrumental
+              || restoredLyrics.trim().toLowerCase() === '[instrumental]',
+          } : {}),
+        }))
+      }
+    }
+
+    // Load model capabilities BEFORE applying the restored params.
+    // loadModelOptions merges model-default steps/guidance into params when
+    // its fetch resolves; it used to be fired at the END of this restore,
+    // so the defaults landed after the sidecar values and silently reverted
+    // num_inference_steps / guidance_scale on every pencil click. Awaiting
+    // it here means defaults land first and the restored values win — and
+    // modelOptions matches the restored model before rerollGeneration
+    // submits (stale capabilities used to strip stg_scale/perturbation_*
+    // from the request, which then poisoned the next sidecar with zeros).
+    // (Virtual SFX models have no LoRAs/options endpoints — same guard
+    // as boot.)
+    if (!sfxModelTypes.has(modelType)) {
+      get().loadLoras(modelType)
+      await get().loadModelOptions(modelType)
     }
 
     // Detect I2V: if image_start was used or image_prompt_type contains "S"
     const hadStartImage = !!(p.image_start || (p.image_prompt_type as string || '').includes('S'))
     const hadEndImage = !!(p.image_end || (p.image_prompt_type as string || '').includes('E'))
 
-    // TTS: restore original prompt with character names (before Speaker 1/2 swap)
-    const originalPrompt = (p._tts_original_prompt as string) || (p.prompt as string) || ''
+    // TTS restores names before Speaker 1/2 substitution. Edit workflows
+    // restore the user's text rather than internal conditioning guidance.
+    const originalPrompt = (p._tts_original_prompt as string) || (
+      p.edit_sub_mode === 'recast' && typeof p.edit_recast_raw_prompt === 'string'
+        ? p.edit_recast_raw_prompt as string
+        : p.edit_sub_mode === 'outpaint' && typeof p.edit_outpaint_raw_prompt === 'string'
+          ? p.edit_outpaint_raw_prompt as string
+          : p.prompt as string
+    ) || ''
 
     // Build params from metadata
     // For image_mode: use 1 (I2V UI toggle) if start image was used, else 0
@@ -6936,8 +8265,8 @@ export const useStore = create<AppState>((set, get) => ({
       model_type: modelType,
       resolution: (p.resolution as string) || '1280x720',
       video_length: (p.video_length as number) || 81,
-      num_inference_steps: (p.num_inference_steps as number) || 20,
-      guidance_scale: (p.guidance_scale as number) || 5.0,
+      num_inference_steps: migratedLegacyRecast ? 8 : (p.num_inference_steps as number) || 20,
+      guidance_scale: migratedLegacyRecast ? 1 : (p.guidance_scale as number) || 5.0,
       seed: (p.seed as number) ?? -1,
       // Restore the ACTUAL saved output mode (0 = video, 1 = image). The old
       // `hadStartImage ? 1 : 0` was wrong: an I2V *video* clip has a start image
@@ -6959,7 +8288,7 @@ export const useStore = create<AppState>((set, get) => ({
     newParams.audio_prompt_type = (p.audio_prompt_type as string) || ''
     newParams.image_prompt_type = (p.image_prompt_type as string) || ''
     newParams.input_video_strength = (p.input_video_strength as number) ?? undefined
-    newParams.flow_shift = (p.flow_shift as number) ?? undefined
+    newParams.flow_shift = migratedLegacyRecast ? 1 : (p.flow_shift as number) ?? undefined
     newParams.h3_audio_shift = (p.h3_audio_shift as number) ?? undefined
     newParams.h3_audio_prompt = (p.h3_audio_prompt as string) || undefined
     newParams.h3_ref_image_size = (p.h3_ref_image_size as 'match' | 'max') ?? undefined
@@ -6967,6 +8296,10 @@ export const useStore = create<AppState>((set, get) => ({
     newParams.self_refiner_setting = (p.self_refiner_setting as number) ?? undefined
     newParams.audio_guide = (p.audio_guide as string) || ''
     newParams.audio_guide2 = (p.audio_guide2 as string) || ''
+    // Style / Music Caption (ACE-Step). Was never copied here, so the
+    // pencil restored only the lyrics — clear when absent so a stale
+    // caption can't leak into an unrelated restore.
+    newParams.alt_prompt = (p.alt_prompt as string) || ''
     newParams.video_guide = (p.video_guide as string) || ''
     newParams.image_refs = Array.isArray(p.image_refs) ? (p.image_refs as string[]) : []
     newParams.h3_ref_videos = Array.isArray(p.h3_ref_videos) ? (p.h3_ref_videos as string[]) : []
@@ -6990,10 +8323,19 @@ export const useStore = create<AppState>((set, get) => ({
       (newParams as Record<string, unknown>).single_stage_pipeline = true;
       (newParams as Record<string, unknown>).progressive_pipeline = false;
     }
+    // Reference two-stage pipeline (10Eros) — restore so re-generating an
+    // STG-era sidecar reproduces the pipeline that made it.
+    (newParams as Record<string, unknown>).reference_pipeline = (p.reference_pipeline as boolean) ?? undefined;
 
     // Advanced pipeline settings
     (newParams as Record<string, unknown>).stage2_steps = (p.stage2_steps as number) ?? undefined;
     (newParams as Record<string, unknown>).stg_scale = (p.stg_scale as number) ?? undefined;
+    // Perturbation config rides along with stg_scale so re-generating an STG
+    // run is faithful. Old sidecars (pre-STG-wiring) simply lack these keys.
+    (newParams as Record<string, unknown>).perturbation_switch = (p.perturbation_switch as number) ?? undefined;
+    (newParams as Record<string, unknown>).perturbation_layers = Array.isArray(p.perturbation_layers) ? (p.perturbation_layers as number[]) : undefined;
+    (newParams as Record<string, unknown>).perturbation_start_perc = (p.perturbation_start_perc as number) ?? undefined;
+    (newParams as Record<string, unknown>).perturbation_end_perc = (p.perturbation_end_perc as number) ?? undefined;
     (newParams as Record<string, unknown>).cfg_rescale = (p.cfg_rescale as number) ?? undefined;
     (newParams as Record<string, unknown>).modality_scale = (p.modality_scale as number) ?? undefined;
     (newParams as Record<string, unknown>).use_gradient_estimation = (p.use_gradient_estimation as boolean) ?? undefined;
@@ -7194,10 +8536,6 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
-    // Trigger model side effects
-    get().loadLoras(modelType)
-    get().loadModelOptions(modelType)
-
     // Restore start/end images from upload URLs as File objects. Prefer
     // upload_filenames.image_{start,end} (basename); fall back to deriving
     // from the full path in params for sidecars missing upload_filenames.
@@ -7239,7 +8577,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (editSubMode) {
       set({
         generationMode: 'avatar',
-        editSubMode: editSubMode as 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything',
+        editSubMode: editSubMode as 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything' | 'recast',
       })
 
       // Re-link the source video. The sidecar stores either edit_video_path
@@ -7299,6 +8637,144 @@ export const useStore = create<AppState>((set, get) => ({
           set({ editAnythingLoraStrength: p.edit_anything_lora_strength as number })
         }
       }
+      if (editSubMode === 'restyle') {
+        const savedRepaintMappings = Array.isArray(p.edit_repaint_region_mappings)
+          ? p.edit_repaint_region_mappings
+            .slice(0, 5)
+            .map((raw, index): RepaintRegionMapping | null => {
+              if (!raw || typeof raw !== 'object') return null
+              const mapping = raw as Record<string, unknown>
+              const source = String(mapping.source || '').trim()
+              const target = String(mapping.target || '').trim()
+              if (!source || !target) return null
+              return {
+                id: String(mapping.id || `repaint-${index + 1}`),
+                source,
+                target,
+              }
+            })
+            .filter((mapping): mapping is RepaintRegionMapping => mapping !== null)
+          : []
+        const repaintFrame = String(p.edit_repaint_target_frame || p.image_start || '')
+        const repaintFrameName = repaintFrame.replace(/\\/g, '/').split('/').pop() || ''
+        set({
+          editRepaintMappings: savedRepaintMappings,
+          editRepaintResolutionProfile: p.edit_repaint_resolution_profile === '704p'
+            ? '704p'
+            : p.edit_repaint_resolution_profile === '512p'
+              ? '512p'
+              : '480p',
+          editRepaintFrameFile: null,
+          editRepaintFramePath: repaintFrame,
+          editRepaintFrameUrl: repaintFrameName ? api.getFileUrl(repaintFrameName) : '',
+        })
+        if (repaintFrame && repaintFrameName) {
+          const repaintUrl = api.getFileUrl(repaintFrameName)
+          fetch(repaintUrl)
+            .then(r => r.ok ? r.blob() : null)
+            .then(blob => {
+              if (!blob) return
+              get().setEditRepaintFrame(
+                new File([blob], repaintFrameName, { type: blob.type || 'image/png' }),
+                repaintFrame,
+                URL.createObjectURL(blob),
+              )
+            })
+            .catch(() => {})
+        }
+      }
+      if (editSubMode === 'recast') {
+        const savedMappings = p.edit_recast_character_mappings
+        if (Array.isArray(savedMappings)) {
+          const restoredMappings = savedMappings
+            .slice(0, 5)
+            .map((raw, index): RecastCharacterMapping | null => {
+              if (!raw || typeof raw !== 'object') return null
+              const mapping = raw as Record<string, unknown>
+              const refPath = String(mapping.ref_image_path || '')
+              const target = String(mapping.target || '').trim()
+              if (!refPath || !target) return null
+              const refName = refPath.replace(/\\/g, '/').split('/').pop() || ''
+              const additionalPaths = Array.isArray(mapping.additional_ref_image_paths)
+                ? mapping.additional_ref_image_paths.map(path => String(path || '')).filter(Boolean)
+                : []
+              return {
+                id: String(mapping.id || `recast-${index + 1}`),
+                target,
+                refFile: null,
+                refPath,
+                refUrl: api.getFileUrl(refName),
+                additionalRefs: additionalPaths.map(path => {
+                  const name = path.replace(/\\/g, '/').split('/').pop() || ''
+                  return { file: null, path, url: api.getFileUrl(name) }
+                }),
+                referenceAlignedToSource: mapping.reference_aligned_to_source === true,
+              }
+            })
+            .filter((mapping): mapping is RecastCharacterMapping => mapping !== null)
+          if (restoredMappings.length > 0) {
+            set({
+              editRecastMappings: restoredMappings,
+              editRecastTarget: restoredMappings[0].target,
+              editRecastPersonCount: restoredMappings.length,
+              editRecastRefFile: null,
+              editRecastRefPath: restoredMappings[0].refPath,
+              editRecastRefUrl: restoredMappings[0].refUrl,
+              editRecastRefAligned: restoredMappings[0].referenceAlignedToSource,
+            })
+          }
+        }
+        if (!Array.isArray(savedMappings) || savedMappings.length === 0) {
+          set(s => ({
+            editRecastMappings: [{
+              ...(s.editRecastMappings[0] || DEFAULT_RECAST_MAPPING),
+              target: String(p.edit_recast_target || 'person'),
+              referenceAlignedToSource: p.edit_recast_ref_aligned === true,
+            }],
+          }))
+        }
+        if (p.edit_recast_target) set({ editRecastTarget: p.edit_recast_target as string })
+        if (p.edit_recast_person_count != null) {
+          const count = Number(p.edit_recast_person_count)
+          set({ editRecastPersonCount: Math.min(5, Math.max(1, Number.isFinite(count) ? Math.round(count) : 1)) })
+        }
+        set({
+          editRecastIsolateReference: p.edit_recast_isolate_reference !== false,
+          editRecastAutoFaceDetail: p.edit_recast_auto_face_detail !== false,
+          editRecastEnhancePrompt: p.edit_recast_enhance_prompt === true,
+          editRecastProtectBystanders: p.edit_recast_protect_bystanders === true,
+          editRecastPreserveBystanders: p.edit_recast_preserve_bystanders !== undefined
+            ? p.edit_recast_preserve_bystanders === true
+            : p.edit_recast_preserve_scene_reference !== undefined
+              ? p.edit_recast_preserve_scene_reference === true
+              : true,
+          editRecastUseRelighting: p.edit_recast_use_relighting === true,
+          editRecastResolutionProfile: p.edit_recast_resolution_profile === '704p'
+            ? '704p'
+            : p.edit_recast_resolution_profile === '512p'
+              ? '512p'
+              : '480p',
+        })
+        const recastRef = (p.edit_recast_ref_path as string) || ''
+        if (recastRef) {
+          const refName = recastRef.replace(/\\/g, '/').split('/').pop() || ''
+          // Recast references can be either uploads or Image-mode outputs.
+          const refUrl = api.getFileUrl(refName)
+          fetch(refUrl)
+            .then(r => r.ok ? r.blob() : null)
+            .then(blob => {
+              if (!blob) return
+              const file = new File([blob], refName, { type: blob.type || 'image/png' })
+              get().setEditRecastRef(
+                file,
+                recastRef,
+                URL.createObjectURL(file),
+                p.edit_recast_ref_aligned === true,
+              )
+            })
+            .catch(() => {})
+        }
+      }
       if (editSubMode === 'outpaint') {
         // Padding (pixels) — preserved as-is; the OutpaintCanvas reads
         // outpaintAspect + outpaintVideoBox to compose, but we also mirror
@@ -7309,9 +8785,27 @@ export const useStore = create<AppState>((set, get) => ({
         const padRight = (p.outpaint_pad_right as number) ?? 0
         set({ outpaintPadding: { top: padTop, bottom: padBottom, left: padLeft, right: padRight } })
 
-        if (p.outpaint_aspect) {
-          set({ outpaintAspect: p.outpaint_aspect as 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4' })
+        const canvasW = (p._outpaint_canvas_w as number) || 0
+        const canvasH = (p._outpaint_canvas_h as number) || 0
+        const savedAspect = String(p.outpaint_aspect || '') as OutpaintAspect
+        const validSavedAspect = (
+          savedAspect === 'source'
+          || _OUTPAINT_ASPECT_RATIOS.some(([aspect]) => aspect === savedAspect)
+        )
+        let restoredAspect: OutpaintAspect | null = validSavedAspect ? savedAspect : null
+        if (!restoredAspect) {
+          let aspectW = canvasW
+          let aspectH = canvasH
+          if (aspectW <= 0 || aspectH <= 0) {
+            const resolutionMatch = /^(\d+)x(\d+)$/i.exec(String(p.resolution || '').trim())
+            if (resolutionMatch) {
+              aspectW = Number(resolutionMatch[1])
+              aspectH = Number(resolutionMatch[2])
+            }
+          }
+          restoredAspect = _inferOutpaintAspect(aspectW, aspectH)
         }
+        if (restoredAspect) set({ outpaintAspect: restoredAspect })
         if (p.outpaint_resolution_preset) {
           set({ outpaintResolutionPreset: p.outpaint_resolution_preset as 'auto' | '480p' | '540p' | '720p' | '1080p' })
         }
@@ -7321,21 +8815,26 @@ export const useStore = create<AppState>((set, get) => ({
         if (p.outpaint_lora_strength_ui != null) {
           set({ outpaintLoraStrength: p.outpaint_lora_strength_ui as number })
         }
+        if (p.outpaint_mask_preserving != null) {
+          set({ outpaintMaskPreserving: !!p.outpaint_mask_preserving })
+        }
 
         // Recompute the canvas-relative video box from saved pad pixels +
         // saved canvas dimensions, so the OutpaintCanvas reproduces the
         // exact composition. Falls back to centered-fit if anything is
         // missing.
-        const canvasW = (p._outpaint_canvas_w as number) || 0
-        const canvasH = (p._outpaint_canvas_h as number) || 0
         if (canvasW > 0 && canvasH > 0) {
-          const srcW = canvasW - padLeft - padRight
-          const srcH = canvasH - padTop - padBottom
+          const savedX = (p._outpaint_overlay_x as number) ?? padLeft
+          const savedY = (p._outpaint_overlay_y as number) ?? padTop
+          const srcW = (p._outpaint_overlay_w as number)
+            || (canvasW - padLeft - padRight)
+          const srcH = (p._outpaint_overlay_h as number)
+            || (canvasH - padTop - padBottom)
           if (srcW > 0 && srcH > 0) {
             set({
               outpaintVideoBox: {
-                x: padLeft / canvasW,
-                y: padTop / canvasH,
+                x: savedX / canvasW,
+                y: savedY / canvasH,
                 w: srcW / canvasW,
                 h: srcH / canvasH,
               },
