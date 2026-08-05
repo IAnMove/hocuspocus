@@ -61,13 +61,17 @@ function stableTextKey(value: string): string {
   return (hash >>> 0).toString(36)
 }
 
-function storySongBrief(project: StoryProject, durationSeconds: number): string {
+function storySongBrief(
+  project: StoryProject,
+  durationSeconds: number,
+  lyricsLanguage = project.language,
+): string {
   const cast = project.characters.slice(0, 5).map(character =>
     `${character.name}: ${character.desire}; arc: ${character.arc}`).join(' | ')
   const beats = project.beats.map(beat => `${beat.title}: ${beat.summary}`).join(' → ')
   return [
     `Create an original theme song that tells the story “${project.title}”.`,
-    `Write all lyrics in ${project.language}. Target approximately ${durationSeconds} seconds.`,
+    `Write all lyrics in ${lyricsLanguage}. Target approximately ${durationSeconds} seconds.`,
     `Genre and emotional direction: ${project.genre}; ${project.tone}. Theme: ${project.theme}.`,
     `Premise: ${project.premise}. Synopsis: ${project.synopsis}. Ending: ${project.ending}.`,
     cast ? `Character journeys: ${cast}.` : '',
@@ -1847,8 +1851,9 @@ export function StoryLabPanel() {
     )
     setProductionBusy('music')
     try {
+      const generationLanguage = project.music.lyricsLanguage || project.language
       const brief = project.music.brief.trim()
-        || storySongBrief(project, project.music.targetDurationSeconds)
+        || storySongBrief(project, project.music.targetDurationSeconds, generationLanguage)
       let style = project.music.style.trim()
       let lyrics = project.music.lyrics.trim()
       if (!style || (project.music.mode === 'original' && !lyrics)) {
@@ -1859,8 +1864,8 @@ export function StoryLabPanel() {
           description: brief,
           style_direction: style || `${project.genre}, ${project.tone}`,
           lyrics_direction: lyrics || project.music.sourceLyrics,
-          story_context: storySongBrief(project, project.music.targetDurationSeconds),
-          language: project.language,
+          story_context: storySongBrief(project, project.music.targetDurationSeconds, generationLanguage),
+          language: generationLanguage,
           duration_seconds: project.music.targetDurationSeconds,
         })
         style = written.style
@@ -1882,7 +1887,7 @@ export function StoryLabPanel() {
         workspace: activeWorkspace,
       })
       const createdAt = new Date().toISOString()
-      const language = project.music.lyricsLanguage || project.language
+      const language = generationLanguage
       const firstVersion = nextMusicCandidateVersion(project.music.candidates, language, project.music.lyricsLanguage || project.language)
       const candidates = result.candidates.map((candidate, index) => ({
         id: storyId('song'),
@@ -1996,6 +2001,7 @@ export function StoryLabPanel() {
     const activity = beginStoryActivity('music_planning', `Story Lab is adapting “${cue.title}”…`, 1)
     setMusicCueBusy(`llm:${cueId}`)
     try {
+      const lyricsLanguage = cue.lyricsLanguage || project.language
       const target = cue.kind === 'character'
         ? project.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
         : cue.kind === 'world' ? 'the Story world' : 'the complete Story'
@@ -2007,8 +2013,8 @@ export function StoryLabPanel() {
         reference_song: cue.referenceSong,
         style_direction: cue.brief,
         lyrics_direction: cue.lyrics,
-        story_context: storySongBrief(project, cue.durationSeconds),
-        language: project.language,
+        story_context: storySongBrief(project, cue.durationSeconds, lyricsLanguage),
+        language: lyricsLanguage,
         duration_seconds: cue.durationSeconds,
         include_lyria: true,
         max_new_tokens: 3000,
@@ -2016,7 +2022,7 @@ export function StoryLabPanel() {
       patchMusicCue(cueId, {
         style: written.style,
         lyrics: written.lyrics,
-        lyricsLanguage: project.language,
+        lyricsLanguage,
         lyriaPrompt: written.lyria_prompt,
       })
       setNotice({ kind: 'ok', text: `“${cue.title}” now has editable MiniMax and Google Lyria prompts${cue.instrumental ? '' : ' with structured lyrics'}.` })
