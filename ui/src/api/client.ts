@@ -1437,6 +1437,40 @@ export async function uploadImage(file: File): Promise<{ filename: string; path:
   return res.json()
 }
 
+export interface StoryAssetSuggestion {
+  index: number
+  kind: import('../features/stories/types').StoryAssetKind
+  targetId: string
+  name: string
+  nameOriginal: string
+  description: string
+  visualPrompt: string
+  confidence: number
+  reason: string
+  source: string
+}
+
+export async function analyzeStoryAssets(params: {
+  assets: Array<{ name: string; path: string; url: string }>
+  description: string
+  project: import('../features/stories/types').StoryProject
+  writingProvider: import('../features/stories/types').StoryWritingProvider
+  writingModel: string
+  writingBaseUrl: string
+  activity_id: string
+}): Promise<{ assets: StoryAssetSuggestion[] }> {
+  const response = await fetch(`${BASE}/api/v1/stories/assets/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Smart asset analysis failed' }))
+    throw new Error(error.detail || 'Smart asset analysis failed')
+  }
+  return response.json()
+}
+
 // --- Comics ---
 
 export async function saveComicProject(

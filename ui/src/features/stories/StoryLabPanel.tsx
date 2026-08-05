@@ -27,7 +27,7 @@ import {
   storyNegativePromptForStyle,
 } from './model'
 import type {
-  StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
+  StoryAssetKind, StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
   StoryMusicCandidate, StoryMusicCue, StoryRelationship, StoryVisualAsset, StoryWritingProvider,
 } from './types'
 
@@ -114,7 +114,8 @@ function nextMusicCandidateVersion(
   }, 0) + 1
 }
 
-type StoryTab = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'productions'
+type StoryTab = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'productions'
+type PendingSmartAsset = api.StoryAssetSuggestion & { selected: boolean }
 type PendingDraft = {
   scope: StoryGenerationScope
   result: Record<string, unknown>
@@ -467,7 +468,11 @@ export function StoryLabPanel() {
     }
   })
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const [smartAssetBusy, setSmartAssetBusy] = useState(false)
+  const [smartAssetDescription, setSmartAssetDescription] = useState('')
+  const [pendingSmartAssets, setPendingSmartAssets] = useState<PendingSmartAsset[]>([])
   const importRef = useRef<HTMLInputElement>(null)
+  const smartAssetRef = useRef<HTMLInputElement>(null)
   const uploadRef = useRef<HTMLInputElement>(null)
   const musicCoverRef = useRef<HTMLInputElement>(null)
   const lyriaUploadRef = useRef<HTMLInputElement>(null)
@@ -540,6 +545,7 @@ export function StoryLabPanel() {
       })
     }
     return {
+      id,
       update: updateActivity,
       fail: (error: unknown, nextPhase = phase) => {
         failed = true
@@ -1309,6 +1315,137 @@ export function StoryLabPanel() {
       setImageBusy('')
       if (uploadRef.current) uploadRef.current.value = ''
     }
+  }
+
+  const analyzeSmartAssets = async (files: File[]) => {
+    const images = files.filter(file => file.type.startsWith('image/')).slice(0, 24)
+    if (!images.length) {
+      setNotice({ kind: 'error', text: 'Choose one or more image files.' })
+      return
+    }
+    const activity = beginStoryActivity(
+      'uploading_assets', `Uploading 0/${images.length} assets…`, images.length + 1,
+    )
+    setSmartAssetBusy(true)
+    setTab('assets')
+    try {
+      const uploaded: Array<{ name: string; path: string; url: string }> = []
+      for (let index = 0; index < images.length; index += 1) {
+        const file = images[index]
+        activity.update(
+          `Uploading ${index + 1}/${images.length}: ${file.name}`,
+          'uploading_assets', index, images.length + 1,
+        )
+        const result = await api.uploadImage(file)
+        uploaded.push({ name: file.name, path: result.path, url: result.url })
+      }
+      activity.update(
+        `Analyzing ${images.length} assets together with the selected Story Lab LLM…`,
+        'analyzing_assets', images.length, images.length + 1,
+      )
+      const result = await api.analyzeStoryAssets({
+        assets: uploaded,
+        description: smartAssetDescription,
+        project,
+        writingProvider: project.provider.writingProvider,
+        writingModel: project.provider.writingModel,
+        writingBaseUrl: project.provider.writingBaseUrl,
+        activity_id: activity.id,
+      })
+      setPendingSmartAssets(result.assets.map(item => ({ ...item, selected: item.kind !== 'ignore' })))
+      setNotice({ kind: 'ok', text: `${result.assets.length} asset suggestions are ready for review.` })
+      activity.finish()
+    } catch (error) {
+      activity.fail(error, 'analyzing_assets')
+      setNotice({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setSmartAssetBusy(false)
+      if (smartAssetRef.current) smartAssetRef.current.value = ''
+    }
+  }
+
+  const patchPendingSmartAsset = (index: number, patchValue: Partial<PendingSmartAsset>) => {
+    setPendingSmartAssets(current => current.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, ...patchValue } : item))
+  }
+
+  const applySmartAssets = () => {
+    const selected = pendingSmartAssets.filter(item => item.selected && item.kind !== 'ignore')
+    if (!selected.length) return
+    const batchId = storyId('asset-import')
+    update(current => {
+      const newTargets = new Map<string, string>()
+      selected.forEach(item => {
+        const assetId = storyId('asset')
+        const asset: StoryVisualAsset = {
+          id: assetId,
+          name: item.name,
+          source: item.source,
+          prompt: item.visualPrompt,
+          provider: 'upload',
+          createdAt: new Date().toISOString(),
+          assetKind: item.kind,
+          description: item.description,
+          confidence: item.confidence,
+          originalName: item.nameOriginal,
+          importBatchId: batchId,
+        }
+        current.assets[assetId] = asset
+
+        if (item.kind === 'character') {
+          let character = current.characters.find(candidate => candidate.id === item.targetId)
+          if (!character) {
+            const groupingKey = item.targetId || `new-character:${item.name.toLocaleLowerCase()}`
+            const existingId = newTargets.get(groupingKey)
+            character = existingId
+              ? current.characters.find(candidate => candidate.id === existingId)
+              : undefined
+            if (!character) {
+              character = {
+                ...emptyCharacter(),
+                id: storyId('character'),
+                name: item.name,
+                appearance: item.description,
+                visualPrompt: item.visualPrompt,
+              }
+              current.characters.push(character)
+              newTargets.set(groupingKey, character.id)
+            }
+          }
+          character.referenceAssetIds = [...new Set([...character.referenceAssetIds, assetId])]
+          character.primaryReferenceAssetId ||= assetId
+          character.approval = 'draft'
+          return
+        }
+
+        if (item.kind === 'location') {
+          let location = current.world.locations.find(candidate => candidate.id === item.targetId)
+          if (!location) {
+            const groupingKey = item.targetId || `new-location:${item.name.toLocaleLowerCase()}`
+            const existingId = newTargets.get(groupingKey)
+            location = existingId
+              ? current.world.locations.find(candidate => candidate.id === existingId)
+              : undefined
+            if (!location) {
+              location = {
+                id: storyId('location'), name: item.name, purpose: '',
+                description: item.description, visualPrompt: item.visualPrompt,
+                negativePrompt: '', referenceAssetIds: [],
+              }
+              current.world.locations.push(location)
+              newTargets.set(groupingKey, location.id)
+            }
+          }
+          location.referenceAssetIds = [...new Set([...location.referenceAssetIds, assetId])]
+          return
+        }
+
+        current.world.referenceAssetIds = [...new Set([...current.world.referenceAssetIds, assetId])]
+      })
+      return current
+    })
+    setPendingSmartAssets([])
+    setNotice({ kind: 'ok', text: `${selected.length} assets applied to Story Lab. New entities remain editable drafts.` })
   }
 
   const removeReference = (target: 'world' | 'character' | 'location', targetId: string | undefined, assetId: string) => {
@@ -2439,6 +2576,7 @@ export function StoryLabPanel() {
 
   const tabs: Array<{ id: StoryTab; label: string; icon: typeof BookOpen }> = [
     { id: 'overview', label: 'Story', icon: BookOpen },
+    { id: 'assets', label: 'Assets', icon: ImagePlus },
     { id: 'world', label: 'World', icon: Boxes },
     { id: 'characters', label: 'Characters', icon: Users },
     { id: 'music', label: 'Music', icon: Music },
@@ -2520,6 +2658,12 @@ export function StoryLabPanel() {
         )}
         <button className={button} onClick={exportStorypack}><Download size={13} /> Storypack</button>
         <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button>
+        <button className={button} disabled={smartAssetBusy} onClick={() => {
+          setTab('assets')
+          smartAssetRef.current?.click()
+        }} title="Upload a group of images and let the selected Story Lab LLM classify them">
+          {smartAssetBusy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} Smart assets
+        </button>
         <button className={button} disabled={Boolean(busy || imageBusy)} onClick={newProject}><Plus size={13} /> New</button>
         <button className={button} disabled={Boolean(busy || imageBusy)} onClick={() => duplicateProject()} title="Duplicate current story">Duplicate</button>
         <button className={button} onClick={() => {
@@ -2654,6 +2798,167 @@ export function StoryLabPanel() {
                   </div>
                   <ProviderPanel project={project} patch={patch} />
                 </div>
+              </>
+            )}
+
+            {tab === 'assets' && (
+              <>
+                <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-text-primary">Smart asset importer</h2>
+                    <p className="mt-1 max-w-3xl text-xs text-text-muted">
+                      Drop related images as one batch. The selected Story Lab LLM identifies characters, locations,
+                      world references, props and style references, and groups alternate views before anything changes.
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-[10px] text-text-muted">
+                    Analyzer: {project.provider.writingProvider === 'maestro'
+                      ? 'Maestro current LLM'
+                      : `${project.provider.writingProvider} · ${project.provider.writingModel || 'configured model'}`}
+                  </div>
+                </div>
+
+                <div className={`${panel} mb-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]`}>
+                  <button
+                    type="button"
+                    disabled={smartAssetBusy}
+                    className="min-h-44 rounded-xl border-2 border-dashed border-border bg-bg-tertiary/40 p-6 text-center transition-colors hover:border-accent-blue hover:bg-accent-blue/5 disabled:opacity-50"
+                    onClick={() => smartAssetRef.current?.click()}
+                    onDragOver={event => event.preventDefault()}
+                    onDrop={event => {
+                      event.preventDefault()
+                      void analyzeSmartAssets(Array.from(event.dataTransfer.files))
+                    }}
+                  >
+                    {smartAssetBusy
+                      ? <Loader2 size={28} className="mx-auto mb-3 animate-spin text-accent-blue" />
+                      : <Upload size={28} className="mx-auto mb-3 text-accent-blue" />}
+                    <span className="block text-sm font-medium text-text-primary">
+                      {smartAssetBusy ? 'Uploading and analyzing the batch…' : 'Drop images here or choose files'}
+                    </span>
+                    <span className="mt-2 block text-[10px] text-text-muted">
+                      Up to 24 images per batch. Several views of one subject can be assigned to the same entity.
+                    </span>
+                  </button>
+                  <div>
+                    <Field
+                      label="Optional context for the complete batch"
+                      value={smartAssetDescription}
+                      onChange={setSmartAssetDescription}
+                      rows={6}
+                      placeholder="For example: photos of Córdoba for a contemporary mystery; the woman in red is the protagonist and the old station is the main location."
+                    />
+                    <p className="mt-2 text-[9px] text-text-muted">
+                      This context is sent once with the ordered image batch. Maestro proposes changes; you review every assignment below.
+                    </p>
+                  </div>
+                </div>
+
+                {pendingSmartAssets.length > 0 && (
+                  <section className="mb-5">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-semibold text-text-primary">Review proposed assignments</h3>
+                        <p className="text-[10px] text-text-muted">Names, prompts, types and destinations remain editable. Uncheck anything you do not want to import.</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className={button} onClick={() => setPendingSmartAssets([])}>Discard batch</button>
+                        <button className={`${button} border-emerald-500/50 text-emerald-300`}
+                          disabled={!pendingSmartAssets.some(item => item.selected && item.kind !== 'ignore')}
+                          onClick={applySmartAssets}>
+                          <Check size={13} /> Apply selected
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {pendingSmartAssets.map((item, index) => {
+                        const newKey = stableTextKey(`${item.name}-${index}`)
+                        const targetOptions = item.kind === 'character'
+                          ? [
+                            ...project.characters.map(character => ({ id: character.id, label: `Existing · ${character.name}` })),
+                            { id: item.targetId.startsWith('new-character:') ? item.targetId : `new-character:${newKey}`, label: `New character · ${item.name}` },
+                          ]
+                          : item.kind === 'location'
+                            ? [
+                              ...project.world.locations.map(location => ({ id: location.id, label: `Existing · ${location.name}` })),
+                              { id: item.targetId.startsWith('new-location:') ? item.targetId : `new-location:${newKey}`, label: `New location · ${item.name}` },
+                            ]
+                            : [{ id: 'world', label: item.kind === 'prop' ? 'World library · prop' : item.kind === 'style' ? 'World library · style' : 'World references' }]
+                        return (
+                          <article key={`${item.source}-${index}`} className={`${panel} ${item.selected ? '' : 'opacity-60'}`}>
+                            <div className="grid gap-3 lg:grid-cols-[140px_minmax(0,1fr)_minmax(260px,0.7fr)]">
+                              <div>
+                                <img src={item.source} alt={item.name} className="h-32 w-full rounded-lg border border-border object-cover" />
+                                <label className="mt-2 flex items-center gap-2 text-[10px] text-text-secondary">
+                                  <input type="checkbox" checked={item.selected}
+                                    onChange={event => patchPendingSmartAsset(index, { selected: event.target.checked })} />
+                                  Import this image
+                                </label>
+                                <p className="mt-1 truncate text-[9px] text-text-muted" title={item.nameOriginal}>{item.nameOriginal}</p>
+                              </div>
+                              <div className="space-y-3">
+                                <Field label="Editable name" value={item.name}
+                                  onChange={name => patchPendingSmartAsset(index, { name })} />
+                                <Field label="What the image contains" value={item.description}
+                                  onChange={description => patchPendingSmartAsset(index, { description })} rows={3} />
+                                <Field label="Reusable visual prompt" value={item.visualPrompt}
+                                  onChange={visualPrompt => patchPendingSmartAsset(index, { visualPrompt })} rows={3} />
+                              </div>
+                              <div className="space-y-3">
+                                <label className="block text-[10px] text-text-muted">Asset type
+                                  <select className={`${input} mt-1`} value={item.kind} onChange={event => {
+                                    const kind = event.target.value as StoryAssetKind
+                                    const targetId = kind === 'character'
+                                      ? (project.characters[0]?.id || `new-character:${newKey}`)
+                                      : kind === 'location'
+                                        ? (project.world.locations[0]?.id || `new-location:${newKey}`)
+                                        : 'world'
+                                    patchPendingSmartAsset(index, { kind, targetId, selected: kind !== 'ignore' })
+                                  }}>
+                                    <option value="character">Character</option>
+                                    <option value="location">Location</option>
+                                    <option value="world">World</option>
+                                    <option value="prop">Prop</option>
+                                    <option value="style">Style reference</option>
+                                    <option value="ignore">Ignore</option>
+                                  </select>
+                                </label>
+                                {item.kind !== 'ignore' && (
+                                  <label className="block text-[10px] text-text-muted">Destination
+                                    <select className={`${input} mt-1`} value={targetOptions.some(option => option.id === item.targetId) ? item.targetId : targetOptions[0]?.id}
+                                      onChange={event => patchPendingSmartAsset(index, { targetId: event.target.value })}>
+                                      {targetOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                                    </select>
+                                  </label>
+                                )}
+                                <div className="rounded-md border border-border bg-bg-tertiary/60 p-2 text-[9px] text-text-muted">
+                                  <p>Confidence: {Math.round(item.confidence * 100)}%</p>
+                                  <p className="mt-1">{item.reason}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                <section>
+                  <h3 className="mb-2 text-sm font-semibold text-text-primary">Imported asset library · {Object.keys(project.assets).length}</h3>
+                  {Object.keys(project.assets).length ? (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                      {Object.values(project.assets).map(asset => (
+                        <div key={asset.id} className={`${panel} p-2.5`}>
+                          <img src={asset.source} alt={asset.name} className="h-32 w-full rounded-md border border-border object-cover" />
+                          <p className="mt-2 truncate text-xs font-medium text-text-primary" title={asset.name}>{asset.name}</p>
+                          <p className="mt-0.5 text-[9px] uppercase tracking-wide text-text-muted">{asset.assetKind || asset.provider}</p>
+                          {asset.description && <p className="mt-1 line-clamp-3 text-[9px] text-text-muted">{asset.description}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div className={`${panel} py-10 text-center text-xs text-text-muted`}>No visual assets have been imported yet.</div>}
+                </section>
               </>
             )}
 
@@ -3530,6 +3835,8 @@ export function StoryLabPanel() {
         </div>
       </div>
       <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={event => uploadVisual(event.target.files)} />
+      <input ref={smartAssetRef} type="file" accept="image/*" multiple className="hidden"
+        onChange={event => void analyzeSmartAssets(Array.from(event.target.files || []))} />
       <input ref={lyriaUploadRef} type="file" accept="audio/*" className="hidden"
         onChange={event => void uploadLyriaResult(event.target.files?.[0])} />
     </div>
