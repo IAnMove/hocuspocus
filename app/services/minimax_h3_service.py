@@ -110,6 +110,51 @@ DEFAULTS = {
     "h3_reference_mode": "first_frame",
 }
 
+
+def prepare_extend_anchor(
+    params: dict,
+    job_id: str,
+    source_path: str,
+    cache_dir: str | Path,
+) -> dict:
+    """Turn an Extend source video into an exact FL2VA start frame.
+
+    H3's FL2VA pipeline has no video-continuation input. Passing
+    ``video_source`` through unchanged therefore made the model ignore it.
+    Capturing the final decodable frame gives Extend deterministic visual
+    continuity without paying the cost of Ref2VA or treating the source as a
+    loose semantic reference.
+    """
+    from .video_editor import extract_frame, probe_media
+
+    media = probe_media(source_path)
+    destination_dir = Path(cache_dir)
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination = destination_dir / f"minimax_h3_extend_{job_id}_last.png"
+    frame = extract_frame(source_path, str(destination), float(media["duration"]))
+
+    ignored_references = sum(
+        len([item for item in (params.get(key) or []) if item])
+        for key in ("image_refs", "h3_ref_videos", "h3_ref_audios")
+    )
+    params["image_start"] = str(destination)
+    params["image_prompt_type"] = "S"
+    params["h3_reference_mode"] = "first_frame"
+    params["image_mode"] = 0
+    params.pop("image_refs", None)
+    params.pop("h3_ref_videos", None)
+    params.pop("h3_ref_audios", None)
+    params["h3_extend_anchor_time"] = frame["time"]
+
+    return {
+        "path": str(destination),
+        "time": frame["time"],
+        "width": frame["width"],
+        "height": frame["height"],
+        "ignored_references": ignored_references,
+    }
+
+
 MODEL_OPTIONS = {
     "model_type": MODEL_ID,
     "architecture": MODEL_ID,

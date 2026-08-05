@@ -682,10 +682,16 @@ export function InputsPanel() {
       {/* Option strip — extend source: source video strength */}
       {selected === 'extend' && continueVideo && (
         <Strip>
-          <Row label="Source video strength" value={inputVideoStrength.toFixed(2)} />
-          <input type="range" min={0} max={1} step={0.05} value={inputVideoStrength}
-            onChange={e => setParam('input_video_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
-          <p className="text-[9px] text-text-muted/60">1.0 = seamless continuation; lower gives more creative freedom. New content is appended after the source.</p>
+          {isH3 ? (
+            <p className="text-[9px] text-text-muted/70">MiniMax H3 captures the source video's final frame and continues from it with FL2VA. The full video is not sent as a slower, loose Ref2VA reference.</p>
+          ) : (
+            <>
+              <Row label="Source video strength" value={inputVideoStrength.toFixed(2)} />
+              <input type="range" min={0} max={1} step={0.05} value={inputVideoStrength}
+                onChange={e => setParam('input_video_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
+              <p className="text-[9px] text-text-muted/60">1.0 = seamless continuation; lower gives more creative freedom. New content is appended after the source.</p>
+            </>
+          )}
         </Strip>
       )}
 

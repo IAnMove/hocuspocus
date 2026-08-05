@@ -14,6 +14,39 @@ from app.services import minimax_h3_service as h3
 
 
 class TestMiniMaxH3Workflow(unittest.TestCase):
+    def test_extend_video_becomes_last_frame_fl2va_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.mp4"
+            source.write_bytes(b"video")
+
+            def fake_extract(_source, destination, requested_time):
+                Path(destination).write_bytes(b"frame")
+                self.assertEqual(requested_time, 8.5)
+                return {"time": 8.416667, "width": 1280, "height": 720}
+
+            params = {
+                **h3.DEFAULTS,
+                "video_source": str(source),
+                "h3_reference_mode": "references",
+                "image_refs": ["old-reference.png"],
+            }
+            with patch("app.services.video_editor.probe_media", return_value={"duration": 8.5}), \
+                    patch("app.services.video_editor.extract_frame", side_effect=fake_extract):
+                result = h3.prepare_extend_anchor(params, "extend1", source, Path(tmp) / "cache")
+
+            self.assertTrue(Path(result["path"]).is_file())
+            self.assertEqual(result["time"], 8.416667)
+            self.assertEqual(result["ignored_references"], 1)
+            self.assertEqual(params["image_start"], result["path"])
+            self.assertEqual(params["image_prompt_type"], "S")
+            self.assertEqual(params["h3_reference_mode"], "first_frame")
+            self.assertNotIn("image_refs", params)
+
+            with patch.object(h3, "INPUT_DIR", Path(tmp) / "input"):
+                workflow, pipeline = h3.build_workflow(params, "extend1")
+            self.assertEqual(pipeline, "fl2va")
+            self.assertIn("first_frame", workflow["10"]["inputs"])
+
     def test_reference_duration_converts_pyav_microseconds_to_seconds(self):
         class Container:
             duration = 14_083_333

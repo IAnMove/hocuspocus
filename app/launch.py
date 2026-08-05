@@ -10438,6 +10438,25 @@ def _run_generation(job_id: str):
             # MiniMax H3 runs through the isolated, quantized Comfy runtime.
             # It still uses Maestro's normal queue/status/cancel contract.
             if raw_params.get("model_type") == minimax_h3_service.MODEL_ID:
+                if raw_params.get("video_source"):
+                    job["message"] = "Capturing the source video's final frame…"
+                    source_path = _resolve_video_editor_source(raw_params["video_source"])
+                    anchor = minimax_h3_service.prepare_extend_anchor(
+                        raw_params,
+                        job_id,
+                        source_path,
+                        os.path.join(os.getcwd(), "uploads"),
+                    )
+                    # Replace the stored snapshot as well: update() would leave
+                    # removed Ref2VA keys behind and misreport the actual run.
+                    job["params"] = raw_params.copy()
+                    ignored = anchor["ignored_references"]
+                    ignored_note = f"; ignored {ignored} other reference(s)" if ignored else ""
+                    print(
+                        f"[MiniMax H3] Extend from video: captured final frame at "
+                        f"{anchor['time']:.3f}s as {anchor['path']}{ignored_note}. "
+                        "Continuing with FL2VA."
+                    )
                 # A queued H3 job can arrive while the previous one is inside
                 # its idle grace period. Cancel that pending release before
                 # acquiring/loading the sidecar.
