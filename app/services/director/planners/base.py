@@ -178,10 +178,12 @@ class BasePlanner(ABC):
         print("[Planner] JSON parse failed, retrying with fix prompt + JSON grammar...")
         fix_prompt = (
             "Your previous response was not valid JSON. "
-            "Please output ONLY a JSON array of objects. "
+            "Correct that response and output ONLY a JSON array of objects. "
             "No markdown fences, no explanation, no thinking tags. "
             "Just the raw JSON array starting with [ and ending with ].\n\n"
-            f"Original request:\n{user_prompt}"
+            f"Original request:\n{user_prompt}\n\n"
+            "Previous malformed response to correct:\n"
+            f"{str(response)[:24000]}"
         )
         retry_kwargs = dict(
             prompt=fix_prompt,

@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.services.director.planners.comic_movie import ComicMoviePlanner
+from app.services.director.planners.music_video import MusicVideoPlanner
 from app.services.director.planners.short_film import ShortFilmPlanner
 from app.services.director.schema import CharacterProfile
 from app.services import director_pipeline
@@ -42,6 +43,18 @@ class _NoLlmShortFilmPlanner(ShortFilmPlanner):
 
 
 class TestDirectorV2StoryRefs(unittest.TestCase):
+    def test_music_video_rejects_empty_plans_instead_of_fake_reframe_prompts(self):
+        with self.assertRaisesRegex(RuntimeError, "returned 0 valid shots; 2 were required"):
+            MusicVideoPlanner._validate_llm_shot_plans([], 2)
+
+    def test_music_video_rejects_partial_prompts_before_image_generation(self):
+        plans = [{
+            "image_prompt": "REFRAME: medium shot | MOOD: steady",
+            "video_prompt": "",
+        }]
+        with self.assertRaisesRegex(RuntimeError, "incomplete image/video prompts for shots 1"):
+            MusicVideoPlanner._validate_llm_shot_plans(plans, 1)
+
     def test_character_and_location_references_are_preserved(self):
         body = {
             "story_description": "A compact episode.",

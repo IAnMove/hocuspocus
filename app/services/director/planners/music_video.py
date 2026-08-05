@@ -184,6 +184,8 @@ class MusicVideoPlanner(BasePlanner):
             **{k: v for k, v in kwargs.items() if k not in ("nsfw",)},
         )
 
+        self._validate_llm_shot_plans(shot_dicts, len(clips))
+
         # ── Image-prompt sanitization (Layer 1) ──────────────────────
         # Strip GARMENT BAN violations and narrative-filler phrases the
         # image model can't render. Mirrors the same hook in short_film.py
@@ -309,6 +311,37 @@ class MusicVideoPlanner(BasePlanner):
                 "Performer must be visible when assigned to a clip",
             ],
         )
+
+    @staticmethod
+    def _validate_llm_shot_plans(shot_dicts: list[dict], expected: int) -> None:
+        """Reject prose/partial planner output before generic fallbacks hide it.
+
+        A malformed music-video response previously became ``expected`` empty
+        ShotPlans.  The image renderer then had only its defaults available and
+        emitted repeated ``REFRAME: medium shot | MOOD: steady`` prompts.  That
+        looks like a successful plan in the UI even though planning failed.
+        """
+        if len(shot_dicts) != expected:
+            raise RuntimeError(
+                f"Music-video planning returned {len(shot_dicts)} valid shots; "
+                f"{expected} were required. No images were queued."
+            )
+        incomplete = []
+        for index, shot in enumerate(shot_dicts):
+            if not isinstance(shot, dict):
+                incomplete.append(index + 1)
+                continue
+            image_prompt = str(shot.get("image_prompt") or "").strip()
+            video_prompt = str(shot.get("video_prompt") or "").strip()
+            if len(image_prompt) < 24 or len(video_prompt) < 16:
+                incomplete.append(index + 1)
+        if incomplete:
+            preview = ", ".join(str(i) for i in incomplete[:12])
+            suffix = "…" if len(incomplete) > 12 else ""
+            raise RuntimeError(
+                "Music-video planning produced incomplete image/video prompts "
+                f"for shots {preview}{suffix}. No images were queued."
+            )
 
     # ── Character Building ───────────────────────────────────────────
 
@@ -579,12 +612,71 @@ Write {len(clips)} structured shot plans. Go:"""
             image_paths = None
         max_tokens = max(4096, len(clips) * 700 + 1024)
 
+        shot_schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "scene_goal": {"type": "string"},
+                "scene_type": {"type": "string"},
+                "subjects_on_screen": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "character_id": {"type": ["string", "null"]},
+                            "visual_description": {"type": "string"},
+                            "position_or_relation": {"type": ["string", "null"]},
+                        },
+                        "required": ["visual_description"],
+                    },
+                },
+                "spatial_setup": {"type": "string"},
+                "environment": {"type": "string"},
+                "visual_style": {"type": "string"},
+                "lighting": {"type": "string"},
+                "mood": {"type": "string"},
+                "action_beats": {"type": "array", "items": {"type": "string"}},
+                "camera_plan": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "framing": {"type": "string"},
+                        "angle": {"type": ["string", "null"]},
+                        "movement": {"type": ["string", "null"]},
+                        "movement_intensity": {"type": ["string", "null"]},
+                        "lens_feel": {"type": ["string", "null"]},
+                    },
+                    "required": ["framing", "movement", "movement_intensity"],
+                },
+                "ending_beat": {"type": "string"},
+                "image_source": {"type": "string"},
+                "image_prompt": {"type": "string", "minLength": 24},
+                "visual_changes": {"type": "array", "items": {"type": "string"}},
+                "video_prompt": {"type": "string", "minLength": 16},
+                "keyframe_prompts": {"type": "array", "items": {"type": "string"}},
+                "window_prompts": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": [
+                "scene_goal", "scene_type", "subjects_on_screen", "environment",
+                "visual_style", "lighting", "mood", "action_beats", "camera_plan",
+                "ending_beat", "image_source", "image_prompt", "visual_changes",
+                "video_prompt", "keyframe_prompts", "window_prompts",
+            ],
+        }
+        response_schema = {
+            "type": "array",
+            "items": shot_schema,
+            "minItems": len(clips),
+            "maxItems": len(clips),
+        }
+
         return self._call_llm_json(
             user_prompt=user_prompt,
             system_prompt=system_prompt,
             max_tokens=max_tokens,
-            thinking_budget=4096,
             image_paths=image_paths,
+            json_schema=response_schema,
         )
 
     # ── Convert LLM Output to ShotPlans ──────────────────────────────
