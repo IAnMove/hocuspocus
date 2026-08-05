@@ -96,6 +96,13 @@ type PendingDraft = {
   selected: string[]
   replaceCollections: boolean
 }
+type MusicVideoGenerationSettings = {
+  imageModel: string
+  videoModel: string
+  writingProvider: StoryWritingProvider
+  writingModel: string
+  writingBaseUrl: string
+}
 const storyJobKey = (workspace: string, projectId: string) =>
   `maestro-story-plan-job:${workspace}:${projectId}`
 const storyResultKey = (workspace: string, projectId: string) =>
@@ -535,6 +542,26 @@ export function StoryLabPanel() {
   const selectedFilmImageModel = videoModels.find(model => model.model_type === filmImageModel)
   const selectedFilmVideoModel = videoModels.find(model => model.model_type === filmVideoModel)
   const filmImageReady = filmImageModel !== MINIMAX_IMAGE_API_MODEL || Boolean(servicesConfig?.minimax_api_key_set)
+  const musicWritingReady = project.provider.writingProvider === 'maestro'
+    || (project.provider.writingProvider === 'deepseek' && Boolean(servicesConfig?.deepseek_api_key_set))
+    || (project.provider.writingProvider === 'minimax' && Boolean(servicesConfig?.minimax_api_key_set))
+    || (project.provider.writingProvider === 'openai' && Boolean(servicesConfig?.openai_api_key_set))
+    || (project.provider.writingProvider === 'openai-compatible'
+      && Boolean(servicesConfig?.compatible_api_key_set && project.provider.writingBaseUrl))
+  const setMusicWritingProvider = (next: StoryWritingProvider) => {
+    const defaults = next === 'deepseek'
+      ? { writingModel: 'deepseek-v4-pro', writingBaseUrl: 'https://api.deepseek.com' }
+      : next === 'minimax'
+        ? { writingModel: 'MiniMax-M3', writingBaseUrl: 'https://api.minimax.io/v1' }
+        : next === 'openai'
+          ? { writingModel: 'gpt-4.1', writingBaseUrl: 'https://api.openai.com' }
+          : next === 'openai-compatible'
+            ? { writingModel: '', writingBaseUrl: servicesConfig?.compatible_base_url || '' }
+            : { writingModel: project.provider.writingModel, writingBaseUrl: project.provider.writingBaseUrl }
+    patch({ provider: { ...project.provider, writingProvider: next, ...defaults } })
+  }
+  const patchMusicWritingProvider = (value: Partial<StoryProject['provider']>) =>
+    patch({ provider: { ...project.provider, ...value } })
 
   useEffect(() => {
     loadWorkspace(activeWorkspace)
@@ -1943,6 +1970,13 @@ export function StoryLabPanel() {
     autoStart = false,
     pacing: 'cinematic' | 'balanced' | 'rhythmic' = 'balanced',
     excerpt?: { start: number; end: number },
+    generationSettings: MusicVideoGenerationSettings = {
+      imageModel: filmImageModel,
+      videoModel: filmVideoModel,
+      writingProvider: source.provider.writingProvider,
+      writingModel: source.provider.writingModel,
+      writingBaseUrl: source.provider.writingBaseUrl,
+    },
   ) => {
     const resolvedCue = effectiveMusicCue(source, cue, candidate)
     const adaptation = buildMusicVideoAdaptation(source, resolvedCue)
@@ -1950,6 +1984,12 @@ export function StoryLabPanel() {
     director.directorReset()
     const store = useStore.getState()
     store.setGenerationMode('video')
+    if (generationSettings.imageModel) {
+      store.selectDirectorImageModel(generationSettings.imageModel)
+    }
+    if (generationSettings.videoModel) {
+      await store.selectDirectorVideoModel(generationSettings.videoModel)
+    }
     store.setSidebarMode('director')
     store.setDirectorSkill('music_video')
     store.setDirectorAutoMode(autoStart)
@@ -1962,6 +2002,9 @@ export function StoryLabPanel() {
       directorSongDuration: excerpt ? excerpt.end - excerpt.start : resolvedCue.durationSeconds,
       directorPacingProfile: pacing,
       directorStep: 'upload',
+      directorWritingProvider: generationSettings.writingProvider,
+      directorWritingModel: generationSettings.writingModel,
+      directorWritingBaseUrl: generationSettings.writingBaseUrl,
     })
 
     for (const reference of adaptation.characterReferences) {
@@ -2011,7 +2054,7 @@ export function StoryLabPanel() {
       useStore.getState().directorConfirmStructure()
       await useStore.getState().startDirectorPipeline()
     }
-    return { adaptation, resolvedCue, pipelineId: useStore.getState().pipelineId }
+    return { adaptation, resolvedCue, pipelineId: useStore.getState().pipelineId, generationSettings }
   }
 
   const openMusicalTrailer = async (
@@ -2045,6 +2088,13 @@ export function StoryLabPanel() {
     )
     try {
       activity.update('Loading character and world references…', 'preparing_music_video', 1, 3)
+      const generationSettings: MusicVideoGenerationSettings = {
+        imageModel: filmImageModel,
+        videoModel: filmVideoModel,
+        writingProvider: project.provider.writingProvider,
+        writingModel: project.provider.writingModel,
+        writingBaseUrl: project.provider.writingBaseUrl,
+      }
       const loaded = await loadMusicVideoProduction(
         project,
         cue,
@@ -2052,6 +2102,7 @@ export function StoryLabPanel() {
         options.autoStart === true,
         options.pacing || musicProductionPacing,
         options.mode === 'trailer' ? options.excerpt : undefined,
+        generationSettings,
       )
       activity.update('Saving the independent production snapshot…', 'preparing_music_video', 2, 3)
       if (options.saveProduction !== false) {
@@ -2080,8 +2131,11 @@ export function StoryLabPanel() {
               mode: options.mode || 'full',
               trimStart: options.mode === 'trailer' ? options.excerpt?.start : undefined,
               trimEnd: options.mode === 'trailer' ? options.excerpt?.end : undefined,
-              imageModel: filmImageModel,
-              videoModel: filmVideoModel,
+              imageModel: loaded.generationSettings.imageModel,
+              videoModel: loaded.generationSettings.videoModel,
+              writingProvider: loaded.generationSettings.writingProvider,
+              writingModel: loaded.generationSettings.writingModel,
+              writingBaseUrl: loaded.generationSettings.writingBaseUrl,
               pipelineId: loaded.pipelineId,
             },
             status: 'staged',
@@ -2148,6 +2202,23 @@ export function StoryLabPanel() {
       const excerpt = mode === 'trailer' && Number.isFinite(trimStart) && Number.isFinite(trimEnd) && trimEnd > trimStart
         ? { start: trimStart, end: trimEnd }
         : undefined
+      const savedWritingProvider = production.targetSnapshot?.writingProvider
+      const generationSettings: MusicVideoGenerationSettings = {
+        imageModel: typeof production.targetSnapshot?.imageModel === 'string'
+          ? production.targetSnapshot.imageModel : filmImageModel,
+        videoModel: typeof production.targetSnapshot?.videoModel === 'string'
+          ? production.targetSnapshot.videoModel : filmVideoModel,
+        writingProvider: savedWritingProvider === 'deepseek'
+          || savedWritingProvider === 'minimax'
+          || savedWritingProvider === 'openai'
+          || savedWritingProvider === 'openai-compatible'
+          || savedWritingProvider === 'maestro'
+          ? savedWritingProvider : source.provider.writingProvider,
+        writingModel: typeof production.targetSnapshot?.writingModel === 'string'
+          ? production.targetSnapshot.writingModel : source.provider.writingModel,
+        writingBaseUrl: typeof production.targetSnapshot?.writingBaseUrl === 'string'
+          ? production.targetSnapshot.writingBaseUrl : source.provider.writingBaseUrl,
+      }
       const current = useStore.getState()
       const hasWork = Boolean(current.directorSceneDescription.trim() || current.directorPlannedClips.length)
       if (hasWork && !window.confirm(
@@ -2155,7 +2226,7 @@ export function StoryLabPanel() {
       )) return
       setProductionBusy('music')
       try {
-        await loadMusicVideoProduction(source, cue, candidate, false, pacing, excerpt)
+        await loadMusicVideoProduction(source, cue, candidate, false, pacing, excerpt, generationSettings)
       } catch (error) {
         setNotice({ kind: 'error', text: `The music-video production could not be reopened: ${(error as Error).message}` })
       } finally {
@@ -2983,6 +3054,82 @@ export function StoryLabPanel() {
                             <audio src={selectedMusicOption.candidate.source} controls preload="metadata" className="h-8 w-full" />
                           </div>
                         )}
+                        <div className="rounded-lg border border-border bg-bg-tertiary/40 p-2.5 space-y-2">
+                          <div>
+                            <p className="text-[10px] font-medium text-text-secondary">Generation models</p>
+                            <p className="mt-0.5 text-[9px] text-text-muted">These exact choices are sent to Director and saved with this music-video production for later iterations.</p>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                            <label className="block text-[10px] text-text-muted">Planning LLM
+                              <select
+                                className={`${input} mt-1`}
+                                value={project.provider.writingProvider}
+                                onChange={event => setMusicWritingProvider(event.target.value as StoryWritingProvider)}
+                              >
+                                <option value="maestro">Maestro internal</option>
+                                <option value="deepseek">DeepSeek</option>
+                                <option value="minimax">MiniMax</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="openai-compatible">Custom OpenAI-compatible</option>
+                              </select>
+                            </label>
+                            {project.provider.writingProvider !== 'maestro' && (
+                              <label className="block text-[10px] text-text-muted">LLM model
+                                {project.provider.writingProvider === 'deepseek' ? (
+                                  <select className={`${input} mt-1`} value={project.provider.writingModel || 'deepseek-v4-pro'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
+                                    <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
+                                    <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
+                                  </select>
+                                ) : project.provider.writingProvider === 'minimax' ? (
+                                  <select className={`${input} mt-1`} value={project.provider.writingModel || 'MiniMax-M3'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
+                                    <option value="MiniMax-M3">MiniMax M3</option>
+                                    <option value="MiniMax-M2.7">MiniMax M2.7</option>
+                                    <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed</option>
+                                  </select>
+                                ) : (
+                                  <input className={`${input} mt-1`} value={project.provider.writingModel} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })} />
+                                )}
+                              </label>
+                            )}
+                            <label className="block text-[10px] text-text-muted">Image model
+                              <select className={`${input} mt-1`} value={filmImageModel} onChange={event => selectDirectorImageModel(event.target.value)}>
+                                {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
+                                  <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
+                                )}
+                                <optgroup label="External API">
+                                  <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
+                                </optgroup>
+                                <optgroup label="Maestro local">
+                                  {selectableImageModels.map(model => (
+                                    <option key={model.model_type} value={model.model_type}>{model.name}</option>
+                                  ))}
+                                </optgroup>
+                              </select>
+                            </label>
+                            <label className="block text-[10px] text-text-muted">Video model
+                              <select className={`${input} mt-1`} value={filmVideoModel} onChange={event => void selectDirectorVideoModel(event.target.value)}>
+                                {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && (
+                                  <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>
+                                )}
+                                {selectableVideoModels.map(model => (
+                                  <option key={model.model_type} value={model.model_type}>{model.name}</option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                          {project.provider.writingProvider === 'openai-compatible' && (
+                            <label className="block text-[10px] text-text-muted">Compatible API base URL
+                              <input className={`${input} mt-1`} value={project.provider.writingBaseUrl} onChange={event => patchMusicWritingProvider({ writingBaseUrl: event.target.value })} placeholder="https://…/v1" />
+                            </label>
+                          )}
+                          <p className={`text-[9px] ${musicWritingReady && filmImageReady ? 'text-text-muted' : 'text-amber-300'}`}>
+                            {musicWritingReady && filmImageReady
+                              ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · ${selectedFilmImageModel?.name || filmImageModel} · ${selectedFilmVideoModel?.name || filmVideoModel}`
+                              : !musicWritingReady
+                                ? 'Configure the selected planning LLM in Settings → Services before generating.'
+                                : 'Configure MiniMax in Settings → Services before using MiniMax Image.'}
+                          </p>
+                        </div>
                         <div className="grid grid-cols-2 gap-1.5">
                           <button
                             type="button"
@@ -3036,7 +3183,7 @@ export function StoryLabPanel() {
                         <div className="grid gap-2 sm:grid-cols-2">
                           <button
                             className={`${button} w-full border-pink-500/60 text-pink-300`}
-                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length)}
+                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length) || !musicWritingReady || !filmImageReady}
                             onClick={() => void stageMusicVideo(true)}
                           >
                             {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
@@ -3044,7 +3191,7 @@ export function StoryLabPanel() {
                           </button>
                           <button
                             className={`${button} w-full`}
-                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length)}
+                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length) || !musicWritingReady || !filmImageReady}
                             onClick={() => void stageMusicVideo(false)}
                           >
                             <ChevronRight size={13} /> Open {musicProductionMode === 'trailer' ? 'trailer' : 'music video'} in Director
