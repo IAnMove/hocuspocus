@@ -63,6 +63,9 @@ interface ActivityView {
     calls?: number
   }
   startedAt?: number
+  phaseStartedAt?: number
+  phaseCurrent?: number
+  phaseTotal?: number
   updatedAt: number
   dismissible?: 'activity' | 'job'
 }
@@ -103,6 +106,28 @@ function formatElapsed(milliseconds: number): string {
   return hours > 0
     ? `${hours}:${minutes.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`
     : `${minutes}:${remainder.toString().padStart(2, '0')}`
+}
+
+function formatEstimate(milliseconds: number): string {
+  const minutes = Math.max(1, Math.ceil(milliseconds / 60_000))
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const remainder = minutes % 60
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`
+}
+
+function estimatedRemaining(row: ActivityView, now: number): string {
+  if (row.status !== 'running') return ''
+  const current = row.phaseCurrent ?? row.current
+  const total = row.phaseTotal ?? row.total
+  const startedAt = row.phaseStartedAt || row.startedAt
+  if (!startedAt || current <= 0 || total <= current) return ''
+  const elapsed = now - startedAt
+  // A first very short sample is too noisy to be useful.
+  if (elapsed < 10_000) return ''
+  const remaining = (elapsed / current) * (total - current)
+  if (!Number.isFinite(remaining) || remaining <= 0) return ''
+  return `ETA ~${formatEstimate(remaining)}`
 }
 
 /**
@@ -155,7 +180,10 @@ export function ActivityFooter() {
       ),
       resourceMessage: resourceMessage(pipeline.resource_schedule),
       startedAt: epochMilliseconds(pipeline.created_at),
-      updatedAt: pipeline.updated_at || pipeline.created_at || 2,
+      phaseStartedAt: epochMilliseconds(pipeline.phase_started_at),
+      phaseCurrent: pipeline.progress?.current || 0,
+      phaseTotal: pipeline.progress?.total || 0,
+      updatedAt: epochMilliseconds(pipeline.updated_at || pipeline.created_at) || 2,
     }))
 
     const pipeline: ActivityView[] = pipelineStatus
@@ -178,7 +206,11 @@ export function ActivityFooter() {
             pipelineStatus.progress?.total_steps || pipelineStatus.progress?.total || 0,
           ),
           resourceMessage: resourceMessage(pipelineStatus.resource_schedule),
-          updatedAt: 2,
+          startedAt: epochMilliseconds(pipelineStatus.created_at),
+          phaseStartedAt: epochMilliseconds(pipelineStatus.phase_started_at),
+          phaseCurrent: pipelineStatus.progress?.current || 0,
+          phaseTotal: pipelineStatus.progress?.total || 0,
+          updatedAt: epochMilliseconds(pipelineStatus.updated_at || pipelineStatus.created_at) || 2,
         }]
       : []
 
@@ -223,6 +255,9 @@ export function ActivityFooter() {
   const elapsed = (row: ActivityView) => row.startedAt
     ? formatElapsed((row.status === 'running' || row.status === 'queued' ? clock : row.updatedAt) - row.startedAt)
     : ''
+  const phaseElapsed = (row: ActivityView) => row.phaseStartedAt
+    ? formatElapsed((row.status === 'running' || row.status === 'queued' ? clock : row.updatedAt) - row.phaseStartedAt)
+    : ''
 
   return (
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
@@ -246,6 +281,19 @@ export function ActivityFooter() {
                       <span className="font-medium text-text-primary">{row.title}</span>
                       <div className="flex items-center gap-2">
                         {elapsed(row) && <span className="shrink-0 tabular-nums text-text-muted">{elapsed(row)}</span>}
+                        {phaseElapsed(row) && (
+                          <span className="shrink-0 tabular-nums text-text-muted" title="Elapsed time in the current phase">
+                            phase {phaseElapsed(row)}
+                          </span>
+                        )}
+                        {estimatedRemaining(row, clock) && (
+                          <span
+                            className="shrink-0 tabular-nums text-accent-blue"
+                            title={`Approximate time remaining for this phase · phase elapsed ${phaseElapsed(row) || elapsed(row)}`}
+                          >
+                            {estimatedRemaining(row, clock)}
+                          </span>
+                        )}
                         <span className="shrink-0 capitalize text-text-muted">{PHASE_LABELS[row.phase] || row.phase?.replaceAll('_', ' ')}</span>
                         {(row.status === 'running' || row.status === 'queued')
                           && (row.id.startsWith('job:') || row.id.startsWith('audio-analysis-')) && (
@@ -344,6 +392,14 @@ export function ActivityFooter() {
         )}
         {primary && elapsed(primary) && (
           <span className="shrink-0 tabular-nums text-text-muted">{elapsed(primary)}</span>
+        )}
+        {primary && estimatedRemaining(primary, clock) && (
+          <span
+            className="hidden sm:inline shrink-0 tabular-nums text-accent-blue"
+            title={`Approximate time remaining for this phase · phase elapsed ${phaseElapsed(primary) || elapsed(primary)}`}
+          >
+            {estimatedRemaining(primary, clock)}
+          </span>
         )}
         <span
           className={`truncate ${hasError ? 'text-red-400' : isActive ? 'text-text-secondary' : 'text-text-muted'}`}

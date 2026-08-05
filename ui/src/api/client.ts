@@ -756,6 +756,9 @@ export interface PipelineStatus {
    *  these inline so users see why some selected LoRAs weren't applied. */
   lora_warnings?: string[]
   resource_schedule?: PipelineResourceSchedule
+  created_at?: number
+  updated_at?: number
+  phase_started_at?: number
 }
 
 export interface ActiveDirectorPipeline {
@@ -770,6 +773,7 @@ export interface ActiveDirectorPipeline {
   workspace?: string
   created_at?: number
   updated_at?: number
+  phase_started_at?: number
   resource_schedule?: PipelineResourceSchedule
 }
 

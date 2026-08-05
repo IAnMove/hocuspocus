@@ -353,8 +353,12 @@ def _save_pipeline_state_serialized(pid: str) -> bool:
         "version": PIPELINE_STATE_VERSION,
         "pipeline_id": pid,
         "created_at": p.get("created_at"),
+        "updated_at": p.get("updated_at"),
+        "phase_started_at": p.get("phase_started_at"),
         "completed_at": p.get("_completed_at"),
         "status": p.get("status", "unknown"),
+        "phase": p.get("phase"),
+        "progress": copy.deepcopy(p.get("progress") or {}),
         "pipeline_type": params.get("pipeline_type", "music_video"),
         "comic_id": params.get("comic_id"),
         "scene_description": params.get("scene_description", ""),
@@ -1558,7 +1562,16 @@ def _update_pipeline(pid: str, **kwargs):
     """Thread-safe update of pipeline state."""
     with _pipeline_lock:
         if pid in _pipelines:
-            _pipelines[pid].update(kwargs)
+            pipeline = _pipelines[pid]
+            now = time.time()
+            next_phase = kwargs.get("phase", pipeline.get("phase"))
+            if (
+                not pipeline.get("phase_started_at")
+                or next_phase != pipeline.get("phase")
+            ):
+                pipeline["phase_started_at"] = now
+            pipeline.update(kwargs)
+            pipeline["updated_at"] = now
 
 
 def start_pipeline(params: dict) -> str:
@@ -1579,6 +1592,7 @@ def start_pipeline(params: dict) -> str:
         workspace = None
         print(f"[Pipeline] No workspace, using wgp.save_path={out_dir}")
 
+    now = time.time()
     pipeline = {
         "id": pid,
         "status": "running",
@@ -1589,7 +1603,9 @@ def start_pipeline(params: dict) -> str:
         "clip_images": [],         # filenames of generated start images
         "output_files": [],
         "error": None,
-        "created_at": time.time(),
+        "created_at": now,
+        "updated_at": now,
+        "phase_started_at": now,
         "params": params,
         "pause_reason": None,
         "workspace": workspace,
@@ -2911,6 +2927,7 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
     workspace = data.get("workspace") if data.get("workspace") not in ("default", None) else None
     resume_out_dir = os.path.dirname(state_path)
 
+    now = time.time()
     pipeline = {
         "id": pid,
         "status": "running",
@@ -2958,7 +2975,9 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         "output_files": data.get("output_files", []) or [],
         "_llm_log": data.get("llm_log"),
         "error": None,
-        "created_at": data.get("created_at") or time.time(),
+        "created_at": data.get("created_at") or now,
+        "updated_at": now,
+        "phase_started_at": now,
         "params": params,
         "pause_reason": None,
         "workspace": workspace,
