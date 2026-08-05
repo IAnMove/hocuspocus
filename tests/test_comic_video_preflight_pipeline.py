@@ -1091,7 +1091,7 @@ def test_preview_generation_does_not_start_without_durable_child_checkpoint(
 
 
 @pytest.mark.parametrize("worker_status", ["queued", "running"])
-def test_pipeline_cancel_waits_for_generation_worker_terminal_state(
+def test_pipeline_cancel_publishes_terminal_state_while_worker_settles(
     monkeypatch,
     tmp_path,
     worker_status,
@@ -1163,24 +1163,14 @@ def test_pipeline_cancel_waits_for_generation_worker_terminal_state(
     assert worker_ready.wait(timeout=2)
     try:
         status = director_pipeline.stop_pipeline(pid)
-        if worker_status == "running":
-            assert status == "cancelling"
-            assert director_pipeline._pipelines[pid]["status"] == "running"
-            assert (
-                director_pipeline._pipelines[pid]["phase"]
-                == "cancelling"
-            )
-            assert waiter_done.is_set() is False
-        else:
-            assert status == "cancelling"
+        assert status is True
+        assert director_pipeline._pipelines[pid]["status"] == "cancelled"
+        assert director_pipeline._pipelines[pid]["phase"] == "cancelled"
 
         worker_release.set()
         waiter.join(timeout=3)
         assert waiter_done.is_set()
-        assert isinstance(
-            outcome.get("error"),
-            director_pipeline.PipelineCancelled,
-        )
+        assert "error" not in outcome
         assert director_pipeline._pipelines[pid]["status"] == "cancelled"
         assert "_active_generation_job_id" not in (
             director_pipeline._pipelines[pid]

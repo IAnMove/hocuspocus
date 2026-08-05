@@ -98,9 +98,15 @@ def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Pa
 
     class FakeWgp:
         @staticmethod
-        def concatenate_multi_clip_videos(paths, destination, audio_path):
+        def concatenate_multi_clip_videos(
+            paths,
+            destination,
+            audio_path,
+            audio_start_sec=0.0,
+        ):
             joined.extend(Path(path).name for path in paths)
             assert audio_path is None
+            assert audio_start_sec == 0.0
             Path(destination).write_bytes(b"joined")
             return True
 
