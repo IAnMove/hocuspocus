@@ -4,10 +4,11 @@ from importlib.metadata import version
 from mmgp import offload
 import torch.nn.functional as F
 import warnings
-from importlib.metadata import version
-
-major, minor = torch.cuda.get_device_capability(None)
-bfloat16_supported =  major >= 8 
+if torch.cuda.is_available():
+    major, minor = torch.cuda.get_device_capability(None)
+else:
+    major, minor = (0, 0)
+bfloat16_supported = major >= 8
 
 try:
     import triton
@@ -257,7 +258,11 @@ def pay_attention(
         force_attention = "sdpa"
         if  attention_mask.dtype == torch.bfloat16 and not bfloat16_supported:
             attention_mask = attention_mask.to(torch.float16)
-    attn = offload.shared_state["_attention"] if force_attention== None else force_attention
+    attn = (
+        offload.shared_state.get("_attention", "sdpa")
+        if force_attention is None
+        else force_attention
+    )
 
     q,k,v = qkv_list
     qkv_list.clear()
