@@ -42,6 +42,25 @@ class _Response:
 
 
 class TestComicCompatibleLlm(unittest.TestCase):
+    def test_multimodal_request_preserves_image_order_before_text(self):
+        with patch(
+            "services.llm_service._image_to_data_url",
+            side_effect=["data:image/jpeg;base64,one", "data:image/jpeg;base64,two"],
+        ), patch(
+            "services.llm_service.requests.post",
+            return_value=_Response('{"assets": []}'),
+        ) as post:
+            llm_service.generate_openai_compatible(
+                prompt="Classify these images",
+                model_id="MiniMax-M3",
+                base_url="https://api.minimax.io/v1",
+                api_key="secret",
+                image_paths=["first.jpg", "second.jpg"],
+            )
+        content = post.call_args.kwargs["json"]["messages"][-1]["content"]
+        self.assertEqual([part["type"] for part in content], ["image_url", "image_url", "text"])
+        self.assertEqual(content[-1]["text"], "Classify these images")
+
     def test_deepseek_empty_json_is_retried_once(self):
         with patch(
             "services.llm_service.requests.post",

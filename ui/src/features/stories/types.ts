@@ -8,6 +8,7 @@ export type StoryWritingProvider =
 export type StoryImageProvider = 'maestro' | 'minimax'
 export type StoryApprovalState = 'draft' | 'approved'
 export type StoryWorkflowMode = 'guided' | 'automatic'
+export type StoryAssetKind = 'world' | 'location' | 'character' | 'prop' | 'style' | 'ignore'
 
 export interface StoryVisualAsset {
   id: string
@@ -18,6 +19,12 @@ export interface StoryVisualAsset {
   provider: StoryImageProvider | 'upload'
   model?: string
   createdAt: string
+  /** Smart-import metadata remains editable/auditable after assignment. */
+  assetKind?: StoryAssetKind
+  description?: string
+  confidence?: number
+  originalName?: string
+  importBatchId?: string
 }
 
 export interface StoryLocation {

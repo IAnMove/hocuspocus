@@ -12403,6 +12403,7 @@ def _generate_comic_director_json(
     stage: str,
     llm_override: dict | None = None,
     root_array_key: str | None = None,
+    image_paths: list[str] | None = None,
 ) -> dict:
     from services import llm_service
     # A streaming HTTP response resets the read timeout on every token.
@@ -12416,6 +12417,7 @@ def _generate_comic_director_json(
         "frequency_penalty": 0.25,
         "presence_penalty": 0.1,
         "json_schema": schema,
+        "image_paths": image_paths or [],
     }
     parse_error = None
     for attempt in range(1, 3):
@@ -13119,6 +13121,118 @@ def put_story_library(body: dict):
             status_code=500,
             detail=f"Could not save the Story Lab library: {exc}",
         ) from exc
+
+
+def _story_import_upload_path(value: str) -> str:
+    """Allow multimodal analysis only for files uploaded into Maestro."""
+    upload_dir = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
+    candidate = os.path.realpath(str(value or ""))
+    if candidate != upload_dir and not candidate.startswith(upload_dir + os.sep):
+        raise HTTPException(status_code=400, detail="Smart asset analysis only accepts Maestro uploads")
+    if not os.path.isfile(candidate):
+        raise HTTPException(status_code=400, detail="One imported asset is no longer available")
+    return candidate
+
+
+@api.post("/api/v1/stories/assets/analyze")
+async def analyze_story_assets(body: dict):
+    """Classify a reviewed batch of uploaded images against one Story bible."""
+    from services import llm_service
+    from services.story_asset_import import (
+        MAX_IMPORT_ASSETS, asset_import_schema, validate_asset_import_result,
+    )
+
+    raw_assets = body.get("assets") if isinstance(body.get("assets"), list) else []
+    if not raw_assets:
+        raise HTTPException(status_code=400, detail="Choose at least one image")
+    if len(raw_assets) > MAX_IMPORT_ASSETS:
+        raise HTTPException(status_code=400, detail=f"Import at most {MAX_IMPORT_ASSETS} images per batch")
+    paths = [_story_import_upload_path(item.get("path") if isinstance(item, dict) else "") for item in raw_assets]
+    names = [
+        str(item.get("name") or os.path.basename(paths[index])).strip()[:300]
+        if isinstance(item, dict) else os.path.basename(paths[index])
+        for index, item in enumerate(raw_assets)
+    ]
+    project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    existing_characters = [
+        {"id": str(item.get("id") or ""), "name": str(item.get("name") or "")}
+        for item in project.get("characters", []) if isinstance(item, dict)
+    ]
+    world = project.get("world") if isinstance(project.get("world"), dict) else {}
+    existing_locations = [
+        {"id": str(item.get("id") or ""), "name": str(item.get("name") or "")}
+        for item in world.get("locations", []) if isinstance(item, dict)
+    ]
+    user_context = str(body.get("description") or "").strip()[:4000]
+    language = str(project.get("language") or "English").strip()[:100]
+    asset_lines = "\n".join(f"Image {index + 1} (index {index}): {name}" for index, name in enumerate(names))
+    prompt = f"""Analyze the attached image batch as reusable assets for one Story Lab project.
+The attached images appear in exactly the same order as this list:
+{asset_lines}
+
+Optional batch context from the user: {user_context or 'none'}
+Story title: {str(project.get('title') or 'Untitled')[:300]}
+Premise: {str(project.get('premise') or '')[:2000]}
+World summary: {str(world.get('summary') or '')[:2000]}
+Existing characters (reuse exact id when clearly matched): {json.dumps(existing_characters, ensure_ascii=False)}
+Existing locations (reuse exact id when clearly matched): {json.dumps(existing_locations, ensure_ascii=False)}
+
+Return one object per image. Classify kind as world, location, character, prop,
+style, or ignore. For a match, targetId is the exact existing id. For multiple
+images of the same new entity, give all of them the same stable grouping key:
+"new-character:<slug>" or "new-location:<slug>". World/prop/style use targetId
+"world". Describe only visible evidence; do not invent biography or plot facts.
+Write name, description, visualPrompt and reason in {language}. visualPrompt is
+a reusable single-image identity/environment reference prompt without grids,
+collages, captions, logos or UI. Confidence is 0 to 1. Return strict JSON only."""
+    schema = asset_import_schema(len(paths))
+    override = _comic_writing_llm(body)
+    if not override:
+        _ensure_llm_loaded()
+    tracking_id = str(body.get("activity_id") or "").strip()[:160]
+    if tracking_id:
+        llm_service.begin_activity_tracking(
+            tracking_id, phase="analyzing_assets", current=0, total=len(paths),
+            detail=f"Analyzing {len(paths)} imported images…",
+        )
+
+    def run_analysis():
+        result = _generate_comic_director_json(
+            prompt=prompt,
+            system_prompt=(
+                "You are a production asset librarian and visual continuity analyst. "
+                "Inspect every attached image and return strict JSON only."
+            ),
+            schema=schema,
+            max_new_tokens=max(1200, len(paths) * 280),
+            stage="Story Lab smart asset import",
+            llm_override=override,
+            image_paths=paths,
+        )
+        return validate_asset_import_result(result, len(paths))
+
+    try:
+        analyzed = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: llm_service.run_with_activity_tracking(tracking_id, run_analysis),
+        )
+    except Exception as exc:
+        llm_service.update_activity_tracking(
+            tracking_id, status="failed", phase="analyzing_assets",
+            detail=str(exc), error=str(exc),
+        )
+        raise HTTPException(status_code=502, detail=f"Smart asset analysis failed: {exc}") from exc
+    llm_service.update_activity_tracking(
+        tracking_id, status="completed", phase="completed",
+        current=len(paths), total=len(paths),
+        detail=f"{len(paths)} asset suggestions ready for review.",
+    )
+    return {
+        "assets": [
+            {**item, "nameOriginal": names[item["index"]], "source": raw_assets[item["index"]].get("url", "")}
+            for item in analyzed
+        ],
+    }
 
 
 def _generate_story_lab_stage(body: dict, scope: str) -> dict:

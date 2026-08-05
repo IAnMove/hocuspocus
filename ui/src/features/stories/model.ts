@@ -227,6 +227,13 @@ function normalizeAsset(value: unknown, id: string): StoryVisualAsset | null {
     provider,
     model: text(item.model) || undefined,
     createdAt: text(item.createdAt, new Date().toISOString()),
+    assetKind: ['world', 'location', 'character', 'prop', 'style', 'ignore'].includes(text(item.assetKind))
+      ? item.assetKind : undefined,
+    description: text(item.description) || undefined,
+    confidence: Number.isFinite(Number(item.confidence))
+      ? Math.max(0, Math.min(1, Number(item.confidence))) : undefined,
+    originalName: text(item.originalName) || undefined,
+    importBatchId: text(item.importBatchId) || undefined,
   }
 }
 

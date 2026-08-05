@@ -1618,7 +1618,7 @@ def generate(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and _vision_available:
+    if image_paths and (_vision_available or _provider in ("remote", "openai")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -1765,6 +1765,7 @@ def generate_openai_compatible(
     frequency_penalty: float = 0.0,
     presence_penalty: float = 0.0,
     json_schema: Optional[dict] = None,
+    image_paths: Optional[list[str]] = None,
 ) -> str:
     """Run one isolated OpenAI-compatible text request.
 
@@ -1795,7 +1796,16 @@ def generate_openai_compatible(
                 f"Do not wrap it in markdown:\n{compact_schema}"
             ),
         })
-    messages.append({"role": "user", "content": prompt})
+    if image_paths:
+        content_parts = []
+        for image_path in image_paths:
+            data_url = _image_to_data_url(image_path)
+            if data_url:
+                content_parts.append({"type": "image_url", "image_url": {"url": data_url}})
+        content_parts.append({"type": "text", "text": prompt})
+        messages.append({"role": "user", "content": content_parts})
+    else:
+        messages.append({"role": "user", "content": prompt})
     is_deepseek = "deepseek.com" in base_url.lower()
     is_minimax = "minimax.io" in base_url.lower()
     payload = {
@@ -1984,7 +1994,7 @@ def generate_streaming(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and _vision_available:
+    if image_paths and (_vision_available or _provider in ("remote", "openai")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
