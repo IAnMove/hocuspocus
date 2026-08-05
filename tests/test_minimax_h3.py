@@ -18,6 +18,7 @@ _MAIN_PATH = _APP / "models" / "minimax_h3" / "minimax_h3_main.py"
 _PACKING_PATH = _APP / "models" / "minimax_h3" / "packing.py"
 _TRANSFORMER_PATH = _APP / "models" / "minimax_h3" / "transformer.py"
 _CONDITIONER_PATH = _APP / "models" / "minimax_h3" / "conditioner.py"
+_PROMPT_ENHANCER_PATH = _APP / "models" / "minimax_h3" / "prompt_enhancer.py"
 _CHECKPOINT_PATH = _APP / "models" / "minimax_h3" / "checkpoint.py"
 _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _WGP_PATH = _APP / "wgp.py"
@@ -52,6 +53,14 @@ def _load_handler_class():
         "os": os,
         "torch": types.SimpleNamespace(bfloat16="bfloat16"),
     }
+    exec(
+        compile(
+            _read(_PROMPT_ENHANCER_PATH),
+            str(_PROMPT_ENHANCER_PATH),
+            "exec",
+        ),
+        namespace,
+    )
     module = ast.Module(body=selected, type_ignores=[])
     exec(compile(ast.fix_missing_locations(module), str(_HANDLER_PATH), "exec"), namespace)
     return namespace["family_handler"]
@@ -87,14 +96,17 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_handler_exposes_base_fl2va_contract(self):
         model_def = self.handler.query_model_def("minimax_h3", {})
-        self.assertEqual(self.handler.query_supported_types(), ["minimax_h3"])
+        self.assertEqual(
+            self.handler.query_supported_types(),
+            ["minimax_h3", "minimax_h3_ref2va"],
+        )
         self.assertEqual((model_def["fps"], model_def["frames_minimum"]), (24, 124))
         self.assertEqual((model_def["frames_steps"], model_def["frames_maximum"]), (17, 345))
         self.assertEqual(
             (model_def["frame_alignment_modulus"], model_def["frame_alignment_remainder"]),
             (17, 5),
         )
-        self.assertEqual(model_def["image_prompt_types_allowed"], "TSE")
+        self.assertEqual(model_def["image_prompt_types_allowed"], "TSEV")
         self.assertTrue(model_def["end_frames_always_enabled"])
         self.assertTrue(model_def["t2v_class"])
         self.assertTrue(model_def["i2v_class"])
@@ -105,7 +117,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_h3_reserves_transformer_activation_workspace(self):
         source = _read(_HANDLER_PATH)
-        self.assertIn("_TRANSFORMER_WORKING_VRAM_MB = 10 * 1024", source)
+        self.assertIn("_TRANSFORMER_WORKING_VRAM_MB = 16 * 1024", source)
         self.assertIn('"workingVRAM": {', source)
         self.assertIn('"transformer": _TRANSFORMER_WORKING_VRAM_MB', source)
 

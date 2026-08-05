@@ -3,6 +3,11 @@ import { X, Upload, Plus, Music, Film, Mic } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 
+// A reference clip has to be long enough to carry a subject or a motion, and short enough that its
+// conditioning rows don't dwarf the shot being generated. Mirrors the backend validator.
+const REFERENCE_CLIP_MIN_SECONDS = 2
+const REFERENCE_CLIP_MAX_SECONDS = 15
+
 // Unified, media-driven "Inputs" panel for Studio Frames mode (image_mode 0).
 //
 // Goal: a single image-forward tile surface where the media you add auto-selects
@@ -202,21 +207,77 @@ export function InputsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageRefs.length])
 
+  // Some models take a reference *video* alongside reference images (MiniMax H3 Ref2VA borrows a subject or
+  // a motion from a clip). That input otherwise lives behind a dropdown in Advanced Settings, which is the
+  // last place anyone looks, so the Reference tile accepts a clip too and turns the option on itself.
+  const refVideoValue = guideValues.find(value => value === 'V')
+  const supportsRefVideo = !!guideCfg && !modelOptions?.guide_preprocessing && !supportsControlVid && !!refVideoValue
+
+  // Read a clip's duration without decoding it: metadata is enough, and it keeps an over-long file from
+  // being uploaded at all.
+  const probeClipDuration = (file: File) =>
+    new Promise<number>(resolve => {
+      const url = URL.createObjectURL(file)
+      const probe = document.createElement('video')
+      probe.preload = 'metadata'
+      const finish = (seconds: number) => {
+        URL.revokeObjectURL(url)
+        resolve(seconds)
+      }
+      probe.onloadedmetadata = () => finish(Number.isFinite(probe.duration) ? probe.duration : 0)
+      probe.onerror = () => finish(0)
+      probe.src = url
+    })
+
+  const attachReferenceVideo = async (file: File) => {
+    if (!file.type.startsWith('video/')) return
+    // Rejected here rather than at generation time: the backend validator would catch it too, but only
+    // after the user had queued a job and waited for the model to load.
+    const duration = await probeClipDuration(file)
+    if (duration > 0 && (duration < REFERENCE_CLIP_MIN_SECONDS || duration > REFERENCE_CLIP_MAX_SECONDS)) {
+      window.alert(
+        `A reference video must be between ${REFERENCE_CLIP_MIN_SECONDS} and ${REFERENCE_CLIP_MAX_SECONDS} ` +
+        `seconds long.\n\n"${file.name}" is ${duration.toFixed(1)}s.\n\nPick a different clip, or trim this one.`
+      )
+      pickReferences()
+      return
+    }
+    try {
+      const result = await api.uploadImage(file)
+      setParam('video_guide', result.path)
+      const current = (params.video_prompt_type as string) || ''
+      if (!current.includes('V')) setParam('video_prompt_type', current + refVideoValue)
+    } catch (e) {
+      console.error('Reference video upload failed:', e)
+    }
+  }
+
   const pickReferences = () => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.png,.jpg,.jpeg,.webp,.bmp'
+    input.accept = '.png,.jpg,.jpeg,.webp,.bmp' + (supportsRefVideo ? ',.mp4,.mov,.webm,.mkv,.avi,.m4v' : '')
     input.multiple = true
     input.onchange = () => {
       const files = Array.from(input.files || [])
+      // A clip is not a reference image: route it to the reference-video input instead of the ref list,
+      // where it would be uploaded as a still and then ignored at generation time.
+      const clips = supportsRefVideo ? files.filter(f => f.type.startsWith('video/')) : []
+      const stills = files.filter(f => !clips.includes(f))
       if (isH3 && files.length > 0) setParam('h3_reference_mode', 'references')
-      const modelRoom = maxRefs == null ? files.length : Math.max(0, maxRefs - imageRefs.length)
+      if (clips.length > 0) void attachReferenceVideo(clips[0])
+      const modelRoom = maxRefs == null ? stills.length : Math.max(0, maxRefs - imageRefs.length)
       const available = isH3
         ? Math.max(0, Math.min(modelRoom, 9 - imageRefs.length, 12 - h3ReferenceCount))
         : modelRoom
-      files.slice(0, available).forEach(addImageRef)
+      stills.slice(0, available).forEach(addImageRef)
     }
     input.click()
+  }
+
+  const dropOnReferenceTile = (file: File) => {
+    if (isH3) setParam('h3_reference_mode', 'references')
+    if (supportsRefVideo && file.type.startsWith('video/')) void attachReferenceVideo(file)
+    else if (!isH3 || h3ReferenceCount < 12) addImageRef(file)
   }
 
   // Extend mode: the source video to continue from.
@@ -360,7 +421,16 @@ export function InputsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startImage, endImage, injectedFrames, params.image_start, params.image_end, isExtend, supportsEndFrame, lastWindow])
 
-  const canAddFrame = isExtend ? supportsInject : (!hasStart || (supportsEndFrame && !hasEnd) || supportsInject)
+  // Whether the model takes a start frame at all. Some take none: MiniMax H3 Ref2VA allows only "T",
+  // conditioning on reference material rather than on timeline positions, so offering a Frame tile invites
+  // the user to attach an image that is then silently dropped at generation time. A backend that sends no
+  // letters is read as "everything allowed", so this can only hide a tile already known to be unusable.
+  const allowedImagePrompts = modelOptions?.image_prompt_types_allowed ?? 'TSEVL'
+  const supportsStartFrame = allowedImagePrompts.includes('S')
+  const supportsAnyFrame = supportsStartFrame || supportsEndFrame || supportsInject
+  const canAddFrame = isExtend
+    ? supportsInject
+    : ((supportsStartFrame && !hasStart) || (supportsEndFrame && !hasEnd) || supportsInject)
 
   // "+ Frame": smart default — 1st image = start, 2nd = end (where supported),
   // the rest injected keyframes that walk forward through the windows: in a
@@ -583,7 +653,9 @@ export function InputsPanel() {
         {/* Unified "Frame" tiles — start / end / injected keyframes, one concept,
             sorted by timeline position and draggable to reposition. The per-tile
             position strip below routes each to its pipeline. */}
-        {frameTiles.map(tile => (
+        {/* Frames carried over from a model that took them are hidden on one that does not, rather than
+            shown as attached input the generation will drop. */}
+        {(supportsAnyFrame ? frameTiles : []).map(tile => (
           <div key={tile.key} draggable
             onDragStart={e => { setFrameDragKey(tile.key); e.dataTransfer.setData('frame-key', tile.key); e.dataTransfer.effectAllowed = 'move' }}
             onDragEnd={() => { setFrameDragKey(null); setFrameDragOverKey(null) }}
@@ -676,14 +748,11 @@ export function InputsPanel() {
         ))}
         {supportsRefs && canAddRef && (!isH3 || (imageRefs.length < 9 && h3ReferenceCount < 12)) && (
           <AddTile
-            label="Reference"
+            label={supportsRefVideo ? 'Reference\n(Image and/or Video)' : 'Reference'}
             icon={<Plus size={18} />}
             onClick={pickReferences}
-            onDropFile={file => {
-              if (isH3) setParam('h3_reference_mode', 'references')
-              if (!isH3 || h3ReferenceCount < 12) addImageRef(file)
-            }}
-            dropAccept="image"
+            onDropFile={dropOnReferenceTile}
+            dropAccept={supportsRefVideo ? ['image', 'video'] : 'image'}
           />
         )}
 
@@ -891,13 +960,16 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function AddTile({ label, icon, onClick, onDropFile, dropAccept }: {
   label: string; icon?: React.ReactNode; onClick: () => void
-  onDropFile?: (f: File) => void; dropAccept?: 'image' | 'audio' | 'video'
+  // A tile can take more than one kind: the Reference tile accepts stills and, on models that support one,
+  // a reference clip, and decides which input the file belongs to in its drop handler.
+  onDropFile?: (f: File) => void; dropAccept?: 'image' | 'audio' | 'video' | ('image' | 'audio' | 'video')[]
 }) {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const f = e.dataTransfer.files[0]
     if (!f || !onDropFile) return
-    if (dropAccept && !f.type.startsWith(`${dropAccept}/`)) return
+    const accepted = dropAccept == null ? null : (Array.isArray(dropAccept) ? dropAccept : [dropAccept])
+    if (accepted && !accepted.some(kind => f.type.startsWith(`${kind}/`))) return
     onDropFile(f)
   }
   return (
@@ -906,7 +978,7 @@ function AddTile({ label, icon, onClick, onDropFile, dropAccept }: {
       onDragOver={onDropFile ? (e => e.preventDefault()) : undefined}
       className="w-[90px] h-[90px] shrink-0 rounded-xl border border-dashed border-border hover:border-accent-blue flex flex-col items-center justify-center gap-1 text-text-muted hover:text-text-primary transition-colors">
       {icon ?? <Plus size={18} />}
-      <span className="text-[10px] text-center px-1">{label}</span>
+      <span className="text-[10px] leading-tight text-center px-1 whitespace-pre-line">{label}</span>
     </button>
   )
 }
