@@ -584,6 +584,15 @@ export interface ForegroundActivity {
   current?: number
   total?: number
   progress?: number
+  detailMessage?: string
+  detailCurrent?: number
+  detailTotal?: number
+  tokenUsage?: {
+    promptTokens?: number
+    completionTokens?: number
+    totalTokens?: number
+    calls?: number
+  }
   error?: string | null
   startedAt?: number
   updatedAt?: number
@@ -1302,6 +1311,7 @@ function beginAppActivity(
     message: string,
     current = 0,
     total = options.total || 0,
+    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailCurrent' | 'detailTotal' | 'tokenUsage'>>,
   ) => get().upsertActivity({
     id,
     kind: options.kind,
@@ -1311,6 +1321,7 @@ function beginAppActivity(
     message,
     current,
     total,
+    ...details,
   })
   report(options.phase, options.message, 0, options.total || 0)
   return {
@@ -5754,19 +5765,61 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (useV2) {
         // Director v2: structured planning → rendering → validation
-        const result = await api.directorV2Plan({
-          skill_type: 'music_video',
-          clips: directorPlannedClips,
-          scene_description: directorSceneDescription,
-          lyrics: directorAnalysis?.lyrics ?? undefined,
-          bpm: directorAnalysis?.bpm ?? 120,
-          reference_image_path: refImagePath ?? undefined,
-          ...extraRefs,
-          speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
-          image_model: get().selectedModelPerMode.image || undefined,
-          video_model: get().selectedModelPerMode.video || undefined,
-          prompt_type: 'both',
-        })
+        let keepPollingPlan = true
+        const progressPoll = (async () => {
+          while (keepPollingPlan) {
+            try {
+              const progress = await api.getDirectorV2PlanProgress(activity.id)
+              if (progress) {
+                const streamed = (progress.stream_text || '').replace(/\s+/g, ' ').trim()
+                const streamPreview = streamed.slice(-1200)
+                const detail = (
+                  progress.phase === 'writing_scenes' && streamPreview
+                    ? streamPreview
+                    : progress.detail || streamPreview || 'The LLM is preparing the next visual prompt…'
+                ).trim()
+                activity.report(
+                  progress.phase || 'planning',
+                  `Planning ${directorPlannedClips.length} shots with the LLM…`,
+                  1,
+                  3,
+                  {
+                    detailMessage: detail,
+                    detailCurrent: progress.current || 0,
+                    detailTotal: progress.total || directorPlannedClips.length,
+                    tokenUsage: progress.usage ? {
+                      promptTokens: progress.usage.prompt_tokens || 0,
+                      completionTokens: progress.usage.completion_tokens || 0,
+                      totalTokens: progress.usage.total_tokens || 0,
+                      calls: progress.usage.calls || 0,
+                    } : undefined,
+                  },
+                )
+              }
+            } catch { /* Progress is informative; the main planning request owns errors. */ }
+            await new Promise(resolve => window.setTimeout(resolve, 800))
+          }
+        })()
+        let result: api.DirectorV2PlanResponse
+        try {
+          result = await api.directorV2Plan({
+            activity_id: activity.id,
+            skill_type: 'music_video',
+            clips: directorPlannedClips,
+            scene_description: directorSceneDescription,
+            lyrics: directorAnalysis?.lyrics ?? undefined,
+            bpm: directorAnalysis?.bpm ?? 120,
+            reference_image_path: refImagePath ?? undefined,
+            ...extraRefs,
+            speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
+            image_model: get().selectedModelPerMode.image || undefined,
+            video_model: get().selectedModelPerMode.video || undefined,
+            prompt_type: 'both',
+          })
+        } finally {
+          keepPollingPlan = false
+          await progressPoll
+        }
         plans = result.clip_plans.map(p => ({
           video_prompt: p.video_prompt || '',
           image_prompt: p.image_prompt || '',

@@ -7060,6 +7060,17 @@ async def director_v2_plan(request: Request):
     """
     body = await request.json()
     skill_type = body.get("skill_type", body.get("pipeline_type", "music_video"))
+    tracking_id = str(body.get("activity_id") or "").strip()[:160]
+    from services import llm_service
+    if tracking_id:
+        estimated_shots = len(body.get("clips") or []) or int(body.get("target_scenes") or 0)
+        llm_service.begin_activity_tracking(
+            tracking_id,
+            phase="writing_scenes",
+            current=0,
+            total=estimated_shots,
+            detail="Writing the visual scenario and scene structure…",
+        )
 
     # Map legacy pipeline_type to skill_type
     skill_map = {
@@ -7074,7 +7085,6 @@ async def director_v2_plan(request: Request):
     try:
         _ensure_llm_loaded()
 
-        from services import llm_service
         from services.director.orchestrator import DirectorOrchestrator, DirectorFlags
 
         flags = DirectorFlags.from_dict(body.get("director_flags", {}))
@@ -7114,10 +7124,22 @@ async def director_v2_plan(request: Request):
 
         # Plan
         plan = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: director.plan(skill_type, **planner_kwargs)
+            None,
+            lambda: llm_service.run_with_activity_tracking(
+                tracking_id,
+                lambda: director.plan(skill_type, **planner_kwargs),
+            ),
         )
 
         # Render
+        planned_shots = len(getattr(plan, "shots", []) or [])
+        llm_service.update_activity_tracking(
+            tracking_id,
+            phase="writing_prompts",
+            current=0,
+            total=planned_shots,
+            detail=f"Turning {planned_shots} scenes into image and video prompts…",
+        )
         has_reference = bool(
             body.get("reference_image_path")
             or body.get("character_ref_paths")
@@ -7135,12 +7157,36 @@ async def director_v2_plan(request: Request):
             # non-human descriptors (e.g. Lumi → the white unicorn) instead
             # of falling back to generic "the woman" / "the man".
             polish_chars = planner_kwargs.get("characters", []) or []
-            clip_plans = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: polish_prompts_third_pass(
-                    clip_plans, video_model, image_model, nsfw,
-                    video_loras=video_loras_activated, image_loras=image_loras_activated,
-                    characters=polish_chars,
+            llm_service.update_activity_tracking(
+                tracking_id,
+                phase="polishing_prompts",
+                current=0,
+                total=len(clip_plans),
+                detail=f"Polishing shot 1 of {len(clip_plans)}…",
+            )
+
+            def _report_polish_progress(current, total):
+                shot = clip_plans[max(0, min(current - 1, len(clip_plans) - 1))]
+                detail = str(shot.get("image_prompt") or shot.get("video_prompt") or "").strip()
+                llm_service.update_activity_tracking(
+                    tracking_id,
+                    phase="polishing_prompts",
+                    current=current,
+                    total=total,
+                    detail=detail[:1200],
                 )
+
+            clip_plans = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: llm_service.run_with_activity_tracking(
+                    tracking_id,
+                    lambda: polish_prompts_third_pass(
+                        clip_plans, video_model, image_model, nsfw,
+                        video_loras=video_loras_activated, image_loras=image_loras_activated,
+                        characters=polish_chars,
+                        progress_callback=_report_polish_progress,
+                    ),
+                ),
             )
 
         from services.director.policies import enforce_visual_style_on_clip_plans
@@ -7149,6 +7195,14 @@ async def director_v2_plan(request: Request):
             body.get("visual_style", ""),
             preserve=bool(body.get("preserve_visual_style", False)),
             has_reference=has_reference,
+        )
+        llm_service.update_activity_tracking(
+            tracking_id,
+            status="completed",
+            phase="completed",
+            current=len(clip_plans),
+            total=len(clip_plans),
+            detail=f"{len(clip_plans)} visual shot plans ready for review.",
         )
         return {
             "clip_plans": clip_plans,
@@ -7159,7 +7213,20 @@ async def director_v2_plan(request: Request):
     except Exception as e:
         import traceback
         traceback.print_exc()
+        llm_service.update_activity_tracking(
+            tracking_id, status="failed", detail=str(e), error=str(e)
+        )
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/api/v1/director/v2/plan/progress/{activity_id}")
+def director_v2_plan_progress(activity_id: str):
+    """Return live sub-step and provider-reported token usage for one plan."""
+    from services import llm_service
+    state = llm_service.get_activity_tracking(activity_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Planning activity not found")
+    return state
 
 
 @api.post("/api/v1/generate")

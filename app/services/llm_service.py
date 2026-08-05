@@ -50,6 +50,97 @@ _stream_buffer: str = ""
 _stream_done: bool = True
 _stream_lock = threading.Lock()
 
+# Per-workflow LLM observability. Director planning runs many LLM calls in a
+# worker thread, so the HTTP request itself cannot stream useful progress to
+# the footer. A tracking scope lets nested calls accumulate provider-reported
+# token usage while the Director endpoint publishes shot-level progress.
+_activity_tracking_lock = threading.Lock()
+_activity_tracking: dict[str, dict] = {}
+_activity_tracking_context = threading.local()
+
+
+def begin_activity_tracking(activity_id: str, **state) -> None:
+    if not activity_id:
+        return
+    with _activity_tracking_lock:
+        cutoff = time.time() - (6 * 60 * 60)
+        for stale_id in [
+            key for key, value in _activity_tracking.items()
+            if float(value.get("updated_at") or 0) < cutoff
+        ]:
+            _activity_tracking.pop(stale_id, None)
+        _activity_tracking[activity_id] = {
+            "id": activity_id,
+            "status": "running",
+            "phase": "planning",
+            "current": 0,
+            "total": 0,
+            "detail": "",
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+            "updated_at": time.time(),
+            **state,
+        }
+
+
+def update_activity_tracking(activity_id: str, **state) -> None:
+    if not activity_id:
+        return
+    with _activity_tracking_lock:
+        current = _activity_tracking.setdefault(activity_id, {"id": activity_id, "usage": {}})
+        current.update(state)
+        current["updated_at"] = time.time()
+
+
+def get_activity_tracking(activity_id: str) -> dict:
+    with _activity_tracking_lock:
+        return dict(_activity_tracking.get(activity_id) or {})
+
+
+def run_with_activity_tracking(activity_id: str, callback):
+    previous = getattr(_activity_tracking_context, "activity_id", "")
+    _activity_tracking_context.activity_id = activity_id
+    try:
+        return callback()
+    finally:
+        _activity_tracking_context.activity_id = previous
+
+
+def _record_activity_usage(usage: dict) -> None:
+    activity_id = getattr(_activity_tracking_context, "activity_id", "")
+    if not activity_id or not isinstance(usage, dict) or not usage:
+        return
+    prompt = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+    completion = usage.get("completion_tokens", usage.get("output_tokens", 0))
+    try:
+        prompt = int(prompt or 0)
+        completion = int(completion or 0)
+        total = int(usage.get("total_tokens") or (prompt + completion))
+    except (TypeError, ValueError):
+        return
+    with _activity_tracking_lock:
+        state = _activity_tracking.get(activity_id)
+        if not state:
+            return
+        totals = state.setdefault("usage", {})
+        totals["prompt_tokens"] = int(totals.get("prompt_tokens") or 0) + prompt
+        totals["completion_tokens"] = int(totals.get("completion_tokens") or 0) + completion
+        totals["total_tokens"] = int(totals.get("total_tokens") or 0) + total
+        totals["calls"] = int(totals.get("calls") or 0) + 1
+        state["updated_at"] = time.time()
+
+
+def _record_activity_stream(text: str, done: bool) -> None:
+    activity_id = getattr(_activity_tracking_context, "activity_id", "")
+    if not activity_id:
+        return
+    with _activity_tracking_lock:
+        state = _activity_tracking.get(activity_id)
+        if not state:
+            return
+        state["stream_text"] = str(text or "")[-4000:]
+        state["stream_done"] = bool(done)
+        state["updated_at"] = time.time()
+
 # Last call state — for pipeline dashboard capture. The user prompt is
 # captured alongside the system prompt so the Director Dashboard can
 # render the full LLM input (system + user) for each pass, not just
@@ -1635,6 +1726,7 @@ def generate(
     raw_content = data["choices"][0]["message"]["content"] or ""
     finish_reason = data["choices"][0].get("finish_reason", "unknown")
     usage = data.get("usage", {})
+    _record_activity_usage(usage)
     prompt_tokens = usage.get("prompt_tokens", "?")
     completion_tokens = usage.get("completion_tokens", "?")
     print(f"[LLM] Response: {completion_tokens} tokens generated (prompt={prompt_tokens}, finish={finish_reason})")
@@ -1792,6 +1884,7 @@ def generate_openai_compatible(
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise RuntimeError("OpenAI-compatible provider returned an invalid response") from exc
         if content:
+            _record_activity_usage(response_data.get("usage") or {})
             return content
         usage = response_data.get("usage") or {}
         token_details = usage.get("completion_tokens_details") or {}
@@ -1877,6 +1970,7 @@ def generate_streaming(
     with _stream_lock:
         _stream_buffer = ""
         _stream_done = False
+    _record_activity_stream("", False)
 
     messages = []
     if system_prompt:
@@ -1998,6 +2092,7 @@ def generate_streaming(
 
     raw_content = ""
     reasoning_content = ""
+    stream_usage = {}
     in_reasoning = False
     try:
         resp = requests.post(
@@ -2023,6 +2118,8 @@ def generate_streaming(
                 break
             try:
                 chunk = _json_mod.loads(data_str)
+                if chunk.get("usage"):
+                    stream_usage = chunk["usage"]
                 delta = chunk.get("choices", [{}])[0].get("delta", {})
 
                 # With --jinja, Qwen3.5 may send reasoning via separate field
@@ -2034,6 +2131,7 @@ def generate_streaming(
                     # Show reasoning in the stream buffer wrapped in <think> tags
                     with _stream_lock:
                         _stream_buffer = f"<think>{reasoning_content}</think>"
+                    _record_activity_stream(f"<think>{reasoning_content}</think>", False)
 
                 token = delta.get("content", "")
                 if token:
@@ -2045,6 +2143,7 @@ def generate_streaming(
                     display += raw_content
                     with _stream_lock:
                         _stream_buffer = display
+                    _record_activity_stream(display, False)
             except Exception:
                 continue
 
@@ -2089,6 +2188,8 @@ def generate_streaming(
         _stream_buffer = full_raw  # keep full raw for the UI to show thinking
         _stream_done = True
 
+    _record_activity_stream(full_raw, True)
+    _record_activity_usage(stream_usage)
     _reset_idle_timer()
     return content.strip()
 
@@ -2131,6 +2232,7 @@ def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top
             raw_content += block.get("text", "")
 
     usage = data.get("usage", {})
+    _record_activity_usage(usage)
     print(f"[LLM/Anthropic] Response: {usage.get('output_tokens', '?')} tokens (prompt={usage.get('input_tokens', '?')})")
 
     content = _strip_thinking_tags(raw_content)
@@ -2163,6 +2265,7 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
         payload["system"] = system_text
 
     raw_content = ""
+    stream_usage = {}
     try:
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -2189,6 +2292,10 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
                 continue
 
             event_type = event.get("type", "")
+            if event_type == "message_start":
+                stream_usage.update((event.get("message") or {}).get("usage") or {})
+            elif event_type == "message_delta":
+                stream_usage.update(event.get("usage") or {})
             if event_type == "content_block_delta":
                 delta = event.get("delta", {})
                 if delta.get("type") == "text_delta":
@@ -2196,6 +2303,7 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
                     raw_content += text
                     with _stream_lock:
                         _stream_buffer = raw_content
+                    _record_activity_stream(raw_content, False)
 
     except Exception as e:
         print(f"[LLM/Anthropic] Streaming error: {e}")
@@ -2210,6 +2318,8 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
         _stream_buffer = raw_content
         _stream_done = True
 
+    _record_activity_stream(raw_content, True)
+    _record_activity_usage(stream_usage)
     _reset_idle_timer()
     return content.strip()
 

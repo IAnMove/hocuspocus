@@ -4,6 +4,8 @@ import { useStore } from '../stores/useStore'
 
 const PHASE_LABELS: Record<string, string> = {
   planning: 'Planning',
+  writing_scenes: 'Writing scenes',
+  writing_prompts: 'Writing prompts',
   polishing_prompts: 'Polishing prompts',
   generating_images: 'Generating images',
   regenerating_styled_references: 'Regenerating styled references',
@@ -50,6 +52,15 @@ interface ActivityView {
   current: number
   total: number
   percent: number
+  detailMessage?: string
+  detailCurrent?: number
+  detailTotal?: number
+  tokenUsage?: {
+    promptTokens?: number
+    completionTokens?: number
+    totalTokens?: number
+    calls?: number
+  }
   startedAt?: number
   updatedAt: number
   dismissible?: 'activity' | 'job'
@@ -106,6 +117,10 @@ export function ActivityFooter() {
       current: activity.current || 0,
       total: activity.total || 0,
       percent: activityProgress(activity.current || 0, activity.total || 0, activity.progress),
+      detailMessage: activity.detailMessage,
+      detailCurrent: activity.detailCurrent,
+      detailTotal: activity.detailTotal,
+      tokenUsage: activity.tokenUsage,
       startedAt: activity.startedAt,
       updatedAt: activity.updatedAt || activity.startedAt || 3,
       dismissible: activity.status === 'failed' ? 'activity' as const : undefined,
@@ -182,7 +197,7 @@ export function ActivityFooter() {
   const phase = primary
     ? PHASE_LABELS[primary.phase] || primary.phase?.replaceAll('_', ' ')
     : ''
-  const message = primary?.message || 'Ready — no active jobs'
+  const message = primary?.detailMessage || primary?.message || 'Ready — no active jobs'
   useEffect(() => {
     if (!activeRows.length) return
     const interval = window.setInterval(() => setClock(Date.now()), 1000)
@@ -239,6 +254,29 @@ export function ActivityFooter() {
                       </div>
                     </div>
                     <p className={row.status === 'failed' ? 'text-red-400' : 'text-text-secondary'}>{row.message}</p>
+                    {row.detailMessage && (
+                      <p className="truncate text-text-muted" title={row.detailMessage}>{row.detailMessage}</p>
+                    )}
+                    {!!row.tokenUsage?.totalTokens && (
+                      <p className="mt-1 tabular-nums text-text-muted" title={`Input: ${(row.tokenUsage.promptTokens || 0).toLocaleString()} · Output: ${(row.tokenUsage.completionTokens || 0).toLocaleString()} · Calls: ${row.tokenUsage.calls || 0}`}>
+                        {(row.tokenUsage.totalTokens || 0).toLocaleString()} tokens
+                        {' · '}{(row.tokenUsage.promptTokens || 0).toLocaleString()} input
+                        {' · '}{(row.tokenUsage.completionTokens || 0).toLocaleString()} output
+                      </p>
+                    )}
+                    {(row.status === 'running' || row.status === 'queued') && !!row.detailTotal && (
+                      <div className="mt-1.5 flex items-center gap-2" title={row.detailMessage}>
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
+                          <div
+                            className="h-full rounded-full bg-amber-400 transition-[width] duration-300"
+                            style={{ width: `${Math.max(((row.detailCurrent || 0) / row.detailTotal) * 100, row.detailCurrent ? 2 : 0)}%` }}
+                          />
+                        </div>
+                        <span className="w-10 text-right tabular-nums text-text-muted">
+                          {row.detailCurrent || 0}/{row.detailTotal}
+                        </span>
+                      </div>
+                    )}
                     {(row.status === 'running' || row.status === 'queued') && (
                       <div className="mt-1.5 flex items-center gap-2">
                         <div className="h-1 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
@@ -296,7 +334,12 @@ export function ActivityFooter() {
       </div>
 
       {isActive && primary && (
-        <div className="hidden sm:flex items-center gap-2 w-44 shrink-0">
+        <div className="hidden sm:flex items-center gap-2 w-52 shrink-0">
+          {!!primary.detailTotal && (
+            <span className="shrink-0 tabular-nums text-amber-300" title={primary.detailMessage}>
+              {primary.detailCurrent || 0}/{primary.detailTotal}
+            </span>
+          )}
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
             <div
               className="h-full rounded-full bg-accent-blue transition-[width] duration-500"

@@ -1069,6 +1069,7 @@ export async function rejoinPipeline(pid: string): Promise<{ filename: string }>
 
 export interface DirectorV2PlanRequest {
   skill_type: string
+  activity_id?: string
   scene_description?: string
   story_description?: string
   clips?: unknown[]
@@ -1101,6 +1102,23 @@ export interface DirectorV2PlanRequest {
   director_flags?: Record<string, boolean>
 }
 
+export interface DirectorV2PlanProgress {
+  id: string
+  status: 'running' | 'completed' | 'failed'
+  phase: string
+  current: number
+  total: number
+  detail: string
+  stream_text?: string
+  stream_done?: boolean
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    calls?: number
+  }
+}
+
 export interface DirectorV2PlanResponse {
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
   production_plan: ProductionPlan
@@ -1117,6 +1135,13 @@ export async function directorV2Plan(params: DirectorV2PlanRequest): Promise<Dir
     const err = await res.json().catch(() => ({ detail: 'Plan failed' }))
     throw new Error(err.detail || 'Director v2 plan failed')
   }
+  return res.json()
+}
+
+export async function getDirectorV2PlanProgress(activityId: string): Promise<DirectorV2PlanProgress | null> {
+  const res = await fetch(`${BASE}/api/v1/director/v2/plan/progress/${encodeURIComponent(activityId)}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error('Could not read Director planning progress')
   return res.json()
 }
 
