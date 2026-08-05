@@ -4974,6 +4974,9 @@ def get_services_config():
         # issue 80 sequential calls. Director's validated planner prompts are
         # the safe, fast default; users can still enable model-dialect polish.
         "director_prompt_polish": services.get("director_prompt_polish", "off"),
+        # Safe workflow overlap: every local GPU and remote server keeps
+        # capacity one; only genuinely different resources run together.
+        "workflow_parallelism_enabled": services.get("workflow_parallelism_enabled", True),
         # Structured JSONL tracing of LLM calls and user actions. Disabled for
         # every fresh install; intended for temporary diagnosis only.
         "debug_trace_enabled": services.get("debug_trace_enabled", False),
@@ -5038,7 +5041,7 @@ async def update_services_config(request: Request):
         "google_api_key", "openai_api_key", "deepseek_api_key", "compatible_api_key",
         "compatible_base_url", "anthropic_api_key", "minimax_api_key",
         "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
-        "debug_trace_enabled",
+        "debug_trace_enabled", "workflow_parallelism_enabled",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
         "show_experimental", "auto_performance",
         "director_multishot_lora_mode",

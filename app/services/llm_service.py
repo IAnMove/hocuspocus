@@ -1860,6 +1860,8 @@ def generate_openai_compatible(
     # empty content; never retry timeouts or transport failures.
     provider_name = "MiniMax" if is_minimax else "DeepSeek" if is_deepseek else "OpenAI-compatible provider"
     attempts = 2 if is_minimax or (json_schema is not None and is_deepseek) else 1
+    from . import resource_scheduler
+    request_lane = resource_scheduler.remote_lane(model_id, base_url)
     for content_attempt in range(attempts):
         request_payload = dict(payload)
         if is_minimax and content_attempt > 0:
@@ -1868,19 +1870,25 @@ def generate_openai_compatible(
                 8192,
             )
         try:
-            response = requests.post(
-                endpoint, json=request_payload, headers=headers, timeout=(10, 600),
-            )
-            # Some otherwise-compatible APIs do not implement OpenAI's
-            # structured response envelope. Retry once without it; Maestro
-            # still validates and repairs the returned JSON locally.
-            if response.status_code in (400, 422) and "response_format" in request_payload:
-                fallback_payload = dict(request_payload)
-                fallback_payload.pop("response_format", None)
+            task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
+            with resource_scheduler.coordinator.acquire(
+                request_lane,
+                task_id=task_id,
+                description=f"{model_id} completion",
+            ):
                 response = requests.post(
-                    endpoint, json=fallback_payload, headers=headers, timeout=(10, 600),
+                    endpoint, json=request_payload, headers=headers, timeout=(10, 600),
                 )
-            response.raise_for_status()
+                # Some otherwise-compatible APIs do not implement OpenAI's
+                # structured response envelope. Retry once without it; Maestro
+                # still validates and repairs the returned JSON locally.
+                if response.status_code in (400, 422) and "response_format" in request_payload:
+                    fallback_payload = dict(request_payload)
+                    fallback_payload.pop("response_format", None)
+                    response = requests.post(
+                        endpoint, json=fallback_payload, headers=headers, timeout=(10, 600),
+                    )
+                response.raise_for_status()
         except requests.exceptions.RequestException as exc:
             detail = ""
             if getattr(exc, "response", None) is not None:

@@ -21,7 +21,7 @@ import secrets
 import subprocess
 import re
 import unicodedata
-from typing import Optional
+from typing import Callable, Optional
 
 # These will be set by launch.py on startup
 _jobs: dict = None          # reference to launch._jobs
@@ -32,6 +32,7 @@ _gen_lock = None            # reference to launch._gen_lock
 
 _pipelines: dict = {}
 _pipeline_lock = threading.Lock()
+_pipeline_state_save_lock = threading.Lock()
 _PRE_ACTIVE_CHILD_STATUSES = frozenset({
     "running",
     "queued",
@@ -242,6 +243,14 @@ def _comic_preflight_fingerprint(
 
 
 def _save_pipeline_state(pid: str) -> bool:
+    # Parallel remote-image/local-video workers checkpoint the same pipeline.
+    # Serialize snapshot creation as well as the atomic replace so an older
+    # snapshot cannot finish last and hide newer segment progress.
+    with _pipeline_state_save_lock:
+        return _save_pipeline_state_serialized(pid)
+
+
+def _save_pipeline_state_serialized(pid: str) -> bool:
     """Serialize pipeline state to JSON on disk. Called at phase boundaries.
 
     Returning a success flag matters for PRE edits: superseded prepared images
@@ -3080,12 +3089,30 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
         except Exception:
             pass  # disk_usage can fail on odd mounts; don't block on the check itself
 
-        # ── Wait for GPU if jobs are running ────────────────────────────
-        # LLM needs GPU (CUDA), so we must wait for generation queue to drain.
-        # In auto mode this is expected (fire-and-forget). In non-auto mode
-        # the user is waiting interactively, so we still wait but they can cancel.
-        if not _wait_for_gpu(pid):
-            return  # cancelled while waiting
+        resource_lanes = _director_resource_lanes(params)
+        from . import debug_trace
+        debug_trace.trace_event(
+            "scheduler",
+            "director_resource_plan",
+            pipeline_id=pid,
+            resources=_resource_schedule_payload(resource_lanes),
+        )
+        _update_pipeline(
+            pid,
+            resource_schedule=_resource_schedule_payload(resource_lanes),
+        )
+
+        # Only a local GPU planner must wait for the generation queue. Remote
+        # providers and a CPU LLM are independent resources and can plan while
+        # another workflow renders locally.
+        if resource_lanes["planning"].key.startswith("local_gpu:"):
+            if not _wait_for_gpu(pid):
+                return  # cancelled while waiting
+        else:
+            print(
+                f"[Pipeline {pid}] Planning on {resource_lanes['planning'].label}; "
+                "local GPU generation may continue in parallel."
+            )
 
         # ── Phase 1: LLM Planning ──────────────────────────────────────
         _update_pipeline(pid, phase="planning", llm_streaming=True,
@@ -3328,13 +3355,84 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
                              "total_steps": 0,
                          })
 
-        # Unload LLM to free VRAM
+        # Unload only the local planner we used. A scoped remote request never
+        # owns Maestro's singleton local model and must not tear it down while
+        # a different workflow is using it.
         from services import llm_service
         try:
-            if llm_service.is_loaded():
+            if resource_lanes["planning"].location == "local" and llm_service.is_loaded():
                 llm_service.unload_model()
         except Exception as e:
             print(f"[Pipeline] LLM unload warning (non-fatal): {e}")
+
+        parallel_video_thread: Optional[threading.Thread] = None
+        parallel_video_result: dict = {"outputs": None, "error": None}
+        parallel_image_failed = threading.Event()
+        parallel_clip_events: list[threading.Event] = []
+        parallel_clip_images: list[str] = []
+        parallel_clip_keyframes: list[list[str]] = []
+        can_pipeline_remote_images = bool(
+            (_wgp.server_config.get("services", {}) if _wgp else {}).get(
+                "workflow_parallelism_enabled", True
+            )
+            and auto_mode
+            and not resume_images
+            and not provided_clip_image_paths
+            and params.get("video_model") == "minimax_h3"
+            and resource_lanes["images"].location == "remote"
+            and resource_lanes["video"].location == "local"
+            and resource_lanes["images"].key != resource_lanes["video"].key
+        )
+        if can_pipeline_remote_images:
+            debug_trace.trace_event(
+                "scheduler",
+                "parallel_pipeline_started",
+                pipeline_id=pid,
+                image_lane=resource_lanes["images"].key,
+                video_lane=resource_lanes["video"].key,
+                clips=len(clip_plans),
+            )
+            parallel_clip_events = [threading.Event() for _ in clip_plans]
+            parallel_clip_images = [""] * len(clip_plans)
+            parallel_clip_keyframes = [[] for _ in clip_plans]
+            _update_pipeline(
+                pid,
+                resource_schedule=_resource_schedule_payload(
+                    resource_lanes,
+                    mode="remote-images+local-video",
+                ),
+                progress={
+                    "current": 0,
+                    "total": len(clip_plans),
+                    "message": "Parallel pipeline: remote images + local MiniMax H3 video",
+                    "step": 0,
+                    "total_steps": 0,
+                },
+            )
+
+            def _parallel_video_worker() -> None:
+                try:
+                    parallel_video_result["outputs"] = _run_video_generation(
+                        pid,
+                        params,
+                        clip_plans,
+                        planned_clips,
+                        parallel_clip_images,
+                        parallel_clip_keyframes,
+                        out_dir=pipeline_out_dir,
+                        workspace=pipeline_workspace,
+                        clip_ready_events=parallel_clip_events,
+                        producer_failed=parallel_image_failed,
+                    )
+                except Exception as error:
+                    parallel_video_result["error"] = error
+
+            parallel_video_thread = threading.Thread(
+                target=_parallel_video_worker,
+                name=f"director-{pid}-local-video",
+                daemon=False,
+            )
+            parallel_video_thread.start()
 
         # On resume, reuse the start images that already generated before the
         # crash — but only if every file still exists (a wiped/half-written
@@ -3393,7 +3491,58 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
         else:
             if resume_images:
                 print(f"[Pipeline {pid}] Resume: saved start images missing on disk — regenerating")
-            clip_images, clip_keyframes = _run_image_generation(pid, params, clip_plans, out_dir=pipeline_out_dir, workspace=pipeline_workspace)
+            def _publish_parallel_clip(index: int, image_name: str, keyframes: list[str]) -> None:
+                if parallel_video_result["error"] is not None:
+                    raise RuntimeError(
+                        f"Local video rendering failed while remote images were running: "
+                        f"{parallel_video_result['error']}"
+                    )
+                parallel_clip_images[index] = image_name
+                parallel_clip_keyframes[index] = keyframes
+                parallel_clip_events[index].set()
+                debug_trace.trace_event(
+                    "scheduler",
+                    "parallel_asset_ready",
+                    pipeline_id=pid,
+                    clip_index=index,
+                    image_name=image_name,
+                    image_lane=resource_lanes["images"].key,
+                    consumer_lane=resource_lanes["video"].key,
+                )
+                _update_pipeline(
+                    pid,
+                    resource_schedule={
+                        **_resource_schedule_payload(resource_lanes, mode="remote-images+local-video"),
+                        "images_ready": index + 1,
+                        "images_total": len(clip_plans),
+                    },
+                )
+
+            try:
+                clip_images, clip_keyframes = _run_image_generation(
+                    pid,
+                    params,
+                    clip_plans,
+                    out_dir=pipeline_out_dir,
+                    workspace=pipeline_workspace,
+                    on_clip_ready=_publish_parallel_clip if parallel_video_thread else None,
+                )
+            except Exception:
+                if parallel_video_thread:
+                    parallel_image_failed.set()
+                    for event in parallel_clip_events:
+                        event.set()
+                    with _pipeline_lock:
+                        active_job_id = (_pipelines.get(pid) or {}).get(
+                            "_active_generation_job_id"
+                        )
+                    if active_job_id and _cancel_generation is not None:
+                        _cancel_generation(active_job_id)
+                    # Do not leave an H3 worker mutating a pipeline already
+                    # reported as failed. Cooperative cancellation wakes the
+                    # waiter, then this join completes before error handling.
+                    parallel_video_thread.join()
+                raise
 
         _update_pipeline(pid, clip_images=clip_images, _clip_keyframes=clip_keyframes)
         _save_pipeline_state(pid)  # Save after image generation
@@ -3436,10 +3585,18 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
                 return
 
         # ── Phase 3: Generate Video ─────────────────────────────────────
-        _update_pipeline(pid, phase="generating_video",
-                         progress={"current": 0, "total": 1, "message": "Generating video...", "step": 0, "total_steps": 0})
+        if parallel_video_thread:
+            _update_pipeline(pid, phase="generating_video",
+                             progress={"current": len(clip_images), "total": len(clip_images), "message": "Remote images complete; finishing local video queue…", "step": 0, "total_steps": 0})
+            parallel_video_thread.join()
+            if parallel_video_result["error"] is not None:
+                raise parallel_video_result["error"]
+            output_files = parallel_video_result["outputs"] or []
+        else:
+            _update_pipeline(pid, phase="generating_video",
+                             progress={"current": 0, "total": 1, "message": "Generating video...", "step": 0, "total_steps": 0})
 
-        output_files = _run_video_generation(pid, params, clip_plans, planned_clips, clip_images, clip_keyframes, out_dir=pipeline_out_dir, workspace=pipeline_workspace)
+            output_files = _run_video_generation(pid, params, clip_plans, planned_clips, clip_images, clip_keyframes, out_dir=pipeline_out_dir, workspace=pipeline_workspace)
 
         if _pipeline_cancel_requested(pid):
             raise PipelineCancelled("Director pipeline was cancelled.")
@@ -3587,6 +3744,59 @@ def _wait_for_gpu(pid: str, poll_interval: float = 2.0):
             return True
 
         time.sleep(poll_interval)
+
+
+def _director_resource_lanes(params: dict) -> dict:
+    """Resolve the execution resource for each expensive Director phase."""
+    try:
+        from services import resource_scheduler
+    except ImportError:  # pragma: no cover - package import mode
+        from app.services import resource_scheduler
+
+    services = _wgp.server_config.get("services", {}) if _wgp else {}
+    gpu_index = params.get("gpu_index", services.get("workflow_gpu_index", 0))
+    writing_provider = str(params.get("writing_provider") or "maestro").strip().lower()
+    if writing_provider not in {"", "maestro", "internal", "local"}:
+        planning_provider = writing_provider
+        planning_url = params.get("writing_base_url") or ""
+        planning_device = "remote"
+    else:
+        planning_provider = params.get("llm_provider") or services.get("llm_provider", "local")
+        planning_url = params.get("llm_remote_url") or services.get("llm_remote_url", "")
+        planning_device = params.get("llm_device") or services.get("llm_device", "cpu")
+    lanes = {
+        "planning": resource_scheduler.llm_lane(
+            planning_provider,
+            base_url=planning_url,
+            device=planning_device,
+            gpu_index=gpu_index,
+        ),
+        "images": resource_scheduler.image_lane(
+            params.get("image_model", ""),
+            base_url=params.get("image_base_url", ""),
+            gpu_index=gpu_index,
+        ),
+        "video": resource_scheduler.video_lane(
+            params.get("video_model", ""),
+            base_url=params.get("video_base_url", ""),
+            gpu_index=gpu_index,
+        ),
+    }
+    return lanes
+
+
+def _resource_schedule_payload(lanes: dict, mode: str = "sequential") -> dict:
+    return {
+        "mode": mode,
+        "lanes": {
+            phase: {
+                "key": lane.key,
+                "label": lane.label,
+                "location": lane.location,
+            }
+            for phase, lane in lanes.items()
+        },
+    }
 
 
 # ── Planning Phase ──────────────────────────────────────────────────────
@@ -4589,6 +4799,10 @@ def _generate_minimax_director_image(
 ) -> str:
     """Generate one Director frame with the external MiniMax Image-01 API."""
     from services import minimax_image_service
+    try:
+        from services import resource_scheduler
+    except ImportError:  # pragma: no cover - package import mode
+        from app.services import resource_scheduler
 
     api_key = ((_wgp.server_config.get("services") or {}).get("minimax_api_key") or "")
     if not api_key:
@@ -4599,14 +4813,20 @@ def _generate_minimax_director_image(
             subject_reference = minimax_image_service.local_image_data_uri(path)
             break
     try:
-        generated = minimax_image_service.generate_image(
-            api_key=api_key,
-            prompt=prompt,
-            aspect_ratio=minimax_image_service.aspect_ratio_for_resolution(resolution),
-            output_dir=output_dir,
-            subject_reference=subject_reference,
-            filename_prefix="minimax-director",
-        )
+        lane = resource_scheduler.remote_lane("minimax", "https://api.minimax.io")
+        with resource_scheduler.coordinator.acquire(
+            lane,
+            task_id=f"minimax-image-{threading.get_ident()}-{time.time_ns()}",
+            description="MiniMax Image-01 Director frame",
+        ):
+            generated = minimax_image_service.generate_image(
+                api_key=api_key,
+                prompt=prompt,
+                aspect_ratio=minimax_image_service.aspect_ratio_for_resolution(resolution),
+                output_dir=output_dir,
+                subject_reference=subject_reference,
+                filename_prefix="minimax-director",
+            )
     except minimax_image_service.MiniMaxImageError as exc:
         raise RuntimeError(str(exc)) from exc
     return str(generated.get("name") or "")
@@ -4730,7 +4950,14 @@ def _director_location_ref_for_plan(plan: dict, params: dict) -> tuple[str, str]
     return scored[0][2], scored[0][3]
 
 
-def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_dir: str = None, workspace: str = None) -> tuple[list[str], list[list[str]]]:
+def _run_image_generation(
+    pid: str,
+    params: dict,
+    clip_plans: list[dict],
+    out_dir: str = None,
+    workspace: str = None,
+    on_clip_ready: Optional[Callable[[int, str, list[str]], None]] = None,
+) -> tuple[list[str], list[list[str]]]:
     """Generate start images and keyframe images per clip.
 
     Returns:
@@ -5078,6 +5305,8 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
                     shot_keyframes.append("")
 
         clip_keyframes.append(shot_keyframes)
+        if on_clip_ready is not None:
+            on_clip_ready(i, clip_images[-1], list(shot_keyframes))
 
     _update_pipeline(pid, progress={
         "current": total_images,
@@ -7118,6 +7347,8 @@ def _run_minimax_h3_story_video(
     resolution: str,
     out_dir: str,
     workspace: str = None,
+    clip_ready_events: Optional[list[threading.Event]] = None,
+    producer_failed: Optional[threading.Event] = None,
 ) -> list[str]:
     """Render a complete Story short film as sequential native-audio H3 clips."""
     fps = 24
@@ -7299,8 +7530,32 @@ def _run_minimax_h3_story_video(
                 raise PipelineCancelled("Director pipeline was cancelled.")
 
             if shot_index != current_shot:
+                if clip_ready_events and shot_index < len(clip_ready_events):
+                    _update_pipeline(
+                        pid,
+                        progress={
+                            "current": job_index,
+                            "total": len(jobs),
+                            "message": f"Parallel render waiting for start image {shot_index + 1}/{len(clip_plans)}",
+                            "step": 0,
+                            "total_steps": 0,
+                        },
+                    )
+                    while not clip_ready_events[shot_index].wait(0.25):
+                        if _pipeline_cancel_requested(pid):
+                            raise PipelineCancelled("Director pipeline was cancelled.")
+                        if producer_failed and producer_failed.is_set():
+                            raise RuntimeError("Start-image generation failed during parallel rendering.")
+                    if producer_failed and producer_failed.is_set():
+                        raise RuntimeError("Start-image generation failed during parallel rendering.")
                 current_shot = shot_index
                 image_name = clip_images[shot_index] if shot_index < len(clip_images) else ""
+                if shot_index < len(reference_manifest):
+                    reference_manifest[shot_index]["shot_frame"] = image_name
+                    _update_pipeline(
+                        pid,
+                        h3_reference_manifest=copy.deepcopy(reference_manifest),
+                    )
                 candidate = image_name if os.path.isabs(image_name) else os.path.join(out_dir, image_name)
                 segment_start = candidate if image_name and os.path.isfile(candidate) else ""
                 reuse_prefix = True
@@ -7505,7 +7760,9 @@ def _stop_minimax_h3_runtime() -> None:
 def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                           planned_clips: list[dict], clip_images: list[str],
                           clip_keyframes: Optional[list[list[str]]] = None,
-                          out_dir: str = None, workspace: str = None) -> list[str]:
+                          out_dir: str = None, workspace: str = None,
+                          clip_ready_events: Optional[list[threading.Event]] = None,
+                          producer_failed: Optional[threading.Event] = None) -> list[str]:
     """Generate multi-clip video with optional keyframe injection. Returns list of output filenames."""
     if (
         params.get("pipeline_type") == "comic_movie"
@@ -7643,6 +7900,8 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 resolution,
                 out_dir,
                 workspace,
+                clip_ready_events,
+                producer_failed,
             )
         finally:
             # Keep one warm sidecar across all Story segments, then hand it to

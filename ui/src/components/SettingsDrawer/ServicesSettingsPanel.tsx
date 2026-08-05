@@ -653,6 +653,28 @@ export function ServicesSettingsPanel() {
           </p>
         </div>
 
+        {/* Resource-aware workflow overlap */}
+        <label className="flex items-center justify-between cursor-pointer group">
+          <div className="flex-1 mr-3 min-w-0">
+            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
+              Parallel workflows by resource
+            </div>
+            <div className="text-[10px] text-text-muted mt-0.5">
+              Overlaps work only across different servers or devices. Each local GPU and each remote host remains a sequential queue.
+            </div>
+          </div>
+          <div
+            onClick={() => updateConfig({ workflow_parallelism_enabled: !servicesConfig.workflow_parallelism_enabled })}
+            className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+              servicesConfig.workflow_parallelism_enabled ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
+            }`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              servicesConfig.workflow_parallelism_enabled ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
+          </div>
+        </label>
+
         {/* Structured debug tracing */}
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3 min-w-0">

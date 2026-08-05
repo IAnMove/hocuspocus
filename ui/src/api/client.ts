@@ -720,6 +720,13 @@ export interface PipelineQualityGate {
   waiver_reason?: string
 }
 
+export interface PipelineResourceSchedule {
+  mode: string
+  images_ready?: number
+  images_total?: number
+  lanes: Record<string, { key: string; label: string; location: string }>
+}
+
 export interface PipelineStatus {
   id: string
   status: 'running' | 'paused' | 'preview_ready' | 'completed' | 'failed' | 'cancelled'
@@ -748,6 +755,7 @@ export interface PipelineStatus {
    *  active model (e.g. Flux 2 Dev LoRA on Klein 9B). The chat renders
    *  these inline so users see why some selected LoRAs weren't applied. */
   lora_warnings?: string[]
+  resource_schedule?: PipelineResourceSchedule
 }
 
 export interface ActiveDirectorPipeline {
@@ -762,6 +770,7 @@ export interface ActiveDirectorPipeline {
   workspace?: string
   created_at?: number
   updated_at?: number
+  resource_schedule?: PipelineResourceSchedule
 }
 
 export async function startPipeline(params: Record<string, unknown>): Promise<{ pipeline_id: string }> {

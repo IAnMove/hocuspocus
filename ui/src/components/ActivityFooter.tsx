@@ -55,6 +55,7 @@ interface ActivityView {
   detailMessage?: string
   detailCurrent?: number
   detailTotal?: number
+  resourceMessage?: string
   tokenUsage?: {
     promptTokens?: number
     completionTokens?: number
@@ -64,6 +65,20 @@ interface ActivityView {
   startedAt?: number
   updatedAt: number
   dismissible?: 'activity' | 'job'
+}
+
+function resourceMessage(schedule?: import('../api/client').PipelineResourceSchedule): string | undefined {
+  if (!schedule?.lanes) return undefined
+  const planning = schedule.lanes.planning?.label
+  const images = schedule.lanes.images?.label
+  const video = schedule.lanes.video?.label
+  if (schedule.mode === 'remote-images+local-video') {
+    const ready = schedule.images_total
+      ? ` · images ${schedule.images_ready || 0}/${schedule.images_total}`
+      : ''
+    return `Parallel resources · ${images} → ${video}${ready}`
+  }
+  return `Resources · planning: ${planning || 'unknown'} · images: ${images || 'unknown'} · video: ${video || 'unknown'}`
 }
 
 function clampPercent(value: number): number {
@@ -138,6 +153,7 @@ export function ActivityFooter() {
         pipeline.progress?.total_steps ? pipeline.progress.step : pipeline.progress?.current || 0,
         pipeline.progress?.total_steps || pipeline.progress?.total || 0,
       ),
+      resourceMessage: resourceMessage(pipeline.resource_schedule),
       startedAt: epochMilliseconds(pipeline.created_at),
       updatedAt: pipeline.updated_at || pipeline.created_at || 2,
     }))
@@ -161,6 +177,7 @@ export function ActivityFooter() {
             pipelineStatus.progress?.total_steps ? pipelineStatus.progress.step : pipelineStatus.progress?.current || 0,
             pipelineStatus.progress?.total_steps || pipelineStatus.progress?.total || 0,
           ),
+          resourceMessage: resourceMessage(pipelineStatus.resource_schedule),
           updatedAt: 2,
         }]
       : []
@@ -256,6 +273,9 @@ export function ActivityFooter() {
                     <p className={row.status === 'failed' ? 'text-red-400' : 'text-text-secondary'}>{row.message}</p>
                     {row.detailMessage && (
                       <p className="truncate text-text-muted" title={row.detailMessage}>{row.detailMessage}</p>
+                    )}
+                    {row.resourceMessage && (
+                      <p className="truncate text-[9px] text-accent-blue" title={row.resourceMessage}>{row.resourceMessage}</p>
                     )}
                     {!!row.tokenUsage?.totalTokens && (
                       <p className="mt-1 tabular-nums text-text-muted" title={`Input: ${(row.tokenUsage.promptTokens || 0).toLocaleString()} · Output: ${(row.tokenUsage.completionTokens || 0).toLocaleString()} · Calls: ${row.tokenUsage.calls || 0}`}>
