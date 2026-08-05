@@ -12267,10 +12267,26 @@ def _generate_comic_director_json(
     for attempt in range(1, 3):
         request = dict(common)
         if parse_error is not None:
+            # Remote OpenAI-compatible providers are stateless: they do not
+            # know what they emitted on the previous request.  Give the
+            # correction pass the actual response, rather than asking it to
+            # regenerate the whole document from scratch.  The cap prevents
+            # a pathological provider response from turning recovery into an
+            # unbounded prompt-token bill.
+            previous_response = raw.strip()
+            previous_limit = 16000
+            if len(previous_response) > previous_limit:
+                previous_response = (
+                    previous_response[:previous_limit]
+                    + "\n[previous response truncated for bounded JSON repair]"
+                )
             request["prompt"] = (
                 f"{prompt}\n\nJSON CORRECTION RETRY: Your previous response could not be "
-                "decoded as the required JSON object. Return exactly one complete JSON "
-                "object matching the supplied schema, with no prose, markdown or outer array."
+                "decoded as the required JSON object. Preserve every usable fact from the "
+                "previous response and repair only its JSON structure. Return exactly one "
+                "complete JSON object matching the supplied schema, with no prose, markdown "
+                "or outer array.\n\nPREVIOUS RESPONSE TO REPAIR:\n"
+                f"{previous_response}"
             )
             print(f"[Comic Director] Retrying malformed {stage} response once")
         if llm_override:
@@ -12998,37 +13014,66 @@ Keep visualPrompt fields semantic and reusable: describe identity, environment, 
 lighting and story-specific color cues, but do not paste the global visual style into every
 field. Maestro applies that independent style at image render time when its lock is enabled.
 Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instruction asks."""
-    result = None
-    problem = None
-    for attempt in range(1, 4):
-        repair = (
-            f"\nYour previous attempt was invalid: {problem}. Correct it completely."
-            if problem else ""
+    system_prompt = (
+        "You are Maestro Story Architect: a professional story editor, character "
+        "designer and production bible author. Return strict JSON only."
+    )
+    schema = _story_lab_schema(schema_scope)
+    max_new_tokens = 6000 if scope == "music" else 2600
+    try:
+        result = _generate_comic_director_json(
+            prompt=base_prompt,
+            system_prompt=system_prompt,
+            schema=schema,
+            max_new_tokens=max_new_tokens,
+            stage=f"Story Lab {scope}",
+            llm_override=llm_override,
+        )
+    except Exception as exc:
+        # _generate_comic_director_json already made one bounded repair pass
+        # with the original malformed text.  Do not blindly spend another
+        # pair of full generations when that recovery also failed.
+        raise HTTPException(
+            status_code=502,
+            detail=f"Story generation failed after JSON repair: {exc}",
+        ) from exc
+
+    result = _normalize_story_stage_ids(result, scope, project)
+    problem = _story_stage_problem(result, scope, project)
+    if problem:
+        # Syntax may be valid while the response still violates the requested
+        # stage shape (for example, {"world": []}).  Providers have no
+        # conversational memory, so include the compact recovered object and
+        # request one focused correction rather than another fresh story.
+        previous_response = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+        previous_limit = 16000
+        if len(previous_response) > previous_limit:
+            previous_response = (
+                previous_response[:previous_limit]
+                + "\n[previous response truncated for bounded schema repair]"
+            )
+        correction = (
+            f"\n\nSTORY SCHEMA REPAIR: The previous response failed validation: {problem}. "
+            "Do not invent a new story. Preserve the usable story facts below and return "
+            "only a corrected JSON object matching the supplied schema.\n"
+            f"PREVIOUS RESPONSE TO REPAIR:\n{previous_response}"
         )
         try:
             result = _generate_comic_director_json(
-                prompt=base_prompt + repair,
-                system_prompt=(
-                    "You are Maestro Story Architect: a professional story editor, character "
-                    "designer and production bible author. Return strict JSON only."
-                ),
-                schema=_story_lab_schema(schema_scope),
-                max_new_tokens=6000 if scope == "music" else 2600,
-                stage=f"Story Lab {scope}, attempt {attempt}",
+                prompt=base_prompt + correction,
+                system_prompt=system_prompt,
+                schema=schema,
+                max_new_tokens=max_new_tokens,
+                stage=f"Story Lab {scope} schema repair",
                 llm_override=llm_override,
             )
         except Exception as exc:
-            problem = str(exc)
-            if attempt >= 3:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Story generation failed after three attempts: {problem}",
-                ) from exc
-            continue
+            raise HTTPException(
+                status_code=502,
+                detail=f"Story generation schema repair failed: {exc}",
+            ) from exc
         result = _normalize_story_stage_ids(result, scope, project)
         problem = _story_stage_problem(result, scope, project)
-        if problem is None:
-            break
     if result is not None and problem and scope == "relationships":
         # A provider can still invent a third name after retries. Preserve all
         # valid relationships and discard only irreparable references instead

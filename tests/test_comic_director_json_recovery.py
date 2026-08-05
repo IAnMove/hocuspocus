@@ -69,7 +69,8 @@ class TestComicDirectorJsonRecovery(unittest.TestCase):
         self.assertEqual(generate.call_count, 2)
         retry_prompt = generate.call_args_list[1].kwargs["prompt"]
         self.assertIn("JSON CORRECTION RETRY", retry_prompt)
-        self.assertNotIn("not an object", retry_prompt)
+        self.assertIn("PREVIOUS RESPONSE TO REPAIR", retry_prompt)
+        self.assertIn('"not an object"', retry_prompt)
 
 
 if __name__ == "__main__":
