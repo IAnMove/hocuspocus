@@ -653,6 +653,33 @@ export function ServicesSettingsPanel() {
           </p>
         </div>
 
+        {/* Structured debug tracing */}
+        <label className="flex items-center justify-between cursor-pointer group">
+          <div className="flex-1 mr-3 min-w-0">
+            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
+              Debug trace
+            </div>
+            <div className="text-[10px] text-text-muted mt-0.5">
+              Saves sanitized LLM requests/results and user actions as JSONL. Off by default.
+            </div>
+            {servicesConfig.debug_trace_enabled && servicesConfig.debug_trace_log_path && (
+              <div className="text-[10px] text-text-muted mt-1 font-mono truncate" title={servicesConfig.debug_trace_log_path}>
+                {servicesConfig.debug_trace_log_path}
+              </div>
+            )}
+          </div>
+          <div
+            onClick={() => updateConfig({ debug_trace_enabled: !servicesConfig.debug_trace_enabled })}
+            className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+              servicesConfig.debug_trace_enabled ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
+            }`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              servicesConfig.debug_trace_enabled ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
+          </div>
+        </label>
+
         {/* Multi-Shot LoRA Mode toggle (Beta) — Phase 1 of LoRA
             capabilities catalog. When on, Pass 2 emits storyboard-format
             video_prompts for 20s shots so a compatible IC-LoRA (e.g.

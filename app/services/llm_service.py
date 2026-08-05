@@ -15,6 +15,7 @@ import threading
 import logging
 import requests
 from typing import Optional
+from .debug_trace import trace_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -1554,6 +1555,7 @@ def _image_to_data_url(image_path: str, max_size: int = 768) -> Optional[str]:
         return f"data:{mime};base64,{data}"
 
 
+@trace_llm_call("generate", context=lambda: {"provider": _provider, "model_id": _model_id})
 def generate(
     prompt: str,
     system_prompt: str = "",
@@ -1746,6 +1748,7 @@ def generate(
     return content.strip()
 
 
+@trace_llm_call("generate_openai_compatible")
 def generate_openai_compatible(
     *,
     prompt: str,
@@ -1912,6 +1915,7 @@ def get_stream_status() -> dict:
         return {"text": _stream_buffer, "done": _stream_done}
 
 
+@trace_llm_call("generate_streaming", context=lambda: {"provider": _provider, "model_id": _model_id})
 def generate_streaming(
     prompt: str,
     system_prompt: str = "",

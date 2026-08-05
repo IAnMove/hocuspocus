@@ -505,6 +505,8 @@ export interface ServicesConfig {
   nsfw_mode: boolean
   nsfw_accepted_at: string | null
   director_prompt_polish: 'off' | 'full_guide' | 'light_guide' | 'third_pass'
+  debug_trace_enabled: boolean
+  debug_trace_log_path: string
   civitai_api_key: string
   civitai_api_key_set: boolean
   voice_reference_enabled: boolean

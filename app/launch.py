@@ -92,6 +92,7 @@ if _hf_token_path:
 print("[Maestro] Importing WanGP engine...")
 import wgp
 from services import model3d_service, minimax_h3_service, minimax_image_service
+from services import debug_trace
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 print(f"[Maestro] WanGP loaded: {len(wgp.displayed_model_types)} models available")
@@ -180,6 +181,13 @@ logging.getLogger("uvicorn.access").addFilter(_QuietAccessFilter())
 
 api = FastAPI(title="Maestro API", version="1.0.0")
 
+debug_trace.configure(
+    enabled=lambda: bool(
+        wgp.server_config.get("services", {}).get("debug_trace_enabled", False)
+    ),
+    log_dir=lambda: os.path.join(os.path.dirname(_app_dir), "logs", "debug"),
+)
+
 # Upload size caps — enforced in upload handlers. Tuned for real-world
 # media the app actually ingests; anything larger is almost certainly
 # abuse or a user mistake.
@@ -223,6 +231,53 @@ api.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@api.middleware("http")
+async def trace_user_mutations(request: Request, call_next):
+    """Record reconstructible user/API actions while debug tracing is on."""
+    should_trace = (
+        debug_trace.is_enabled()
+        and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.url.path != "/api/v1/debug/user-action"
+    )
+    event_id = uuid.uuid4().hex if should_trace else ""
+    started = time.monotonic()
+    if should_trace:
+        content_type = request.headers.get("content-type", "")
+        request_body = None
+        if "application/json" in content_type:
+            try:
+                raw_body = await request.body()
+                request_body = json.loads(raw_body) if raw_body else None
+            except Exception as exc:
+                request_body = {"parse_error": str(exc)}
+        elif content_type:
+            request_body = f"<{content_type}; body omitted>"
+        debug_trace.trace_event(
+            "user_action", "api_request", event_id=event_id, phase="request",
+            method=request.method, path=request.url.path,
+            query=dict(request.query_params), body=request_body,
+        )
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        if should_trace:
+            debug_trace.trace_event(
+                "user_action", "api_request", event_id=event_id, phase="error",
+                method=request.method, path=request.url.path,
+                duration_ms=round((time.monotonic() - started) * 1000, 2),
+                error={"type": type(exc).__name__, "message": str(exc)},
+            )
+        raise
+    if should_trace:
+        debug_trace.trace_event(
+            "user_action", "api_request", event_id=event_id, phase="response",
+            method=request.method, path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=round((time.monotonic() - started) * 1000, 2),
+        )
+    return response
 
 # --- Generation job tracking ---
 _jobs: dict = {}
@@ -4909,6 +4964,10 @@ def get_services_config():
         # issue 80 sequential calls. Director's validated planner prompts are
         # the safe, fast default; users can still enable model-dialect polish.
         "director_prompt_polish": services.get("director_prompt_polish", "off"),
+        # Structured JSONL tracing of LLM calls and user actions. Disabled for
+        # every fresh install; intended for temporary diagnosis only.
+        "debug_trace_enabled": services.get("debug_trace_enabled", False),
+        "debug_trace_log_path": debug_trace.current_log_path(),
         "civitai_api_key": _mask_key(services.get("civitai_api_key", "")),
         "civitai_api_key_set": bool(services.get("civitai_api_key", "")),
         "voice_reference_enabled": services.get("voice_reference_enabled", False),
@@ -4969,6 +5028,7 @@ async def update_services_config(request: Request):
         "google_api_key", "openai_api_key", "deepseek_api_key", "compatible_api_key",
         "compatible_base_url", "anthropic_api_key", "minimax_api_key",
         "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
+        "debug_trace_enabled",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
         "show_experimental", "auto_performance",
         "director_multishot_lora_mode",
@@ -5010,6 +5070,21 @@ async def update_services_config(request: Request):
         f.write(json.dumps(wgp.server_config, indent=4))
 
     return {"status": "ok", "updated": updated}
+
+
+@api.post("/api/v1/debug/user-action")
+async def record_debug_user_action(request: Request):
+    """Record non-API UI actions (buttons/navigation), never typed values."""
+    if not debug_trace.is_enabled():
+        return {"status": "disabled"}
+    body = await request.json()
+    debug_trace.trace_event(
+        "user_action", "ui_control",
+        control=str(body.get("control") or "")[:500],
+        control_type=str(body.get("control_type") or "")[:80],
+        view=str(body.get("view") or "")[:500],
+    )
+    return {"status": "ok"}
 
 
 # ============================================================================
