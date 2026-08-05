@@ -3147,11 +3147,9 @@ def _run_pipeline(pid: str, resume: bool = False):
 
         # ── Optional: Third-pass prompt polish ────────────────────────
         services = _wgp.server_config.get("services", {}) if _wgp else {}
-        # Default "third_pass" — Pass 3 polish runs each generated prompt
-        # through a model-specific dialect pass after planning, which
-        # produces materially better output than relying on Pass 2 alone
-        # with a single hardcoded dialect.
-        polish_mode = services.get("director_prompt_polish", "third_pass")
+        # Opt-in: third_pass makes one extra LLM call per prompt and can turn
+        # a 40-shot plan into 80 serial calls before image generation starts.
+        polish_mode = services.get("director_prompt_polish", "off")
 
         # Snapshot pre-polish prompts for comparison
         import copy
@@ -4076,7 +4074,7 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     # per-prompt after planning by polish_prompts_third_pass(), which
     # avoids stacking conflicting dialect guidance into Pass 2's already
     # crowded system prompt.
-    polish_mode = services_cfg.get("director_prompt_polish", "third_pass")
+    polish_mode = services_cfg.get("director_prompt_polish", "off")
     if polish_mode in ("full_guide", "light_guide"):
         from services.director.prompt_polish import build_polish_block
         guide_mode = "full" if polish_mode == "full_guide" else "light"

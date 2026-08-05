@@ -4904,11 +4904,11 @@ def get_services_config():
         "use_director_v2": services.get("use_director_v2", True),
         "nsfw_mode": nsfw,
         "nsfw_accepted_at": services.get("nsfw_accepted_at", None),
-        # Default flipped from "off" to "third_pass" — Pass 3 polish runs
-        # each generated prompt through a model-specific dialect pass after
-        # planning, which produces materially better LTX-2 / Flux output
-        # than relying on Pass 2 alone with a single hardcoded dialect.
-        "director_prompt_polish": services.get("director_prompt_polish", "third_pass"),
+        # Third-pass polish is opt-in. It performs one extra LLM call per
+        # generated prompt (normally two per shot), which made a 40-shot plan
+        # issue 80 sequential calls. Director's validated planner prompts are
+        # the safe, fast default; users can still enable model-dialect polish.
+        "director_prompt_polish": services.get("director_prompt_polish", "off"),
         "civitai_api_key": _mask_key(services.get("civitai_api_key", "")),
         "civitai_api_key_set": bool(services.get("civitai_api_key", "")),
         "voice_reference_enabled": services.get("voice_reference_enabled", False),
@@ -7103,9 +7103,7 @@ async def director_v2_plan(request: Request):
         planner_kwargs["nsfw"] = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
 
         # Prompt polish mode: off | full_guide | light_guide | third_pass.
-        # Default flipped from "off" to "third_pass" — see /api/v1/services
-        # GET endpoint for full rationale.
-        polish_mode = services.get("director_prompt_polish", "third_pass")
+        polish_mode = services.get("director_prompt_polish", "off")
         video_model = body.get("video_model", "")
         image_model = body.get("image_model", "")
 

@@ -633,14 +633,14 @@ export function ServicesSettingsPanel() {
             Director Prompt Polish
           </label>
           <select
-            value={servicesConfig.director_prompt_polish || 'third_pass'}
+            value={servicesConfig.director_prompt_polish || 'off'}
             onChange={e => updateConfig({ director_prompt_polish: e.target.value as 'off' | 'full_guide' | 'light_guide' | 'third_pass' })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="third_pass">Third Pass (Enhance Pipeline) — recommended</option>
+            <option value="off">Off — use validated Director prompts (recommended)</option>
+            <option value="third_pass">Third Pass — extra LLM call per prompt</option>
             <option value="light_guide">Lightweight Guide Inject (legacy)</option>
             <option value="full_guide">Full Guide Inject (legacy)</option>
-            <option value="off">Off</option>
           </select>
           <p className="text-[10px] text-text-muted mt-1">
             {servicesConfig.director_prompt_polish === 'full_guide'
@@ -648,8 +648,8 @@ export function ServicesSettingsPanel() {
               : servicesConfig.director_prompt_polish === 'light_guide'
               ? 'Legacy: injects a lightweight dialect cheat sheet (~200 tokens) into the Director planner.'
               : servicesConfig.director_prompt_polish === 'off'
-              ? 'Director uses its built-in prompting rules only. No model-specific optimization.'
-              : 'Default. Runs each Director prompt through the model\'s enhance pipeline after planning, so video and image prompts are dialect-correct for LTX-2, Flux, etc.'}
+              ? 'Default. Uses the complete prompts produced and validated by Director, with no additional LLM calls.'
+              : 'Opt-in. Runs each prompt through another LLM call; a 40-shot plan can require 80 extra calls.'}
           </p>
         </div>
 
