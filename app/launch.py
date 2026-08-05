@@ -12534,8 +12534,35 @@ def _normalize_story_stage_ids(
     *,
     drop_unknown_relationships: bool = False,
 ) -> dict:
-    """Repair harmless LLM ID drift while keeping canonical project IDs stable."""
+    """Repair harmless LLM omissions and ID drift before validation."""
     normalized = copy.deepcopy(result)
+    if scope == "world" and isinstance(normalized.get("world"), dict):
+        locations = normalized["world"].get("locations")
+        if not isinstance(locations, list):
+            return normalized
+        for location in locations:
+            if not isinstance(location, dict):
+                continue
+            name = str(location.get("name") or "this location").strip()
+            description = str(
+                location.get("description") or location.get("purpose") or ""
+            ).strip()
+            # These are presentation-only fields.  When an otherwise useful
+            # location omits them, deterministic defaults are safer and
+            # cheaper than throwing away the whole world and asking the LLM
+            # to regenerate it.  The user can still edit both fields later.
+            if not isinstance(location.get("visualPrompt"), str) or not location["visualPrompt"].strip():
+                location["visualPrompt"] = " ".join(part for part in (
+                    name,
+                    description,
+                    "single coherent environment concept art, no text or labels",
+                ) if part)
+            if not isinstance(location.get("negativePrompt"), str) or not location["negativePrompt"].strip():
+                location["negativePrompt"] = (
+                    "text, lettering, captions, logos, UI, collage, contact sheet, grid"
+                )
+        return normalized
+
     if scope == "characters" and isinstance(normalized.get("characters"), list):
         used: set[str] = set()
         for index, character in enumerate(normalized["characters"]):
@@ -13091,7 +13118,7 @@ Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instr
     if result is None or problem:
         raise HTTPException(
             status_code=502,
-            detail=f"Story generation remained incomplete after three attempts: {problem}",
+            detail=f"Story generation remained incomplete after bounded repair: {problem}",
         )
     if scope == "structure" and "beats" in result:
         result = {"structure": result["beats"]}

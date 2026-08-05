@@ -41,6 +41,25 @@ class TestStoryLabIdRepair(unittest.TestCase):
             ["nara", "vigil"],
         )
 
+    def test_world_location_visual_defaults_are_recovered_without_another_llm_call(self):
+        result = {
+            "world": {
+                "locations": [{
+                    "id": "archive",
+                    "name": "The Archive",
+                    "purpose": "Where the AI finds its first memory.",
+                    "description": "A buried concrete library under a red desert.",
+                }],
+            },
+        }
+
+        normalized = _normalize_story_stage_ids(result, "world", {})
+        location = normalized["world"]["locations"][0]
+
+        self.assertIn("The Archive", location["visualPrompt"])
+        self.assertIn("no text", location["visualPrompt"])
+        self.assertIn("lettering", location["negativePrompt"])
+
     def test_relationship_names_and_whitespace_resolve_to_canonical_ids(self):
         project = {
             "characters": [
