@@ -111,6 +111,8 @@ Use `POST /api/v1/upload` first for local reference assets, then pass the return
 ### 📚 Story Lab — reusable stories, worlds and characters
 Story Lab is a production bible that sits before Comic Studio and Director. Write a premise once, then generate or manually edit the logline, synopsis, world rules, locations, character psychology and appearance, relationships, dramatic beats, and ending. Every generated field stays editable.
 
+For a screenshot-led, end-to-end walkthrough, see **[Maestro X / Experimental: Story → Comics → Video](docs/MAESTRO_X_STORY_COMICS_VIDEO.md)**. It also includes copy-ready captions for an X launch thread.
+
 - **Guided mode** creates reviewable field-level drafts and locks production until the relevant story, world, cast identities, relationships, and structure are approved. **Automatic mode** runs the same checkpointed pipeline, then offers first-look world, location, and character concepts.
 - Choose Maestro internal, DeepSeek V4 Pro/Flash, MiniMax M3/M2.7/M2.7 Highspeed, OpenAI, or a custom compatible writing agent inside the story itself. Concept-art generation has its own independent Maestro/MiniMax selector.
 - Character cards combine role, desire, need, flaw, arc, dialogue voice, wardrobe, visual invariants, negative prompts, multiple references, and a selected primary identity image.
