@@ -34,6 +34,12 @@ import type {
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
 const panel = 'rounded-xl border border-border bg-bg-secondary p-3 md:p-4'
+const CHARACTER_IDENTITY_REFERENCE_LOCK = [
+  'CHARACTER IDENTITY REFERENCE: show exactly one character in a clear medium close-up or chest-up portrait.',
+  'The face must be large in frame, sharply readable, unobstructed and well lit, with both eyes and defining facial features clearly visible.',
+  'Use a frontal or gentle three-quarter view, a neutral readable pose, the canonical wardrobe, and a simple non-distracting background.',
+  'Do not use a distant shot, full-body environmental composition, extreme profile, covered face, dramatic occlusion, action pose or additional characters.',
+].join(' ')
 
 function moveItem<T>(items: T[], from: number, to: number): void {
   if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return
@@ -642,14 +648,23 @@ export function StoryLabPanel() {
       return
     }
     if (key === 'characters') {
-      const incomplete = project.characters.filter(character =>
-        character.approval !== 'approved'
-        || !character.primaryReferenceAssetId
-        || !project.assets[character.primaryReferenceAssetId])
+      const incomplete = project.characters.flatMap(character => {
+        const reasons = [
+          character.approval !== 'approved' ? 'still marked draft' : '',
+          !character.primaryReferenceAssetId
+            ? 'has no primary identity selected'
+            : !project.assets[character.primaryReferenceAssetId]
+              ? 'has a missing primary identity asset'
+              : '',
+        ].filter(Boolean)
+        return reasons.length ? [`${character.name || 'Unnamed character'} (${reasons.join(', ')})`] : []
+      })
       if (!project.characters.length || incomplete.length) {
         setNotice({
           kind: 'error',
-          text: 'Approve each character and select a valid primary visual identity before approving the cast.',
+          text: !project.characters.length
+            ? 'Add at least one character before approving the cast.'
+            : `Cast approval is blocked: ${incomplete.join(' · ')}. Review each listed character, select its primary image, then click its draft button to approve it.`,
         })
         setTab('characters')
         return
@@ -1094,6 +1109,7 @@ export function StoryLabPanel() {
       : undefined
     const effectivePrompt = [
       applyStoryVisualStyle(prompt, current.visualStyle, current.enforceVisualStyle),
+      target.kind === 'character' ? CHARACTER_IDENTITY_REFERENCE_LOCK : '',
       'Single concept-art image, one coherent view, no contact sheet, no grid, no text, no labels.',
       compatibleNegativePrompt ? `Strictly avoid: ${compatibleNegativePrompt}.` : '',
     ].filter(Boolean).join(' ')
