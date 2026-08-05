@@ -2726,7 +2726,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJob: GenerationJob = {
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
       phase: '', message: tool === 'upscale' ? 'Submitting upscale...' : 'Submitting revoice...',
-      outputFiles: [], error: null, oomInfo: null,
+      outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
     }
     set(st => ({ isGenerating: true, jobs: [newJob, ...st.jobs] }))
 
@@ -3079,9 +3079,9 @@ export const useStore = create<AppState>((set, get) => ({
       if (!state.blendClipAPath || !state.blendClipBPath) return
       const prompt = (state.params.prompt as string || '').trim()
 
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting blend...', outputFiles: [], error: null, oomInfo: null,
+    const newJob: GenerationJob = {
+      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+      phase: '', message: 'Submitting blend...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
 
@@ -3217,9 +3217,9 @@ export const useStore = create<AppState>((set, get) => ({
       const trimEnd = state.outpaintTrimEnd || 0
       const sendTrim = trimEnd > trimStart && trimEnd > 0.05
 
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting outpaint...', outputFiles: [], error: null, oomInfo: null,
+    const newJob: GenerationJob = {
+      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+      phase: '', message: 'Submitting outpaint...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
 
@@ -3312,9 +3312,9 @@ export const useStore = create<AppState>((set, get) => ({
       const prompt = (state.params.prompt as string || '').trim()
       if (!prompt) return
 
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting...', outputFiles: [], error: null, oomInfo: null,
+    const newJob: GenerationJob = {
+      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+      phase: '', message: 'Submitting...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
 
@@ -3948,6 +3948,7 @@ export const useStore = create<AppState>((set, get) => ({
       message: 'Submitting...',
       outputFiles: [],
       error: null,
+      createdAt: Date.now(),
       oomInfo: null,
     }
 
@@ -4081,6 +4082,7 @@ export const useStore = create<AppState>((set, get) => ({
             message: j.message,
             outputFiles: j.output_files,
             error: j.error,
+            createdAt: j.created_at < 1_000_000_000_000 ? j.created_at * 1000 : j.created_at,
             oomInfo: (j as { oom_info?: import('../types').OomInfo | null }).oom_info ?? null,
             taskTimings: j.task_timings ?? [],
           }))

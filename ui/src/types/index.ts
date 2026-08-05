@@ -156,6 +156,7 @@ export interface GenerationJob {
   message: string
   outputFiles: string[]
   error: string | null
+  createdAt?: number
   taskTimings?: GenerationTaskTiming[]
   /** Present only on failed jobs that look like CUDA OOMs (see OomInfo). */
   oomInfo?: OomInfo | null

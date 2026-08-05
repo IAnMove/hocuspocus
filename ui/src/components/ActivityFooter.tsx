@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ListVideo, Loader2 } from 'lucide-react'
 import { useStore } from '../stores/useStore'
 
@@ -50,6 +50,7 @@ interface ActivityView {
   current: number
   total: number
   percent: number
+  startedAt?: number
   updatedAt: number
   dismissible?: 'activity' | 'job'
 }
@@ -61,6 +62,21 @@ function clampPercent(value: number): number {
 function activityProgress(current: number, total: number, explicit?: number): number {
   if (total > 0) return clampPercent((current / total) * 100)
   return clampPercent((explicit || 0) * (explicit && explicit <= 1 ? 100 : 1))
+}
+
+function epochMilliseconds(value?: number): number | undefined {
+  if (!value || !Number.isFinite(value)) return undefined
+  return value < 1_000_000_000_000 ? value * 1000 : value
+}
+
+function formatElapsed(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainder = seconds % 60
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`
+    : `${minutes}:${remainder.toString().padStart(2, '0')}`
 }
 
 /**
@@ -78,6 +94,7 @@ export function ActivityFooter() {
   const dismissJob = useStore(s => s.dismissJob)
   const setVideoWorkflowsOpen = useStore(s => s.setDashboardOpen)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [clock, setClock] = useState(() => Date.now())
 
   const rows = useMemo<ActivityView[]>(() => {
     const registered = Object.values(activities).map(activity => ({
@@ -89,6 +106,7 @@ export function ActivityFooter() {
       current: activity.current || 0,
       total: activity.total || 0,
       percent: activityProgress(activity.current || 0, activity.total || 0, activity.progress),
+      startedAt: activity.startedAt,
       updatedAt: activity.updatedAt || activity.startedAt || 3,
       dismissible: activity.status === 'failed' ? 'activity' as const : undefined,
     }))
@@ -105,6 +123,7 @@ export function ActivityFooter() {
         pipeline.progress?.total_steps ? pipeline.progress.step : pipeline.progress?.current || 0,
         pipeline.progress?.total_steps || pipeline.progress?.total || 0,
       ),
+      startedAt: epochMilliseconds(pipeline.created_at),
       updatedAt: pipeline.updated_at || pipeline.created_at || 2,
     }))
 
@@ -145,6 +164,7 @@ export function ActivityFooter() {
         current: job.totalSteps ? job.step : 0,
         total: job.totalSteps || 0,
         percent: activityProgress(job.step, job.totalSteps, job.progress),
+        startedAt: job.createdAt,
         updatedAt: 1,
         dismissible: job.status === 'failed' ? 'job' as const : undefined,
       }))
@@ -163,6 +183,14 @@ export function ActivityFooter() {
     ? PHASE_LABELS[primary.phase] || primary.phase?.replaceAll('_', ' ')
     : ''
   const message = primary?.message || 'Ready — no active jobs'
+  useEffect(() => {
+    if (!activeRows.length) return
+    const interval = window.setInterval(() => setClock(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [activeRows.length])
+  const elapsed = (row: ActivityView) => row.startedAt
+    ? formatElapsed((row.status === 'running' || row.status === 'queued' ? clock : row.updatedAt) - row.startedAt)
+    : ''
 
   return (
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
@@ -185,6 +213,7 @@ export function ActivityFooter() {
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium text-text-primary">{row.title}</span>
                       <div className="flex items-center gap-2">
+                        {elapsed(row) && <span className="shrink-0 tabular-nums text-text-muted">{elapsed(row)}</span>}
                         <span className="shrink-0 capitalize text-text-muted">{PHASE_LABELS[row.phase] || row.phase?.replaceAll('_', ' ')}</span>
                         {(row.status === 'running' || row.status === 'queued')
                           && (row.id.startsWith('job:') || row.id.startsWith('audio-analysis-')) && (
@@ -254,6 +283,9 @@ export function ActivityFooter() {
       <div className="min-w-0 flex-1 flex items-center gap-2">
         {phase && primary && (
           <span className="hidden sm:inline shrink-0 text-text-muted capitalize">{phase}</span>
+        )}
+        {primary && elapsed(primary) && (
+          <span className="shrink-0 tabular-nums text-text-muted">{elapsed(primary)}</span>
         )}
         <span
           className={`truncate ${hasError ? 'text-red-400' : isActive ? 'text-text-secondary' : 'text-text-muted'}`}

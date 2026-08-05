@@ -1745,13 +1745,13 @@ def generate_openai_compatible(
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    # DeepSeek documents that JSON mode can occasionally return an empty
-    # content field. MiniMax reasoning models can likewise exhaust their first
-    # completion budget before emitting visible content. Retry only a confirmed
-    # successful HTTP response with an empty content field; never retry
-    # timeouts or transport failures.
+    # DeepSeek's JSON mode can occasionally return an empty content field.
+    # MiniMax reasoning models can likewise spend their first completion budget
+    # entirely on hidden reasoning, even for a short plain-text task such as
+    # lyric translation. Retry only a confirmed successful HTTP response with
+    # empty content; never retry timeouts or transport failures.
     provider_name = "MiniMax" if is_minimax else "DeepSeek" if is_deepseek else "OpenAI-compatible provider"
-    attempts = 2 if json_schema is not None and (is_deepseek or is_minimax) else 1
+    attempts = 2 if is_minimax or (json_schema is not None and is_deepseek) else 1
     for content_attempt in range(attempts):
         request_payload = dict(payload)
         if is_minimax and content_attempt > 0:
