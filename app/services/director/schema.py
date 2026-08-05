@@ -398,6 +398,10 @@ class ProductionPlan:
     reference_assets: Optional[ReferenceAssets] = None
     characters: Optional[list[CharacterProfile]] = None
     continuity_notes: Optional[list[str]] = None
+    # Valid surplus ideas returned by a planner. They do not consume timeline
+    # slots automatically, but remain persisted for later clip replacement or
+    # edit re-segmentation instead of being discarded.
+    alternative_shots: Optional[list[dict]] = None
 
     def to_dict(self) -> dict:
         d = {
@@ -416,6 +420,8 @@ class ProductionPlan:
             d["characters"] = [c.to_dict() for c in self.characters]
         if self.continuity_notes:
             d["continuity_notes"] = self.continuity_notes
+        if self.alternative_shots:
+            d["alternative_shots"] = self.alternative_shots
         return d
 
     @staticmethod
@@ -429,6 +435,7 @@ class ProductionPlan:
             reference_assets=None,  # reconstructed externally if needed
             characters=[CharacterProfile.from_dict(c) for c in d.get("characters", [])] if d.get("characters") else None,
             continuity_notes=d.get("continuity_notes"),
+            alternative_shots=d.get("alternative_shots"),
         )
 
     def get_character(self, character_id: str) -> Optional[CharacterProfile]:

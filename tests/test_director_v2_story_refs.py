@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -36,6 +37,32 @@ def _load_planner_kwargs():
 _director_v2_planner_kwargs = _load_planner_kwargs()
 
 
+def _music_shot(index: int) -> dict:
+    return {
+        "clip_index": index,
+        "scene_goal": f"Complete narrative beat {index}",
+        "scene_type": "narrative",
+        "subjects_on_screen": [],
+        "environment": "A moonlit archive",
+        "visual_style": "cinematic data dream",
+        "lighting": "soft cyan light",
+        "mood": "reflective",
+        "action_beats": ["Data motes gather"],
+        "camera_plan": {
+            "framing": "medium shot",
+            "movement": "slow push in",
+            "movement_intensity": "subtle",
+        },
+        "ending_beat": "The archive glows",
+        "image_source": "original",
+        "image_prompt": f"A complete static first frame in a moonlit archive for clip {index}.",
+        "visual_changes": ["The archive begins to glow"],
+        "video_prompt": f"The camera slowly advances while pale data motes gather for clip {index}.",
+        "keyframe_prompts": [],
+        "window_prompts": [],
+    }
+
+
 class _NoLlmShortFilmPlanner(ShortFilmPlanner):
     def _plan_story_driven(self, **kwargs):
         self.received_has_reference = kwargs["has_reference"]
@@ -54,6 +81,66 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         }]
         with self.assertRaisesRegex(RuntimeError, "incomplete image/video prompts for shots 1"):
             MusicVideoPlanner._validate_llm_shot_plans(plans, 1)
+
+    def test_music_video_accepts_surplus_complete_plans(self):
+        plan = {
+            "image_prompt": "A complete static first frame in a moonlit archive.",
+            "video_prompt": "The camera slowly advances while pale data motes drift through the archive.",
+        }
+        MusicVideoPlanner._validate_llm_shot_plans([plan, plan, plan], 2)
+
+    def test_music_video_partitions_surplus_as_alternatives(self):
+        plans = [
+            {
+                "clip_index": index,
+                "image_prompt": f"A complete static first frame for numbered clip {index}.",
+                "video_prompt": f"The camera moves through the complete action for numbered clip {index}.",
+            }
+            for index in (1, 2, 3)
+        ]
+        slots, missing, alternatives = MusicVideoPlanner._partition_shot_plans(plans, 2)
+        self.assertEqual(sorted(slots), [0, 1])
+        self.assertEqual(missing, [])
+        self.assertEqual(len(alternatives), 1)
+
+    def test_music_video_repairs_only_missing_indexes_once(self):
+        calls = []
+
+        def generate(**kwargs):
+            calls.append(kwargs)
+            return json.dumps([_music_shot(1 if len(calls) == 1 else 2)])
+
+        plan = MusicVideoPlanner(llm_generate=generate).plan(
+            clips=[
+                {"start": 0, "end": 4, "label": "intro", "beat_count": 8},
+                {"start": 4, "end": 8, "label": "verse", "beat_count": 8},
+            ],
+            scene_description="A concise story about a living archive.",
+            bpm=120,
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(plan.shots), 2)
+        self.assertIn("Missing clip indexes: 2", calls[1]["prompt"])
+        self.assertNotIn("Missing clip indexes: 1", calls[1]["prompt"])
+
+    def test_music_video_persists_surplus_plans_as_alternatives(self):
+        def generate(**_kwargs):
+            return json.dumps([_music_shot(1), _music_shot(2), _music_shot(3)])
+
+        plan = MusicVideoPlanner(llm_generate=generate).plan(
+            clips=[
+                {"start": 0, "end": 4, "label": "intro", "beat_count": 8},
+                {"start": 4, "end": 8, "label": "verse", "beat_count": 8},
+            ],
+            scene_description="A concise story about a living archive.",
+            bpm=120,
+        )
+
+        serialized = plan.to_dict()
+        self.assertEqual(len(plan.shots), 2)
+        self.assertEqual(len(serialized["alternative_shots"]), 1)
+        self.assertEqual(serialized["alternative_shots"][0]["clip_index"], 3)
 
     def test_character_and_location_references_are_preserved(self):
         body = {
