@@ -1202,10 +1202,21 @@ export function StoryLabPanel() {
     })
     setReferenceBatchBusy(true)
     setNotice(null)
+    const activity = beginStoryActivity(
+      'regenerating_styled_references',
+      `Regenerating styled references: 0/${targets.length}`,
+      targets.length,
+    )
     let completed = 0
     let lastError = ''
     try {
       for (const item of targets) {
+        activity.update(
+          `Generating styled reference ${completed + 1}/${targets.length}: ${item.label}`,
+          'regenerating_styled_references',
+          completed,
+          targets.length,
+        )
         setNotice({
           kind: 'ok',
           text: `Regenerating styled references ${completed + 1}/${targets.length}: ${item.label}`,
@@ -1218,6 +1229,12 @@ export function StoryLabPanel() {
         })
         if (!ready) break
         completed += 1
+        activity.update(
+          `Styled reference completed ${completed}/${targets.length}: ${item.label}`,
+          'regenerating_styled_references',
+          completed,
+          targets.length,
+        )
       }
       setNotice(completed === targets.length
         ? {
@@ -1228,6 +1245,15 @@ export function StoryLabPanel() {
             kind: 'error',
             text: `Stopped after ${completed}/${targets.length} references. Completed replacements were kept; the failed target kept its old reference. ${lastError}`.trim(),
           })
+      if (completed === targets.length) {
+        activity.finish()
+      } else {
+        activity.fail(new Error(lastError || `Stopped after ${completed}/${targets.length} styled references.`), 'regenerating_styled_references')
+      }
+    } catch (error) {
+      const message = (error as Error).message
+      activity.fail(error, 'regenerating_styled_references')
+      setNotice({ kind: 'error', text: `Styled reference generation stopped after ${completed}/${targets.length}: ${message}` })
     } finally {
       setReferenceBatchBusy(false)
     }

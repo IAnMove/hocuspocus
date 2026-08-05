@@ -6,6 +6,7 @@ const PHASE_LABELS: Record<string, string> = {
   planning: 'Planning',
   polishing_prompts: 'Polishing prompts',
   generating_images: 'Generating images',
+  regenerating_styled_references: 'Regenerating styled references',
   preview_ready: 'Ready for review',
   generating_video: 'Generating video',
   post_processing: 'Post-processing',
