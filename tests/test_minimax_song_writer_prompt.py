@@ -46,6 +46,7 @@ class TestMiniMaxSongWriterPrompt(unittest.TestCase):
         self.assertIn("STORY CONTEXT", prompt)
         self.assertIn("LYRICS LANGUAGE: Spanish", prompt)
         self.assertIn("TARGET DURATION: approximately 120 seconds", prompt)
+        self.assertIn("MiniMax Music has no exact duration API parameter", prompt)
 
     def test_normalizes_provider_limits_by_mode(self):
         style, lyrics = _normalize_minimax_song_output(

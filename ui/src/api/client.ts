@@ -208,6 +208,25 @@ export async function generateStoryMusicCandidates(params: {
   return res.json()
 }
 
+export async function translateStoryLyrics(params: {
+  lyrics: string
+  targetLanguage: string
+  writingProvider: import('../features/stories/types').StoryWritingProvider
+  writingModel?: string
+  writingBaseUrl?: string
+}): Promise<{ lyrics: string; targetLanguage: string }> {
+  const res = await fetch(`${BASE}/api/v1/stories/translate-lyrics`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Lyric translation failed' }))
+    throw new Error(error.detail || 'Lyric translation failed')
+  }
+  return res.json()
+}
+
 // Director Music Video: generate a music track (writes the song first if only
 // a description is given) and return the ABSOLUTE audio path so it can flow
 // straight into the existing analyze → plan-structure → pipeline chain.

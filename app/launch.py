@@ -5456,6 +5456,10 @@ def _minimax_song_request_prompt(body: dict, description: str, instrumental: boo
         f"TARGET MODEL: {model}",
         f"LYRICS LANGUAGE: {language}",
         f"TARGET DURATION: approximately {duration} seconds",
+        "DURATION NOTE: MiniMax Music has no exact duration API parameter. Treat the target "
+        "as a strict lyric and arrangement budget: keep the section count and sung lines "
+        "proportionate to it; do not add repeated verses, choruses or extended outros merely "
+        "to retell more story.",
         f"CORE REQUEST:\n{description[:8000]}",
     ]
     labelled_inputs = (
@@ -13347,6 +13351,74 @@ async def generate_story_music_candidates(body: dict):
             for candidate in candidates
         ]
     }
+
+
+@api.post("/api/v1/stories/translate-lyrics")
+async def translate_story_lyrics(body: dict):
+    """Translate editable song lyrics with the Story Lab writing provider."""
+    from services import llm_service
+
+    lyrics = str(body.get("lyrics") or "").strip()
+    target_language = str(body.get("targetLanguage") or "").strip()[:80]
+    if not lyrics:
+        raise HTTPException(status_code=400, detail="Lyrics are required")
+    if not target_language:
+        raise HTTPException(status_code=400, detail="Choose a target language")
+    if len(lyrics) > 3500:
+        raise HTTPException(status_code=400, detail="Lyrics exceed MiniMax's 3500-character limit")
+
+    source_tags = re.findall(r"(?m)^\s*(\[[^\]\r\n]+\])\s*$", lyrics)
+    system_prompt = (
+        "You are a professional lyric translator. Return only the translated lyrics, "
+        "with no explanation, title, markdown or code fence. Preserve every bracketed "
+        "section tag exactly as written (for example [Verse], [Pre Chorus], [Chorus]) "
+        "and preserve parenthetical performance directions, line breaks, repetitions and "
+        "the song's singability. Do not add or remove sections."
+    )
+    prompt = (
+        f"Translate these song lyrics into {target_language}. Keep the meaning, emotional "
+        "arc and roughly singable line lengths. Preserve the section tags exactly.\n\n"
+        f"LYRICS:\n{lyrics}"
+    )
+    llm_override = _comic_writing_llm(body)
+    try:
+        if llm_override:
+            translated = llm_service.generate_openai_compatible(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                model_id=llm_override["model"],
+                base_url=llm_override["base_url"],
+                api_key=llm_override["api_key"],
+                max_new_tokens=min(3000, max(500, len(lyrics) * 2)),
+                temperature=0.2,
+            )
+        else:
+            _ensure_llm_loaded()
+            translated = llm_service.generate_streaming(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_new_tokens=min(3000, max(500, len(lyrics) * 2)),
+                temperature=0.2,
+                enable_thinking=False,
+                thinking_budget=0,
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Lyric translation failed: {exc}") from exc
+
+    translated = str(translated or "").strip()
+    if translated.startswith("```"):
+        translated = re.sub(r"^```(?:text|markdown)?\s*|\s*```$", "", translated, flags=re.IGNORECASE).strip()
+    if not translated:
+        raise HTTPException(status_code=502, detail="The LLM returned empty translated lyrics")
+    translated_tags = re.findall(r"(?m)^\s*(\[[^\]\r\n]+\])\s*$", translated)
+    if translated_tags != source_tags:
+        raise HTTPException(
+            status_code=502,
+            detail="The LLM changed the MiniMax lyric section tags. Please retry or edit the lyrics manually.",
+        )
+    if len(translated) > 3500:
+        raise HTTPException(status_code=502, detail="The translated lyrics exceed MiniMax's 3500-character limit")
+    return {"lyrics": translated, "targetLanguage": target_language}
 
 
 @api.post("/api/v1/stories/generate/start")

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
   BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, ExternalLink, Film, ImagePlus, Loader2,
-  Music, Network, Palette, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
+  Languages, Music, Network, Palette, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, useStore } from '../../stores/useStore'
@@ -408,6 +408,7 @@ export function StoryLabPanel() {
   const [productionBusy, setProductionBusy] = useState<'film' | 'music' | null>(null)
   const [musicCueBusy, setMusicCueBusy] = useState('')
   const [musicQueue, setMusicQueue] = useState<{ ids: string[]; index: number } | null>(null)
+  const [lyricsTranslationLanguage, setLyricsTranslationLanguage] = useState<Record<string, string>>({})
   const [instruction, setInstruction] = useState('')
   const [comicDirection, setComicDirection] = useState(DEFAULT_COMIC_CHAPTER_DIRECTION)
   const [comicPageCount, setComicPageCount] = useState(4)
@@ -1749,6 +1750,64 @@ export function StoryLabPanel() {
     })
   }
 
+  const translateMusicCueLyrics = async (cueId: string) => {
+    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    const targetLanguage = (lyricsTranslationLanguage[cueId] || '').trim()
+    if (!cue?.lyrics.trim()) return
+    if (!targetLanguage) {
+      setNotice({ kind: 'error', text: 'Write the target language before translating the lyrics.' })
+      return
+    }
+    const activity = beginStoryActivity('writing_song', `Translating “${cue.title}” into ${targetLanguage}…`, 1)
+    setMusicCueBusy(`translate:${cueId}`)
+    try {
+      const translated = await api.translateStoryLyrics({
+        lyrics: cue.lyrics,
+        targetLanguage,
+        writingProvider: project.provider.writingProvider,
+        writingModel: project.provider.writingModel,
+        writingBaseUrl: project.provider.writingBaseUrl,
+      })
+      patchMusicCue(cueId, { lyrics: translated.lyrics })
+      setNotice({ kind: 'ok', text: `“${cue.title}” lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({ kind: 'error', text: `Lyrics could not be translated: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+    }
+  }
+
+  const translateManualSongLyrics = async () => {
+    const lyrics = project.music.lyrics.trim()
+    const targetLanguage = (lyricsTranslationLanguage.manual || '').trim()
+    if (!lyrics) return
+    if (!targetLanguage) {
+      setNotice({ kind: 'error', text: 'Write the target language before translating the lyrics.' })
+      return
+    }
+    const activity = beginStoryActivity('writing_song', `Translating the manual song into ${targetLanguage}…`, 1)
+    setProductionBusy('music')
+    try {
+      const translated = await api.translateStoryLyrics({
+        lyrics,
+        targetLanguage,
+        writingProvider: project.provider.writingProvider,
+        writingModel: project.provider.writingModel,
+        writingBaseUrl: project.provider.writingBaseUrl,
+      })
+      patch({ music: { ...project.music, lyrics: translated.lyrics } })
+      setNotice({ kind: 'ok', text: `Manual song lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({ kind: 'error', text: `Lyrics could not be translated: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setProductionBusy(null)
+    }
+  }
+
   const adaptMusicCueWithLlm = async (cueId: string) => {
     const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
     if (!cue) return
@@ -2685,6 +2744,7 @@ export function StoryLabPanel() {
                             : cue.kind === 'world' ? (project.title || 'Story world') : cue.targetId
                           const generatingAudio = musicCueBusy === `audio:${cue.id}`
                           const adapting = musicCueBusy === `llm:${cue.id}`
+                          const translating = musicCueBusy === `translate:${cue.id}`
                           const queued = musicQueue?.ids.includes(cue.id)
                           return (
                             <article key={cue.id} className={`${panel} space-y-3 ${generatingAudio ? 'border-pink-500/60' : ''}`}>
@@ -2713,12 +2773,13 @@ export function StoryLabPanel() {
                                         onChange={event => patchMusicCue(cue.id, { instrumental: event.target.checked })} />
                                       Instrumental
                                     </label>
-                                    <label className="block text-[10px] text-text-muted">Duration · seconds
+                                    <label className="block text-[10px] text-text-muted">Target duration for lyrics · seconds
                                       <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
                                         value={cue.durationSeconds}
                                         onChange={event => patchMusicCue(cue.id, { durationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) })} />
                                     </label>
                                   </div>
+                                  <p className="text-[9px] text-text-muted">MiniMax has no exact duration setting; this guides the LLM’s lyric length, while the rendered track can vary with tempo and arrangement.</p>
                                   <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
                                     onClick={() => void adaptMusicCueWithLlm(cue.id)}>
                                     {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Adapt provider prompt{cue.instrumental ? '' : ' + lyrics'} with LLM
@@ -2738,6 +2799,20 @@ export function StoryLabPanel() {
                                   <p className="text-[9px] text-text-muted">Genre, mood, instruments, voice, tempo and production. Anything after character 300 is not sent.</p>
                                   {!cue.instrumental && <Field label="lyrics · structured separately" value={cue.lyrics}
                                     onChange={lyrics => patchMusicCue(cue.id, { lyrics })} rows={10} />}
+                                  {!cue.instrumental && (
+                                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                                      <label className="block text-[10px] text-text-muted">Translate lyrics to
+                                        <input className={`${input} mt-1`} value={lyricsTranslationLanguage[cue.id] || ''}
+                                          onChange={event => setLyricsTranslationLanguage(current => ({ ...current, [cue.id]: event.target.value }))}
+                                          placeholder="English, French, Japanese…" />
+                                      </label>
+                                      <button className={`${button} self-end`} disabled={Boolean(musicCueBusy || musicQueue) || !musicWritingReady || !cue.lyrics.trim()}
+                                        onClick={() => void translateMusicCueLyrics(cue.id)}>
+                                        {translating ? <Loader2 size={13} className="animate-spin" /> : <Languages size={13} />} Translate
+                                      </button>
+                                    </div>
+                                  )}
+                                  {!cue.instrumental && <p className="text-[9px] text-text-muted">Uses the selected Story Lab LLM and replaces these editable lyrics. MiniMax section tags stay unchanged.</p>}
                                   {!cue.instrumental && cue.lyrics.trim() && !MINIMAX_LYRIC_SECTION.test(cue.lyrics) && (
                                     <p className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[9px] text-amber-200">
                                       These lyrics have no supported section tags. Use the LLM adaptation or add [Verse], [Pre Chorus], [Chorus], [Bridge] and [Outro] before generating.
@@ -2875,11 +2950,22 @@ export function StoryLabPanel() {
                         onChange={style => patch({ music: { ...project.music, style } })} rows={3} />
                       <Field label="Editable lyrics" value={project.music.lyrics}
                         onChange={lyrics => patch({ music: { ...project.music, lyrics } })} rows={8} />
-                      <label className="block text-[10px] text-text-muted">Approx. duration · seconds
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                        <label className="block text-[10px] text-text-muted">Translate lyrics to
+                          <input className={`${input} mt-1`} value={lyricsTranslationLanguage.manual || ''}
+                            onChange={event => setLyricsTranslationLanguage(current => ({ ...current, manual: event.target.value }))}
+                            placeholder="English, French, Japanese…" />
+                        </label>
+                        <button className={`${button} self-end`} disabled={productionBusy === 'music' || !musicWritingReady || !project.music.lyrics.trim()}
+                          onClick={() => void translateManualSongLyrics()}><Languages size={13} /> Translate</button>
+                      </div>
+                      <p className="text-[9px] text-text-muted">Uses the selected Story Lab LLM and replaces the editable lyrics, preserving MiniMax section tags.</p>
+                      <label className="block text-[10px] text-text-muted">Target duration for lyrics · seconds
                         <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
                           value={project.music.targetDurationSeconds}
                           onChange={event => patch({ music: { ...project.music, targetDurationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) } })} />
                       </label>
+                      <p className="text-[9px] text-text-muted">MiniMax Music does not expose an exact duration parameter; the target guides lyric writing and the render can vary.</p>
                       <button className={`${button} w-full border-pink-500/60 text-pink-300`}
                         disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
                         onClick={() => void generateMinimaxSongs()}><Music size={13} /> Generate manual candidates</button>
