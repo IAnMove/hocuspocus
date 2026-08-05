@@ -13364,21 +13364,12 @@ async def translate_story_lyrics(body: dict):
         raise HTTPException(status_code=400, detail="Lyrics are required")
     if not target_language:
         raise HTTPException(status_code=400, detail="Choose a target language")
-    if len(lyrics) > 3500:
-        raise HTTPException(status_code=400, detail="Lyrics exceed MiniMax's 3500-character limit")
-
-    source_tags = re.findall(r"(?m)^\s*(\[[^\]\r\n]+\])\s*$", lyrics)
     system_prompt = (
-        "You are a professional lyric translator. Return only the translated lyrics, "
-        "with no explanation, title, markdown or code fence. Preserve every bracketed "
-        "section tag exactly as written (for example [Verse], [Pre Chorus], [Chorus]) "
-        "and preserve parenthetical performance directions, line breaks, repetitions and "
-        "the song's singability. Do not add or remove sections."
+        "Translate song lyrics accurately. Return only the translated lyrics, "
+        "with no explanation, title, markdown or code fence."
     )
     prompt = (
-        f"Translate these song lyrics into {target_language}. Keep the meaning, emotional "
-        "arc and roughly singable line lengths. Preserve the section tags exactly.\n\n"
-        f"LYRICS:\n{lyrics}"
+        f"Translate the following lyrics into {target_language}:\n\n{lyrics}"
     )
     llm_override = _comic_writing_llm(body)
     try:
@@ -13410,14 +13401,6 @@ async def translate_story_lyrics(body: dict):
         translated = re.sub(r"^```(?:text|markdown)?\s*|\s*```$", "", translated, flags=re.IGNORECASE).strip()
     if not translated:
         raise HTTPException(status_code=502, detail="The LLM returned empty translated lyrics")
-    translated_tags = re.findall(r"(?m)^\s*(\[[^\]\r\n]+\])\s*$", translated)
-    if translated_tags != source_tags:
-        raise HTTPException(
-            status_code=502,
-            detail="The LLM changed the MiniMax lyric section tags. Please retry or edit the lyrics manually.",
-        )
-    if len(translated) > 3500:
-        raise HTTPException(status_code=502, detail="The translated lyrics exceed MiniMax's 3500-character limit")
     return {"lyrics": translated, "targetLanguage": target_language}
 
 
