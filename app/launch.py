@@ -5605,7 +5605,6 @@ async def llm_write_song(request: Request):
         image_paths = [body["reference_image_path"]]
     image_paths = [p for p in image_paths if p and os.path.isfile(p)]
 
-    _ensure_llm_loaded()
     from services.guide_loader import load_guide
     include_lyria = False
     if target == "minimax":
@@ -5622,16 +5621,31 @@ async def llm_write_song(request: Request):
     else:
         system_prompt = load_guide("music", "song_writer") or _SONG_WRITER_FALLBACK
         user_prompt = description
+    llm_override = _comic_writing_llm(body) if body.get("writingProvider") else None
     try:
-        raw = llm_service.generate(
-            prompt=user_prompt,
-            system_prompt=system_prompt,
-            max_new_tokens=body.get("max_new_tokens", 3000 if include_lyria else 1024),
-            temperature=body.get("temperature", 0.85),
-            top_p=body.get("top_p", 0.9),
-            seed=body.get("seed"),
-            image_paths=image_paths or None,
-        )
+        if llm_override:
+            raw = llm_service.generate_openai_compatible(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                model_id=llm_override["model"],
+                base_url=llm_override["base_url"],
+                api_key=llm_override["api_key"],
+                max_new_tokens=body.get("max_new_tokens", 3000 if include_lyria else 1024),
+                temperature=body.get("temperature", 0.85),
+                top_p=body.get("top_p", 0.9),
+                image_paths=image_paths or None,
+            )
+        else:
+            _ensure_llm_loaded()
+            raw = llm_service.generate(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                max_new_tokens=body.get("max_new_tokens", 3000 if include_lyria else 1024),
+                temperature=body.get("temperature", 0.85),
+                top_p=body.get("top_p", 0.9),
+                seed=body.get("seed"),
+                image_paths=image_paths or None,
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     style, lyrics = _parse_song_output(raw, instrumental)

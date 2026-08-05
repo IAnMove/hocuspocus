@@ -96,6 +96,10 @@ function normalizeMusicCandidate(value: unknown, now: string): StoryMusicCandida
   if (!text(candidate.source)) return null
   return {
     id: text(candidate.id) || storyId('song'),
+    displayName: text(candidate.displayName) || undefined,
+    title: text(candidate.title) || undefined,
+    language: text(candidate.language) || undefined,
+    version: Number(candidate.version) > 0 ? Math.max(1, Number(candidate.version)) : undefined,
     name: text(candidate.name, 'Story song'),
     source: text(candidate.source),
     prompt: text(candidate.prompt),
@@ -123,6 +127,7 @@ function normalizeMusicCue(value: unknown, index: number, now: string): StoryMus
     brief: text(cue.brief),
     style: text(cue.style),
     lyrics: text(cue.lyrics),
+    lyricsLanguage: text(cue.lyricsLanguage) || undefined,
     lyriaPrompt: text(cue.lyriaPrompt),
     instrumental: cue.instrumental === true,
     durationSeconds: Math.max(20, Math.min(360, Number(cue.durationSeconds) || 90)),
@@ -414,6 +419,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       style: text(project.music?.style),
       sourceLyrics: text(project.music?.sourceLyrics),
       lyrics: text(project.music?.lyrics),
+      lyricsLanguage: text(project.music?.lyricsLanguage) || undefined,
       coverReferenceFilename: text(project.music?.coverReferenceFilename) || undefined,
       coverReferenceName: text(project.music?.coverReferenceName) || undefined,
       targetDurationSeconds: Math.max(20, Math.min(360, Number(project.music?.targetDurationSeconds) || 90)),

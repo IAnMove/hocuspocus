@@ -445,6 +445,8 @@ export function StoryLabPanel() {
   const [musicCueBusy, setMusicCueBusy] = useState('')
   const [musicQueue, setMusicQueue] = useState<{ ids: string[]; index: number } | null>(null)
   const [lyricsTranslationLanguage, setLyricsTranslationLanguage] = useState<Record<string, string>>({})
+  const [musicVersionStyle, setMusicVersionStyle] = useState<Record<string, string>>({})
+  const [musicVersionLanguage, setMusicVersionLanguage] = useState<Record<string, string>>({})
   const [instruction, setInstruction] = useState('')
   const [comicDirection, setComicDirection] = useState(DEFAULT_COMIC_CHAPTER_DIRECTION)
   const [comicPageCount, setComicPageCount] = useState(4)
@@ -510,7 +512,7 @@ export function StoryLabPanel() {
       })
     })
     return options
-  }, [project.music.candidates, project.music.cues])
+  }, [project.language, project.music.candidates, project.music.cues, project.music.lyricsLanguage, project.title])
   const selectedMusicOption = musicCandidateOptions.find(option => option.candidate.id === musicProductionCandidateId)
 
   useEffect(() => {
@@ -611,6 +613,11 @@ export function StoryLabPanel() {
   }
   const patchMusicWritingProvider = (value: Partial<StoryProject['provider']>) =>
     patch({ provider: { ...project.provider, ...value } })
+  const musicWritingProviderParams = {
+    writingProvider: project.provider.writingProvider,
+    writingModel: project.provider.writingModel,
+    writingBaseUrl: project.provider.writingBaseUrl,
+  }
 
   useEffect(() => {
     loadWorkspace(activeWorkspace)
@@ -1752,6 +1759,7 @@ export function StoryLabPanel() {
       const brief = project.music.brief.trim()
         || storySongBrief(project, project.music.targetDurationSeconds)
       const written = await api.writeSong({
+        ...musicWritingProviderParams,
         target: 'minimax',
         model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
         description: brief,
@@ -1794,6 +1802,7 @@ export function StoryLabPanel() {
       const storyBrief = project.music.brief.trim()
         || storySongBrief(project, project.music.targetDurationSeconds)
       const written = await api.writeSong({
+        ...musicWritingProviderParams,
         target: 'minimax',
         model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
         description: 'Write completely original replacement lyrics for this Story. Keep only the broad section order, approximate meter and singability of the authorized source; do not copy distinctive wording, names or lines.',
@@ -1875,6 +1884,7 @@ export function StoryLabPanel() {
       if (!style || (project.music.mode === 'original' && !lyrics)) {
         activity.update('Story Lab is writing the missing song prompt and lyrics…', 'writing_song', 0, 1)
         const written = await api.writeSong({
+          ...musicWritingProviderParams,
           target: 'minimax',
           model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
           description: brief,
@@ -2007,6 +2017,164 @@ export function StoryLabPanel() {
     }
   }
 
+  const rewriteMusicCueDraft = async (
+    cue: StoryMusicCue,
+    requestedStyle: string,
+    requestedLanguage: string,
+  ) => {
+    const latest = useStoryStore.getState().project
+    const targetLanguage = requestedLanguage.trim() || cue.lyricsLanguage || latest.language
+    const targetStyle = requestedStyle.trim() || cue.style || cue.brief
+    const target = cue.kind === 'character'
+      ? latest.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
+      : cue.kind === 'world' ? 'the Story world' : 'the complete Story'
+    return api.writeSong({
+      writingProvider: latest.provider.writingProvider,
+      writingModel: latest.provider.writingModel,
+      writingBaseUrl: latest.provider.writingBaseUrl,
+      target: 'minimax',
+      model: latest.music.model,
+      instrumental: cue.instrumental,
+      description: [
+        `Create a completely new ${cue.instrumental ? 'instrumental composition' : 'song version'} for ${target}.`,
+        `Its Story purpose remains: ${cue.purpose}.`,
+        'This must be a full recomposition, not a light edit: rebuild genre, arrangement, instrumentation, vocal delivery, rhythm and production around the requested style.',
+        cue.instrumental
+          ? 'Preserve the narrative role and emotional arc, but do not preserve the old arrangement.'
+          : 'Rewrite every sung line from scratch while preserving the Story facts, emotional arc and a memorable recurring hook. Do not merely translate or paraphrase the old wording.',
+      ].join(' '),
+      style_direction: targetStyle,
+      lyrics_direction: cue.instrumental ? '' : [
+        `Write entirely new structured lyrics in ${targetLanguage}, using MiniMax section tags in English.`,
+        'The previous lyrics below are narrative source material only; do not copy their lines:',
+        cue.lyrics,
+      ].join('\n\n'),
+      story_context: storySongBrief(latest, cue.durationSeconds, targetLanguage),
+      language: targetLanguage,
+      duration_seconds: cue.durationSeconds,
+      include_lyria: true,
+      max_new_tokens: 3000,
+    }).then(written => ({
+      style: written.style,
+      lyrics: written.lyrics,
+      lyricsLanguage: targetLanguage,
+      lyriaPrompt: written.lyria_prompt,
+      brief: requestedStyle.trim() || cue.brief,
+    }))
+  }
+
+  const createMusicCueVersion = async (cueId: string) => {
+    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    if (!cue) return
+    const requestedStyle = (musicVersionStyle[cueId] || '').trim()
+    const requestedLanguage = (musicVersionLanguage[cueId] || '').trim()
+    if (!requestedStyle && !requestedLanguage) {
+      setNotice({ kind: 'error', text: 'Write a new style, a new language, or both before creating the version.' })
+      return
+    }
+    const changeLabel = [requestedStyle, requestedLanguage].filter(Boolean).join(' · ')
+    const activity = beginStoryActivity('writing_song', `Creating a new version of “${cue.title}” · ${changeLabel}…`, 1)
+    setMusicCueBusy(`version:${cueId}`)
+    try {
+      const rewritten = await rewriteMusicCueDraft(cue, requestedStyle, requestedLanguage)
+      patchMusicCue(cueId, rewritten)
+      setNotice({
+        kind: 'ok',
+        text: `A completely new “${cue.title}” draft is ready in ${rewritten.lyricsLanguage}. Existing generated audio was preserved. Review the prompts before generating it.`,
+      })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({ kind: 'error', text: `The new song version could not be written: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+    }
+  }
+
+  const createAllMusicCueVersions = async () => {
+    const cues = useStoryStore.getState().project.music.cues
+    const requestedStyle = (musicVersionStyle.all || '').trim()
+    const requestedLanguage = (musicVersionLanguage.all || '').trim()
+    if (!cues.length) {
+      setNotice({ kind: 'error', text: 'Generate the music proposals before creating alternate versions.' })
+      return
+    }
+    if (!requestedStyle && !requestedLanguage) {
+      setNotice({ kind: 'error', text: 'Write a global style, a global language, or both.' })
+      return
+    }
+    if (!window.confirm(
+      `Rewrite all ${cues.length} music proposals sequentially? This makes ${cues.length} LLM call${cues.length === 1 ? '' : 's'}, but does not generate paid MiniMax audio. Existing audio candidates will remain available.`,
+    )) return
+    const activity = beginStoryActivity('writing_song', `Preparing alternate music drafts · 0/${cues.length}`, cues.length)
+    setMusicCueBusy('version:all')
+    let completed = 0
+    try {
+      for (let index = 0; index < cues.length; index += 1) {
+        const currentCue = useStoryStore.getState().project.music.cues.find(item => item.id === cues[index].id)
+        if (!currentCue) continue
+        activity.update(`Rewriting “${currentCue.title}” · ${index + 1}/${cues.length}`, 'writing_song', index, cues.length)
+        const rewritten = await rewriteMusicCueDraft(currentCue, requestedStyle, requestedLanguage)
+        patchMusicCue(currentCue.id, rewritten)
+        completed += 1
+        activity.update(`Completed “${currentCue.title}” · ${completed}/${cues.length}`, 'writing_song', completed, cues.length)
+      }
+      setNotice({
+        kind: 'ok',
+        text: `${completed} alternate music drafts are ready. Existing audio was preserved; review each new prompt before generating tracks.`,
+      })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({
+        kind: 'error',
+        text: `Bulk versioning stopped after ${completed}/${cues.length}. Completed drafts were preserved: ${(error as Error).message}`,
+      })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+    }
+  }
+
+  const createManualSongVersion = async () => {
+    const requestedStyle = (musicVersionStyle.manual || '').trim()
+    const requestedLanguage = (musicVersionLanguage.manual || '').trim()
+    if (!requestedStyle && !requestedLanguage) {
+      setNotice({ kind: 'error', text: 'Write a new style, a new language, or both before creating the manual version.' })
+      return
+    }
+    const targetLanguage = requestedLanguage || project.music.lyricsLanguage || project.language
+    const activity = beginStoryActivity('writing_song', `Creating a new manual song version in ${targetLanguage}…`, 1)
+    setProductionBusy('music')
+    try {
+      const written = await api.writeSong({
+        ...musicWritingProviderParams,
+        target: 'minimax',
+        model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
+        description: 'Create a complete new version of this Story song. Recompose the arrangement and rewrite every lyric line from scratch; preserve only its Story meaning and emotional progression.',
+        style_direction: requestedStyle || project.music.style || `${project.genre}, ${project.tone}`,
+        lyrics_direction: `Write entirely new lyrics in ${targetLanguage}. Treat these previous lyrics only as narrative source material and do not copy their lines:\n\n${project.music.lyrics}`,
+        story_context: storySongBrief(project, project.music.targetDurationSeconds, targetLanguage),
+        language: targetLanguage,
+        duration_seconds: project.music.targetDurationSeconds,
+      })
+      patch({
+        music: {
+          ...project.music,
+          style: written.style,
+          lyrics: written.lyrics,
+          lyricsLanguage: targetLanguage,
+        },
+      })
+      setNotice({ kind: 'ok', text: `The manual ${requestedStyle || 'alternate'} version is ready in ${targetLanguage}. Existing audio candidates were preserved.` })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({ kind: 'error', text: `The manual song version could not be written: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setProductionBusy(null)
+    }
+  }
+
   const adaptMusicCueWithLlm = async (cueId: string) => {
     const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
     if (!cue) return
@@ -2022,6 +2190,7 @@ export function StoryLabPanel() {
         ? project.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
         : cue.kind === 'world' ? 'the Story world' : 'the complete Story'
       const written = await api.writeSong({
+        ...musicWritingProviderParams,
         target: 'minimax',
         model: project.music.model,
         instrumental: cue.instrumental,
@@ -3110,6 +3279,34 @@ export function StoryLabPanel() {
                   </div>
                 </div>
 
+                <div className={`${panel} mb-4 border-purple-500/30 bg-purple-500/5`}>
+                  <div className="mb-2 flex items-start gap-2">
+                    <Palette size={17} className="mt-0.5 shrink-0 text-purple-300" />
+                    <div>
+                      <h3 className="text-xs font-semibold text-purple-200">Create a new version of every music proposal</h3>
+                      <p className="mt-0.5 text-[9px] text-text-muted">Changes style, language, or both. Prompts and lyrics are rewritten sequentially; generated audio candidates are never deleted.</p>
+                    </div>
+                  </div>
+                  <div className="grid md:grid-cols-[1fr_0.7fr_auto] gap-2 items-end">
+                    <label className="block text-[10px] text-text-muted">New style · optional
+                      <input className={`${input} mt-1`} value={musicVersionStyle.all || ''}
+                        onChange={event => setMusicVersionStyle(current => ({ ...current, all: event.target.value }))}
+                        placeholder="Rap, boom bap, female flow, dark bass…" />
+                    </label>
+                    <label className="block text-[10px] text-text-muted">New lyrics language · optional
+                      <input className={`${input} mt-1`} value={musicVersionLanguage.all || ''}
+                        onChange={event => setMusicVersionLanguage(current => ({ ...current, all: event.target.value }))}
+                        placeholder="Spanish, Japanese…" />
+                    </label>
+                    <button className={`${button} border-purple-500/60 text-purple-200`}
+                      disabled={Boolean(busy || musicQueue || musicCueBusy) || !musicWritingReady || !project.music.cues.length}
+                      onClick={() => void createAllMusicCueVersions()}>
+                      {musicCueBusy === 'version:all' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />}
+                      Rewrite all drafts
+                    </button>
+                  </div>
+                </div>
+
                 {(['world', 'character', 'story'] as const).map(kind => {
                   const cues = project.music.cues.filter(cue => cue.kind === kind)
                   if (!cues.length) return null
@@ -3126,6 +3323,7 @@ export function StoryLabPanel() {
                           const generatingAudio = musicCueBusy === `audio:${cue.id}`
                           const adapting = musicCueBusy === `llm:${cue.id}`
                           const translating = musicCueBusy === `translate:${cue.id}`
+                          const versioning = musicCueBusy === `version:${cue.id}`
                           const queued = musicQueue?.ids.includes(cue.id)
                           return (
                             <article key={cue.id} className={`${panel} space-y-3 ${generatingAudio ? 'border-pink-500/60' : ''}`}>
@@ -3165,6 +3363,21 @@ export function StoryLabPanel() {
                                     onClick={() => void adaptMusicCueWithLlm(cue.id)}>
                                     {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Adapt provider prompt{cue.instrumental ? '' : ' + lyrics'} with LLM
                                   </button>
+                                  <div className="space-y-2 rounded-lg border border-purple-500/30 bg-purple-500/5 p-2.5">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-200"><Palette size={12} /> Create a completely new version</div>
+                                    <input className={input} value={musicVersionStyle[cue.id] || ''}
+                                      onChange={event => setMusicVersionStyle(current => ({ ...current, [cue.id]: event.target.value }))}
+                                      placeholder="New style, e.g. cinematic rap / boom bap…" />
+                                    <input className={input} value={musicVersionLanguage[cue.id] || ''}
+                                      onChange={event => setMusicVersionLanguage(current => ({ ...current, [cue.id]: event.target.value }))}
+                                      placeholder={`New language, optional · current: ${cue.lyricsLanguage || project.language}`} />
+                                    <button className={`${button} w-full border-purple-500/60 text-purple-200`}
+                                      disabled={Boolean(musicCueBusy || musicQueue) || !musicWritingReady}
+                                      onClick={() => void createMusicCueVersion(cue.id)}>
+                                      {versioning ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Rewrite style{cue.instrumental ? '' : ' + lyrics'}
+                                    </button>
+                                    <p className="text-[9px] text-text-muted">Leave either field empty to retain its current value. Existing generated tracks remain available below.</p>
+                                  </div>
                                 </div>
                                 <div className="space-y-3">
                                 <div className="space-y-2.5 rounded-lg border border-pink-500/30 bg-pink-500/5 p-3">
@@ -3342,6 +3555,21 @@ export function StoryLabPanel() {
                           onClick={() => void translateManualSongLyrics()}><Languages size={13} /> Translate</button>
                       </div>
                       <p className="text-[9px] text-text-muted">Uses the selected Story Lab LLM and replaces the editable lyrics, preserving MiniMax section tags.</p>
+                      <div className="space-y-2 rounded-lg border border-purple-500/30 bg-purple-500/5 p-2.5">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-200"><Palette size={12} /> Create a completely new manual version</div>
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          <input className={input} value={musicVersionStyle.manual || ''}
+                            onChange={event => setMusicVersionStyle(current => ({ ...current, manual: event.target.value }))}
+                            placeholder="New style, e.g. rap…" />
+                          <input className={input} value={musicVersionLanguage.manual || ''}
+                            onChange={event => setMusicVersionLanguage(current => ({ ...current, manual: event.target.value }))}
+                            placeholder={`Language · ${project.music.lyricsLanguage || project.language}`} />
+                        </div>
+                        <button className={`${button} w-full border-purple-500/60 text-purple-200`}
+                          disabled={productionBusy === 'music' || !musicWritingReady}
+                          onClick={() => void createManualSongVersion()}><RefreshCcw size={13} /> Rewrite style + lyrics</button>
+                        <p className="text-[9px] text-text-muted">Use either field or both. The current draft supplies the Story meaning, but its arrangement and sung lines are rebuilt from scratch.</p>
+                      </div>
                       <label className="block text-[10px] text-text-muted">Target duration for lyrics · seconds
                         <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
                           value={project.music.targetDurationSeconds}

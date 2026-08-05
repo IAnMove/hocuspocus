@@ -165,6 +165,9 @@ export async function writeSong(params: {
   reference_image_path?: string
   include_lyria?: boolean
   max_new_tokens?: number
+  writingProvider?: import('../features/stories/types').StoryWritingProvider
+  writingModel?: string
+  writingBaseUrl?: string
 }): Promise<{ style: string; lyrics: string; lyria_prompt: string; raw: string }> {
   const res = await fetch(`${BASE}/api/v1/llm/write-song`, {
     method: 'POST',
