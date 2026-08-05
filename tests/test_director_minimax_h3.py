@@ -159,6 +159,111 @@ def test_h3_story_wrapper_releases_runtime_after_failure(tmp_path: Path):
     stop_runtime.assert_called_once()
 
 
+def test_h3_music_video_uses_the_sequential_renderer(tmp_path: Path):
+    params = {
+        "video_model": "minimax_h3",
+        "pipeline_type": "music_video",
+        "video_params": {"resolution": "960x544"},
+    }
+    with patch.object(
+        director_pipeline,
+        "_run_minimax_h3_story_video",
+        return_value=["clip_1.mp4", "movie.mp4"],
+    ) as render, patch.object(director_pipeline, "_stop_minimax_h3_runtime") as stop_runtime:
+        outputs = director_pipeline._run_video_generation(
+            "h3music",
+            params,
+            [{"video_prompt": "first"}, {"video_prompt": "second"}],
+            [{"start": 0, "end": 5}, {"start": 5, "end": 10}],
+            ["first.png", "second.png"],
+            out_dir=str(tmp_path),
+        )
+
+    assert outputs == ["clip_1.mp4", "movie.mp4"]
+    render.assert_called_once()
+    stop_runtime.assert_called_once()
+
+
+def test_incomplete_h3_checkpoint_is_not_treated_as_completed(tmp_path: Path):
+    first = tmp_path / "first.mp4"
+    second = tmp_path / "second.mp4"
+    first.write_bytes(b"video")
+    state = {
+        "video_model": "minimax_h3",
+        "clips": [
+            {
+                "planned_clip": {"duration_sec": 5},
+                "h3_segments": [{"index": 0, "filename": first.name, "frames": 124}],
+            },
+            {
+                "planned_clip": {"duration_sec": 5},
+                "h3_segments": [],
+            },
+        ],
+    }
+
+    assert not director_pipeline._h3_checkpoint_is_complete(state, str(tmp_path))
+
+    second.write_bytes(b"video")
+    state["clips"][1]["h3_segments"] = [{"index": 0, "filename": second.name, "frames": 124}]
+    assert director_pipeline._h3_checkpoint_is_complete(state, str(tmp_path))
+
+
+def test_h3_resume_reuses_completed_segments_before_rendering_the_rest(tmp_path: Path):
+    first_frame = tmp_path / "first.png"
+    second_frame = tmp_path / "second.png"
+    existing = tmp_path / "existing.mp4"
+    for path in (first_frame, second_frame, existing):
+        path.write_bytes(b"video")
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        output = tmp_path / "new.mp4"
+        output.write_bytes(b"video")
+        return [output.name]
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(paths, destination, audio_path):
+            assert [Path(path).name for path in paths] == ["existing.mp4", "new.mp4"]
+            assert audio_path is None
+            Path(destination).write_bytes(b"assembled")
+            return True
+
+    previous_pipelines = director_pipeline._pipelines
+    director_pipeline._pipelines = {
+        "h3resume": {
+            "_h3_segments": [[{
+                "index": 0,
+                "filename": existing.name,
+                "frames": 124,
+                "stale": False,
+            }], []],
+        },
+    }
+    try:
+        with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+                patch.object(director_pipeline, "_save_pipeline_state"), \
+                patch.object(director_pipeline, "_wgp", FakeWgp()):
+            outputs = director_pipeline._run_minimax_h3_story_video(
+                "h3resume",
+                {},
+                [{"video_prompt": "first"}, {"video_prompt": "second"}],
+                [{"duration_sec": 5}, {"duration_sec": 5}],
+                [first_frame.name, second_frame.name],
+                {"num_inference_steps": 20},
+                "960x544",
+                str(tmp_path),
+            )
+    finally:
+        director_pipeline._pipelines = previous_pipelines
+
+    assert len(submitted) == 1
+    assert "second" in submitted[0]["prompt"]
+    assert outputs == ["existing.mp4", "new.mp4", "minimax_h3_h3resume_multiclip.mp4"]
+
+
 def test_h3_story_first_frame_mode_does_not_silently_send_omni_refs(tmp_path: Path):
     shot = tmp_path / "shot.png"
     portrait = tmp_path / "portrait.png"

@@ -540,6 +540,39 @@ def _ensure_h3_segment_state(data: dict) -> dict:
     return data
 
 
+def _h3_checkpoint_is_complete(data: dict, out_dir: str) -> bool:
+    """Return whether every planned H3 segment has a usable checkpoint."""
+    if data.get("video_model") != "minimax_h3":
+        return True
+    clips = data.get("clips") if isinstance(data.get("clips"), list) else []
+    if not clips:
+        return False
+    for clip in clips:
+        planned = clip.get("planned_clip") if isinstance(clip.get("planned_clip"), dict) else {}
+        duration = planned.get("duration_sec") or (
+            float(planned.get("end", 0) or 0) - float(planned.get("start", 0) or 0)
+        )
+        if duration <= 0:
+            duration = 5.0
+        expected = len(_minimax_h3_frame_segments(float(duration), 24))
+        segments = clip.get("h3_segments") if isinstance(clip.get("h3_segments"), list) else []
+        valid = {
+            int(segment.get("index", -1)): segment
+            for segment in segments
+            if isinstance(segment, dict)
+            and not segment.get("stale")
+            and str(segment.get("filename") or "").strip()
+        }
+        if len(valid) != expected or any(index not in valid for index in range(expected)):
+            return False
+        for segment in valid.values():
+            filename = str(segment["filename"])
+            path = filename if os.path.isabs(filename) else os.path.join(out_dir, filename)
+            if not os.path.isfile(path):
+                return False
+    return True
+
+
 def _reconcile_pipeline_state_file(filepath: str, data: dict) -> dict:
     """Promote a timed-out checkpoint when its generation actually finished."""
     data = _ensure_h3_segment_state(data)
@@ -2848,6 +2881,10 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         "preview_clips": data.get("preview_clips", []) or [],
         "h3_reference_manifest": data.get("h3_reference_manifest", []) or [],
         "h3_prompt_validation": data.get("h3_prompt_validation"),
+        "_h3_segments": [
+            copy.deepcopy(clip.get("h3_segments") or [])
+            for clip in saved_clips
+        ],
         "output_files": data.get("output_files", []) or [],
         "_llm_log": data.get("llm_log"),
         "error": None,
@@ -2886,7 +2923,11 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         )
         return True, "recovered_preview"
 
-    if data.get("status") == "completed" and data.get("output_files"):
+    if (
+        data.get("status") == "completed"
+        and data.get("output_files")
+        and _h3_checkpoint_is_complete(data, resume_out_dir)
+    ):
         _update_pipeline(
             pid,
             status="completed",
@@ -7174,11 +7215,18 @@ def _run_minimax_h3_story_video(
         raise RuntimeError("MiniMax H3 received no planned Story shots to render.")
 
     outputs: list[str] = []
-    segment_states: list[list[dict]] = [[] for _ in clip_plans]
+    saved_segment_states = (_pipelines.get(pid) or {}).get("_h3_segments") or []
+    segment_states: list[list[dict]] = [
+        copy.deepcopy(saved_segment_states[index])
+        if index < len(saved_segment_states) and isinstance(saved_segment_states[index], list)
+        else []
+        for index in range(len(clip_plans))
+    ]
     _update_pipeline(pid, _h3_segments=segment_states)
     continuation_frames: list[str] = []
     current_shot = -1
     segment_start = ""
+    reuse_prefix = False
     try:
         for job_index, (shot_index, segment_index, segment_count, frames, prompt, segment_reference_mode) in enumerate(jobs):
             if _pipeline_cancel_requested(pid):
@@ -7189,6 +7237,51 @@ def _run_minimax_h3_story_video(
                 image_name = clip_images[shot_index] if shot_index < len(clip_images) else ""
                 candidate = image_name if os.path.isabs(image_name) else os.path.join(out_dir, image_name)
                 segment_start = candidate if image_name and os.path.isfile(candidate) else ""
+                reuse_prefix = True
+
+            saved_segment = next((
+                item for item in segment_states[shot_index]
+                if isinstance(item, dict) and item.get("index") == segment_index
+            ), None)
+            saved_name = str(saved_segment.get("filename") or "") if saved_segment else ""
+            saved_path = saved_name if os.path.isabs(saved_name) else os.path.join(out_dir, saved_name)
+            reusable = bool(
+                reuse_prefix
+                and saved_segment
+                and not saved_segment.get("stale")
+                and int(saved_segment.get("frames") or 0) == frames
+                and saved_name
+                and os.path.isfile(saved_path)
+            )
+            if reusable:
+                outputs.append(saved_name)
+                print(
+                    f"[Pipeline {pid}] Reusing MiniMax H3 shot {shot_index + 1}, "
+                    f"segment {segment_index + 1}/{segment_count}"
+                )
+                if segment_index + 1 < segment_count:
+                    from .video_editor import extract_frame, probe_media
+                    continuation_path = os.path.join(
+                        out_dir,
+                        f".minimax_h3_{pid}_{shot_index + 1}_{segment_index + 1}_continuation.png",
+                    )
+                    media = probe_media(saved_path)
+                    extract_frame(saved_path, continuation_path, float(media["duration"]))
+                    continuation_frames.append(continuation_path)
+                    segment_start = continuation_path
+                _update_pipeline(
+                    pid,
+                    progress={
+                        "current": job_index + 1,
+                        "total": len(jobs),
+                        "message": f"Reused MiniMax H3 segment {job_index + 1}/{len(jobs)}",
+                        "step": 0,
+                        "total_steps": 0,
+                    },
+                )
+                _save_pipeline_state(pid)
+                continue
+            reuse_prefix = False
 
             gen_params: dict = {
                 "model_type": "minimax_h3",
@@ -7249,6 +7342,10 @@ def _run_minimax_h3_story_video(
                 )
             outputs.extend(generated)
             generated_path = generated[-1] if os.path.isabs(generated[-1]) else os.path.join(out_dir, generated[-1])
+            segment_states[shot_index] = [
+                item for item in segment_states[shot_index]
+                if not isinstance(item, dict) or item.get("index") != segment_index
+            ]
             segment_states[shot_index].append({
                 "index": segment_index,
                 "filename": os.path.basename(generated_path),
@@ -7260,6 +7357,7 @@ def _run_minimax_h3_story_video(
                 "stale": False,
                 "created_at": time.time(),
             })
+            segment_states[shot_index].sort(key=lambda item: int(item.get("index", 0)))
             _update_pipeline(pid, _h3_segments=copy.deepcopy(segment_states))
 
             if segment_index + 1 < segment_count:
@@ -7298,7 +7396,15 @@ def _run_minimax_h3_story_video(
     final_name = f"minimax_h3_{pid}_multiclip.mp4"
     final_path = os.path.join(out_dir, final_name)
     clip_paths = [name if os.path.isabs(name) else os.path.join(out_dir, name) for name in outputs]
-    if not _wgp.concatenate_multi_clip_videos(clip_paths, final_path, None):
+    # Musical productions retain the chosen song as the final soundtrack;
+    # H3's native per-segment ambience remains useful while rendering but is
+    # not a replacement for the selected music track.
+    assembly_audio = (
+        params.get("audio_path")
+        if params.get("pipeline_type") == "music_video"
+        else None
+    )
+    if not _wgp.concatenate_multi_clip_videos(clip_paths, final_path, assembly_audio):
         raise RuntimeError(
             "MiniMax H3 rendered every segment, but final short-film assembly failed. "
             "The individual clips were preserved."
@@ -7456,10 +7562,10 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
     if not out_dir:
         out_dir = _wgp.save_path
 
-    # H3's open model renders one native-audio clip per request and has no
-    # WanGP multi-clip/sliding-window contract. Story mode therefore runs its
-    # planned shots explicitly and assembles them with their embedded audio.
-    if video_model == "minimax_h3" and pipeline_type == "short_film_story":
+    # H3 renders exactly one native-audio clip per request. It cannot consume
+    # WanGP's multi-clip/sliding-window contract, so every Director mode must
+    # submit its planned shots sequentially and assemble the resulting clips.
+    if video_model == "minimax_h3":
         try:
             return _run_minimax_h3_story_video(
                 pid,
