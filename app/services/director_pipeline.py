@@ -3043,6 +3043,13 @@ def _run_pipeline(pid: str, resume: bool = False):
     generation phase re-runs — so a crash 2 hours into a run doesn't
     throw away the LLM planning that already succeeded.
     """
+    from . import debug_trace
+    with debug_trace.context_scope(pipeline_id=pid, workflow="director"):
+        return _run_pipeline_traced(pid, resume=resume)
+
+
+def _run_pipeline_traced(pid: str, resume: bool = False):
+    """Implementation wrapped by a debug correlation scope."""
     try:
         p = _pipelines[pid]
         params = p["params"]

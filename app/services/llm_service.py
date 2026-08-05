@@ -15,6 +15,7 @@ import threading
 import logging
 import requests
 from typing import Optional
+from . import debug_trace
 from .debug_trace import trace_llm_call
 
 logger = logging.getLogger(__name__)
@@ -101,12 +102,14 @@ def run_with_activity_tracking(activity_id: str, callback):
     previous = getattr(_activity_tracking_context, "activity_id", "")
     _activity_tracking_context.activity_id = activity_id
     try:
-        return callback()
+        with debug_trace.context_scope(activity_id=activity_id):
+            return callback()
     finally:
         _activity_tracking_context.activity_id = previous
 
 
 def _record_activity_usage(usage: dict) -> None:
+    debug_trace.trace_llm_usage(usage)
     activity_id = getattr(_activity_tracking_context, "activity_id", "")
     if not activity_id or not isinstance(usage, dict) or not usage:
         return

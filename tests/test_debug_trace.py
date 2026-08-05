@@ -27,17 +27,21 @@ def test_llm_trace_pairs_request_and_response_and_redacts_secrets(tmp_path: Path
 
     @debug_trace.trace_llm_call("test_generate", context=lambda: {"provider": "test", "model_id": "model"})
     def generate(prompt: str, api_key: str = "") -> str:
+        debug_trace.trace_llm_usage({"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16})
         return f"answer for {prompt}"
 
     assert generate("full prompt", api_key="do-not-log") == "answer for full prompt"
     records = [json.loads(line) for line in Path(debug_trace.current_log_path()).read_text(encoding="utf-8").splitlines()]
-    assert [record["phase"] for record in records] == ["request", "response"]
-    assert records[0]["event_id"] == records[1]["event_id"]
+    assert [record["phase"] for record in records] == ["request", "usage", "response"]
+    assert len({record["event_id"] for record in records}) == 1
     assert records[0]["request"]["prompt"] == "full prompt"
     assert records[0]["request"]["api_key"] == "<redacted>"
-    assert records[0]["context"] == {"provider": "test", "model_id": "model"}
-    assert records[1]["response"] == "answer for full prompt"
-    assert records[1]["duration_ms"] >= 0
+    assert records[0]["context"]["provider"] == "test"
+    assert records[0]["context"]["model_id"] == "model"
+    assert records[1]["usage"]["total_tokens"] == 16
+    assert records[2]["response"] == "answer for full prompt"
+    assert records[2]["duration_ms"] >= 0
+    assert [record["sequence"] for record in records] == sorted(record["sequence"] for record in records)
 
 
 def test_sanitizer_omits_binary_and_base64_payloads():

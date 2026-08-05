@@ -187,6 +187,11 @@ debug_trace.configure(
     ),
     log_dir=lambda: os.path.join(os.path.dirname(_app_dir), "logs", "debug"),
 )
+debug_trace.start_session(
+    workspace=wgp.server_config.get("services", {}).get("active_workspace", "default"),
+    config_file=wgp.server_config_filename,
+    app_version=api.version,
+)
 
 # Upload size caps — enforced in upload handlers. Tuned for real-world
 # media the app actually ingests; anything larger is almost certainly
@@ -260,7 +265,12 @@ async def trace_user_mutations(request: Request, call_next):
             query=dict(request.query_params), body=request_body,
         )
     try:
-        response = await call_next(request)
+        with debug_trace.context_scope(
+            request_id=event_id or None,
+            http_method=request.method,
+            http_path=request.url.path,
+        ):
+            response = await call_next(request)
     except Exception as exc:
         if should_trace:
             debug_trace.trace_event(
