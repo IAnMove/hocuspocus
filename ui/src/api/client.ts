@@ -168,7 +168,7 @@ export async function writeSong(params: {
   writingProvider?: import('../features/stories/types').StoryWritingProvider
   writingModel?: string
   writingBaseUrl?: string
-}): Promise<{ style: string; lyrics: string; lyria_prompt: string; raw: string }> {
+}): Promise<{ style: string; lyrics: string; lyria_prompt: string; warnings?: string[]; raw: string }> {
   const res = await fetch(`${BASE}/api/v1/llm/write-song`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

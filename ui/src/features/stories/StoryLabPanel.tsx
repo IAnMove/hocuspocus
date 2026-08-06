@@ -2052,8 +2052,7 @@ export function StoryLabPanel() {
       story_context: storySongBrief(latest, cue.durationSeconds, targetLanguage),
       language: targetLanguage,
       duration_seconds: cue.durationSeconds,
-      include_lyria: true,
-      max_new_tokens: 3000,
+      max_new_tokens: 1600,
     }).then(written => ({
       style: written.style,
       lyrics: written.lyrics,
@@ -2175,7 +2174,7 @@ export function StoryLabPanel() {
     }
   }
 
-  const adaptMusicCueWithLlm = async (cueId: string) => {
+  const adaptMusicCueWithLlm = async (cueId: string, includeLyria = false) => {
     const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
     if (!cue) return
     if (!cue.referenceSong.trim()) {
@@ -2201,16 +2200,24 @@ export function StoryLabPanel() {
         story_context: storySongBrief(project, cue.durationSeconds, lyricsLanguage),
         language: lyricsLanguage,
         duration_seconds: cue.durationSeconds,
-        include_lyria: true,
-        max_new_tokens: 3000,
+        include_lyria: includeLyria,
+        max_new_tokens: includeLyria ? 3000 : 1600,
       })
       patchMusicCue(cueId, {
         style: written.style,
         lyrics: written.lyrics,
         lyricsLanguage,
-        lyriaPrompt: written.lyria_prompt,
+        ...(includeLyria ? { lyriaPrompt: written.lyria_prompt } : {}),
       })
-      setNotice({ kind: 'ok', text: `“${cue.title}” now has editable MiniMax and Google Lyria prompts${cue.instrumental ? '' : ' with structured lyrics'}.` })
+      const lyriaMissing = includeLyria && !written.lyria_prompt.trim()
+      setNotice({
+        kind: 'ok',
+        text: lyriaMissing
+          ? `“${cue.title}” has a valid MiniMax prompt${cue.instrumental ? '' : ' and structured lyrics'}. The optional Lyria prompt was omitted, but nothing was discarded.`
+          : includeLyria
+            ? `“${cue.title}” now has editable MiniMax and Google Lyria prompts${cue.instrumental ? '' : ' with structured lyrics'}.`
+            : `“${cue.title}” now has an editable MiniMax prompt${cue.instrumental ? '' : ' with structured lyrics'}. Lyria was not requested.`,
+      })
     } catch (error) {
       activity.fail(error, 'music_planning')
       setNotice({ kind: 'error', text: `The music proposal could not be adapted: ${(error as Error).message}` })
@@ -3442,7 +3449,7 @@ export function StoryLabPanel() {
                                   <p className="text-[9px] text-text-muted">Uses contiguous timestamps, section names, intensity, arrangement and separated lyrics. Lyria Pro targets up to about 3:00; longer Story durations are condensed in this prompt.</p>
                                   <div className="grid sm:grid-cols-2 gap-2">
                                     <button className={button} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
-                                      onClick={() => void adaptMusicCueWithLlm(cue.id)}>
+                                      onClick={() => void adaptMusicCueWithLlm(cue.id, true)}>
                                       {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate / refresh Lyria prompt
                                     </button>
                                     <button className={button} disabled={!cue.lyriaPrompt.trim()} onClick={() => {

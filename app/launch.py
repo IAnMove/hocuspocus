@@ -5531,6 +5531,15 @@ def _parse_lyria_output(raw):
     return match.group(1).strip() if match else ""
 
 
+def _optional_lyria_warning(lyria_prompt: str, requested: bool) -> str:
+    """Describe a missing optional Lyria result without rejecting the song."""
+    if requested and not re.search(
+        r"\[\d+:\d{2}\s*-\s*\d+:\d{2}\]", str(lyria_prompt or ""),
+    ):
+        return "The LLM omitted the optional timed Lyria prompt; MiniMax style and lyrics were preserved."
+    return ""
+
+
 def _minimax_song_request_prompt(body: dict, description: str, instrumental: bool) -> str:
     """Build a labelled brief so references never leak into the final provider prompt."""
     model = str(body.get("model") or "music-3.0").strip()
@@ -5656,11 +5665,14 @@ async def llm_write_song(request: Request):
             raise HTTPException(status_code=502, detail="The LLM did not return a valid MiniMax style prompt")
         if not instrumental and not lyrics:
             raise HTTPException(status_code=502, detail="The LLM did not return MiniMax lyrics")
-        if include_lyria and not re.search(
-            r"\[\d+:\d{2}\s*-\s*\d+:\d{2}\]", lyria_prompt,
-        ):
-            raise HTTPException(status_code=502, detail="The LLM did not return a timed Lyria prompt")
-    return {"style": style, "lyrics": lyrics, "lyria_prompt": lyria_prompt, "raw": raw}
+    lyria_warning = _optional_lyria_warning(lyria_prompt, include_lyria)
+    return {
+        "style": style,
+        "lyrics": lyrics,
+        "lyria_prompt": lyria_prompt,
+        "warnings": [lyria_warning] if lyria_warning else [],
+        "raw": raw,
+    }
 
 
 def _build_music_gen_params(model_type: str, lyrics: str, style: str, duration_seconds, seed) -> dict:
