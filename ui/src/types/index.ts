@@ -63,8 +63,8 @@ export interface GenerateParams {
   input_video_strength?: number
   /** Keep an I2V start image's medium and rendering style in the motion prompt. */
   preserve_source_style?: boolean
-  /** Match source aspect or crop it to the explicitly selected video canvas. */
-  image_fit_mode?: 'source' | 'crop'
+  /** Fit without distortion (black matte) or explicitly crop to the video canvas. */
+  image_fit_mode?: 'contain' | 'source' | 'crop'
   flow_shift?: number
   audio_guide?: string
   audio_scale?: number
@@ -75,7 +75,7 @@ export interface GenerateParams {
   /** MiniMax H3 Ref2VA standalone audio references. */
   h3_ref_audios?: string[]
   h3_audio_shift?: number
-  /** Sound direction appended as an Audio: clause when the prompt has none. */
+  /** Sound direction written into MiniMax H3's overall_soundscape field. */
   h3_audio_prompt?: string
   h3_ref_image_size?: 'match' | 'max'
   /** Explicit H3 conditioning contract: exact start frame or omni references. */

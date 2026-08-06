@@ -108,6 +108,7 @@ DEFAULTS = {
     "h3_ref_image_size": "match",
     "h3_model_profile": "quality",
     "h3_reference_mode": "first_frame",
+    "image_fit_mode": "contain",
 }
 
 
@@ -484,6 +485,55 @@ def _copy_input(source: str, job_id: str, index: int) -> str:
     return name
 
 
+def _copy_frame_input(
+    source: str,
+    job_id: str,
+    index: int,
+    width: int,
+    height: int,
+    fit_mode: str = "contain",
+) -> str:
+    """Prepare an FL2VA boundary frame without ever stretching its content.
+
+    MiniMax's Comfy node receives the configured canvas size separately.  A raw
+    portrait image on a landscape canvas can therefore be resized non-uniformly
+    inside the node.  We remove that ambiguity by supplying an already-sized
+    RGB PNG: contain/legacy-source uses a centered black matte, while crop is an
+    explicit opt-in that fills the canvas and discards the outer edges.
+    """
+    from PIL import Image, ImageOps
+
+    path = Path(source).expanduser().resolve()
+    if not path.is_file():
+        raise ValueError(f"Frame image does not exist: {source}")
+    INPUT_DIR.mkdir(parents=True, exist_ok=True)
+    target = (max(1, int(width)), max(1, int(height)))
+    mode = str(fit_mode or "contain").strip().lower()
+    mode = "contain" if mode in {"", "source", "fit", "preserve"} else mode
+
+    with Image.open(path) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+        if mode == "crop":
+            prepared = ImageOps.fit(
+                image,
+                target,
+                method=Image.Resampling.LANCZOS,
+                centering=(0.5, 0.5),
+            )
+        else:
+            contained = ImageOps.contain(image, target, method=Image.Resampling.LANCZOS)
+            prepared = Image.new("RGB", target, (0, 0, 0))
+            offset = (
+                (target[0] - contained.width) // 2,
+                (target[1] - contained.height) // 2,
+            )
+            prepared.paste(contained, offset)
+
+        name = f"maestro_h3_{job_id}_{index}_frame.png"
+        prepared.save(INPUT_DIR / name, format="PNG", optimize=True)
+    return name
+
+
 def _probe_duration(source: str) -> float:
     """Read media duration with PyAV without decoding the complete asset."""
     import av
@@ -620,7 +670,17 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
             if source:
                 copy_index += 1
                 node_id = str(30 + copy_index)
-                workflow[node_id] = _node("LoadImage", image=_copy_input(source, job_id, copy_index))
+                workflow[node_id] = _node(
+                    "LoadImage",
+                    image=_copy_frame_input(
+                        source,
+                        job_id,
+                        copy_index,
+                        width,
+                        height,
+                        str(params.get("image_fit_mode") or "contain"),
+                    ),
+                )
                 inputs[input_name] = [node_id, 0]
         workflow["10"] = _node("MiniMaxH3ImageToVideo", **inputs)
         return workflow, pipeline

@@ -423,12 +423,12 @@ export function AdvancedSettings() {
                   <label className="block text-[10px] text-text-muted">
                     Start image fit
                     <select
-                      value={params.image_fit_mode || 'source'}
-                      onChange={e => setParam('image_fit_mode', e.target.value as 'source' | 'crop')}
+                      value={params.image_fit_mode === 'crop' ? 'crop' : 'contain'}
+                      onChange={e => setParam('image_fit_mode', e.target.value as 'contain' | 'crop')}
                       className="mt-1 w-full rounded-lg border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:border-accent-blue focus:outline-none"
                     >
-                      <option value="source">Match source aspect · no content loss</option>
-                      <option value="crop">Crop to selected video canvas</option>
+                      <option value="contain">Fit with black bars · no distortion</option>
+                      <option value="crop">Crop to fill canvas · edges may be lost</option>
                     </select>
                   </label>
                   <label className="flex cursor-pointer items-center gap-2">
@@ -443,9 +443,9 @@ export function AdvancedSettings() {
                     </span>
                   </label>
                   <p className="text-[9px] text-text-muted/60">
-                    Adds a short I2V instruction to retain the original medium,
-                    including anime linework and cel shading. Disable it only
-                    when you deliberately want to restyle the image.
+                    Fit preserves the complete source inside the selected canvas;
+                    black bars appear only when aspect ratios differ. Crop fills
+                    the canvas but can remove content near the edges.
                   </p>
                 </div>
               )}

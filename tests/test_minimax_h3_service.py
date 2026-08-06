@@ -10,17 +10,83 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from PIL import Image
+
 from app.services import minimax_h3_service as h3
 
 
 class TestMiniMaxH3Workflow(unittest.TestCase):
+    def test_portrait_start_frame_is_letterboxed_to_landscape_without_stretching(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "portrait.png"
+            Image.new("RGB", (200, 400), (220, 30, 40)).save(source)
+            input_dir = root / "input"
+
+            with patch.object(h3, "INPUT_DIR", input_dir):
+                workflow, pipeline = h3.build_workflow({
+                    **h3.DEFAULTS,
+                    "image_start": str(source),
+                    "resolution": "960x544",
+                    "image_fit_mode": "contain",
+                }, "letterbox")
+
+            self.assertEqual(pipeline, "fl2va")
+            prepared_path = input_dir / workflow["31"]["inputs"]["image"]
+            with Image.open(prepared_path) as prepared:
+                self.assertEqual(prepared.size, (960, 544))
+                self.assertEqual(prepared.getpixel((0, 272)), (0, 0, 0))
+                center = prepared.getpixel((480, 272))
+                self.assertGreater(center[0], 200)
+                self.assertLess(center[1], 50)
+
+    def test_start_frame_crop_is_explicit_and_fills_the_canvas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "portrait.png"
+            Image.new("RGB", (200, 400), (20, 180, 60)).save(source)
+            input_dir = root / "input"
+
+            with patch.object(h3, "INPUT_DIR", input_dir):
+                workflow, _ = h3.build_workflow({
+                    **h3.DEFAULTS,
+                    "image_start": str(source),
+                    "resolution": "960x544",
+                    "image_fit_mode": "crop",
+                }, "crop")
+
+            with Image.open(input_dir / workflow["31"]["inputs"]["image"]) as prepared:
+                self.assertEqual(prepared.size, (960, 544))
+                self.assertEqual(prepared.getpixel((0, 0)), (20, 180, 60))
+                self.assertEqual(prepared.getpixel((959, 543)), (20, 180, 60))
+
+    def test_legacy_source_fit_mode_maps_to_non_distorting_letterbox(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "wide.png"
+            Image.new("RGB", (400, 100), (30, 50, 210)).save(source)
+            input_dir = root / "input"
+
+            with patch.object(h3, "INPUT_DIR", input_dir):
+                workflow, _ = h3.build_workflow({
+                    **h3.DEFAULTS,
+                    "image_start": str(source),
+                    "resolution": "544x960",
+                    "image_fit_mode": "source",
+                }, "legacy-source")
+
+            with Image.open(input_dir / workflow["31"]["inputs"]["image"]) as prepared:
+                self.assertEqual(prepared.size, (544, 960))
+                self.assertEqual(prepared.getpixel((272, 0)), (0, 0, 0))
+                self.assertEqual(prepared.getpixel((272, 480)), (30, 50, 210))
+
     def test_extend_video_becomes_last_frame_fl2va_anchor(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source.mp4"
             source.write_bytes(b"video")
 
             def fake_extract(_source, destination, requested_time):
-                Path(destination).write_bytes(b"frame")
+                Image.new("RGB", (1280, 720), (12, 24, 36)).save(destination)
                 self.assertEqual(requested_time, 8.5)
                 return {"time": 8.416667, "width": 1280, "height": 720}
 
@@ -172,8 +238,8 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(h3, "INPUT_DIR", Path(tmp) / "input"):
             first = Path(tmp) / "first.png"
             last = Path(tmp) / "last.png"
-            first.write_bytes(b"first")
-            last.write_bytes(b"last")
+            Image.new("RGB", (640, 360), (10, 20, 30)).save(first)
+            Image.new("RGB", (640, 360), (30, 20, 10)).save(last)
             workflow, pipeline = h3.build_workflow({
                 **h3.DEFAULTS,
                 "prompt": "transition",

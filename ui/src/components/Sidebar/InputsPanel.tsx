@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { X, Upload, Plus, Music, Film, Mic, Layers, Loader2 } from 'lucide-react'
+import { X, Upload, Plus, Music, Film, Mic, Layers, Loader2, AlertTriangle } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 
@@ -32,6 +32,11 @@ interface InjectedFrame {
   // back to a native start/end frame can reuse it (restored frames have null
   // and fall back to their uploaded path).
   file: File | null
+}
+
+interface ImageSize {
+  width: number
+  height: number
 }
 
 const OFFSET_PRESETS = [
@@ -125,6 +130,7 @@ export function InputsPanel() {
   const [frameDragOverKey, setFrameDragOverKey] = useState<string | null>(null)
   const [compositeBusy, setCompositeBusy] = useState(false)
   const [compositeNotice, setCompositeNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const [startImageSize, setStartImageSize] = useState<ImageSize | null>(null)
 
   // ── Inject capability + window layout ──────────────────────────────
   const supportsInject = useMemo(() => {
@@ -381,6 +387,59 @@ export function InputsPanel() {
   const lastWindow = Math.max(0, windowInfo.windowCount - 1)
   const hasStart = !!startImage || (!isExtend && !!params.image_start)
   const hasEnd = !!endImage || (!isExtend && !!params.image_end)
+
+  useEffect(() => {
+    if (!isH3 || !hasStart || isExtend) {
+      setStartImageSize(null)
+      return
+    }
+    const stored = Array.isArray(params.image_start)
+      ? params.image_start.find(Boolean) || ''
+      : String(params.image_start || '')
+    let objectUrl = ''
+    const source = startImage
+      ? (objectUrl = URL.createObjectURL(startImage))
+      : (stored ? api.getStoredAssetUrl(stored) : '')
+    if (!source) {
+      setStartImageSize(null)
+      return
+    }
+    let disposed = false
+    const probe = new Image()
+    probe.onload = () => {
+      if (!disposed) setStartImageSize({ width: probe.naturalWidth, height: probe.naturalHeight })
+    }
+    probe.onerror = () => {
+      if (!disposed) setStartImageSize(null)
+    }
+    probe.src = source
+    return () => {
+      disposed = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [hasStart, isExtend, isH3, params.image_start, startImage])
+
+  const startAspectWarning = useMemo(() => {
+    if (!isH3 || !hasStart || !startImageSize) return null
+    const match = String(params.resolution || '960x544').match(/(\d+)\s*[x×]\s*(\d+)/i)
+    if (!match) return null
+    const target = { width: Number(match[1]), height: Number(match[2]) }
+    if (!target.width || !target.height) return null
+    const sourceRatio = startImageSize.width / startImageSize.height
+    const targetRatio = target.width / target.height
+    if (Math.abs(sourceRatio - targetRatio) / targetRatio < 0.025) return null
+    const orientation = (size: ImageSize) => (
+      Math.abs(size.width / size.height - 1) < 0.025
+        ? 'cuadrada'
+        : size.width > size.height ? 'horizontal' : 'vertical'
+    )
+    return {
+      target,
+      sourceOrientation: orientation(startImageSize),
+      targetOrientation: orientation(target),
+      bars: sourceRatio < targetRatio ? 'laterales' : 'arriba y abajo',
+    }
+  }, [hasStart, isH3, params.resolution, startImageSize])
 
   const frameRoleFor = (window: number, offset: string): 'start' | 'end' | 'inject' => {
     if (isExtend) return 'inject'
@@ -710,6 +769,38 @@ export function InputsPanel() {
             onDropFile={f => void addH3Reference('audio', f)} dropAccept="audio" />
         )}
       </div>
+
+      {startAspectWarning && (
+        <div className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2.5">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-300" />
+            <div className="min-w-0 space-y-2">
+              <p className="text-[10px] leading-relaxed text-amber-100/90">
+                La Start image es {startImageSize?.width}×{startImageSize?.height} ({startAspectWarning.sourceOrientation}), pero MiniMax H3 está configurado a {startAspectWarning.target.width}×{startAspectWarning.target.height} ({startAspectWarning.targetOrientation}).{' '}
+                {params.image_fit_mode === 'crop'
+                  ? 'Se recortarán los bordes para llenar el encuadre; la imagen no se deformará.'
+                  : `Se conservará completa, centrada y sin deformar, añadiendo franjas negras ${startAspectWarning.bars}.`}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setParam('image_fit_mode', 'contain')}
+                  className={`rounded-md border px-2 py-1 text-[9px] transition-colors ${params.image_fit_mode !== 'crop' ? 'border-amber-300/45 bg-amber-400/20 text-amber-50' : 'border-border bg-bg-secondary text-text-muted hover:text-text-primary'}`}
+                >
+                  Ajustar con franjas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setParam('image_fit_mode', 'crop')}
+                  className={`rounded-md border px-2 py-1 text-[9px] transition-colors ${params.image_fit_mode === 'crop' ? 'border-amber-300/45 bg-amber-400/20 text-amber-50' : 'border-border bg-bg-secondary text-text-muted hover:text-text-primary'}`}
+                >
+                  Recortar para llenar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isH3 && hasStart && imageRefs.length > 0 && (
         <div className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2.5 space-y-2">
