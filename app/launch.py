@@ -12609,7 +12609,7 @@ def _comic_writing_llm(body: dict) -> dict | None:
     }
 
 
-def _story_lab_schema(scope: str) -> dict:
+def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
     """Return the strict editable Story Lab payload requested for one stage."""
     string = {"type": "string"}
     string_array = {"type": "array", "items": string, "maxItems": 12}
@@ -12695,6 +12695,10 @@ def _story_lab_schema(scope: str) -> dict:
         ],
         "additionalProperties": False,
     }
+    beat_minimum = 3 if project_type == "quick_video" else 4 if project_type == "music_video" else 6
+    beat_maximum = 8 if project_type == "quick_video" else 10 if project_type == "music_video" else 14
+    music_minimum = 1 if project_type == "music_video" else 4
+    music_maximum = 1 if project_type == "music_video" else 16
     properties = {
         "overview": {
             "type": "object",
@@ -12708,11 +12712,11 @@ def _story_lab_schema(scope: str) -> dict:
         "world": world,
         "characters": {"type": "array", "items": character, "minItems": 1, "maxItems": 12},
         "relationships": {"type": "array", "items": relationship, "maxItems": 24},
-        "beats": {"type": "array", "items": beat, "minItems": 6, "maxItems": 14},
+        "beats": {"type": "array", "items": beat, "minItems": beat_minimum, "maxItems": beat_maximum},
         "music": {
             "type": "object",
             "properties": {
-                "cues": {"type": "array", "items": music_cue, "minItems": 4, "maxItems": 16},
+                "cues": {"type": "array", "items": music_cue, "minItems": music_minimum, "maxItems": music_maximum},
             },
             "required": ["cues"],
             "additionalProperties": False,
@@ -12874,6 +12878,7 @@ def _normalize_story_stage_ids(
 
 
 def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
+    project_type = str(project.get("projectType") or "full_story").strip().lower()
     if not isinstance(result, dict):
         return "response root is not a JSON object"
     key = "beats" if scope == "structure" else scope
@@ -12944,7 +12949,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
             str(item.get("id") or "").strip()
             for item in project.get("characters", []) if isinstance(item, dict)
         }
-        expected_count = len(character_ids) + 4
+        expected_count = 1 if project_type == "music_video" else len(character_ids) + 4
         if len(cues) != expected_count:
             return f"music must contain exactly {expected_count} cues"
         required_cue = {
@@ -12982,6 +12987,13 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
             ids.append(cue["id"])
         if len(ids) != len(set(ids)):
             return "music contains duplicate IDs"
+        if project_type == "music_video":
+            cue = cues[0]
+            if cue["kind"] != "story" or cue["targetId"] != "story":
+                return "music-video mode needs one story song"
+            if cue["instrumental"]:
+                return "the music-video song must include vocals"
+            return None
         world_cues = [cue for cue in cues if cue["kind"] == "world" and cue["targetId"] == "world"]
         character_targets = {
             cue["targetId"] for cue in cues if cue["kind"] == "character"
@@ -13005,7 +13017,11 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
     limits = {
         "characters": (1, 12),
         "relationships": (0, 24),
-        "structure": (6, 14),
+        "structure": (
+            (3, 8) if project_type == "quick_video"
+            else (4, 10) if project_type == "music_video"
+            else (6, 14)
+        ),
     }
     minimum, maximum = limits[scope]
     if len(value) < minimum or len(value) > maximum:
@@ -13040,7 +13056,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
 def _story_project_prompt_context(project: dict, scope: str) -> str:
     """Return bounded, valid JSON with editorial facts but no heavy runtime data."""
     overview_keys = (
-        "title", "language", "genre", "tone", "audience", "premise",
+        "title", "projectType", "creativeBrief", "language", "genre", "tone", "audience", "premise",
         "logline", "synopsis", "theme", "ending", "visualStyle",
         "enforceVisualStyle",
     )
@@ -13288,6 +13304,14 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     schema_scope = "beats" if scope == "structure" else scope
     premise = str(body.get("premise") or "").strip()
     project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    project_type = str(project.get("projectType") or "full_story").strip().lower()
+    if project_type not in {"full_story", "music_video", "quick_video"}:
+        project_type = "full_story"
+    creative_brief = project.get("creativeBrief") if isinstance(project.get("creativeBrief"), dict) else {}
+    try:
+        brief_duration = int(float(creative_brief.get("durationSeconds") or 0))
+    except (TypeError, ValueError):
+        brief_duration = 0
     if not premise:
         premise = str(project.get("premise") or "").strip()
     if not premise:
@@ -13308,7 +13332,25 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
         character_count = len([
             item for item in project.get("characters", []) if isinstance(item, dict)
         ])
-        music_direction = f"""
+        if project_type == "music_video":
+            music_direction = f"""
+Music-video contract:
+- Return exactly one original vocal story song. Its kind is "story" and targetId is "story".
+- The performer/creator is: {str(creative_brief.get('performer') or 'not specified')[:1000]}.
+- Requested musical style: {str(creative_brief.get('musicStyle') or genre)[:1000]}.
+- What the song must tell: {str(creative_brief.get('songStory') or premise)[:2000]}.
+- Target duration: {max(20, min(360, brief_duration or 90))} seconds.
+- referenceSong is an editable inspiration example in "Title — Artist" form. Use it only
+  for broad tempo, instrumentation or emotional architecture; never copy melody or lyrics.
+- style is the final MiniMax Music prompt: one concise English comma-separated line,
+  10–300 characters, covering genre, mood, instruments, vocals, tempo and production.
+- Write lyrics in {language}, maximum 3500 characters, with a recurring hook and a clear
+  narrative progression. Use supported English tags on their own lines: [Intro], [Verse],
+  [Pre Chorus], [Chorus], [Bridge], [Hook], [Inst], [Solo], [Outro].
+- Set instrumental false. Make brief and purpose explain how this song drives the videoclip.
+"""
+        else:
+            music_direction = f"""
 Music-specific contract:
 - Return exactly one instrumental ambient cue for targetId "world".
 - Return exactly one presentation cue for each of the {character_count} existing character IDs.
@@ -13333,6 +13375,27 @@ Music-specific contract:
   atmosphere, instrumentation, tempo and musical arc entirely in style.
 - Make brief and purpose explain how the cue maps to this exact world, character or story arc.
 """
+    if project_type == "music_video":
+        narrative_direction = f"""
+This is a compact music-first story, not a complete franchise bible. Build a coherent visual
+arc around the performer and the song. Context: {str(creative_brief.get('context') or premise)[:3000]}.
+Use 4–10 beats that can become videoclip shots and keep locations/cast deliberately small.
+"""
+    elif project_type == "quick_video":
+        narrative_direction = f"""
+This is a fast single-concept video. Subjects: {str(creative_brief.get('subjects') or 'not specified')[:1500]}.
+Setting: {str(creative_brief.get('setting') or 'not specified')[:1500]}.
+Requested action/dialogue: {str(creative_brief.get('action') or premise)[:3000]}.
+Format: {str(creative_brief.get('quickFormat') or 'dialogue')[:100]}; target duration:
+{max(5, min(120, brief_duration or 15))} seconds. Use 3–8 concise,
+shootable beats in one scene or a very small number of locations. Do not inflate it into a
+feature-film mythology; preserve the direct joke, dialogue, announcement or viral premise.
+"""
+    else:
+        narrative_direction = """
+Build one causal dramatic arc with setup, inciting incident, rising complications,
+midpoint/reversal, crisis, climax and resolution.
+"""
     base_prompt = f"""Create the requested editable Story Lab material.
 Generation scope: {scope}
 Premise: {premise}
@@ -13346,10 +13409,10 @@ Optional user instruction: {instruction or 'none'}
 Current manually edited project (preserve useful established facts and stable IDs):
 {current}
 {music_direction}
+{narrative_direction}
 
 Return only the JSON required by the schema. This is a reusable story bible, not a comic
-page plan and not a screenplay. Build one causal dramatic arc with setup, inciting incident,
-rising complications, midpoint/reversal, crisis, climax and resolution. Characters need
+page plan and not a screenplay. Characters need
 distinct desire, need, flaw, voice, visual silhouette and a change caused by their choices.
 Visual prompts describe one neutral concept-art subject or environment only: no contact
 sheets, no grids, no comic panels, no lettering, no captions, no UI and no multiple views.
@@ -13361,8 +13424,13 @@ Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instr
         "You are Maestro Story Architect: a professional story editor, character "
         "designer and production bible author. Return strict JSON only."
     )
-    schema = _story_lab_schema(schema_scope)
-    max_new_tokens = 6000 if scope == "music" else 2600
+    schema = _story_lab_schema(schema_scope, project_type)
+    max_new_tokens = (
+        2400 if scope == "music" and project_type == "music_video"
+        else 6000 if scope == "music"
+        else 2000 if project_type == "quick_video"
+        else 2600
+    )
     try:
         result = _generate_comic_director_json(
             prompt=base_prompt,
@@ -13535,10 +13603,16 @@ def _run_story_plan_job_inner(job_id: str) -> None:
         return
     body = copy.deepcopy(job.get("request") or {})
     requested_scope = str(body.get("scope") or "all")
-    stages = (
-        ["overview", "characters", "world", "relationships", "structure", "music"]
-        if requested_scope == "all" else [requested_scope]
+    project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    project_type = str(project.get("projectType") or "full_story").strip().lower()
+    all_stages = (
+        ["overview", "characters", "world", "structure", "music"]
+        if project_type == "music_video"
+        else ["overview", "characters", "world", "structure"]
+        if project_type == "quick_video"
+        else ["overview", "characters", "world", "relationships", "structure", "music"]
     )
+    stages = all_stages if requested_scope == "all" else [requested_scope]
     completed = job.get("completedStages")
     completed = completed if isinstance(completed, dict) else {}
     working_project = copy.deepcopy(body.get("project") or {})
@@ -13729,6 +13803,9 @@ def start_story_lab_generation(body: dict):
         raise HTTPException(status_code=400, detail="Unsupported Story Lab generation scope")
     if not str(body.get("premise") or "").strip():
         raise HTTPException(status_code=400, detail="Write a premise before generating the story")
+    project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    project_type = str(project.get("projectType") or "full_story").strip().lower()
+    stage_total = 5 if project_type == "music_video" else 4 if project_type == "quick_video" else 6
     job_id = f"story-plan-{uuid.uuid4().hex[:12]}"
     job = {
         "jobId": job_id,
@@ -13736,7 +13813,7 @@ def start_story_lab_generation(body: dict):
         "message": "Story generation queued.",
         "stage": "queued",
         "current": 0,
-        "total": 6 if scope == "all" else 1,
+        "total": stage_total if scope == "all" else 1,
         "request": _story_checkpoint_request(body),
         "completedStages": {},
         "result": None,

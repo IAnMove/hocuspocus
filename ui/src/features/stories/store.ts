@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import * as api from '../../api/client'
 import { changedSections, createStoryProject, normalizeStoryProject } from './model'
-import type { StoryProject } from './types'
+import type { StoryProject, StoryProjectType } from './types'
 
 const LEGACY_AUTOSAVE_KEY = 'maestro-story-lab-v1'
 const LIBRARY_PREFIX = 'maestro-story-library-v2:'
@@ -103,7 +103,7 @@ interface StoryState {
   setProject: (project: StoryProject) => void
   patchProject: (patch: Partial<StoryProject>) => void
   updateProject: (updater: (project: StoryProject) => StoryProject) => void
-  newProject: () => void
+  newProject: (projectType?: StoryProjectType) => void
   duplicateProject: (id?: string) => void
   openProject: (id: string) => void
   deleteProject: (id: string) => void
@@ -213,8 +213,8 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       dirty: true,
     }
   }),
-  newProject: () => set(state => {
-    const project = createStoryProject()
+  newProject: projectType => set(state => {
+    const project = createStoryProject(projectType)
     return {
       project,
       projects: { ...state.projects, [project.id]: project },

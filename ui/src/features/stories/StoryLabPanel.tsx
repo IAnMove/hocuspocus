@@ -28,7 +28,7 @@ import {
 } from './model'
 import type {
   StoryAssetKind, StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
-  StoryMusicCandidate, StoryMusicCue, StoryRelationship, StoryVisualAsset, StoryWritingProvider,
+  StoryMusicCandidate, StoryMusicCue, StoryProjectType, StoryRelationship, StoryVisualAsset, StoryWritingProvider,
 } from './types'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
@@ -79,7 +79,7 @@ function storySongBrief(
     `Create an original theme song that tells the story “${project.title}”.`,
     `Write all lyrics in ${lyricsLanguage}. Target approximately ${durationSeconds} seconds.`,
     `Genre and emotional direction: ${project.genre}; ${project.tone}. Theme: ${project.theme}.`,
-    `Premise: ${project.premise}. Synopsis: ${project.synopsis}. Ending: ${project.ending}.`,
+    `Premise: ${storyProjectPremise(project)}. Synopsis: ${project.synopsis}. Ending: ${project.ending}.`,
     cast ? `Character journeys: ${cast}.` : '',
     beats ? `Narrative progression: ${beats}.` : '',
     project.world.visualLanguage ? `Choose music that feels native to this visual world: ${project.world.visualLanguage}.` : '',
@@ -154,6 +154,33 @@ const TONES = [
   'Suspenseful', 'Emotional', 'Hopeful', 'Gritty', 'Whimsical', 'Mysterious',
   'Romantic', 'Melancholic', 'Satirical', 'Family-friendly',
 ]
+
+const STORY_PROJECT_TYPES: Array<{ id: StoryProjectType; label: string; description: string }> = [
+  { id: 'full_story', label: 'Historia completa', description: 'Mundo, personajes, estructura, música y adaptaciones.' },
+  { id: 'music_video', label: 'Videoclip', description: 'Canción original y una historia visual construida alrededor de ella.' },
+  { id: 'quick_video', label: 'Vídeo rápido', description: 'Diálogo, meme, parodia, sketch, viral o anuncio breve.' },
+]
+
+function storyProjectPremise(project: StoryProject): string {
+  if (project.projectType === 'music_video') {
+    return [
+      project.creativeBrief.context,
+      project.creativeBrief.performer && `Artista o creador: ${project.creativeBrief.performer}`,
+      project.creativeBrief.musicStyle && `Estilo musical: ${project.creativeBrief.musicStyle}`,
+      project.creativeBrief.songStory && `La canción cuenta: ${project.creativeBrief.songStory}`,
+    ].filter(Boolean).join('\n')
+  }
+  if (project.projectType === 'quick_video') {
+    return [
+      project.creativeBrief.context,
+      project.creativeBrief.subjects && `Protagonistas: ${project.creativeBrief.subjects}`,
+      project.creativeBrief.setting && `Lugar: ${project.creativeBrief.setting}`,
+      project.creativeBrief.action && `Acción o diálogo: ${project.creativeBrief.action}`,
+      `Formato: ${project.creativeBrief.quickFormat}`,
+    ].filter(Boolean).join('\n')
+  }
+  return project.premise
+}
 
 function draftPaths(result: Record<string, unknown>): string[] {
   const paths: string[] = []
@@ -643,8 +670,15 @@ export function StoryLabPanel() {
     }
   }, [activeWorkspace, project.id])
 
+  useEffect(() => {
+    if (project.projectType === 'quick_video') {
+      setFilmDuration(project.creativeBrief.durationSeconds)
+      setFilmDirection(project.creativeBrief.action || 'Create the complete quick video described by this Story Lab project.')
+    }
+  }, [project.creativeBrief.action, project.creativeBrief.durationSeconds, project.projectType])
+
   const approve = (key: keyof StoryProject['approvals']) => {
-    if (key === 'overview' && (!project.premise.trim() || !project.logline.trim() || !project.synopsis.trim())) {
+    if (key === 'overview' && (!storyProjectPremise(project).trim() || !project.logline.trim() || !project.synopsis.trim())) {
       setNotice({ kind: 'error', text: 'Premise, logline and synopsis are required before approving the story.' })
       setTab('overview')
       return
@@ -934,8 +968,9 @@ export function StoryLabPanel() {
   }
 
   const generate = async (scope: StoryGenerationScope) => {
-    if (!project.premise.trim()) {
-      setNotice({ kind: 'error', text: 'Write a premise first.' })
+    const generationPremise = storyProjectPremise(project)
+    if (!generationPremise.trim()) {
+      setNotice({ kind: 'error', text: project.projectType === 'full_story' ? 'Write a premise first.' : 'Complete the creative brief first.' })
       return
     }
     setBusy(scope)
@@ -951,7 +986,7 @@ export function StoryLabPanel() {
     try {
       const { result } = await api.generateStorySection({
         scope,
-        premise: project.premise,
+        premise: generationPremise,
         language: project.language,
         genre: project.genre,
         tone: project.tone,
@@ -2772,7 +2807,7 @@ export function StoryLabPanel() {
     setNotice({ kind: 'ok', text: 'The adaptation source was restored as a new editable story; the current version was preserved.' })
   }
 
-  const tabs: Array<{ id: StoryTab; label: string; icon: typeof BookOpen }> = [
+  const allTabs: Array<{ id: StoryTab; label: string; icon: typeof BookOpen }> = [
     { id: 'overview', label: 'Story', icon: BookOpen },
     { id: 'assets', label: 'Assets', icon: ImagePlus },
     { id: 'world', label: 'World', icon: Boxes },
@@ -2782,18 +2817,37 @@ export function StoryLabPanel() {
     { id: 'structure', label: 'Structure', icon: ChevronRight },
     { id: 'productions', label: 'Productions', icon: Film },
   ]
-  const progress = useMemo(() => [
-    Boolean(project.logline && project.synopsis),
-    Boolean(project.world.summary),
-    project.characters.length > 0,
-    project.beats.length >= 6,
-  ].filter(Boolean).length, [project])
+  const visibleTabIds: StoryTab[] = project.projectType === 'music_video'
+    ? ['overview', 'assets', 'world', 'characters', 'structure', 'music', 'productions']
+    : project.projectType === 'quick_video'
+      ? ['overview', 'assets', 'world', 'characters', 'structure', 'productions']
+      : ['overview', 'assets', 'world', 'characters', 'music', 'relationships', 'structure', 'productions']
+  const tabs = allTabs.filter(item => visibleTabIds.includes(item.id))
+  const foundationChecks = project.projectType === 'music_video'
+    ? [
+      Boolean(project.logline && project.synopsis),
+      Boolean(project.world.summary),
+      project.characters.length > 0,
+      project.beats.length >= 4,
+      project.music.cues.length > 0,
+    ]
+    : [
+      Boolean(project.logline && project.synopsis),
+      Boolean(project.world.summary),
+      project.characters.length > 0,
+      project.beats.length >= (project.projectType === 'quick_video' ? 3 : 6),
+    ]
+  const progress = foundationChecks.filter(Boolean).length
+  const foundationTotal = foundationChecks.length
+  useEffect(() => {
+    if (!visibleTabIds.includes(tab)) setTab('overview')
+  }, [project.projectType, tab]) // eslint-disable-line react-hooks/exhaustive-deps
   const productionIssues = (() => {
     if (project.workflowMode === 'automatic') return []
     const required: Array<keyof StoryProject['approvals']> = [
       'overview', 'world', 'characters', 'structure',
     ]
-    if (project.relationships.length) required.push('relationships')
+    if (project.projectType === 'full_story' && project.relationships.length) required.push('relationships')
     const issues = required
       .filter(section => !isApproved(section))
       .map(section => `Approve ${section}`)
@@ -2813,7 +2867,7 @@ export function StoryLabPanel() {
           <div className="flex items-center gap-2">
             <BookOpen size={16} className="text-accent-blue" />
             <span className="text-sm font-semibold text-text-primary">Story Lab</span>
-            <span className="text-[10px] text-text-muted">v{project.revision} · {progress}/4 foundations</span>
+            <span className="text-[10px] text-text-muted">v{project.revision} · {progress}/{foundationTotal} foundations</span>
             {storyLoading
               ? <span className="text-[9px] text-text-muted">loading workspace…</span>
               : storySaveError
@@ -2824,7 +2878,9 @@ export function StoryLabPanel() {
                     ? <span className="text-[9px] text-emerald-400">saved in workspace</span>
                     : <span className="text-[9px] text-text-muted">cached locally</span>}
           </div>
-          <p className="text-[9px] text-text-muted mt-0.5">One editable story bible for comics, films and future adaptations.</p>
+          <p className="text-[9px] text-text-muted mt-0.5">
+            {STORY_PROJECT_TYPES.find(item => item.id === project.projectType)?.description}
+          </p>
         </div>
         <select
           className={`${input} w-44`}
@@ -2837,12 +2893,33 @@ export function StoryLabPanel() {
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
             .map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
         </select>
+        <select
+          className={`${input} w-40`}
+          value={project.projectType}
+          disabled={Boolean(busy || imageBusy)}
+          title="Tipo de proyecto Story Lab"
+          onChange={event => {
+            const projectType = event.target.value as StoryProjectType
+            const durationSeconds = projectType === 'quick_video' && project.projectType !== 'quick_video'
+              ? 15
+              : projectType === 'music_video' && project.projectType !== 'music_video'
+                ? 90
+                : project.creativeBrief.durationSeconds
+            patch({ projectType, creativeBrief: { ...project.creativeBrief, durationSeconds } })
+          }}
+        >
+          {STORY_PROJECT_TYPES.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
         <select className={`${input} w-auto`} value={project.workflowMode} onChange={event => patch({ workflowMode: event.target.value as StoryProject['workflowMode'] })}>
           <option value="guided">Guided · approve stages</option>
           <option value="automatic">Automatic · one click</option>
         </select>
         <button className={button} onClick={() => generate('all')} disabled={Boolean(busy)}>
-          {busy === 'all' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {jobProgress || 'Generate story bible'}
+          {busy === 'all' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {jobProgress || (
+            project.projectType === 'music_video' ? 'Crear canción e historia visual'
+              : project.projectType === 'quick_video' ? 'Crear vídeo rápido'
+                : 'Generar historia completa'
+          )}
         </button>
         {busy && recoveryJobId && (
           <button className={`${button} border-red-500/50 text-red-300`} onClick={cancelGeneration}>
@@ -2862,7 +2939,23 @@ export function StoryLabPanel() {
         }} title="Upload a group of images and let the selected Story Lab LLM classify them">
           {smartAssetBusy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} Smart assets
         </button>
-        <button className={button} disabled={Boolean(busy || imageBusy)} onClick={newProject}><Plus size={13} /> New</button>
+        <details className="relative">
+          <summary className={`${button} list-none cursor-pointer`}><Plus size={13} /> New</summary>
+          <div className="absolute right-0 z-40 mt-1 w-64 rounded-lg border border-border bg-bg-primary p-1.5 shadow-xl">
+            {STORY_PROJECT_TYPES.map(item => (
+              <button key={item.id} type="button" disabled={Boolean(busy || imageBusy)}
+                className="block w-full rounded-md px-2.5 py-2 text-left hover:bg-bg-hover disabled:opacity-40"
+                onClick={event => {
+                  newProject(item.id)
+                  const details = event.currentTarget.closest('details') as HTMLDetailsElement | null
+                  details?.removeAttribute('open')
+                }}>
+                <span className="block text-xs font-medium text-text-primary">{item.label}</span>
+                <span className="mt-0.5 block text-[9px] text-text-muted">{item.description}</span>
+              </button>
+            ))}
+          </div>
+        </details>
         <button className={button} disabled={Boolean(busy || imageBusy)} onClick={() => duplicateProject()} title="Duplicate current story">Duplicate</button>
         <button className={button} onClick={() => {
           if (window.confirm(`Delete "${project.title}" from this workspace's Story Lab library?`)) deleteProject(project.id)
@@ -2950,7 +3043,52 @@ export function StoryLabPanel() {
             )}
             {tab === 'overview' && (
               <>
-                <SectionHeader title="Story and intent" description="Define what the story is about before choosing shots or panels." scope="overview" busy={busy} approved={isApproved('overview')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('overview')} />
+                <SectionHeader
+                  title={project.projectType === 'music_video' ? 'Canción e historia visual' : project.projectType === 'quick_video' ? 'Concepto de vídeo rápido' : 'Story and intent'}
+                  description={project.projectType === 'music_video'
+                    ? 'Con cinco decisiones podemos escribir la canción y preparar un videoclip coherente.'
+                    : project.projectType === 'quick_video'
+                      ? 'Una idea directa, sus protagonistas, el lugar y lo que debe ocurrir.'
+                      : 'Define what the story is about before choosing shots or panels.'}
+                  scope="overview" busy={busy} approved={isApproved('overview')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('overview')}
+                />
+                {project.projectType === 'music_video' && (
+                  <div className={`${panel} mb-4 grid md:grid-cols-2 gap-3 border-pink-500/20`}>
+                    <div className="md:col-span-2"><Field label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={4} placeholder="Dónde nace la canción, situación, época, atmósfera y cualquier dato imprescindible." /></div>
+                    <Field label="Artista / quién canta, graba o produce" value={project.creativeBrief.performer} onChange={performer => patch({ creativeBrief: { ...project.creativeBrief, performer } })} rows={3} placeholder="Voz, personalidad artística, presencia escénica o productor." />
+                    <Field label="Estilo musical" value={project.creativeBrief.musicStyle} onChange={musicStyle => patch({ creativeBrief: { ...project.creativeBrief, musicStyle }, music: { ...project.music, style: musicStyle } })} rows={3} placeholder="Género, instrumentación, voz, energía y producción." />
+                    <div className="md:col-span-2"><Field label="Qué queremos que cuente la canción" value={project.creativeBrief.songStory} onChange={songStory => patch({ creativeBrief: { ...project.creativeBrief, songStory }, music: { ...project.music, brief: songStory } })} rows={5} placeholder="Historia, punto de vista, emoción inicial, cambio y recuerdo final." /></div>
+                    <label className="block text-[10px] text-text-muted">
+                      Duración objetivo · {project.creativeBrief.durationSeconds}s
+                      <input type="range" min={30} max={360} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
+                        onChange={event => {
+                          const durationSeconds = Number(event.target.value)
+                          patch({ creativeBrief: { ...project.creativeBrief, durationSeconds }, music: { ...project.music, targetDurationSeconds: durationSeconds } })
+                        }} />
+                    </label>
+                    <p className="self-end text-[10px] text-text-muted">El LLM generará una canción, un intérprete visualizable, un mundo compacto y 4–10 momentos utilizables como planos.</p>
+                  </div>
+                )}
+                {project.projectType === 'quick_video' && (
+                  <div className={`${panel} mb-4 grid md:grid-cols-2 gap-3 border-cyan-500/20`}>
+                    <div className="md:col-span-2"><Field label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={3} placeholder="Qué está pasando y qué debe entender el espectador sin explicación adicional." /></div>
+                    <Field label="Protagonistas" value={project.creativeBrief.subjects} onChange={subjects => patch({ creativeBrief: { ...project.creativeBrief, subjects } })} rows={3} placeholder="Por ejemplo: Trump y Marco Rubio." />
+                    <Field label="Lugar" value={project.creativeBrief.setting} onChange={setting => patch({ creativeBrief: { ...project.creativeBrief, setting } })} rows={3} placeholder="Por ejemplo: despacho de la Casa Blanca, de día." />
+                    <div className="md:col-span-2"><Field label="Qué ocurre / diálogo" value={project.creativeBrief.action} onChange={action => patch({ creativeBrief: { ...project.creativeBrief, action } })} rows={5} placeholder="Acción, conversación, remate o mensaje que debe aparecer." /></div>
+                    <label className="block text-[10px] text-text-muted">Formato
+                      <select className={`${input} mt-1`} value={project.creativeBrief.quickFormat}
+                        onChange={event => patch({ creativeBrief: { ...project.creativeBrief, quickFormat: event.target.value as StoryProject['creativeBrief']['quickFormat'] } })}>
+                        <option value="dialogue">Diálogo</option><option value="meme">Meme</option><option value="parody">Parodia</option>
+                        <option value="sketch">Sketch</option><option value="viral">Viral</option><option value="announcement">Anuncio</option>
+                      </select>
+                    </label>
+                    <label className="block text-[10px] text-text-muted">
+                      Duración objetivo · {project.creativeBrief.durationSeconds}s
+                      <input type="range" min={5} max={120} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
+                        onChange={event => patch({ creativeBrief: { ...project.creativeBrief, durationSeconds: Number(event.target.value) } })} />
+                    </label>
+                  </div>
+                )}
                 <div className="grid xl:grid-cols-[1fr_360px] gap-4">
                   <div className={`${panel} grid md:grid-cols-2 gap-3`}>
                     <Field label="Title" value={project.title} onChange={title => patch({ title })} />
@@ -2962,11 +3100,15 @@ export function StoryLabPanel() {
                         onChange={language => patch({ language })}
                       />
                     </label>
-                    <Choice label="Genre" value={project.genre} options={GENRES} onChange={genre => patch({ genre })} />
-                    <Choice label="Tone" value={project.tone} options={TONES} onChange={tone => patch({ tone })} />
-                    <Field label="Audience" value={project.audience} onChange={audience => patch({ audience })} />
-                    <Field label="Theme" value={project.theme} onChange={theme => patch({ theme })} />
-                    <Field label="What the story is about / premise" value={project.premise} onChange={premise => patch({ premise })} rows={5} placeholder="Who wants what, what stops them, and what happens if they fail?" />
+                    {project.projectType === 'full_story' && (
+                      <>
+                        <Choice label="Genre" value={project.genre} options={GENRES} onChange={genre => patch({ genre })} />
+                        <Choice label="Tone" value={project.tone} options={TONES} onChange={tone => patch({ tone })} />
+                        <Field label="Audience" value={project.audience} onChange={audience => patch({ audience })} />
+                        <Field label="Theme" value={project.theme} onChange={theme => patch({ theme })} />
+                        <Field label="What the story is about / premise" value={project.premise} onChange={premise => patch({ premise })} rows={5} placeholder="Who wants what, what stops them, and what happens if they fail?" />
+                      </>
+                    )}
                     <Field label="Visual style / independent art direction" value={project.visualStyle} onChange={visualStyle => patch({ visualStyle })} rows={5} placeholder="For example: hand-painted 2D animation, watercolor backgrounds, clean ink contours, warm muted palette…" />
                     <div className="md:col-span-2 rounded-lg border border-border bg-bg-tertiary/50 p-3 space-y-2">
                       <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
@@ -2990,9 +3132,16 @@ export function StoryLabPanel() {
                         </button>
                       </div>
                     </div>
-                    <div className="md:col-span-2"><Field label="Logline" value={project.logline} onChange={logline => patch({ logline })} rows={2} /></div>
-                    <div className="md:col-span-2"><Field label="Synopsis" value={project.synopsis} onChange={synopsis => patch({ synopsis })} rows={8} /></div>
-                    <div className="md:col-span-2"><Field label="Ending / final image" value={project.ending} onChange={ending => patch({ ending })} rows={3} /></div>
+                    <div className="md:col-span-2 border-t border-border pt-3">
+                      <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                        {project.projectType === 'full_story' ? 'Story treatment' : 'Tratamiento generado y editable'}
+                      </p>
+                      <div className="space-y-3">
+                        <Field label="Logline" value={project.logline} onChange={logline => patch({ logline })} rows={2} />
+                        <Field label="Synopsis" value={project.synopsis} onChange={synopsis => patch({ synopsis })} rows={8} />
+                        <Field label="Ending / final image" value={project.ending} onChange={ending => patch({ ending })} rows={3} />
+                      </div>
+                    </div>
                   </div>
                   <ProviderPanel project={project} patch={patch} />
                 </div>
@@ -3250,7 +3399,11 @@ export function StoryLabPanel() {
                 <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-3 mb-4">
                   <div>
                     <h2 className="text-lg font-semibold text-text-primary">Music bible</h2>
-                    <p className="text-xs text-text-muted mt-1">LLM-authored ambience, character presentation themes and three story songs. Suggestions cost no MiniMax music credits until you generate audio.</p>
+                    <p className="text-xs text-text-muted mt-1">
+                      {project.projectType === 'music_video'
+                        ? 'One LLM-authored song built from the creative brief, ready to edit, generate and turn into a videoclip. No MiniMax music credits are used until you generate audio.'
+                        : 'LLM-authored ambience, character presentation themes and three story songs. Suggestions cost no MiniMax music credits until you generate audio.'}
+                    </p>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2 xl:max-w-[760px]">
                     <input className={`${input} sm:w-72`} value={instruction}
@@ -3609,6 +3762,7 @@ export function StoryLabPanel() {
                   <p className="text-xs text-text-muted mt-1">Adapt the same approved material without destroying the source story.</p>
                 </div>
                 <div className="grid md:grid-cols-2 gap-4">
+                  {project.projectType === 'full_story' && (
                   <div className={`${panel} space-y-3`}>
                     <BookOpen size={26} className="text-accent-blue" />
                     <h3 className="font-semibold text-text-primary">Comic adaptation</h3>
@@ -3655,10 +3809,14 @@ export function StoryLabPanel() {
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={() => stageComic(false)}><ChevronRight size={13} /> Open in Comic Director</button>
                     <p className="text-[9px] text-text-muted">Complete generation creates the plan and artwork and may consume provider credits. Director mode lets you review every field first.</p>
                   </div>
+                  )}
+                  {project.projectType !== 'music_video' && (
                   <div className={`${panel} space-y-3`}>
                     <Film size={26} className="text-purple-400" />
-                    <h3 className="font-semibold text-text-primary">Film adaptation</h3>
-                    <p className="text-xs text-text-muted">Creates a short narrative episode instead of compressing the whole story. The cast, world and visual references remain attached.</p>
+                    <h3 className="font-semibold text-text-primary">{project.projectType === 'quick_video' ? 'Vídeo rápido' : 'Film adaptation'}</h3>
+                    <p className="text-xs text-text-muted">{project.projectType === 'quick_video'
+                      ? 'Convierte directamente el concepto, diálogo y 3–8 momentos en un vídeo ensamblado, conservando protagonistas, lugar y estilo.'
+                      : 'Creates a short narrative episode instead of compressing the whole story. The cast, world and visual references remain attached.'}</p>
                     <textarea className={input} rows={4} value={filmDirection} onChange={event => setFilmDirection(event.target.value)} aria-label="Short-film episode direction" />
                     <label className="block text-[10px] text-text-muted">Target duration · seconds
                       <input
@@ -3734,10 +3892,12 @@ export function StoryLabPanel() {
                         </span>
                       </span>
                     </label>
-                    <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmImageReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate complete short film</button>
-                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> Open in Short Film Director</button>
+                    <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmImageReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
+                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> {project.projectType === 'quick_video' ? 'Abrir en Director' : 'Open in Short Film Director'}</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
                   </div>
+                  )}
+                  {project.projectType !== 'quick_video' && (
                   <div className={`${panel} space-y-3 md:col-span-2`}>
                     <div className="flex items-start gap-3">
                       <Music size={26} className="shrink-0 text-pink-400" />
@@ -3938,6 +4098,7 @@ export function StoryLabPanel() {
                       </div>
                     )}
                   </div>
+                  )}
                   <div className="hidden" aria-hidden="true">
                     <Music size={26} className="text-pink-400" />
                     <h3 className="font-semibold text-text-primary">Musical trailer</h3>

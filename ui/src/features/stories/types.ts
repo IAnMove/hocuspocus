@@ -8,6 +8,8 @@ export type StoryWritingProvider =
 export type StoryImageProvider = 'maestro' | 'minimax'
 export type StoryApprovalState = 'draft' | 'approved'
 export type StoryWorkflowMode = 'guided' | 'automatic'
+export type StoryProjectType = 'full_story' | 'music_video' | 'quick_video'
+export type StoryQuickFormat = 'dialogue' | 'meme' | 'parody' | 'sketch' | 'viral' | 'announcement'
 export type StoryAssetKind = 'world' | 'location' | 'character' | 'prop' | 'style' | 'ignore'
 
 export interface StoryVisualAsset {
@@ -175,6 +177,18 @@ export interface StoryProject {
   revision: number
   sectionVersions: Record<'overview' | 'world' | 'characters' | 'relationships' | 'structure', number>
   title: string
+  projectType: StoryProjectType
+  creativeBrief: {
+    context: string
+    performer: string
+    musicStyle: string
+    songStory: string
+    subjects: string
+    setting: string
+    action: string
+    quickFormat: StoryQuickFormat
+    durationSeconds: number
+  }
   language: string
   genre: string
   tone: string
