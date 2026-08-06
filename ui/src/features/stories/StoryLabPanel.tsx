@@ -428,14 +428,21 @@ function SectionHeader({
         <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
         <p className="text-xs text-text-muted mt-1">{description}</p>
       </div>
-      <div className="flex flex-col sm:flex-row gap-2 lg:max-w-[620px]">
-        <input className={`${input} sm:w-72`} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="Optional regeneration instruction…" />
-        <button className={button} disabled={Boolean(busy)} onClick={() => onGenerate(scope)}>
-          {busy === scope ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate section
-        </button>
-        <button className={`${button} ${approved ? 'border-emerald-500 text-emerald-400' : ''}`} onClick={onApprove}>
-          <Check size={13} /> {approved ? 'Approved' : 'Approve'}
-        </button>
+      <div className="lg:max-w-[680px]">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input className={`${input} sm:w-72`} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="Optional regeneration instruction…" />
+          <button className={button} disabled={Boolean(busy)} onClick={() => onGenerate(scope)}
+            title="Uses the LLM to generate or rewrite this section's text. It does not generate images.">
+            {busy === scope ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate text
+          </button>
+          <button className={`${button} ${approved ? 'border-emerald-500 text-emerald-400' : ''}`} onClick={onApprove}
+            title="Confirms the current version of this section. It does not generate content.">
+            <Check size={13} /> {approved ? 'Approved' : 'Approve'}
+          </button>
+        </div>
+        <p className="mt-1.5 text-[9px] leading-relaxed text-text-muted">
+          LLM text only: generates or rewrites this section's fields and preserves existing image references; it does not render images. Guided mode lets you review the draft before applying it. Approve only confirms the current version.
+        </p>
       </div>
     </div>
   )
@@ -4365,6 +4372,9 @@ function CompactVideoWorkspace({
               ? 'Aquí sólo viven el entorno visual, el artista o protagonistas y los momentos que acompañarán la canción. No necesitas una biblia de mundo ni relaciones dramáticas.'
               : 'Aquí sólo viven la localización, las personas que deben aparecer y la sucesión breve de acciones o diálogo. Los campos internos compatibles con Director se mantienen detrás de esta vista.'}
           </p>
+          <p className="mt-2 rounded-md border border-accent-blue/20 bg-accent-blue/5 px-2.5 py-1.5 text-[9px] leading-relaxed text-text-muted">
+            <span className="font-medium text-accent-blue">Preparar = sólo texto con LLM.</span> Puede reescribir los campos del bloque, pero conserva las referencias. Únicamente los botones “Generar imagen” o “Crear identidad” renderizan imágenes.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button className={button} onClick={() => navigate('assets')}><ImagePlus size={13} /> Importar imágenes</button>
@@ -4409,7 +4419,8 @@ function CompactVideoWorkspace({
             </div>
           </details>
           <div className="flex flex-wrap gap-2">
-            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('world')}>
+            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('world')}
+              title="Genera o reescribe sólo los textos del entorno mediante el LLM; no renderiza imágenes.">
               {busy === 'world' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar entorno
             </button>
             <button className={button} disabled={Boolean(imageBusy) || referenceBatchBusy || !project.world.visualPrompt.trim()}
@@ -4433,7 +4444,8 @@ function CompactVideoWorkspace({
             {status(castReady, isSectionApproved('characters'))}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('characters')}>
+            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('characters')}
+              title="Genera o reescribe sólo los textos de los sujetos mediante el LLM; conserva sus imágenes.">
               {busy === 'characters' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar sujetos
             </button>
             <button className={button} onClick={() => update(current => { current.characters.push(emptyCharacter()); return current })}>
@@ -4462,7 +4474,8 @@ function CompactVideoWorkspace({
             {status(sequenceReady, isSectionApproved('structure'))}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('structure')}>
+            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('structure')}
+              title="Genera o reescribe sólo la secuencia escrita mediante el LLM; no renderiza imágenes ni vídeo.">
               {busy === 'structure' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar secuencia
             </button>
             <button className={button} onClick={() => update(current => {
