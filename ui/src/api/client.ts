@@ -1119,6 +1119,7 @@ export interface DirectorV2PlanRequest {
   video_model?: string
   seamless?: boolean
   multishot_lora_mode?: boolean
+  music_video_treatment?: import('../types').MusicVideoTreatment
   director_flags?: Record<string, boolean>
 }
 
@@ -2547,6 +2548,8 @@ export async function planClipPromptsAndImages(params: {
   speaker_mappings?: Record<string, { name: string; role: string }>
   prompt_type?: 'image' | 'video' | 'both'
   existing_image_prompts?: string[]
+  video_model?: string
+  music_video_treatment?: import('../types').MusicVideoTreatment
 }): Promise<{ clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-prompts-and-images`, {
     method: 'POST',

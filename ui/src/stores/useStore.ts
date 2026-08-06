@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, ShortFilmCharacter, ShortFilmPath, CivitAIModel, CivitAIDownload, PipelineListItem, SavedPipelineState, SystemDetectResponse, SystemStats } from '../types'
+import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, SavedPipelineState, SystemDetectResponse, SystemStats } from '../types'
 import * as api from '../api/client'
 import { applyTheme, getStoredTheme, type ThemeId } from '../lib/theme'
 
@@ -1152,6 +1152,8 @@ interface AppState {
   directorPlannedClips: PlannedClip[]
   directorEnergyBias: number
   directorPacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
+  directorMusicVideoTreatment: MusicVideoTreatment
+  setDirectorMusicVideoTreatment: (partial: Partial<MusicVideoTreatment>) => void
   directorClipPlans: ClipPlan[]
   directorSceneDescription: string
   directorLoading: boolean
@@ -4912,6 +4914,22 @@ export const useStore = create<AppState>((set, get) => ({
   directorPlannedClips: [],
   directorEnergyBias: 0,
   directorPacingProfile: 'balanced',
+  directorMusicVideoTreatment: {
+    mode: 'hybrid',
+    performer_presence: 60,
+    lip_sync: 'frequent',
+    recurring_sets: ['Main performance set', 'Story world', 'Bridge contrast set'],
+    wardrobe: '',
+    palette: '',
+    camera_language: 'Controlled cinematic movement; intimate verses and bold chorus coverage',
+    recurring_motif: '',
+    chorus_signature: 'Return to the main performance set with direct-to-camera delivery and the boldest lighting',
+    surrealism: 35,
+    forbidden_elements: '',
+  },
+  setDirectorMusicVideoTreatment: (partial) => set(state => ({
+    directorMusicVideoTreatment: { ...state.directorMusicVideoTreatment, ...partial },
+  })),
   directorClipPlans: [],
   directorSceneDescription: '',
   directorLoading: false,
@@ -5814,6 +5832,7 @@ export const useStore = create<AppState>((set, get) => ({
             speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
             image_model: get().selectedModelPerMode.image || undefined,
             video_model: get().selectedModelPerMode.video || undefined,
+            music_video_treatment: get().directorMusicVideoTreatment,
             prompt_type: 'both',
           })
         } finally {
@@ -5835,6 +5854,8 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
           prompt_type: 'both',
+          music_video_treatment: get().directorMusicVideoTreatment,
+          video_model: get().selectedModelPerMode.video || undefined,
         })
         plans = result.clip_plans.map(p => ({
           video_prompt: p.video_prompt || '',
@@ -5897,6 +5918,8 @@ export const useStore = create<AppState>((set, get) => ({
         speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
         prompt_type: 'video',
         existing_image_prompts: existingImagePrompts,
+        music_video_treatment: get().directorMusicVideoTreatment,
+        video_model: get().selectedModelPerMode.video || undefined,
       })
       // Merge video prompts into existing clip plans
       const updatedPlans = directorClipPlans.map((plan, i) => ({
@@ -6264,6 +6287,19 @@ export const useStore = create<AppState>((set, get) => ({
       directorPlannedClips: [],
       directorEnergyBias: 0,
       directorPacingProfile: 'balanced',
+      directorMusicVideoTreatment: {
+        mode: 'hybrid',
+        performer_presence: 60,
+        lip_sync: 'frequent',
+        recurring_sets: ['Main performance set', 'Story world', 'Bridge contrast set'],
+        wardrobe: '',
+        palette: '',
+        camera_language: 'Controlled cinematic movement; intimate verses and bold chorus coverage',
+        recurring_motif: '',
+        chorus_signature: 'Return to the main performance set with direct-to-camera delivery and the boldest lighting',
+        surrealism: 35,
+        forbidden_elements: '',
+      },
       directorClipPlans: [],
       directorSceneDescription: '',
       directorLoading: false,
@@ -7627,6 +7663,9 @@ export const useStore = create<AppState>((set, get) => ({
       narrative_mode: shortFilmNarrative,
       visual_style: shortFilmVisualStyle || undefined,
       preserve_visual_style: shortFilmPreserveVisualStyle,
+      music_video_treatment: pipelineType === 'music_video'
+        ? state.directorMusicVideoTreatment
+        : undefined,
 
       // Image gen settings
       image_model: selectedModelPerMode.image || 'flux2_klein_9b',

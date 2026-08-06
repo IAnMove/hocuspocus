@@ -3778,6 +3778,8 @@ def plan_clip_prompts_and_images(
     speaker_mappings: Optional[dict] = None,
     prompt_type: str = "both",
     existing_image_prompts: Optional[list] = None,
+    video_model: str = "",
+    music_video_treatment: Optional[dict] = None,
 ) -> list:
     """Generate per-clip prompts.  Supports three modes via *prompt_type*:
 
@@ -3872,7 +3874,11 @@ def plan_clip_prompts_and_images(
             return content
         return ""
 
-    video_guide = _load_guide("LTX-2_PROMPTING_GUIDE_Embedded_Audio.MD")
+    is_ltx = str(video_model or "").lower().startswith(("ltx2", "ltxv"))
+    video_guide = _load_guide(
+        "LTX-2_PROMPTING_GUIDE_Embedded_Audio.MD"
+        if is_ltx else "director/music_video_treatment_rules.md"
+    )
     image_guide = _load_guide("QWEN IMAGE EDIT PROMPTING GUIDE.md")
 
     guide_sections = ""
@@ -3910,10 +3916,19 @@ def plan_clip_prompts_and_images(
     )
 
     # Shared rules for all music video modes
+    try:
+        from services.director.planners.music_video import normalize_music_video_treatment
+        normalized_treatment = normalize_music_video_treatment(music_video_treatment)
+    except Exception:
+        normalized_treatment = music_video_treatment or {}
+    treatment_text = json.dumps(normalized_treatment, ensure_ascii=False)
     shared_rules = (
         "- Use the Scene Concept as your PRIMARY guide for locations, outfits, "
         "props, and activities.\n"
         "- Use the lyrics to inspire mood and visual metaphors, NOT literal text.\n"
+        "- Follow this editable treatment: " + treatment_text + "\n"
+        "- Use controlled recurrence: return to the same chorus set and motif; "
+        "vary coverage inside it instead of inventing an unrelated world.\n"
         "- If a clip says 'Performer:', that person must appear.\n"
         f"{char_rule}\n"
         "- Do NOT put lyrics or spoken words in prompts.\n"
@@ -3964,7 +3979,7 @@ def plan_clip_prompts_and_images(
                 "RULES:\n"
                 f"{shared_rules}"
                 "- Vary shots creatively — mix close-ups, wide shots, different angles.\n"
-                "- Consecutive clips should feel visually DIFFERENT.\n"
+                "- Consecutive clips need distinct coverage, but recurring sets, wardrobe and motifs stay recognizable.\n"
                 "- Instrumental clips can use establishing shots, environment details, "
                 "or abstract visuals.\n"
                 f"{guide_sections}\n"
@@ -4031,7 +4046,7 @@ def plan_clip_prompts_and_images(
             f"{shared_rules}"
             "- YOU choose camera angles, movements, and shot composition.\n"
             "- Vary shots creatively — mix close-ups, wide shots, tracking shots, etc.\n"
-            "- Consecutive clips should feel visually DIFFERENT.\n"
+            "- Consecutive clips need distinct coverage, but recurring sets, wardrobe and motifs stay recognizable.\n"
             "- Instrumental clips can use establishing shots, environment details, "
             "or abstract visuals.\n"
             "- Do NOT start I prompts with 'Edit the provided image'.\n"

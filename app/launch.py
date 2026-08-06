@@ -6755,6 +6755,8 @@ async def director_plan_prompts_and_images(request: Request):
             speaker_mappings=body.get("speaker_mappings"),
             prompt_type=body.get("prompt_type", "both"),
             existing_image_prompts=body.get("existing_image_prompts"),
+            video_model=body.get("video_model", ""),
+            music_video_treatment=body.get("music_video_treatment"),
         )
         return {"clip_plans": clip_plans}
     except Exception as e:
@@ -7159,6 +7161,7 @@ _DIRECTOR_V2_PLANNER_KEYS = (
     "preserve_visual_style",
     "platform", "style", "transcript", "prompt_type", "image_model",
     "video_model", "seamless", "multishot_lora_mode",
+    "music_video_treatment",
 )
 
 

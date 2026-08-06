@@ -10,7 +10,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.services.director.planners.comic_movie import ComicMoviePlanner
-from app.services.director.planners.music_video import MusicVideoPlanner
+from app.services.director.planners.music_video import (
+    MusicVideoPlanner,
+    build_music_video_coverage,
+    normalize_music_video_treatment,
+)
 from app.services.director.planners.short_film import ShortFilmPlanner
 from app.services.director.schema import CharacterProfile
 from app.services import director_pipeline
@@ -70,6 +74,38 @@ class _NoLlmShortFilmPlanner(ShortFilmPlanner):
 
 
 class TestDirectorV2StoryRefs(unittest.TestCase):
+    def test_music_video_treatment_normalizes_editable_fields(self):
+        treatment = normalize_music_video_treatment({
+            "mode": "performance",
+            "performer_presence": 140,
+            "recurring_sets": "stage\nrooftop",
+            "lip_sync": "occasional",
+        })
+        self.assertEqual(treatment["mode"], "performance")
+        self.assertEqual(treatment["performer_presence"], 100)
+        self.assertEqual(treatment["recurring_sets"], ["stage", "rooftop"])
+        self.assertEqual(treatment["lip_sync"], "occasional")
+
+    def test_choruses_reuse_signature_set_with_controlled_coverage(self):
+        clips = [
+            {"label": "verse"},
+            {"label": "chorus"},
+            {"label": "verse"},
+            {"label": "chorus"},
+            {"label": "bridge"},
+        ]
+        treatment = normalize_music_video_treatment({
+            "mode": "hybrid",
+            "performer_presence": 60,
+            "recurring_sets": ["gold stage", "city", "white void"],
+        })
+        coverage = build_music_video_coverage(clips, treatment)
+        self.assertEqual(coverage[1]["recurring_set"], "gold stage")
+        self.assertEqual(coverage[3]["recurring_set"], "gold stage")
+        self.assertTrue(coverage[1]["reuse_chorus_signature"])
+        self.assertTrue(coverage[3]["performer_present"])
+        self.assertEqual(coverage[4]["recurring_set"], "white void")
+
     def test_music_video_rejects_empty_plans_instead_of_fake_reframe_prompts(self):
         with self.assertRaisesRegex(RuntimeError, "returned 0 valid shots; 2 were required"):
             MusicVideoPlanner._validate_llm_shot_plans([], 2)
@@ -153,6 +189,7 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             "video_model": "ltx2_22B_distilled_1_1",
             "visual_style": "2D anime, clean cel shading",
             "preserve_visual_style": True,
+            "music_video_treatment": {"mode": "hybrid"},
         }
         self.assertEqual(_director_v2_planner_kwargs(body), body)
 

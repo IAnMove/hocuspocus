@@ -825,6 +825,23 @@ export interface ClipPlan {
   metadata?: Record<string, unknown>
 }
 
+export type MusicVideoMode = 'performance' | 'narrative' | 'hybrid' | 'abstract'
+export type MusicVideoLipSync = 'frequent' | 'occasional' | 'none'
+
+export interface MusicVideoTreatment {
+  mode: MusicVideoMode
+  performer_presence: number
+  lip_sync: MusicVideoLipSync
+  recurring_sets: string[]
+  wardrobe: string
+  palette: string
+  camera_language: string
+  recurring_motif: string
+  chorus_signature: string
+  surrealism: number
+  forbidden_elements: string
+}
+
 /** Partial plan returned from single-phase LLM calls */
 export interface PartialClipPlan {
   video_prompt?: string

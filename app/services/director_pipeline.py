@@ -4351,6 +4351,7 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         "multishot_lora_mode": multishot_lora_mode,
         "visual_style": params.get("visual_style", ""),
         "preserve_visual_style": params.get("preserve_visual_style", False),
+        "music_video_treatment": params.get("music_video_treatment"),
     }
 
     if pipeline_type == "comic_movie":
