@@ -105,6 +105,7 @@ if _hf_token_path:
 print("[Maestro] Importing WanGP engine...")
 import wgp
 from services import model3d_service, minimax_h3_service, minimax_image_service
+from services import debug_trace
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 print(f"[Maestro] WanGP loaded: {len(wgp.displayed_model_types)} models available")
@@ -201,6 +202,18 @@ logging.getLogger("uvicorn.access").addFilter(_QuietAccessFilter())
 
 api = FastAPI(title="Maestro API", version="1.0.0")
 
+debug_trace.configure(
+    enabled=lambda: bool(
+        wgp.server_config.get("services", {}).get("debug_trace_enabled", False)
+    ),
+    log_dir=lambda: os.path.join(os.path.dirname(_app_dir), "logs", "debug"),
+)
+debug_trace.start_session(
+    workspace=wgp.server_config.get("services", {}).get("active_workspace", "default"),
+    config_file=wgp.server_config_filename,
+    app_version=api.version,
+)
+
 # Upload size caps — enforced in upload handlers. Tuned for real-world
 # media the app actually ingests; anything larger is almost certainly
 # abuse or a user mistake.
@@ -245,6 +258,58 @@ api.add_middleware(
     allow_headers=["*"],
 )
 
+
+@api.middleware("http")
+async def trace_user_mutations(request: Request, call_next):
+    """Record reconstructible user/API actions while debug tracing is on."""
+    should_trace = (
+        debug_trace.is_enabled()
+        and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.url.path != "/api/v1/debug/user-action"
+    )
+    event_id = uuid.uuid4().hex if should_trace else ""
+    started = time.monotonic()
+    if should_trace:
+        content_type = request.headers.get("content-type", "")
+        request_body = None
+        if "application/json" in content_type:
+            try:
+                raw_body = await request.body()
+                request_body = json.loads(raw_body) if raw_body else None
+            except Exception as exc:
+                request_body = {"parse_error": str(exc)}
+        elif content_type:
+            request_body = f"<{content_type}; body omitted>"
+        debug_trace.trace_event(
+            "user_action", "api_request", event_id=event_id, phase="request",
+            method=request.method, path=request.url.path,
+            query=dict(request.query_params), body=request_body,
+        )
+    try:
+        with debug_trace.context_scope(
+            request_id=event_id or None,
+            http_method=request.method,
+            http_path=request.url.path,
+        ):
+            response = await call_next(request)
+    except Exception as exc:
+        if should_trace:
+            debug_trace.trace_event(
+                "user_action", "api_request", event_id=event_id, phase="error",
+                method=request.method, path=request.url.path,
+                duration_ms=round((time.monotonic() - started) * 1000, 2),
+                error={"type": type(exc).__name__, "message": str(exc)},
+            )
+        raise
+    if should_trace:
+        debug_trace.trace_event(
+            "user_action", "api_request", event_id=event_id, phase="response",
+            method=request.method, path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=round((time.monotonic() - started) * 1000, 2),
+        )
+    return response
+
 # --- Generation job tracking ---
 from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
@@ -266,6 +331,53 @@ _jobs: dict = {}
 _gen_lock = threading.Lock()
 _active_gen_states: dict = {}  # job_id -> wgp gen state dict (for abort signaling)
 _audio_analysis_execution_lock = threading.Lock()
+_H3_IDLE_SHUTDOWN_SECONDS = minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS
+
+
+def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
+    """Return queued/running GPU-generation jobs, excluding a terminalizing job."""
+    pending: list[dict] = []
+    for candidate_id, candidate in _jobs.items():
+        if candidate_id == exclude_job_id:
+            continue
+        if candidate.get("status") not in {"queued", "running"}:
+            continue
+        # Auxiliary tasks such as audio analysis share the status dictionary
+        # but do not own the GPU generation lock or require a model runtime.
+        if not candidate.get("params", {}).get("model_type"):
+            continue
+        pending.append(candidate)
+    return pending
+
+
+def _release_h3_when_queue_allows(job_id: str) -> None:
+    """Keep H3 warm for its own queue, but promptly yield VRAM to other models."""
+    pending = _pending_gpu_jobs(exclude_job_id=job_id)
+    h3_pending = any(
+        candidate.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
+        for candidate in pending
+    )
+    if h3_pending:
+        minimax_h3_service.cancel_idle_shutdown()
+        print("[MiniMax H3] Keeping runtime warm for a queued H3 job.")
+        return
+
+    if pending:
+        print("[MiniMax H3] Releasing runtime for a queued non-H3 GPU job.")
+        minimax_h3_service.stop_runtime()
+        return
+
+    print(
+        f"[MiniMax H3] Queue idle; releasing runtime in "
+        f"{int(_H3_IDLE_SHUTDOWN_SECONDS)}s unless another H3 job arrives."
+    )
+    minimax_h3_service.schedule_idle_shutdown(
+        _H3_IDLE_SHUTDOWN_SECONDS,
+        lambda: any(
+            candidate.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
+            for candidate in _pending_gpu_jobs(exclude_job_id=job_id)
+        ),
+    )
 
 
 def _interrupt_wan_model() -> None:
@@ -6043,11 +6155,18 @@ def get_services_config():
         "use_director_v2": services.get("use_director_v2", True),
         "nsfw_mode": nsfw,
         "nsfw_accepted_at": services.get("nsfw_accepted_at", None),
-        # Default flipped from "off" to "third_pass" — Pass 3 polish runs
-        # each generated prompt through a model-specific dialect pass after
-        # planning, which produces materially better LTX-2 / Flux output
-        # than relying on Pass 2 alone with a single hardcoded dialect.
-        "director_prompt_polish": services.get("director_prompt_polish", "third_pass"),
+        # Third-pass polish is opt-in. It performs one extra LLM call per
+        # generated prompt (normally two per shot), which made a 40-shot plan
+        # issue 80 sequential calls. Director's validated planner prompts are
+        # the safe, fast default; users can still enable model-dialect polish.
+        "director_prompt_polish": services.get("director_prompt_polish", "off"),
+        # Safe workflow overlap: every local GPU and remote server keeps
+        # capacity one; only genuinely different resources run together.
+        "workflow_parallelism_enabled": services.get("workflow_parallelism_enabled", True),
+        # Structured JSONL tracing of LLM calls and user actions. Disabled for
+        # every fresh install; intended for temporary diagnosis only.
+        "debug_trace_enabled": services.get("debug_trace_enabled", False),
+        "debug_trace_log_path": debug_trace.current_log_path(),
         "civitai_api_key": _mask_key(services.get("civitai_api_key", "")),
         "civitai_api_key_set": bool(services.get("civitai_api_key", "")),
         # Voice Reference is a stable, user-facing capability now. Fresh
@@ -6114,6 +6233,7 @@ async def update_services_config(request: Request):
         "google_api_key", "openai_api_key", "deepseek_api_key", "compatible_api_key",
         "compatible_base_url", "anthropic_api_key", "minimax_api_key",
         "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
+        "debug_trace_enabled", "workflow_parallelism_enabled",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
         "show_experimental", "auto_performance", "storage_allow_linked_removal",
         "director_multishot_lora_mode",
@@ -6155,6 +6275,21 @@ async def update_services_config(request: Request):
         f.write(json.dumps(wgp.server_config, indent=4))
 
     return {"status": "ok", "updated": updated}
+
+
+@api.post("/api/v1/debug/user-action")
+async def record_debug_user_action(request: Request):
+    """Record non-API UI actions (buttons/navigation), never typed values."""
+    if not debug_trace.is_enabled():
+        return {"status": "disabled"}
+    body = await request.json()
+    debug_trace.trace_event(
+        "user_action", "ui_control",
+        control=str(body.get("control") or "")[:500],
+        control_type=str(body.get("control_type") or "")[:80],
+        view=str(body.get("view") or "")[:500],
+    )
+    return {"status": "ok"}
 
 
 # ============================================================================
@@ -7040,6 +7175,15 @@ def _parse_lyria_output(raw):
     return match.group(1).strip() if match else ""
 
 
+def _optional_lyria_warning(lyria_prompt: str, requested: bool) -> str:
+    """Describe a missing optional Lyria result without rejecting the song."""
+    if requested and not re.search(
+        r"\[\d+:\d{2}\s*-\s*\d+:\d{2}\]", str(lyria_prompt or ""),
+    ):
+        return "The LLM omitted the optional timed Lyria prompt; MiniMax style and lyrics were preserved."
+    return ""
+
+
 def _minimax_song_request_prompt(body: dict, description: str, instrumental: bool) -> str:
     """Build a labelled brief so references never leak into the final provider prompt."""
     model = str(body.get("model") or "music-3.0").strip()
@@ -7053,6 +7197,10 @@ def _minimax_song_request_prompt(body: dict, description: str, instrumental: boo
         f"TARGET MODEL: {model}",
         f"LYRICS LANGUAGE: {language}",
         f"TARGET DURATION: approximately {duration} seconds",
+        "DURATION NOTE: MiniMax Music has no exact duration API parameter. Treat the target "
+        "as a strict lyric and arrangement budget: keep the section count and sung lines "
+        "proportionate to it; do not add repeated verses, choruses or extended outros merely "
+        "to retell more story.",
         f"CORE REQUEST:\n{description[:8000]}",
     ]
     labelled_inputs = (
@@ -7110,7 +7258,6 @@ async def llm_write_song(request: Request):
         image_paths = [body["reference_image_path"]]
     image_paths = [p for p in image_paths if p and os.path.isfile(p)]
 
-    _ensure_llm_loaded()
     from services.guide_loader import load_guide
     include_lyria = False
     if target == "minimax":
@@ -7127,16 +7274,31 @@ async def llm_write_song(request: Request):
     else:
         system_prompt = load_guide("music", "song_writer") or _SONG_WRITER_FALLBACK
         user_prompt = description
+    llm_override = _comic_writing_llm(body) if body.get("writingProvider") else None
     try:
-        raw = llm_service.generate(
-            prompt=user_prompt,
-            system_prompt=system_prompt,
-            max_new_tokens=body.get("max_new_tokens", 3000 if include_lyria else 1024),
-            temperature=body.get("temperature", 0.85),
-            top_p=body.get("top_p", 0.9),
-            seed=body.get("seed"),
-            image_paths=image_paths or None,
-        )
+        if llm_override:
+            raw = llm_service.generate_openai_compatible(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                model_id=llm_override["model"],
+                base_url=llm_override["base_url"],
+                api_key=llm_override["api_key"],
+                max_new_tokens=body.get("max_new_tokens", 3000 if include_lyria else 1024),
+                temperature=body.get("temperature", 0.85),
+                top_p=body.get("top_p", 0.9),
+                image_paths=image_paths or None,
+            )
+        else:
+            _ensure_llm_loaded()
+            raw = llm_service.generate(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                max_new_tokens=body.get("max_new_tokens", 3000 if include_lyria else 1024),
+                temperature=body.get("temperature", 0.85),
+                top_p=body.get("top_p", 0.9),
+                seed=body.get("seed"),
+                image_paths=image_paths or None,
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     style, lyrics = _parse_song_output(raw, instrumental)
@@ -7147,11 +7309,14 @@ async def llm_write_song(request: Request):
             raise HTTPException(status_code=502, detail="The LLM did not return a valid MiniMax style prompt")
         if not instrumental and not lyrics:
             raise HTTPException(status_code=502, detail="The LLM did not return MiniMax lyrics")
-        if include_lyria and not re.search(
-            r"\[\d+:\d{2}\s*-\s*\d+:\d{2}\]", lyria_prompt,
-        ):
-            raise HTTPException(status_code=502, detail="The LLM did not return a timed Lyria prompt")
-    return {"style": style, "lyrics": lyrics, "lyria_prompt": lyria_prompt, "raw": raw}
+    lyria_warning = _optional_lyria_warning(lyria_prompt, include_lyria)
+    return {
+        "style": style,
+        "lyrics": lyrics,
+        "lyria_prompt": lyria_prompt,
+        "warnings": [lyria_warning] if lyria_warning else [],
+        "raw": raw,
+    }
 
 
 def _build_music_gen_params(model_type: str, lyrics: str, style: str, duration_seconds, seed) -> dict:
@@ -8270,7 +8435,16 @@ async def director_plan_prompts_and_images(request: Request):
             speaker_mappings=body.get("speaker_mappings"),
             prompt_type=body.get("prompt_type", "both"),
             existing_image_prompts=body.get("existing_image_prompts"),
+            video_model=body.get("video_model", ""),
+            music_video_treatment=body.get("music_video_treatment"),
         )
+        if body.get("video_model") == minimax_h3_service.MODEL_ID:
+            from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
+            clip_plans = adapt_clip_plans_for_h3(
+                clip_plans,
+                reference_mode=body.get("h3_reference_mode", "first_frame"),
+                audio_direction=body.get("h3_audio_prompt", ""),
+            )
         return {"clip_plans": clip_plans}
     except Exception as e:
         traceback.print_exc()
@@ -8335,6 +8509,13 @@ async def director_plan_short_film_prompts(request: Request):
             prompt_type=body.get("prompt_type", "both"),
             existing_image_prompts=body.get("existing_image_prompts"),
         )
+        if body.get("video_model") == minimax_h3_service.MODEL_ID:
+            from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
+            clip_plans = adapt_clip_plans_for_h3(
+                clip_plans,
+                reference_mode=body.get("h3_reference_mode", "first_frame"),
+                audio_direction=body.get("h3_audio_prompt", ""),
+            )
         return {"clip_plans": clip_plans}
     except Exception as e:
         traceback.print_exc()
@@ -8790,6 +8971,7 @@ _DIRECTOR_V2_PLANNER_KEYS = (
     "preserve_visual_style",
     "platform", "style", "transcript", "prompt_type", "image_model",
     "video_model", "seamless", "multishot_lora_mode",
+    "music_video_treatment",
 )
 
 
@@ -8805,6 +8987,17 @@ async def director_v2_plan(request: Request):
     """
     body = await request.json()
     skill_type = body.get("skill_type", body.get("pipeline_type", "music_video"))
+    tracking_id = str(body.get("activity_id") or "").strip()[:160]
+    from services import llm_service
+    if tracking_id:
+        estimated_shots = len(body.get("clips") or []) or int(body.get("target_scenes") or 0)
+        llm_service.begin_activity_tracking(
+            tracking_id,
+            phase="writing_scenes",
+            current=0,
+            total=estimated_shots,
+            detail="Writing the visual scenario and scene structure…",
+        )
 
     # Map legacy pipeline_type to skill_type
     skill_map = {
@@ -8819,7 +9012,6 @@ async def director_v2_plan(request: Request):
     try:
         _ensure_llm_loaded()
 
-        from services import llm_service
         from services.director.orchestrator import DirectorOrchestrator, DirectorFlags
 
         flags = DirectorFlags.from_dict(body.get("director_flags", {}))
@@ -8838,9 +9030,7 @@ async def director_v2_plan(request: Request):
         planner_kwargs["nsfw"] = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
 
         # Prompt polish mode: off | full_guide | light_guide | third_pass.
-        # Default flipped from "off" to "third_pass" — see /api/v1/services
-        # GET endpoint for full rationale.
-        polish_mode = services.get("director_prompt_polish", "third_pass")
+        polish_mode = services.get("director_prompt_polish", "off")
         video_model = body.get("video_model", "")
         image_model = body.get("image_model", "")
 
@@ -8859,10 +9049,22 @@ async def director_v2_plan(request: Request):
 
         # Plan
         plan = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: director.plan(skill_type, **planner_kwargs)
+            None,
+            lambda: llm_service.run_with_activity_tracking(
+                tracking_id,
+                lambda: director.plan(skill_type, **planner_kwargs),
+            ),
         )
 
         # Render
+        planned_shots = len(getattr(plan, "shots", []) or [])
+        llm_service.update_activity_tracking(
+            tracking_id,
+            phase="writing_prompts",
+            current=0,
+            total=planned_shots,
+            detail=f"Turning {planned_shots} scenes into image and video prompts…",
+        )
         has_reference = bool(
             body.get("reference_image_path")
             or body.get("character_ref_paths")
@@ -8880,12 +9082,36 @@ async def director_v2_plan(request: Request):
             # non-human descriptors (e.g. Lumi → the white unicorn) instead
             # of falling back to generic "the woman" / "the man".
             polish_chars = planner_kwargs.get("characters", []) or []
-            clip_plans = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: polish_prompts_third_pass(
-                    clip_plans, video_model, image_model, nsfw,
-                    video_loras=video_loras_activated, image_loras=image_loras_activated,
-                    characters=polish_chars,
+            llm_service.update_activity_tracking(
+                tracking_id,
+                phase="polishing_prompts",
+                current=0,
+                total=len(clip_plans),
+                detail=f"Polishing shot 1 of {len(clip_plans)}…",
+            )
+
+            def _report_polish_progress(current, total):
+                shot = clip_plans[max(0, min(current - 1, len(clip_plans) - 1))]
+                detail = str(shot.get("image_prompt") or shot.get("video_prompt") or "").strip()
+                llm_service.update_activity_tracking(
+                    tracking_id,
+                    phase="polishing_prompts",
+                    current=current,
+                    total=total,
+                    detail=detail[:1200],
                 )
+
+            clip_plans = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: llm_service.run_with_activity_tracking(
+                    tracking_id,
+                    lambda: polish_prompts_third_pass(
+                        clip_plans, video_model, image_model, nsfw,
+                        video_loras=video_loras_activated, image_loras=image_loras_activated,
+                        characters=polish_chars,
+                        progress_callback=_report_polish_progress,
+                    ),
+                ),
             )
 
         from services.director.policies import enforce_visual_style_on_clip_plans
@@ -8894,6 +9120,23 @@ async def director_v2_plan(request: Request):
             body.get("visual_style", ""),
             preserve=bool(body.get("preserve_visual_style", False)),
             has_reference=has_reference,
+        )
+        if video_model == minimax_h3_service.MODEL_ID:
+            from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
+            serialized_plan = plan.to_dict()
+            clip_plans = adapt_clip_plans_for_h3(
+                clip_plans,
+                serialized_plan.get("shots") or [],
+                reference_mode=body.get("h3_reference_mode", "first_frame"),
+                audio_direction=body.get("h3_audio_prompt", ""),
+            )
+        llm_service.update_activity_tracking(
+            tracking_id,
+            status="completed",
+            phase="completed",
+            current=len(clip_plans),
+            total=len(clip_plans),
+            detail=f"{len(clip_plans)} visual shot plans ready for review.",
         )
         return {
             "clip_plans": clip_plans,
@@ -8904,7 +9147,20 @@ async def director_v2_plan(request: Request):
     except Exception as e:
         import traceback
         traceback.print_exc()
+        llm_service.update_activity_tracking(
+            tracking_id, status="failed", detail=str(e), error=str(e)
+        )
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/api/v1/director/v2/plan/progress/{activity_id}")
+def director_v2_plan_progress(activity_id: str):
+    """Return live sub-step and provider-reported token usage for one plan."""
+    from services import llm_service
+    state = llm_service.get_activity_tracking(activity_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Planning activity not found")
+    return state
 
 
 @api.post("/api/v1/generate")
@@ -9081,6 +9337,11 @@ async def generate(request: Request):
         "out_dir": job_out_dir,
     }
     _jobs[job_id] = job
+
+    if body.get("model_type") == minimax_h3_service.MODEL_ID:
+        # Cancel any idle-release race as soon as the new H3 work enters the
+        # queue, not only once its thread acquires the GPU lock.
+        minimax_h3_service.cancel_idle_shutdown()
 
     # Non-daemon so generation survives browser disconnect during overnight runs
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
@@ -20873,6 +21134,29 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
             # MiniMax H3 runs through the isolated, quantized Comfy runtime.
             # It still uses Maestro's normal queue/status/cancel contract.
             if raw_params.get("model_type") == minimax_h3_service.MODEL_ID:
+                if raw_params.get("video_source"):
+                    job["message"] = "Capturing the source video's final frame…"
+                    source_path = _resolve_video_editor_source(raw_params["video_source"])
+                    anchor = minimax_h3_service.prepare_extend_anchor(
+                        raw_params,
+                        job_id,
+                        source_path,
+                        os.path.join(os.getcwd(), "uploads"),
+                    )
+                    # Replace the stored snapshot as well: update() would leave
+                    # removed Ref2VA keys behind and misreport the actual run.
+                    job["params"] = raw_params.copy()
+                    ignored = anchor["ignored_references"]
+                    ignored_note = f"; ignored {ignored} other reference(s)" if ignored else ""
+                    print(
+                        f"[MiniMax H3] Extend from video: captured final frame at "
+                        f"{anchor['time']:.3f}s as {anchor['path']}{ignored_note}. "
+                        "Continuing with FL2VA."
+                    )
+                # A queued H3 job can arrive while the previous one is inside
+                # its idle grace period. Cancel that pending release before
+                # acquiring/loading the sidecar.
+                minimax_h3_service.cancel_idle_shutdown()
                 wgp.release_model()
                 gc.collect()
                 if torch.cuda.is_available():
@@ -20894,9 +21178,11 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                     job["out_dir"],
                     _h3_progress,
                     lambda: is_cancel_requested(job),
-                    # Director owns one warm runtime across all of its H3
-                    # segments and releases it after final assembly.
-                    keep_runtime=bool(raw_params.get("_director_pipeline_id")),
+                    # Queue-aware release happens in this worker's finally
+                    # block, after it has inspected following jobs. Keep the
+                    # sidecar alive until that decision instead of stopping
+                    # it unconditionally inside the service.
+                    keep_runtime=True,
                 )
                 output_names = [os.path.basename(path) for path in generated]
                 record_job_outputs(job, output_names)
@@ -22354,6 +22640,14 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 # considered active and a second PRE launch remains blocked.
                 job["status"] = "cancelled"
                 job["message"] = "Cancelled"
+            if (
+                job.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
+                # Story Director deliberately keeps H3 alive between its
+                # sequential segments. Its wrapper schedules the same
+                # queue-aware idle release after final assembly.
+                and not job.get("params", {}).get("_director_pipeline_id")
+            ):
+                _release_h3_when_queue_allows(job_id)
 
 
 def _recast_video_frame_count(video_path):
@@ -24108,6 +24402,7 @@ def _generate_comic_director_json(
     stage: str,
     llm_override: dict | None = None,
     root_array_key: str | None = None,
+    image_paths: list[str] | None = None,
 ) -> dict:
     from services import llm_service
     # A streaming HTTP response resets the read timeout on every token.
@@ -24121,15 +24416,32 @@ def _generate_comic_director_json(
         "frequency_penalty": 0.25,
         "presence_penalty": 0.1,
         "json_schema": schema,
+        "image_paths": image_paths or [],
     }
     parse_error = None
     for attempt in range(1, 3):
         request = dict(common)
         if parse_error is not None:
+            # Remote OpenAI-compatible providers are stateless: they do not
+            # know what they emitted on the previous request.  Give the
+            # correction pass the actual response, rather than asking it to
+            # regenerate the whole document from scratch.  The cap prevents
+            # a pathological provider response from turning recovery into an
+            # unbounded prompt-token bill.
+            previous_response = raw.strip()
+            previous_limit = 16000
+            if len(previous_response) > previous_limit:
+                previous_response = (
+                    previous_response[:previous_limit]
+                    + "\n[previous response truncated for bounded JSON repair]"
+                )
             request["prompt"] = (
                 f"{prompt}\n\nJSON CORRECTION RETRY: Your previous response could not be "
-                "decoded as the required JSON object. Return exactly one complete JSON "
-                "object matching the supplied schema, with no prose, markdown or outer array."
+                "decoded as the required JSON object. Preserve every usable fact from the "
+                "previous response and repair only its JSON structure. Return exactly one "
+                "complete JSON object matching the supplied schema, with no prose, markdown "
+                "or outer array.\n\nPREVIOUS RESPONSE TO REPAIR:\n"
+                f"{previous_response}"
             )
             print(f"[Comic Director] Retrying malformed {stage} response once")
         if llm_override:
@@ -24248,7 +24560,7 @@ def _comic_writing_llm(body: dict) -> dict | None:
     }
 
 
-def _story_lab_schema(scope: str) -> dict:
+def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
     """Return the strict editable Story Lab payload requested for one stage."""
     string = {"type": "string"}
     string_array = {"type": "array", "items": string, "maxItems": 12}
@@ -24334,6 +24646,10 @@ def _story_lab_schema(scope: str) -> dict:
         ],
         "additionalProperties": False,
     }
+    beat_minimum = 3 if project_type == "quick_video" else 4 if project_type == "music_video" else 6
+    beat_maximum = 8 if project_type == "quick_video" else 10 if project_type == "music_video" else 14
+    music_minimum = 1 if project_type == "music_video" else 4
+    music_maximum = 1 if project_type == "music_video" else 16
     properties = {
         "overview": {
             "type": "object",
@@ -24347,11 +24663,11 @@ def _story_lab_schema(scope: str) -> dict:
         "world": world,
         "characters": {"type": "array", "items": character, "minItems": 1, "maxItems": 12},
         "relationships": {"type": "array", "items": relationship, "maxItems": 24},
-        "beats": {"type": "array", "items": beat, "minItems": 6, "maxItems": 14},
+        "beats": {"type": "array", "items": beat, "minItems": beat_minimum, "maxItems": beat_maximum},
         "music": {
             "type": "object",
             "properties": {
-                "cues": {"type": "array", "items": music_cue, "minItems": 4, "maxItems": 16},
+                "cues": {"type": "array", "items": music_cue, "minItems": music_minimum, "maxItems": music_maximum},
             },
             "required": ["cues"],
             "additionalProperties": False,
@@ -24377,8 +24693,35 @@ def _normalize_story_stage_ids(
     *,
     drop_unknown_relationships: bool = False,
 ) -> dict:
-    """Repair harmless LLM ID drift while keeping canonical project IDs stable."""
+    """Repair harmless LLM omissions and ID drift before validation."""
     normalized = copy.deepcopy(result)
+    if scope == "world" and isinstance(normalized.get("world"), dict):
+        locations = normalized["world"].get("locations")
+        if not isinstance(locations, list):
+            return normalized
+        for location in locations:
+            if not isinstance(location, dict):
+                continue
+            name = str(location.get("name") or "this location").strip()
+            description = str(
+                location.get("description") or location.get("purpose") or ""
+            ).strip()
+            # These are presentation-only fields.  When an otherwise useful
+            # location omits them, deterministic defaults are safer and
+            # cheaper than throwing away the whole world and asking the LLM
+            # to regenerate it.  The user can still edit both fields later.
+            if not isinstance(location.get("visualPrompt"), str) or not location["visualPrompt"].strip():
+                location["visualPrompt"] = " ".join(part for part in (
+                    name,
+                    description,
+                    "single coherent environment concept art, no text or labels",
+                ) if part)
+            if not isinstance(location.get("negativePrompt"), str) or not location["negativePrompt"].strip():
+                location["negativePrompt"] = (
+                    "text, lettering, captions, logos, UI, collage, contact sheet, grid"
+                )
+        return normalized
+
     if scope == "characters" and isinstance(normalized.get("characters"), list):
         used: set[str] = set()
         for index, character in enumerate(normalized["characters"]):
@@ -24486,6 +24829,7 @@ def _normalize_story_stage_ids(
 
 
 def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
+    project_type = str(project.get("projectType") or "full_story").strip().lower()
     if not isinstance(result, dict):
         return "response root is not a JSON object"
     key = "beats" if scope == "structure" else scope
@@ -24556,7 +24900,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
             str(item.get("id") or "").strip()
             for item in project.get("characters", []) if isinstance(item, dict)
         }
-        expected_count = len(character_ids) + 4
+        expected_count = 1 if project_type == "music_video" else len(character_ids) + 4
         if len(cues) != expected_count:
             return f"music must contain exactly {expected_count} cues"
         required_cue = {
@@ -24594,6 +24938,13 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
             ids.append(cue["id"])
         if len(ids) != len(set(ids)):
             return "music contains duplicate IDs"
+        if project_type == "music_video":
+            cue = cues[0]
+            if cue["kind"] != "story" or cue["targetId"] != "story":
+                return "music-video mode needs one story song"
+            if cue["instrumental"]:
+                return "the music-video song must include vocals"
+            return None
         world_cues = [cue for cue in cues if cue["kind"] == "world" and cue["targetId"] == "world"]
         character_targets = {
             cue["targetId"] for cue in cues if cue["kind"] == "character"
@@ -24617,7 +24968,11 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
     limits = {
         "characters": (1, 12),
         "relationships": (0, 24),
-        "structure": (6, 14),
+        "structure": (
+            (3, 8) if project_type == "quick_video"
+            else (4, 10) if project_type == "music_video"
+            else (6, 14)
+        ),
     }
     minimum, maximum = limits[scope]
     if len(value) < minimum or len(value) > maximum:
@@ -24652,7 +25007,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
 def _story_project_prompt_context(project: dict, scope: str) -> str:
     """Return bounded, valid JSON with editorial facts but no heavy runtime data."""
     overview_keys = (
-        "title", "language", "genre", "tone", "audience", "premise",
+        "title", "projectType", "creativeBrief", "language", "genre", "tone", "audience", "premise",
         "logline", "synopsis", "theme", "ending", "visualStyle",
         "enforceVisualStyle",
     )
@@ -24783,11 +25138,131 @@ def put_story_library(body: dict):
         ) from exc
 
 
+def _story_import_upload_path(value: str) -> str:
+    """Allow multimodal analysis only for files uploaded into Maestro."""
+    upload_dir = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
+    candidate = os.path.realpath(str(value or ""))
+    if candidate != upload_dir and not candidate.startswith(upload_dir + os.sep):
+        raise HTTPException(status_code=400, detail="Smart asset analysis only accepts Maestro uploads")
+    if not os.path.isfile(candidate):
+        raise HTTPException(status_code=400, detail="One imported asset is no longer available")
+    return candidate
+
+
+@api.post("/api/v1/stories/assets/analyze")
+async def analyze_story_assets(body: dict):
+    """Classify a reviewed batch of uploaded images against one Story bible."""
+    from services import llm_service
+    from services.story_asset_import import (
+        MAX_IMPORT_ASSETS, asset_import_schema, validate_asset_import_result,
+    )
+
+    raw_assets = body.get("assets") if isinstance(body.get("assets"), list) else []
+    if not raw_assets:
+        raise HTTPException(status_code=400, detail="Choose at least one image")
+    if len(raw_assets) > MAX_IMPORT_ASSETS:
+        raise HTTPException(status_code=400, detail=f"Import at most {MAX_IMPORT_ASSETS} images per batch")
+    paths = [_story_import_upload_path(item.get("path") if isinstance(item, dict) else "") for item in raw_assets]
+    names = [
+        str(item.get("name") or os.path.basename(paths[index])).strip()[:300]
+        if isinstance(item, dict) else os.path.basename(paths[index])
+        for index, item in enumerate(raw_assets)
+    ]
+    project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    existing_characters = [
+        {"id": str(item.get("id") or ""), "name": str(item.get("name") or "")}
+        for item in project.get("characters", []) if isinstance(item, dict)
+    ]
+    world = project.get("world") if isinstance(project.get("world"), dict) else {}
+    existing_locations = [
+        {"id": str(item.get("id") or ""), "name": str(item.get("name") or "")}
+        for item in world.get("locations", []) if isinstance(item, dict)
+    ]
+    user_context = str(body.get("description") or "").strip()[:4000]
+    language = str(project.get("language") or "English").strip()[:100]
+    asset_lines = "\n".join(f"Image {index + 1} (index {index}): {name}" for index, name in enumerate(names))
+    prompt = f"""Analyze the attached image batch as reusable assets for one Story Lab project.
+The attached images appear in exactly the same order as this list:
+{asset_lines}
+
+Optional batch context from the user: {user_context or 'none'}
+Story title: {str(project.get('title') or 'Untitled')[:300]}
+Premise: {str(project.get('premise') or '')[:2000]}
+World summary: {str(world.get('summary') or '')[:2000]}
+Existing characters (reuse exact id when clearly matched): {json.dumps(existing_characters, ensure_ascii=False)}
+Existing locations (reuse exact id when clearly matched): {json.dumps(existing_locations, ensure_ascii=False)}
+
+Return one object per image. Classify kind as world, location, character, prop,
+style, or ignore. For a match, targetId is the exact existing id. For multiple
+images of the same new entity, give all of them the same stable grouping key:
+"new-character:<slug>" or "new-location:<slug>". World/prop/style use targetId
+"world". Describe only visible evidence; do not invent biography or plot facts.
+Write name, description, visualPrompt and reason in {language}. visualPrompt is
+a reusable single-image identity/environment reference prompt without grids,
+collages, captions, logos or UI. Confidence is 0 to 1. Return strict JSON only."""
+    schema = asset_import_schema(len(paths))
+    override = _comic_writing_llm(body)
+    if not override:
+        _ensure_llm_loaded()
+    tracking_id = str(body.get("activity_id") or "").strip()[:160]
+    if tracking_id:
+        llm_service.begin_activity_tracking(
+            tracking_id, phase="analyzing_assets", current=0, total=len(paths),
+            detail=f"Analyzing {len(paths)} imported images…",
+        )
+
+    def run_analysis():
+        result = _generate_comic_director_json(
+            prompt=prompt,
+            system_prompt=(
+                "You are a production asset librarian and visual continuity analyst. "
+                "Inspect every attached image and return strict JSON only."
+            ),
+            schema=schema,
+            max_new_tokens=max(1200, len(paths) * 280),
+            stage="Story Lab smart asset import",
+            llm_override=override,
+            image_paths=paths,
+        )
+        return validate_asset_import_result(result, len(paths))
+
+    try:
+        analyzed = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: llm_service.run_with_activity_tracking(tracking_id, run_analysis),
+        )
+    except Exception as exc:
+        llm_service.update_activity_tracking(
+            tracking_id, status="failed", phase="analyzing_assets",
+            detail=str(exc), error=str(exc),
+        )
+        raise HTTPException(status_code=502, detail=f"Smart asset analysis failed: {exc}") from exc
+    llm_service.update_activity_tracking(
+        tracking_id, status="completed", phase="completed",
+        current=len(paths), total=len(paths),
+        detail=f"{len(paths)} asset suggestions ready for review.",
+    )
+    return {
+        "assets": [
+            {**item, "nameOriginal": names[item["index"]], "source": raw_assets[item["index"]].get("url", "")}
+            for item in analyzed
+        ],
+    }
+
+
 def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     """Generate and validate one replaceable Story Lab stage."""
     schema_scope = "beats" if scope == "structure" else scope
     premise = str(body.get("premise") or "").strip()
     project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    project_type = str(project.get("projectType") or "full_story").strip().lower()
+    if project_type not in {"full_story", "music_video", "quick_video"}:
+        project_type = "full_story"
+    creative_brief = project.get("creativeBrief") if isinstance(project.get("creativeBrief"), dict) else {}
+    try:
+        brief_duration = int(float(creative_brief.get("durationSeconds") or 0))
+    except (TypeError, ValueError):
+        brief_duration = 0
     if not premise:
         premise = str(project.get("premise") or "").strip()
     if not premise:
@@ -24808,7 +25283,25 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
         character_count = len([
             item for item in project.get("characters", []) if isinstance(item, dict)
         ])
-        music_direction = f"""
+        if project_type == "music_video":
+            music_direction = f"""
+Music-video contract:
+- Return exactly one original vocal story song. Its kind is "story" and targetId is "story".
+- The performer/creator is: {str(creative_brief.get('performer') or 'not specified')[:1000]}.
+- Requested musical style: {str(creative_brief.get('musicStyle') or genre)[:1000]}.
+- What the song must tell: {str(creative_brief.get('songStory') or premise)[:2000]}.
+- Target duration: {max(20, min(360, brief_duration or 90))} seconds.
+- referenceSong is an editable inspiration example in "Title — Artist" form. Use it only
+  for broad tempo, instrumentation or emotional architecture; never copy melody or lyrics.
+- style is the final MiniMax Music prompt: one concise English comma-separated line,
+  10–300 characters, covering genre, mood, instruments, vocals, tempo and production.
+- Write lyrics in {language}, maximum 3500 characters, with a recurring hook and a clear
+  narrative progression. Use supported English tags on their own lines: [Intro], [Verse],
+  [Pre Chorus], [Chorus], [Bridge], [Hook], [Inst], [Solo], [Outro].
+- Set instrumental false. Make brief and purpose explain how this song drives the videoclip.
+"""
+        else:
+            music_direction = f"""
 Music-specific contract:
 - Return exactly one instrumental ambient cue for targetId "world".
 - Return exactly one presentation cue for each of the {character_count} existing character IDs.
@@ -24833,6 +25326,27 @@ Music-specific contract:
   atmosphere, instrumentation, tempo and musical arc entirely in style.
 - Make brief and purpose explain how the cue maps to this exact world, character or story arc.
 """
+    if project_type == "music_video":
+        narrative_direction = f"""
+This is a compact music-first story, not a complete franchise bible. Build a coherent visual
+arc around the performer and the song. Context: {str(creative_brief.get('context') or premise)[:3000]}.
+Use 4–10 beats that can become videoclip shots and keep locations/cast deliberately small.
+"""
+    elif project_type == "quick_video":
+        narrative_direction = f"""
+This is a fast single-concept video. Subjects: {str(creative_brief.get('subjects') or 'not specified')[:1500]}.
+Setting: {str(creative_brief.get('setting') or 'not specified')[:1500]}.
+Requested action/dialogue: {str(creative_brief.get('action') or premise)[:3000]}.
+Format: {str(creative_brief.get('quickFormat') or 'dialogue')[:100]}; target duration:
+{max(5, min(120, brief_duration or 15))} seconds. Use 3–8 concise,
+shootable beats in one scene or a very small number of locations. Do not inflate it into a
+feature-film mythology; preserve the direct joke, dialogue, announcement or viral premise.
+"""
+    else:
+        narrative_direction = """
+Build one causal dramatic arc with setup, inciting incident, rising complications,
+midpoint/reversal, crisis, climax and resolution.
+"""
     base_prompt = f"""Create the requested editable Story Lab material.
 Generation scope: {scope}
 Premise: {premise}
@@ -24846,10 +25360,10 @@ Optional user instruction: {instruction or 'none'}
 Current manually edited project (preserve useful established facts and stable IDs):
 {current}
 {music_direction}
+{narrative_direction}
 
 Return only the JSON required by the schema. This is a reusable story bible, not a comic
-page plan and not a screenplay. Build one causal dramatic arc with setup, inciting incident,
-rising complications, midpoint/reversal, crisis, climax and resolution. Characters need
+page plan and not a screenplay. Characters need
 distinct desire, need, flaw, voice, visual silhouette and a change caused by their choices.
 Visual prompts describe one neutral concept-art subject or environment only: no contact
 sheets, no grids, no comic panels, no lettering, no captions, no UI and no multiple views.
@@ -24857,37 +25371,71 @@ Keep visualPrompt fields semantic and reusable: describe identity, environment, 
 lighting and story-specific color cues, but do not paste the global visual style into every
 field. Maestro applies that independent style at image render time when its lock is enabled.
 Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instruction asks."""
-    result = None
-    problem = None
-    for attempt in range(1, 4):
-        repair = (
-            f"\nYour previous attempt was invalid: {problem}. Correct it completely."
-            if problem else ""
+    system_prompt = (
+        "You are Maestro Story Architect: a professional story editor, character "
+        "designer and production bible author. Return strict JSON only."
+    )
+    schema = _story_lab_schema(schema_scope, project_type)
+    max_new_tokens = (
+        2400 if scope == "music" and project_type == "music_video"
+        else 6000 if scope == "music"
+        else 2000 if project_type == "quick_video"
+        else 2600
+    )
+    try:
+        result = _generate_comic_director_json(
+            prompt=base_prompt,
+            system_prompt=system_prompt,
+            schema=schema,
+            max_new_tokens=max_new_tokens,
+            stage=f"Story Lab {scope}",
+            llm_override=llm_override,
+        )
+    except Exception as exc:
+        # _generate_comic_director_json already made one bounded repair pass
+        # with the original malformed text.  Do not blindly spend another
+        # pair of full generations when that recovery also failed.
+        raise HTTPException(
+            status_code=502,
+            detail=f"Story generation failed after JSON repair: {exc}",
+        ) from exc
+
+    result = _normalize_story_stage_ids(result, scope, project)
+    problem = _story_stage_problem(result, scope, project)
+    if problem:
+        # Syntax may be valid while the response still violates the requested
+        # stage shape (for example, {"world": []}).  Providers have no
+        # conversational memory, so include the compact recovered object and
+        # request one focused correction rather than another fresh story.
+        previous_response = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+        previous_limit = 16000
+        if len(previous_response) > previous_limit:
+            previous_response = (
+                previous_response[:previous_limit]
+                + "\n[previous response truncated for bounded schema repair]"
+            )
+        correction = (
+            f"\n\nSTORY SCHEMA REPAIR: The previous response failed validation: {problem}. "
+            "Do not invent a new story. Preserve the usable story facts below and return "
+            "only a corrected JSON object matching the supplied schema.\n"
+            f"PREVIOUS RESPONSE TO REPAIR:\n{previous_response}"
         )
         try:
             result = _generate_comic_director_json(
-                prompt=base_prompt + repair,
-                system_prompt=(
-                    "You are Maestro Story Architect: a professional story editor, character "
-                    "designer and production bible author. Return strict JSON only."
-                ),
-                schema=_story_lab_schema(schema_scope),
-                max_new_tokens=6000 if scope == "music" else 2600,
-                stage=f"Story Lab {scope}, attempt {attempt}",
+                prompt=base_prompt + correction,
+                system_prompt=system_prompt,
+                schema=schema,
+                max_new_tokens=max_new_tokens,
+                stage=f"Story Lab {scope} schema repair",
                 llm_override=llm_override,
             )
         except Exception as exc:
-            problem = str(exc)
-            if attempt >= 3:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Story generation failed after three attempts: {problem}",
-                ) from exc
-            continue
+            raise HTTPException(
+                status_code=502,
+                detail=f"Story generation schema repair failed: {exc}",
+            ) from exc
         result = _normalize_story_stage_ids(result, scope, project)
         problem = _story_stage_problem(result, scope, project)
-        if problem is None:
-            break
     if result is not None and problem and scope == "relationships":
         # A provider can still invent a third name after retries. Preserve all
         # valid relationships and discard only irreparable references instead
@@ -24905,7 +25453,7 @@ Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instr
     if result is None or problem:
         raise HTTPException(
             status_code=502,
-            detail=f"Story generation remained incomplete after three attempts: {problem}",
+            detail=f"Story generation remained incomplete after bounded repair: {problem}",
         )
     if scope == "structure" and "beats" in result:
         result = {"structure": result["beats"]}
@@ -25006,10 +25554,16 @@ def _run_story_plan_job_inner(job_id: str) -> None:
         return
     body = copy.deepcopy(job.get("request") or {})
     requested_scope = str(body.get("scope") or "all")
-    stages = (
-        ["overview", "characters", "world", "relationships", "structure", "music"]
-        if requested_scope == "all" else [requested_scope]
+    project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    project_type = str(project.get("projectType") or "full_story").strip().lower()
+    all_stages = (
+        ["overview", "characters", "world", "structure", "music"]
+        if project_type == "music_video"
+        else ["overview", "characters", "world", "structure"]
+        if project_type == "quick_video"
+        else ["overview", "characters", "world", "relationships", "structure", "music"]
     )
+    stages = all_stages if requested_scope == "all" else [requested_scope]
     completed = job.get("completedStages")
     completed = completed if isinstance(completed, dict) else {}
     working_project = copy.deepcopy(body.get("project") or {})
@@ -25136,6 +25690,62 @@ async def generate_story_music_candidates(body: dict):
     }
 
 
+@api.post("/api/v1/stories/translate-lyrics")
+async def translate_story_lyrics(body: dict):
+    """Translate editable song lyrics with the Story Lab writing provider."""
+    from services import llm_service
+
+    lyrics = str(body.get("lyrics") or "").strip()
+    target_language = str(body.get("targetLanguage") or "").strip()[:80]
+    if not lyrics:
+        raise HTTPException(status_code=400, detail="Lyrics are required")
+    if not target_language:
+        raise HTTPException(status_code=400, detail="Choose a target language")
+    system_prompt = (
+        "Translate song lyrics accurately. Return only the translated lyrics, "
+        "with no explanation, title, markdown or code fence. Translate only the sung "
+        "lyric lines. Copy every song instruction enclosed in square brackets exactly "
+        "as written, preserving its English text and capitalization (for example "
+        "[Verse], [Pre Chorus], [Chorus], [Bridge], [Outro] or [Female vocal])."
+    )
+    prompt = (
+        f"Translate the following lyrics into {target_language}. Do not translate or "
+        "alter any text enclosed in square brackets; copy those instructions verbatim.\n\n"
+        f"{lyrics}"
+    )
+    llm_override = _comic_writing_llm(body)
+    try:
+        if llm_override:
+            translated = llm_service.generate_openai_compatible(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                model_id=llm_override["model"],
+                base_url=llm_override["base_url"],
+                api_key=llm_override["api_key"],
+                max_new_tokens=min(3000, max(500, len(lyrics) * 2)),
+                temperature=0.2,
+            )
+        else:
+            _ensure_llm_loaded()
+            translated = llm_service.generate_streaming(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_new_tokens=min(3000, max(500, len(lyrics) * 2)),
+                temperature=0.2,
+                enable_thinking=False,
+                thinking_budget=0,
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Lyric translation failed: {exc}") from exc
+
+    translated = str(translated or "").strip()
+    if translated.startswith("```"):
+        translated = re.sub(r"^```(?:text|markdown)?\s*|\s*```$", "", translated, flags=re.IGNORECASE).strip()
+    if not translated:
+        raise HTTPException(status_code=502, detail="The LLM returned empty translated lyrics")
+    return {"lyrics": translated, "targetLanguage": target_language}
+
+
 @api.post("/api/v1/stories/generate/start")
 def start_story_lab_generation(body: dict):
     scope = str(body.get("scope") or "all").strip().lower()
@@ -25144,6 +25754,9 @@ def start_story_lab_generation(body: dict):
         raise HTTPException(status_code=400, detail="Unsupported Story Lab generation scope")
     if not str(body.get("premise") or "").strip():
         raise HTTPException(status_code=400, detail="Write a premise before generating the story")
+    project = body.get("project") if isinstance(body.get("project"), dict) else {}
+    project_type = str(project.get("projectType") or "full_story").strip().lower()
+    stage_total = 5 if project_type == "music_video" else 4 if project_type == "quick_video" else 6
     job_id = f"story-plan-{uuid.uuid4().hex[:12]}"
     job = {
         "jobId": job_id,
@@ -25151,7 +25764,7 @@ def start_story_lab_generation(body: dict):
         "message": "Story generation queued.",
         "stage": "queued",
         "current": 0,
-        "total": 6 if scope == "all" else 1,
+        "total": stage_total if scope == "all" else 1,
         "request": _story_checkpoint_request(body),
         "completedStages": {},
         "result": None,

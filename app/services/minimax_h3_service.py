@@ -108,7 +108,53 @@ DEFAULTS = {
     "h3_ref_image_size": "match",
     "h3_model_profile": "quality",
     "h3_reference_mode": "first_frame",
+    "image_fit_mode": "contain",
 }
+
+
+def prepare_extend_anchor(
+    params: dict,
+    job_id: str,
+    source_path: str,
+    cache_dir: str | Path,
+) -> dict:
+    """Turn an Extend source video into an exact FL2VA start frame.
+
+    H3's FL2VA pipeline has no video-continuation input. Passing
+    ``video_source`` through unchanged therefore made the model ignore it.
+    Capturing the final decodable frame gives Extend deterministic visual
+    continuity without paying the cost of Ref2VA or treating the source as a
+    loose semantic reference.
+    """
+    from .video_editor import extract_frame, probe_media
+
+    media = probe_media(source_path)
+    destination_dir = Path(cache_dir)
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination = destination_dir / f"minimax_h3_extend_{job_id}_last.png"
+    frame = extract_frame(source_path, str(destination), float(media["duration"]))
+
+    ignored_references = sum(
+        len([item for item in (params.get(key) or []) if item])
+        for key in ("image_refs", "h3_ref_videos", "h3_ref_audios")
+    )
+    params["image_start"] = str(destination)
+    params["image_prompt_type"] = "S"
+    params["h3_reference_mode"] = "first_frame"
+    params["image_mode"] = 0
+    params.pop("image_refs", None)
+    params.pop("h3_ref_videos", None)
+    params.pop("h3_ref_audios", None)
+    params["h3_extend_anchor_time"] = frame["time"]
+
+    return {
+        "path": str(destination),
+        "time": frame["time"],
+        "width": frame["width"],
+        "height": frame["height"],
+        "ignored_references": ignored_references,
+    }
+
 
 MODEL_OPTIONS = {
     "model_type": MODEL_ID,
@@ -159,6 +205,12 @@ _port: int | None = None
 _runtime_profile: str | None = None
 _runtime_lock = threading.RLock()
 _active_prompt: str | None = None
+_idle_shutdown_timer: threading.Timer | None = None
+
+# Keep the large H3 sidecar warm briefly after the queue becomes idle. The
+# caller cancels this timer when a compatible job arrives, so a run of clips
+# does not repeatedly reload the model just to generate the next one.
+DEFAULT_IDLE_SHUTDOWN_SECONDS = 45.0
 
 
 def _python_executable() -> Path:
@@ -190,7 +242,10 @@ def ensure_audio_prompt(prompt: str, audio_direction: str = "") -> str:
     production-sound default.
     """
     normalized_prompt = str(prompt or "").strip()
-    if re.search(r"\baudio\s*:", normalized_prompt, flags=re.IGNORECASE):
+    if (
+        re.search(r"\baudio\s*:", normalized_prompt, flags=re.IGNORECASE)
+        or "overall_soundscape:" in normalized_prompt
+    ):
         return normalized_prompt
     normalized_audio = " ".join(str(audio_direction or "").split())
     if not normalized_audio:
@@ -303,6 +358,7 @@ def _runtime_command(port: int, profile: str = "quality") -> list[str]:
 def ensure_runtime(progress: Callable[[str], None], profile: str = "quality") -> str:
     global _process, _port, _runtime_profile
     with _runtime_lock:
+        _cancel_idle_shutdown_locked()
         if _process is not None and _process.poll() is None and _port is not None:
             if _runtime_profile == profile:
                 return f"http://127.0.0.1:{_port}"
@@ -338,21 +394,72 @@ def ensure_runtime(progress: Callable[[str], None], profile: str = "quality") ->
         raise RuntimeError("MiniMax H3 runtime did not become ready within 3 minutes")
 
 
-def stop_runtime() -> None:
-    global _process, _port, _runtime_profile, _active_prompt
+def _cancel_idle_shutdown_locked() -> None:
+    global _idle_shutdown_timer
+    if _idle_shutdown_timer is not None:
+        _idle_shutdown_timer.cancel()
+        _idle_shutdown_timer = None
+
+
+def cancel_idle_shutdown() -> None:
+    """Keep H3 warm because another H3 job is about to run."""
     with _runtime_lock:
-        process = _process
-        _process = None
-        _port = None
-        _runtime_profile = None
-        _active_prompt = None
-        if process is not None and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
+        _cancel_idle_shutdown_locked()
+
+
+def _stop_runtime_locked() -> None:
+    global _process, _port, _runtime_profile, _active_prompt
+    process = _process
+    _process = None
+    _port = None
+    _runtime_profile = None
+    _active_prompt = None
+    if process is not None and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+
+def stop_runtime() -> None:
+    """Release the isolated H3 runtime immediately."""
+    with _runtime_lock:
+        _cancel_idle_shutdown_locked()
+        _stop_runtime_locked()
+
+
+def schedule_idle_shutdown(
+    delay_seconds: float = DEFAULT_IDLE_SHUTDOWN_SECONDS,
+    should_keep_warm: Callable[[], bool] | None = None,
+) -> None:
+    """Release H3 after a short idle period unless the queue becomes active.
+
+    ``should_keep_warm`` is evaluated under the runtime lock immediately
+    before shutdown. It is a final race-safe queue check; enqueueing a job
+    should also call :func:`cancel_idle_shutdown` for an immediate cancel.
+    """
+    global _idle_shutdown_timer
+    delay = max(0.0, float(delay_seconds))
+
+    with _runtime_lock:
+        _cancel_idle_shutdown_locked()
+
+        def _shutdown_if_still_idle() -> None:
+            global _idle_shutdown_timer
+            with _runtime_lock:
+                if _idle_shutdown_timer is not timer:
+                    return
+                _idle_shutdown_timer = None
+                if should_keep_warm is not None and should_keep_warm():
+                    return
+                _stop_runtime_locked()
+
+        timer = threading.Timer(delay, _shutdown_if_still_idle)
+        timer.daemon = True
+        _idle_shutdown_timer = timer
+        timer.start()
 
 
 def cancel() -> None:
@@ -378,13 +485,67 @@ def _copy_input(source: str, job_id: str, index: int) -> str:
     return name
 
 
+def _copy_frame_input(
+    source: str,
+    job_id: str,
+    index: int,
+    width: int,
+    height: int,
+    fit_mode: str = "contain",
+) -> str:
+    """Prepare an FL2VA boundary frame without ever stretching its content.
+
+    MiniMax's Comfy node receives the configured canvas size separately.  A raw
+    portrait image on a landscape canvas can therefore be resized non-uniformly
+    inside the node.  We remove that ambiguity by supplying an already-sized
+    RGB PNG: contain/legacy-source uses a centered black matte, while crop is an
+    explicit opt-in that fills the canvas and discards the outer edges.
+    """
+    from PIL import Image, ImageOps
+
+    path = Path(source).expanduser().resolve()
+    if not path.is_file():
+        raise ValueError(f"Frame image does not exist: {source}")
+    INPUT_DIR.mkdir(parents=True, exist_ok=True)
+    target = (max(1, int(width)), max(1, int(height)))
+    mode = str(fit_mode or "contain").strip().lower()
+    mode = "contain" if mode in {"", "source", "fit", "preserve"} else mode
+
+    with Image.open(path) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+        if mode == "crop":
+            prepared = ImageOps.fit(
+                image,
+                target,
+                method=Image.Resampling.LANCZOS,
+                centering=(0.5, 0.5),
+            )
+        else:
+            contained = ImageOps.contain(image, target, method=Image.Resampling.LANCZOS)
+            prepared = Image.new("RGB", target, (0, 0, 0))
+            offset = (
+                (target[0] - contained.width) // 2,
+                (target[1] - contained.height) // 2,
+            )
+            prepared.paste(contained, offset)
+
+        name = f"maestro_h3_{job_id}_{index}_frame.png"
+        prepared.save(INPUT_DIR / name, format="PNG", optimize=True)
+    return name
+
+
 def _probe_duration(source: str) -> float:
     """Read media duration with PyAV without decoding the complete asset."""
     import av
 
     with av.open(source) as container:
         if container.duration is not None:
-            return float(container.duration * av.time_base)
+            # PyAV exposes a container duration in AV_TIME_BASE units
+            # (microseconds), while ``av.time_base`` is the number of those
+            # units per second. Multiplying produces absurd durations such as
+            # 14,083,333,000,000s for a 14.083s MP4; convert to seconds by
+            # dividing instead.
+            return float(container.duration / av.time_base)
         durations = [float(stream.duration * stream.time_base)
                      for stream in container.streams if stream.duration is not None]
         if durations:
@@ -480,9 +641,22 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
     profile = _profile_name(params)
     selected = MODEL_PROFILES[profile]
     workflow = _base_sampling_graph(params, selected[pipeline], selected["text_encoder"])
-    prompt = ensure_audio_prompt(
-        str(params.get("prompt", "")),
-        str(params.get("h3_audio_prompt", "")),
+    raw_prompt = str(params.get("prompt", ""))
+    authored_audio = re.search(r"\bAudio\s*:\s*(.*)$", raw_prompt, flags=re.I | re.S)
+    audio_direction = (
+        authored_audio.group(1).strip()
+        if authored_audio
+        else str(params.get("h3_audio_prompt", ""))
+    )
+    try:
+        from .director.minimax_h3_prompting import format_minimax_h3_prompt
+    except ImportError:
+        from services.director.minimax_h3_prompting import format_minimax_h3_prompt
+    prompt = format_minimax_h3_prompt(
+        {},
+        raw_prompt,
+        reference_mode="references" if pipeline == "ref2va" else "first_frame",
+        audio_direction=audio_direction,
     )
     copy_index = 0
 
@@ -496,7 +670,17 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
             if source:
                 copy_index += 1
                 node_id = str(30 + copy_index)
-                workflow[node_id] = _node("LoadImage", image=_copy_input(source, job_id, copy_index))
+                workflow[node_id] = _node(
+                    "LoadImage",
+                    image=_copy_frame_input(
+                        source,
+                        job_id,
+                        copy_index,
+                        width,
+                        height,
+                        str(params.get("image_fit_mode") or "contain"),
+                    ),
+                )
                 inputs[input_name] = [node_id, 0]
         workflow["10"] = _node("MiniMaxH3ImageToVideo", **inputs)
         return workflow, pipeline
@@ -627,7 +811,11 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
 
             now = time.time()
             if now - last_history_poll >= 1:
-                result = requests.get(f"{base_url}/history/{prompt_id}", timeout=10).json()
+                # H3 can still be decoding and writing the final video/audio
+                # when ComfyUI receives this status request.  Ten seconds is
+                # too short on large local renders and incorrectly reports a
+                # completed prompt as failed.
+                result = requests.get(f"{base_url}/history/{prompt_id}", timeout=60).json()
                 last_history_poll = now
                 if prompt_id in result:
                     history = result[prompt_id]

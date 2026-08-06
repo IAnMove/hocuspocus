@@ -96,6 +96,10 @@ function normalizeMusicCandidate(value: unknown, now: string): StoryMusicCandida
   if (!text(candidate.source)) return null
   return {
     id: text(candidate.id) || storyId('song'),
+    displayName: text(candidate.displayName) || undefined,
+    title: text(candidate.title) || undefined,
+    language: text(candidate.language) || undefined,
+    version: Number(candidate.version) > 0 ? Math.max(1, Number(candidate.version)) : undefined,
     name: text(candidate.name, 'Story song'),
     source: text(candidate.source),
     prompt: text(candidate.prompt),
@@ -123,6 +127,7 @@ function normalizeMusicCue(value: unknown, index: number, now: string): StoryMus
     brief: text(cue.brief),
     style: text(cue.style),
     lyrics: text(cue.lyrics),
+    lyricsLanguage: text(cue.lyricsLanguage) || undefined,
     lyriaPrompt: text(cue.lyriaPrompt),
     instrumental: cue.instrumental === true,
     durationSeconds: Math.max(20, Math.min(360, Number(cue.durationSeconds) || 90)),
@@ -227,10 +232,17 @@ function normalizeAsset(value: unknown, id: string): StoryVisualAsset | null {
     provider,
     model: text(item.model) || undefined,
     createdAt: text(item.createdAt, new Date().toISOString()),
+    assetKind: ['world', 'location', 'character', 'prop', 'style', 'ignore'].includes(text(item.assetKind))
+      ? item.assetKind : undefined,
+    description: text(item.description) || undefined,
+    confidence: Number.isFinite(Number(item.confidence))
+      ? Math.max(0, Math.min(1, Number(item.confidence))) : undefined,
+    originalName: text(item.originalName) || undefined,
+    importBatchId: text(item.importBatchId) || undefined,
   }
 }
 
-export function createStoryProject(): StoryProject {
+export function createStoryProject(projectType: StoryProject['projectType'] = 'full_story'): StoryProject {
   const now = new Date().toISOString()
   return {
     version: 1,
@@ -240,6 +252,18 @@ export function createStoryProject(): StoryProject {
       overview: 1, world: 1, characters: 1, relationships: 1, structure: 1,
     },
     title: 'Untitled story',
+    projectType,
+    creativeBrief: {
+      context: '',
+      performer: '',
+      musicStyle: '',
+      songStory: '',
+      subjects: '',
+      setting: '',
+      action: '',
+      quickFormat: 'dialogue',
+      durationSeconds: projectType === 'quick_video' ? 15 : 90,
+    },
     language: 'Español',
     genre: 'Adventure',
     tone: 'Cinematic',
@@ -292,6 +316,8 @@ export function normalizeStoryProject(value: unknown): StoryProject {
   const fallback = createStoryProject()
   if (!value || typeof value !== 'object') return fallback
   const project = value as Partial<StoryProject>
+  const creativeBrief = project.creativeBrief && typeof project.creativeBrief === 'object'
+    ? project.creativeBrief : fallback.creativeBrief
   const world: Partial<StoryProject['world']> =
     project.world && typeof project.world === 'object' ? project.world : {}
   const assets: Record<string, StoryVisualAsset> = {}
@@ -341,6 +367,22 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     revision: Math.max(1, Number(project.revision) || 1),
     sectionVersions,
     title: text(project.title, fallback.title),
+    projectType: project.projectType === 'music_video'
+      ? 'music_video' : project.projectType === 'quick_video' ? 'quick_video' : 'full_story',
+    creativeBrief: {
+      context: text(creativeBrief.context),
+      performer: text(creativeBrief.performer),
+      musicStyle: text(creativeBrief.musicStyle),
+      songStory: text(creativeBrief.songStory),
+      subjects: text(creativeBrief.subjects),
+      setting: text(creativeBrief.setting),
+      action: text(creativeBrief.action),
+      quickFormat: ['dialogue', 'meme', 'parody', 'sketch', 'viral', 'announcement']
+        .includes(text(creativeBrief.quickFormat))
+        ? creativeBrief.quickFormat : 'dialogue',
+      durationSeconds: Math.max(5, Math.min(360,
+        Number(creativeBrief.durationSeconds) || (project.projectType === 'quick_video' ? 15 : 90))),
+    },
     language: text(project.language, fallback.language),
     genre: text(project.genre, fallback.genre),
     tone: text(project.tone, fallback.tone),
@@ -407,6 +449,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       style: text(project.music?.style),
       sourceLyrics: text(project.music?.sourceLyrics),
       lyrics: text(project.music?.lyrics),
+      lyricsLanguage: text(project.music?.lyricsLanguage) || undefined,
       coverReferenceFilename: text(project.music?.coverReferenceFilename) || undefined,
       coverReferenceName: text(project.music?.coverReferenceName) || undefined,
       targetDurationSeconds: Math.max(20, Math.min(360, Number(project.music?.targetDurationSeconds) || 90)),
@@ -442,12 +485,12 @@ export function normalizeStoryProject(value: unknown): StoryProject {
 
 export function changedSections(before: StoryProject, after: StoryProject): StorySection[] {
   const overviewBefore = [
-    before.title, before.language, before.genre, before.tone, before.audience,
+    before.title, before.projectType, before.creativeBrief, before.language, before.genre, before.tone, before.audience,
     before.visualStyle, before.enforceVisualStyle,
     before.premise, before.logline, before.synopsis, before.theme, before.ending,
   ]
   const overviewAfter = [
-    after.title, after.language, after.genre, after.tone, after.audience,
+    after.title, after.projectType, after.creativeBrief, after.language, after.genre, after.tone, after.audience,
     after.visualStyle, after.enforceVisualStyle,
     after.premise, after.logline, after.synopsis, after.theme, after.ending,
   ]

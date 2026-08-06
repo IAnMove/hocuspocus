@@ -5,7 +5,7 @@ import { getFileUrl } from '../../api/client'
 import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
 import { DirectorSongSetup } from './DirectorSongSetup'
-import type { DirectorSkill, ShortFilmCharacter, ShortFilmPath } from '../../types'
+import type { DirectorSkill, MusicVideoTreatment, ShortFilmCharacter, ShortFilmPath } from '../../types'
 
 const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
   .then(module => ({ default: module.ComicDirectorPanel })))
@@ -366,6 +366,8 @@ export function DirectorChat() {
   const plannedClips = useStore(s => s.directorPlannedClips)
   const energyBias = useStore(s => s.directorEnergyBias)
   const pacingProfile = useStore(s => s.directorPacingProfile)
+  const musicVideoTreatment = useStore(s => s.directorMusicVideoTreatment)
+  const setMusicVideoTreatment = useStore(s => s.setDirectorMusicVideoTreatment)
   const clipPlans = useStore(s => s.directorClipPlans)
   const sceneDescription = useStore(s => s.directorSceneDescription)
   const audioFile = useStore(s => s.directorAudioFile)
@@ -945,6 +947,21 @@ export function DirectorChat() {
                 </div>
               </UserBubble>
             )}
+            {isMusicVideo && atStep('style') && (
+              <SystemBubble>
+                <MusicVideoTreatmentEditor
+                  treatment={musicVideoTreatment}
+                  onChange={setMusicVideoTreatment}
+                />
+              </SystemBubble>
+            )}
+            {isMusicVideo && pastStep('style') && (
+              <UserBubble>
+                <p className="text-[10px] text-text-secondary">
+                  {musicVideoTreatment.mode} · {musicVideoTreatment.performer_presence}% performance · {musicVideoTreatment.recurring_sets.length} recurring sets
+                </p>
+              </UserBubble>
+            )}
             <SystemBubble>
               <StyleForm
                 speakers={speakers}
@@ -1154,6 +1171,88 @@ export function DirectorChat() {
 }
 
 // --- Sub-components ---
+
+function MusicVideoTreatmentEditor({
+  treatment,
+  onChange,
+}: {
+  treatment: MusicVideoTreatment
+  onChange: (partial: Partial<MusicVideoTreatment>) => void
+}) {
+  const inputClass = 'w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] text-text-primary focus:border-accent-blue focus:outline-none'
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary">
+          <Sparkles size={12} className="text-purple-300" /> Music-video treatment
+        </div>
+        <p className="mt-1 text-[9px] leading-relaxed text-text-muted">
+          Defines the visual grammar before shot planning. Choruses deliberately return to a signature setup instead of turning every lyric into an unrelated scene.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[9px] text-text-muted">Mode
+          <select value={treatment.mode} onChange={event => onChange({ mode: event.target.value as MusicVideoTreatment['mode'] })} className={`${inputClass} mt-1`}>
+            <option value="hybrid">Hybrid</option>
+            <option value="performance">Performance</option>
+            <option value="narrative">Narrative</option>
+            <option value="abstract">Abstract / visualizer</option>
+          </select>
+        </label>
+        <label className="text-[9px] text-text-muted">Lip-sync
+          <select value={treatment.lip_sync} onChange={event => onChange({ lip_sync: event.target.value as MusicVideoTreatment['lip_sync'] })} className={`${inputClass} mt-1`}>
+            <option value="frequent">Frequent</option>
+            <option value="occasional">Occasional</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+      </div>
+
+      <label className="block text-[9px] text-text-muted">
+        <span className="flex justify-between"><span>Artist on screen</span><b className="text-text-secondary">{treatment.performer_presence}%</b></span>
+        <input type="range" min={0} max={100} step={5} value={treatment.performer_presence}
+          onChange={event => onChange({ performer_presence: Number(event.target.value) })}
+          className="mt-1 w-full accent-accent-blue" />
+      </label>
+
+      <label className="block text-[9px] text-text-muted">Recurring sets · one per line
+        <textarea value={treatment.recurring_sets.join('\n')} rows={3}
+          onChange={event => onChange({ recurring_sets: event.target.value.split('\n').map(item => item.trim()).filter(Boolean).slice(0, 5) })}
+          className={`${inputClass} mt-1 resize-none`} placeholder={'Main performance set\nStory world\nBridge contrast set'} />
+      </label>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[9px] text-text-muted">Wardrobe lock
+          <input value={treatment.wardrobe} onChange={event => onChange({ wardrobe: event.target.value })} className={`${inputClass} mt-1`} placeholder="Signature wardrobe" />
+        </label>
+        <label className="text-[9px] text-text-muted">Palette / texture
+          <input value={treatment.palette} onChange={event => onChange({ palette: event.target.value })} className={`${inputClass} mt-1`} placeholder="Cyan, amber, 35mm grain" />
+        </label>
+      </div>
+
+      <label className="block text-[9px] text-text-muted">Camera language
+        <input value={treatment.camera_language} onChange={event => onChange({ camera_language: event.target.value })} className={`${inputClass} mt-1`} />
+      </label>
+      <label className="block text-[9px] text-text-muted">Recurring visual motif
+        <input value={treatment.recurring_motif} onChange={event => onChange({ recurring_motif: event.target.value })} className={`${inputClass} mt-1`} placeholder="A mechanical seed pulses on musical accents" />
+      </label>
+      <label className="block text-[9px] text-text-muted">Chorus signature
+        <textarea value={treatment.chorus_signature} rows={2} onChange={event => onChange({ chorus_signature: event.target.value })} className={`${inputClass} mt-1 resize-none`} />
+      </label>
+
+      <label className="block text-[9px] text-text-muted">
+        <span className="flex justify-between"><span>Surrealism</span><b className="text-text-secondary">{treatment.surrealism}%</b></span>
+        <input type="range" min={0} max={100} step={5} value={treatment.surrealism}
+          onChange={event => onChange({ surrealism: Number(event.target.value) })}
+          className="mt-1 w-full accent-purple-400" />
+      </label>
+      <label className="block text-[9px] text-text-muted">Forbidden elements
+        <input value={treatment.forbidden_elements} onChange={event => onChange({ forbidden_elements: event.target.value })} className={`${inputClass} mt-1`} placeholder="No unrelated locations, no costume changes…" />
+      </label>
+    </div>
+  )
+}
 
 function CharacterNaming({
   characters, setCharacters,

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, ShortFilmCharacter, ShortFilmPath, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping } from '../types'
+import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping } from '../types'
 import * as api from '../api/client'
 import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 
@@ -908,6 +908,15 @@ export interface ForegroundActivity {
   current?: number
   total?: number
   progress?: number
+  detailMessage?: string
+  detailCurrent?: number
+  detailTotal?: number
+  tokenUsage?: {
+    promptTokens?: number
+    completionTokens?: number
+    totalTokens?: number
+    calls?: number
+  }
   error?: string | null
   startedAt?: number
   updatedAt?: number
@@ -1540,6 +1549,8 @@ interface AppState {
   directorPlannedClips: PlannedClip[]
   directorEnergyBias: number
   directorPacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
+  directorMusicVideoTreatment: MusicVideoTreatment
+  setDirectorMusicVideoTreatment: (partial: Partial<MusicVideoTreatment>) => void
   directorClipPlans: ClipPlan[]
   directorSceneDescription: string
   directorLoading: boolean
@@ -1699,6 +1710,7 @@ function beginAppActivity(
     message: string,
     current = 0,
     total = options.total || 0,
+    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailCurrent' | 'detailTotal' | 'tokenUsage'>>,
   ) => get().upsertActivity({
     id,
     kind: options.kind,
@@ -1708,6 +1720,7 @@ function beginAppActivity(
     message,
     current,
     total,
+    ...details,
   })
   report(options.phase, options.message, 0, options.total || 0)
   return {
@@ -3644,7 +3657,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJob: GenerationJob = {
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
       phase: '', message: tool === 'upscale' ? 'Submitting upscale...' : 'Submitting revoice...',
-      outputFiles: [], error: null, oomInfo: null,
+      outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
     }
     set(st => ({ isGenerating: true, jobs: [newJob, ...st.jobs] }))
 
@@ -4000,9 +4013,9 @@ export const useStore = create<AppState>((set, get) => ({
       if (!state.blendClipAPath || !state.blendClipBPath) return
       const prompt = (state.params.prompt as string || '').trim()
 
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting blend...', outputFiles: [], error: null, oomInfo: null,
+    const newJob: GenerationJob = {
+      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+      phase: '', message: 'Submitting blend...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
 
@@ -4138,9 +4151,9 @@ export const useStore = create<AppState>((set, get) => ({
       const trimEnd = state.outpaintTrimEnd || 0
       const sendTrim = trimEnd > trimStart && trimEnd > 0.05
 
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting outpaint...', outputFiles: [], error: null, oomInfo: null,
+    const newJob: GenerationJob = {
+      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+      phase: '', message: 'Submitting outpaint...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
 
@@ -4457,9 +4470,9 @@ export const useStore = create<AppState>((set, get) => ({
       const prompt = (state.params.prompt as string || '').trim()
       if (!prompt) return
 
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting...', outputFiles: [], error: null, oomInfo: null,
+    const newJob: GenerationJob = {
+      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+      phase: '', message: 'Submitting...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
 
@@ -4616,6 +4629,28 @@ export const useStore = create<AppState>((set, get) => ({
     // value if the user switched to a model that doesn't support it.
     if (!(state.modelOptions as Record<string, unknown> | null)?.reference_pipeline) {
       delete params.reference_pipeline
+    }
+
+    // MiniMax H3 has two mutually exclusive conditioning contracts. After a
+    // Ref2VA run, selecting a new Start image can leave the persisted mode set
+    // to "references" even when all reference tiles have been removed. In
+    // that case the backend rejects the request before generation because
+    // Ref2VA has no reference input. Treat an unaccompanied Start image as an
+    // explicit FL2VA request and discard stale reference paths from the
+    // previous run. If live reference tiles are still present, keep Ref2VA so
+    // users can intentionally combine them.
+    if (
+      params.model_type === 'minimax_h3'
+      && (state.startImage || params.image_start)
+      && (params.h3_reference_mode === 'references' || !params.h3_reference_mode)
+      && state.imageRefs.length === 0
+      && !(Array.isArray(params.h3_ref_videos) && params.h3_ref_videos.length > 0)
+      && !(Array.isArray(params.h3_ref_audios) && params.h3_ref_audios.length > 0)
+    ) {
+      params.h3_reference_mode = 'first_frame'
+      delete params.image_refs
+      delete params.h3_ref_videos
+      delete params.h3_ref_audios
     }
 
     // Tag avatar/edit-mode generations with their sub-mode so the gallery's
@@ -5136,6 +5171,7 @@ export const useStore = create<AppState>((set, get) => ({
       message: 'Submitting...',
       outputFiles: [],
       error: null,
+      createdAt: Date.now(),
       oomInfo: null,
     }
 
@@ -5269,6 +5305,7 @@ export const useStore = create<AppState>((set, get) => ({
             message: j.message,
             outputFiles: j.output_files,
             error: j.error,
+            createdAt: j.created_at < 1_000_000_000_000 ? j.created_at * 1000 : j.created_at,
             oomInfo: (j as { oom_info?: import('../types').OomInfo | null }).oom_info ?? null,
             taskTimings: j.task_timings ?? [],
           }))
@@ -6146,6 +6183,22 @@ export const useStore = create<AppState>((set, get) => ({
   directorPlannedClips: [],
   directorEnergyBias: 0,
   directorPacingProfile: 'balanced',
+  directorMusicVideoTreatment: {
+    mode: 'hybrid',
+    performer_presence: 60,
+    lip_sync: 'frequent',
+    recurring_sets: ['Main performance set', 'Story world', 'Bridge contrast set'],
+    wardrobe: '',
+    palette: '',
+    camera_language: 'Controlled cinematic movement; intimate verses and bold chorus coverage',
+    recurring_motif: '',
+    chorus_signature: 'Return to the main performance set with direct-to-camera delivery and the boldest lighting',
+    surrealism: 35,
+    forbidden_elements: '',
+  },
+  setDirectorMusicVideoTreatment: (partial) => set(state => ({
+    directorMusicVideoTreatment: { ...state.directorMusicVideoTreatment, ...partial },
+  })),
   directorClipPlans: [],
   directorSceneDescription: '',
   directorLoading: false,
@@ -7000,19 +7053,64 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (useV2) {
         // Director v2: structured planning → rendering → validation
-        const result = await api.directorV2Plan({
-          skill_type: 'music_video',
-          clips: directorPlannedClips,
-          scene_description: directorSceneDescription,
-          lyrics: directorAnalysis?.lyrics ?? undefined,
-          bpm: directorAnalysis?.bpm ?? 120,
-          reference_image_path: refImagePath ?? undefined,
-          ...extraRefs,
-          speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
-          image_model: get().selectedModelPerMode.image || undefined,
-          video_model: get().selectedModelPerMode.video || undefined,
-          prompt_type: 'both',
-        })
+        let keepPollingPlan = true
+        const progressPoll = (async () => {
+          while (keepPollingPlan) {
+            try {
+              const progress = await api.getDirectorV2PlanProgress(activity.id)
+              if (progress) {
+                const streamed = (progress.stream_text || '').replace(/\s+/g, ' ').trim()
+                const streamPreview = streamed.slice(-1200)
+                const detail = (
+                  progress.phase === 'writing_scenes' && streamPreview
+                    ? streamPreview
+                    : progress.detail || streamPreview || 'The LLM is preparing the next visual prompt…'
+                ).trim()
+                activity.report(
+                  progress.phase || 'planning',
+                  `Planning ${directorPlannedClips.length} shots with the LLM…`,
+                  1,
+                  3,
+                  {
+                    detailMessage: detail,
+                    detailCurrent: progress.current || 0,
+                    detailTotal: progress.total || directorPlannedClips.length,
+                    tokenUsage: progress.usage ? {
+                      promptTokens: progress.usage.prompt_tokens || 0,
+                      completionTokens: progress.usage.completion_tokens || 0,
+                      totalTokens: progress.usage.total_tokens || 0,
+                      calls: progress.usage.calls || 0,
+                    } : undefined,
+                  },
+                )
+              }
+            } catch { /* Progress is informative; the main planning request owns errors. */ }
+            await new Promise(resolve => window.setTimeout(resolve, 800))
+          }
+        })()
+        let result: api.DirectorV2PlanResponse
+        try {
+          result = await api.directorV2Plan({
+            activity_id: activity.id,
+            skill_type: 'music_video',
+            clips: directorPlannedClips,
+            scene_description: directorSceneDescription,
+            lyrics: directorAnalysis?.lyrics ?? undefined,
+            bpm: directorAnalysis?.bpm ?? 120,
+            reference_image_path: refImagePath ?? undefined,
+            ...extraRefs,
+            speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
+            image_model: get().selectedModelPerMode.image || undefined,
+            video_model: get().selectedModelPerMode.video || undefined,
+            h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+            h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
+            music_video_treatment: get().directorMusicVideoTreatment,
+            prompt_type: 'both',
+          })
+        } finally {
+          keepPollingPlan = false
+          await progressPoll
+        }
         plans = result.clip_plans.map(p => ({
           video_prompt: p.video_prompt || '',
           image_prompt: p.image_prompt || '',
@@ -7028,6 +7126,10 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
           prompt_type: 'both',
+          music_video_treatment: get().directorMusicVideoTreatment,
+          video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
         })
         plans = result.clip_plans.map(p => ({
           video_prompt: p.video_prompt || '',
@@ -7090,6 +7192,10 @@ export const useStore = create<AppState>((set, get) => ({
         speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
         prompt_type: 'video',
         existing_image_prompts: existingImagePrompts,
+        music_video_treatment: get().directorMusicVideoTreatment,
+        video_model: get().selectedModelPerMode.video || undefined,
+        h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+        h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
       })
       // Merge video prompts into existing clip plans
       const updatedPlans = directorClipPlans.map((plan, i) => ({
@@ -7457,6 +7563,19 @@ export const useStore = create<AppState>((set, get) => ({
       directorPlannedClips: [],
       directorEnergyBias: 0,
       directorPacingProfile: 'balanced',
+      directorMusicVideoTreatment: {
+        mode: 'hybrid',
+        performer_presence: 60,
+        lip_sync: 'frequent',
+        recurring_sets: ['Main performance set', 'Story world', 'Bridge contrast set'],
+        wardrobe: '',
+        palette: '',
+        camera_language: 'Controlled cinematic movement; intimate verses and bold chorus coverage',
+        recurring_motif: '',
+        chorus_signature: 'Return to the main performance set with direct-to-camera delivery and the boldest lighting',
+        surrealism: 35,
+        forbidden_elements: '',
+      },
       directorClipPlans: [],
       directorSceneDescription: '',
       directorLoading: false,
@@ -7674,6 +7793,8 @@ export const useStore = create<AppState>((set, get) => ({
           characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
           image_model: get().selectedModelPerMode.image || undefined,
           video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -7689,6 +7810,9 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
           characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
+          video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -7758,6 +7882,9 @@ export const useStore = create<AppState>((set, get) => ({
         characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
         prompt_type: 'video',
         existing_image_prompts: existingImagePrompts,
+        video_model: get().selectedModelPerMode.video || undefined,
+        h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+        h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
       })
       const updatedPlans = directorClipPlans.map((plan, i) => ({
         ...plan,
@@ -7827,6 +7954,8 @@ export const useStore = create<AppState>((set, get) => ({
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
           image_model: get().selectedModelPerMode.image || undefined,
           video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -9096,6 +9225,9 @@ export const useStore = create<AppState>((set, get) => ({
       narrative_mode: shortFilmNarrative,
       visual_style: shortFilmVisualStyle || undefined,
       preserve_visual_style: shortFilmPreserveVisualStyle,
+      music_video_treatment: pipelineType === 'music_video'
+        ? state.directorMusicVideoTreatment
+        : undefined,
 
       // Image gen settings
       image_model: selectedModelPerMode.image || 'flux2_klein_9b',

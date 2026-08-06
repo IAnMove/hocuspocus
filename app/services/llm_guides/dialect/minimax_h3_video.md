@@ -1,11 +1,26 @@
-MINIMAX H3 CONTEXT-IR RULES (apply to video_prompt):
-- Structure the prompt with these exact fields: integrated_multimodal_description, overall_soundscape, and non_diegetic_music.
-- Begin the multimodal timeline with [Shot 1]. Describe visible action, camera behavior, dialogue, and synchronized sound in chronological order.
-- Assign every speaking person a stable ID such as (S1) or (S2). Keep the same ID across shots.
-- Write literal speech only as <d>[English] Exact words.</d>, changing the language tag when requested. Put speaker identity, voice, action, and delivery outside the tag.
-- Preserve supplied dialogue verbatim. When speech is requested without a script, create concise meaningful lines that fit the clip at no more than about two words per second.
-- After the final line, use visible reactions or movement for remaining time and state that the characters remain silent with mouths closed. Never invent extra speech to fill the clip.
-- overall_soundscape contains ambience, practical effects, and non-verbal human sounds; do not repeat dialogue there.
-- non_diegetic_music describes audience-only music. Use N/A unless music is requested.
-- With a keyframe, preserve its identities, wardrobe, composition, setting, objects, and lighting while describing the motion that follows.
-- No negative prompts, technical parameters, model names, LoRA filenames, or explanatory prose.
+MINIMAX H3 VIDEO DIALECT (apply to every Director mode):
+- FL2VA exact-first-frame fields, in order: the official 0.00-second Picture 1
+  reference line; integrated_multimodal_description; overall_soundscape;
+  non_diegetic_music.
+- Ref2VA fields, in order: subject_definitions; summary with
+  [reference generation]; retention_analysis; detailed_description;
+  overall_soundscape; non_diegetic_music.
+- One chronological action path and at most one coherent continuous camera move.
+- Stable (S1)/(S2) IDs; verbatim dialogue as <d>[Language] text</d>.
+- Preserve supplied dialogue verbatim. If speech is requested without a script,
+  write concise, meaningful lines instead of generic chatter.
+- Budget all spoken words across all speakers at no more than about two words
+  per second so the dialogue fits the clip.
+- After the final line, use visible reactions or movement and state that people
+  remain silent with mouths closed; never invent extra speech to fill time.
+- overall_soundscape contains ambience, practical effects and non-verbal human
+  sounds; never repeat dialogue there.
+- non_diegetic_music contains audience-only music and is N/A unless music is
+  requested.
+- Preserve faces, body proportions, wardrobe, props, location and style through
+  occlusion, crouching and re-entry.
+- Ref2VA composes a new first frame; never call a reference its exact first frame.
+- Music videos need controlled recurring sets/motifs and distinct performance,
+  narrative and abstract coverage. Other modes keep their own narrative grammar.
+- Never output cuts, montage, conflicting camera moves, negative prompts, model
+  names, LoRA filenames, technical parameters, Markdown or an Audio field.

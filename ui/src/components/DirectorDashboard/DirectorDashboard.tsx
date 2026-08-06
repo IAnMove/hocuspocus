@@ -49,38 +49,90 @@ function formatDate(ts: number): string {
   })
 }
 
+function h3ExpectedSegmentCount(clip: PipelineClipState): number {
+  const planned = clip.planned_clip
+  const duration = planned ? Math.max(0, planned.end - planned.start) : 5
+  const requestedFrames = Math.max(107, Math.round(duration * 24))
+  const targetFrames = 124
+  return Math.min(
+    Math.max(1, Math.round(requestedFrames / targetFrames)),
+    Math.max(1, Math.floor(requestedFrames / 107)),
+  )
+}
+
+function completedH3Segments(clip: PipelineClipState): number {
+  return (clip.h3_segments || []).filter(segment => Boolean(segment.filename) && !segment.stale).length
+}
+
 function PipelineProgressBar({ pipeline }: { pipeline: SavedPipelineState }) {
+  const fallbackImageTime = pipeline.clips.reduce((sum, c) => sum + (c.image_gen_time_sec || 0), 0) || null
+  const fallbackVideoTime = pipeline.clips.reduce((sum, c) => sum + (c.video_gen_time_sec || 0), 0) || null
+  const llmPassCount = pipeline.llm_log?.passes?.length || (pipeline.llm_log ? 1 : 0)
   const phases = [
-    { key: 'planning', label: 'LLM Planning', time: pipeline.llm_log?.planning_time_sec },
-    { key: 'images', label: 'Image Gen', time: pipeline.clips.reduce((sum, c) => sum + (c.image_gen_time_sec || 0), 0) || null },
-    { key: 'video', label: 'Video Gen', time: pipeline.clips.reduce((sum, c) => sum + (c.video_gen_time_sec || 0), 0) || null },
+    {
+      key: 'planning',
+      label: 'Prompts',
+      time: pipeline.prompt_generation_time_sec ?? pipeline.llm_log?.planning_time_sec,
+      detail: `${llmPassCount} LLM pass${llmPassCount === 1 ? '' : 'es'}`,
+    },
+    {
+      key: 'images',
+      label: 'Images / preparation',
+      time: pipeline.image_generation_time_sec ?? fallbackImageTime,
+      detail: `${pipeline.clips.filter(c => Boolean(c.start_image_filename)).length}/${pipeline.clips.length} ready`,
+    },
+    {
+      key: 'video',
+      label: 'Videos + final assembly',
+      time: pipeline.video_generation_time_sec ?? fallbackVideoTime,
+      detail: pipeline.video_model === 'minimax_h3'
+        ? `${pipeline.clips.reduce((sum, clip) => sum + completedH3Segments(clip), 0)} segments`
+        : `${pipeline.clips.filter(c => Boolean(c.video_filename)).length}/${pipeline.clips.length} clips`,
+    },
   ]
-  const total = phases.reduce((s, p) => s + (p.time || 0), 0) || 1
+  const timedTotal = phases.reduce((s, p) => s + (p.time || 0), 0) || 1
   const isComplete = pipeline.status === 'completed'
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <div className="flex h-2 rounded-full overflow-hidden bg-bg-tertiary">
         {phases.map((phase, i) => {
-          const pct = (phase.time || 0) / total * 100
+          const pct = (phase.time || 0) / timedTotal * 100
           const colors = ['bg-purple-500', 'bg-blue-500', 'bg-green-500']
           return pct > 0 ? (
             <div key={i} className={`${colors[i]} transition-all`} style={{ width: `${Math.max(pct, 3)}%` }} />
           ) : null
         })}
       </div>
-      <div className="flex justify-between text-[9px] text-text-muted">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
         {phases.map((phase, i) => (
-          <span key={i} className="flex items-center gap-1">
-            <span className={`w-1.5 h-1.5 rounded-full ${['bg-purple-500', 'bg-blue-500', 'bg-green-500'][i]}`} />
-            {phase.label}: {formatTime(phase.time ?? null)}
-          </span>
+          <div key={phase.key} className="rounded bg-bg-tertiary px-2 py-1.5 min-w-0">
+            <div className="flex items-center gap-1 text-[9px] text-text-muted truncate">
+              <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${['bg-purple-500', 'bg-blue-500', 'bg-green-500'][i]}`} />
+              {phase.label}
+            </div>
+            <div className="text-xs text-text-primary font-medium">{formatTime(phase.time ?? null)}</div>
+            <div className="text-[8px] text-text-muted truncate" title={phase.detail}>{phase.detail}</div>
+          </div>
         ))}
-        <span className="flex items-center gap-1">
-          {isComplete ? <Check size={9} className="text-indicator-success" /> : <Clock size={9} />}
-          Total: {formatTime(pipeline.total_time_sec)}
-        </span>
+        <div className="rounded bg-bg-tertiary px-2 py-1.5">
+          <div className="flex items-center gap-1 text-[9px] text-text-muted">
+            {isComplete ? <Check size={9} className="text-indicator-success" /> : <Clock size={9} />}
+            Total elapsed
+          </div>
+          <div className="text-xs text-text-primary font-medium">{formatTime(pipeline.total_time_sec)}</div>
+          <div className="text-[8px] text-text-muted">Since production started</div>
+        </div>
       </div>
+      {pipeline.assembly_time_sec != null && (
+        <div className="text-[9px] text-text-muted">
+          Latest re-join: {formatTime(pipeline.assembly_time_sec)}
+          {pipeline.assembly_count ? ` · ${pipeline.assembly_count} re-join${pipeline.assembly_count === 1 ? '' : 's'}` : ''}
+        </div>
+      )}
+      <p className="text-[8px] text-text-muted">
+        Image and video work can overlap; total elapsed is wall-clock time and may be lower than the sum of stages.
+      </p>
     </div>
   )
 }
@@ -705,14 +757,23 @@ function DirectorDashboardInner() {
   const goodCount = selectedPipeline?.clips.filter(c => c.tag === 'good').length || 0
   const needsWorkCount = selectedPipeline?.clips.filter(c => c.tag === 'needs_work').length || 0
   const totalClips = selectedPipeline?.clips.length || 0
+  const isH3Pipeline = selectedPipeline?.video_model === 'minimax_h3'
   const missingImages = selectedPipeline?.clips.filter(c => !c.start_image_filename).length || 0
-  const missingVideos = selectedPipeline?.clips.filter(c =>
-    ((!c.video_filename && !c.h3_segments?.length) || c.video_stale || !c.start_image_filename)).length || 0
-  const incompleteClips = selectedPipeline?.clips.filter(c =>
-    !c.start_image_filename || (!c.video_filename && !c.h3_segments?.length) || c.video_stale).length || 0
+  const missingVideos = isH3Pipeline
+    ? (selectedPipeline?.clips.reduce(
+      (total, clip) => total + Math.max(0, h3ExpectedSegmentCount(clip) - completedH3Segments(clip)),
+      0,
+    ) || 0)
+    : (selectedPipeline?.clips.filter(c => (!c.video_filename || c.video_stale) && c.start_image_filename).length || 0)
+  const incompleteClips = selectedPipeline?.clips.filter(c => (
+    !c.start_image_filename
+    || (isH3Pipeline
+      ? completedH3Segments(c) < h3ExpectedSegmentCount(c)
+      : !c.video_filename || c.video_stale)
+  )).length || 0
   const hasMissing = missingImages > 0 || missingVideos > 0
   const videoPartCount = selectedPipeline?.clips.reduce(
-    (count, clip) => count + (clip.h3_segments?.length || (clip.video_filename ? 1 : 0)),
+    (count, clip) => count + (isH3Pipeline ? completedH3Segments(clip) : (clip.video_filename ? 1 : 0)),
     0,
   ) || 0
   const finalOutputFilename = selectedPipeline?.final_output_filename || [...(selectedPipeline?.output_files || [])]
@@ -729,7 +790,7 @@ function DirectorDashboardInner() {
   const pipelineTerminal = !!selectedPipeline && [
     'completed', 'failed', 'crashed', 'cancelled',
   ].includes(selectedPipeline.status)
-  const showRepairAction = hasMissing || repairActive || repairRetryable || pipelineTerminal
+  const showRepairAction = hasMissing || repairActive || repairRetryable || (pipelineTerminal && !isH3Pipeline)
 
   const generateMissing = async () => {
     if (!selectedPipeline) return
@@ -737,6 +798,10 @@ function DirectorDashboardInner() {
     setRegenError(null)
     setRepairStartingPid(pid)
     try {
+      if (isH3Pipeline) {
+        await resumePipeline(pid)
+        return
+      }
       await startPipelineRepair(pid)
     } catch (e) {
       setRegenError(String(e instanceof Error ? e.message : e))
@@ -853,18 +918,22 @@ function DirectorDashboardInner() {
                 onClick={generateMissing}
                 disabled={loading || repairBusy}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] bg-orange-500/10 border border-orange-500/30 rounded text-chip-orange hover:bg-orange-500/20 disabled:opacity-40 transition-colors"
-                title={hasMissing
-                  ? `Repair ${missingImages} missing images + ${missingVideos} missing or stale videos, then join when possible`
-                  : 'Check saved clip files and repair anything missing or invalid, then join when possible'}
+                title={isH3Pipeline
+                  ? `Resume the sequential H3 render for ${missingVideos} missing segment${missingVideos === 1 ? '' : 's'}`
+                  : hasMissing
+                    ? `Repair ${missingImages} missing images + ${missingVideos} missing or stale videos, then join when possible`
+                    : 'Check saved clip files and repair anything missing or invalid, then join when possible'}
               >
                 {repairStarting ? <Loader2 size={10} className="animate-spin" /> : <Play size={10} />}
-                {repairRetryable && !hasMissing
-                  ? 'Retry repair'
-                  : missingImages > 0
-                    ? `Repair ${incompleteClips} clip${incompleteClips === 1 ? '' : 's'}`
-                    : missingVideos > 0
-                      ? `Repair ${missingVideos} video${missingVideos === 1 ? '' : 's'}`
-                      : 'Check + repair'}
+                {isH3Pipeline
+                  ? `Resume ${missingVideos} missing segment${missingVideos === 1 ? '' : 's'}`
+                  : repairRetryable && !hasMissing
+                    ? 'Retry repair'
+                    : missingImages > 0
+                      ? `Repair ${incompleteClips} clip${incompleteClips === 1 ? '' : 's'}`
+                      : missingVideos > 0
+                        ? `Repair ${missingVideos} video${missingVideos === 1 ? '' : 's'}`
+                        : 'Check + repair'}
               </button>
             ) : null}
             {repair?.status === 'completed' && (

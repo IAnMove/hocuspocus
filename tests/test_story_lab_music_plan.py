@@ -102,6 +102,28 @@ class TestStoryLabMusicPlan(unittest.TestCase):
         invalid["music"]["cues"][3]["lyrics"] = ""
         self.assertIn("must include vocals", _story_stage_problem(invalid, "music", self.project))
 
+    def test_music_video_mode_requests_and_accepts_one_vocal_story_song(self):
+        schema = _story_lab_schema("music", "music_video")
+        cues_schema = schema["properties"]["music"]["properties"]["cues"]
+        self.assertEqual(cues_schema["minItems"], 1)
+        self.assertEqual(cues_schema["maxItems"], 1)
+
+        project = {"projectType": "music_video", "characters": []}
+        result = {"music": {"cues": [
+            cue("main-song", "story", "story", instrumental=False),
+        ]}}
+        self.assertIsNone(_story_stage_problem(result, "music", project))
+
+        result["music"]["cues"][0]["instrumental"] = True
+        result["music"]["cues"][0]["lyrics"] = ""
+        self.assertIn("must include vocals", _story_stage_problem(result, "music", project))
+
+    def test_quick_video_structure_is_compact(self):
+        schema = _story_lab_schema("beats", "quick_video")
+        beats = schema["properties"]["beats"]
+        self.assertEqual(beats["minItems"], 3)
+        self.assertEqual(beats["maxItems"], 8)
+
 
 if __name__ == "__main__":
     unittest.main()

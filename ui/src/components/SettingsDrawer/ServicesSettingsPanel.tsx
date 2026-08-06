@@ -633,14 +633,14 @@ export function ServicesSettingsPanel() {
             Director Prompt Polish
           </label>
           <select
-            value={servicesConfig.director_prompt_polish || 'third_pass'}
+            value={servicesConfig.director_prompt_polish || 'off'}
             onChange={e => updateConfig({ director_prompt_polish: e.target.value as 'off' | 'full_guide' | 'light_guide' | 'third_pass' })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="third_pass">Third Pass (Enhance Pipeline) — recommended</option>
+            <option value="off">Off — use validated Director prompts (recommended)</option>
+            <option value="third_pass">Third Pass — extra LLM call per prompt</option>
             <option value="light_guide">Lightweight Guide Inject (legacy)</option>
             <option value="full_guide">Full Guide Inject (legacy)</option>
-            <option value="off">Off</option>
           </select>
           <p className="text-[10px] text-text-muted mt-1">
             {servicesConfig.director_prompt_polish === 'full_guide'
@@ -648,10 +648,59 @@ export function ServicesSettingsPanel() {
               : servicesConfig.director_prompt_polish === 'light_guide'
               ? 'Legacy: injects a lightweight dialect cheat sheet (~200 tokens) into the Director planner.'
               : servicesConfig.director_prompt_polish === 'off'
-              ? 'Director uses its built-in prompting rules only. No model-specific optimization.'
-              : 'Default. Runs each Director prompt through the model\'s enhance pipeline after planning, so video and image prompts are dialect-correct for LTX-2, Flux, etc.'}
+              ? 'Default. Uses the complete prompts produced and validated by Director, with no additional LLM calls.'
+              : 'Opt-in. Runs each prompt through another LLM call; a 40-shot plan can require 80 extra calls.'}
           </p>
         </div>
+
+        {/* Resource-aware workflow overlap */}
+        <label className="flex items-center justify-between cursor-pointer group">
+          <div className="flex-1 mr-3 min-w-0">
+            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
+              Parallel workflows by resource
+            </div>
+            <div className="text-[10px] text-text-muted mt-0.5">
+              Overlaps work only across different servers or devices. Each local GPU and each remote host remains a sequential queue.
+            </div>
+          </div>
+          <div
+            onClick={() => updateConfig({ workflow_parallelism_enabled: !servicesConfig.workflow_parallelism_enabled })}
+            className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+              servicesConfig.workflow_parallelism_enabled ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
+            }`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              servicesConfig.workflow_parallelism_enabled ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
+          </div>
+        </label>
+
+        {/* Structured debug tracing */}
+        <label className="flex items-center justify-between cursor-pointer group">
+          <div className="flex-1 mr-3 min-w-0">
+            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
+              Debug trace
+            </div>
+            <div className="text-[10px] text-text-muted mt-0.5">
+              Saves sanitized LLM requests/results and user actions as JSONL. Off by default.
+            </div>
+            {servicesConfig.debug_trace_enabled && servicesConfig.debug_trace_log_path && (
+              <div className="text-[10px] text-text-muted mt-1 font-mono truncate" title={servicesConfig.debug_trace_log_path}>
+                {servicesConfig.debug_trace_log_path}
+              </div>
+            )}
+          </div>
+          <div
+            onClick={() => updateConfig({ debug_trace_enabled: !servicesConfig.debug_trace_enabled })}
+            className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+              servicesConfig.debug_trace_enabled ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
+            }`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              servicesConfig.debug_trace_enabled ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
+          </div>
+        </label>
 
         {/* Multi-Shot LoRA Mode toggle (Beta) — Phase 1 of LoRA
             capabilities catalog. When on, Pass 2 emits storyboard-format

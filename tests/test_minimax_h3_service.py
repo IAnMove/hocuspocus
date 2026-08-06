@@ -3,15 +3,134 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
+
+from PIL import Image
 
 from app.services import minimax_h3_service as h3
 
 
 class TestMiniMaxH3Workflow(unittest.TestCase):
+    def test_portrait_start_frame_is_letterboxed_to_landscape_without_stretching(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "portrait.png"
+            Image.new("RGB", (200, 400), (220, 30, 40)).save(source)
+            input_dir = root / "input"
+
+            with patch.object(h3, "INPUT_DIR", input_dir):
+                workflow, pipeline = h3.build_workflow({
+                    **h3.DEFAULTS,
+                    "image_start": str(source),
+                    "resolution": "960x544",
+                    "image_fit_mode": "contain",
+                }, "letterbox")
+
+            self.assertEqual(pipeline, "fl2va")
+            prepared_path = input_dir / workflow["31"]["inputs"]["image"]
+            with Image.open(prepared_path) as prepared:
+                self.assertEqual(prepared.size, (960, 544))
+                self.assertEqual(prepared.getpixel((0, 272)), (0, 0, 0))
+                center = prepared.getpixel((480, 272))
+                self.assertGreater(center[0], 200)
+                self.assertLess(center[1], 50)
+
+    def test_start_frame_crop_is_explicit_and_fills_the_canvas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "portrait.png"
+            Image.new("RGB", (200, 400), (20, 180, 60)).save(source)
+            input_dir = root / "input"
+
+            with patch.object(h3, "INPUT_DIR", input_dir):
+                workflow, _ = h3.build_workflow({
+                    **h3.DEFAULTS,
+                    "image_start": str(source),
+                    "resolution": "960x544",
+                    "image_fit_mode": "crop",
+                }, "crop")
+
+            with Image.open(input_dir / workflow["31"]["inputs"]["image"]) as prepared:
+                self.assertEqual(prepared.size, (960, 544))
+                self.assertEqual(prepared.getpixel((0, 0)), (20, 180, 60))
+                self.assertEqual(prepared.getpixel((959, 543)), (20, 180, 60))
+
+    def test_legacy_source_fit_mode_maps_to_non_distorting_letterbox(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "wide.png"
+            Image.new("RGB", (400, 100), (30, 50, 210)).save(source)
+            input_dir = root / "input"
+
+            with patch.object(h3, "INPUT_DIR", input_dir):
+                workflow, _ = h3.build_workflow({
+                    **h3.DEFAULTS,
+                    "image_start": str(source),
+                    "resolution": "544x960",
+                    "image_fit_mode": "source",
+                }, "legacy-source")
+
+            with Image.open(input_dir / workflow["31"]["inputs"]["image"]) as prepared:
+                self.assertEqual(prepared.size, (544, 960))
+                self.assertEqual(prepared.getpixel((272, 0)), (0, 0, 0))
+                self.assertEqual(prepared.getpixel((272, 480)), (30, 50, 210))
+
+    def test_extend_video_becomes_last_frame_fl2va_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.mp4"
+            source.write_bytes(b"video")
+
+            def fake_extract(_source, destination, requested_time):
+                Image.new("RGB", (1280, 720), (12, 24, 36)).save(destination)
+                self.assertEqual(requested_time, 8.5)
+                return {"time": 8.416667, "width": 1280, "height": 720}
+
+            params = {
+                **h3.DEFAULTS,
+                "video_source": str(source),
+                "h3_reference_mode": "references",
+                "image_refs": ["old-reference.png"],
+            }
+            with patch("app.services.video_editor.probe_media", return_value={"duration": 8.5}), \
+                    patch("app.services.video_editor.extract_frame", side_effect=fake_extract):
+                result = h3.prepare_extend_anchor(params, "extend1", source, Path(tmp) / "cache")
+
+            self.assertTrue(Path(result["path"]).is_file())
+            self.assertEqual(result["time"], 8.416667)
+            self.assertEqual(result["ignored_references"], 1)
+            self.assertEqual(params["image_start"], result["path"])
+            self.assertEqual(params["image_prompt_type"], "S")
+            self.assertEqual(params["h3_reference_mode"], "first_frame")
+            self.assertNotIn("image_refs", params)
+
+            with patch.object(h3, "INPUT_DIR", Path(tmp) / "input"):
+                workflow, pipeline = h3.build_workflow(params, "extend1")
+            self.assertEqual(pipeline, "fl2va")
+            self.assertIn("first_frame", workflow["10"]["inputs"])
+
+    def test_reference_duration_converts_pyav_microseconds_to_seconds(self):
+        class Container:
+            duration = 14_083_333
+            streams = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        fake_av = SimpleNamespace(
+            time_base=1_000_000,
+            open=lambda _source: Container(),
+        )
+        with patch.dict(sys.modules, {"av": fake_av}):
+            self.assertAlmostEqual(h3._probe_duration("reference.mp4"), 14.083333)
+
     def test_runtime_enables_fused_triton_int8_backend(self):
         command = h3._runtime_command(43123, "balanced")
 
@@ -35,7 +154,9 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
             h3.MODEL_PROFILES["quality"]["fl2va"],
         )
         self.assertEqual(workflow["10"]["class_type"], "MiniMaxH3ImageToVideo")
-        self.assertEqual(workflow["10"]["inputs"]["prompt"].lower().count("audio:"), 1)
+        final_prompt = workflow["10"]["inputs"]["prompt"]
+        self.assertEqual(final_prompt.lower().count("overall_soundscape:"), 1)
+        self.assertIn("at 0.00 seconds", final_prompt)
         self.assertEqual(workflow["27"]["inputs"]["fps"], 24.0)
         self.assertEqual(workflow["27"]["inputs"]["audio"], ["26", 0])
         self.assertEqual(workflow["28"]["inputs"]["codec"], "auto")
@@ -86,7 +207,7 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         }, "jobaudiodefault")
 
         prompt = workflow["10"]["inputs"]["prompt"]
-        self.assertIn("Audio:", prompt)
+        self.assertIn("overall_soundscape:", prompt)
         self.assertIn("clear, audible stereo mix", prompt)
 
     def test_authored_audio_clause_is_not_duplicated(self):
@@ -97,7 +218,9 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
             "h3_audio_prompt": "loud machinery",
         }, "jobaudioauthored")
 
-        self.assertEqual(workflow["10"]["inputs"]["prompt"], prompt)
+        final_prompt = workflow["10"]["inputs"]["prompt"]
+        self.assertIn("overall_soundscape: gentle waves and gulls.", final_prompt)
+        self.assertNotIn("loud machinery", final_prompt)
 
     def test_comfy_sampling_progress_is_exposed_to_maestro_jobs(self):
         update = h3._comfy_progress_event(json.dumps({
@@ -115,8 +238,8 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(h3, "INPUT_DIR", Path(tmp) / "input"):
             first = Path(tmp) / "first.png"
             last = Path(tmp) / "last.png"
-            first.write_bytes(b"first")
-            last.write_bytes(b"last")
+            Image.new("RGB", (640, 360), (10, 20, 30)).save(first)
+            Image.new("RGB", (640, 360), (30, 20, 10)).save(last)
             workflow, pipeline = h3.build_workflow({
                 **h3.DEFAULTS,
                 "prompt": "transition",
@@ -273,6 +396,35 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
 
         self.assertEqual(result, ["clip.mp4"])
         stop_runtime.assert_not_called()
+
+    def test_idle_shutdown_rechecks_queue_guard_before_releasing(self):
+        class FakeTimer:
+            def __init__(self, _delay, callback):
+                self.callback = callback
+                self.daemon = False
+                self.cancelled = False
+
+            def start(self):
+                pass
+
+            def cancel(self):
+                self.cancelled = True
+
+        with patch.object(h3.threading, "Timer", FakeTimer), \
+                patch.object(h3, "_stop_runtime_locked") as stop_runtime:
+            h3.schedule_idle_shutdown(45, should_keep_warm=lambda: True)
+            timer = h3._idle_shutdown_timer
+            self.assertIsNotNone(timer)
+            timer.callback()
+            stop_runtime.assert_not_called()
+
+            h3.schedule_idle_shutdown(45, should_keep_warm=lambda: False)
+            timer = h3._idle_shutdown_timer
+            self.assertIsNotNone(timer)
+            timer.callback()
+            stop_runtime.assert_called_once()
+
+        h3.cancel_idle_shutdown()
 
 
 if __name__ == "__main__":

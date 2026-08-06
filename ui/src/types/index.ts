@@ -63,8 +63,8 @@ export interface GenerateParams {
   input_video_strength?: number
   /** Keep an I2V start image's medium and rendering style in the motion prompt. */
   preserve_source_style?: boolean
-  /** Match source aspect or crop it to the explicitly selected video canvas. */
-  image_fit_mode?: 'source' | 'crop'
+  /** Fit without distortion (black matte) or explicitly crop to the video canvas. */
+  image_fit_mode?: 'contain' | 'source' | 'crop'
   flow_shift?: number
   audio_guide?: string
   audio_scale?: number
@@ -75,7 +75,7 @@ export interface GenerateParams {
   /** MiniMax H3 Ref2VA standalone audio references. */
   h3_ref_audios?: string[]
   h3_audio_shift?: number
-  /** Sound direction appended as an Audio: clause when the prompt has none. */
+  /** Sound direction written into MiniMax H3's overall_soundscape field. */
   h3_audio_prompt?: string
   h3_ref_image_size?: 'match' | 'max'
   /** Explicit H3 conditioning contract: exact start frame or omni references. */
@@ -167,6 +167,7 @@ export interface GenerationJob {
   message: string
   outputFiles: string[]
   error: string | null
+  createdAt?: number
   taskTimings?: GenerationTaskTiming[]
   /** Present only on failed jobs that look like CUDA OOMs (see OomInfo). */
   oomInfo?: OomInfo | null
@@ -580,6 +581,9 @@ export interface ServicesConfig {
   nsfw_mode: boolean
   nsfw_accepted_at: string | null
   director_prompt_polish: 'off' | 'full_guide' | 'light_guide' | 'third_pass'
+  workflow_parallelism_enabled: boolean
+  debug_trace_enabled: boolean
+  debug_trace_log_path: string
   civitai_api_key: string
   civitai_api_key_set: boolean
   voice_reference_enabled: boolean
@@ -915,6 +919,23 @@ export interface ClipPlan {
   metadata?: Record<string, unknown>
 }
 
+export type MusicVideoMode = 'performance' | 'narrative' | 'hybrid' | 'abstract'
+export type MusicVideoLipSync = 'frequent' | 'occasional' | 'none'
+
+export interface MusicVideoTreatment {
+  mode: MusicVideoMode
+  performer_presence: number
+  lip_sync: MusicVideoLipSync
+  recurring_sets: string[]
+  wardrobe: string
+  palette: string
+  camera_language: string
+  recurring_motif: string
+  chorus_signature: string
+  surrealism: number
+  forbidden_elements: string
+}
+
 /** Partial plan returned from single-phase LLM calls */
 export interface PartialClipPlan {
   video_prompt?: string
@@ -1176,6 +1197,12 @@ export interface SavedPipelineState {
   clips: PipelineClipState[]
   output_files: string[]
   final_output_filename?: string
+  prompt_generation_time_sec?: number | null
+  image_generation_time_sec?: number | null
+  video_generation_time_sec?: number | null
+  assembly_time_sec?: number | null
+  assembly_count?: number
+  assembled_at?: number | null
   total_time_sec: number | null
   repair?: PipelineRepairState | null
 }

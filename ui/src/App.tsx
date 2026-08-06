@@ -27,6 +27,7 @@ function App() {
   const loadLlmStatus = useStore(s => s.loadLlmStatus)
   const loadLlmModels = useStore(s => s.loadLlmModels)
   const loadPipelineList = useStore(s => s.loadPipelineList)
+  const servicesConfig = useStore(s => s.servicesConfig)
   const toggleSidebar = useStore(s => s.toggleSidebar)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
   const toggleSettings = useStore(s => s.toggleSettings)
@@ -51,6 +52,35 @@ function App() {
     const interval = setInterval(loadLlmStatus, 15000)
     return () => clearInterval(interval)
   }, [loadLlmStatus])
+
+  // Debug-only interaction journal. It records control labels/navigation,
+  // never input values or keystrokes. API mutations are traced server-side.
+  useEffect(() => {
+    if (!servicesConfig?.debug_trace_enabled) return
+    const recordControl = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      const control = target?.closest<HTMLElement>('button, a, [role="button"], [role="tab"]')
+      if (!control) return
+      const label = (
+        control.getAttribute('aria-label')
+        || control.getAttribute('title')
+        || control.textContent
+        || control.tagName
+      ).replace(/\s+/g, ' ').trim().slice(0, 500)
+      if (!label) return
+      void fetch('/api/v1/debug/user-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          control: label,
+          control_type: control.getAttribute('role') || control.tagName.toLowerCase(),
+          view: window.location.pathname,
+        }),
+      }).catch(() => undefined)
+    }
+    document.addEventListener('click', recordControl, true)
+    return () => document.removeEventListener('click', recordControl, true)
+  }, [servicesConfig?.debug_trace_enabled])
 
   return (
     <div className="flex flex-col h-full w-full bg-bg-primary">

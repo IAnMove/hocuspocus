@@ -13,7 +13,7 @@ _GUIDES_DIR = os.path.join(os.path.dirname(__file__), "llm_guides", "enhance")
 # Map architecture prefixes to guide files
 # Values can be a string (single guide) or a tuple (with_images_guide, without_images_guide)
 _ARCHITECTURE_MAP = {
-    # MiniMax H3 joint audio-video models
+    # MiniMax H3 joint native-audio video models
     "minimax_h3": "minimax_h3_video.md",
 
     # LTX-2 video models
@@ -126,7 +126,7 @@ def get_enhance_guide(model_type: str, generation_mode: str, has_images: bool = 
             inline = md.get("enhance_guide_text")
             if isinstance(inline, str) and inline.strip():
                 inline_delta = inline.strip()
-    except Exception as e:
+    except (Exception, SystemExit) as e:
         # Don't let a model_def lookup failure prevent the enhancer
         # from running — fall through to architecture mapping.
         print(f"[Enhance] Per-model guide lookup failed for {model_type}: {e}")

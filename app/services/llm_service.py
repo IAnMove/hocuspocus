@@ -15,6 +15,8 @@ import threading
 import logging
 import requests
 from typing import Optional
+from . import debug_trace
+from .debug_trace import trace_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,99 @@ _idle_timeout: float = 60.0  # seconds before auto-unload
 _stream_buffer: str = ""
 _stream_done: bool = True
 _stream_lock = threading.Lock()
+
+# Per-workflow LLM observability. Director planning runs many LLM calls in a
+# worker thread, so the HTTP request itself cannot stream useful progress to
+# the footer. A tracking scope lets nested calls accumulate provider-reported
+# token usage while the Director endpoint publishes shot-level progress.
+_activity_tracking_lock = threading.Lock()
+_activity_tracking: dict[str, dict] = {}
+_activity_tracking_context = threading.local()
+
+
+def begin_activity_tracking(activity_id: str, **state) -> None:
+    if not activity_id:
+        return
+    with _activity_tracking_lock:
+        cutoff = time.time() - (6 * 60 * 60)
+        for stale_id in [
+            key for key, value in _activity_tracking.items()
+            if float(value.get("updated_at") or 0) < cutoff
+        ]:
+            _activity_tracking.pop(stale_id, None)
+        _activity_tracking[activity_id] = {
+            "id": activity_id,
+            "status": "running",
+            "phase": "planning",
+            "current": 0,
+            "total": 0,
+            "detail": "",
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+            "updated_at": time.time(),
+            **state,
+        }
+
+
+def update_activity_tracking(activity_id: str, **state) -> None:
+    if not activity_id:
+        return
+    with _activity_tracking_lock:
+        current = _activity_tracking.setdefault(activity_id, {"id": activity_id, "usage": {}})
+        current.update(state)
+        current["updated_at"] = time.time()
+
+
+def get_activity_tracking(activity_id: str) -> dict:
+    with _activity_tracking_lock:
+        return dict(_activity_tracking.get(activity_id) or {})
+
+
+def run_with_activity_tracking(activity_id: str, callback):
+    previous = getattr(_activity_tracking_context, "activity_id", "")
+    _activity_tracking_context.activity_id = activity_id
+    try:
+        with debug_trace.context_scope(activity_id=activity_id):
+            return callback()
+    finally:
+        _activity_tracking_context.activity_id = previous
+
+
+def _record_activity_usage(usage: dict) -> None:
+    debug_trace.trace_llm_usage(usage)
+    activity_id = getattr(_activity_tracking_context, "activity_id", "")
+    if not activity_id or not isinstance(usage, dict) or not usage:
+        return
+    prompt = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+    completion = usage.get("completion_tokens", usage.get("output_tokens", 0))
+    try:
+        prompt = int(prompt or 0)
+        completion = int(completion or 0)
+        total = int(usage.get("total_tokens") or (prompt + completion))
+    except (TypeError, ValueError):
+        return
+    with _activity_tracking_lock:
+        state = _activity_tracking.get(activity_id)
+        if not state:
+            return
+        totals = state.setdefault("usage", {})
+        totals["prompt_tokens"] = int(totals.get("prompt_tokens") or 0) + prompt
+        totals["completion_tokens"] = int(totals.get("completion_tokens") or 0) + completion
+        totals["total_tokens"] = int(totals.get("total_tokens") or 0) + total
+        totals["calls"] = int(totals.get("calls") or 0) + 1
+        state["updated_at"] = time.time()
+
+
+def _record_activity_stream(text: str, done: bool) -> None:
+    activity_id = getattr(_activity_tracking_context, "activity_id", "")
+    if not activity_id:
+        return
+    with _activity_tracking_lock:
+        state = _activity_tracking.get(activity_id)
+        if not state:
+            return
+        state["stream_text"] = str(text or "")[-4000:]
+        state["stream_done"] = bool(done)
+        state["updated_at"] = time.time()
 
 # Last call state — for pipeline dashboard capture. The user prompt is
 # captured alongside the system prompt so the Director Dashboard can
@@ -1606,6 +1701,7 @@ def _image_to_data_url(image_path: str, max_size: int = 768) -> Optional[str]:
         return f"data:{mime};base64,{data}"
 
 
+@trace_llm_call("generate", context=lambda: {"provider": _provider, "model_id": _model_id})
 def generate(
     prompt: str,
     system_prompt: str = "",
@@ -1665,7 +1761,7 @@ def generate(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and _vision_available:
+    if image_paths and (_vision_available or _provider in ("remote", "openai")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -1778,6 +1874,7 @@ def generate(
     raw_content = data["choices"][0]["message"]["content"] or ""
     finish_reason = data["choices"][0].get("finish_reason", "unknown")
     usage = data.get("usage", {})
+    _record_activity_usage(usage)
     prompt_tokens = usage.get("prompt_tokens", "?")
     completion_tokens = usage.get("completion_tokens", "?")
     print(f"[LLM] Response: {completion_tokens} tokens generated (prompt={prompt_tokens}, finish={finish_reason})")
@@ -1797,6 +1894,7 @@ def generate(
     return content.strip()
 
 
+@trace_llm_call("generate_openai_compatible")
 def generate_openai_compatible(
     *,
     prompt: str,
@@ -1810,6 +1908,7 @@ def generate_openai_compatible(
     frequency_penalty: float = 0.0,
     presence_penalty: float = 0.0,
     json_schema: Optional[dict] = None,
+    image_paths: Optional[list[str]] = None,
 ) -> str:
     """Run one isolated OpenAI-compatible text request.
 
@@ -1840,7 +1939,16 @@ def generate_openai_compatible(
                 f"Do not wrap it in markdown:\n{compact_schema}"
             ),
         })
-    messages.append({"role": "user", "content": prompt})
+    if image_paths:
+        content_parts = []
+        for image_path in image_paths:
+            data_url = _image_to_data_url(image_path)
+            if data_url:
+                content_parts.append({"type": "image_url", "image_url": {"url": data_url}})
+        content_parts.append({"type": "text", "text": prompt})
+        messages.append({"role": "user", "content": content_parts})
+    else:
+        messages.append({"role": "user", "content": prompt})
     is_deepseek = "deepseek.com" in base_url.lower()
     is_minimax = "minimax.io" in base_url.lower()
     payload = {
@@ -1888,13 +1996,15 @@ def generate_openai_compatible(
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    # DeepSeek documents that JSON mode can occasionally return an empty
-    # content field. MiniMax reasoning models can likewise exhaust their first
-    # completion budget before emitting visible content. Retry only a confirmed
-    # successful HTTP response with an empty content field; never retry
-    # timeouts or transport failures.
+    # DeepSeek's JSON mode can occasionally return an empty content field.
+    # MiniMax reasoning models can likewise spend their first completion budget
+    # entirely on hidden reasoning, even for a short plain-text task such as
+    # lyric translation. Retry only a confirmed successful HTTP response with
+    # empty content; never retry timeouts or transport failures.
     provider_name = "MiniMax" if is_minimax else "DeepSeek" if is_deepseek else "OpenAI-compatible provider"
-    attempts = 2 if json_schema is not None and (is_deepseek or is_minimax) else 1
+    attempts = 2 if is_minimax or (json_schema is not None and is_deepseek) else 1
+    from . import resource_scheduler
+    request_lane = resource_scheduler.remote_lane(model_id, base_url)
     for content_attempt in range(attempts):
         request_payload = dict(payload)
         if is_minimax and content_attempt > 0:
@@ -1903,19 +2013,25 @@ def generate_openai_compatible(
                 8192,
             )
         try:
-            response = requests.post(
-                endpoint, json=request_payload, headers=headers, timeout=(10, 600),
-            )
-            # Some otherwise-compatible APIs do not implement OpenAI's
-            # structured response envelope. Retry once without it; Maestro
-            # still validates and repairs the returned JSON locally.
-            if response.status_code in (400, 422) and "response_format" in request_payload:
-                fallback_payload = dict(request_payload)
-                fallback_payload.pop("response_format", None)
+            task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
+            with resource_scheduler.coordinator.acquire(
+                request_lane,
+                task_id=task_id,
+                description=f"{model_id} completion",
+            ):
                 response = requests.post(
-                    endpoint, json=fallback_payload, headers=headers, timeout=(10, 600),
+                    endpoint, json=request_payload, headers=headers, timeout=(10, 600),
                 )
-            response.raise_for_status()
+                # Some otherwise-compatible APIs do not implement OpenAI's
+                # structured response envelope. Retry once without it; Maestro
+                # still validates and repairs the returned JSON locally.
+                if response.status_code in (400, 422) and "response_format" in request_payload:
+                    fallback_payload = dict(request_payload)
+                    fallback_payload.pop("response_format", None)
+                    response = requests.post(
+                        endpoint, json=fallback_payload, headers=headers, timeout=(10, 600),
+                    )
+                response.raise_for_status()
         except requests.exceptions.RequestException as exc:
             detail = ""
             if getattr(exc, "response", None) is not None:
@@ -1935,6 +2051,7 @@ def generate_openai_compatible(
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise RuntimeError("OpenAI-compatible provider returned an invalid response") from exc
         if content:
+            _record_activity_usage(response_data.get("usage") or {})
             return content
         usage = response_data.get("usage") or {}
         token_details = usage.get("completion_tokens_details") or {}
@@ -1962,6 +2079,7 @@ def get_stream_status() -> dict:
         return {"text": _stream_buffer, "done": _stream_done}
 
 
+@trace_llm_call("generate_streaming", context=lambda: {"provider": _provider, "model_id": _model_id})
 def generate_streaming(
     prompt: str,
     system_prompt: str = "",
@@ -2020,13 +2138,14 @@ def generate_streaming(
     with _stream_lock:
         _stream_buffer = ""
         _stream_done = False
+    _record_activity_stream("", False)
 
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and _vision_available:
+    if image_paths and (_vision_available or _provider in ("remote", "openai")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -2141,6 +2260,7 @@ def generate_streaming(
 
     raw_content = ""
     reasoning_content = ""
+    stream_usage = {}
     in_reasoning = False
     try:
         resp = requests.post(
@@ -2166,6 +2286,8 @@ def generate_streaming(
                 break
             try:
                 chunk = _json_mod.loads(data_str)
+                if chunk.get("usage"):
+                    stream_usage = chunk["usage"]
                 delta = chunk.get("choices", [{}])[0].get("delta", {})
 
                 # With --jinja, Qwen3.5 may send reasoning via separate field
@@ -2177,6 +2299,7 @@ def generate_streaming(
                     # Show reasoning in the stream buffer wrapped in <think> tags
                     with _stream_lock:
                         _stream_buffer = f"<think>{reasoning_content}</think>"
+                    _record_activity_stream(f"<think>{reasoning_content}</think>", False)
 
                 token = delta.get("content", "")
                 if token:
@@ -2188,6 +2311,7 @@ def generate_streaming(
                     display += raw_content
                     with _stream_lock:
                         _stream_buffer = display
+                    _record_activity_stream(display, False)
             except Exception:
                 continue
 
@@ -2232,6 +2356,8 @@ def generate_streaming(
         _stream_buffer = full_raw  # keep full raw for the UI to show thinking
         _stream_done = True
 
+    _record_activity_stream(full_raw, True)
+    _record_activity_usage(stream_usage)
     _reset_idle_timer()
     return content.strip()
 
@@ -2274,6 +2400,7 @@ def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top
             raw_content += block.get("text", "")
 
     usage = data.get("usage", {})
+    _record_activity_usage(usage)
     print(f"[LLM/Anthropic] Response: {usage.get('output_tokens', '?')} tokens (prompt={usage.get('input_tokens', '?')})")
 
     content = _strip_thinking_tags(raw_content)
@@ -2306,6 +2433,7 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
         payload["system"] = system_text
 
     raw_content = ""
+    stream_usage = {}
     try:
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -2332,6 +2460,10 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
                 continue
 
             event_type = event.get("type", "")
+            if event_type == "message_start":
+                stream_usage.update((event.get("message") or {}).get("usage") or {})
+            elif event_type == "message_delta":
+                stream_usage.update(event.get("usage") or {})
             if event_type == "content_block_delta":
                 delta = event.get("delta", {})
                 if delta.get("type") == "text_delta":
@@ -2339,6 +2471,7 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
                     raw_content += text
                     with _stream_lock:
                         _stream_buffer = raw_content
+                    _record_activity_stream(raw_content, False)
 
     except Exception as e:
         print(f"[LLM/Anthropic] Streaming error: {e}")
@@ -2353,6 +2486,8 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
         _stream_buffer = raw_content
         _stream_done = True
 
+    _record_activity_stream(raw_content, True)
+    _record_activity_usage(stream_usage)
     _reset_idle_timer()
     return content.strip()
 
@@ -3816,6 +3951,8 @@ def plan_clip_prompts_and_images(
     speaker_mappings: Optional[dict] = None,
     prompt_type: str = "both",
     existing_image_prompts: Optional[list] = None,
+    video_model: str = "",
+    music_video_treatment: Optional[dict] = None,
 ) -> list:
     """Generate per-clip prompts.  Supports three modes via *prompt_type*:
 
@@ -3910,7 +4047,11 @@ def plan_clip_prompts_and_images(
             return content
         return ""
 
-    video_guide = _load_guide("LTX-2_PROMPTING_GUIDE_Embedded_Audio.MD")
+    is_ltx = str(video_model or "").lower().startswith(("ltx2", "ltxv"))
+    video_guide = _load_guide(
+        "LTX-2_PROMPTING_GUIDE_Embedded_Audio.MD"
+        if is_ltx else "director/music_video_treatment_rules.md"
+    )
     image_guide = _load_guide("QWEN IMAGE EDIT PROMPTING GUIDE.md")
 
     guide_sections = ""
@@ -3948,6 +4089,12 @@ def plan_clip_prompts_and_images(
     )
 
     # Shared rules for all music video modes
+    try:
+        from services.director.planners.music_video import normalize_music_video_treatment
+        normalized_treatment = normalize_music_video_treatment(music_video_treatment)
+    except Exception:
+        normalized_treatment = music_video_treatment or {}
+    treatment_text = json.dumps(normalized_treatment, ensure_ascii=False)
     shared_rules = (
         "- Use the Scene Concept as your PRIMARY guide for locations, outfits, "
         "props, and activities.\n"
@@ -3959,6 +4106,9 @@ def plan_clip_prompts_and_images(
         "reference photos don't contain. Any examples in these instructions "
         "show FORMAT only — never copy their content into prompts.\n"
         "- Use the lyrics to inspire mood and visual metaphors, NOT literal text.\n"
+        "- Follow this editable treatment: " + treatment_text + "\n"
+        "- Use controlled recurrence: return to the same chorus set and motif; "
+        "vary coverage inside it instead of inventing an unrelated world.\n"
         "- If a clip says 'Performer:', that person must appear.\n"
         f"{char_rule}\n"
         "- Do NOT put lyrics or spoken words in prompts.\n"
@@ -4015,7 +4165,7 @@ def plan_clip_prompts_and_images(
                 "RULES:\n"
                 f"{shared_rules}"
                 "- Vary shots creatively — mix close-ups, wide shots, different angles.\n"
-                "- Consecutive clips should feel visually DIFFERENT.\n"
+                "- Consecutive clips need distinct coverage, but recurring sets, wardrobe and motifs stay recognizable.\n"
                 "- Instrumental clips can use establishing shots, environment details, "
                 "or abstract visuals.\n"
                 f"{guide_sections}\n"
@@ -4084,7 +4234,7 @@ def plan_clip_prompts_and_images(
             f"{shared_rules}"
             "- YOU choose camera angles, movements, and shot composition.\n"
             "- Vary shots creatively — mix close-ups, wide shots, tracking shots, etc.\n"
-            "- Consecutive clips should feel visually DIFFERENT.\n"
+            "- Consecutive clips need distinct coverage, but recurring sets, wardrobe and motifs stay recognizable.\n"
             "- Instrumental clips can use establishing shots, environment details, "
             "or abstract visuals.\n"
             "- Do NOT start I prompts with 'Edit the provided image'.\n"

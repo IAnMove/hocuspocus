@@ -24,7 +24,7 @@ import subprocess
 import unicodedata
 import traceback
 from functools import wraps
-from typing import Optional
+from typing import Callable, Optional
 
 from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
@@ -590,8 +590,12 @@ def _save_pipeline_state_locked(pid: str) -> bool:
         "version": PIPELINE_STATE_VERSION,
         "pipeline_id": pid,
         "created_at": p.get("created_at"),
+        "updated_at": p.get("updated_at"),
+        "phase_started_at": p.get("phase_started_at"),
         "completed_at": p.get("_completed_at"),
         "status": p.get("status", "unknown"),
+        "phase": p.get("phase"),
+        "progress": copy.deepcopy(p.get("progress") or {}),
         "pipeline_type": params.get("pipeline_type", "music_video"),
         "comic_id": params.get("comic_id"),
         "scene_description": params.get("scene_description", ""),
@@ -639,6 +643,12 @@ def _save_pipeline_state_locked(pid: str) -> bool:
         "clip_fit_details": clip_fit_details,
         "clip_validations": clip_validations,
         "llm_log": p.get("_llm_log"),
+        "prompt_generation_time_sec": p.get("_prompt_generation_time_sec"),
+        "image_generation_time_sec": p.get("_image_generation_time_sec"),
+        "video_generation_time_sec": p.get("_video_generation_time_sec"),
+        "assembly_time_sec": p.get("_assembly_time_sec"),
+        "assembly_count": p.get("_assembly_count", 0),
+        "assembled_at": p.get("_assembled_at"),
         # Persist the complete dictionaries as well as the backwards-compatible
         # flattened clip summaries.  Metadata carries stable panel identities,
         # renderer choices and source mappings required to recompute the same
@@ -767,7 +777,32 @@ def _pipeline_media_for_job(pid: str, out_dir: str, expected_clips: int) -> Opti
     return max(candidates, key=lambda item: item["created_at"]) if candidates else None
 
 
-def _ensure_h3_segment_state(data: dict) -> dict:
+def _legacy_h3_multiclip_output(filename: str, out_dir: str = "") -> bool:
+    """Whether a legacy H3 file is one malformed multi-shot request.
+
+    Before Director gained the sequential H3 adapter, it sent the generic
+    LTX multi-clip payload to H3.  H3 then rendered only its first request,
+    while its sidecar still recorded every ``---CLIP_BOUNDARY---`` prompt and
+    start frame.  Such a file must remain visible to the user, but it is not
+    a checkpoint for *any* individual H3 shot and must never be reused on
+    resume.
+    """
+    path = filename if os.path.isabs(filename) else os.path.join(out_dir, filename)
+    meta_path = os.path.splitext(path)[0] + ".meta.json"
+    try:
+        with open(meta_path, "r", encoding="utf-8") as handle:
+            metadata = json.load(handle)
+        params = metadata.get("params") if isinstance(metadata, dict) else {}
+        if not isinstance(params, dict) or int(params.get("multi_prompts_gen_type") or 0) != 3:
+            return False
+        prompt = str(params.get("prompt") or "")
+        starts = params.get("image_start")
+        return "---CLIP_BOUNDARY---" in prompt or isinstance(starts, list) and len(starts) > 1
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return False
+
+
+def _ensure_h3_segment_state(data: dict, out_dir: str = "") -> dict:
     """Backfill editable H3 segment records for legacy saved productions."""
     if data.get("video_model") != "minimax_h3":
         return data
@@ -780,6 +815,7 @@ def _ensure_h3_segment_state(data: dict) -> dict:
         if str(name).lower().endswith((".mp4", ".webm", ".mkv", ".mov"))
         and "_multiclip" not in str(name).lower()
         and "_rejoin_" not in str(name).lower()
+        and not _legacy_h3_multiclip_output(str(name), out_dir)
     ]
     cursor = 0
     params = data.get("_params_snapshot") if isinstance(data.get("_params_snapshot"), dict) else {}
@@ -821,9 +857,42 @@ def _ensure_h3_segment_state(data: dict) -> dict:
     return data
 
 
+def _h3_checkpoint_is_complete(data: dict, out_dir: str) -> bool:
+    """Return whether every planned H3 segment has a usable checkpoint."""
+    if data.get("video_model") != "minimax_h3":
+        return True
+    clips = data.get("clips") if isinstance(data.get("clips"), list) else []
+    if not clips:
+        return False
+    for clip in clips:
+        planned = clip.get("planned_clip") if isinstance(clip.get("planned_clip"), dict) else {}
+        duration = planned.get("duration_sec") or (
+            float(planned.get("end", 0) or 0) - float(planned.get("start", 0) or 0)
+        )
+        if duration <= 0:
+            duration = 5.0
+        expected = len(_minimax_h3_frame_segments(float(duration), 24))
+        segments = clip.get("h3_segments") if isinstance(clip.get("h3_segments"), list) else []
+        valid = {
+            int(segment.get("index", -1)): segment
+            for segment in segments
+            if isinstance(segment, dict)
+            and not segment.get("stale")
+            and str(segment.get("filename") or "").strip()
+        }
+        if len(valid) != expected or any(index not in valid for index in range(expected)):
+            return False
+        for segment in valid.values():
+            filename = str(segment["filename"])
+            path = filename if os.path.isabs(filename) else os.path.join(out_dir, filename)
+            if not os.path.isfile(path):
+                return False
+    return True
+
+
 def _reconcile_pipeline_state_file(filepath: str, data: dict) -> dict:
     """Promote a timed-out checkpoint when its generation actually finished."""
-    data = _ensure_h3_segment_state(data)
+    data = _ensure_h3_segment_state(data, os.path.dirname(filepath))
     pid = str(data.get("pipeline_id") or "")
     clips = data.get("clips") if isinstance(data.get("clips"), list) else []
     if not pid or not clips:
@@ -1610,6 +1679,41 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     video_loras = state.get("video_loras") or {}
     video_params = state.get("video_params") or {}
     if video_model == "minimax_h3":
+        # A saved legacy production can have its planned shot and frame but no
+        # editable H3 checkpoint yet.  Initialise that shot here so its card
+        # can be regenerated independently instead of failing with the vague
+        # "Segment index 0 out of range" error.
+        state = _ensure_h3_segment_state(state, os.path.dirname(_find_pipeline_file(out_dir, pid) or out_dir))
+        clip = state["clips"][clip_index]
+        if not clip.get("h3_segments"):
+            planned = clip.get("planned_clip") if isinstance(clip.get("planned_clip"), dict) else {}
+            duration = planned.get("duration_sec") or (
+                float(planned.get("end", 0) or 0) - float(planned.get("start", 0) or 0)
+            )
+            if duration <= 0:
+                duration = 5.0
+            snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
+            plans = state.get("clip_plans") if isinstance(state.get("clip_plans"), list) else []
+            plan = plans[clip_index] if clip_index < len(plans) else clip
+            seed = int(clip.get("seed") or _comic_shot_seed(snapshot, clip_index, plan))
+            base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
+            segment_frames = _minimax_h3_frame_segments(float(duration), 24)
+            clip["h3_segments"] = [{
+                "index": segment_index,
+                "filename": "",
+                "prompt": _minimax_h3_segment_prompt(
+                    plan,
+                    segment_index,
+                    len(segment_frames),
+                    str(video_params.get("h3_audio_prompt") or ""),
+                    base_mode,
+                ),
+                "frames": frames,
+                "seed": (seed + segment_index) & 0x7FFFFFFF,
+                "reference_mode": base_mode,
+                "stale": True,
+            } for segment_index, frames in enumerate(segment_frames)]
+            _replace_saved_pipeline(out_dir, pid, state)
         return rerun_h3_segment(
             out_dir,
             pid,
@@ -1993,8 +2097,21 @@ def rerun_h3_segment(
                 raise ValueError(f"Start image for H3 segment {index + 1} is missing")
 
             segment_mode = "references" if identity_safe and index > 0 else base_mode
-            prompt = _h3_apply_identity_contract(
-                _h3_apply_reference_contract(str(record.get("prompt") or ""), segment_mode)
+            try:
+                from services.director.minimax_h3_prompting import format_minimax_h3_prompt
+            except ImportError:
+                from app.services.director.minimax_h3_prompting import format_minimax_h3_prompt
+            segment_plan = dict(clip)
+            dialogue_beats = list(clip.get("dialogue_beats") or [])
+            if len(segments) > 1 and dialogue_beats:
+                start = index * len(dialogue_beats) // len(segments)
+                end = (index + 1) * len(dialogue_beats) // len(segments)
+                segment_plan["dialogue_beats"] = dialogue_beats[start:end]
+            prompt = format_minimax_h3_prompt(
+                segment_plan,
+                str(record.get("prompt") or ""),
+                reference_mode=segment_mode,
+                audio_direction=str(video_params.get("h3_audio_prompt") or ""),
             )
             gen_params = {
                 "model_type": "minimax_h3",
@@ -2167,6 +2284,7 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
     )
     output_path = os.path.join(clip_out_dir, output_name)
 
+    join_started_at = time.time()
     try:
         # concatenate_multi_clip_videos is the join the original pipeline
         # uses (ffmpeg concat FILTER, re-encodes to a uniform format). The
@@ -2184,13 +2302,26 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
         print(f"[Pipeline] Rejoined {len(video_files)} clips -> {output_name}")
 
         # Update pipeline state
+        assembled_at = time.time()
+        assembly_time_sec = round(assembled_at - join_started_at, 2)
+
         def _update(s):
             if output_name not in s.get("output_files", []):
                 s.setdefault("output_files", []).append(output_name)
             s["final_output_filename"] = output_name
-        _update_saved_pipeline(out_dir, pid, _update)
+            s["assembly_time_sec"] = assembly_time_sec
+            s["assembly_count"] = int(s.get("assembly_count") or 0) + 1
+            s["assembled_at"] = assembled_at
+            created_at = s.get("created_at")
+            if created_at:
+                s["total_time_sec"] = round(assembled_at - float(created_at), 2)
+        updated_state = _update_saved_pipeline(out_dir, pid, _update) or {}
 
-        return {"filename": output_name}
+        return {
+            "filename": output_name,
+            "assembly_time_sec": assembly_time_sec,
+            "total_time_sec": updated_state.get("total_time_sec"),
+        }
     except Exception as e:
         raise RuntimeError(f"Rejoin failed: {e}")
 
@@ -3064,7 +3195,15 @@ def _update_pipeline(pid: str, **kwargs):
             # but no later phase, completion, or failure may replace Stop.
             if set(kwargs) - _CANCELLED_ARTIFACT_FIELDS:
                 return False
+        now = time.time()
+        next_phase = kwargs.get("phase", pipeline.get("phase"))
+        if (
+            not pipeline.get("phase_started_at")
+            or next_phase != pipeline.get("phase")
+        ):
+            pipeline["phase_started_at"] = now
         pipeline.update(kwargs)
+        pipeline["updated_at"] = now
         return True
 
 
@@ -3109,6 +3248,20 @@ def _start_pipeline_worker(pid: str, *, resume: bool = False) -> None:
         raise
 
 
+def _accumulate_pipeline_time(pid: str, key: str, elapsed_sec: float) -> None:
+    """Atomically add a wall-clock stage duration to a live pipeline."""
+    with _pipeline_lock:
+        pipeline = _pipelines.get(pid)
+        if not pipeline:
+            return
+        pipeline[key] = round(
+            float(pipeline.get(key) or 0) + max(0.0, elapsed_sec),
+            2,
+        )
+        pipeline["updated_at"] = time.time()
+
+
+
 def start_pipeline(params: dict) -> str:
     """Start a new director pipeline. Returns pipeline_id."""
     pid = uuid.uuid4().hex[:8]
@@ -3131,6 +3284,7 @@ def start_pipeline(params: dict) -> str:
         workspace = None
         print(f"[Pipeline] No workspace, using wgp.save_path={out_dir}")
 
+    now = time.time()
     pipeline = {
         "id": pid,
         "status": "running",
@@ -3141,11 +3295,19 @@ def start_pipeline(params: dict) -> str:
         "clip_images": [],         # filenames of generated start images
         "output_files": [],
         "error": None,
-        "created_at": time.time(),
+        "created_at": now,
+        "updated_at": now,
+        "phase_started_at": now,
         "params": params,
         "pause_reason": None,
         "workspace": workspace,
         "out_dir": out_dir,
+        "_prompt_generation_time_sec": 0.0,
+        "_image_generation_time_sec": 0.0,
+        "_video_generation_time_sec": 0.0,
+        "_assembly_time_sec": None,
+        "_assembly_count": 0,
+        "_assembled_at": None,
         # For LLM streaming: the frontend polls /api/v1/llm/stream-status
         "llm_streaming": False,
     }
@@ -4484,6 +4646,7 @@ def _resume_pipeline_reserved(pid: str, out_dir: str) -> tuple[bool, str]:
     workspace = data.get("workspace") if data.get("workspace") not in ("default", None) else None
     resume_out_dir = os.path.dirname(state_path)
 
+    now = time.time()
     pipeline = {
         "id": pid,
         "status": "running",
@@ -4524,10 +4687,34 @@ def _resume_pipeline_reserved(pid: str, out_dir: str) -> tuple[bool, str]:
         "preview_clips": data.get("preview_clips", []) or [],
         "h3_reference_manifest": data.get("h3_reference_manifest", []) or [],
         "h3_prompt_validation": data.get("h3_prompt_validation"),
+        "_h3_segments": [
+            copy.deepcopy(clip.get("h3_segments") or [])
+            for clip in saved_clips
+        ],
         "output_files": data.get("output_files", []) or [],
         "_llm_log": data.get("llm_log"),
+        "_prompt_generation_time_sec": (
+            data.get("prompt_generation_time_sec")
+            if data.get("prompt_generation_time_sec") is not None
+            else (data.get("llm_log") or {}).get("planning_time_sec", 0)
+        ),
+        "_image_generation_time_sec": (
+            data.get("image_generation_time_sec")
+            if data.get("image_generation_time_sec") is not None
+            else sum(float(c.get("image_gen_time_sec") or 0) for c in saved_clips)
+        ),
+        "_video_generation_time_sec": (
+            data.get("video_generation_time_sec")
+            if data.get("video_generation_time_sec") is not None
+            else sum(float(c.get("video_gen_time_sec") or 0) for c in saved_clips)
+        ),
+        "_assembly_time_sec": data.get("assembly_time_sec"),
+        "_assembly_count": int(data.get("assembly_count") or 0),
+        "_assembled_at": data.get("assembled_at"),
         "error": None,
-        "created_at": data.get("created_at") or time.time(),
+        "created_at": data.get("created_at") or now,
+        "updated_at": now,
+        "phase_started_at": now,
         "params": params,
         "pause_reason": None,
         "workspace": workspace,
@@ -4562,7 +4749,11 @@ def _resume_pipeline_reserved(pid: str, out_dir: str) -> tuple[bool, str]:
         )
         return True, "recovered_preview"
 
-    if data.get("status") == "completed" and data.get("output_files"):
+    if (
+        data.get("status") == "completed"
+        and data.get("output_files")
+        and _h3_checkpoint_is_complete(data, resume_out_dir)
+    ):
         _update_pipeline(
             pid,
             status="completed",
@@ -4632,6 +4823,17 @@ def stop_pipeline(pid: str) -> bool:
     return True
 
 
+def _director_trace_context(function):
+    """Correlate a Director worker without hiding its inspectable body."""
+    @wraps(function)
+    def wrapped(pid: str, resume: bool = False):
+        from . import debug_trace
+        with debug_trace.context_scope(pipeline_id=pid, workflow="director"):
+            return function(pid, resume=resume)
+    return wrapped
+
+
+@_director_trace_context
 def _run_pipeline(pid: str, resume: bool = False):
     """Main pipeline thread — runs the full Director flow.
 
@@ -4675,12 +4877,30 @@ def _run_pipeline(pid: str, resume: bool = False):
         except Exception:
             pass  # disk_usage can fail on odd mounts; don't block on the check itself
 
-        # ── Wait for GPU if jobs are running ────────────────────────────
-        # LLM needs GPU (CUDA), so we must wait for generation queue to drain.
-        # In auto mode this is expected (fire-and-forget). In non-auto mode
-        # the user is waiting interactively, so we still wait but they can cancel.
-        if not _wait_for_gpu(pid):
-            return  # cancelled while waiting
+        resource_lanes = _director_resource_lanes(params)
+        from . import debug_trace
+        debug_trace.trace_event(
+            "scheduler",
+            "director_resource_plan",
+            pipeline_id=pid,
+            resources=_resource_schedule_payload(resource_lanes),
+        )
+        _update_pipeline(
+            pid,
+            resource_schedule=_resource_schedule_payload(resource_lanes),
+        )
+
+        # Only a local GPU planner must wait for the generation queue. Remote
+        # providers and a CPU LLM are independent resources and can plan while
+        # another workflow renders locally.
+        if resource_lanes["planning"].key.startswith("local_gpu:"):
+            if not _wait_for_gpu(pid):
+                return  # cancelled while waiting
+        else:
+            print(
+                f"[Pipeline {pid}] Planning on {resource_lanes['planning'].label}; "
+                "local GPU generation may continue in parallel."
+            )
 
         # ── Phase 1: LLM Planning ──────────────────────────────────────
         _update_pipeline(pid, phase="planning", llm_streaming=True,
@@ -4749,11 +4969,9 @@ def _run_pipeline(pid: str, resume: bool = False):
 
         # ── Optional: Third-pass prompt polish ────────────────────────
         services = _wgp.server_config.get("services", {}) if _wgp else {}
-        # Default "third_pass" — Pass 3 polish runs each generated prompt
-        # through a model-specific dialect pass after planning, which
-        # produces materially better output than relying on Pass 2 alone
-        # with a single hardcoded dialect.
-        polish_mode = services.get("director_prompt_polish", "third_pass")
+        # Opt-in: third_pass makes one extra LLM call per prompt and can turn
+        # a 40-shot plan into 80 serial calls before image generation starts.
+        polish_mode = services.get("director_prompt_polish", "off")
 
         # Snapshot pre-polish prompts for comparison
         import copy
@@ -4910,12 +5128,21 @@ def _run_pipeline(pid: str, resume: bool = False):
                 )
             _save_pipeline_state(pid)
 
+        if not resume_plans:
+            _accumulate_pipeline_time(
+                pid,
+                "_prompt_generation_time_sec",
+                time.time() - planning_start,
+            )
+            _save_pipeline_state(pid)
+
         # ── Phase 2: Prepare or Generate Start Images ────────────────────
         # Normal Director productions generate start frames here. Comic
         # movies already have one approved artwork image per shot, so those
         # files are copied into the recoverable pipeline output directory and
         # fed directly to I2V without spending image-generation credits.
         provided_clip_image_paths = params.get("provided_clip_image_paths") or []
+        image_stage_started_at = time.time()
         _update_pipeline(pid, phase="generating_images",
                          progress={
                              "current": 0,
@@ -4952,12 +5179,90 @@ def _run_pipeline(pid: str, resume: bool = False):
             params["_reference_style"] = _style_phrase
             _update_pipeline(pid, _reference_style=_style_phrase)
 
-        # Unload LLM to free VRAM
+        # Unload only the local planner we used. A scoped remote request never
+        # owns Maestro's singleton local model and must not tear it down while
+        # a different workflow is using it.
         try:
-            if llm_service.is_loaded():
+            if resource_lanes["planning"].location == "local" and llm_service.is_loaded():
                 llm_service.unload_model()
         except Exception as e:
             print(f"[Pipeline] LLM unload warning (non-fatal): {e}")
+
+        parallel_video_thread: Optional[threading.Thread] = None
+        parallel_video_result: dict = {"outputs": None, "error": None}
+        parallel_image_failed = threading.Event()
+        parallel_clip_events: list[threading.Event] = []
+        parallel_clip_images: list[str] = []
+        parallel_clip_keyframes: list[list[str]] = []
+        can_pipeline_remote_images = bool(
+            (_wgp.server_config.get("services", {}) if _wgp else {}).get(
+                "workflow_parallelism_enabled", True
+            )
+            and auto_mode
+            and not resume_images
+            and not provided_clip_image_paths
+            and params.get("video_model") == "minimax_h3"
+            and resource_lanes["images"].location == "remote"
+            and resource_lanes["video"].location == "local"
+            and resource_lanes["images"].key != resource_lanes["video"].key
+        )
+        if can_pipeline_remote_images:
+            debug_trace.trace_event(
+                "scheduler",
+                "parallel_pipeline_started",
+                pipeline_id=pid,
+                image_lane=resource_lanes["images"].key,
+                video_lane=resource_lanes["video"].key,
+                clips=len(clip_plans),
+            )
+            parallel_clip_events = [threading.Event() for _ in clip_plans]
+            parallel_clip_images = [""] * len(clip_plans)
+            parallel_clip_keyframes = [[] for _ in clip_plans]
+            _update_pipeline(
+                pid,
+                resource_schedule=_resource_schedule_payload(
+                    resource_lanes,
+                    mode="remote-images+local-video",
+                ),
+                progress={
+                    "current": 0,
+                    "total": len(clip_plans),
+                    "message": "Parallel pipeline: remote images + local MiniMax H3 video",
+                    "step": 0,
+                    "total_steps": 0,
+                },
+            )
+
+            def _parallel_video_worker() -> None:
+                video_stage_started_at = time.time()
+                try:
+                    parallel_video_result["outputs"] = _run_video_generation(
+                        pid,
+                        params,
+                        clip_plans,
+                        planned_clips,
+                        parallel_clip_images,
+                        parallel_clip_keyframes,
+                        out_dir=pipeline_out_dir,
+                        workspace=pipeline_workspace,
+                        clip_ready_events=parallel_clip_events,
+                        producer_failed=parallel_image_failed,
+                    )
+                except Exception as error:
+                    parallel_video_result["error"] = error
+                finally:
+                    _accumulate_pipeline_time(
+                        pid,
+                        "_video_generation_time_sec",
+                        time.time() - video_stage_started_at,
+                    )
+
+            parallel_video_thread = threading.Thread(
+                target=_parallel_video_worker,
+                name=f"director-{pid}-local-video",
+                daemon=False,
+            )
+            parallel_video_thread.start()
 
         # On resume, reuse the start images that already generated before the
         # crash — but only if every file still exists (a wiped/half-written
@@ -5016,8 +5321,65 @@ def _run_pipeline(pid: str, resume: bool = False):
         else:
             if resume_images:
                 print(f"[Pipeline {pid}] Resume: saved start images missing on disk — regenerating")
-            clip_images, clip_keyframes = _run_image_generation(pid, params, clip_plans, out_dir=pipeline_out_dir, workspace=pipeline_workspace)
+            def _publish_parallel_clip(index: int, image_name: str, keyframes: list[str]) -> None:
+                if parallel_video_result["error"] is not None:
+                    raise RuntimeError(
+                        f"Local video rendering failed while remote images were running: "
+                        f"{parallel_video_result['error']}"
+                    )
+                parallel_clip_images[index] = image_name
+                parallel_clip_keyframes[index] = keyframes
+                parallel_clip_events[index].set()
+                debug_trace.trace_event(
+                    "scheduler",
+                    "parallel_asset_ready",
+                    pipeline_id=pid,
+                    clip_index=index,
+                    image_name=image_name,
+                    image_lane=resource_lanes["images"].key,
+                    consumer_lane=resource_lanes["video"].key,
+                )
+                _update_pipeline(
+                    pid,
+                    resource_schedule={
+                        **_resource_schedule_payload(resource_lanes, mode="remote-images+local-video"),
+                        "images_ready": index + 1,
+                        "images_total": len(clip_plans),
+                    },
+                )
 
+            try:
+                clip_images, clip_keyframes = _run_image_generation(
+                    pid,
+                    params,
+                    clip_plans,
+                    out_dir=pipeline_out_dir,
+                    workspace=pipeline_workspace,
+                    on_clip_ready=_publish_parallel_clip if parallel_video_thread else None,
+                )
+            except Exception:
+                if parallel_video_thread:
+                    parallel_image_failed.set()
+                    for event in parallel_clip_events:
+                        event.set()
+                    with _pipeline_lock:
+                        active_job_id = (_pipelines.get(pid) or {}).get(
+                            "_active_generation_job_id"
+                        )
+                    if active_job_id and _cancel_generation is not None:
+                        _cancel_generation(active_job_id)
+                    # Do not leave an H3 worker mutating a pipeline already
+                    # reported as failed. Cooperative cancellation wakes the
+                    # waiter, then this join completes before error handling.
+                    parallel_video_thread.join()
+                raise
+
+        if not _resume_imgs_ok:
+            _accumulate_pipeline_time(
+                pid,
+                "_image_generation_time_sec",
+                time.time() - image_stage_started_at,
+            )
         _update_pipeline(pid, clip_images=clip_images, _clip_keyframes=clip_keyframes)
         _save_pipeline_state(pid)  # Save after image generation
 
@@ -5070,10 +5432,35 @@ def _run_pipeline(pid: str, resume: bool = False):
             )
 
         # ── Phase 3: Generate Video ─────────────────────────────────────
-        _update_pipeline(pid, phase="generating_video",
-                         progress={"current": 0, "total": 1, "message": "Generating video...", "step": 0, "total_steps": 0})
+        if parallel_video_thread:
+            _update_pipeline(pid, phase="generating_video",
+                             progress={"current": len(clip_images), "total": len(clip_images), "message": "Remote images complete; finishing local video queue…", "step": 0, "total_steps": 0})
+            parallel_video_thread.join()
+            if parallel_video_result["error"] is not None:
+                raise parallel_video_result["error"]
+            output_files = parallel_video_result["outputs"] or []
+        else:
+            _update_pipeline(pid, phase="generating_video",
+                             progress={"current": 0, "total": 1, "message": "Generating video...", "step": 0, "total_steps": 0})
 
-        output_files = _run_video_generation(pid, params, clip_plans, planned_clips, clip_images, clip_keyframes, out_dir=pipeline_out_dir, workspace=pipeline_workspace)
+            video_stage_started_at = time.time()
+            try:
+                output_files = _run_video_generation(
+                    pid,
+                    params,
+                    clip_plans,
+                    planned_clips,
+                    clip_images,
+                    clip_keyframes,
+                    out_dir=pipeline_out_dir,
+                    workspace=pipeline_workspace,
+                )
+            finally:
+                _accumulate_pipeline_time(
+                    pid,
+                    "_video_generation_time_sec",
+                    time.time() - video_stage_started_at,
+                )
 
         # A Stop during the video phase lands here after the abort. Record
         # whatever clips finished (the Dashboard can rerun/rejoin them),
@@ -5270,6 +5657,59 @@ def _wait_for_gpu(pid: str, poll_interval: float = 2.0):
             return True
 
         time.sleep(poll_interval)
+
+
+def _director_resource_lanes(params: dict) -> dict:
+    """Resolve the execution resource for each expensive Director phase."""
+    try:
+        from services import resource_scheduler
+    except ImportError:  # pragma: no cover - package import mode
+        from app.services import resource_scheduler
+
+    services = _wgp.server_config.get("services", {}) if _wgp else {}
+    gpu_index = params.get("gpu_index", services.get("workflow_gpu_index", 0))
+    writing_provider = str(params.get("writing_provider") or "maestro").strip().lower()
+    if writing_provider not in {"", "maestro", "internal", "local"}:
+        planning_provider = writing_provider
+        planning_url = params.get("writing_base_url") or ""
+        planning_device = "remote"
+    else:
+        planning_provider = params.get("llm_provider") or services.get("llm_provider", "local")
+        planning_url = params.get("llm_remote_url") or services.get("llm_remote_url", "")
+        planning_device = params.get("llm_device") or services.get("llm_device", "cpu")
+    lanes = {
+        "planning": resource_scheduler.llm_lane(
+            planning_provider,
+            base_url=planning_url,
+            device=planning_device,
+            gpu_index=gpu_index,
+        ),
+        "images": resource_scheduler.image_lane(
+            params.get("image_model", ""),
+            base_url=params.get("image_base_url", ""),
+            gpu_index=gpu_index,
+        ),
+        "video": resource_scheduler.video_lane(
+            params.get("video_model", ""),
+            base_url=params.get("video_base_url", ""),
+            gpu_index=gpu_index,
+        ),
+    }
+    return lanes
+
+
+def _resource_schedule_payload(lanes: dict, mode: str = "sequential") -> dict:
+    return {
+        "mode": mode,
+        "lanes": {
+            phase: {
+                "key": lane.key,
+                "label": lane.label,
+                "location": lane.location,
+            }
+            for phase, lane in lanes.items()
+        },
+    }
 
 
 # ── Planning Phase ──────────────────────────────────────────────────────
@@ -5740,6 +6180,7 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         "multishot_lora_mode": multishot_lora_mode,
         "visual_style": params.get("visual_style", ""),
         "preserve_visual_style": params.get("preserve_visual_style", False),
+        "music_video_treatment": params.get("music_video_treatment"),
     }
 
     if pipeline_type == "comic_movie":
@@ -5795,7 +6236,7 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     # per-prompt after planning by polish_prompts_third_pass(), which
     # avoids stacking conflicting dialect guidance into Pass 2's already
     # crowded system prompt.
-    polish_mode = services_cfg.get("director_prompt_polish", "third_pass")
+    polish_mode = services_cfg.get("director_prompt_polish", "off")
     if polish_mode in ("full_guide", "light_guide"):
         from services.director.prompt_polish import build_polish_block
         guide_mode = "full" if polish_mode == "full_guide" else "light"
@@ -6303,6 +6744,10 @@ def _generate_minimax_director_image(
 ) -> str:
     """Generate one Director frame with the external MiniMax Image-01 API."""
     from services import minimax_image_service
+    try:
+        from services import resource_scheduler
+    except ImportError:  # pragma: no cover - package import mode
+        from app.services import resource_scheduler
 
     api_key = ((_wgp.server_config.get("services") or {}).get("minimax_api_key") or "")
     if not api_key:
@@ -6313,14 +6758,20 @@ def _generate_minimax_director_image(
             subject_reference = minimax_image_service.local_image_data_uri(path)
             break
     try:
-        generated = minimax_image_service.generate_image(
-            api_key=api_key,
-            prompt=prompt,
-            aspect_ratio=minimax_image_service.aspect_ratio_for_resolution(resolution),
-            output_dir=output_dir,
-            subject_reference=subject_reference,
-            filename_prefix="minimax-director",
-        )
+        lane = resource_scheduler.remote_lane("minimax", "https://api.minimax.io")
+        with resource_scheduler.coordinator.acquire(
+            lane,
+            task_id=f"minimax-image-{threading.get_ident()}-{time.time_ns()}",
+            description="MiniMax Image-01 Director frame",
+        ):
+            generated = minimax_image_service.generate_image(
+                api_key=api_key,
+                prompt=prompt,
+                aspect_ratio=minimax_image_service.aspect_ratio_for_resolution(resolution),
+                output_dir=output_dir,
+                subject_reference=subject_reference,
+                filename_prefix="minimax-director",
+            )
     except minimax_image_service.MiniMaxImageError as exc:
         raise RuntimeError(str(exc)) from exc
     return str(generated.get("name") or "")
@@ -6444,7 +6895,14 @@ def _director_location_ref_for_plan(plan: dict, params: dict) -> tuple[str, str]
     return scored[0][2], scored[0][3]
 
 
-def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_dir: str = None, workspace: str = None) -> tuple[list[str], list[list[str]]]:
+def _run_image_generation(
+    pid: str,
+    params: dict,
+    clip_plans: list[dict],
+    out_dir: str = None,
+    workspace: str = None,
+    on_clip_ready: Optional[Callable[[int, str, list[str]], None]] = None,
+) -> tuple[list[str], list[list[str]]]:
     """Generate start images and keyframe images per clip.
 
     Returns:
@@ -6878,6 +7336,8 @@ def _run_image_generation(pid: str, params: dict, clip_plans: list[dict], out_di
                     shot_keyframes.append("")
 
         clip_keyframes.append(shot_keyframes)
+        if on_clip_ready is not None:
+            on_clip_ready(i, clip_images[-1], list(shot_keyframes))
 
     _update_pipeline(pid, progress={
         "current": total_images,
@@ -8544,6 +9004,12 @@ def _minimax_h3_audio_direction(
 def _h3_sentence_windows(prompt: str, segment_count: int) -> list[str]:
     """Split a long Story prompt into non-repeating action windows."""
     text = re.sub(r"\s*\bAudio\s*:.*$", "", str(prompt or "").strip(), flags=re.I | re.S)
+    if "integrated_multimodal_description:" in text:
+        text = text.split("integrated_multimodal_description:", 1)[1]
+        text = text.split("overall_soundscape:", 1)[0].strip()
+    elif "detailed_description:" in text:
+        text = text.split("detailed_description:", 1)[1]
+        text = text.split("overall_soundscape:", 1)[0].strip()
     if segment_count <= 1 or not text:
         return [text]
 
@@ -8670,23 +9136,26 @@ def _minimax_h3_segment_prompt(
     global_audio_direction: str = "",
     reference_mode: str = "first_frame",
 ) -> str:
-    """Choose the authored continuation and attach its explicit audio plan."""
+    """Choose the authored continuation and apply H3's official dialect."""
+    try:
+        from services.director.minimax_h3_prompting import format_minimax_h3_prompt
+    except ImportError:  # pytest imports this module through app.services
+        from app.services.director.minimax_h3_prompting import format_minimax_h3_prompt
+
+    segment_plan = dict(plan)
+    dialogue_beats = list(plan.get("dialogue_beats") or [])
+    if segment_count > 1 and dialogue_beats:
+        start = segment_index * len(dialogue_beats) // segment_count
+        end = (segment_index + 1) * len(dialogue_beats) // segment_count
+        segment_plan["dialogue_beats"] = dialogue_beats[start:end]
     optimized = plan.get("h3_segment_prompts") or []
     if len(optimized) == segment_count and segment_index < len(optimized):
         prompt = str(optimized[segment_index] or "").strip()
-        prompt = _h3_apply_reference_contract(prompt, reference_mode)
-        try:
-            from services import minimax_h3_service
-        except ImportError:  # pytest imports this module through app.services
-            from app.services import minimax_h3_service
-        return minimax_h3_service.ensure_audio_prompt(
+        return format_minimax_h3_prompt(
+            segment_plan,
             prompt,
-            _minimax_h3_audio_direction(
-                plan,
-                global_audio_direction,
-                segment_index,
-                segment_count,
-            ),
+            reference_mode=reference_mode,
+            audio_direction=global_audio_direction,
         )
 
     window_prompts = plan.get("window_prompts") or []
@@ -8700,20 +9169,11 @@ def _minimax_h3_segment_prompt(
     else:
         source = str(plan.get("video_prompt") or "")
         prompt = _h3_sentence_windows(source, segment_count)[segment_index]
-    prompt = _h3_apply_reference_contract(prompt, reference_mode)
-
-    try:
-        from services import minimax_h3_service
-    except ImportError:  # pytest imports this module through app.services
-        from app.services import minimax_h3_service
-    return minimax_h3_service.ensure_audio_prompt(
+    return format_minimax_h3_prompt(
+        segment_plan,
         prompt,
-        _minimax_h3_audio_direction(
-            plan,
-            global_audio_direction,
-            segment_index,
-            segment_count,
-        ),
+        reference_mode=reference_mode,
+        audio_direction=global_audio_direction,
     )
 
 
@@ -8737,6 +9197,10 @@ def _h3_parse_optimized_prompts(response: str) -> list[dict]:
 
 def _h3_preserve_audio_contract(candidate: str, draft: str) -> str:
     """Accept visual phrasing from the validator while keeping authored audio verbatim."""
+    if "overall_soundscape:" in draft and "non_diegetic_music:" in draft:
+        draft_audio = draft.split("overall_soundscape:", 1)[1]
+        candidate_visual = candidate.split("overall_soundscape:", 1)[0].rstrip()
+        return f"{candidate_visual}\noverall_soundscape:{draft_audio}".strip()
     draft_parts = re.split(r"\bAudio\s*:", draft, maxsplit=1, flags=re.I)
     if len(draft_parts) != 2:
         return candidate.strip()
@@ -8747,19 +9211,36 @@ def _h3_preserve_audio_contract(candidate: str, draft: str) -> str:
 def _h3_validated_candidate(candidate: str, draft: str, reference_mode: str) -> str:
     """Reject optimizer drift and reapply contracts the LLM is not allowed to alter."""
     candidate = _h3_preserve_audio_contract(str(candidate or ""), draft)
-    candidate = _h3_apply_reference_contract(candidate, reference_mode)
+    if "overall_soundscape:" not in draft:
+        candidate = _h3_apply_reference_contract(candidate, reference_mode)
+        if len(candidate) < max(40, len(draft) // 3) or len(candidate) > max(6000, len(draft) * 2):
+            return ""
+        if "audio:" not in candidate.casefold():
+            return ""
+        for quoted in re.findall(r'"([^"\n]+)"', draft):
+            if quoted not in candidate:
+                return ""
+        if reference_mode == "references" and "exact first frame" in candidate.casefold():
+            return ""
+        if reference_mode == "first_frame" and "exact first frame" not in candidate.casefold():
+            return ""
+        return candidate
     if len(candidate) < max(40, len(draft) // 3) or len(candidate) > max(6000, len(draft) * 2):
         return ""
-    if "audio:" not in candidate.casefold():
+    try:
+        from services.director.minimax_h3_prompting import is_structured_h3_prompt
+    except ImportError:
+        from app.services.director.minimax_h3_prompting import is_structured_h3_prompt
+    if not is_structured_h3_prompt(candidate, reference_mode):
         return ""
     if "visual style lock:" in draft.casefold() and "visual style lock:" not in candidate.casefold():
         return ""
-    for quoted in re.findall(r'"([^"\n]+)"', draft):
-        if quoted not in candidate:
+    for spoken in re.findall(r"<d>\[[^\]]+\]\s*([^<]+)</d>", draft):
+        if spoken not in candidate:
             return ""
-    if reference_mode == "references" and "exact first frame" in candidate.casefold():
+    if reference_mode == "references" and "fully referenced" in candidate.casefold():
         return ""
-    if reference_mode == "first_frame" and "exact first frame" not in candidate.casefold():
+    if reference_mode == "first_frame" and "at 0.00 seconds" not in candidate.casefold():
         return ""
     return candidate
 
@@ -8831,8 +9312,10 @@ def _optimize_minimax_h3_story_prompts(
         "segment_index pairs. Make motion chronological, concrete and visually executable; use at "
         "most one coherent camera move per segment. Never add, remove, reorder or repeat story "
         "events, characters, props, wardrobe, colors or locations. Preserve style-lock language, "
-        "all quoted dialogue and the complete Audio clause verbatim. FL2VA exact-first-frame and "
-        "Ref2VA new-opening-frame contracts are immutable. Do not copy actions from another segment."
+        "all <d>[Language] dialogue and the complete overall_soundscape and non_diegetic_music "
+        "fields verbatim. Preserve the exact official field labels and their order. FL2VA's exact "
+        "0.00-second Picture 1 line and Ref2VA's six-field new-opening-frame contract are immutable. "
+        "Do not add an Audio field and do not copy actions from another segment."
     )
     user_prompt = (
         f"Conditioning mode: {reference_mode}. Optimize these exact H3 segment prompts:\n"
@@ -8918,6 +9401,8 @@ def _run_minimax_h3_story_video(
     resolution: str,
     out_dir: str,
     workspace: str = None,
+    clip_ready_events: Optional[list[threading.Event]] = None,
+    producer_failed: Optional[threading.Event] = None,
 ) -> list[str]:
     """Render a complete Story short film as sequential native-audio H3 clips."""
     fps = 24
@@ -9081,21 +9566,97 @@ def _run_minimax_h3_story_video(
         raise RuntimeError("MiniMax H3 received no planned Story shots to render.")
 
     outputs: list[str] = []
-    segment_states: list[list[dict]] = [[] for _ in clip_plans]
+    saved_segment_states = (_pipelines.get(pid) or {}).get("_h3_segments") or []
+    segment_states: list[list[dict]] = [
+        copy.deepcopy(saved_segment_states[index])
+        if index < len(saved_segment_states) and isinstance(saved_segment_states[index], list)
+        else []
+        for index in range(len(clip_plans))
+    ]
     _update_pipeline(pid, _h3_segments=segment_states)
     continuation_frames: list[str] = []
     current_shot = -1
     segment_start = ""
+    reuse_prefix = False
     try:
         for job_index, (shot_index, segment_index, segment_count, frames, prompt, segment_reference_mode) in enumerate(jobs):
             if _pipeline_cancel_requested(pid):
                 raise PipelineCancelled("Director pipeline was cancelled.")
 
             if shot_index != current_shot:
+                if clip_ready_events and shot_index < len(clip_ready_events):
+                    _update_pipeline(
+                        pid,
+                        progress={
+                            "current": job_index,
+                            "total": len(jobs),
+                            "message": f"Parallel render waiting for start image {shot_index + 1}/{len(clip_plans)}",
+                            "step": 0,
+                            "total_steps": 0,
+                        },
+                    )
+                    while not clip_ready_events[shot_index].wait(0.25):
+                        if _pipeline_cancel_requested(pid):
+                            raise PipelineCancelled("Director pipeline was cancelled.")
+                        if producer_failed and producer_failed.is_set():
+                            raise RuntimeError("Start-image generation failed during parallel rendering.")
+                    if producer_failed and producer_failed.is_set():
+                        raise RuntimeError("Start-image generation failed during parallel rendering.")
                 current_shot = shot_index
                 image_name = clip_images[shot_index] if shot_index < len(clip_images) else ""
+                if shot_index < len(reference_manifest):
+                    reference_manifest[shot_index]["shot_frame"] = image_name
+                    _update_pipeline(
+                        pid,
+                        h3_reference_manifest=copy.deepcopy(reference_manifest),
+                    )
                 candidate = image_name if os.path.isabs(image_name) else os.path.join(out_dir, image_name)
                 segment_start = candidate if image_name and os.path.isfile(candidate) else ""
+                reuse_prefix = True
+
+            saved_segment = next((
+                item for item in segment_states[shot_index]
+                if isinstance(item, dict) and item.get("index") == segment_index
+            ), None)
+            saved_name = str(saved_segment.get("filename") or "") if saved_segment else ""
+            saved_path = saved_name if os.path.isabs(saved_name) else os.path.join(out_dir, saved_name)
+            reusable = bool(
+                reuse_prefix
+                and saved_segment
+                and not saved_segment.get("stale")
+                and int(saved_segment.get("frames") or 0) == frames
+                and saved_name
+                and os.path.isfile(saved_path)
+            )
+            if reusable:
+                outputs.append(saved_name)
+                print(
+                    f"[Pipeline {pid}] Reusing MiniMax H3 shot {shot_index + 1}, "
+                    f"segment {segment_index + 1}/{segment_count}"
+                )
+                if segment_index + 1 < segment_count:
+                    from .video_editor import extract_frame, probe_media
+                    continuation_path = os.path.join(
+                        out_dir,
+                        f".minimax_h3_{pid}_{shot_index + 1}_{segment_index + 1}_continuation.png",
+                    )
+                    media = probe_media(saved_path)
+                    extract_frame(saved_path, continuation_path, float(media["duration"]))
+                    continuation_frames.append(continuation_path)
+                    segment_start = continuation_path
+                _update_pipeline(
+                    pid,
+                    progress={
+                        "current": job_index + 1,
+                        "total": len(jobs),
+                        "message": f"Reused MiniMax H3 segment {job_index + 1}/{len(jobs)}",
+                        "step": 0,
+                        "total_steps": 0,
+                    },
+                )
+                _save_pipeline_state(pid)
+                continue
+            reuse_prefix = False
 
             gen_params: dict = {
                 "model_type": "minimax_h3",
@@ -9156,6 +9717,10 @@ def _run_minimax_h3_story_video(
                 )
             outputs.extend(generated)
             generated_path = generated[-1] if os.path.isabs(generated[-1]) else os.path.join(out_dir, generated[-1])
+            segment_states[shot_index] = [
+                item for item in segment_states[shot_index]
+                if not isinstance(item, dict) or item.get("index") != segment_index
+            ]
             segment_states[shot_index].append({
                 "index": segment_index,
                 "filename": os.path.basename(generated_path),
@@ -9167,6 +9732,7 @@ def _run_minimax_h3_story_video(
                 "stale": False,
                 "created_at": time.time(),
             })
+            segment_states[shot_index].sort(key=lambda item: int(item.get("index", 0)))
             _update_pipeline(pid, _h3_segments=copy.deepcopy(segment_states))
 
             if segment_index + 1 < segment_count:
@@ -9205,7 +9771,15 @@ def _run_minimax_h3_story_video(
     final_name = f"minimax_h3_{pid}_multiclip.mp4"
     final_path = os.path.join(out_dir, final_name)
     clip_paths = [name if os.path.isabs(name) else os.path.join(out_dir, name) for name in outputs]
-    if not _wgp.concatenate_multi_clip_videos(clip_paths, final_path, None):
+    # Musical productions retain the chosen song as the final soundtrack;
+    # H3's native per-segment ambience remains useful while rendering but is
+    # not a replacement for the selected music track.
+    assembly_audio = (
+        params.get("audio_path")
+        if params.get("pipeline_type") == "music_video"
+        else None
+    )
+    if not _wgp.concatenate_multi_clip_videos(clip_paths, final_path, assembly_audio):
         raise RuntimeError(
             "MiniMax H3 rendered every segment, but final short-film assembly failed. "
             "The individual clips were preserved."
@@ -9230,13 +9804,19 @@ def _stop_minimax_h3_runtime() -> None:
         from services import minimax_h3_service
     except ImportError:  # pragma: no cover - package import mode
         from app.services import minimax_h3_service
-    minimax_h3_service.stop_runtime()
+    # Director owns the runtime while it submits sequential H3 segments. Once
+    # assembly finishes, let the shared H3 idle policy release it after a
+    # short grace period; a newly queued H3 job cancels this timer, while a
+    # non-H3 job releases it immediately before it acquires the GPU lock.
+    minimax_h3_service.schedule_idle_shutdown()
 
 
 def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                           planned_clips: list[dict], clip_images: list[str],
                           clip_keyframes: Optional[list[list[str]]] = None,
-                          out_dir: str = None, workspace: str = None) -> list[str]:
+                          out_dir: str = None, workspace: str = None,
+                          clip_ready_events: Optional[list[threading.Event]] = None,
+                          producer_failed: Optional[threading.Event] = None) -> list[str]:
     """Generate multi-clip video with optional keyframe injection. Returns list of output filenames."""
     if (
         params.get("pipeline_type") == "comic_movie"
@@ -9359,10 +9939,10 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
     if not out_dir:
         out_dir = _wgp.save_path
 
-    # H3's open model renders one native-audio clip per request and has no
-    # WanGP multi-clip/sliding-window contract. Story mode therefore runs its
-    # planned shots explicitly and assembles them with their embedded audio.
-    if video_model == "minimax_h3" and pipeline_type == "short_film_story":
+    # H3 renders exactly one native-audio clip per request. It cannot consume
+    # WanGP's multi-clip/sliding-window contract, so every Director mode must
+    # submit its planned shots sequentially and assemble the resulting clips.
+    if video_model == "minimax_h3":
         try:
             return _run_minimax_h3_story_video(
                 pid,
@@ -9374,11 +9954,13 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 resolution,
                 out_dir,
                 workspace,
+                clip_ready_events,
+                producer_failed,
             )
         finally:
-            # Keep one warm sidecar across all Story segments, then release it
-            # after assembly (or any failure/cancel) so idle H3 does not retain
-            # almost the whole GPU indefinitely.
+            # Keep one warm sidecar across all Story segments, then hand it to
+            # the shared queue-aware idle-release policy after final assembly
+            # (or any failure/cancel).
             _stop_minimax_h3_runtime()
 
     # Quantize helper

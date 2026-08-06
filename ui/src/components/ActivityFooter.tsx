@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ListVideo, Loader2 } from 'lucide-react'
 import { useStore } from '../stores/useStore'
 
 const PHASE_LABELS: Record<string, string> = {
   planning: 'Planning',
+  writing_scenes: 'Writing scenes',
+  writing_prompts: 'Writing prompts',
   polishing_prompts: 'Polishing prompts',
   generating_images: 'Generating images',
+  regenerating_styled_references: 'Regenerating styled references',
   preview_ready: 'Ready for review',
   generating_video: 'Generating video',
   post_processing: 'Post-processing',
@@ -49,8 +52,36 @@ interface ActivityView {
   current: number
   total: number
   percent: number
+  detailMessage?: string
+  detailCurrent?: number
+  detailTotal?: number
+  resourceMessage?: string
+  tokenUsage?: {
+    promptTokens?: number
+    completionTokens?: number
+    totalTokens?: number
+    calls?: number
+  }
+  startedAt?: number
+  phaseStartedAt?: number
+  phaseCurrent?: number
+  phaseTotal?: number
   updatedAt: number
   dismissible?: 'activity' | 'job'
+}
+
+function resourceMessage(schedule?: import('../api/client').PipelineResourceSchedule): string | undefined {
+  if (!schedule?.lanes) return undefined
+  const planning = schedule.lanes.planning?.label
+  const images = schedule.lanes.images?.label
+  const video = schedule.lanes.video?.label
+  if (schedule.mode === 'remote-images+local-video') {
+    const ready = schedule.images_total
+      ? ` · images ${schedule.images_ready || 0}/${schedule.images_total}`
+      : ''
+    return `Parallel resources · ${images} → ${video}${ready}`
+  }
+  return `Resources · planning: ${planning || 'unknown'} · images: ${images || 'unknown'} · video: ${video || 'unknown'}`
 }
 
 function clampPercent(value: number): number {
@@ -60,6 +91,43 @@ function clampPercent(value: number): number {
 function activityProgress(current: number, total: number, explicit?: number): number {
   if (total > 0) return clampPercent((current / total) * 100)
   return clampPercent((explicit || 0) * (explicit && explicit <= 1 ? 100 : 1))
+}
+
+function epochMilliseconds(value?: number): number | undefined {
+  if (!value || !Number.isFinite(value)) return undefined
+  return value < 1_000_000_000_000 ? value * 1000 : value
+}
+
+function formatElapsed(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainder = seconds % 60
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`
+    : `${minutes}:${remainder.toString().padStart(2, '0')}`
+}
+
+function formatEstimate(milliseconds: number): string {
+  const minutes = Math.max(1, Math.ceil(milliseconds / 60_000))
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const remainder = minutes % 60
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`
+}
+
+function estimatedRemaining(row: ActivityView, now: number): string {
+  if (row.status !== 'running') return ''
+  const current = row.phaseCurrent ?? row.current
+  const total = row.phaseTotal ?? row.total
+  const startedAt = row.phaseStartedAt || row.startedAt
+  if (!startedAt || current <= 0 || total <= current) return ''
+  const elapsed = now - startedAt
+  // A first very short sample is too noisy to be useful.
+  if (elapsed < 10_000) return ''
+  const remaining = (elapsed / current) * (total - current)
+  if (!Number.isFinite(remaining) || remaining <= 0) return ''
+  return `ETA ~${formatEstimate(remaining)}`
 }
 
 /**
@@ -77,6 +145,7 @@ export function ActivityFooter() {
   const dismissJob = useStore(s => s.dismissJob)
   const setVideoWorkflowsOpen = useStore(s => s.setDashboardOpen)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [clock, setClock] = useState(() => Date.now())
 
   const rows = useMemo<ActivityView[]>(() => {
     const registered = Object.values(activities).map(activity => ({
@@ -88,6 +157,11 @@ export function ActivityFooter() {
       current: activity.current || 0,
       total: activity.total || 0,
       percent: activityProgress(activity.current || 0, activity.total || 0, activity.progress),
+      detailMessage: activity.detailMessage,
+      detailCurrent: activity.detailCurrent,
+      detailTotal: activity.detailTotal,
+      tokenUsage: activity.tokenUsage,
+      startedAt: activity.startedAt,
       updatedAt: activity.updatedAt || activity.startedAt || 3,
       dismissible: activity.status === 'failed' ? 'activity' as const : undefined,
     }))
@@ -104,7 +178,12 @@ export function ActivityFooter() {
         pipeline.progress?.total_steps ? pipeline.progress.step : pipeline.progress?.current || 0,
         pipeline.progress?.total_steps || pipeline.progress?.total || 0,
       ),
-      updatedAt: pipeline.updated_at || pipeline.created_at || 2,
+      resourceMessage: resourceMessage(pipeline.resource_schedule),
+      startedAt: epochMilliseconds(pipeline.created_at),
+      phaseStartedAt: epochMilliseconds(pipeline.phase_started_at),
+      phaseCurrent: pipeline.progress?.current || 0,
+      phaseTotal: pipeline.progress?.total || 0,
+      updatedAt: epochMilliseconds(pipeline.updated_at || pipeline.created_at) || 2,
     }))
 
     const pipeline: ActivityView[] = pipelineStatus
@@ -126,7 +205,12 @@ export function ActivityFooter() {
             pipelineStatus.progress?.total_steps ? pipelineStatus.progress.step : pipelineStatus.progress?.current || 0,
             pipelineStatus.progress?.total_steps || pipelineStatus.progress?.total || 0,
           ),
-          updatedAt: 2,
+          resourceMessage: resourceMessage(pipelineStatus.resource_schedule),
+          startedAt: epochMilliseconds(pipelineStatus.created_at),
+          phaseStartedAt: epochMilliseconds(pipelineStatus.phase_started_at),
+          phaseCurrent: pipelineStatus.progress?.current || 0,
+          phaseTotal: pipelineStatus.progress?.total || 0,
+          updatedAt: epochMilliseconds(pipelineStatus.updated_at || pipelineStatus.created_at) || 2,
         }]
       : []
 
@@ -144,6 +228,7 @@ export function ActivityFooter() {
         current: job.totalSteps ? job.step : 0,
         total: job.totalSteps || 0,
         percent: activityProgress(job.step, job.totalSteps, job.progress),
+        startedAt: job.createdAt,
         updatedAt: 1,
         dismissible: job.status === 'failed' ? 'job' as const : undefined,
       }))
@@ -161,7 +246,18 @@ export function ActivityFooter() {
   const phase = primary
     ? PHASE_LABELS[primary.phase] || primary.phase?.replaceAll('_', ' ')
     : ''
-  const message = primary?.message || 'Ready — no active jobs'
+  const message = primary?.detailMessage || primary?.message || 'Ready — no active jobs'
+  useEffect(() => {
+    if (!activeRows.length) return
+    const interval = window.setInterval(() => setClock(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [activeRows.length])
+  const elapsed = (row: ActivityView) => row.startedAt
+    ? formatElapsed((row.status === 'running' || row.status === 'queued' ? clock : row.updatedAt) - row.startedAt)
+    : ''
+  const phaseElapsed = (row: ActivityView) => row.phaseStartedAt
+    ? formatElapsed((row.status === 'running' || row.status === 'queued' ? clock : row.updatedAt) - row.phaseStartedAt)
+    : ''
 
   return (
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
@@ -184,6 +280,20 @@ export function ActivityFooter() {
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium text-text-primary">{row.title}</span>
                       <div className="flex items-center gap-2">
+                        {elapsed(row) && <span className="shrink-0 tabular-nums text-text-muted">{elapsed(row)}</span>}
+                        {phaseElapsed(row) && (
+                          <span className="shrink-0 tabular-nums text-text-muted" title="Elapsed time in the current phase">
+                            phase {phaseElapsed(row)}
+                          </span>
+                        )}
+                        {estimatedRemaining(row, clock) && (
+                          <span
+                            className="shrink-0 tabular-nums text-accent-blue"
+                            title={`Approximate time remaining for this phase · phase elapsed ${phaseElapsed(row) || elapsed(row)}`}
+                          >
+                            {estimatedRemaining(row, clock)}
+                          </span>
+                        )}
                         <span className="shrink-0 capitalize text-text-muted">{PHASE_LABELS[row.phase] || row.phase?.replaceAll('_', ' ')}</span>
                         {(row.status === 'running' || row.status === 'queued')
                           && (row.id.startsWith('job:') || row.id.startsWith('audio-analysis-')) && (
@@ -209,6 +319,32 @@ export function ActivityFooter() {
                       </div>
                     </div>
                     <p className={row.status === 'failed' ? 'text-red-400' : 'text-text-secondary'}>{row.message}</p>
+                    {row.detailMessage && (
+                      <p className="truncate text-text-muted" title={row.detailMessage}>{row.detailMessage}</p>
+                    )}
+                    {row.resourceMessage && (
+                      <p className="truncate text-[9px] text-accent-blue" title={row.resourceMessage}>{row.resourceMessage}</p>
+                    )}
+                    {!!row.tokenUsage?.totalTokens && (
+                      <p className="mt-1 tabular-nums text-text-muted" title={`Input: ${(row.tokenUsage.promptTokens || 0).toLocaleString()} · Output: ${(row.tokenUsage.completionTokens || 0).toLocaleString()} · Calls: ${row.tokenUsage.calls || 0}`}>
+                        {(row.tokenUsage.totalTokens || 0).toLocaleString()} tokens
+                        {' · '}{(row.tokenUsage.promptTokens || 0).toLocaleString()} input
+                        {' · '}{(row.tokenUsage.completionTokens || 0).toLocaleString()} output
+                      </p>
+                    )}
+                    {(row.status === 'running' || row.status === 'queued') && !!row.detailTotal && (
+                      <div className="mt-1.5 flex items-center gap-2" title={row.detailMessage}>
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
+                          <div
+                            className="h-full rounded-full bg-amber-400 transition-[width] duration-300"
+                            style={{ width: `${Math.max(((row.detailCurrent || 0) / row.detailTotal) * 100, row.detailCurrent ? 2 : 0)}%` }}
+                          />
+                        </div>
+                        <span className="w-10 text-right tabular-nums text-text-muted">
+                          {row.detailCurrent || 0}/{row.detailTotal}
+                        </span>
+                      </div>
+                    )}
                     {(row.status === 'running' || row.status === 'queued') && (
                       <div className="mt-1.5 flex items-center gap-2">
                         <div className="h-1 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
@@ -254,6 +390,17 @@ export function ActivityFooter() {
         {phase && primary && (
           <span className="hidden sm:inline shrink-0 text-text-muted capitalize">{phase}</span>
         )}
+        {primary && elapsed(primary) && (
+          <span className="shrink-0 tabular-nums text-text-muted">{elapsed(primary)}</span>
+        )}
+        {primary && estimatedRemaining(primary, clock) && (
+          <span
+            className="hidden sm:inline shrink-0 tabular-nums text-accent-blue"
+            title={`Approximate time remaining for this phase · phase elapsed ${phaseElapsed(primary) || elapsed(primary)}`}
+          >
+            {estimatedRemaining(primary, clock)}
+          </span>
+        )}
         <span
           className={`truncate ${hasError ? 'text-red-400' : isActive ? 'text-text-secondary' : 'text-text-muted'}`}
           title={message}
@@ -263,7 +410,12 @@ export function ActivityFooter() {
       </div>
 
       {isActive && primary && (
-        <div className="hidden sm:flex items-center gap-2 w-44 shrink-0">
+        <div className="hidden sm:flex items-center gap-2 w-52 shrink-0">
+          {!!primary.detailTotal && (
+            <span className="shrink-0 tabular-nums text-amber-300" title={primary.detailMessage}>
+              {primary.detailCurrent || 0}/{primary.detailTotal}
+            </span>
+          )}
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
             <div
               className="h-full rounded-full bg-accent-blue transition-[width] duration-500"

@@ -8,6 +8,9 @@ export type StoryWritingProvider =
 export type StoryImageProvider = 'maestro' | 'minimax'
 export type StoryApprovalState = 'draft' | 'approved'
 export type StoryWorkflowMode = 'guided' | 'automatic'
+export type StoryProjectType = 'full_story' | 'music_video' | 'quick_video'
+export type StoryQuickFormat = 'dialogue' | 'meme' | 'parody' | 'sketch' | 'viral' | 'announcement'
+export type StoryAssetKind = 'world' | 'location' | 'character' | 'prop' | 'style' | 'ignore'
 
 export interface StoryVisualAsset {
   id: string
@@ -18,6 +21,12 @@ export interface StoryVisualAsset {
   provider: StoryImageProvider | 'upload'
   model?: string
   createdAt: string
+  /** Smart-import metadata remains editable/auditable after assignment. */
+  assetKind?: StoryAssetKind
+  description?: string
+  confidence?: number
+  originalName?: string
+  importBatchId?: string
 }
 
 export interface StoryLocation {
@@ -101,6 +110,11 @@ export interface StoryProduction {
 
 export interface StoryMusicCandidate {
   id: string
+  /** Human-readable identity; the provider filename remains in `name`. */
+  displayName?: string
+  title?: string
+  language?: string
+  version?: number
   name: string
   source: string
   prompt: string
@@ -122,6 +136,8 @@ export interface StoryMusicCue {
   brief: string
   style: string
   lyrics: string
+  /** Language of the current editable lyrics, updated by lyric translation. */
+  lyricsLanguage?: string
   /** Paste-ready Google AI Studio prompt; Maestro does not call Lyria directly. */
   lyriaPrompt: string
   instrumental: boolean
@@ -137,6 +153,7 @@ export interface StoryMusicDraft {
   style: string
   sourceLyrics: string
   lyrics: string
+  lyricsLanguage?: string
   coverReferenceFilename?: string
   coverReferenceName?: string
   targetDurationSeconds: number
@@ -160,6 +177,18 @@ export interface StoryProject {
   revision: number
   sectionVersions: Record<'overview' | 'world' | 'characters' | 'relationships' | 'structure', number>
   title: string
+  projectType: StoryProjectType
+  creativeBrief: {
+    context: string
+    performer: string
+    musicStyle: string
+    songStory: string
+    subjects: string
+    setting: string
+    action: string
+    quickFormat: StoryQuickFormat
+    durationSeconds: number
+  }
   language: string
   genre: string
   tone: string

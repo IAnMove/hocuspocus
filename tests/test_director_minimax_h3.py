@@ -40,7 +40,7 @@ def test_h3_segment_prompts_follow_authored_windows():
     ]
 
     assert all(expected in prompt for expected, prompt in zip(["opening", "middle", "ending"], prompts))
-    assert all("Audio:" in prompt for prompt in prompts)
+    assert all("overall_soundscape:" in prompt for prompt in prompts)
 
 
 def test_h3_authored_windows_are_split_instead_of_replayed():
@@ -79,11 +79,30 @@ def test_h3_segment_prompt_renders_director_audio_plan_and_dialogue():
         }],
     }, 0, 1)
 
-    assert "Audio:" in prompt
+    assert "overall_soundscape:" in prompt
     assert "rain on the metal roof" in prompt
     assert "door clang" in prompt
-    assert 'Mara says "We leave at dawn."' in prompt
+    assert "Mara says <d>[English] We leave at dawn.</d>" in prompt
     assert "precise lip sync" in prompt
+
+
+def test_h3_dialogue_is_assigned_once_across_continuation_segments():
+    plan = {
+        "video_prompt": "She enters. She stops. She looks back. She leaves.",
+        "dialogue_beats": [
+            {"speaker_name": "Mara", "spoken_text": "Wait for me."},
+            {"speaker_name": "Mara", "spoken_text": "Now we go."},
+        ],
+        "audio_plan": {"mode": "dialogue_driven", "lip_sync_critical": True},
+    }
+
+    first = director_pipeline._minimax_h3_segment_prompt(plan, 0, 2)
+    second = director_pipeline._minimax_h3_segment_prompt(plan, 1, 2)
+
+    assert "Wait for me." in first
+    assert "Wait for me." not in second
+    assert "Now we go." not in first
+    assert "Now we go." in second
 
 
 def test_h3_story_renders_each_shot_and_assembles_native_audio(tmp_path: Path):
@@ -124,7 +143,7 @@ def test_h3_story_renders_each_shot_and_assembles_native_audio(tmp_path: Path):
         )
 
     assert all(expected in item["prompt"] for expected, item in zip(["first", "second"], submitted))
-    assert all("Audio:" in item["prompt"] for item in submitted)
+    assert all("overall_soundscape:" in item["prompt"] for item in submitted)
     assert all(item["model_type"] == "minimax_h3" for item in submitted)
     assert all(item["image_start"].endswith(f"shot_{index}.png") for index, item in enumerate(submitted))
     assert outputs == ["clip_1.mp4", "clip_2.mp4", "minimax_h3_h3story_multiclip.mp4"]
@@ -159,6 +178,111 @@ def test_h3_story_wrapper_releases_runtime_after_failure(tmp_path: Path):
     stop_runtime.assert_called_once()
 
 
+def test_h3_music_video_uses_the_sequential_renderer(tmp_path: Path):
+    params = {
+        "video_model": "minimax_h3",
+        "pipeline_type": "music_video",
+        "video_params": {"resolution": "960x544"},
+    }
+    with patch.object(
+        director_pipeline,
+        "_run_minimax_h3_story_video",
+        return_value=["clip_1.mp4", "movie.mp4"],
+    ) as render, patch.object(director_pipeline, "_stop_minimax_h3_runtime") as stop_runtime:
+        outputs = director_pipeline._run_video_generation(
+            "h3music",
+            params,
+            [{"video_prompt": "first"}, {"video_prompt": "second"}],
+            [{"start": 0, "end": 5}, {"start": 5, "end": 10}],
+            ["first.png", "second.png"],
+            out_dir=str(tmp_path),
+        )
+
+    assert outputs == ["clip_1.mp4", "movie.mp4"]
+    render.assert_called_once()
+    stop_runtime.assert_called_once()
+
+
+def test_incomplete_h3_checkpoint_is_not_treated_as_completed(tmp_path: Path):
+    first = tmp_path / "first.mp4"
+    second = tmp_path / "second.mp4"
+    first.write_bytes(b"video")
+    state = {
+        "video_model": "minimax_h3",
+        "clips": [
+            {
+                "planned_clip": {"duration_sec": 5},
+                "h3_segments": [{"index": 0, "filename": first.name, "frames": 124}],
+            },
+            {
+                "planned_clip": {"duration_sec": 5},
+                "h3_segments": [],
+            },
+        ],
+    }
+
+    assert not director_pipeline._h3_checkpoint_is_complete(state, str(tmp_path))
+
+    second.write_bytes(b"video")
+    state["clips"][1]["h3_segments"] = [{"index": 0, "filename": second.name, "frames": 124}]
+    assert director_pipeline._h3_checkpoint_is_complete(state, str(tmp_path))
+
+
+def test_h3_resume_reuses_completed_segments_before_rendering_the_rest(tmp_path: Path):
+    first_frame = tmp_path / "first.png"
+    second_frame = tmp_path / "second.png"
+    existing = tmp_path / "existing.mp4"
+    for path in (first_frame, second_frame, existing):
+        path.write_bytes(b"video")
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        output = tmp_path / "new.mp4"
+        output.write_bytes(b"video")
+        return [output.name]
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(paths, destination, audio_path):
+            assert [Path(path).name for path in paths] == ["existing.mp4", "new.mp4"]
+            assert audio_path is None
+            Path(destination).write_bytes(b"assembled")
+            return True
+
+    previous_pipelines = director_pipeline._pipelines
+    director_pipeline._pipelines = {
+        "h3resume": {
+            "_h3_segments": [[{
+                "index": 0,
+                "filename": existing.name,
+                "frames": 124,
+                "stale": False,
+            }], []],
+        },
+    }
+    try:
+        with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+                patch.object(director_pipeline, "_save_pipeline_state"), \
+                patch.object(director_pipeline, "_wgp", FakeWgp()):
+            outputs = director_pipeline._run_minimax_h3_story_video(
+                "h3resume",
+                {},
+                [{"video_prompt": "first"}, {"video_prompt": "second"}],
+                [{"duration_sec": 5}, {"duration_sec": 5}],
+                [first_frame.name, second_frame.name],
+                {"num_inference_steps": 20},
+                "960x544",
+                str(tmp_path),
+            )
+    finally:
+        director_pipeline._pipelines = previous_pipelines
+
+    assert len(submitted) == 1
+    assert "second" in submitted[0]["prompt"]
+    assert outputs == ["existing.mp4", "new.mp4", "minimax_h3_h3resume_multiclip.mp4"]
+
+
 def test_h3_story_first_frame_mode_does_not_silently_send_omni_refs(tmp_path: Path):
     shot = tmp_path / "shot.png"
     portrait = tmp_path / "portrait.png"
@@ -191,7 +315,7 @@ def test_h3_story_first_frame_mode_does_not_silently_send_omni_refs(tmp_path: Pa
 
     assert submitted[0]["image_start"] == str(shot)
     assert "image_refs" not in submitted[0]
-    assert "exact first frame" in submitted[0]["prompt"].casefold()
+    assert "at 0.00 seconds" in submitted[0]["prompt"].casefold()
 
 
 def test_h3_story_routes_director_omni_references_to_ref2va(tmp_path: Path):
@@ -341,7 +465,7 @@ def test_h3_ref2va_prompt_does_not_claim_an_exact_first_frame():
     }, 0, 1, reference_mode="references")
 
     assert "exact first frame" not in prompt.casefold()
-    assert "Compose a new opening frame" in prompt
+    assert "Compose one new continuous shot" in prompt
 
 
 def test_h3_prompt_validator_cannot_rewrite_authored_audio():
@@ -401,7 +525,7 @@ def test_h3_story_runs_one_guarded_optimizer_pass_for_exact_segments():
     generate.assert_called_once()
     assert len(plans[0]["h3_segment_prompts"]) == 1
     assert plans[0]["metadata"]["h3_prompt_validation"] == "optimized"
-    assert "Audio:" in plans[0]["h3_segment_prompts"][0]
+    assert "overall_soundscape:" in plans[0]["h3_segment_prompts"][0]
 
 
 def test_legacy_location_matching_handles_spanish_labels_and_english_prompts():

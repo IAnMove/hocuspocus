@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { X, Upload, Plus, Music, Film, Mic } from 'lucide-react'
+import { X, Upload, Plus, Music, Film, Mic, Layers, Loader2, AlertTriangle } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 
@@ -37,6 +37,11 @@ interface InjectedFrame {
   // back to a native start/end frame can reuse it (restored frames have null
   // and fall back to their uploaded path).
   file: File | null
+}
+
+interface ImageSize {
+  width: number
+  height: number
 }
 
 const OFFSET_PRESETS = [
@@ -129,6 +134,9 @@ export function InputsPanel() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [frameDragKey, setFrameDragKey] = useState<string | null>(null)
   const [frameDragOverKey, setFrameDragOverKey] = useState<string | null>(null)
+  const [compositeBusy, setCompositeBusy] = useState(false)
+  const [compositeNotice, setCompositeNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const [startImageSize, setStartImageSize] = useState<ImageSize | null>(null)
 
   // ── Inject capability + window layout ──────────────────────────────
   const supportsInject = useMemo(() => {
@@ -334,6 +342,85 @@ export function InputsPanel() {
   }
   const pickImage = (onFile: (f: File) => void) => pickFile('image/*', onFile)
 
+  const createCompositeStartImage = async () => {
+    const storedStart = Array.isArray(params.image_start)
+      ? params.image_start.find(Boolean) || ''
+      : String(params.image_start || '')
+    if ((!startImage && !storedStart) || imageRefs.length === 0) return
+    setCompositeBusy(true)
+    setCompositeNotice(null)
+    try {
+      const maestro = useStore.getState()
+      const imageModel = maestro.selectedModelPerMode.image || 'flux2_klein_9b'
+      const model = maestro.models.find(item => item.model_type === imageModel)
+      if (model && !model.supports_ref_images) {
+        throw new Error(`The selected image model “${imageModel}” does not support reference images. Choose a reference-capable image model first.`)
+      }
+
+      const startPath = startImage
+        ? (await api.uploadImage(startImage)).path
+        : storedStart
+      const referencePaths: string[] = []
+      for (const reference of imageRefs) {
+        referencePaths.push((await api.uploadImage(reference)).path)
+      }
+      const imageParams = maestro.savedParamsPerMode.image || {}
+      const imageLoras = maestro.savedLoraPerMode.image
+      const action = String(params.prompt || '').trim()
+      const compositePrompt = [
+        'Create one production-ready composite still for use as the exact first frame of a video.',
+        'Treat Picture 1 as the authoritative base scene: preserve its environment, camera position, framing, perspective and lighting.',
+        'Place the people or objects from Pictures 2 onward naturally inside that scene, preserving their recognizable identity, face, body proportions, wardrobe and visual medium.',
+        action ? `Stage this requested moment as a static opening frame: ${action}` : 'Stage the referenced subjects naturally in the base scene.',
+        'Return a single coherent image, not a collage, split screen, contact sheet or before-and-after comparison. No captions, labels or UI.',
+      ].join(' ')
+      const submitted = await api.submitGeneration({
+        ...imageParams,
+        model_type: imageModel,
+        prompt: compositePrompt,
+        image_refs: [startPath, ...referencePaths],
+        image_mode: 1,
+        generation_mode: 'image',
+        video_prompt_type: 'KI',
+        remove_background_images_ref: 0,
+        repeat_generation: 1,
+        workspace: maestro.activeWorkspace,
+        activated_loras: imageLoras?.activated_loras || [],
+        loras_multipliers: imageLoras?.loras_multipliers || '',
+      })
+      void maestro.reconnectJobs()
+
+      let outputPath = ''
+      for (let attempt = 0; attempt < 400; attempt += 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 1500))
+        const status = await api.fetchJobStatus(submitted.job_id)
+        if (status.status === 'failed' || status.status === 'cancelled') {
+          throw new Error(status.error || status.message || 'Composite image generation failed')
+        }
+        if (status.status === 'completed') {
+          outputPath = status.output_files.find(path => /\.(png|jpe?g|webp)$/i.test(path)) || ''
+          break
+        }
+      }
+      if (!outputPath) throw new Error('Composite image generation timed out or returned no image')
+      const response = await fetch(api.getFileUrl(outputPath))
+      if (!response.ok) throw new Error('The composite image could not be loaded')
+      const blob = await response.blob()
+      const filename = basename(outputPath)
+      setStartImage(new File([blob], filename, { type: blob.type || 'image/png' }))
+      setParam('h3_reference_mode', 'first_frame')
+      setCompositeNotice({
+        kind: 'ok',
+        text: 'Composite ready. It replaced the Start frame; MiniMax H3 will now preserve it with FL2VA.',
+      })
+      void maestro.loadOutputs()
+    } catch (error) {
+      setCompositeNotice({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setCompositeBusy(false)
+    }
+  }
+
   // ── Inject handlers ────────────────────────────────────────────────
   const syncFrameParams = (frames: InjectedFrame[]) => {
     if (frames.length === 0) {
@@ -388,6 +475,59 @@ export function InputsPanel() {
   const lastWindow = Math.max(0, windowInfo.windowCount - 1)
   const hasStart = !!startImage || (!isExtend && !!params.image_start)
   const hasEnd = !!endImage || (!isExtend && !!params.image_end)
+
+  useEffect(() => {
+    if (!isH3 || !hasStart || isExtend) {
+      setStartImageSize(null)
+      return
+    }
+    const stored = Array.isArray(params.image_start)
+      ? params.image_start.find(Boolean) || ''
+      : String(params.image_start || '')
+    let objectUrl = ''
+    const source = startImage
+      ? (objectUrl = URL.createObjectURL(startImage))
+      : (stored ? api.getStoredAssetUrl(stored) : '')
+    if (!source) {
+      setStartImageSize(null)
+      return
+    }
+    let disposed = false
+    const probe = new Image()
+    probe.onload = () => {
+      if (!disposed) setStartImageSize({ width: probe.naturalWidth, height: probe.naturalHeight })
+    }
+    probe.onerror = () => {
+      if (!disposed) setStartImageSize(null)
+    }
+    probe.src = source
+    return () => {
+      disposed = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [hasStart, isExtend, isH3, params.image_start, startImage])
+
+  const startAspectWarning = useMemo(() => {
+    if (!isH3 || !hasStart || !startImageSize) return null
+    const match = String(params.resolution || '960x544').match(/(\d+)\s*[x×]\s*(\d+)/i)
+    if (!match) return null
+    const target = { width: Number(match[1]), height: Number(match[2]) }
+    if (!target.width || !target.height) return null
+    const sourceRatio = startImageSize.width / startImageSize.height
+    const targetRatio = target.width / target.height
+    if (Math.abs(sourceRatio - targetRatio) / targetRatio < 0.025) return null
+    const orientation = (size: ImageSize) => (
+      Math.abs(size.width / size.height - 1) < 0.025
+        ? 'cuadrada'
+        : size.width > size.height ? 'horizontal' : 'vertical'
+    )
+    return {
+      target,
+      sourceOrientation: orientation(startImageSize),
+      targetOrientation: orientation(target),
+      bars: sourceRatio < targetRatio ? 'laterales' : 'arriba y abajo',
+    }
+  }, [hasStart, isH3, params.resolution, startImageSize])
 
   const frameRoleFor = (window: number, offset: string): 'start' | 'end' | 'inject' => {
     if (isExtend) return 'inject'
@@ -782,6 +922,63 @@ export function InputsPanel() {
         )}
       </div>
 
+      {startAspectWarning && (
+        <div className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2.5">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-300" />
+            <div className="min-w-0 space-y-2">
+              <p className="text-[10px] leading-relaxed text-amber-100/90">
+                La Start image es {startImageSize?.width}×{startImageSize?.height} ({startAspectWarning.sourceOrientation}), pero MiniMax H3 está configurado a {startAspectWarning.target.width}×{startAspectWarning.target.height} ({startAspectWarning.targetOrientation}).{' '}
+                {params.image_fit_mode === 'crop'
+                  ? 'Se recortarán los bordes para llenar el encuadre; la imagen no se deformará.'
+                  : `Se conservará completa, centrada y sin deformar, añadiendo franjas negras ${startAspectWarning.bars}.`}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setParam('image_fit_mode', 'contain')}
+                  className={`rounded-md border px-2 py-1 text-[9px] transition-colors ${params.image_fit_mode !== 'crop' ? 'border-amber-300/45 bg-amber-400/20 text-amber-50' : 'border-border bg-bg-secondary text-text-muted hover:text-text-primary'}`}
+                >
+                  Ajustar con franjas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setParam('image_fit_mode', 'crop')}
+                  className={`rounded-md border px-2 py-1 text-[9px] transition-colors ${params.image_fit_mode === 'crop' ? 'border-amber-300/45 bg-amber-400/20 text-amber-50' : 'border-border bg-bg-secondary text-text-muted hover:text-text-primary'}`}
+                >
+                  Recortar para llenar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isH3 && hasStart && imageRefs.length > 0 && (
+        <div className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2.5 space-y-2">
+          <div className="flex items-start gap-2">
+            <Layers size={14} className="mt-0.5 shrink-0 text-amber-300" />
+            <p className="text-[10px] leading-relaxed text-amber-100/90">
+              MiniMax H3 no puede conservar el Start frame exacto y usar referencias de identidad separadas en la misma generación. Crea primero una imagen compuesta: Maestro colocará las referencias dentro de la escena inicial y usará el resultado como primer fotograma exacto con FL2VA.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={compositeBusy}
+            onClick={() => void createCompositeStartImage()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/30 bg-amber-500/15 px-2.5 py-1.5 text-[10px] font-medium text-amber-100 hover:bg-amber-500/25 disabled:opacity-50"
+          >
+            {compositeBusy ? <Loader2 size={12} className="animate-spin" /> : <Layers size={12} />}
+            {compositeBusy ? 'Creando imagen compuesta…' : 'Crear imagen compuesta'}
+          </button>
+          {compositeNotice && (
+            <p className={`text-[9px] ${compositeNotice.kind === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>
+              {compositeNotice.text}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Option strip — Frame: position picker (routes start / end / inject
           invisibly) + role-specific strength. */}
       {selectedFrameTile && (
@@ -834,10 +1031,16 @@ export function InputsPanel() {
       {/* Option strip — extend source: source video strength */}
       {selected === 'extend' && continueVideo && (
         <Strip>
-          <Row label="Source video strength" value={inputVideoStrength.toFixed(2)} />
-          <input type="range" min={0} max={1} step={0.05} value={inputVideoStrength}
-            onChange={e => setParam('input_video_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
-          <p className="text-[9px] text-text-muted">1.0 = seamless continuation; lower gives more creative freedom. New content is appended after the source.</p>
+          {isH3 ? (
+            <p className="text-[9px] text-text-muted/70">MiniMax H3 captures the source video's final frame and continues from it with FL2VA. The full video is not sent as a slower, loose Ref2VA reference.</p>
+          ) : (
+            <>
+              <Row label="Source video strength" value={inputVideoStrength.toFixed(2)} />
+              <input type="range" min={0} max={1} step={0.05} value={inputVideoStrength}
+                onChange={e => setParam('input_video_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
+              <p className="text-[9px] text-text-muted/60">1.0 = seamless continuation; lower gives more creative freedom. New content is appended after the source.</p>
+            </>
+          )}
         </Strip>
       )}
 

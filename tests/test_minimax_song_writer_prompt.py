@@ -20,11 +20,12 @@ def _load_functions(*names: str):
     return tuple(namespace[name] for name in names)
 
 
-_minimax_song_request_prompt, _normalize_minimax_song_output, _parse_song_output, _parse_lyria_output = _load_functions(
+_minimax_song_request_prompt, _normalize_minimax_song_output, _parse_song_output, _parse_lyria_output, _optional_lyria_warning = _load_functions(
     "_minimax_song_request_prompt",
     "_normalize_minimax_song_output",
     "_parse_song_output",
     "_parse_lyria_output",
+    "_optional_lyria_warning",
 )
 
 
@@ -46,6 +47,7 @@ class TestMiniMaxSongWriterPrompt(unittest.TestCase):
         self.assertIn("STORY CONTEXT", prompt)
         self.assertIn("LYRICS LANGUAGE: Spanish", prompt)
         self.assertIn("TARGET DURATION: approximately 120 seconds", prompt)
+        self.assertIn("MiniMax Music has no exact duration API parameter", prompt)
 
     def test_normalizes_provider_limits_by_mode(self):
         style, lyrics = _normalize_minimax_song_output(
@@ -87,6 +89,25 @@ Sky Seed: Composition Breakdown
         self.assertNotIn("[LYRIA]", lyrics)
         self.assertIn("[Chorus]", lyrics)
         self.assertIn("[0:00 - 0:12]", _parse_lyria_output(raw))
+
+    def test_missing_optional_lyria_does_not_invalidate_style_or_lyrics(self):
+        raw = """[STYLE]
+Cinematic rap, heavy 808 bass, reflective vocal, 85 BPM
+[LYRICS]
+[Verse]
+The archive remembers
+
+[Chorus]
+Nothing is discarded
+"""
+        style, lyrics = _parse_song_output(raw, False)
+        lyria_prompt = _parse_lyria_output(raw)
+
+        self.assertTrue(style)
+        self.assertIn("[Chorus]", lyrics)
+        self.assertEqual(lyria_prompt, "")
+        self.assertIn("preserved", _optional_lyria_warning(lyria_prompt, True))
+        self.assertEqual(_optional_lyria_warning(lyria_prompt, False), "")
 
 
 if __name__ == "__main__":

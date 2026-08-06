@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
   BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, ExternalLink, Film, ImagePlus, Loader2,
-  Music, Network, Palette, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
+  Languages, Music, Network, Palette, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, useStore } from '../../stores/useStore'
@@ -27,13 +27,19 @@ import {
   storyNegativePromptForStyle,
 } from './model'
 import type {
-  StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
-  StoryMusicCandidate, StoryMusicCue, StoryRelationship, StoryVisualAsset, StoryWritingProvider,
+  StoryAssetKind, StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
+  StoryMusicCandidate, StoryMusicCue, StoryProjectType, StoryRelationship, StoryVisualAsset, StoryWritingProvider,
 } from './types'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
 const panel = 'rounded-xl border border-border bg-bg-secondary p-3 md:p-4'
+const CHARACTER_IDENTITY_REFERENCE_LOCK = [
+  'CHARACTER IDENTITY REFERENCE: show exactly one character in a clear medium close-up or chest-up portrait.',
+  'The face must be large in frame, sharply readable, unobstructed and well lit, with both eyes and defining facial features clearly visible.',
+  'Use a frontal or gentle three-quarter view, a neutral readable pose, the canonical wardrobe, and a simple non-distracting background.',
+  'Do not use a distant shot, full-body environmental composition, extreme profile, covered face, dramatic occlusion, action pose or additional characters.',
+].join(' ')
 
 function moveItem<T>(items: T[], from: number, to: number): void {
   if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return
@@ -61,15 +67,19 @@ function stableTextKey(value: string): string {
   return (hash >>> 0).toString(36)
 }
 
-function storySongBrief(project: StoryProject, durationSeconds: number): string {
+function storySongBrief(
+  project: StoryProject,
+  durationSeconds: number,
+  lyricsLanguage = project.language,
+): string {
   const cast = project.characters.slice(0, 5).map(character =>
     `${character.name}: ${character.desire}; arc: ${character.arc}`).join(' | ')
   const beats = project.beats.map(beat => `${beat.title}: ${beat.summary}`).join(' → ')
   return [
     `Create an original theme song that tells the story “${project.title}”.`,
-    `Write all lyrics in ${project.language}. Target approximately ${durationSeconds} seconds.`,
+    `Write all lyrics in ${lyricsLanguage}. Target approximately ${durationSeconds} seconds.`,
     `Genre and emotional direction: ${project.genre}; ${project.tone}. Theme: ${project.theme}.`,
-    `Premise: ${project.premise}. Synopsis: ${project.synopsis}. Ending: ${project.ending}.`,
+    `Premise: ${storyProjectPremise(project)}. Synopsis: ${project.synopsis}. Ending: ${project.ending}.`,
     cast ? `Character journeys: ${cast}.` : '',
     beats ? `Narrative progression: ${beats}.` : '',
     project.world.visualLanguage ? `Choose music that feels native to this visual world: ${project.world.visualLanguage}.` : '',
@@ -89,12 +99,50 @@ function miniMaxCuePayload(cue: StoryMusicCue, model: StoryProject['music']['mod
   }, null, 2)
 }
 
-type StoryTab = 'overview' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'productions'
+function musicCandidateDisplayName(
+  candidate: StoryMusicCandidate,
+  title: string,
+  fallbackLanguage: string,
+  fallbackVersion: number,
+): string {
+  if (candidate.displayName?.trim()) return candidate.displayName
+  const language = candidate.language?.trim() || fallbackLanguage.trim() || 'Original'
+  const version = candidate.version || fallbackVersion
+  return `${candidate.title?.trim() || title.trim() || 'Story song'} · ${language} · v${version}`
+}
+
+function nextMusicCandidateVersion(
+  candidates: StoryMusicCandidate[],
+  language: string,
+  fallbackLanguage: string,
+): number {
+  const normalizedLanguage = (language || fallbackLanguage).trim().toLocaleLowerCase()
+  return candidates.reduce((highest, candidate, index) => {
+    const candidateLanguage = (candidate.language || fallbackLanguage).trim().toLocaleLowerCase()
+    if (candidateLanguage !== normalizedLanguage) return highest
+    return Math.max(highest, candidate.version || index + 1)
+  }, 0) + 1
+}
+
+type StoryTab = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'productions'
+type StyledReferenceTarget = {
+  target: { kind: 'world' | 'character' | 'location'; id?: string }
+  label: string
+  prompt: string
+}
+type PendingSmartAsset = api.StoryAssetSuggestion & { selected: boolean }
 type PendingDraft = {
   scope: StoryGenerationScope
   result: Record<string, unknown>
   selected: string[]
   replaceCollections: boolean
+}
+type MusicVideoGenerationSettings = {
+  imageModel: string
+  videoModel: string
+  writingProvider: StoryWritingProvider
+  writingModel: string
+  writingBaseUrl: string
 }
 const storyJobKey = (workspace: string, projectId: string) =>
   `maestro-story-plan-job:${workspace}:${projectId}`
@@ -111,6 +159,65 @@ const TONES = [
   'Suspenseful', 'Emotional', 'Hopeful', 'Gritty', 'Whimsical', 'Mysterious',
   'Romantic', 'Melancholic', 'Satirical', 'Family-friendly',
 ]
+
+const STORY_PROJECT_TYPES: Array<{ id: StoryProjectType; label: string; description: string }> = [
+  { id: 'full_story', label: 'Historia completa', description: 'Mundo, personajes, estructura, música y adaptaciones.' },
+  { id: 'music_video', label: 'Videoclip', description: 'Canción original y una historia visual construida alrededor de ella.' },
+  { id: 'quick_video', label: 'Vídeo rápido', description: 'Diálogo, meme, parodia, sketch, viral o anuncio breve.' },
+]
+
+function storyStyledReferenceTargets(
+  project: StoryProject,
+  options: { includeLocations: boolean; existingOnly: boolean },
+): StyledReferenceTarget[] {
+  const targets: StyledReferenceTarget[] = []
+  const hasExistingReference = (ids: string[]) => ids.some(id => Boolean(project.assets[id]))
+  const canInclude = (prompt: string, ids: string[]) => Boolean(prompt.trim())
+    && (!options.existingOnly || hasExistingReference(ids))
+  if (canInclude(project.world.visualPrompt, project.world.referenceAssetIds)) {
+    targets.push({ target: { kind: 'world' }, label: 'world', prompt: project.world.visualPrompt })
+  }
+  project.characters.forEach(character => {
+    if (!canInclude(character.visualPrompt, character.referenceAssetIds)) return
+    targets.push({
+      target: { kind: 'character', id: character.id },
+      label: character.name,
+      prompt: character.visualPrompt,
+    })
+  })
+  if (options.includeLocations) {
+    project.world.locations.forEach(location => {
+      if (!canInclude(location.visualPrompt, location.referenceAssetIds)) return
+      targets.push({
+        target: { kind: 'location', id: location.id },
+        label: location.name,
+        prompt: location.visualPrompt,
+      })
+    })
+  }
+  return targets
+}
+
+function storyProjectPremise(project: StoryProject): string {
+  if (project.projectType === 'music_video') {
+    return [
+      project.creativeBrief.context,
+      project.creativeBrief.performer && `Artista o creador: ${project.creativeBrief.performer}`,
+      project.creativeBrief.musicStyle && `Estilo musical: ${project.creativeBrief.musicStyle}`,
+      project.creativeBrief.songStory && `La canción cuenta: ${project.creativeBrief.songStory}`,
+    ].filter(Boolean).join('\n')
+  }
+  if (project.projectType === 'quick_video') {
+    return [
+      project.creativeBrief.context,
+      project.creativeBrief.subjects && `Protagonistas: ${project.creativeBrief.subjects}`,
+      project.creativeBrief.setting && `Lugar: ${project.creativeBrief.setting}`,
+      project.creativeBrief.action && `Acción o diálogo: ${project.creativeBrief.action}`,
+      `Formato: ${project.creativeBrief.quickFormat}`,
+    ].filter(Boolean).join('\n')
+  }
+  return project.premise
+}
 
 function draftPaths(result: Record<string, unknown>): string[] {
   const paths: string[] = []
@@ -358,14 +465,21 @@ function SectionHeader({
         <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
         <p className="text-xs text-text-muted mt-1">{description}</p>
       </div>
-      <div className="flex flex-col sm:flex-row gap-2 lg:max-w-[620px]">
-        <input className={`${input} sm:w-72`} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="Optional regeneration instruction…" />
-        <button className={button} disabled={Boolean(busy)} onClick={() => onGenerate(scope)}>
-          {busy === scope ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate section
-        </button>
-        <button className={`${button} ${approved ? 'border-emerald-500 text-emerald-400' : ''}`} onClick={onApprove}>
-          <Check size={13} /> {approved ? 'Approved' : 'Approve'}
-        </button>
+      <div className="lg:max-w-[680px]">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input className={`${input} sm:w-72`} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="Optional regeneration instruction…" />
+          <button className={button} disabled={Boolean(busy)} onClick={() => onGenerate(scope)}
+            title="Uses the LLM to generate or rewrite this section's text. It does not generate images.">
+            {busy === scope ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate text
+          </button>
+          <button className={`${button} ${approved ? 'border-emerald-500 text-emerald-400' : ''}`} onClick={onApprove}
+            title="Confirms the current version of this section. It does not generate content.">
+            <Check size={13} /> {approved ? 'Approved' : 'Approve'}
+          </button>
+        </div>
+        <p className="mt-1.5 text-[9px] leading-relaxed text-text-muted">
+          LLM text only: generates or rewrites this section's fields and preserves existing image references; it does not render images. Guided mode lets you review the draft before applying it. Approve only confirms the current version.
+        </p>
       </div>
     </div>
   )
@@ -401,6 +515,9 @@ export function StoryLabPanel() {
   const [productionBusy, setProductionBusy] = useState<'film' | 'music' | null>(null)
   const [musicCueBusy, setMusicCueBusy] = useState('')
   const [musicQueue, setMusicQueue] = useState<{ ids: string[]; index: number } | null>(null)
+  const [lyricsTranslationLanguage, setLyricsTranslationLanguage] = useState<Record<string, string>>({})
+  const [musicVersionStyle, setMusicVersionStyle] = useState<Record<string, string>>({})
+  const [musicVersionLanguage, setMusicVersionLanguage] = useState<Record<string, string>>({})
   const [instruction, setInstruction] = useState('')
   const [comicDirection, setComicDirection] = useState(DEFAULT_COMIC_CHAPTER_DIRECTION)
   const [comicPageCount, setComicPageCount] = useState(4)
@@ -434,7 +551,11 @@ export function StoryLabPanel() {
     }
   })
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const [smartAssetBusy, setSmartAssetBusy] = useState(false)
+  const [smartAssetDescription, setSmartAssetDescription] = useState('')
+  const [pendingSmartAssets, setPendingSmartAssets] = useState<PendingSmartAsset[]>([])
   const importRef = useRef<HTMLInputElement>(null)
+  const smartAssetRef = useRef<HTMLInputElement>(null)
   const uploadRef = useRef<HTMLInputElement>(null)
   const musicCoverRef = useRef<HTMLInputElement>(null)
   const lyriaUploadRef = useRef<HTMLInputElement>(null)
@@ -447,15 +568,22 @@ export function StoryLabPanel() {
     project.music.cues.forEach(cue => cue.candidates.forEach(candidate => {
       if (seen.has(candidate.id)) return
       seen.add(candidate.id)
-      options.push({ candidate, cue, label: `${cue.title} · ${candidate.model}` })
+      options.push({
+        candidate,
+        cue,
+        label: musicCandidateDisplayName(candidate, cue.title, cue.lyricsLanguage || project.language, cue.candidates.indexOf(candidate) + 1),
+      })
     }))
     project.music.candidates.forEach(candidate => {
       if (seen.has(candidate.id)) return
       seen.add(candidate.id)
-      options.push({ candidate, label: `Story song · ${candidate.model}` })
+      options.push({
+        candidate,
+        label: musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1),
+      })
     })
     return options
-  }, [project.music.candidates, project.music.cues])
+  }, [project.language, project.music.candidates, project.music.cues, project.music.lyricsLanguage, project.title])
   const selectedMusicOption = musicCandidateOptions.find(option => option.candidate.id === musicProductionCandidateId)
 
   useEffect(() => {
@@ -500,6 +628,7 @@ export function StoryLabPanel() {
       })
     }
     return {
+      id,
       update: updateActivity,
       fail: (error: unknown, nextPhase = phase) => {
         failed = true
@@ -535,6 +664,31 @@ export function StoryLabPanel() {
   const selectedFilmImageModel = videoModels.find(model => model.model_type === filmImageModel)
   const selectedFilmVideoModel = videoModels.find(model => model.model_type === filmVideoModel)
   const filmImageReady = filmImageModel !== MINIMAX_IMAGE_API_MODEL || Boolean(servicesConfig?.minimax_api_key_set)
+  const musicWritingReady = project.provider.writingProvider === 'maestro'
+    || (project.provider.writingProvider === 'deepseek' && Boolean(servicesConfig?.deepseek_api_key_set))
+    || (project.provider.writingProvider === 'minimax' && Boolean(servicesConfig?.minimax_api_key_set))
+    || (project.provider.writingProvider === 'openai' && Boolean(servicesConfig?.openai_api_key_set))
+    || (project.provider.writingProvider === 'openai-compatible'
+      && Boolean(servicesConfig?.compatible_api_key_set && project.provider.writingBaseUrl))
+  const setMusicWritingProvider = (next: StoryWritingProvider) => {
+    const defaults = next === 'deepseek'
+      ? { writingModel: 'deepseek-v4-pro', writingBaseUrl: 'https://api.deepseek.com' }
+      : next === 'minimax'
+        ? { writingModel: 'MiniMax-M3', writingBaseUrl: 'https://api.minimax.io/v1' }
+        : next === 'openai'
+          ? { writingModel: 'gpt-4.1', writingBaseUrl: 'https://api.openai.com' }
+          : next === 'openai-compatible'
+            ? { writingModel: '', writingBaseUrl: servicesConfig?.compatible_base_url || '' }
+            : { writingModel: project.provider.writingModel, writingBaseUrl: project.provider.writingBaseUrl }
+    patch({ provider: { ...project.provider, writingProvider: next, ...defaults } })
+  }
+  const patchMusicWritingProvider = (value: Partial<StoryProject['provider']>) =>
+    patch({ provider: { ...project.provider, ...value } })
+  const musicWritingProviderParams = {
+    writingProvider: project.provider.writingProvider,
+    writingModel: project.provider.writingModel,
+    writingBaseUrl: project.provider.writingBaseUrl,
+  }
 
   useEffect(() => {
     loadWorkspace(activeWorkspace)
@@ -560,28 +714,50 @@ export function StoryLabPanel() {
     }
   }, [activeWorkspace, project.id])
 
+  useEffect(() => {
+    if (project.projectType === 'quick_video') {
+      setFilmDuration(project.creativeBrief.durationSeconds)
+      setFilmDirection(project.creativeBrief.action || 'Create the complete quick video described by this Story Lab project.')
+    }
+  }, [project.creativeBrief.action, project.creativeBrief.durationSeconds, project.projectType])
+
+  const openStorySection = (target: StoryTab) => {
+    const compactSection = project.projectType !== 'full_story'
+      && ['world', 'characters', 'relationships', 'structure'].includes(target)
+    setTab(compactSection ? 'overview' : target)
+  }
+
   const approve = (key: keyof StoryProject['approvals']) => {
-    if (key === 'overview' && (!project.premise.trim() || !project.logline.trim() || !project.synopsis.trim())) {
+    if (key === 'overview' && (!storyProjectPremise(project).trim() || !project.logline.trim() || !project.synopsis.trim())) {
       setNotice({ kind: 'error', text: 'Premise, logline and synopsis are required before approving the story.' })
       setTab('overview')
       return
     }
     if (key === 'world' && (!project.world.summary.trim() || !project.world.visualLanguage.trim())) {
       setNotice({ kind: 'error', text: 'Add a world summary and visual language before approving the world.' })
-      setTab('world')
+      openStorySection('world')
       return
     }
     if (key === 'characters') {
-      const incomplete = project.characters.filter(character =>
-        character.approval !== 'approved'
-        || !character.primaryReferenceAssetId
-        || !project.assets[character.primaryReferenceAssetId])
+      const incomplete = project.characters.flatMap(character => {
+        const reasons = [
+          character.approval !== 'approved' ? 'still marked draft' : '',
+          !character.primaryReferenceAssetId
+            ? 'has no primary identity selected'
+            : !project.assets[character.primaryReferenceAssetId]
+              ? 'has a missing primary identity asset'
+              : '',
+        ].filter(Boolean)
+        return reasons.length ? [`${character.name || 'Unnamed character'} (${reasons.join(', ')})`] : []
+      })
       if (!project.characters.length || incomplete.length) {
         setNotice({
           kind: 'error',
-          text: 'Approve each character and select a valid primary visual identity before approving the cast.',
+          text: !project.characters.length
+            ? 'Add at least one character before approving the cast.'
+            : `Cast approval is blocked: ${incomplete.join(' · ')}. Review each listed character, select its primary image, then click its draft button to approve it.`,
         })
-        setTab('characters')
+        openStorySection('characters')
         return
       }
     }
@@ -591,7 +767,7 @@ export function StoryLabPanel() {
       || relationship.fromCharacterId === relationship.toCharacterId
       || !relationship.dynamic.trim())) {
       setNotice({ kind: 'error', text: 'Every relationship needs two different characters and a current dynamic.' })
-      setTab('relationships')
+      openStorySection('relationships')
       return
     }
     if (key === 'structure' && (
@@ -599,7 +775,7 @@ export function StoryLabPanel() {
       || project.beats.some(beat => !beat.summary.trim() || !beat.conflict.trim() || !beat.turn.trim())
     )) {
       setNotice({ kind: 'error', text: 'Use at least three causal beats, each with action, conflict and a consequence.' })
-      setTab('structure')
+      openStorySection('structure')
       return
     }
     patch({
@@ -805,13 +981,13 @@ export function StoryLabPanel() {
       if (imageCount > 0 && project.provider.imageProvider === 'minimax' && !window.confirm(
         `Automatic mode will now generate ${imageCount} MiniMax concept image${imageCount === 1 ? '' : 's'}, which may use provider credits. Continue?`,
       )) {
-        setTab('characters')
+        openStorySection('characters')
         return
       }
       if (generated.world.visualPrompt && generated.world.referenceAssetIds.length === 0) {
         const worldReady = await generateVisual({ kind: 'world' }, generated.world.visualPrompt)
         if (!worldReady) {
-          setTab('characters')
+          openStorySection('characters')
           return
         }
       }
@@ -819,7 +995,7 @@ export function StoryLabPanel() {
         if (character.visualPrompt && character.referenceAssetIds.length === 0) {
           const ready = await generateVisual({ kind: 'character', id: character.id }, character.visualPrompt)
           if (!ready) {
-            setTab('characters')
+            openStorySection('characters')
             return
           }
         }
@@ -831,7 +1007,7 @@ export function StoryLabPanel() {
             location.visualPrompt,
           )
           if (!ready) {
-            setTab('world')
+            openStorySection('world')
             return
           }
         }
@@ -842,8 +1018,9 @@ export function StoryLabPanel() {
   }
 
   const generate = async (scope: StoryGenerationScope) => {
-    if (!project.premise.trim()) {
-      setNotice({ kind: 'error', text: 'Write a premise first.' })
+    const generationPremise = storyProjectPremise(project)
+    if (!generationPremise.trim()) {
+      setNotice({ kind: 'error', text: project.projectType === 'full_story' ? 'Write a premise first.' : 'Complete the creative brief first.' })
       return
     }
     setBusy(scope)
@@ -859,7 +1036,7 @@ export function StoryLabPanel() {
     try {
       const { result } = await api.generateStorySection({
         scope,
-        premise: project.premise,
+        premise: generationPremise,
         language: project.language,
         genre: project.genre,
         tone: project.tone,
@@ -1024,6 +1201,7 @@ export function StoryLabPanel() {
       : undefined
     const effectivePrompt = [
       applyStoryVisualStyle(prompt, current.visualStyle, current.enforceVisualStyle),
+      target.kind === 'character' ? CHARACTER_IDENTITY_REFERENCE_LOCK : '',
       'Single concept-art image, one coherent view, no contact sheet, no grid, no text, no labels.',
       compatibleNegativePrompt ? `Strictly avoid: ${compatibleNegativePrompt}.` : '',
     ].filter(Boolean).join(' ')
@@ -1133,40 +1311,36 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'Write a visual style before regenerating references.' })
       return
     }
-    const targets: Array<{
-      target: { kind: 'world' | 'character' | 'location'; id?: string }
-      label: string
-      prompt: string
-    }> = []
-    if (current.world.visualPrompt.trim()) {
-      targets.push({ target: { kind: 'world' }, label: 'world', prompt: current.world.visualPrompt })
-    }
-    current.characters.forEach(character => {
-      if (character.visualPrompt.trim()) {
-        targets.push({
-          target: { kind: 'character', id: character.id },
-          label: character.name,
-          prompt: character.visualPrompt,
-        })
-      }
+    const compactMode = current.projectType !== 'full_story'
+    const targets = storyStyledReferenceTargets(current, {
+      includeLocations: !compactMode,
+      existingOnly: true,
     })
-    current.world.locations.forEach(location => {
-      if (location.visualPrompt.trim()) {
-        targets.push({
-          target: { kind: 'location', id: location.id },
-          label: location.name,
-          prompt: location.visualPrompt,
-        })
-      }
+    const allowedPromptTargets = storyStyledReferenceTargets(current, {
+      includeLocations: !compactMode,
+      existingOnly: false,
     })
+    const skippedPromptOnly = allowedPromptTargets.length - targets.length
+    const skippedLocations = compactMode
+      ? current.world.locations.filter(location => location.visualPrompt.trim()).length
+      : 0
     if (!targets.length) {
-      setNotice({ kind: 'error', text: 'Add at least one world, character or location visual prompt first.' })
+      setNotice({
+        kind: 'error',
+        text: compactMode
+          ? 'There are no existing world or subject reference images to restyle. Generate the first image explicitly from its own card.'
+          : 'There are no existing world, character or location reference images to restyle. Generate the first image explicitly from its own card.',
+      })
       return
     }
     const creditWarning = current.provider.imageProvider === 'minimax'
       ? ' This may use MiniMax provider credits.' : ''
+    const omissions = [
+      skippedPromptOnly ? `${skippedPromptOnly} prompt-only target${skippedPromptOnly === 1 ? '' : 's'} without an existing image will be skipped.` : '',
+      skippedLocations ? `${skippedLocations} additional folded location${skippedLocations === 1 ? '' : 's'} will be skipped in this compact mode.` : '',
+    ].filter(Boolean).join(' ')
     if (!window.confirm(
-      `Generate ${targets.length} styled reference image${targets.length === 1 ? '' : 's'}? Each successful result will replace that target's old references; failed targets keep their current references.${creditWarning}`,
+      `Restyle ${targets.length} existing reference set${targets.length === 1 ? '' : 's'}: ${targets.map(item => item.label).join(', ')}. Each successful result replaces only that target's old references; failed targets keep them. ${omissions}${creditWarning}`,
     )) return
 
     update(latest => {
@@ -1175,10 +1349,21 @@ export function StoryLabPanel() {
     })
     setReferenceBatchBusy(true)
     setNotice(null)
+    const activity = beginStoryActivity(
+      'regenerating_styled_references',
+      `Regenerating styled references: 0/${targets.length}`,
+      targets.length,
+    )
     let completed = 0
     let lastError = ''
     try {
       for (const item of targets) {
+        activity.update(
+          `Generating styled reference ${completed + 1}/${targets.length}: ${item.label}`,
+          'regenerating_styled_references',
+          completed,
+          targets.length,
+        )
         setNotice({
           kind: 'ok',
           text: `Regenerating styled references ${completed + 1}/${targets.length}: ${item.label}`,
@@ -1191,6 +1376,12 @@ export function StoryLabPanel() {
         })
         if (!ready) break
         completed += 1
+        activity.update(
+          `Styled reference completed ${completed}/${targets.length}: ${item.label}`,
+          'regenerating_styled_references',
+          completed,
+          targets.length,
+        )
       }
       setNotice(completed === targets.length
         ? {
@@ -1201,6 +1392,15 @@ export function StoryLabPanel() {
             kind: 'error',
             text: `Stopped after ${completed}/${targets.length} references. Completed replacements were kept; the failed target kept its old reference. ${lastError}`.trim(),
           })
+      if (completed === targets.length) {
+        activity.finish()
+      } else {
+        activity.fail(new Error(lastError || `Stopped after ${completed}/${targets.length} styled references.`), 'regenerating_styled_references')
+      }
+    } catch (error) {
+      const message = (error as Error).message
+      activity.fail(error, 'regenerating_styled_references')
+      setNotice({ kind: 'error', text: `Styled reference generation stopped after ${completed}/${targets.length}: ${message}` })
     } finally {
       setReferenceBatchBusy(false)
     }
@@ -1223,6 +1423,137 @@ export function StoryLabPanel() {
       setImageBusy('')
       if (uploadRef.current) uploadRef.current.value = ''
     }
+  }
+
+  const analyzeSmartAssets = async (files: File[]) => {
+    const images = files.filter(file => file.type.startsWith('image/')).slice(0, 24)
+    if (!images.length) {
+      setNotice({ kind: 'error', text: 'Choose one or more image files.' })
+      return
+    }
+    const activity = beginStoryActivity(
+      'uploading_assets', `Uploading 0/${images.length} assets…`, images.length + 1,
+    )
+    setSmartAssetBusy(true)
+    setTab('assets')
+    try {
+      const uploaded: Array<{ name: string; path: string; url: string }> = []
+      for (let index = 0; index < images.length; index += 1) {
+        const file = images[index]
+        activity.update(
+          `Uploading ${index + 1}/${images.length}: ${file.name}`,
+          'uploading_assets', index, images.length + 1,
+        )
+        const result = await api.uploadImage(file)
+        uploaded.push({ name: file.name, path: result.path, url: result.url })
+      }
+      activity.update(
+        `Analyzing ${images.length} assets together with the selected Story Lab LLM…`,
+        'analyzing_assets', images.length, images.length + 1,
+      )
+      const result = await api.analyzeStoryAssets({
+        assets: uploaded,
+        description: smartAssetDescription,
+        project,
+        writingProvider: project.provider.writingProvider,
+        writingModel: project.provider.writingModel,
+        writingBaseUrl: project.provider.writingBaseUrl,
+        activity_id: activity.id,
+      })
+      setPendingSmartAssets(result.assets.map(item => ({ ...item, selected: item.kind !== 'ignore' })))
+      setNotice({ kind: 'ok', text: `${result.assets.length} asset suggestions are ready for review.` })
+      activity.finish()
+    } catch (error) {
+      activity.fail(error, 'analyzing_assets')
+      setNotice({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setSmartAssetBusy(false)
+      if (smartAssetRef.current) smartAssetRef.current.value = ''
+    }
+  }
+
+  const patchPendingSmartAsset = (index: number, patchValue: Partial<PendingSmartAsset>) => {
+    setPendingSmartAssets(current => current.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, ...patchValue } : item))
+  }
+
+  const applySmartAssets = () => {
+    const selected = pendingSmartAssets.filter(item => item.selected && item.kind !== 'ignore')
+    if (!selected.length) return
+    const batchId = storyId('asset-import')
+    update(current => {
+      const newTargets = new Map<string, string>()
+      selected.forEach(item => {
+        const assetId = storyId('asset')
+        const asset: StoryVisualAsset = {
+          id: assetId,
+          name: item.name,
+          source: item.source,
+          prompt: item.visualPrompt,
+          provider: 'upload',
+          createdAt: new Date().toISOString(),
+          assetKind: item.kind,
+          description: item.description,
+          confidence: item.confidence,
+          originalName: item.nameOriginal,
+          importBatchId: batchId,
+        }
+        current.assets[assetId] = asset
+
+        if (item.kind === 'character') {
+          let character = current.characters.find(candidate => candidate.id === item.targetId)
+          if (!character) {
+            const groupingKey = item.targetId || `new-character:${item.name.toLocaleLowerCase()}`
+            const existingId = newTargets.get(groupingKey)
+            character = existingId
+              ? current.characters.find(candidate => candidate.id === existingId)
+              : undefined
+            if (!character) {
+              character = {
+                ...emptyCharacter(),
+                id: storyId('character'),
+                name: item.name,
+                appearance: item.description,
+                visualPrompt: item.visualPrompt,
+              }
+              current.characters.push(character)
+              newTargets.set(groupingKey, character.id)
+            }
+          }
+          character.referenceAssetIds = [...new Set([...character.referenceAssetIds, assetId])]
+          character.primaryReferenceAssetId ||= assetId
+          character.approval = 'draft'
+          return
+        }
+
+        if (item.kind === 'location') {
+          let location = current.world.locations.find(candidate => candidate.id === item.targetId)
+          if (!location) {
+            const groupingKey = item.targetId || `new-location:${item.name.toLocaleLowerCase()}`
+            const existingId = newTargets.get(groupingKey)
+            location = existingId
+              ? current.world.locations.find(candidate => candidate.id === existingId)
+              : undefined
+            if (!location) {
+              location = {
+                id: storyId('location'), name: item.name, purpose: '',
+                description: item.description, visualPrompt: item.visualPrompt,
+                negativePrompt: '', referenceAssetIds: [],
+              }
+              current.world.locations.push(location)
+              newTargets.set(groupingKey, location.id)
+            }
+          }
+          location.referenceAssetIds = [...new Set([...location.referenceAssetIds, assetId])]
+          return
+        }
+
+        current.world.referenceAssetIds = [...new Set([...current.world.referenceAssetIds, assetId])]
+      })
+      return current
+    })
+    setPendingSmartAssets([])
+    setNotice({ kind: 'ok', text: `${selected.length} assets applied to Story Lab. New entities remain editable drafts.` })
   }
 
   const removeReference = (target: 'world' | 'character' | 'location', targetId: string | undefined, assetId: string) => {
@@ -1509,6 +1840,7 @@ export function StoryLabPanel() {
       const brief = project.music.brief.trim()
         || storySongBrief(project, project.music.targetDurationSeconds)
       const written = await api.writeSong({
+        ...musicWritingProviderParams,
         target: 'minimax',
         model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
         description: brief,
@@ -1524,6 +1856,7 @@ export function StoryLabPanel() {
           brief,
           style: written.style,
           lyrics: written.lyrics,
+          lyricsLanguage: project.language,
         },
       })
       setNotice({ kind: 'ok', text: 'Song prompt and editable lyrics are ready. Review them before spending MiniMax credits.' })
@@ -1550,6 +1883,7 @@ export function StoryLabPanel() {
       const storyBrief = project.music.brief.trim()
         || storySongBrief(project, project.music.targetDurationSeconds)
       const written = await api.writeSong({
+        ...musicWritingProviderParams,
         target: 'minimax',
         model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
         description: 'Write completely original replacement lyrics for this Story. Keep only the broad section order, approximate meter and singability of the authorized source; do not copy distinctive wording, names or lines.',
@@ -1565,6 +1899,7 @@ export function StoryLabPanel() {
           brief: storyBrief,
           style: written.style || project.music.style,
           lyrics: written.lyrics,
+          lyricsLanguage: project.language,
         },
       })
       setNotice({ kind: 'ok', text: 'The Story lyrics were adapted and remain fully editable before generation.' })
@@ -1622,20 +1957,22 @@ export function StoryLabPanel() {
     )
     setProductionBusy('music')
     try {
+      const generationLanguage = project.music.lyricsLanguage || project.language
       const brief = project.music.brief.trim()
-        || storySongBrief(project, project.music.targetDurationSeconds)
+        || storySongBrief(project, project.music.targetDurationSeconds, generationLanguage)
       let style = project.music.style.trim()
       let lyrics = project.music.lyrics.trim()
       if (!style || (project.music.mode === 'original' && !lyrics)) {
         activity.update('Story Lab is writing the missing song prompt and lyrics…', 'writing_song', 0, 1)
         const written = await api.writeSong({
+          ...musicWritingProviderParams,
           target: 'minimax',
           model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
           description: brief,
           style_direction: style || `${project.genre}, ${project.tone}`,
           lyrics_direction: lyrics || project.music.sourceLyrics,
-          story_context: storySongBrief(project, project.music.targetDurationSeconds),
-          language: project.language,
+          story_context: storySongBrief(project, project.music.targetDurationSeconds, generationLanguage),
+          language: generationLanguage,
           duration_seconds: project.music.targetDurationSeconds,
         })
         style = written.style
@@ -1657,8 +1994,14 @@ export function StoryLabPanel() {
         workspace: activeWorkspace,
       })
       const createdAt = new Date().toISOString()
-      const candidates = result.candidates.map(candidate => ({
+      const language = generationLanguage
+      const firstVersion = nextMusicCandidateVersion(project.music.candidates, language, project.music.lyricsLanguage || project.language)
+      const candidates = result.candidates.map((candidate, index) => ({
         id: storyId('song'),
+        displayName: `${project.title || 'Story song'} · ${language} · v${firstVersion + index}`,
+        title: project.title || 'Story song',
+        language,
+        version: firstVersion + index,
         name: candidate.filename,
         source: candidate.source,
         prompt: style,
@@ -1674,6 +2017,7 @@ export function StoryLabPanel() {
           brief,
           style,
           lyrics,
+          lyricsLanguage: project.music.lyricsLanguage || project.language,
           candidates: [...project.music.candidates, ...candidates],
           selectedCandidateId: candidates[0]?.id || project.music.selectedCandidateId,
         },
@@ -1696,7 +2040,222 @@ export function StoryLabPanel() {
     })
   }
 
-  const adaptMusicCueWithLlm = async (cueId: string) => {
+  const translateMusicCueLyrics = async (cueId: string) => {
+    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    const targetLanguage = (lyricsTranslationLanguage[cueId] || '').trim()
+    if (!cue?.lyrics.trim()) return
+    if (!targetLanguage) {
+      setNotice({ kind: 'error', text: 'Write the target language before translating the lyrics.' })
+      return
+    }
+    const activity = beginStoryActivity('writing_song', `Translating “${cue.title}” into ${targetLanguage}…`, 1)
+    setMusicCueBusy(`translate:${cueId}`)
+    try {
+      const translated = await api.translateStoryLyrics({
+        lyrics: cue.lyrics,
+        targetLanguage,
+        writingProvider: project.provider.writingProvider,
+        writingModel: project.provider.writingModel,
+        writingBaseUrl: project.provider.writingBaseUrl,
+      })
+      patchMusicCue(cueId, { lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage })
+      setNotice({ kind: 'ok', text: `“${cue.title}” lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({ kind: 'error', text: `Lyrics could not be translated: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+    }
+  }
+
+  const translateManualSongLyrics = async () => {
+    const lyrics = project.music.lyrics.trim()
+    const targetLanguage = (lyricsTranslationLanguage.manual || '').trim()
+    if (!lyrics) return
+    if (!targetLanguage) {
+      setNotice({ kind: 'error', text: 'Write the target language before translating the lyrics.' })
+      return
+    }
+    const activity = beginStoryActivity('writing_song', `Translating the manual song into ${targetLanguage}…`, 1)
+    setProductionBusy('music')
+    try {
+      const translated = await api.translateStoryLyrics({
+        lyrics,
+        targetLanguage,
+        writingProvider: project.provider.writingProvider,
+        writingModel: project.provider.writingModel,
+        writingBaseUrl: project.provider.writingBaseUrl,
+      })
+      patch({ music: { ...project.music, lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage } })
+      setNotice({ kind: 'ok', text: `Manual song lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({ kind: 'error', text: `Lyrics could not be translated: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setProductionBusy(null)
+    }
+  }
+
+  const rewriteMusicCueDraft = async (
+    cue: StoryMusicCue,
+    requestedStyle: string,
+    requestedLanguage: string,
+  ) => {
+    const latest = useStoryStore.getState().project
+    const targetLanguage = requestedLanguage.trim() || cue.lyricsLanguage || latest.language
+    const targetStyle = requestedStyle.trim() || cue.style || cue.brief
+    const target = cue.kind === 'character'
+      ? latest.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
+      : cue.kind === 'world' ? 'the Story world' : 'the complete Story'
+    return api.writeSong({
+      writingProvider: latest.provider.writingProvider,
+      writingModel: latest.provider.writingModel,
+      writingBaseUrl: latest.provider.writingBaseUrl,
+      target: 'minimax',
+      model: latest.music.model,
+      instrumental: cue.instrumental,
+      description: [
+        `Create a completely new ${cue.instrumental ? 'instrumental composition' : 'song version'} for ${target}.`,
+        `Its Story purpose remains: ${cue.purpose}.`,
+        'This must be a full recomposition, not a light edit: rebuild genre, arrangement, instrumentation, vocal delivery, rhythm and production around the requested style.',
+        cue.instrumental
+          ? 'Preserve the narrative role and emotional arc, but do not preserve the old arrangement.'
+          : 'Rewrite every sung line from scratch while preserving the Story facts, emotional arc and a memorable recurring hook. Do not merely translate or paraphrase the old wording.',
+      ].join(' '),
+      style_direction: targetStyle,
+      lyrics_direction: cue.instrumental ? '' : [
+        `Write entirely new structured lyrics in ${targetLanguage}, using MiniMax section tags in English.`,
+        'The previous lyrics below are narrative source material only; do not copy their lines:',
+        cue.lyrics,
+      ].join('\n\n'),
+      story_context: storySongBrief(latest, cue.durationSeconds, targetLanguage),
+      language: targetLanguage,
+      duration_seconds: cue.durationSeconds,
+      max_new_tokens: 1600,
+    }).then(written => ({
+      style: written.style,
+      lyrics: written.lyrics,
+      lyricsLanguage: targetLanguage,
+      lyriaPrompt: written.lyria_prompt,
+      brief: requestedStyle.trim() || cue.brief,
+    }))
+  }
+
+  const createMusicCueVersion = async (cueId: string) => {
+    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    if (!cue) return
+    const requestedStyle = (musicVersionStyle[cueId] || '').trim()
+    const requestedLanguage = (musicVersionLanguage[cueId] || '').trim()
+    if (!requestedStyle && !requestedLanguage) {
+      setNotice({ kind: 'error', text: 'Write a new style, a new language, or both before creating the version.' })
+      return
+    }
+    const changeLabel = [requestedStyle, requestedLanguage].filter(Boolean).join(' · ')
+    const activity = beginStoryActivity('writing_song', `Creating a new version of “${cue.title}” · ${changeLabel}…`, 1)
+    setMusicCueBusy(`version:${cueId}`)
+    try {
+      const rewritten = await rewriteMusicCueDraft(cue, requestedStyle, requestedLanguage)
+      patchMusicCue(cueId, rewritten)
+      setNotice({
+        kind: 'ok',
+        text: `A completely new “${cue.title}” draft is ready in ${rewritten.lyricsLanguage}. Existing generated audio was preserved. Review the prompts before generating it.`,
+      })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({ kind: 'error', text: `The new song version could not be written: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+    }
+  }
+
+  const createAllMusicCueVersions = async () => {
+    const cues = useStoryStore.getState().project.music.cues
+    const requestedStyle = (musicVersionStyle.all || '').trim()
+    const requestedLanguage = (musicVersionLanguage.all || '').trim()
+    if (!cues.length) {
+      setNotice({ kind: 'error', text: 'Generate the music proposals before creating alternate versions.' })
+      return
+    }
+    if (!requestedStyle && !requestedLanguage) {
+      setNotice({ kind: 'error', text: 'Write a global style, a global language, or both.' })
+      return
+    }
+    if (!window.confirm(
+      `Rewrite all ${cues.length} music proposals sequentially? This makes ${cues.length} LLM call${cues.length === 1 ? '' : 's'}, but does not generate paid MiniMax audio. Existing audio candidates will remain available.`,
+    )) return
+    const activity = beginStoryActivity('writing_song', `Preparing alternate music drafts · 0/${cues.length}`, cues.length)
+    setMusicCueBusy('version:all')
+    let completed = 0
+    try {
+      for (let index = 0; index < cues.length; index += 1) {
+        const currentCue = useStoryStore.getState().project.music.cues.find(item => item.id === cues[index].id)
+        if (!currentCue) continue
+        activity.update(`Rewriting “${currentCue.title}” · ${index + 1}/${cues.length}`, 'writing_song', index, cues.length)
+        const rewritten = await rewriteMusicCueDraft(currentCue, requestedStyle, requestedLanguage)
+        patchMusicCue(currentCue.id, rewritten)
+        completed += 1
+        activity.update(`Completed “${currentCue.title}” · ${completed}/${cues.length}`, 'writing_song', completed, cues.length)
+      }
+      setNotice({
+        kind: 'ok',
+        text: `${completed} alternate music drafts are ready. Existing audio was preserved; review each new prompt before generating tracks.`,
+      })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({
+        kind: 'error',
+        text: `Bulk versioning stopped after ${completed}/${cues.length}. Completed drafts were preserved: ${(error as Error).message}`,
+      })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+    }
+  }
+
+  const createManualSongVersion = async () => {
+    const requestedStyle = (musicVersionStyle.manual || '').trim()
+    const requestedLanguage = (musicVersionLanguage.manual || '').trim()
+    if (!requestedStyle && !requestedLanguage) {
+      setNotice({ kind: 'error', text: 'Write a new style, a new language, or both before creating the manual version.' })
+      return
+    }
+    const targetLanguage = requestedLanguage || project.music.lyricsLanguage || project.language
+    const activity = beginStoryActivity('writing_song', `Creating a new manual song version in ${targetLanguage}…`, 1)
+    setProductionBusy('music')
+    try {
+      const written = await api.writeSong({
+        ...musicWritingProviderParams,
+        target: 'minimax',
+        model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
+        description: 'Create a complete new version of this Story song. Recompose the arrangement and rewrite every lyric line from scratch; preserve only its Story meaning and emotional progression.',
+        style_direction: requestedStyle || project.music.style || `${project.genre}, ${project.tone}`,
+        lyrics_direction: `Write entirely new lyrics in ${targetLanguage}. Treat these previous lyrics only as narrative source material and do not copy their lines:\n\n${project.music.lyrics}`,
+        story_context: storySongBrief(project, project.music.targetDurationSeconds, targetLanguage),
+        language: targetLanguage,
+        duration_seconds: project.music.targetDurationSeconds,
+      })
+      patch({
+        music: {
+          ...project.music,
+          style: written.style,
+          lyrics: written.lyrics,
+          lyricsLanguage: targetLanguage,
+        },
+      })
+      setNotice({ kind: 'ok', text: `The manual ${requestedStyle || 'alternate'} version is ready in ${targetLanguage}. Existing audio candidates were preserved.` })
+    } catch (error) {
+      activity.fail(error, 'writing_song')
+      setNotice({ kind: 'error', text: `The manual song version could not be written: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setProductionBusy(null)
+    }
+  }
+
+  const adaptMusicCueWithLlm = async (cueId: string, includeLyria = false) => {
     const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
     if (!cue) return
     if (!cue.referenceSong.trim()) {
@@ -1706,10 +2265,12 @@ export function StoryLabPanel() {
     const activity = beginStoryActivity('music_planning', `Story Lab is adapting “${cue.title}”…`, 1)
     setMusicCueBusy(`llm:${cueId}`)
     try {
+      const lyricsLanguage = cue.lyricsLanguage || project.language
       const target = cue.kind === 'character'
         ? project.characters.find(character => character.id === cue.targetId)?.name || cue.targetId
         : cue.kind === 'world' ? 'the Story world' : 'the complete Story'
       const written = await api.writeSong({
+        ...musicWritingProviderParams,
         target: 'minimax',
         model: project.music.model,
         instrumental: cue.instrumental,
@@ -1717,18 +2278,27 @@ export function StoryLabPanel() {
         reference_song: cue.referenceSong,
         style_direction: cue.brief,
         lyrics_direction: cue.lyrics,
-        story_context: storySongBrief(project, cue.durationSeconds),
-        language: project.language,
+        story_context: storySongBrief(project, cue.durationSeconds, lyricsLanguage),
+        language: lyricsLanguage,
         duration_seconds: cue.durationSeconds,
-        include_lyria: true,
-        max_new_tokens: 3000,
+        include_lyria: includeLyria,
+        max_new_tokens: includeLyria ? 3000 : 1600,
       })
       patchMusicCue(cueId, {
         style: written.style,
         lyrics: written.lyrics,
-        lyriaPrompt: written.lyria_prompt,
+        lyricsLanguage,
+        ...(includeLyria ? { lyriaPrompt: written.lyria_prompt } : {}),
       })
-      setNotice({ kind: 'ok', text: `“${cue.title}” now has editable MiniMax and Google Lyria prompts${cue.instrumental ? '' : ' with structured lyrics'}.` })
+      const lyriaMissing = includeLyria && !written.lyria_prompt.trim()
+      setNotice({
+        kind: 'ok',
+        text: lyriaMissing
+          ? `“${cue.title}” has a valid MiniMax prompt${cue.instrumental ? '' : ' and structured lyrics'}. The optional Lyria prompt was omitted, but nothing was discarded.`
+          : includeLyria
+            ? `“${cue.title}” now has editable MiniMax and Google Lyria prompts${cue.instrumental ? '' : ' with structured lyrics'}.`
+            : `“${cue.title}” now has an editable MiniMax prompt${cue.instrumental ? '' : ' with structured lyrics'}. Lyria was not requested.`,
+      })
     } catch (error) {
       activity.fail(error, 'music_planning')
       setNotice({ kind: 'error', text: `The music proposal could not be adapted: ${(error as Error).message}` })
@@ -1747,8 +2317,14 @@ export function StoryLabPanel() {
     setMusicCueBusy(`lyria-upload:${cueId}`)
     try {
       const uploaded = await api.uploadAudio(file)
+      const language = cue.lyricsLanguage || project.language
+      const version = nextMusicCandidateVersion(cue.candidates, language, project.language)
       const candidate = {
         id: storyId('song'),
+        displayName: `${cue.title} · ${language} · v${version}`,
+        title: cue.title,
+        language,
+        version,
         name: file.name || uploaded.filename,
         source: uploaded.url,
         prompt: cue.lyriaPrompt,
@@ -1812,8 +2388,14 @@ export function StoryLabPanel() {
         workspace: activeWorkspace,
       })
       const createdAt = new Date().toISOString()
-      const candidates = result.candidates.map(candidate => ({
+      const language = cue.lyricsLanguage || current.language
+      const firstVersion = nextMusicCandidateVersion(cue.candidates, language, current.language)
+      const candidates = result.candidates.map((candidate, index) => ({
         id: storyId('song'),
+        displayName: `${cue.title} · ${language} · v${firstVersion + index}`,
+        title: cue.title,
+        language,
+        version: firstVersion + index,
         name: candidate.filename,
         source: candidate.source,
         prompt,
@@ -1923,7 +2505,7 @@ export function StoryLabPanel() {
     id: 'story-song',
     kind: 'story',
     targetId: source.id,
-    title: candidate.name,
+    title: candidate.title || candidate.displayName || candidate.name,
     purpose: source.music.brief || `Tell ${source.title} as a song-led visual story.`,
     referenceSong: '',
     brief: source.music.brief,
@@ -1943,6 +2525,13 @@ export function StoryLabPanel() {
     autoStart = false,
     pacing: 'cinematic' | 'balanced' | 'rhythmic' = 'balanced',
     excerpt?: { start: number; end: number },
+    generationSettings: MusicVideoGenerationSettings = {
+      imageModel: filmImageModel,
+      videoModel: filmVideoModel,
+      writingProvider: source.provider.writingProvider,
+      writingModel: source.provider.writingModel,
+      writingBaseUrl: source.provider.writingBaseUrl,
+    },
   ) => {
     const resolvedCue = effectiveMusicCue(source, cue, candidate)
     const adaptation = buildMusicVideoAdaptation(source, resolvedCue)
@@ -1950,6 +2539,12 @@ export function StoryLabPanel() {
     director.directorReset()
     const store = useStore.getState()
     store.setGenerationMode('video')
+    if (generationSettings.imageModel) {
+      store.selectDirectorImageModel(generationSettings.imageModel)
+    }
+    if (generationSettings.videoModel) {
+      await store.selectDirectorVideoModel(generationSettings.videoModel)
+    }
     store.setSidebarMode('director')
     store.setDirectorSkill('music_video')
     store.setDirectorAutoMode(autoStart)
@@ -1962,6 +2557,9 @@ export function StoryLabPanel() {
       directorSongDuration: excerpt ? excerpt.end - excerpt.start : resolvedCue.durationSeconds,
       directorPacingProfile: pacing,
       directorStep: 'upload',
+      directorWritingProvider: generationSettings.writingProvider,
+      directorWritingModel: generationSettings.writingModel,
+      directorWritingBaseUrl: generationSettings.writingBaseUrl,
     })
 
     for (const reference of adaptation.characterReferences) {
@@ -2011,7 +2609,7 @@ export function StoryLabPanel() {
       useStore.getState().directorConfirmStructure()
       await useStore.getState().startDirectorPipeline()
     }
-    return { adaptation, resolvedCue, pipelineId: useStore.getState().pipelineId }
+    return { adaptation, resolvedCue, pipelineId: useStore.getState().pipelineId, generationSettings }
   }
 
   const openMusicalTrailer = async (
@@ -2040,11 +2638,18 @@ export function StoryLabPanel() {
     setProductionBusy('music')
     const activity = beginStoryActivity(
       'preparing_music_video',
-      `Loading “${candidate.name}” and its Story references…`,
+      `Loading “${candidate.displayName || candidate.title || candidate.name}” and its Story references…`,
       3,
     )
     try {
       activity.update('Loading character and world references…', 'preparing_music_video', 1, 3)
+      const generationSettings: MusicVideoGenerationSettings = {
+        imageModel: filmImageModel,
+        videoModel: filmVideoModel,
+        writingProvider: project.provider.writingProvider,
+        writingModel: project.provider.writingModel,
+        writingBaseUrl: project.provider.writingBaseUrl,
+      }
       const loaded = await loadMusicVideoProduction(
         project,
         cue,
@@ -2052,6 +2657,7 @@ export function StoryLabPanel() {
         options.autoStart === true,
         options.pacing || musicProductionPacing,
         options.mode === 'trailer' ? options.excerpt : undefined,
+        generationSettings,
       )
       activity.update('Saving the independent production snapshot…', 'preparing_music_video', 2, 3)
       if (options.saveProduction !== false) {
@@ -2080,8 +2686,11 @@ export function StoryLabPanel() {
               mode: options.mode || 'full',
               trimStart: options.mode === 'trailer' ? options.excerpt?.start : undefined,
               trimEnd: options.mode === 'trailer' ? options.excerpt?.end : undefined,
-              imageModel: filmImageModel,
-              videoModel: filmVideoModel,
+              imageModel: loaded.generationSettings.imageModel,
+              videoModel: loaded.generationSettings.videoModel,
+              writingProvider: loaded.generationSettings.writingProvider,
+              writingModel: loaded.generationSettings.writingModel,
+              writingBaseUrl: loaded.generationSettings.writingBaseUrl,
               pipelineId: loaded.pipelineId,
             },
             status: 'staged',
@@ -2148,6 +2757,23 @@ export function StoryLabPanel() {
       const excerpt = mode === 'trailer' && Number.isFinite(trimStart) && Number.isFinite(trimEnd) && trimEnd > trimStart
         ? { start: trimStart, end: trimEnd }
         : undefined
+      const savedWritingProvider = production.targetSnapshot?.writingProvider
+      const generationSettings: MusicVideoGenerationSettings = {
+        imageModel: typeof production.targetSnapshot?.imageModel === 'string'
+          ? production.targetSnapshot.imageModel : filmImageModel,
+        videoModel: typeof production.targetSnapshot?.videoModel === 'string'
+          ? production.targetSnapshot.videoModel : filmVideoModel,
+        writingProvider: savedWritingProvider === 'deepseek'
+          || savedWritingProvider === 'minimax'
+          || savedWritingProvider === 'openai'
+          || savedWritingProvider === 'openai-compatible'
+          || savedWritingProvider === 'maestro'
+          ? savedWritingProvider : source.provider.writingProvider,
+        writingModel: typeof production.targetSnapshot?.writingModel === 'string'
+          ? production.targetSnapshot.writingModel : source.provider.writingModel,
+        writingBaseUrl: typeof production.targetSnapshot?.writingBaseUrl === 'string'
+          ? production.targetSnapshot.writingBaseUrl : source.provider.writingBaseUrl,
+      }
       const current = useStore.getState()
       const hasWork = Boolean(current.directorSceneDescription.trim() || current.directorPlannedClips.length)
       if (hasWork && !window.confirm(
@@ -2155,7 +2781,7 @@ export function StoryLabPanel() {
       )) return
       setProductionBusy('music')
       try {
-        await loadMusicVideoProduction(source, cue, candidate, false, pacing, excerpt)
+        await loadMusicVideoProduction(source, cue, candidate, false, pacing, excerpt, generationSettings)
       } catch (error) {
         setNotice({ kind: 'error', text: `The music-video production could not be reopened: ${(error as Error).message}` })
       } finally {
@@ -2227,27 +2853,62 @@ export function StoryLabPanel() {
     setNotice({ kind: 'ok', text: 'The adaptation source was restored as a new editable story; the current version was preserved.' })
   }
 
-  const tabs: Array<{ id: StoryTab; label: string; icon: typeof BookOpen }> = [
-    { id: 'overview', label: 'Story', icon: BookOpen },
-    { id: 'world', label: 'World', icon: Boxes },
-    { id: 'characters', label: 'Characters', icon: Users },
-    { id: 'music', label: 'Music', icon: Music },
-    { id: 'relationships', label: 'Relationships', icon: Network },
-    { id: 'structure', label: 'Structure', icon: ChevronRight },
-    { id: 'productions', label: 'Productions', icon: Film },
-  ]
-  const progress = useMemo(() => [
-    Boolean(project.logline && project.synopsis),
-    Boolean(project.world.summary),
-    project.characters.length > 0,
-    project.beats.length >= 6,
-  ].filter(Boolean).length, [project])
+  const tabs: Array<{ id: StoryTab; label: string; icon: typeof BookOpen }> = project.projectType === 'music_video'
+    ? [
+      { id: 'overview', label: 'Videoclip', icon: Film },
+      { id: 'assets', label: 'Imágenes', icon: ImagePlus },
+      { id: 'music', label: 'Canción', icon: Music },
+      { id: 'productions', label: 'Generar', icon: Sparkles },
+    ]
+    : project.projectType === 'quick_video'
+      ? [
+        { id: 'overview', label: 'Vídeo rápido', icon: Film },
+        { id: 'assets', label: 'Imágenes', icon: ImagePlus },
+        { id: 'productions', label: 'Generar', icon: Sparkles },
+      ]
+      : [
+        { id: 'overview', label: 'Story', icon: BookOpen },
+        { id: 'assets', label: 'Assets', icon: ImagePlus },
+        { id: 'world', label: 'World', icon: Boxes },
+        { id: 'characters', label: 'Characters', icon: Users },
+        { id: 'music', label: 'Music', icon: Music },
+        { id: 'relationships', label: 'Relationships', icon: Network },
+        { id: 'structure', label: 'Structure', icon: ChevronRight },
+        { id: 'productions', label: 'Productions', icon: Film },
+      ]
+  const visibleTabIds = tabs.map(item => item.id)
+  const foundationChecks = project.projectType === 'music_video'
+    ? [
+      Boolean(project.logline && project.synopsis),
+      Boolean(project.world.summary),
+      project.characters.length > 0,
+      project.beats.length >= 4,
+      project.music.cues.length > 0,
+    ]
+    : [
+      Boolean(project.logline && project.synopsis),
+      Boolean(project.world.summary),
+      project.characters.length > 0,
+      project.beats.length >= (project.projectType === 'quick_video' ? 3 : 6),
+    ]
+  const progress = foundationChecks.filter(Boolean).length
+  const foundationTotal = foundationChecks.length
+  const styledReferenceTargetCount = storyStyledReferenceTargets(project, {
+    includeLocations: project.projectType === 'full_story',
+    existingOnly: true,
+  }).length
+  const foldedStyledLocationCount = project.projectType === 'full_story'
+    ? 0
+    : project.world.locations.filter(location => location.visualPrompt.trim()).length
+  useEffect(() => {
+    if (!visibleTabIds.includes(tab)) setTab('overview')
+  }, [project.projectType, tab]) // eslint-disable-line react-hooks/exhaustive-deps
   const productionIssues = (() => {
     if (project.workflowMode === 'automatic') return []
     const required: Array<keyof StoryProject['approvals']> = [
       'overview', 'world', 'characters', 'structure',
     ]
-    if (project.relationships.length) required.push('relationships')
+    if (project.projectType === 'full_story' && project.relationships.length) required.push('relationships')
     const issues = required
       .filter(section => !isApproved(section))
       .map(section => `Approve ${section}`)
@@ -2267,7 +2928,7 @@ export function StoryLabPanel() {
           <div className="flex items-center gap-2">
             <BookOpen size={16} className="text-accent-blue" />
             <span className="text-sm font-semibold text-text-primary">Story Lab</span>
-            <span className="text-[10px] text-text-muted">v{project.revision} · {progress}/4 foundations</span>
+            <span className="text-[10px] text-text-muted">v{project.revision} · {progress}/{foundationTotal} {project.projectType === 'full_story' ? 'foundations' : 'requisitos'}</span>
             {storyLoading
               ? <span className="text-[9px] text-text-muted">loading workspace…</span>
               : storySaveError
@@ -2278,7 +2939,9 @@ export function StoryLabPanel() {
                     ? <span className="text-[9px] text-emerald-400">saved in workspace</span>
                     : <span className="text-[9px] text-text-muted">cached locally</span>}
           </div>
-          <p className="text-[9px] text-text-muted mt-0.5">One editable story bible for comics, films and future adaptations.</p>
+          <p className="text-[9px] text-text-muted mt-0.5">
+            {STORY_PROJECT_TYPES.find(item => item.id === project.projectType)?.description}
+          </p>
         </div>
         <select
           className={`${input} w-44`}
@@ -2291,12 +2954,33 @@ export function StoryLabPanel() {
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
             .map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
         </select>
+        <select
+          className={`${input} w-40`}
+          value={project.projectType}
+          disabled={Boolean(busy || imageBusy)}
+          title="Tipo de proyecto Story Lab"
+          onChange={event => {
+            const projectType = event.target.value as StoryProjectType
+            const durationSeconds = projectType === 'quick_video' && project.projectType !== 'quick_video'
+              ? 15
+              : projectType === 'music_video' && project.projectType !== 'music_video'
+                ? 90
+                : project.creativeBrief.durationSeconds
+            patch({ projectType, creativeBrief: { ...project.creativeBrief, durationSeconds } })
+          }}
+        >
+          {STORY_PROJECT_TYPES.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
         <select className={`${input} w-auto`} value={project.workflowMode} onChange={event => patch({ workflowMode: event.target.value as StoryProject['workflowMode'] })}>
           <option value="guided">Guided · approve stages</option>
           <option value="automatic">Automatic · one click</option>
         </select>
         <button className={button} onClick={() => generate('all')} disabled={Boolean(busy)}>
-          {busy === 'all' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {jobProgress || 'Generate story bible'}
+          {busy === 'all' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {jobProgress || (
+            project.projectType === 'music_video' ? 'Crear canción e historia visual'
+              : project.projectType === 'quick_video' ? 'Crear vídeo rápido'
+                : 'Generar historia completa'
+          )}
         </button>
         {busy && recoveryJobId && (
           <button className={`${button} border-red-500/50 text-red-300`} onClick={cancelGeneration}>
@@ -2310,7 +2994,29 @@ export function StoryLabPanel() {
         )}
         <button className={button} onClick={exportStorypack}><Download size={13} /> Storypack</button>
         <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> Import</button>
-        <button className={button} disabled={Boolean(busy || imageBusy)} onClick={newProject}><Plus size={13} /> New</button>
+        <button className={button} disabled={smartAssetBusy} onClick={() => {
+          setTab('assets')
+          smartAssetRef.current?.click()
+        }} title="Upload a group of images and let the selected Story Lab LLM classify them">
+          {smartAssetBusy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} Smart assets
+        </button>
+        <details className="relative">
+          <summary className={`${button} list-none cursor-pointer`}><Plus size={13} /> New</summary>
+          <div className="absolute right-0 z-40 mt-1 w-64 rounded-lg border border-border bg-bg-primary p-1.5 shadow-xl">
+            {STORY_PROJECT_TYPES.map(item => (
+              <button key={item.id} type="button" disabled={Boolean(busy || imageBusy)}
+                className="block w-full rounded-md px-2.5 py-2 text-left hover:bg-bg-hover disabled:opacity-40"
+                onClick={event => {
+                  newProject(item.id)
+                  const details = event.currentTarget.closest('details') as HTMLDetailsElement | null
+                  details?.removeAttribute('open')
+                }}>
+                <span className="block text-xs font-medium text-text-primary">{item.label}</span>
+                <span className="mt-0.5 block text-[9px] text-text-muted">{item.description}</span>
+              </button>
+            ))}
+          </div>
+        </details>
         <button className={button} disabled={Boolean(busy || imageBusy)} onClick={() => duplicateProject()} title="Duplicate current story">Duplicate</button>
         <button className={button} onClick={() => {
           if (window.confirm(`Delete "${project.title}" from this workspace's Story Lab library?`)) deleteProject(project.id)
@@ -2331,9 +3037,19 @@ export function StoryLabPanel() {
             </button>
           ))}
           <div className="mt-4 border-t border-border pt-3 text-[9px] text-text-muted space-y-1.5">
-            <p>Manual edits are always authoritative.</p>
-            <p>Regeneration preserves existing reference images.</p>
-            <p>Adaptations remember the source revision.</p>
+            {project.projectType === 'full_story' ? (
+              <>
+                <p>Manual edits are always authoritative.</p>
+                <p>Regeneration preserves existing reference images.</p>
+                <p>Adaptations remember the source revision.</p>
+              </>
+            ) : (
+              <>
+                <p>Concepto, imágenes y secuencia viven juntos.</p>
+                <p>Las referencias aprobadas pasan a Director.</p>
+                <p>Puedes editar cualquier resultado antes de generar.</p>
+              </>
+            )}
           </div>
         </nav>
 
@@ -2398,7 +3114,52 @@ export function StoryLabPanel() {
             )}
             {tab === 'overview' && (
               <>
-                <SectionHeader title="Story and intent" description="Define what the story is about before choosing shots or panels." scope="overview" busy={busy} approved={isApproved('overview')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('overview')} />
+                <SectionHeader
+                  title={project.projectType === 'music_video' ? 'Canción e historia visual' : project.projectType === 'quick_video' ? 'Concepto de vídeo rápido' : 'Story and intent'}
+                  description={project.projectType === 'music_video'
+                    ? 'Con cinco decisiones podemos escribir la canción y preparar un videoclip coherente.'
+                    : project.projectType === 'quick_video'
+                      ? 'Una idea directa, sus protagonistas, el lugar y lo que debe ocurrir.'
+                      : 'Define what the story is about before choosing shots or panels.'}
+                  scope="overview" busy={busy} approved={isApproved('overview')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('overview')}
+                />
+                {project.projectType === 'music_video' && (
+                  <div className={`${panel} mb-4 grid md:grid-cols-2 gap-3 border-pink-500/20`}>
+                    <div className="md:col-span-2"><Field label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={4} placeholder="Dónde nace la canción, situación, época, atmósfera y cualquier dato imprescindible." /></div>
+                    <Field label="Artista / quién canta, graba o produce" value={project.creativeBrief.performer} onChange={performer => patch({ creativeBrief: { ...project.creativeBrief, performer } })} rows={3} placeholder="Voz, personalidad artística, presencia escénica o productor." />
+                    <Field label="Estilo musical" value={project.creativeBrief.musicStyle} onChange={musicStyle => patch({ creativeBrief: { ...project.creativeBrief, musicStyle }, music: { ...project.music, style: musicStyle } })} rows={3} placeholder="Género, instrumentación, voz, energía y producción." />
+                    <div className="md:col-span-2"><Field label="Qué queremos que cuente la canción" value={project.creativeBrief.songStory} onChange={songStory => patch({ creativeBrief: { ...project.creativeBrief, songStory }, music: { ...project.music, brief: songStory } })} rows={5} placeholder="Historia, punto de vista, emoción inicial, cambio y recuerdo final." /></div>
+                    <label className="block text-[10px] text-text-muted">
+                      Duración objetivo · {project.creativeBrief.durationSeconds}s
+                      <input type="range" min={30} max={360} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
+                        onChange={event => {
+                          const durationSeconds = Number(event.target.value)
+                          patch({ creativeBrief: { ...project.creativeBrief, durationSeconds }, music: { ...project.music, targetDurationSeconds: durationSeconds } })
+                        }} />
+                    </label>
+                    <p className="self-end text-[10px] text-text-muted">El LLM generará una canción, un intérprete visualizable, un mundo compacto y 4–10 momentos utilizables como planos.</p>
+                  </div>
+                )}
+                {project.projectType === 'quick_video' && (
+                  <div className={`${panel} mb-4 grid md:grid-cols-2 gap-3 border-cyan-500/20`}>
+                    <div className="md:col-span-2"><Field label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={3} placeholder="Qué está pasando y qué debe entender el espectador sin explicación adicional." /></div>
+                    <Field label="Protagonistas" value={project.creativeBrief.subjects} onChange={subjects => patch({ creativeBrief: { ...project.creativeBrief, subjects } })} rows={3} placeholder="Por ejemplo: Trump y Marco Rubio." />
+                    <Field label="Lugar" value={project.creativeBrief.setting} onChange={setting => patch({ creativeBrief: { ...project.creativeBrief, setting } })} rows={3} placeholder="Por ejemplo: despacho de la Casa Blanca, de día." />
+                    <div className="md:col-span-2"><Field label="Qué ocurre / diálogo" value={project.creativeBrief.action} onChange={action => patch({ creativeBrief: { ...project.creativeBrief, action } })} rows={5} placeholder="Acción, conversación, remate o mensaje que debe aparecer." /></div>
+                    <label className="block text-[10px] text-text-muted">Formato
+                      <select className={`${input} mt-1`} value={project.creativeBrief.quickFormat}
+                        onChange={event => patch({ creativeBrief: { ...project.creativeBrief, quickFormat: event.target.value as StoryProject['creativeBrief']['quickFormat'] } })}>
+                        <option value="dialogue">Diálogo</option><option value="meme">Meme</option><option value="parody">Parodia</option>
+                        <option value="sketch">Sketch</option><option value="viral">Viral</option><option value="announcement">Anuncio</option>
+                      </select>
+                    </label>
+                    <label className="block text-[10px] text-text-muted">
+                      Duración objetivo · {project.creativeBrief.durationSeconds}s
+                      <input type="range" min={5} max={120} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
+                        onChange={event => patch({ creativeBrief: { ...project.creativeBrief, durationSeconds: Number(event.target.value) } })} />
+                    </label>
+                  </div>
+                )}
                 <div className="grid xl:grid-cols-[1fr_360px] gap-4">
                   <div className={`${panel} grid md:grid-cols-2 gap-3`}>
                     <Field label="Title" value={project.title} onChange={title => patch({ title })} />
@@ -2410,11 +3171,15 @@ export function StoryLabPanel() {
                         onChange={language => patch({ language })}
                       />
                     </label>
-                    <Choice label="Genre" value={project.genre} options={GENRES} onChange={genre => patch({ genre })} />
-                    <Choice label="Tone" value={project.tone} options={TONES} onChange={tone => patch({ tone })} />
-                    <Field label="Audience" value={project.audience} onChange={audience => patch({ audience })} />
-                    <Field label="Theme" value={project.theme} onChange={theme => patch({ theme })} />
-                    <Field label="What the story is about / premise" value={project.premise} onChange={premise => patch({ premise })} rows={5} placeholder="Who wants what, what stops them, and what happens if they fail?" />
+                    {project.projectType === 'full_story' && (
+                      <>
+                        <Choice label="Genre" value={project.genre} options={GENRES} onChange={genre => patch({ genre })} />
+                        <Choice label="Tone" value={project.tone} options={TONES} onChange={tone => patch({ tone })} />
+                        <Field label="Audience" value={project.audience} onChange={audience => patch({ audience })} />
+                        <Field label="Theme" value={project.theme} onChange={theme => patch({ theme })} />
+                        <Field label="What the story is about / premise" value={project.premise} onChange={premise => patch({ premise })} rows={5} placeholder="Who wants what, what stops them, and what happens if they fail?" />
+                      </>
+                    )}
                     <Field label="Visual style / independent art direction" value={project.visualStyle} onChange={visualStyle => patch({ visualStyle })} rows={5} placeholder="For example: hand-painted 2D animation, watercolor backgrounds, clean ink contours, warm muted palette…" />
                     <div className="md:col-span-2 rounded-lg border border-border bg-bg-tertiary/50 p-3 space-y-2">
                       <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
@@ -2433,17 +3198,209 @@ export function StoryLabPanel() {
                         <button className={button} disabled={!project.visualStyle.trim()} onClick={writeStyleIntoPrompts}>
                           <Palette size={13} /> Write/replace style lock in existing prompts
                         </button>
-                        <button className={button} disabled={!project.visualStyle.trim() || Boolean(imageBusy) || referenceBatchBusy} onClick={regenerateStyledReferences}>
-                          {referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Regenerate all visual references in this style
+                        <button className={button} disabled={!project.visualStyle.trim() || !styledReferenceTargetCount || Boolean(imageBusy) || referenceBatchBusy} onClick={regenerateStyledReferences}>
+                          {referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Restyle {styledReferenceTargetCount} existing reference{styledReferenceTargetCount === 1 ? '' : 's'}
                         </button>
                       </div>
+                      {project.projectType !== 'full_story' && (
+                        <p className="text-[9px] leading-relaxed text-text-muted">
+                          Compact scope: only existing world and subject images are replaced. Prompt-only targets are not created automatically{foldedStyledLocationCount ? `, and ${foldedStyledLocationCount} additional folded location${foldedStyledLocationCount === 1 ? ' is' : 's are'} excluded` : ''}.
+                        </p>
+                      )}
                     </div>
-                    <div className="md:col-span-2"><Field label="Logline" value={project.logline} onChange={logline => patch({ logline })} rows={2} /></div>
-                    <div className="md:col-span-2"><Field label="Synopsis" value={project.synopsis} onChange={synopsis => patch({ synopsis })} rows={8} /></div>
-                    <div className="md:col-span-2"><Field label="Ending / final image" value={project.ending} onChange={ending => patch({ ending })} rows={3} /></div>
+                    <div className="md:col-span-2 border-t border-border pt-3">
+                      <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                        {project.projectType === 'full_story' ? 'Story treatment' : 'Tratamiento generado y editable'}
+                      </p>
+                      <div className="space-y-3">
+                        <Field label="Logline" value={project.logline} onChange={logline => patch({ logline })} rows={2} />
+                        <Field label="Synopsis" value={project.synopsis} onChange={synopsis => patch({ synopsis })} rows={8} />
+                        <Field label="Ending / final image" value={project.ending} onChange={ending => patch({ ending })} rows={3} />
+                      </div>
+                    </div>
                   </div>
                   <ProviderPanel project={project} patch={patch} />
                 </div>
+                {project.projectType !== 'full_story' && (
+                  <CompactVideoWorkspace
+                    project={project}
+                    update={update}
+                    busy={busy}
+                    imageBusy={imageBusy}
+                    referenceBatchBusy={referenceBatchBusy}
+                    generateSection={generate}
+                    approveSection={approve}
+                    isSectionApproved={isApproved}
+                    generateVisual={generateVisual}
+                    upload={target => {
+                      setUploadTarget(target)
+                      uploadRef.current?.click()
+                    }}
+                    removeReference={removeReference}
+                    navigate={setTab}
+                  />
+                )}
+              </>
+            )}
+
+            {tab === 'assets' && (
+              <>
+                <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-text-primary">Smart asset importer</h2>
+                    <p className="mt-1 max-w-3xl text-xs text-text-muted">
+                      Drop related images as one batch. The selected Story Lab LLM identifies characters, locations,
+                      world references, props and style references, and groups alternate views before anything changes.
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-[10px] text-text-muted">
+                    Analyzer: {project.provider.writingProvider === 'maestro'
+                      ? 'Maestro current LLM'
+                      : `${project.provider.writingProvider} · ${project.provider.writingModel || 'configured model'}`}
+                  </div>
+                </div>
+
+                <div className={`${panel} mb-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]`}>
+                  <button
+                    type="button"
+                    disabled={smartAssetBusy}
+                    className="min-h-44 rounded-xl border-2 border-dashed border-border bg-bg-tertiary/40 p-6 text-center transition-colors hover:border-accent-blue hover:bg-accent-blue/5 disabled:opacity-50"
+                    onClick={() => smartAssetRef.current?.click()}
+                    onDragOver={event => event.preventDefault()}
+                    onDrop={event => {
+                      event.preventDefault()
+                      void analyzeSmartAssets(Array.from(event.dataTransfer.files))
+                    }}
+                  >
+                    {smartAssetBusy
+                      ? <Loader2 size={28} className="mx-auto mb-3 animate-spin text-accent-blue" />
+                      : <Upload size={28} className="mx-auto mb-3 text-accent-blue" />}
+                    <span className="block text-sm font-medium text-text-primary">
+                      {smartAssetBusy ? 'Uploading and analyzing the batch…' : 'Drop images here or choose files'}
+                    </span>
+                    <span className="mt-2 block text-[10px] text-text-muted">
+                      Up to 24 images per batch. Several views of one subject can be assigned to the same entity.
+                    </span>
+                  </button>
+                  <div>
+                    <Field
+                      label="Optional context for the complete batch"
+                      value={smartAssetDescription}
+                      onChange={setSmartAssetDescription}
+                      rows={6}
+                      placeholder="For example: photos of Córdoba for a contemporary mystery; the woman in red is the protagonist and the old station is the main location."
+                    />
+                    <p className="mt-2 text-[9px] text-text-muted">
+                      This context is sent once with the ordered image batch. Maestro proposes changes; you review every assignment below.
+                    </p>
+                  </div>
+                </div>
+
+                {pendingSmartAssets.length > 0 && (
+                  <section className="mb-5">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-semibold text-text-primary">Review proposed assignments</h3>
+                        <p className="text-[10px] text-text-muted">Names, prompts, types and destinations remain editable. Uncheck anything you do not want to import.</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className={button} onClick={() => setPendingSmartAssets([])}>Discard batch</button>
+                        <button className={`${button} border-emerald-500/50 text-emerald-300`}
+                          disabled={!pendingSmartAssets.some(item => item.selected && item.kind !== 'ignore')}
+                          onClick={applySmartAssets}>
+                          <Check size={13} /> Apply selected
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {pendingSmartAssets.map((item, index) => {
+                        const newKey = stableTextKey(`${item.name}-${index}`)
+                        const targetOptions = item.kind === 'character'
+                          ? [
+                            ...project.characters.map(character => ({ id: character.id, label: `Existing · ${character.name}` })),
+                            { id: item.targetId.startsWith('new-character:') ? item.targetId : `new-character:${newKey}`, label: `New character · ${item.name}` },
+                          ]
+                          : item.kind === 'location'
+                            ? [
+                              ...project.world.locations.map(location => ({ id: location.id, label: `Existing · ${location.name}` })),
+                              { id: item.targetId.startsWith('new-location:') ? item.targetId : `new-location:${newKey}`, label: `New location · ${item.name}` },
+                            ]
+                            : [{ id: 'world', label: item.kind === 'prop' ? 'World library · prop' : item.kind === 'style' ? 'World library · style' : 'World references' }]
+                        return (
+                          <article key={`${item.source}-${index}`} className={`${panel} ${item.selected ? '' : 'opacity-60'}`}>
+                            <div className="grid gap-3 lg:grid-cols-[140px_minmax(0,1fr)_minmax(260px,0.7fr)]">
+                              <div>
+                                <img src={item.source} alt={item.name} className="h-32 w-full rounded-lg border border-border object-cover" />
+                                <label className="mt-2 flex items-center gap-2 text-[10px] text-text-secondary">
+                                  <input type="checkbox" checked={item.selected}
+                                    onChange={event => patchPendingSmartAsset(index, { selected: event.target.checked })} />
+                                  Import this image
+                                </label>
+                                <p className="mt-1 truncate text-[9px] text-text-muted" title={item.nameOriginal}>{item.nameOriginal}</p>
+                              </div>
+                              <div className="space-y-3">
+                                <Field label="Editable name" value={item.name}
+                                  onChange={name => patchPendingSmartAsset(index, { name })} />
+                                <Field label="What the image contains" value={item.description}
+                                  onChange={description => patchPendingSmartAsset(index, { description })} rows={3} />
+                                <Field label="Reusable visual prompt" value={item.visualPrompt}
+                                  onChange={visualPrompt => patchPendingSmartAsset(index, { visualPrompt })} rows={3} />
+                              </div>
+                              <div className="space-y-3">
+                                <label className="block text-[10px] text-text-muted">Asset type
+                                  <select className={`${input} mt-1`} value={item.kind} onChange={event => {
+                                    const kind = event.target.value as StoryAssetKind
+                                    const targetId = kind === 'character'
+                                      ? (project.characters[0]?.id || `new-character:${newKey}`)
+                                      : kind === 'location'
+                                        ? (project.world.locations[0]?.id || `new-location:${newKey}`)
+                                        : 'world'
+                                    patchPendingSmartAsset(index, { kind, targetId, selected: kind !== 'ignore' })
+                                  }}>
+                                    <option value="character">Character</option>
+                                    <option value="location">Location</option>
+                                    <option value="world">World</option>
+                                    <option value="prop">Prop</option>
+                                    <option value="style">Style reference</option>
+                                    <option value="ignore">Ignore</option>
+                                  </select>
+                                </label>
+                                {item.kind !== 'ignore' && (
+                                  <label className="block text-[10px] text-text-muted">Destination
+                                    <select className={`${input} mt-1`} value={targetOptions.some(option => option.id === item.targetId) ? item.targetId : targetOptions[0]?.id}
+                                      onChange={event => patchPendingSmartAsset(index, { targetId: event.target.value })}>
+                                      {targetOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                                    </select>
+                                  </label>
+                                )}
+                                <div className="rounded-md border border-border bg-bg-tertiary/60 p-2 text-[9px] text-text-muted">
+                                  <p>Confidence: {Math.round(item.confidence * 100)}%</p>
+                                  <p className="mt-1">{item.reason}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                <section>
+                  <h3 className="mb-2 text-sm font-semibold text-text-primary">Imported asset library · {Object.keys(project.assets).length}</h3>
+                  {Object.keys(project.assets).length ? (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                      {Object.values(project.assets).map(asset => (
+                        <div key={asset.id} className={`${panel} p-2.5`}>
+                          <img src={asset.source} alt={asset.name} className="h-32 w-full rounded-md border border-border object-cover" />
+                          <p className="mt-2 truncate text-xs font-medium text-text-primary" title={asset.name}>{asset.name}</p>
+                          <p className="mt-0.5 text-[9px] uppercase tracking-wide text-text-muted">{asset.assetKind || asset.provider}</p>
+                          {asset.description && <p className="mt-1 line-clamp-3 text-[9px] text-text-muted">{asset.description}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div className={`${panel} py-10 text-center text-xs text-text-muted`}>No visual assets have been imported yet.</div>}
+                </section>
               </>
             )}
 
@@ -2537,7 +3494,11 @@ export function StoryLabPanel() {
                 <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-3 mb-4">
                   <div>
                     <h2 className="text-lg font-semibold text-text-primary">Music bible</h2>
-                    <p className="text-xs text-text-muted mt-1">LLM-authored ambience, character presentation themes and three story songs. Suggestions cost no MiniMax music credits until you generate audio.</p>
+                    <p className="text-xs text-text-muted mt-1">
+                      {project.projectType === 'music_video'
+                        ? 'One LLM-authored song built from the creative brief, ready to edit, generate and turn into a videoclip. No MiniMax music credits are used until you generate audio.'
+                        : 'LLM-authored ambience, character presentation themes and three story songs. Suggestions cost no MiniMax music credits until you generate audio.'}
+                    </p>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2 xl:max-w-[760px]">
                     <input className={`${input} sm:w-72`} value={instruction}
@@ -2573,6 +3534,34 @@ export function StoryLabPanel() {
                   </div>
                 </div>
 
+                <div className={`${panel} mb-4 border-purple-500/30 bg-purple-500/5`}>
+                  <div className="mb-2 flex items-start gap-2">
+                    <Palette size={17} className="mt-0.5 shrink-0 text-purple-300" />
+                    <div>
+                      <h3 className="text-xs font-semibold text-purple-200">Create a new version of every music proposal</h3>
+                      <p className="mt-0.5 text-[9px] text-text-muted">Changes style, language, or both. Prompts and lyrics are rewritten sequentially; generated audio candidates are never deleted.</p>
+                    </div>
+                  </div>
+                  <div className="grid md:grid-cols-[1fr_0.7fr_auto] gap-2 items-end">
+                    <label className="block text-[10px] text-text-muted">New style · optional
+                      <input className={`${input} mt-1`} value={musicVersionStyle.all || ''}
+                        onChange={event => setMusicVersionStyle(current => ({ ...current, all: event.target.value }))}
+                        placeholder="Rap, boom bap, female flow, dark bass…" />
+                    </label>
+                    <label className="block text-[10px] text-text-muted">New lyrics language · optional
+                      <input className={`${input} mt-1`} value={musicVersionLanguage.all || ''}
+                        onChange={event => setMusicVersionLanguage(current => ({ ...current, all: event.target.value }))}
+                        placeholder="Spanish, Japanese…" />
+                    </label>
+                    <button className={`${button} border-purple-500/60 text-purple-200`}
+                      disabled={Boolean(busy || musicQueue || musicCueBusy) || !musicWritingReady || !project.music.cues.length}
+                      onClick={() => void createAllMusicCueVersions()}>
+                      {musicCueBusy === 'version:all' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />}
+                      Rewrite all drafts
+                    </button>
+                  </div>
+                </div>
+
                 {(['world', 'character', 'story'] as const).map(kind => {
                   const cues = project.music.cues.filter(cue => cue.kind === kind)
                   if (!cues.length) return null
@@ -2588,6 +3577,8 @@ export function StoryLabPanel() {
                             : cue.kind === 'world' ? (project.title || 'Story world') : cue.targetId
                           const generatingAudio = musicCueBusy === `audio:${cue.id}`
                           const adapting = musicCueBusy === `llm:${cue.id}`
+                          const translating = musicCueBusy === `translate:${cue.id}`
+                          const versioning = musicCueBusy === `version:${cue.id}`
                           const queued = musicQueue?.ids.includes(cue.id)
                           return (
                             <article key={cue.id} className={`${panel} space-y-3 ${generatingAudio ? 'border-pink-500/60' : ''}`}>
@@ -2616,16 +3607,32 @@ export function StoryLabPanel() {
                                         onChange={event => patchMusicCue(cue.id, { instrumental: event.target.checked })} />
                                       Instrumental
                                     </label>
-                                    <label className="block text-[10px] text-text-muted">Duration · seconds
+                                    <label className="block text-[10px] text-text-muted">Target duration for lyrics · seconds
                                       <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
                                         value={cue.durationSeconds}
                                         onChange={event => patchMusicCue(cue.id, { durationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) })} />
                                     </label>
                                   </div>
+                                  <p className="text-[9px] text-text-muted">MiniMax has no exact duration setting; this guides the LLM’s lyric length, while the rendered track can vary with tempo and arrangement.</p>
                                   <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
                                     onClick={() => void adaptMusicCueWithLlm(cue.id)}>
                                     {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Adapt provider prompt{cue.instrumental ? '' : ' + lyrics'} with LLM
                                   </button>
+                                  <div className="space-y-2 rounded-lg border border-purple-500/30 bg-purple-500/5 p-2.5">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-200"><Palette size={12} /> Create a completely new version</div>
+                                    <input className={input} value={musicVersionStyle[cue.id] || ''}
+                                      onChange={event => setMusicVersionStyle(current => ({ ...current, [cue.id]: event.target.value }))}
+                                      placeholder="New style, e.g. cinematic rap / boom bap…" />
+                                    <input className={input} value={musicVersionLanguage[cue.id] || ''}
+                                      onChange={event => setMusicVersionLanguage(current => ({ ...current, [cue.id]: event.target.value }))}
+                                      placeholder={`New language, optional · current: ${cue.lyricsLanguage || project.language}`} />
+                                    <button className={`${button} w-full border-purple-500/60 text-purple-200`}
+                                      disabled={Boolean(musicCueBusy || musicQueue) || !musicWritingReady}
+                                      onClick={() => void createMusicCueVersion(cue.id)}>
+                                      {versioning ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Rewrite style{cue.instrumental ? '' : ' + lyrics'}
+                                    </button>
+                                    <p className="text-[9px] text-text-muted">Leave either field empty to retain its current value. Existing generated tracks remain available below.</p>
+                                  </div>
                                 </div>
                                 <div className="space-y-3">
                                 <div className="space-y-2.5 rounded-lg border border-pink-500/30 bg-pink-500/5 p-3">
@@ -2641,6 +3648,20 @@ export function StoryLabPanel() {
                                   <p className="text-[9px] text-text-muted">Genre, mood, instruments, voice, tempo and production. Anything after character 300 is not sent.</p>
                                   {!cue.instrumental && <Field label="lyrics · structured separately" value={cue.lyrics}
                                     onChange={lyrics => patchMusicCue(cue.id, { lyrics })} rows={10} />}
+                                  {!cue.instrumental && (
+                                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                                      <label className="block text-[10px] text-text-muted">Translate lyrics to
+                                        <input className={`${input} mt-1`} value={lyricsTranslationLanguage[cue.id] || ''}
+                                          onChange={event => setLyricsTranslationLanguage(current => ({ ...current, [cue.id]: event.target.value }))}
+                                          placeholder="English, French, Japanese…" />
+                                      </label>
+                                      <button className={`${button} self-end`} disabled={Boolean(musicCueBusy || musicQueue) || !musicWritingReady || !cue.lyrics.trim()}
+                                        onClick={() => void translateMusicCueLyrics(cue.id)}>
+                                        {translating ? <Loader2 size={13} className="animate-spin" /> : <Languages size={13} />} Translate
+                                      </button>
+                                    </div>
+                                  )}
+                                  {!cue.instrumental && <p className="text-[9px] text-text-muted">Uses the selected Story Lab LLM and replaces these editable lyrics. MiniMax section tags stay unchanged.</p>}
                                   {!cue.instrumental && cue.lyrics.trim() && !MINIMAX_LYRIC_SECTION.test(cue.lyrics) && (
                                     <p className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[9px] text-amber-200">
                                       These lyrics have no supported section tags. Use the LLM adaptation or add [Verse], [Pre Chorus], [Chorus], [Bridge] and [Outro] before generating.
@@ -2676,7 +3697,7 @@ export function StoryLabPanel() {
                                   <p className="text-[9px] text-text-muted">Uses contiguous timestamps, section names, intensity, arrangement and separated lyrics. Lyria Pro targets up to about 3:00; longer Story durations are condensed in this prompt.</p>
                                   <div className="grid sm:grid-cols-2 gap-2">
                                     <button className={button} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
-                                      onClick={() => void adaptMusicCueWithLlm(cue.id)}>
+                                      onClick={() => void adaptMusicCueWithLlm(cue.id, true)}>
                                       {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate / refresh Lyria prompt
                                     </button>
                                     <button className={button} disabled={!cue.lyriaPrompt.trim()} onClick={() => {
@@ -2699,11 +3720,12 @@ export function StoryLabPanel() {
                                 <div className="space-y-2 border-t border-border pt-2">
                                   {cue.candidates.map(candidate => {
                                     const selected = cue.selectedCandidateId === candidate.id
+                                    const label = musicCandidateDisplayName(candidate, cue.title, cue.lyricsLanguage || project.language, cue.candidates.indexOf(candidate) + 1)
                                     return (
                                       <div key={candidate.id} className={`rounded border p-2 space-y-1.5 ${selected ? 'border-pink-400 bg-pink-500/5' : 'border-border'}`}>
                                         <button type="button" className="w-full flex items-center justify-between gap-2 text-left text-[10px]"
                                           onClick={() => patchMusicCue(cue.id, { selectedCandidateId: candidate.id })}>
-                                          <span className="text-text-primary">{getOutputReference({ name: candidate.name, type: 'audio' })} · {candidate.model}</span>
+                                          <span className="text-text-primary">{label} · {candidate.model}</span>
                                           <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
                                         </button>
                                         <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
@@ -2778,17 +3800,43 @@ export function StoryLabPanel() {
                         onChange={style => patch({ music: { ...project.music, style } })} rows={3} />
                       <Field label="Editable lyrics" value={project.music.lyrics}
                         onChange={lyrics => patch({ music: { ...project.music, lyrics } })} rows={8} />
-                      <label className="block text-[10px] text-text-muted">Approx. duration · seconds
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                        <label className="block text-[10px] text-text-muted">Translate lyrics to
+                          <input className={`${input} mt-1`} value={lyricsTranslationLanguage.manual || ''}
+                            onChange={event => setLyricsTranslationLanguage(current => ({ ...current, manual: event.target.value }))}
+                            placeholder="English, French, Japanese…" />
+                        </label>
+                        <button className={`${button} self-end`} disabled={productionBusy === 'music' || !musicWritingReady || !project.music.lyrics.trim()}
+                          onClick={() => void translateManualSongLyrics()}><Languages size={13} /> Translate</button>
+                      </div>
+                      <p className="text-[9px] text-text-muted">Uses the selected Story Lab LLM and replaces the editable lyrics, preserving MiniMax section tags.</p>
+                      <div className="space-y-2 rounded-lg border border-purple-500/30 bg-purple-500/5 p-2.5">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-200"><Palette size={12} /> Create a completely new manual version</div>
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          <input className={input} value={musicVersionStyle.manual || ''}
+                            onChange={event => setMusicVersionStyle(current => ({ ...current, manual: event.target.value }))}
+                            placeholder="New style, e.g. rap…" />
+                          <input className={input} value={musicVersionLanguage.manual || ''}
+                            onChange={event => setMusicVersionLanguage(current => ({ ...current, manual: event.target.value }))}
+                            placeholder={`Language · ${project.music.lyricsLanguage || project.language}`} />
+                        </div>
+                        <button className={`${button} w-full border-purple-500/60 text-purple-200`}
+                          disabled={productionBusy === 'music' || !musicWritingReady}
+                          onClick={() => void createManualSongVersion()}><RefreshCcw size={13} /> Rewrite style + lyrics</button>
+                        <p className="text-[9px] text-text-muted">Use either field or both. The current draft supplies the Story meaning, but its arrangement and sung lines are rebuilt from scratch.</p>
+                      </div>
+                      <label className="block text-[10px] text-text-muted">Target duration for lyrics · seconds
                         <input className={`${input} mt-1`} type="number" min={20} max={360} step={5}
                           value={project.music.targetDurationSeconds}
                           onChange={event => patch({ music: { ...project.music, targetDurationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) } })} />
                       </label>
+                      <p className="text-[9px] text-text-muted">MiniMax Music does not expose an exact duration parameter; the target guides lyric writing and the render can vary.</p>
                       <button className={`${button} w-full border-pink-500/60 text-pink-300`}
                         disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
                         onClick={() => void generateMinimaxSongs()}><Music size={13} /> Generate manual candidates</button>
                       {project.music.candidates.map(candidate => (
                         <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">
-                          <span className="text-[10px] text-text-primary">{getOutputReference({ name: candidate.name, type: 'audio' })} · {candidate.model}</span>
+                          <span className="text-[10px] text-text-primary">{musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1)} · {candidate.model}</span>
                           <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
                           <button className={`${button} w-full`} onClick={() => void openMusicalTrailer(candidate.id)}><Film size={12} /> Use in musical trailer</button>
                         </div>
@@ -2805,10 +3853,13 @@ export function StoryLabPanel() {
             {tab === 'productions' && (
               <>
                 <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-text-primary">Productions</h2>
-                  <p className="text-xs text-text-muted mt-1">Adapt the same approved material without destroying the source story.</p>
+                  <h2 className="text-lg font-semibold text-text-primary">{project.projectType === 'music_video' ? 'Generar videoclip' : project.projectType === 'quick_video' ? 'Generar vídeo rápido' : 'Productions'}</h2>
+                  <p className="text-xs text-text-muted mt-1">{project.projectType === 'full_story'
+                    ? 'Adapt the same approved material without destroying the source story.'
+                    : 'Revisa los modelos, el formato y las referencias aprobadas antes de iniciar Director.'}</p>
                 </div>
                 <div className="grid md:grid-cols-2 gap-4">
+                  {project.projectType === 'full_story' && (
                   <div className={`${panel} space-y-3`}>
                     <BookOpen size={26} className="text-accent-blue" />
                     <h3 className="font-semibold text-text-primary">Comic adaptation</h3>
@@ -2855,10 +3906,14 @@ export function StoryLabPanel() {
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={() => stageComic(false)}><ChevronRight size={13} /> Open in Comic Director</button>
                     <p className="text-[9px] text-text-muted">Complete generation creates the plan and artwork and may consume provider credits. Director mode lets you review every field first.</p>
                   </div>
+                  )}
+                  {project.projectType !== 'music_video' && (
                   <div className={`${panel} space-y-3`}>
                     <Film size={26} className="text-purple-400" />
-                    <h3 className="font-semibold text-text-primary">Film adaptation</h3>
-                    <p className="text-xs text-text-muted">Creates a short narrative episode instead of compressing the whole story. The cast, world and visual references remain attached.</p>
+                    <h3 className="font-semibold text-text-primary">{project.projectType === 'quick_video' ? 'Vídeo rápido' : 'Film adaptation'}</h3>
+                    <p className="text-xs text-text-muted">{project.projectType === 'quick_video'
+                      ? 'Convierte directamente el concepto, diálogo y 3–8 momentos en un vídeo ensamblado, conservando protagonistas, lugar y estilo.'
+                      : 'Creates a short narrative episode instead of compressing the whole story. The cast, world and visual references remain attached.'}</p>
                     <textarea className={input} rows={4} value={filmDirection} onChange={event => setFilmDirection(event.target.value)} aria-label="Short-film episode direction" />
                     <label className="block text-[10px] text-text-muted">Target duration · seconds
                       <input
@@ -2934,10 +3989,12 @@ export function StoryLabPanel() {
                         </span>
                       </span>
                     </label>
-                    <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmImageReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate complete short film</button>
-                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> Open in Short Film Director</button>
+                    <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmImageReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
+                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> {project.projectType === 'quick_video' ? 'Abrir en Director' : 'Open in Short Film Director'}</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
                   </div>
+                  )}
+                  {project.projectType !== 'quick_video' && (
                   <div className={`${panel} space-y-3 md:col-span-2`}>
                     <div className="flex items-start gap-3">
                       <Music size={26} className="shrink-0 text-pink-400" />
@@ -2983,6 +4040,82 @@ export function StoryLabPanel() {
                             <audio src={selectedMusicOption.candidate.source} controls preload="metadata" className="h-8 w-full" />
                           </div>
                         )}
+                        <div className="rounded-lg border border-border bg-bg-tertiary/40 p-2.5 space-y-2">
+                          <div>
+                            <p className="text-[10px] font-medium text-text-secondary">Generation models</p>
+                            <p className="mt-0.5 text-[9px] text-text-muted">These exact choices are sent to Director and saved with this music-video production for later iterations.</p>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                            <label className="block text-[10px] text-text-muted">Planning LLM
+                              <select
+                                className={`${input} mt-1`}
+                                value={project.provider.writingProvider}
+                                onChange={event => setMusicWritingProvider(event.target.value as StoryWritingProvider)}
+                              >
+                                <option value="maestro">Maestro internal</option>
+                                <option value="deepseek">DeepSeek</option>
+                                <option value="minimax">MiniMax</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="openai-compatible">Custom OpenAI-compatible</option>
+                              </select>
+                            </label>
+                            {project.provider.writingProvider !== 'maestro' && (
+                              <label className="block text-[10px] text-text-muted">LLM model
+                                {project.provider.writingProvider === 'deepseek' ? (
+                                  <select className={`${input} mt-1`} value={project.provider.writingModel || 'deepseek-v4-pro'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
+                                    <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
+                                    <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
+                                  </select>
+                                ) : project.provider.writingProvider === 'minimax' ? (
+                                  <select className={`${input} mt-1`} value={project.provider.writingModel || 'MiniMax-M3'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
+                                    <option value="MiniMax-M3">MiniMax M3</option>
+                                    <option value="MiniMax-M2.7">MiniMax M2.7</option>
+                                    <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed</option>
+                                  </select>
+                                ) : (
+                                  <input className={`${input} mt-1`} value={project.provider.writingModel} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })} />
+                                )}
+                              </label>
+                            )}
+                            <label className="block text-[10px] text-text-muted">Image model
+                              <select className={`${input} mt-1`} value={filmImageModel} onChange={event => selectDirectorImageModel(event.target.value)}>
+                                {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
+                                  <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
+                                )}
+                                <optgroup label="External API">
+                                  <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
+                                </optgroup>
+                                <optgroup label="Maestro local">
+                                  {selectableImageModels.map(model => (
+                                    <option key={model.model_type} value={model.model_type}>{model.name}</option>
+                                  ))}
+                                </optgroup>
+                              </select>
+                            </label>
+                            <label className="block text-[10px] text-text-muted">Video model
+                              <select className={`${input} mt-1`} value={filmVideoModel} onChange={event => void selectDirectorVideoModel(event.target.value)}>
+                                {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && (
+                                  <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>
+                                )}
+                                {selectableVideoModels.map(model => (
+                                  <option key={model.model_type} value={model.model_type}>{model.name}</option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                          {project.provider.writingProvider === 'openai-compatible' && (
+                            <label className="block text-[10px] text-text-muted">Compatible API base URL
+                              <input className={`${input} mt-1`} value={project.provider.writingBaseUrl} onChange={event => patchMusicWritingProvider({ writingBaseUrl: event.target.value })} placeholder="https://…/v1" />
+                            </label>
+                          )}
+                          <p className={`text-[9px] ${musicWritingReady && filmImageReady ? 'text-text-muted' : 'text-amber-300'}`}>
+                            {musicWritingReady && filmImageReady
+                              ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · ${selectedFilmImageModel?.name || filmImageModel} · ${selectedFilmVideoModel?.name || filmVideoModel}`
+                              : !musicWritingReady
+                                ? 'Configure the selected planning LLM in Settings → Services before generating.'
+                                : 'Configure MiniMax in Settings → Services before using MiniMax Image.'}
+                          </p>
+                        </div>
                         <div className="grid grid-cols-2 gap-1.5">
                           <button
                             type="button"
@@ -3036,7 +4169,7 @@ export function StoryLabPanel() {
                         <div className="grid gap-2 sm:grid-cols-2">
                           <button
                             className={`${button} w-full border-pink-500/60 text-pink-300`}
-                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length)}
+                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length) || !musicWritingReady || !filmImageReady}
                             onClick={() => void stageMusicVideo(true)}
                           >
                             {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
@@ -3044,7 +4177,7 @@ export function StoryLabPanel() {
                           </button>
                           <button
                             className={`${button} w-full`}
-                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length)}
+                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length) || !musicWritingReady || !filmImageReady}
                             onClick={() => void stageMusicVideo(false)}
                           >
                             <ChevronRight size={13} /> Open {musicProductionMode === 'trailer' ? 'trailer' : 'music video'} in Director
@@ -3062,6 +4195,7 @@ export function StoryLabPanel() {
                       </div>
                     )}
                   </div>
+                  )}
                   <div className="hidden" aria-hidden="true">
                     <Music size={26} className="text-pink-400" />
                     <h3 className="font-semibold text-text-primary">Musical trailer</h3>
@@ -3155,13 +4289,13 @@ export function StoryLabPanel() {
                     {project.music.candidates.length > 0 && (
                       <div className="space-y-2">
                         {project.music.candidates.map(candidate => {
-                          const reference = getOutputReference({ name: candidate.name, type: 'audio' })
                           const selected = project.music.selectedCandidateId === candidate.id
+                          const label = musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1)
                           return (
                             <div key={candidate.id} className={`rounded border p-2 space-y-1.5 ${selected ? 'border-pink-400 bg-pink-500/5' : 'border-border'}`}>
                               <button type="button" onClick={() => patch({ music: { ...project.music, selectedCandidateId: candidate.id } })}
                                 className="w-full flex items-center justify-between text-[10px] text-left">
-                                <span className="text-text-primary">{reference} · {candidate.model}</span>
+                                <span className="text-text-primary">{label} · {candidate.model}</span>
                                 <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
                               </button>
                               <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
@@ -3216,6 +4350,8 @@ export function StoryLabPanel() {
         </div>
       </div>
       <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={event => uploadVisual(event.target.files)} />
+      <input ref={smartAssetRef} type="file" accept="image/*" multiple className="hidden"
+        onChange={event => void analyzeSmartAssets(Array.from(event.target.files || []))} />
       <input ref={lyriaUploadRef} type="file" accept="audio/*" className="hidden"
         onChange={event => void uploadLyriaResult(event.target.files?.[0])} />
     </div>
@@ -3229,6 +4365,286 @@ function emptyCharacter(): StoryCharacter {
     appearance: '', wardrobe: '', visualPrompt: '', negativePrompt: '',
     referenceAssetIds: [], approval: 'draft',
   }
+}
+
+function CompactVideoWorkspace({
+  project, update, busy, imageBusy, referenceBatchBusy, generateSection, approveSection,
+  isSectionApproved, generateVisual, upload, removeReference, navigate,
+}: {
+  project: StoryProject
+  update: (updater: (project: StoryProject) => StoryProject) => void
+  busy: StoryGenerationScope | null
+  imageBusy: string
+  referenceBatchBusy: boolean
+  generateSection: (scope: StoryGenerationScope) => void
+  approveSection: (scope: keyof StoryProject['approvals']) => void
+  isSectionApproved: (scope: keyof StoryProject['approvals']) => boolean
+  generateVisual: (
+    target: { kind: 'world' | 'character' | 'location'; id?: string },
+    prompt: string,
+  ) => Promise<unknown>
+  upload: (target: { kind: 'world' | 'character' | 'location'; id?: string }) => void
+  removeReference: (target: 'world' | 'character' | 'location', targetId: string | undefined, assetId: string) => void
+  navigate: (tab: StoryTab) => void
+}) {
+  const isMusicVideo = project.projectType === 'music_video'
+  const worldReady = Boolean(project.world.summary.trim() && project.world.visualLanguage.trim())
+  const castReady = project.characters.length > 0 && project.characters.every(character =>
+    character.approval === 'approved'
+    && Boolean(character.primaryReferenceAssetId && project.assets[character.primaryReferenceAssetId]))
+  const sequenceReady = project.beats.length >= 3 && project.beats.every(beat =>
+    Boolean(beat.summary.trim() && beat.conflict.trim() && beat.turn.trim()))
+  const status = (ready: boolean, approved: boolean) => (
+    <span className={`rounded-full border px-2 py-1 text-[9px] ${ready
+      ? approved ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+      : 'border-border bg-bg-tertiary text-text-muted'}`}>
+      {ready ? approved ? 'Aprobado' : 'Listo para aprobar' : 'Pendiente'}
+    </span>
+  )
+
+  return (
+    <section className={`${panel} mt-4 ${isMusicVideo ? 'border-pink-500/25' : 'border-cyan-500/25'}`}>
+      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <p className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${isMusicVideo ? 'text-pink-300' : 'text-cyan-300'}`}>
+            Mesa de preparación
+          </p>
+          <h3 className="mt-1 text-base font-semibold text-text-primary">
+            {isMusicVideo ? 'Imágenes y secuencia del videoclip' : 'Imágenes y secuencia del vídeo rápido'}
+          </h3>
+          <p className="mt-1 max-w-3xl text-xs text-text-muted">
+            {isMusicVideo
+              ? 'Aquí sólo viven el entorno visual, el artista o protagonistas y los momentos que acompañarán la canción. No necesitas una biblia de mundo ni relaciones dramáticas.'
+              : 'Aquí sólo viven la localización, las personas que deben aparecer y la sucesión breve de acciones o diálogo. Los campos internos compatibles con Director se mantienen detrás de esta vista.'}
+          </p>
+          <p className="mt-2 rounded-md border border-accent-blue/20 bg-accent-blue/5 px-2.5 py-1.5 text-[9px] leading-relaxed text-text-muted">
+            <span className="font-medium text-accent-blue">Preparar = sólo texto con LLM.</span> Puede reescribir los campos del bloque, pero conserva las referencias. Únicamente los botones “Generar imagen” o “Crear identidad” renderizan imágenes.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className={button} onClick={() => navigate('assets')}><ImagePlus size={13} /> Importar imágenes</button>
+          {isMusicVideo && <button className={button} onClick={() => navigate('music')}><Music size={13} /> Editar canción</button>}
+          <button className={`${button} border-accent-blue/60 text-accent-blue`} onClick={() => navigate('productions')}><Film size={13} /> Ir a generar</button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 2xl:grid-cols-3">
+        <article className="rounded-xl border border-border bg-bg-primary/35 p-3 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-semibold text-text-primary">1 · Entorno y dirección visual</h4>
+              <p className="text-[9px] text-text-muted">Una base visual reutilizable, no una sección de worldbuilding.</p>
+            </div>
+            {status(worldReady, isSectionApproved('world'))}
+          </div>
+          <Field label={isMusicVideo ? 'Escenario visual del videoclip' : 'Localización del vídeo'} value={project.world.summary}
+            onChange={summary => update(current => { current.world.summary = summary; return current })} rows={3} />
+          <Field label="Iluminación, paleta y lenguaje visual" value={project.world.visualLanguage}
+            onChange={visualLanguage => update(current => { current.world.visualLanguage = visualLanguage; return current })} rows={3} />
+          <Field label="Prompt para la imagen base" value={project.world.visualPrompt}
+            onChange={visualPrompt => update(current => { current.world.visualPrompt = visualPrompt; return current })} rows={4} />
+          <details className="rounded-md border border-border bg-bg-tertiary/35 p-2 text-[10px] text-text-muted">
+            <summary className="cursor-pointer text-text-secondary">Evitar en las imágenes y localizaciones adicionales</summary>
+            <div className="mt-3 space-y-3">
+              <Field label="Negative prompt" value={project.world.negativePrompt}
+                onChange={negativePrompt => update(current => { current.world.negativePrompt = negativePrompt; return current })} rows={3} />
+              <div className="flex items-center justify-between gap-2">
+                <span>{project.world.locations.length} localizaciones adicionales</span>
+                <button className={button} onClick={() => update(current => {
+                  current.world.locations.push({ id: storyId('location'), name: 'Nueva localización', purpose: '', description: '', visualPrompt: '', negativePrompt: '', referenceAssetIds: [] })
+                  return current
+                })}><Plus size={12} /> Añadir</button>
+              </div>
+              {project.world.locations.map((location, index) => (
+                <LocationEditor key={location.id} location={location} index={index} total={project.world.locations.length}
+                  project={project} update={update} imageBusy={imageBusy} generateVisual={generateVisual}
+                  upload={() => upload({ kind: 'location', id: location.id })}
+                  removeReference={id => removeReference('location', location.id, id)} />
+              ))}
+            </div>
+          </details>
+          <div className="flex flex-wrap gap-2">
+            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('world')}
+              title="Genera o reescribe sólo los textos del entorno mediante el LLM; no renderiza imágenes.">
+              {busy === 'world' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar entorno
+            </button>
+            <button className={button} disabled={Boolean(imageBusy) || referenceBatchBusy || !project.world.visualPrompt.trim()}
+              onClick={() => void generateVisual({ kind: 'world' }, project.world.visualPrompt)}>
+              {imageBusy === 'world:world' ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} Generar imagen
+            </button>
+            <button className={button} onClick={() => upload({ kind: 'world' })}><Upload size={13} /> Añadir referencia</button>
+            <button className={`${button} ${isSectionApproved('world') ? 'border-emerald-500 text-emerald-400' : ''}`}
+              onClick={() => approveSection('world')}><Check size={13} /> {isSectionApproved('world') ? 'Aprobado' : 'Aprobar'}</button>
+          </div>
+          <ReferenceGallery ids={project.world.referenceAssetIds} assets={project.assets}
+            onRemove={id => removeReference('world', undefined, id)} />
+        </article>
+
+        <article className="rounded-xl border border-border bg-bg-primary/35 p-3 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-semibold text-text-primary">2 · {isMusicVideo ? 'Artista y sujetos' : 'Protagonistas'}</h4>
+              <p className="text-[9px] text-text-muted">Sólo identidad, vestuario, aspecto y referencias que verá la cámara.</p>
+            </div>
+            {status(castReady, isSectionApproved('characters'))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('characters')}
+              title="Genera o reescribe sólo los textos de los sujetos mediante el LLM; conserva sus imágenes.">
+              {busy === 'characters' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar sujetos
+            </button>
+            <button className={button} onClick={() => update(current => { current.characters.push(emptyCharacter()); return current })}>
+              <Plus size={13} /> Añadir
+            </button>
+            <button className={`${button} ${isSectionApproved('characters') ? 'border-emerald-500 text-emerald-400' : ''}`}
+              onClick={() => approveSection('characters')}><Check size={13} /> {isSectionApproved('characters') ? 'Aprobados' : 'Aprobar conjunto'}</button>
+          </div>
+          <div className="space-y-3">
+            {project.characters.map((character, index) => (
+              <CompactSubjectEditor key={character.id} character={character} index={index} total={project.characters.length}
+                project={project} update={update} imageBusy={imageBusy} generateVisual={generateVisual}
+                upload={() => upload({ kind: 'character', id: character.id })}
+                removeReference={id => removeReference('character', character.id, id)} />
+            ))}
+            {!project.characters.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-text-muted">Genera o añade la primera persona que aparecerá en cámara.</p>}
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-border bg-bg-primary/35 p-3 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-sm font-semibold text-text-primary">3 · {isMusicVideo ? 'Momentos visuales' : 'Acciones y cortes'}</h4>
+              <p className="text-[9px] text-text-muted">{isMusicVideo ? 'La progresión visual que Director adaptará a las secciones de la canción.' : 'Una secuencia corta con principio, cambio y remate.'}</p>
+            </div>
+            {status(sequenceReady, isSectionApproved('structure'))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('structure')}
+              title="Genera o reescribe sólo la secuencia escrita mediante el LLM; no renderiza imágenes ni vídeo.">
+              {busy === 'structure' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar secuencia
+            </button>
+            <button className={button} onClick={() => update(current => {
+              current.beats.push({ id: storyId('beat'), stage: '', title: 'Nuevo momento', summary: '', goal: '', conflict: '', turn: '' })
+              return current
+            })}><Plus size={13} /> Añadir momento</button>
+            <button className={`${button} ${isSectionApproved('structure') ? 'border-emerald-500 text-emerald-400' : ''}`}
+              onClick={() => approveSection('structure')}><Check size={13} /> {isSectionApproved('structure') ? 'Aprobada' : 'Aprobar secuencia'}</button>
+          </div>
+          <div className="space-y-2">
+            {project.beats.map((beat, index) => (
+              <CompactBeatEditor key={beat.id} beat={beat} index={index} total={project.beats.length} update={update} />
+            ))}
+            {!project.beats.length && <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-text-muted">Genera la secuencia o añade el primer momento.</p>}
+          </div>
+        </article>
+      </div>
+    </section>
+  )
+}
+
+function CompactSubjectEditor({
+  character, index, total, project, update, imageBusy, generateVisual, upload, removeReference,
+}: {
+  character: StoryCharacter
+  index: number
+  total: number
+  project: StoryProject
+  update: (updater: (project: StoryProject) => StoryProject) => void
+  imageBusy: string
+  generateVisual: (target: { kind: 'character'; id: string }, prompt: string) => Promise<unknown>
+  upload: () => void
+  removeReference: (id: string) => void
+}) {
+  const set = (change: Partial<StoryCharacter>) => update(current => {
+    current.characters = current.characters.map(item => item.id === character.id
+      ? { ...item, approval: 'draft', ...change } : item)
+    return current
+  })
+  const hasPrimary = Boolean(character.primaryReferenceAssetId && project.assets[character.primaryReferenceAssetId])
+  return (
+    <div className="rounded-lg border border-border bg-bg-tertiary/35 p-2.5 space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold text-text-primary">{character.name || 'Sin nombre'}</p>
+          <p className={`text-[9px] ${hasPrimary ? 'text-emerald-300' : 'text-amber-300'}`}>{hasPrimary ? 'Identidad principal seleccionada' : 'Falta una imagen de identidad principal'}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button className={button} disabled={index === 0} title="Subir" onClick={() => update(current => { moveItem(current.characters, index, index - 1); return current })}><ChevronUp size={12} /></button>
+          <button className={button} disabled={index === total - 1} title="Bajar" onClick={() => update(current => { moveItem(current.characters, index, index + 1); return current })}><ChevronDown size={12} /></button>
+          <button className="p-1 text-red-400" title="Eliminar" onClick={() => update(current => {
+            current.characters = current.characters.filter(item => item.id !== character.id)
+            current.relationships = current.relationships.filter(item => item.fromCharacterId !== character.id && item.toCharacterId !== character.id)
+            pruneUnusedAssets(current)
+            return current
+          })}><Trash2 size={13} /></button>
+        </div>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <Field label="Nombre" value={character.name} onChange={name => set({ name })} />
+        <Field label="Papel en cámara" value={character.role} onChange={role => set({ role })} />
+        <Field label="Aspecto reconocible" value={character.appearance} onChange={appearance => set({ appearance })} rows={3} />
+        <Field label="Vestuario y continuidad" value={character.wardrobe} onChange={wardrobe => set({ wardrobe })} rows={3} />
+        <div className="sm:col-span-2"><Field label="Prompt de identidad visual" value={character.visualPrompt} onChange={visualPrompt => set({ visualPrompt })} rows={4} /></div>
+      </div>
+      <details className="rounded border border-border px-2 py-1.5 text-[10px] text-text-muted">
+        <summary className="cursor-pointer text-text-secondary">Voz, motivación y restricciones opcionales</summary>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <Field label="Voz / diálogo" value={character.voice} onChange={voice => set({ voice })} rows={2} />
+          <Field label="Motivación visible" value={character.desire} onChange={desire => set({ desire })} rows={2} />
+          <div className="sm:col-span-2"><Field label="Negative prompt" value={character.negativePrompt} onChange={negativePrompt => set({ negativePrompt })} rows={2} /></div>
+        </div>
+      </details>
+      <div className="flex flex-wrap gap-2">
+        <button className={button} disabled={Boolean(imageBusy) || !character.visualPrompt.trim()}
+          onClick={() => void generateVisual({ kind: 'character', id: character.id }, character.visualPrompt)}>
+          {imageBusy === `character:${character.id}` ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />} {hasPrimary ? 'Crear variación' : 'Crear identidad'}
+        </button>
+        <button className={button} onClick={upload}><Upload size={13} /> Subir imágenes</button>
+        <button className={`${button} ${character.approval === 'approved' ? 'border-emerald-500 text-emerald-400' : ''}`}
+          disabled={!hasPrimary} title={hasPrimary ? 'Confirmar esta identidad para Director' : 'Selecciona primero una imagen principal'}
+          onClick={() => set({ approval: character.approval === 'approved' ? 'draft' : 'approved' })}>
+          <Check size={13} /> {character.approval === 'approved' ? 'Identidad aprobada' : 'Aprobar identidad'}
+        </button>
+      </div>
+      <ReferenceGallery ids={character.referenceAssetIds} assets={project.assets} primaryId={character.primaryReferenceAssetId}
+        onPrimary={primaryReferenceAssetId => set({ primaryReferenceAssetId })} onRemove={removeReference} />
+    </div>
+  )
+}
+
+function CompactBeatEditor({ beat, index, total, update }: {
+  beat: StoryBeat
+  index: number
+  total: number
+  update: (updater: (project: StoryProject) => StoryProject) => void
+}) {
+  const set = (change: Partial<StoryBeat>) => update(current => {
+    current.beats = current.beats.map(item => item.id === beat.id ? { ...item, ...change } : item)
+    return current
+  })
+  return (
+    <div className="rounded-lg border border-border bg-bg-tertiary/35 p-2.5 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="w-5 shrink-0 text-sm font-bold text-text-muted/60">{index + 1}</span>
+        <input className={input} value={beat.title} onChange={event => set({ title: event.target.value })} placeholder="Nombre del momento" aria-label={`Momento ${index + 1}`} />
+        <button className={button} disabled={index === 0} title="Subir" onClick={() => update(current => { moveItem(current.beats, index, index - 1); return current })}><ChevronUp size={12} /></button>
+        <button className={button} disabled={index === total - 1} title="Bajar" onClick={() => update(current => { moveItem(current.beats, index, index + 1); return current })}><ChevronDown size={12} /></button>
+        <button className="p-1 text-red-400" title="Eliminar" onClick={() => update(current => { current.beats = current.beats.filter(item => item.id !== beat.id); return current })}><Trash2 size={12} /></button>
+      </div>
+      <Field label="Qué vemos" value={beat.summary} onChange={summary => set({ summary })} rows={3} />
+      <div className="grid sm:grid-cols-2 gap-2">
+        <Field label="Tensión, obstáculo o impulso" value={beat.conflict} onChange={conflict => set({ conflict })} rows={2} />
+        <Field label="Cambio que deja para el siguiente corte" value={beat.turn} onChange={turn => set({ turn })} rows={2} />
+      </div>
+      <details className="rounded border border-border px-2 py-1.5 text-[10px] text-text-muted">
+        <summary className="cursor-pointer text-text-secondary">Sección musical / función opcional</summary>
+        <div className="mt-2 grid sm:grid-cols-2 gap-2">
+          <Field label="Sección o fase" value={beat.stage} onChange={stage => set({ stage })} />
+          <Field label="Objetivo del momento" value={beat.goal} onChange={goal => set({ goal })} rows={2} />
+        </div>
+      </details>
+    </div>
+  )
 }
 
 function CharacterEditor({

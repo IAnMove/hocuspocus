@@ -207,7 +207,10 @@ export async function writeSong(params: {
   reference_image_path?: string
   include_lyria?: boolean
   max_new_tokens?: number
-}): Promise<{ style: string; lyrics: string; lyria_prompt: string; raw: string }> {
+  writingProvider?: import('../features/stories/types').StoryWritingProvider
+  writingModel?: string
+  writingBaseUrl?: string
+}): Promise<{ style: string; lyrics: string; lyria_prompt: string; warnings?: string[]; raw: string }> {
   const res = await fetch(`${BASE}/api/v1/llm/write-song`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -246,6 +249,25 @@ export async function generateStoryMusicCandidates(params: {
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'MiniMax Music generation failed' }))
     throw new Error(error.detail || 'MiniMax Music generation failed')
+  }
+  return res.json()
+}
+
+export async function translateStoryLyrics(params: {
+  lyrics: string
+  targetLanguage: string
+  writingProvider: import('../features/stories/types').StoryWritingProvider
+  writingModel?: string
+  writingBaseUrl?: string
+}): Promise<{ lyrics: string; targetLanguage: string }> {
+  const res = await fetch(`${BASE}/api/v1/stories/translate-lyrics`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Lyric translation failed' }))
+    throw new Error(error.detail || 'Lyric translation failed')
   }
   return res.json()
 }
@@ -755,6 +777,13 @@ export interface PipelineQualityGate {
   waiver_reason?: string
 }
 
+export interface PipelineResourceSchedule {
+  mode: string
+  images_ready?: number
+  images_total?: number
+  lanes: Record<string, { key: string; label: string; location: string }>
+}
+
 export interface PipelineStatus {
   id: string
   status: 'running' | 'paused' | 'preview_ready' | 'completed' | 'failed' | 'cancelled'
@@ -783,6 +812,10 @@ export interface PipelineStatus {
    *  active model (e.g. Flux 2 Dev LoRA on Klein 9B). The chat renders
    *  these inline so users see why some selected LoRAs weren't applied. */
   lora_warnings?: string[]
+  resource_schedule?: PipelineResourceSchedule
+  created_at?: number
+  updated_at?: number
+  phase_started_at?: number
 }
 
 export interface ActiveDirectorPipeline {
@@ -797,6 +830,8 @@ export interface ActiveDirectorPipeline {
   workspace?: string
   created_at?: number
   updated_at?: number
+  phase_started_at?: number
+  resource_schedule?: PipelineResourceSchedule
 }
 
 export async function startPipeline(params: Record<string, unknown>): Promise<{ pipeline_id: string }> {
@@ -1119,7 +1154,11 @@ export async function rerunH3Segment(
   return res.json()
 }
 
-export async function rejoinPipeline(pid: string): Promise<{ filename: string }> {
+export async function rejoinPipeline(pid: string): Promise<{
+  filename: string
+  assembly_time_sec: number
+  total_time_sec: number | null
+}> {
   const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/rejoin`, {
     method: 'POST',
   })
@@ -1143,6 +1182,7 @@ export async function deletePipeline(pid: string): Promise<{ media_deleted: numb
 
 export interface DirectorV2PlanRequest {
   skill_type: string
+  activity_id?: string
   scene_description?: string
   story_description?: string
   clips?: unknown[]
@@ -1170,9 +1210,29 @@ export interface DirectorV2PlanRequest {
   prompt_type?: string
   image_model?: string
   video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
   seamless?: boolean
   multishot_lora_mode?: boolean
+  music_video_treatment?: import('../types').MusicVideoTreatment
   director_flags?: Record<string, boolean>
+}
+
+export interface DirectorV2PlanProgress {
+  id: string
+  status: 'running' | 'completed' | 'failed'
+  phase: string
+  current: number
+  total: number
+  detail: string
+  stream_text?: string
+  stream_done?: boolean
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    calls?: number
+  }
 }
 
 export interface DirectorV2PlanResponse {
@@ -1191,6 +1251,13 @@ export async function directorV2Plan(params: DirectorV2PlanRequest): Promise<Dir
     const err = await res.json().catch(() => ({ detail: 'Plan failed' }))
     throw new Error(err.detail || 'Director v2 plan failed')
   }
+  return res.json()
+}
+
+export async function getDirectorV2PlanProgress(activityId: string): Promise<DirectorV2PlanProgress | null> {
+  const res = await fetch(`${BASE}/api/v1/director/v2/plan/progress/${encodeURIComponent(activityId)}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error('Could not read Director planning progress')
   return res.json()
 }
 
@@ -1711,6 +1778,40 @@ export async function uploadImage(file: File): Promise<{ filename: string; path:
   })
   if (!res.ok) throw new Error('Upload failed')
   return res.json()
+}
+
+export interface StoryAssetSuggestion {
+  index: number
+  kind: import('../features/stories/types').StoryAssetKind
+  targetId: string
+  name: string
+  nameOriginal: string
+  description: string
+  visualPrompt: string
+  confidence: number
+  reason: string
+  source: string
+}
+
+export async function analyzeStoryAssets(params: {
+  assets: Array<{ name: string; path: string; url: string }>
+  description: string
+  project: import('../features/stories/types').StoryProject
+  writingProvider: import('../features/stories/types').StoryWritingProvider
+  writingModel: string
+  writingBaseUrl: string
+  activity_id: string
+}): Promise<{ assets: StoryAssetSuggestion[] }> {
+  const response = await fetch(`${BASE}/api/v1/stories/assets/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Smart asset analysis failed' }))
+    throw new Error(error.detail || 'Smart asset analysis failed')
+  }
+  return response.json()
 }
 
 // --- Comics ---
@@ -2788,6 +2889,10 @@ export async function planClipPromptsAndImages(params: {
   speaker_mappings?: Record<string, { name: string; role: string }>
   prompt_type?: 'image' | 'video' | 'both'
   existing_image_prompts?: string[]
+  video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
+  music_video_treatment?: import('../types').MusicVideoTreatment
 }): Promise<{ clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-prompts-and-images`, {
     method: 'POST',
@@ -2835,6 +2940,9 @@ export async function planShortFilmPrompts(params: {
   characters?: { name: string; description: string }[]
   prompt_type?: 'image' | 'video' | 'both'
   existing_image_prompts?: string[]
+  video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
 }): Promise<{ clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-short-film-prompts`, {
     method: 'POST',
