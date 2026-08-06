@@ -125,6 +125,11 @@ function nextMusicCandidateVersion(
 }
 
 type StoryTab = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'productions'
+type StyledReferenceTarget = {
+  target: { kind: 'world' | 'character' | 'location'; id?: string }
+  label: string
+  prompt: string
+}
 type PendingSmartAsset = api.StoryAssetSuggestion & { selected: boolean }
 type PendingDraft = {
   scope: StoryGenerationScope
@@ -160,6 +165,38 @@ const STORY_PROJECT_TYPES: Array<{ id: StoryProjectType; label: string; descript
   { id: 'music_video', label: 'Videoclip', description: 'Canción original y una historia visual construida alrededor de ella.' },
   { id: 'quick_video', label: 'Vídeo rápido', description: 'Diálogo, meme, parodia, sketch, viral o anuncio breve.' },
 ]
+
+function storyStyledReferenceTargets(
+  project: StoryProject,
+  options: { includeLocations: boolean; existingOnly: boolean },
+): StyledReferenceTarget[] {
+  const targets: StyledReferenceTarget[] = []
+  const hasExistingReference = (ids: string[]) => ids.some(id => Boolean(project.assets[id]))
+  const canInclude = (prompt: string, ids: string[]) => Boolean(prompt.trim())
+    && (!options.existingOnly || hasExistingReference(ids))
+  if (canInclude(project.world.visualPrompt, project.world.referenceAssetIds)) {
+    targets.push({ target: { kind: 'world' }, label: 'world', prompt: project.world.visualPrompt })
+  }
+  project.characters.forEach(character => {
+    if (!canInclude(character.visualPrompt, character.referenceAssetIds)) return
+    targets.push({
+      target: { kind: 'character', id: character.id },
+      label: character.name,
+      prompt: character.visualPrompt,
+    })
+  })
+  if (options.includeLocations) {
+    project.world.locations.forEach(location => {
+      if (!canInclude(location.visualPrompt, location.referenceAssetIds)) return
+      targets.push({
+        target: { kind: 'location', id: location.id },
+        label: location.name,
+        prompt: location.visualPrompt,
+      })
+    })
+  }
+  return targets
+}
 
 function storyProjectPremise(project: StoryProject): string {
   if (project.projectType === 'music_video') {
@@ -1274,40 +1311,36 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'Write a visual style before regenerating references.' })
       return
     }
-    const targets: Array<{
-      target: { kind: 'world' | 'character' | 'location'; id?: string }
-      label: string
-      prompt: string
-    }> = []
-    if (current.world.visualPrompt.trim()) {
-      targets.push({ target: { kind: 'world' }, label: 'world', prompt: current.world.visualPrompt })
-    }
-    current.characters.forEach(character => {
-      if (character.visualPrompt.trim()) {
-        targets.push({
-          target: { kind: 'character', id: character.id },
-          label: character.name,
-          prompt: character.visualPrompt,
-        })
-      }
+    const compactMode = current.projectType !== 'full_story'
+    const targets = storyStyledReferenceTargets(current, {
+      includeLocations: !compactMode,
+      existingOnly: true,
     })
-    current.world.locations.forEach(location => {
-      if (location.visualPrompt.trim()) {
-        targets.push({
-          target: { kind: 'location', id: location.id },
-          label: location.name,
-          prompt: location.visualPrompt,
-        })
-      }
+    const allowedPromptTargets = storyStyledReferenceTargets(current, {
+      includeLocations: !compactMode,
+      existingOnly: false,
     })
+    const skippedPromptOnly = allowedPromptTargets.length - targets.length
+    const skippedLocations = compactMode
+      ? current.world.locations.filter(location => location.visualPrompt.trim()).length
+      : 0
     if (!targets.length) {
-      setNotice({ kind: 'error', text: 'Add at least one world, character or location visual prompt first.' })
+      setNotice({
+        kind: 'error',
+        text: compactMode
+          ? 'There are no existing world or subject reference images to restyle. Generate the first image explicitly from its own card.'
+          : 'There are no existing world, character or location reference images to restyle. Generate the first image explicitly from its own card.',
+      })
       return
     }
     const creditWarning = current.provider.imageProvider === 'minimax'
       ? ' This may use MiniMax provider credits.' : ''
+    const omissions = [
+      skippedPromptOnly ? `${skippedPromptOnly} prompt-only target${skippedPromptOnly === 1 ? '' : 's'} without an existing image will be skipped.` : '',
+      skippedLocations ? `${skippedLocations} additional folded location${skippedLocations === 1 ? '' : 's'} will be skipped in this compact mode.` : '',
+    ].filter(Boolean).join(' ')
     if (!window.confirm(
-      `Generate ${targets.length} styled reference image${targets.length === 1 ? '' : 's'}? Each successful result will replace that target's old references; failed targets keep their current references.${creditWarning}`,
+      `Restyle ${targets.length} existing reference set${targets.length === 1 ? '' : 's'}: ${targets.map(item => item.label).join(', ')}. Each successful result replaces only that target's old references; failed targets keep them. ${omissions}${creditWarning}`,
     )) return
 
     update(latest => {
@@ -2860,6 +2893,13 @@ export function StoryLabPanel() {
     ]
   const progress = foundationChecks.filter(Boolean).length
   const foundationTotal = foundationChecks.length
+  const styledReferenceTargetCount = storyStyledReferenceTargets(project, {
+    includeLocations: project.projectType === 'full_story',
+    existingOnly: true,
+  }).length
+  const foldedStyledLocationCount = project.projectType === 'full_story'
+    ? 0
+    : project.world.locations.filter(location => location.visualPrompt.trim()).length
   useEffect(() => {
     if (!visibleTabIds.includes(tab)) setTab('overview')
   }, [project.projectType, tab]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -3158,10 +3198,15 @@ export function StoryLabPanel() {
                         <button className={button} disabled={!project.visualStyle.trim()} onClick={writeStyleIntoPrompts}>
                           <Palette size={13} /> Write/replace style lock in existing prompts
                         </button>
-                        <button className={button} disabled={!project.visualStyle.trim() || Boolean(imageBusy) || referenceBatchBusy} onClick={regenerateStyledReferences}>
-                          {referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Regenerate all visual references in this style
+                        <button className={button} disabled={!project.visualStyle.trim() || !styledReferenceTargetCount || Boolean(imageBusy) || referenceBatchBusy} onClick={regenerateStyledReferences}>
+                          {referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Restyle {styledReferenceTargetCount} existing reference{styledReferenceTargetCount === 1 ? '' : 's'}
                         </button>
                       </div>
+                      {project.projectType !== 'full_story' && (
+                        <p className="text-[9px] leading-relaxed text-text-muted">
+                          Compact scope: only existing world and subject images are replaced. Prompt-only targets are not created automatically{foldedStyledLocationCount ? `, and ${foldedStyledLocationCount} additional folded location${foldedStyledLocationCount === 1 ? ' is' : 's are'} excluded` : ''}.
+                        </p>
+                      )}
                     </div>
                     <div className="md:col-span-2 border-t border-border pt-3">
                       <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-text-muted">
