@@ -241,7 +241,10 @@ def ensure_audio_prompt(prompt: str, audio_direction: str = "") -> str:
     production-sound default.
     """
     normalized_prompt = str(prompt or "").strip()
-    if re.search(r"\baudio\s*:", normalized_prompt, flags=re.IGNORECASE):
+    if (
+        re.search(r"\baudio\s*:", normalized_prompt, flags=re.IGNORECASE)
+        or "overall_soundscape:" in normalized_prompt
+    ):
         return normalized_prompt
     normalized_audio = " ".join(str(audio_direction or "").split())
     if not normalized_audio:
@@ -588,9 +591,22 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
     profile = _profile_name(params)
     selected = MODEL_PROFILES[profile]
     workflow = _base_sampling_graph(params, selected[pipeline], selected["text_encoder"])
-    prompt = ensure_audio_prompt(
-        str(params.get("prompt", "")),
-        str(params.get("h3_audio_prompt", "")),
+    raw_prompt = str(params.get("prompt", ""))
+    authored_audio = re.search(r"\bAudio\s*:\s*(.*)$", raw_prompt, flags=re.I | re.S)
+    audio_direction = (
+        authored_audio.group(1).strip()
+        if authored_audio
+        else str(params.get("h3_audio_prompt", ""))
+    )
+    try:
+        from .director.minimax_h3_prompting import format_minimax_h3_prompt
+    except ImportError:
+        from services.director.minimax_h3_prompting import format_minimax_h3_prompt
+    prompt = format_minimax_h3_prompt(
+        {},
+        raw_prompt,
+        reference_mode="references" if pipeline == "ref2va" else "first_frame",
+        audio_direction=audio_direction,
     )
     copy_index = 0
 

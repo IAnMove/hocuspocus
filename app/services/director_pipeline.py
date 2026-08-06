@@ -1194,8 +1194,20 @@ def rerun_h3_segment(
                 raise ValueError(f"Start image for H3 segment {index + 1} is missing")
 
             segment_mode = "references" if identity_safe and index > 0 else base_mode
-            prompt = _h3_apply_identity_contract(
-                _h3_apply_reference_contract(str(record.get("prompt") or ""), segment_mode)
+            try:
+                from services.director.minimax_h3_prompting import format_minimax_h3_prompt
+            except ImportError:
+                from app.services.director.minimax_h3_prompting import format_minimax_h3_prompt
+            prompt = format_minimax_h3_prompt(
+                clip,
+                str(record.get("prompt") or ""),
+                reference_mode=segment_mode,
+                audio_direction=_minimax_h3_audio_direction(
+                    clip,
+                    str(video_params.get("h3_audio_prompt") or ""),
+                    index,
+                    len(segments),
+                ),
             )
             gen_params = {
                 "model_type": "minimax_h3",
@@ -7089,6 +7101,12 @@ def _minimax_h3_audio_direction(
 def _h3_sentence_windows(prompt: str, segment_count: int) -> list[str]:
     """Split a long Story prompt into non-repeating action windows."""
     text = re.sub(r"\s*\bAudio\s*:.*$", "", str(prompt or "").strip(), flags=re.I | re.S)
+    if "integrated_multimodal_description:" in text:
+        text = text.split("integrated_multimodal_description:", 1)[1]
+        text = text.split("overall_soundscape:", 1)[0].strip()
+    elif "detailed_description:" in text:
+        text = text.split("detailed_description:", 1)[1]
+        text = text.split("overall_soundscape:", 1)[0].strip()
     if segment_count <= 1 or not text:
         return [text]
 
@@ -7215,23 +7233,26 @@ def _minimax_h3_segment_prompt(
     global_audio_direction: str = "",
     reference_mode: str = "first_frame",
 ) -> str:
-    """Choose the authored continuation and attach its explicit audio plan."""
+    """Choose the authored continuation and apply H3's official dialect."""
+    try:
+        from services.director.minimax_h3_prompting import format_minimax_h3_prompt
+    except ImportError:  # pytest imports this module through app.services
+        from app.services.director.minimax_h3_prompting import format_minimax_h3_prompt
+
+    audio_direction = _minimax_h3_audio_direction(
+        plan,
+        global_audio_direction,
+        segment_index,
+        segment_count,
+    )
     optimized = plan.get("h3_segment_prompts") or []
     if len(optimized) == segment_count and segment_index < len(optimized):
         prompt = str(optimized[segment_index] or "").strip()
-        prompt = _h3_apply_reference_contract(prompt, reference_mode)
-        try:
-            from services import minimax_h3_service
-        except ImportError:  # pytest imports this module through app.services
-            from app.services import minimax_h3_service
-        return minimax_h3_service.ensure_audio_prompt(
+        return format_minimax_h3_prompt(
+            plan,
             prompt,
-            _minimax_h3_audio_direction(
-                plan,
-                global_audio_direction,
-                segment_index,
-                segment_count,
-            ),
+            reference_mode=reference_mode,
+            audio_direction=audio_direction,
         )
 
     window_prompts = plan.get("window_prompts") or []
@@ -7245,20 +7266,11 @@ def _minimax_h3_segment_prompt(
     else:
         source = str(plan.get("video_prompt") or "")
         prompt = _h3_sentence_windows(source, segment_count)[segment_index]
-    prompt = _h3_apply_reference_contract(prompt, reference_mode)
-
-    try:
-        from services import minimax_h3_service
-    except ImportError:  # pytest imports this module through app.services
-        from app.services import minimax_h3_service
-    return minimax_h3_service.ensure_audio_prompt(
+    return format_minimax_h3_prompt(
+        plan,
         prompt,
-        _minimax_h3_audio_direction(
-            plan,
-            global_audio_direction,
-            segment_index,
-            segment_count,
-        ),
+        reference_mode=reference_mode,
+        audio_direction=audio_direction,
     )
 
 
@@ -7282,6 +7294,10 @@ def _h3_parse_optimized_prompts(response: str) -> list[dict]:
 
 def _h3_preserve_audio_contract(candidate: str, draft: str) -> str:
     """Accept visual phrasing from the validator while keeping authored audio verbatim."""
+    if "overall_soundscape:" in draft and "non_diegetic_music:" in draft:
+        draft_audio = draft.split("overall_soundscape:", 1)[1]
+        candidate_visual = candidate.split("overall_soundscape:", 1)[0].rstrip()
+        return f"{candidate_visual}\noverall_soundscape:{draft_audio}".strip()
     draft_parts = re.split(r"\bAudio\s*:", draft, maxsplit=1, flags=re.I)
     if len(draft_parts) != 2:
         return candidate.strip()
@@ -7292,19 +7308,36 @@ def _h3_preserve_audio_contract(candidate: str, draft: str) -> str:
 def _h3_validated_candidate(candidate: str, draft: str, reference_mode: str) -> str:
     """Reject optimizer drift and reapply contracts the LLM is not allowed to alter."""
     candidate = _h3_preserve_audio_contract(str(candidate or ""), draft)
-    candidate = _h3_apply_reference_contract(candidate, reference_mode)
+    if "overall_soundscape:" not in draft:
+        candidate = _h3_apply_reference_contract(candidate, reference_mode)
+        if len(candidate) < max(40, len(draft) // 3) or len(candidate) > max(6000, len(draft) * 2):
+            return ""
+        if "audio:" not in candidate.casefold():
+            return ""
+        for quoted in re.findall(r'"([^"\n]+)"', draft):
+            if quoted not in candidate:
+                return ""
+        if reference_mode == "references" and "exact first frame" in candidate.casefold():
+            return ""
+        if reference_mode == "first_frame" and "exact first frame" not in candidate.casefold():
+            return ""
+        return candidate
     if len(candidate) < max(40, len(draft) // 3) or len(candidate) > max(6000, len(draft) * 2):
         return ""
-    if "audio:" not in candidate.casefold():
+    try:
+        from services.director.minimax_h3_prompting import is_structured_h3_prompt
+    except ImportError:
+        from app.services.director.minimax_h3_prompting import is_structured_h3_prompt
+    if not is_structured_h3_prompt(candidate, reference_mode):
         return ""
     if "visual style lock:" in draft.casefold() and "visual style lock:" not in candidate.casefold():
         return ""
-    for quoted in re.findall(r'"([^"\n]+)"', draft):
-        if quoted not in candidate:
+    for spoken in re.findall(r"<d>\[[^\]]+\]\s*([^<]+)</d>", draft):
+        if spoken not in candidate:
             return ""
-    if reference_mode == "references" and "exact first frame" in candidate.casefold():
+    if reference_mode == "references" and "fully referenced" in candidate.casefold():
         return ""
-    if reference_mode == "first_frame" and "exact first frame" not in candidate.casefold():
+    if reference_mode == "first_frame" and "at 0.00 seconds" not in candidate.casefold():
         return ""
     return candidate
 
@@ -7376,8 +7409,10 @@ def _optimize_minimax_h3_story_prompts(
         "segment_index pairs. Make motion chronological, concrete and visually executable; use at "
         "most one coherent camera move per segment. Never add, remove, reorder or repeat story "
         "events, characters, props, wardrobe, colors or locations. Preserve style-lock language, "
-        "all quoted dialogue and the complete Audio clause verbatim. FL2VA exact-first-frame and "
-        "Ref2VA new-opening-frame contracts are immutable. Do not copy actions from another segment."
+        "all <d>[Language] dialogue and the complete overall_soundscape and non_diegetic_music "
+        "fields verbatim. Preserve the exact official field labels and their order. FL2VA's exact "
+        "0.00-second Picture 1 line and Ref2VA's six-field new-opening-frame contract are immutable. "
+        "Do not add an Audio field and do not copy actions from another segment."
     )
     user_prompt = (
         f"Conditioning mode: {reference_mode}. Optimize these exact H3 segment prompts:\n"

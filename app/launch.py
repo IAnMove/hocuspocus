@@ -6758,6 +6758,13 @@ async def director_plan_prompts_and_images(request: Request):
             video_model=body.get("video_model", ""),
             music_video_treatment=body.get("music_video_treatment"),
         )
+        if body.get("video_model") == minimax_h3_service.MODEL_ID:
+            from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
+            clip_plans = adapt_clip_plans_for_h3(
+                clip_plans,
+                reference_mode=body.get("h3_reference_mode", "first_frame"),
+                audio_direction=body.get("h3_audio_prompt", ""),
+            )
         return {"clip_plans": clip_plans}
     except Exception as e:
         traceback.print_exc()
@@ -6822,6 +6829,13 @@ async def director_plan_short_film_prompts(request: Request):
             prompt_type=body.get("prompt_type", "both"),
             existing_image_prompts=body.get("existing_image_prompts"),
         )
+        if body.get("video_model") == minimax_h3_service.MODEL_ID:
+            from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
+            clip_plans = adapt_clip_plans_for_h3(
+                clip_plans,
+                reference_mode=body.get("h3_reference_mode", "first_frame"),
+                audio_direction=body.get("h3_audio_prompt", ""),
+            )
         return {"clip_plans": clip_plans}
     except Exception as e:
         traceback.print_exc()
@@ -7311,6 +7325,15 @@ async def director_v2_plan(request: Request):
             preserve=bool(body.get("preserve_visual_style", False)),
             has_reference=has_reference,
         )
+        if video_model == minimax_h3_service.MODEL_ID:
+            from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
+            serialized_plan = plan.to_dict()
+            clip_plans = adapt_clip_plans_for_h3(
+                clip_plans,
+                serialized_plan.get("shots") or [],
+                reference_mode=body.get("h3_reference_mode", "first_frame"),
+                audio_direction=body.get("h3_audio_prompt", ""),
+            )
         llm_service.update_activity_tracking(
             tracking_id,
             status="completed",

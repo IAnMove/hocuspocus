@@ -1117,6 +1117,8 @@ export interface DirectorV2PlanRequest {
   prompt_type?: string
   image_model?: string
   video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
   seamless?: boolean
   multishot_lora_mode?: boolean
   music_video_treatment?: import('../types').MusicVideoTreatment
@@ -2549,6 +2551,8 @@ export async function planClipPromptsAndImages(params: {
   prompt_type?: 'image' | 'video' | 'both'
   existing_image_prompts?: string[]
   video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
   music_video_treatment?: import('../types').MusicVideoTreatment
 }): Promise<{ clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-prompts-and-images`, {
@@ -2597,6 +2601,9 @@ export async function planShortFilmPrompts(params: {
   characters?: { name: string; description: string }[]
   prompt_type?: 'image' | 'video' | 'both'
   existing_image_prompts?: string[]
+  video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
 }): Promise<{ clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-short-film-prompts`, {
     method: 'POST',

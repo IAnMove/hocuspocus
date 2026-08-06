@@ -40,7 +40,7 @@ def test_h3_segment_prompts_follow_authored_windows():
     ]
 
     assert all(expected in prompt for expected, prompt in zip(["opening", "middle", "ending"], prompts))
-    assert all("Audio:" in prompt for prompt in prompts)
+    assert all("overall_soundscape:" in prompt for prompt in prompts)
 
 
 def test_h3_authored_windows_are_split_instead_of_replayed():
@@ -79,10 +79,10 @@ def test_h3_segment_prompt_renders_director_audio_plan_and_dialogue():
         }],
     }, 0, 1)
 
-    assert "Audio:" in prompt
+    assert "overall_soundscape:" in prompt
     assert "rain on the metal roof" in prompt
     assert "door clang" in prompt
-    assert 'Mara says "We leave at dawn."' in prompt
+    assert "Mara says <d>[English] We leave at dawn.</d>" in prompt
     assert "precise lip sync" in prompt
 
 
@@ -124,7 +124,7 @@ def test_h3_story_renders_each_shot_and_assembles_native_audio(tmp_path: Path):
         )
 
     assert all(expected in item["prompt"] for expected, item in zip(["first", "second"], submitted))
-    assert all("Audio:" in item["prompt"] for item in submitted)
+    assert all("overall_soundscape:" in item["prompt"] for item in submitted)
     assert all(item["model_type"] == "minimax_h3" for item in submitted)
     assert all(item["image_start"].endswith(f"shot_{index}.png") for index, item in enumerate(submitted))
     assert outputs == ["clip_1.mp4", "clip_2.mp4", "minimax_h3_h3story_multiclip.mp4"]
@@ -296,7 +296,7 @@ def test_h3_story_first_frame_mode_does_not_silently_send_omni_refs(tmp_path: Pa
 
     assert submitted[0]["image_start"] == str(shot)
     assert "image_refs" not in submitted[0]
-    assert "exact first frame" in submitted[0]["prompt"].casefold()
+    assert "at 0.00 seconds" in submitted[0]["prompt"].casefold()
 
 
 def test_h3_story_routes_director_omni_references_to_ref2va(tmp_path: Path):
@@ -446,7 +446,7 @@ def test_h3_ref2va_prompt_does_not_claim_an_exact_first_frame():
     }, 0, 1, reference_mode="references")
 
     assert "exact first frame" not in prompt.casefold()
-    assert "Compose a new opening frame" in prompt
+    assert "Compose one new continuous shot" in prompt
 
 
 def test_h3_prompt_validator_cannot_rewrite_authored_audio():
@@ -506,7 +506,7 @@ def test_h3_story_runs_one_guarded_optimizer_pass_for_exact_segments():
     generate.assert_called_once()
     assert len(plans[0]["h3_segment_prompts"]) == 1
     assert plans[0]["metadata"]["h3_prompt_validation"] == "optimized"
-    assert "Audio:" in plans[0]["h3_segment_prompts"][0]
+    assert "overall_soundscape:" in plans[0]["h3_segment_prompts"][0]
 
 
 def test_legacy_location_matching_handles_spanish_labels_and_english_prompts():

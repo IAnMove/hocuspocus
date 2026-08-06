@@ -88,7 +88,9 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
             h3.MODEL_PROFILES["quality"]["fl2va"],
         )
         self.assertEqual(workflow["10"]["class_type"], "MiniMaxH3ImageToVideo")
-        self.assertEqual(workflow["10"]["inputs"]["prompt"].lower().count("audio:"), 1)
+        final_prompt = workflow["10"]["inputs"]["prompt"]
+        self.assertEqual(final_prompt.lower().count("overall_soundscape:"), 1)
+        self.assertIn("at 0.00 seconds", final_prompt)
         self.assertEqual(workflow["27"]["inputs"]["fps"], 24.0)
         self.assertEqual(workflow["27"]["inputs"]["audio"], ["26", 0])
         self.assertEqual(workflow["28"]["inputs"]["codec"], "auto")
@@ -139,7 +141,7 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         }, "jobaudiodefault")
 
         prompt = workflow["10"]["inputs"]["prompt"]
-        self.assertIn("Audio:", prompt)
+        self.assertIn("overall_soundscape:", prompt)
         self.assertIn("clear, audible stereo mix", prompt)
 
     def test_authored_audio_clause_is_not_duplicated(self):
@@ -150,7 +152,9 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
             "h3_audio_prompt": "loud machinery",
         }, "jobaudioauthored")
 
-        self.assertEqual(workflow["10"]["inputs"]["prompt"], prompt)
+        final_prompt = workflow["10"]["inputs"]["prompt"]
+        self.assertIn("overall_soundscape: gentle waves and gulls.", final_prompt)
+        self.assertNotIn("loud machinery", final_prompt)
 
     def test_comfy_sampling_progress_is_exposed_to_maestro_jobs(self):
         update = h3._comfy_progress_event(json.dumps({

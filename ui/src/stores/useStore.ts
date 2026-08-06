@@ -5832,6 +5832,8 @@ export const useStore = create<AppState>((set, get) => ({
             speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
             image_model: get().selectedModelPerMode.image || undefined,
             video_model: get().selectedModelPerMode.video || undefined,
+            h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+            h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
             music_video_treatment: get().directorMusicVideoTreatment,
             prompt_type: 'both',
           })
@@ -5856,6 +5858,8 @@ export const useStore = create<AppState>((set, get) => ({
           prompt_type: 'both',
           music_video_treatment: get().directorMusicVideoTreatment,
           video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
         })
         plans = result.clip_plans.map(p => ({
           video_prompt: p.video_prompt || '',
@@ -5920,6 +5924,8 @@ export const useStore = create<AppState>((set, get) => ({
         existing_image_prompts: existingImagePrompts,
         music_video_treatment: get().directorMusicVideoTreatment,
         video_model: get().selectedModelPerMode.video || undefined,
+        h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+        h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
       })
       // Merge video prompts into existing clip plans
       const updatedPlans = directorClipPlans.map((plan, i) => ({
@@ -6517,6 +6523,8 @@ export const useStore = create<AppState>((set, get) => ({
           characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
           image_model: get().selectedModelPerMode.image || undefined,
           video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -6532,6 +6540,9 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
           characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
+          video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -6601,6 +6612,9 @@ export const useStore = create<AppState>((set, get) => ({
         characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
         prompt_type: 'video',
         existing_image_prompts: existingImagePrompts,
+        video_model: get().selectedModelPerMode.video || undefined,
+        h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+        h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
       })
       const updatedPlans = directorClipPlans.map((plan, i) => ({
         ...plan,
@@ -6670,6 +6684,8 @@ export const useStore = create<AppState>((set, get) => ({
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
           image_model: get().selectedModelPerMode.image || undefined,
           video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
