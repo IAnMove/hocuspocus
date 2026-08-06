@@ -1060,6 +1060,12 @@ export interface SavedPipelineState {
   clips: PipelineClipState[]
   output_files: string[]
   final_output_filename?: string
+  prompt_generation_time_sec?: number | null
+  image_generation_time_sec?: number | null
+  video_generation_time_sec?: number | null
+  assembly_time_sec?: number | null
+  assembly_count?: number
+  assembled_at?: number | null
   total_time_sec: number | null
 }
 

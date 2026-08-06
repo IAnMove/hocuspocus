@@ -65,37 +65,74 @@ function completedH3Segments(clip: PipelineClipState): number {
 }
 
 function PipelineProgressBar({ pipeline }: { pipeline: SavedPipelineState }) {
+  const fallbackImageTime = pipeline.clips.reduce((sum, c) => sum + (c.image_gen_time_sec || 0), 0) || null
+  const fallbackVideoTime = pipeline.clips.reduce((sum, c) => sum + (c.video_gen_time_sec || 0), 0) || null
+  const llmPassCount = pipeline.llm_log?.passes?.length || (pipeline.llm_log ? 1 : 0)
   const phases = [
-    { key: 'planning', label: 'LLM Planning', time: pipeline.llm_log?.planning_time_sec },
-    { key: 'images', label: 'Image Gen', time: pipeline.clips.reduce((sum, c) => sum + (c.image_gen_time_sec || 0), 0) || null },
-    { key: 'video', label: 'Video Gen', time: pipeline.clips.reduce((sum, c) => sum + (c.video_gen_time_sec || 0), 0) || null },
+    {
+      key: 'planning',
+      label: 'Prompts',
+      time: pipeline.prompt_generation_time_sec ?? pipeline.llm_log?.planning_time_sec,
+      detail: `${llmPassCount} LLM pass${llmPassCount === 1 ? '' : 'es'}`,
+    },
+    {
+      key: 'images',
+      label: 'Images / preparation',
+      time: pipeline.image_generation_time_sec ?? fallbackImageTime,
+      detail: `${pipeline.clips.filter(c => Boolean(c.start_image_filename)).length}/${pipeline.clips.length} ready`,
+    },
+    {
+      key: 'video',
+      label: 'Videos + final assembly',
+      time: pipeline.video_generation_time_sec ?? fallbackVideoTime,
+      detail: pipeline.video_model === 'minimax_h3'
+        ? `${pipeline.clips.reduce((sum, clip) => sum + completedH3Segments(clip), 0)} segments`
+        : `${pipeline.clips.filter(c => Boolean(c.video_filename)).length}/${pipeline.clips.length} clips`,
+    },
   ]
-  const total = phases.reduce((s, p) => s + (p.time || 0), 0) || 1
+  const timedTotal = phases.reduce((s, p) => s + (p.time || 0), 0) || 1
   const isComplete = pipeline.status === 'completed'
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <div className="flex h-2 rounded-full overflow-hidden bg-bg-tertiary">
         {phases.map((phase, i) => {
-          const pct = (phase.time || 0) / total * 100
+          const pct = (phase.time || 0) / timedTotal * 100
           const colors = ['bg-purple-500', 'bg-blue-500', 'bg-green-500']
           return pct > 0 ? (
             <div key={i} className={`${colors[i]} transition-all`} style={{ width: `${Math.max(pct, 3)}%` }} />
           ) : null
         })}
       </div>
-      <div className="flex justify-between text-[9px] text-text-muted">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
         {phases.map((phase, i) => (
-          <span key={i} className="flex items-center gap-1">
-            <span className={`w-1.5 h-1.5 rounded-full ${['bg-purple-500', 'bg-blue-500', 'bg-green-500'][i]}`} />
-            {phase.label}: {formatTime(phase.time ?? null)}
-          </span>
+          <div key={phase.key} className="rounded bg-bg-tertiary px-2 py-1.5 min-w-0">
+            <div className="flex items-center gap-1 text-[9px] text-text-muted truncate">
+              <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${['bg-purple-500', 'bg-blue-500', 'bg-green-500'][i]}`} />
+              {phase.label}
+            </div>
+            <div className="text-xs text-text-primary font-medium">{formatTime(phase.time ?? null)}</div>
+            <div className="text-[8px] text-text-muted truncate" title={phase.detail}>{phase.detail}</div>
+          </div>
         ))}
-        <span className="flex items-center gap-1">
-          {isComplete ? <Check size={9} className="text-green-400" /> : <Clock size={9} />}
-          Total: {formatTime(pipeline.total_time_sec)}
-        </span>
+        <div className="rounded bg-bg-tertiary px-2 py-1.5">
+          <div className="flex items-center gap-1 text-[9px] text-text-muted">
+            {isComplete ? <Check size={9} className="text-green-400" /> : <Clock size={9} />}
+            Total elapsed
+          </div>
+          <div className="text-xs text-text-primary font-medium">{formatTime(pipeline.total_time_sec)}</div>
+          <div className="text-[8px] text-text-muted">Since production started</div>
+        </div>
       </div>
+      {pipeline.assembly_time_sec != null && (
+        <div className="text-[9px] text-text-muted">
+          Latest re-join: {formatTime(pipeline.assembly_time_sec)}
+          {pipeline.assembly_count ? ` · ${pipeline.assembly_count} re-join${pipeline.assembly_count === 1 ? '' : 's'}` : ''}
+        </div>
+      )}
+      <p className="text-[8px] text-text-muted">
+        Image and video work can overlap; total elapsed is wall-clock time and may be lower than the sum of stages.
+      </p>
     </div>
   )
 }

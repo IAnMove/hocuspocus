@@ -49,3 +49,26 @@ def test_pipeline_phase_timer_is_initialized_for_legacy_live_state():
         assert pipeline["updated_at"] == 250.0
     finally:
         director_pipeline._pipelines = original_pipelines
+
+
+def test_pipeline_stage_times_accumulate_across_resumed_work():
+    original_pipelines = director_pipeline._pipelines
+    director_pipeline._pipelines = {
+        "timed": {
+            "_video_generation_time_sec": 12.5,
+            "updated_at": 100.0,
+        }
+    }
+    try:
+        with patch.object(director_pipeline.time, "time", return_value=150.0):
+            director_pipeline._accumulate_pipeline_time(
+                "timed",
+                "_video_generation_time_sec",
+                7.25,
+            )
+
+        pipeline = director_pipeline._pipelines["timed"]
+        assert pipeline["_video_generation_time_sec"] == 19.75
+        assert pipeline["updated_at"] == 150.0
+    finally:
+        director_pipeline._pipelines = original_pipelines

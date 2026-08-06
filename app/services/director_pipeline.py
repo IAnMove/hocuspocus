@@ -398,6 +398,12 @@ def _save_pipeline_state_serialized(pid: str) -> bool:
         "clip_fit_details": clip_fit_details,
         "clip_validations": clip_validations,
         "llm_log": p.get("_llm_log"),
+        "prompt_generation_time_sec": p.get("_prompt_generation_time_sec"),
+        "image_generation_time_sec": p.get("_image_generation_time_sec"),
+        "video_generation_time_sec": p.get("_video_generation_time_sec"),
+        "assembly_time_sec": p.get("_assembly_time_sec"),
+        "assembly_count": p.get("_assembly_count", 0),
+        "assembled_at": p.get("_assembled_at"),
         # Persist the complete dictionaries as well as the backwards-compatible
         # flattened clip summaries.  Metadata carries stable panel identities,
         # renderer choices and source mappings required to recompute the same
@@ -1309,6 +1315,7 @@ def rejoin_clips(out_dir: str, pid: str) -> dict:
     )
     output_path = os.path.join(clip_out_dir, output_name)
 
+    join_started_at = time.time()
     try:
         concatenate_native = getattr(_wgp, "concatenate_multi_clip_videos", None)
         if state.get("video_model") == "minimax_h3" and callable(concatenate_native):
@@ -1319,13 +1326,26 @@ def rejoin_clips(out_dir: str, pid: str) -> dict:
         print(f"[Pipeline] Rejoined {len(video_files)} clips → {output_name}")
 
         # Update pipeline state
+        assembled_at = time.time()
+        assembly_time_sec = round(assembled_at - join_started_at, 2)
+
         def _update(s):
             if output_name not in s.get("output_files", []):
                 s.setdefault("output_files", []).append(output_name)
             s["final_output_filename"] = output_name
-        _update_saved_pipeline(out_dir, pid, _update)
+            s["assembly_time_sec"] = assembly_time_sec
+            s["assembly_count"] = int(s.get("assembly_count") or 0) + 1
+            s["assembled_at"] = assembled_at
+            created_at = s.get("created_at")
+            if created_at:
+                s["total_time_sec"] = round(assembled_at - float(created_at), 2)
+        updated_state = _update_saved_pipeline(out_dir, pid, _update) or {}
 
-        return {"filename": output_name}
+        return {
+            "filename": output_name,
+            "assembly_time_sec": assembly_time_sec,
+            "total_time_sec": updated_state.get("total_time_sec"),
+        }
     except Exception as e:
         raise RuntimeError(f"Rejoin failed: {e}")
 
@@ -1574,6 +1594,19 @@ def _update_pipeline(pid: str, **kwargs):
             pipeline["updated_at"] = now
 
 
+def _accumulate_pipeline_time(pid: str, key: str, elapsed_sec: float) -> None:
+    """Atomically add a wall-clock stage duration to a live pipeline."""
+    with _pipeline_lock:
+        pipeline = _pipelines.get(pid)
+        if not pipeline:
+            return
+        pipeline[key] = round(
+            float(pipeline.get(key) or 0) + max(0.0, elapsed_sec),
+            2,
+        )
+        pipeline["updated_at"] = time.time()
+
+
 def start_pipeline(params: dict) -> str:
     """Start a new director pipeline. Returns pipeline_id."""
     pid = uuid.uuid4().hex[:8]
@@ -1610,6 +1643,12 @@ def start_pipeline(params: dict) -> str:
         "pause_reason": None,
         "workspace": workspace,
         "out_dir": out_dir,
+        "_prompt_generation_time_sec": 0.0,
+        "_image_generation_time_sec": 0.0,
+        "_video_generation_time_sec": 0.0,
+        "_assembly_time_sec": None,
+        "_assembly_count": 0,
+        "_assembled_at": None,
         # For LLM streaming: the frontend polls /api/v1/llm/stream-status
         "llm_streaming": False,
     }
@@ -2974,6 +3013,24 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
         ],
         "output_files": data.get("output_files", []) or [],
         "_llm_log": data.get("llm_log"),
+        "_prompt_generation_time_sec": (
+            data.get("prompt_generation_time_sec")
+            if data.get("prompt_generation_time_sec") is not None
+            else (data.get("llm_log") or {}).get("planning_time_sec", 0)
+        ),
+        "_image_generation_time_sec": (
+            data.get("image_generation_time_sec")
+            if data.get("image_generation_time_sec") is not None
+            else sum(float(c.get("image_gen_time_sec") or 0) for c in saved_clips)
+        ),
+        "_video_generation_time_sec": (
+            data.get("video_generation_time_sec")
+            if data.get("video_generation_time_sec") is not None
+            else sum(float(c.get("video_gen_time_sec") or 0) for c in saved_clips)
+        ),
+        "_assembly_time_sec": data.get("assembly_time_sec"),
+        "_assembly_count": int(data.get("assembly_count") or 0),
+        "_assembled_at": data.get("assembled_at"),
         "error": None,
         "created_at": data.get("created_at") or now,
         "updated_at": now,
@@ -3359,12 +3416,21 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
                 )
             _save_pipeline_state(pid)
 
+        if not resume_plans:
+            _accumulate_pipeline_time(
+                pid,
+                "_prompt_generation_time_sec",
+                time.time() - planning_start,
+            )
+            _save_pipeline_state(pid)
+
         # ── Phase 2: Prepare or Generate Start Images ────────────────────
         # Normal Director productions generate start frames here. Comic
         # movies already have one approved artwork image per shot, so those
         # files are copied into the recoverable pipeline output directory and
         # fed directly to I2V without spending image-generation credits.
         provided_clip_image_paths = params.get("provided_clip_image_paths") or []
+        image_stage_started_at = time.time()
         _update_pipeline(pid, phase="generating_images",
                          progress={
                              "current": 0,
@@ -3430,6 +3496,7 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
             )
 
             def _parallel_video_worker() -> None:
+                video_stage_started_at = time.time()
                 try:
                     parallel_video_result["outputs"] = _run_video_generation(
                         pid,
@@ -3445,6 +3512,12 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
                     )
                 except Exception as error:
                     parallel_video_result["error"] = error
+                finally:
+                    _accumulate_pipeline_time(
+                        pid,
+                        "_video_generation_time_sec",
+                        time.time() - video_stage_started_at,
+                    )
 
             parallel_video_thread = threading.Thread(
                 target=_parallel_video_worker,
@@ -3563,6 +3636,12 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
                     parallel_video_thread.join()
                 raise
 
+        if not _resume_imgs_ok:
+            _accumulate_pipeline_time(
+                pid,
+                "_image_generation_time_sec",
+                time.time() - image_stage_started_at,
+            )
         _update_pipeline(pid, clip_images=clip_images, _clip_keyframes=clip_keyframes)
         _save_pipeline_state(pid)  # Save after image generation
 
@@ -3615,7 +3694,24 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
             _update_pipeline(pid, phase="generating_video",
                              progress={"current": 0, "total": 1, "message": "Generating video...", "step": 0, "total_steps": 0})
 
-            output_files = _run_video_generation(pid, params, clip_plans, planned_clips, clip_images, clip_keyframes, out_dir=pipeline_out_dir, workspace=pipeline_workspace)
+            video_stage_started_at = time.time()
+            try:
+                output_files = _run_video_generation(
+                    pid,
+                    params,
+                    clip_plans,
+                    planned_clips,
+                    clip_images,
+                    clip_keyframes,
+                    out_dir=pipeline_out_dir,
+                    workspace=pipeline_workspace,
+                )
+            finally:
+                _accumulate_pipeline_time(
+                    pid,
+                    "_video_generation_time_sec",
+                    time.time() - video_stage_started_at,
+                )
 
         if _pipeline_cancel_requested(pid):
             raise PipelineCancelled("Director pipeline was cancelled.")

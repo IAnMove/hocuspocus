@@ -33,6 +33,7 @@ def _saved_state(tmp_path: Path) -> dict:
         })
     return {
         "pipeline_id": "editable",
+        "created_at": 100.0,
         "status": "completed",
         "video_model": "minimax_h3",
         "video_params": {
@@ -189,3 +190,9 @@ def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Pa
     assert not any(item["stale"] for item in saved["clips"][0]["h3_segments"])
     assert joined == ["old_0.mp4", "new_1.mp4", "new_2.mp4"]
     assert rejoined["filename"].startswith("minimax_h3_editable_rejoin_")
+    assert saved["assembly_time_sec"] >= 0
+    assert saved["assembly_count"] == 1
+    assert saved["assembled_at"] >= saved["created_at"]
+    assert saved["total_time_sec"] == round(saved["assembled_at"] - saved["created_at"], 2)
+    assert rejoined["assembly_time_sec"] == saved["assembly_time_sec"]
+    assert rejoined["total_time_sec"] == saved["total_time_sec"]

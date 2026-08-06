@@ -1070,7 +1070,11 @@ export async function rerunH3Segment(
   return res.json()
 }
 
-export async function rejoinPipeline(pid: string): Promise<{ filename: string }> {
+export async function rejoinPipeline(pid: string): Promise<{
+  filename: string
+  assembly_time_sec: number
+  total_time_sec: number | null
+}> {
   const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/rejoin`, {
     method: 'POST',
   })
