@@ -225,7 +225,10 @@ def _sound_fields(plan: dict, audio_direction: str) -> tuple[str, str]:
     if effects:
         soundscape_parts.append("Synchronized effects: " + ", ".join(effects))
     if audio.get("lip_sync_critical"):
-        soundscape_parts.append("Clear foreground voices with precise natural lip sync")
+        soundscape_parts.append("Clear foreground voices with precise lip sync and natural delivery")
+    vocal_style = _clean(audio.get("vocal_style"))
+    if vocal_style:
+        soundscape_parts.append(f"Vocal delivery: {vocal_style}")
     direction = _clean(audio_direction)
     if direction:
         soundscape_parts.append(direction)

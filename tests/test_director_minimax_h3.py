@@ -86,6 +86,25 @@ def test_h3_segment_prompt_renders_director_audio_plan_and_dialogue():
     assert "precise lip sync" in prompt
 
 
+def test_h3_dialogue_is_assigned_once_across_continuation_segments():
+    plan = {
+        "video_prompt": "She enters. She stops. She looks back. She leaves.",
+        "dialogue_beats": [
+            {"speaker_name": "Mara", "spoken_text": "Wait for me."},
+            {"speaker_name": "Mara", "spoken_text": "Now we go."},
+        ],
+        "audio_plan": {"mode": "dialogue_driven", "lip_sync_critical": True},
+    }
+
+    first = director_pipeline._minimax_h3_segment_prompt(plan, 0, 2)
+    second = director_pipeline._minimax_h3_segment_prompt(plan, 1, 2)
+
+    assert "Wait for me." in first
+    assert "Wait for me." not in second
+    assert "Now we go." not in first
+    assert "Now we go." in second
+
+
 def test_h3_story_renders_each_shot_and_assembles_native_audio(tmp_path: Path):
     start_images = []
     for index in range(2):

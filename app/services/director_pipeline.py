@@ -1198,16 +1198,17 @@ def rerun_h3_segment(
                 from services.director.minimax_h3_prompting import format_minimax_h3_prompt
             except ImportError:
                 from app.services.director.minimax_h3_prompting import format_minimax_h3_prompt
+            segment_plan = dict(clip)
+            dialogue_beats = list(clip.get("dialogue_beats") or [])
+            if len(segments) > 1 and dialogue_beats:
+                start = index * len(dialogue_beats) // len(segments)
+                end = (index + 1) * len(dialogue_beats) // len(segments)
+                segment_plan["dialogue_beats"] = dialogue_beats[start:end]
             prompt = format_minimax_h3_prompt(
-                clip,
+                segment_plan,
                 str(record.get("prompt") or ""),
                 reference_mode=segment_mode,
-                audio_direction=_minimax_h3_audio_direction(
-                    clip,
-                    str(video_params.get("h3_audio_prompt") or ""),
-                    index,
-                    len(segments),
-                ),
+                audio_direction=str(video_params.get("h3_audio_prompt") or ""),
             )
             gen_params = {
                 "model_type": "minimax_h3",
@@ -7239,20 +7240,20 @@ def _minimax_h3_segment_prompt(
     except ImportError:  # pytest imports this module through app.services
         from app.services.director.minimax_h3_prompting import format_minimax_h3_prompt
 
-    audio_direction = _minimax_h3_audio_direction(
-        plan,
-        global_audio_direction,
-        segment_index,
-        segment_count,
-    )
+    segment_plan = dict(plan)
+    dialogue_beats = list(plan.get("dialogue_beats") or [])
+    if segment_count > 1 and dialogue_beats:
+        start = segment_index * len(dialogue_beats) // segment_count
+        end = (segment_index + 1) * len(dialogue_beats) // segment_count
+        segment_plan["dialogue_beats"] = dialogue_beats[start:end]
     optimized = plan.get("h3_segment_prompts") or []
     if len(optimized) == segment_count and segment_index < len(optimized):
         prompt = str(optimized[segment_index] or "").strip()
         return format_minimax_h3_prompt(
-            plan,
+            segment_plan,
             prompt,
             reference_mode=reference_mode,
-            audio_direction=audio_direction,
+            audio_direction=global_audio_direction,
         )
 
     window_prompts = plan.get("window_prompts") or []
@@ -7267,10 +7268,10 @@ def _minimax_h3_segment_prompt(
         source = str(plan.get("video_prompt") or "")
         prompt = _h3_sentence_windows(source, segment_count)[segment_index]
     return format_minimax_h3_prompt(
-        plan,
+        segment_plan,
         prompt,
         reference_mode=reference_mode,
-        audio_direction=audio_direction,
+        audio_direction=global_audio_direction,
     )
 
 
