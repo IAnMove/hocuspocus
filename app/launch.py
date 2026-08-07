@@ -12955,6 +12955,103 @@ def _normalize_story_stage_ids(
 ) -> dict:
     """Repair harmless LLM omissions and ID drift before validation."""
     normalized = copy.deepcopy(result)
+    if scope == "structure" and isinstance(normalized, dict):
+        # Smaller/local providers occasionally ignore the top-level JSON
+        # schema while still returning a useful visual sequence. Preserve
+        # that work instead of spending another full call asking for the same
+        # story under the literal ``beats`` key.
+        raw_beats = normalized.get("beats")
+        if isinstance(raw_beats, dict):
+            raw_beats = next((
+                raw_beats.get(key)
+                for key in ("items", "beats", "moments", "scenes", "sequences")
+                if isinstance(raw_beats.get(key), list)
+            ), raw_beats)
+
+        visual_sequence = normalized.get("visual_sequence_outline")
+        visual_sequence = visual_sequence if isinstance(visual_sequence, list) else []
+        plot_points = normalized.get("plot_points")
+        plot_points = plot_points if isinstance(plot_points, list) else []
+        if not isinstance(raw_beats, list):
+            raw_beats = next((
+                normalized.get(key)
+                for key in ("structure", "moments", "scenes", "sequences")
+                if isinstance(normalized.get(key), list)
+            ), None)
+        if not isinstance(raw_beats, list):
+            raw_beats = visual_sequence or plot_points
+
+        if isinstance(raw_beats, list):
+            def field(item, *keys):
+                if not isinstance(item, dict):
+                    return str(item or "").strip()
+                return next((
+                    str(item.get(key) or "").strip()
+                    for key in keys if str(item.get(key) or "").strip()
+                ), "")
+
+            beats = []
+            used_ids: set[str] = set()
+            total = len(raw_beats)
+            for index, item in enumerate(raw_beats):
+                visual = visual_sequence[index] if index < len(visual_sequence) else {}
+                plot = plot_points[index] if index < len(plot_points) else {}
+                source = item if isinstance(item, dict) else {"description": item}
+                title = (
+                    field(source, "title", "name", "focus")
+                    or field(plot, "title", "name", "focus")
+                    or field(visual, "title", "name", "focus")
+                    or f"Moment {index + 1}"
+                )
+                summary = (
+                    field(visual, "summary", "description", "action", "visual")
+                    or field(source, "summary", "description", "action", "visual")
+                    or field(plot, "summary", "description", "action")
+                    or title
+                )
+                goal = (
+                    field(source, "goal", "objective", "purpose", "focus")
+                    or field(plot, "goal", "objective", "purpose", "focus")
+                    or title
+                )
+                conflict = (
+                    field(source, "conflict", "obstacle", "tension", "problem")
+                    or field(plot, "conflict", "obstacle", "tension", "description")
+                    or summary
+                )
+                turn = (
+                    field(source, "turn", "change", "outcome", "result", "reversal")
+                    or field(plot, "turn", "change", "outcome", "result", "description")
+                    or field(visual, "turn", "change", "outcome", "description")
+                    or summary
+                )
+                stage = field(source, "stage", "section", "phase")
+                if not stage:
+                    stage = (
+                        "setup" if index == 0 else
+                        "resolution" if index == total - 1 else
+                        "climax" if total > 2 and index == total - 2 else
+                        "rising action"
+                    )
+                candidate = _story_id_token(field(source, "id") or title) or f"beat-{index + 1}"
+                base = candidate
+                suffix = 2
+                while candidate in used_ids:
+                    candidate = f"{base}-{suffix}"
+                    suffix += 1
+                used_ids.add(candidate)
+                beats.append({
+                    "id": candidate,
+                    "stage": stage,
+                    "title": title,
+                    "summary": summary,
+                    "goal": goal,
+                    "conflict": conflict,
+                    "turn": turn,
+                })
+            normalized["beats"] = beats
+        return normalized
+
     if scope == "world" and isinstance(normalized.get("world"), dict):
         locations = normalized["world"].get("locations")
         if not isinstance(locations, list):
