@@ -35,6 +35,16 @@ class PromptPolicy:
 DEFAULT_POLICY = PromptPolicy()
 
 
+# Direct-video prompts intentionally use the compact grammar that has proved
+# reliable for text-only MiniMax H3 generations.  These labels are also stable
+# parsing boundaries: long music-video shots can be split into several H3
+# requests while repeating the complete world/style contract in every request.
+DIRECT_VIDEO_SCENE_MARKER = "Scene overview:"
+DIRECT_VIDEO_SHOT_MARKER = "Shot 1:"
+DIRECT_VIDEO_SOUND_MARKER = "overall_soundscape:"
+DIRECT_VIDEO_MUSIC_MARKER = "non_diegetic_music:"
+
+
 # ── Anti-Pattern Definitions ─────────────────────────────────────────
 
 # Words/phrases that should never appear in single-shot video prompts
@@ -663,4 +673,173 @@ def enforce_visual_style_on_clip_plans(
                 )
                 for value in values
             ]
+    return clip_plans
+
+
+def direct_video_situation(prompt: object) -> str:
+    """Extract only the variable shot situation from a composed direct prompt.
+
+    The operation is deliberately tolerant of a prompt that has already passed
+    through the FL2VA/Ref2VA adapter.  Direct mode must never retain those
+    image-reference claims when it is converted back to pure text-to-video.
+    """
+    text = str(prompt or "").strip()
+    if not text:
+        return ""
+    if DIRECT_VIDEO_SHOT_MARKER.casefold() in text.casefold():
+        text = re.split(
+            re.escape(DIRECT_VIDEO_SHOT_MARKER),
+            text,
+            maxsplit=1,
+            flags=re.I,
+        )[1]
+    elif "integrated_multimodal_description:" in text.casefold():
+        text = re.split(
+            r"integrated_multimodal_description:",
+            text,
+            maxsplit=1,
+            flags=re.I,
+        )[1]
+    elif "detailed_description:" in text.casefold():
+        text = re.split(
+            r"detailed_description:",
+            text,
+            maxsplit=1,
+            flags=re.I,
+        )[1]
+    text = re.split(
+        rf"{re.escape(DIRECT_VIDEO_SOUND_MARKER)}|{re.escape(DIRECT_VIDEO_MUSIC_MARKER)}",
+        text,
+        maxsplit=1,
+        flags=re.I,
+    )[0]
+    text = re.sub(
+        r"^The referenced picture is the exact opening frame\.[^.]*"
+        r"authoritative[^.]*\.\s*",
+        "",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"^For the target video, at 0\.00 seconds[^.]*fully referenced\.\s*",
+        "",
+        text,
+        flags=re.I,
+    )
+    return " ".join(text.split()).strip(" .")
+
+
+def compose_direct_video_prompt(
+    master_prompt: object,
+    situation_prompt: object,
+    *,
+    plan: Optional[dict] = None,
+    audio_direction: object = "",
+    allow_clip_text: bool = True,
+) -> str:
+    """Compose one self-contained text-only video prompt.
+
+    ``master_prompt`` is copied verbatim at the front of every generated clip.
+    The LLM is only responsible for ``situation_prompt``.  No first-frame or
+    reference terminology is introduced here because direct mode has no image
+    conditioning at any stage.
+    """
+    master = " ".join(str(master_prompt or "").split()).strip()
+    situation = direct_video_situation(situation_prompt)
+    shot = plan if isinstance(plan, dict) else {}
+
+    # A previously composed prompt contains its master before Scene overview.
+    # Remove that prefix before rebuilding so retries and manual edits remain
+    # idempotent even when the user changes the master prompt.
+    if DIRECT_VIDEO_SCENE_MARKER.casefold() in situation.casefold():
+        situation = re.split(
+            re.escape(DIRECT_VIDEO_SCENE_MARKER),
+            situation,
+            maxsplit=1,
+            flags=re.I,
+        )[-1]
+
+    overview_parts: list[str] = []
+    for value in (shot.get("scene_goal"), shot.get("environment")):
+        clean = " ".join(str(value or "").split()).strip(" .")
+        if clean and clean.casefold() not in {item.casefold() for item in overview_parts}:
+            overview_parts.append(clean)
+    overview = ". ".join(overview_parts) or "One concrete continuous moment in the established world"
+    situation = situation or "The scene unfolds as one concrete, visually executable continuous shot"
+    if not allow_clip_text:
+        situation = apply_no_visible_text_lock(situation, mode="video")
+
+    audio = shot.get("audio_plan") if isinstance(shot.get("audio_plan"), dict) else {}
+    sound_parts: list[str] = []
+    ambience = " ".join(str(audio.get("ambience") or "").split()).strip(" .")
+    if ambience:
+        sound_parts.append(ambience)
+    effects = audio.get("effects")
+    if isinstance(effects, list):
+        clean_effects = [" ".join(str(item).split()).strip(" .") for item in effects]
+        clean_effects = [item for item in clean_effects if item]
+        if clean_effects:
+            sound_parts.append("Synchronized effects: " + ", ".join(clean_effects))
+    direction = " ".join(str(audio_direction or "").split()).strip(" .")
+    if direction:
+        sound_parts.append(direction)
+    if not sound_parts:
+        sound_parts.append("Natural synchronized ambience and effects matching the visible action")
+
+    return "\n".join((
+        master,
+        f"{DIRECT_VIDEO_SCENE_MARKER} {overview}.",
+        f"{DIRECT_VIDEO_SHOT_MARKER} {situation}.",
+        f"{DIRECT_VIDEO_SOUND_MARKER} {'; '.join(sound_parts)}.",
+        f"{DIRECT_VIDEO_MUSIC_MARKER} none",
+    )).strip()
+
+
+def enforce_direct_video_on_clip_plans(
+    clip_plans: list[dict],
+    master_prompt: object,
+    *,
+    audio_direction: object = "",
+    allow_clip_text: bool = True,
+) -> list[dict]:
+    """Make every video prompt self-contained and remove all image stages."""
+    master = " ".join(str(master_prompt or "").split()).strip()
+    if not master:
+        raise ValueError("Direct video mode requires a master video prompt.")
+
+    for plan in clip_plans or []:
+        if not isinstance(plan, dict):
+            continue
+        plan["video_prompt"] = compose_direct_video_prompt(
+            master,
+            plan.get("video_prompt"),
+            plan=plan,
+            audio_direction=audio_direction,
+            allow_clip_text=allow_clip_text,
+        )
+        windows = plan.get("window_prompts")
+        if isinstance(windows, list):
+            plan["window_prompts"] = [
+                compose_direct_video_prompt(
+                    master,
+                    value.get("prompt", value.get("text", ""))
+                    if isinstance(value, dict) else value,
+                    plan=plan,
+                    audio_direction=audio_direction,
+                    allow_clip_text=allow_clip_text,
+                )
+                for value in windows
+                if str(
+                    value.get("prompt", value.get("text", ""))
+                    if isinstance(value, dict) else value
+                ).strip()
+            ]
+        plan["image_prompt"] = ""
+        plan["image_source"] = "none"
+        plan["keyframe_prompts"] = []
+        plan["h3_segment_prompts"] = []
+        metadata = plan.setdefault("metadata", {})
+        if isinstance(metadata, dict):
+            metadata["generation_mode"] = "direct_video"
+            metadata["direct_video_master_prompt"] = master
     return clip_plans

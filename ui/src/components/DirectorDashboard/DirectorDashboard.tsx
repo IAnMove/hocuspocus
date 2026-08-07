@@ -266,7 +266,13 @@ function H3SegmentCard({ segment, shotIndex, onRerun }: {
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-medium text-cyan-300">Segment {segment.index + 1}</span>
         <span className="text-[9px] text-text-muted">{(segment.frames / 24).toFixed(1)}s · seed {segment.seed}</span>
-        <span className="text-[9px] text-text-muted">{segment.reference_mode === 'references' ? 'identity references' : 'exact first frame'}</span>
+        <span className="text-[9px] text-text-muted">{
+          segment.reference_mode === 'direct_video'
+            ? 'text only · no images'
+            : segment.reference_mode === 'references'
+              ? 'identity references'
+              : 'exact first frame'
+        }</span>
         {segment.stale && <span className="ml-auto text-[9px] text-amber-300">Needs regeneration</span>}
       </div>
       {segment.filename && (
@@ -433,21 +439,29 @@ function ClipCard({ clip, onTag, onRerunImage, onRerunVideo, onRerunH3Segment }:
             <div className="flex items-center justify-between">
               <span className="text-[9px] font-medium uppercase tracking-wider text-cyan-300">H3 conditioning</span>
               <span className="text-[9px] text-text-muted">
-                {clip.h3_references.mode === 'first_frame' ? 'FL2VA · exact frame' : 'Ref2VA · references'}
+                {clip.h3_references.mode === 'direct_video'
+                  ? 'T2V · no images'
+                  : clip.h3_references.mode === 'first_frame'
+                    ? 'FL2VA · exact frame'
+                    : 'Ref2VA · references'}
               </span>
             </div>
             <p className="text-[9px] text-text-muted">{clip.h3_references.note}</p>
             {clip.h3_prompt_validation && (
               <div className={`text-[9px] ${
-                clip.h3_prompt_validation === 'optimized' ? 'text-green-300' : 'text-amber-300'
+                clip.h3_prompt_validation === 'optimized' || clip.h3_prompt_validation === 'direct_video_contract'
+                  ? 'text-green-300'
+                  : 'text-amber-300'
               }`}>
                 Prompt: {clip.h3_prompt_validation === 'optimized'
                   ? `validated and optimized for H3 · ${clip.h3_segment_prompts?.length || 0} segments`
+                  : clip.h3_prompt_validation === 'direct_video_contract'
+                    ? 'direct T2V contract · master prompt repeated per segment'
                   : 'deterministic safe prompt · LLM validation unavailable'}
               </div>
             )}
             <div className="text-[9px] text-text-secondary space-y-0.5">
-              <div>Shot frame: {fileLabel(clip.h3_references.shot_frame) || 'missing'}</div>
+              <div>Shot frame: {clip.h3_references.mode === 'direct_video' ? 'not used' : fileLabel(clip.h3_references.shot_frame) || 'missing'}</div>
               {clip.h3_references.image_references.length > 0 && (
                 <div>Images: {clip.h3_references.image_references.map(fileLabel).join(', ')}</div>
               )}

@@ -15,6 +15,7 @@ from app.services.director.planners.music_video import (
     build_music_video_coverage,
     normalize_music_video_treatment,
 )
+from app.services.director.policies import enforce_direct_video_on_clip_plans
 from app.services.director.planners.short_film import ShortFilmPlanner
 from app.services.director.schema import CharacterProfile
 from app.services import director_pipeline
@@ -85,6 +86,49 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(treatment["performer_presence"], 100)
         self.assertEqual(treatment["recurring_sets"], ["stage", "rooftop"])
         self.assertEqual(treatment["lip_sync"], "occasional")
+
+    def test_direct_video_treatment_keeps_master_prompt_and_ignores_visual_refs(self):
+        treatment = normalize_music_video_treatment({
+            "generation_mode": "direct_video",
+            "direct_video_master_prompt": "Immutable painted science-fiction world.",
+        })
+        self.assertEqual(treatment["generation_mode"], "direct_video")
+        self.assertEqual(
+            treatment["direct_video_master_prompt"],
+            "Immutable painted science-fiction world.",
+        )
+        params = {
+            "pipeline_type": "music_video",
+            "music_video_treatment": treatment,
+            "reference_image_path": "/tmp/portrait.png",
+            "character_ref_paths": ["/tmp/character.png"],
+            "location_ref_paths": ["/tmp/location.png"],
+        }
+        self.assertFalse(director_pipeline._has_visual_references(params))
+
+    def test_direct_video_contract_repeats_master_and_removes_image_prompts(self):
+        plans = [{
+            "scene_goal": "Reveal the alien citadel",
+            "environment": "a red desert beneath two moons",
+            "video_prompt": "A lone warrior raises a black sword as the camera pushes in.",
+            "image_prompt": "This must never reach an image model.",
+            "keyframe_prompts": ["Nor this keyframe."],
+        }]
+        enforce_direct_video_on_clip_plans(
+            plans,
+            "IMMUTABLE PAINTED WORLD.",
+            allow_clip_text=False,
+        )
+        prompt = plans[0]["video_prompt"]
+        self.assertTrue(prompt.startswith("IMMUTABLE PAINTED WORLD."))
+        self.assertIn("Scene overview: Reveal the alien citadel", prompt)
+        self.assertIn("A lone warrior raises", prompt)
+        self.assertIn("non_diegetic_music: none", prompt)
+        self.assertEqual(plans[0]["image_prompt"], "")
+        self.assertEqual(plans[0]["image_source"], "none")
+        self.assertEqual(plans[0]["keyframe_prompts"], [])
+        self.assertEqual(plans[0]["h3_segment_prompts"], [])
+        self.assertIn("VISIBLE TEXT LOCK", prompt)
 
     def test_choruses_reuse_signature_set_with_controlled_coverage(self):
         clips = [

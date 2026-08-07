@@ -888,8 +888,13 @@ export interface ClipPlan {
 
 export type MusicVideoMode = 'performance' | 'narrative' | 'hybrid' | 'abstract'
 export type MusicVideoLipSync = 'frequent' | 'occasional' | 'none'
+export type MusicVideoGenerationMode = 'image_guided' | 'direct_video'
+
+export const DEFAULT_DIRECT_VIDEO_MASTER_PROMPT = 'A scene from the 1981 adult animated science fiction anthology film Heavy Metal, professional color grading, in the exact visual style and aesthetics of the 1981 film Heavy Metal. In the distinctive painted animation style of Heavy Metal 1981: painterly textures, grainy film texture, dark saturated colors, strong contrast, rough ink contours, airbrushed highlights and the classic heavy metal fantasy / sci-fi atmosphere of the 1981 film. World vocabulary: alien warriors, industrial spacecraft, decadent neon cities, monsters and alien deserts under red or purple skies. Never anime, clean digital art, modern 3D CGI or photorealistic live action.'
 
 export interface MusicVideoTreatment {
+  generation_mode: MusicVideoGenerationMode
+  direct_video_master_prompt: string
   mode: MusicVideoMode
   performer_presence: number
   lip_sync: MusicVideoLipSync
@@ -1063,7 +1068,7 @@ export interface PipelineClipState {
   h3_references?: H3ShotReferenceManifest | null
   h3_segment_prompts?: string[]
   h3_segments?: H3SegmentState[]
-  h3_prompt_validation?: 'optimized' | 'deterministic_fallback' | null
+  h3_prompt_validation?: 'optimized' | 'deterministic_fallback' | 'direct_video_contract' | null
 }
 
 export interface H3SegmentState {
@@ -1072,7 +1077,7 @@ export interface H3SegmentState {
   prompt: string
   frames: number
   seed: number
-  reference_mode: 'first_frame' | 'references'
+  reference_mode: 'first_frame' | 'references' | 'direct_video'
   start_image_filename?: string
   stale?: boolean
   created_at?: number
@@ -1081,7 +1086,7 @@ export interface H3SegmentState {
 
 export interface H3ShotReferenceManifest {
   shot_index: number
-  mode: 'first_frame' | 'references'
+  mode: 'first_frame' | 'references' | 'direct_video'
   shot_frame: string
   image_references: string[]
   location_reference: string
@@ -1091,7 +1096,7 @@ export interface H3ShotReferenceManifest {
   audio_references: string[]
   note: string
   warnings?: string[]
-  continuity_mode?: 'identity_safe_hybrid'
+  continuity_mode?: 'identity_safe_hybrid' | 'direct_text_to_video'
 }
 
 export interface PipelineLlmPass {
@@ -1119,6 +1124,8 @@ export interface SavedPipelineState {
   completed_at: number | null
   status: string
   pipeline_type: string
+  generation_mode?: 'image_guided' | 'direct_video'
+  direct_video_master_prompt?: string
   comic_id?: string | null
   workspace?: string
   preview_clips?: Array<Record<string, unknown>>
@@ -1130,7 +1137,7 @@ export interface SavedPipelineState {
   video_model: string
   h3_reference_manifest?: H3ShotReferenceManifest[]
   h3_prompt_validation?: {
-    status: 'optimized' | 'deterministic_fallback'
+    status: 'optimized' | 'deterministic_fallback' | 'direct_video_contract'
     segments?: number
     error?: string
   } | null
@@ -1151,6 +1158,7 @@ export interface PipelineListItem {
   id: string
   status: string
   pipeline_type: string
+  generation_mode?: 'image_guided' | 'direct_video'
   comic_id?: string | null
   created_at: number
   clip_count: number

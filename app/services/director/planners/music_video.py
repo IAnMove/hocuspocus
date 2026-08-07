@@ -76,6 +76,17 @@ _SECTION_VISUAL_STRATEGY = {
 
 
 _DEFAULT_TREATMENT = {
+    "generation_mode": "image_guided",
+    "direct_video_master_prompt": (
+        "A scene from the 1981 adult animated science fiction anthology film Heavy Metal, "
+        "professional color grading, in the exact visual style and aesthetics of the 1981 "
+        "film Heavy Metal. In the distinctive painted animation style of Heavy Metal 1981: "
+        "painterly textures, grainy film texture, dark saturated colors, strong contrast, "
+        "rough ink contours, airbrushed highlights and the classic heavy metal fantasy / "
+        "sci-fi atmosphere of the 1981 film. World vocabulary: alien warriors, industrial "
+        "spacecraft, decadent neon cities, monsters and alien deserts under red or purple "
+        "skies. Never anime, clean digital art, modern 3D CGI or photorealistic live action."
+    ),
     "mode": "hybrid",
     "performer_presence": 60,
     "lip_sync": "frequent",
@@ -124,7 +135,18 @@ def normalize_music_video_treatment(value: Any) -> dict[str, Any]:
     except (TypeError, ValueError):
         surrealism = int(_DEFAULT_TREATMENT["surrealism"])
     sets = _treatment_list(raw.get("recurring_sets")) or list(_DEFAULT_TREATMENT["recurring_sets"])
+    generation_mode = str(
+        raw.get("generation_mode") or _DEFAULT_TREATMENT["generation_mode"]
+    ).strip().lower()
+    if generation_mode not in {"image_guided", "direct_video"}:
+        generation_mode = "image_guided"
+    direct_video_master_prompt = str(
+        raw.get("direct_video_master_prompt")
+        or _DEFAULT_TREATMENT["direct_video_master_prompt"]
+    ).strip()
     return {
+        "generation_mode": generation_mode,
+        "direct_video_master_prompt": direct_video_master_prompt,
         "mode": mode,
         "performer_presence": max(0, min(100, performer_presence)),
         "lip_sync": lip_sync,
@@ -268,9 +290,12 @@ class MusicVideoPlanner(BasePlanner):
             speaker_mappings: {speaker_id: {name, role}} from UI.
             characters: List of character dicts [{name, description}].
         """
-        has_reference = bool(reference_image_path)
         performer_map = _parse_performer_map(scene_description)
         treatment = normalize_music_video_treatment(kwargs.get("music_video_treatment"))
+        direct_video = treatment["generation_mode"] == "direct_video"
+        has_reference = bool(reference_image_path) and not direct_video
+        if direct_video:
+            reference_image_path = None
         coverage_plan = build_music_video_coverage(clips, treatment)
 
         # Normalize speaker_mappings: frontend sends list, we need dict
@@ -322,7 +347,19 @@ class MusicVideoPlanner(BasePlanner):
             **{k: v for k, v in kwargs.items() if k not in ("nsfw", "music_video_treatment")},
         )
 
-        self._validate_llm_shot_plans(shot_dicts, len(clips))
+        if direct_video:
+            # Text-only mode never lets a planner accidentally reintroduce an
+            # image stage through a non-empty image/keyframe field.
+            for shot in shot_dicts:
+                if isinstance(shot, dict):
+                    shot["image_prompt"] = ""
+                    shot["keyframe_prompts"] = []
+
+        self._validate_llm_shot_plans(
+            shot_dicts,
+            len(clips),
+            require_image=not direct_video,
+        )
 
         # ── Image-prompt sanitization (Layer 1) ──────────────────────
         # Strip GARMENT BAN violations and narrative-filler phrases the
@@ -454,7 +491,12 @@ class MusicVideoPlanner(BasePlanner):
         )
 
     @staticmethod
-    def _validate_llm_shot_plans(shot_dicts: list[dict], expected: int) -> None:
+    def _validate_llm_shot_plans(
+        shot_dicts: list[dict],
+        expected: int,
+        *,
+        require_image: bool = True,
+    ) -> None:
         """Reject prose/partial planner output before generic fallbacks hide it.
 
         A malformed music-video response previously became ``expected`` empty
@@ -474,22 +516,23 @@ class MusicVideoPlanner(BasePlanner):
                 continue
             image_prompt = str(shot.get("image_prompt") or "").strip()
             video_prompt = str(shot.get("video_prompt") or "").strip()
-            if len(image_prompt) < 24 or len(video_prompt) < 16:
+            if (require_image and len(image_prompt) < 24) or len(video_prompt) < 16:
                 incomplete.append(index + 1)
         if incomplete:
             preview = ", ".join(str(i) for i in incomplete[:12])
             suffix = "…" if len(incomplete) > 12 else ""
             raise RuntimeError(
-                "Music-video planning produced incomplete image/video prompts "
+                "Music-video planning produced incomplete "
+                f"{'image/video ' if require_image else 'video '}prompts "
                 f"for shots {preview}{suffix}. No images were queued."
             )
 
     @staticmethod
-    def _shot_is_complete(shot: Any) -> bool:
+    def _shot_is_complete(shot: Any, *, require_image: bool = True) -> bool:
         if not isinstance(shot, dict):
             return False
         return (
-            len(str(shot.get("image_prompt") or "").strip()) >= 24
+            (not require_image or len(str(shot.get("image_prompt") or "").strip()) >= 24)
             and len(str(shot.get("video_prompt") or "").strip()) >= 16
         )
 
@@ -499,6 +542,8 @@ class MusicVideoPlanner(BasePlanner):
         candidates: list[dict],
         expected: int,
         positional_indices: Optional[list[int]] = None,
+        *,
+        require_image: bool = True,
     ) -> tuple[dict[int, dict], list[int], list[dict]]:
         """Map valid candidates onto fixed audio slots and retain overflow.
 
@@ -508,7 +553,7 @@ class MusicVideoPlanner(BasePlanner):
         slots: dict[int, dict] = {}
         alternatives: list[dict] = []
         for position, candidate in enumerate(candidates):
-            if not cls._shot_is_complete(candidate):
+            if not cls._shot_is_complete(candidate, require_image=require_image):
                 continue
             raw_index = candidate.get("clip_index") if isinstance(candidate, dict) else None
             try:
@@ -702,25 +747,27 @@ class MusicVideoPlanner(BasePlanner):
         camera_block = build_camera_style_block()
         # video_guide now merged into ltx2_music_video_rules.md — no separate load needed
 
+        treatment = normalize_music_video_treatment(kwargs.get("music_video_treatment"))
+        direct_video = treatment["generation_mode"] == "direct_video"
+
         from ..image_prompt_rules import get_image_prompt_rules
-        image_prompt_rules = get_image_prompt_rules(
-            has_reference,
-            num_character_refs=len(kwargs.get("character_ref_paths", []) or []),
-            num_location_refs=len(kwargs.get("location_ref_paths", []) or []),
-            character_ref_labels=kwargs.get("character_ref_labels"),
-            location_ref_labels=kwargs.get("location_ref_labels"),
-            seamless=kwargs.get("seamless", True),
-            image_model=kwargs.get("image_model", ""),
-        )
+        image_prompt_rules = "" if direct_video else get_image_prompt_rules(
+                has_reference,
+                num_character_refs=len(kwargs.get("character_ref_paths", []) or []),
+                num_location_refs=len(kwargs.get("location_ref_paths", []) or []),
+                character_ref_labels=kwargs.get("character_ref_labels"),
+                location_ref_labels=kwargs.get("location_ref_labels"),
+                seamless=kwargs.get("seamless", True),
+                image_model=kwargs.get("image_model", ""),
+            )
 
         from ..guide_loader import load_guide
         video_model = str(kwargs.get("video_model") or "").lower()
         is_ltx = video_model.startswith(("ltx2", "ltxv"))
-        music_video_rules = load_guide(
+        music_video_rules = "" if direct_video else load_guide(
             "ltx2_music_video_rules.md" if is_ltx else "music_video_treatment_rules.md"
         )
-        treatment = normalize_music_video_treatment(kwargs.get("music_video_treatment"))
-        character_style_contract = build_character_visual_style_contract(
+        character_style_contract = "" if direct_video else build_character_visual_style_contract(
             kwargs.get("character_visual_style", ""),
             preserve=bool(kwargs.get("preserve_visual_style", False)),
         )
@@ -728,9 +775,47 @@ class MusicVideoPlanner(BasePlanner):
             kwargs.get("allow_clip_text") is True,
         )
         motion_prompt_rule = (
+            "Only the concrete situation for this clip: subjects, visible action, environment "
+            "and one camera move. Do not repeat, summarize or rewrite the master prompt."
+            if direct_video else
             "Short energetic prompt describing action AFTER the start frame. Keywords. Vibes. Camera. 15-40 words."
             if is_ltx else
             "Chronological action path after the first frame. Describe concrete subject movement and one coherent camera move in natural English."
+        )
+        direct_video_contract = f"""DIRECT TEXT-TO-VIDEO MODE — STRICT:
+- There is no start image, generated image, keyframe or visual reference.
+- The immutable master prompt below defines the visual medium and world. It is automatically
+  prefixed by Maestro after planning. Never repeat it, paraphrase it, dilute it or invent a
+  competing style in video_prompt.
+- Your only variable prompt contribution is the concrete situation for this clip: who/what is
+  visible, where they are, the chronological action, and at most one coherent camera move.
+- image_prompt MUST be an empty string. keyframe_prompts and window_prompts MUST be empty arrays.
+- Do not mention first frames, supplied pictures, references, image conditioning or continuity frames.
+
+IMMUTABLE MASTER VIDEO PROMPT (context only; do not copy into video_prompt):
+{treatment['direct_video_master_prompt']}""" if direct_video else ""
+        example_image_source = "none" if direct_video else "original or previous"
+        example_image_prompt = (
+            "" if direct_video else
+            "FIRST FRAME BEFORE action — initial state, static pose, environment. No motion verbs."
+        )
+        scene_anchor_contract = (
+            """SCENE-ANCHORING (direct text-to-video):
+The immutable master prompt is the only visual-world authority. Create situations that belong
+inside that world and the user's Scene Concept. Keep recurring subjects descriptively stable,
+but never mention a source image, reference frame or alternate visual style."""
+            if direct_video else
+            """SCENE-ANCHORING (avoid off-topic content):
+The user uploaded a REFERENCE IMAGE showing the performer in a SPECIFIC setting
+(stage, microphone, crowd, lighting, etc.). EVERY image_prompt and video_prompt
+MUST match that setting plus the concept (Scene Concept below). Do NOT invent
+unrelated scenes unless those appear in the reference image or concept text. The reference
+image is the visual ground truth; deviations beyond it are hallucinations."""
+            if has_reference else
+            """SCENE-ANCHORING (avoid off-topic content):
+No reference image was provided. INVENT a single consistent performer and setting that fit
+the Scene Concept, then REUSE them across EVERY clip so it reads as one cohesive music video.
+Show the performer delivering vocals on lyric clips and stay on-concept."""
         )
 
         system_prompt = f"""You are a music video director. Plan each clip AND write its prompts. Output ONLY the JSON array.
@@ -744,6 +829,8 @@ class MusicVideoPlanner(BasePlanner):
 {character_style_contract}
 
 {visible_text_contract}
+
+{direct_video_contract}
 
 {'''VISUAL AESTHETIC — the reference photo defines the visual style for the entire music video.
 Match its aesthetic (color grading, film texture, era, tone) in every image_prompt unless the
@@ -779,8 +866,8 @@ OUTPUT — respond with ONLY a JSON array:
     "action_beats": ["Action 1", "Action 2"],
     "camera_plan": {{"framing": "medium shot", "movement": "slow dolly in", "movement_intensity": "subtle"}},
     "ending_beat": "Final image",
-    "image_source": "original or previous",
-    "image_prompt": "FIRST FRAME BEFORE action — initial state, static pose, environment. No motion verbs.",
+    "image_source": "{example_image_source}",
+    "image_prompt": "{example_image_prompt}",
     "visual_changes": ["what transforms during the clip — e.g. 'performer jumps off stage', 'lights shift to red'"],
     "video_prompt": "{motion_prompt_rule}",
     "keyframe_prompts": [],
@@ -789,6 +876,8 @@ OUTPUT — respond with ONLY a JSON array:
 ]
 
 Notes:
+{'''- Direct mode: write only the situation in video_prompt. Leave image_prompt empty and do not create keyframes/windows.
+- Maestro will prepend the immutable master prompt and add Scene overview, Shot 1 and sound fields deterministically.''' if direct_video else '''
 - image_source: "original" = user's reference photo (default). "previous" = previous scene's output (same-location continuity).
 - FIELD ORDER: Write image_prompt FIRST (starting state), then visual_changes, then video_prompt.
 - visual_changes: If it says "performer jumps off stage", image_prompt shows them still ON stage.
@@ -803,20 +892,9 @@ Notes:
     * Expression / mood shifts (model animates these from prompt)
     * Lighting shifts (prompt them in video_prompt's atmospheric beats)
     * "Energy" or "intensity" beats (model picks up from music + prompt)
-- window_prompts: empty ([]) unless the scene needs >26s continuous video.
+- window_prompts: empty ([]) unless the scene needs >26s continuous video.'''}
 
-{'''SCENE-ANCHORING (avoid off-topic content):
-The user uploaded a REFERENCE IMAGE showing the performer in a SPECIFIC setting
-(stage, microphone, crowd, lighting, etc.). EVERY image_prompt and video_prompt
-MUST match that setting plus the concept (Scene Concept below). Do NOT invent
-unrelated scenes — no "knight in armor", no "moss-covered castle", no "ancient
-ruins" unless those appear in the reference image or concept text. The reference
-image is the visual ground truth; deviations beyond it are hallucinations.''' if has_reference else '''SCENE-ANCHORING (avoid off-topic content):
-No reference image was provided. INVENT a single consistent performer (the
-vocalist/artist) and a setting that fit the Scene Concept below, then REUSE the
-same artist and world across EVERY clip so it reads as one cohesive music video.
-Show the performer delivering the vocals on lyric clips. Stay on-concept — do NOT
-drift into unrelated scenes the concept doesn't imply.'''}
+{scene_anchor_contract}
 
 KEEP MUSIC-VIDEO PROMPTS EXECUTABLE:
 For each scene, the music drives the pacing and energy. Identify:
@@ -832,7 +910,7 @@ Return exactly one object for every requested clip. Preserve each one-based clip
 
         # Inject model-specific prompt polish guide if provided
         polish_block = kwargs.get("polish_block", "")
-        if polish_block:
+        if polish_block and not direct_video:
             system_prompt = f"{system_prompt}\n\n{polish_block}"
 
         # Inject content guidance (NSFW or safety guardrails)
@@ -848,12 +926,12 @@ Write {len(clips)} structured shot plans for clip indexes 1-{len(clips)}. Go:"""
 
         # Send ALL reference images to the LLM (main + character + location refs)
         image_paths = []
-        if has_reference and reference_image_path:
+        if not direct_video and has_reference and reference_image_path:
             image_paths.append(reference_image_path)
-        for cp in (kwargs.get("character_ref_paths") or []):
+        for cp in (() if direct_video else (kwargs.get("character_ref_paths") or [])):
             if cp and os.path.isfile(cp):
                 image_paths.append(cp)
-        for lp in (kwargs.get("location_ref_paths") or []):
+        for lp in (() if direct_video else (kwargs.get("location_ref_paths") or [])):
             if lp and os.path.isfile(lp):
                 image_paths.append(lp)
         if not image_paths:
@@ -900,7 +978,7 @@ Write {len(clips)} structured shot plans for clip indexes 1-{len(clips)}. Go:"""
                 },
                 "ending_beat": {"type": "string"},
                 "image_source": {"type": "string"},
-                "image_prompt": {"type": "string", "minLength": 24},
+                "image_prompt": {"type": "string", "minLength": 0 if direct_video else 24},
                 "visual_changes": {"type": "array", "items": {"type": "string"}},
                 "video_prompt": {"type": "string", "minLength": 16},
                 "keyframe_prompts": {"type": "array", "items": {"type": "string"}},
@@ -927,7 +1005,11 @@ Write {len(clips)} structured shot plans for clip indexes 1-{len(clips)}. Go:"""
             image_paths=image_paths,
             json_schema=response_schema,
         )
-        slots, missing, alternatives = self._partition_shot_plans(candidates, len(clips))
+        slots, missing, alternatives = self._partition_shot_plans(
+            candidates,
+            len(clips),
+            require_image=not direct_video,
+        )
 
         if alternatives:
             print(
@@ -947,8 +1029,8 @@ Write {len(clips)} structured shot plans for clip indexes 1-{len(clips)}. Go:"""
             repair_system = f"""You repair missing music-video shot plans.
 Return ONLY a JSON array with exactly one complete object for each requested clip_index.
 Do not return already completed indexes. Preserve the requested one-based clip_index values.
-Every image_prompt must describe a static first frame and contain at least 24 characters.
-Every video_prompt must describe subsequent action. {"Use 15-40 words." if is_ltx else "Use chronological, visually executable natural English."}
+{("image_prompt must be empty. video_prompt must contain only the concrete clip situation; never repeat the master prompt." if direct_video else "Every image_prompt must describe a static first frame and contain at least 24 characters. Every video_prompt must describe subsequent action.")}
+{("Use concise chronological, visually executable natural English." if direct_video else "Use 15-40 words." if is_ltx else "Use chronological, visually executable natural English.")}
 {character_style_contract}
 {visible_text_contract}
 Use empty keyframe_prompts and window_prompts unless strictly necessary.
@@ -979,6 +1061,7 @@ Return only these {len(missing)} missing shot plans."""
                 repaired,
                 len(clips),
                 positional_indices=missing,
+                require_image=not direct_video,
             )
             for index in missing:
                 if index in repaired_slots:

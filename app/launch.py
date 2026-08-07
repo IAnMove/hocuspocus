@@ -7307,6 +7307,16 @@ async def director_v2_plan(request: Request):
         )
 
         # Build planner kwargs from request body
+        from services.director.planners.music_video import normalize_music_video_treatment
+        normalized_treatment = normalize_music_video_treatment(
+            body.get("music_video_treatment")
+        )
+        direct_video = (
+            skill_type == "music_video"
+            and normalized_treatment.get("generation_mode") == "direct_video"
+        )
+        if skill_type == "music_video":
+            body["music_video_treatment"] = normalized_treatment
         planner_kwargs = _director_v2_planner_kwargs(body)
 
         # NSFW from server config (enforced: never with public providers)
@@ -7350,17 +7360,17 @@ async def director_v2_plan(request: Request):
             total=planned_shots,
             detail=f"Turning {planned_shots} scenes into image and video prompts…",
         )
-        has_reference = bool(
+        has_reference = not direct_video and bool(
             body.get("reference_image_path")
             or body.get("character_ref_paths")
             or body.get("location_ref_paths")
         )
-        prompt_type = body.get("prompt_type", "both")
+        prompt_type = "video" if direct_video else body.get("prompt_type", "both")
         rendered = director.render_plan(plan, prompt_type=prompt_type, has_reference=has_reference)
         clip_plans = director.plan_to_clip_plans(rendered)
 
         # Third-pass polish: run each prompt through the enhance pipeline
-        if polish_mode == "third_pass" and clip_plans:
+        if polish_mode == "third_pass" and clip_plans and not direct_video:
             from services.director.prompt_polish import polish_prompts_third_pass
             nsfw = planner_kwargs.get("nsfw", False)
             # Forward character profiles so polish can map names → correct
@@ -7402,13 +7412,28 @@ async def director_v2_plan(request: Request):
         from services.director.policies import enforce_visual_style_on_clip_plans
         clip_plans = enforce_visual_style_on_clip_plans(
             clip_plans,
-            body.get("visual_style", ""),
-            preserve=bool(body.get("preserve_visual_style", False)),
+            "" if direct_video else body.get("visual_style", ""),
+            preserve=(
+                False if direct_video
+                else bool(body.get("preserve_visual_style", False))
+            ),
             has_reference=has_reference,
-            character_visual_style=body.get("character_visual_style", ""),
-            allow_clip_text=body.get("allow_clip_text") is True,
+            character_visual_style=(
+                "" if direct_video else body.get("character_visual_style", "")
+            ),
+            allow_clip_text=(
+                True if direct_video else body.get("allow_clip_text") is True
+            ),
         )
-        if video_model == minimax_h3_service.MODEL_ID:
+        if direct_video:
+            from services.director.policies import enforce_direct_video_on_clip_plans
+            clip_plans = enforce_direct_video_on_clip_plans(
+                clip_plans,
+                normalized_treatment.get("direct_video_master_prompt"),
+                audio_direction=body.get("h3_audio_prompt", ""),
+                allow_clip_text=body.get("allow_clip_text") is True,
+            )
+        elif video_model == minimax_h3_service.MODEL_ID:
             from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
             serialized_plan = plan.to_dict()
             clip_plans = adapt_clip_plans_for_h3(

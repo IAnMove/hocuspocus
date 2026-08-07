@@ -814,7 +814,8 @@ export interface PipelineResourceSchedule {
 export interface PipelineStatus {
   id: string
   status: 'running' | 'paused' | 'preview_ready' | 'completed' | 'failed' | 'cancelled'
-  phase: 'planning' | 'polishing_prompts' | 'generating_images' | 'preview_ready' | 'generating_video' | 'post_processing' | 'completed'
+  phase: 'planning' | 'polishing_prompts' | 'preparing_direct_video' | 'generating_images' | 'preview_ready' | 'generating_video' | 'post_processing' | 'completed'
+  generation_mode?: 'image_guided' | 'direct_video'
   auto_mode: boolean
   progress: { current: number; total: number; message: string; step: number; total_steps: number }
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
