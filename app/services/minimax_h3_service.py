@@ -207,10 +207,11 @@ _runtime_lock = threading.RLock()
 _active_prompt: str | None = None
 _idle_shutdown_timer: threading.Timer | None = None
 
-# Keep the large H3 sidecar warm briefly after the queue becomes idle. The
-# caller cancels this timer when a compatible job arrives, so a run of clips
-# does not repeatedly reload the model just to generate the next one.
-DEFAULT_IDLE_SHUTDOWN_SECONDS = 45.0
+# Queued H3 jobs are detected explicitly and keep the sidecar warm, so once the
+# queue is genuinely empty there is little value in retaining tens of GB of
+# pinned host memory for almost a minute. Keep only a short grace period for a
+# quick manual rerun, then release the isolated runtime.
+DEFAULT_IDLE_SHUTDOWN_SECONDS = 10.0
 
 
 def _python_executable() -> Path:
@@ -219,6 +220,12 @@ def _python_executable() -> Path:
 
 def is_runtime_installed() -> bool:
     return _python_executable().is_file() and (COMFY_DIR / "main.py").is_file()
+
+
+def is_runtime_running() -> bool:
+    """Return whether the isolated H3 sidecar is currently resident."""
+    with _runtime_lock:
+        return _process is not None and _process.poll() is None
 
 
 def _model_path(relative_name: str) -> Path:
@@ -455,6 +462,7 @@ def schedule_idle_shutdown(
                 if should_keep_warm is not None and should_keep_warm():
                     return
                 _stop_runtime_locked()
+                print("[MiniMax H3] Idle runtime released.")
 
         timer = threading.Timer(delay, _shutdown_if_still_idle)
         timer.daemon = True

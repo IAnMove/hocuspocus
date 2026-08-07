@@ -165,7 +165,7 @@ if _services.get("auto_performance") and not _services.get("auto_performance_app
 sys.argv = _original_argv
 
 # --- FastAPI setup ---
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -4711,7 +4711,7 @@ def get_system_stats_live():
     """
     from services.live_stats import get_live_stats
 
-    stats = get_live_stats()
+    stats = get_live_stats(os.path.join(os.path.dirname(_app_dir), "ui", "dist"))
 
     # Currently-loaded generation model. WGP/mmgp keeps it resident
     # between jobs. `transformer_type` tracks the live load (set at the
@@ -4729,6 +4729,17 @@ def get_system_stats_live():
                 model_name = md.get("name") or model_type
             except Exception:
                 model_name = model_type
+    except Exception:
+        pass
+
+    # MiniMax H3 runs in an isolated ComfyUI sidecar, outside WGP's
+    # ``wan_model`` bookkeeping. Surface it as resident while its short idle
+    # grace period is active so high RAM/VRAM is not mistaken for a hidden job.
+    try:
+        if minimax_h3_service.is_runtime_running():
+            model_type = minimax_h3_service.MODEL_ID
+            model_name = minimax_h3_service.MODEL_NAME
+            model_loaded = True
     except Exception:
         pass
 
@@ -15189,13 +15200,16 @@ def _resolve_output_file(filename: str) -> str | None:
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = "", media_type: str = ""):
+def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = "", media_type: str = ""):
     """List generated output files (newest first) from the active workspace.
 
     Supports pagination via limit/offset query params.
     Returns {outputs, total} where total is the full count before pagination.
     When limit=0 (default), returns all items (backwards compatible).
     """
+    # The gallery is a live index, not a cacheable document. In particular a
+    # Pinokio popup may stay open across generations and server restarts.
+    response.headers["Cache-Control"] = "no-store"
     out_dir = _workspace_dir()
     if not os.path.isdir(out_dir):
         return {"outputs": [], "total": 0}

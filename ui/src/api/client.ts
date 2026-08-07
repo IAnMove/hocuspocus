@@ -414,7 +414,7 @@ export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly
   if (opts?.search) params.set('search', opts.search)
   if (opts?.mediaType) params.set('media_type', opts.mediaType)
   const qs = params.toString()
-  const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`)
+  const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`, { cache: 'no-store' })
   if (!res.ok) throw new Error('Failed to fetch outputs')
   const data = await res.json()
   return { outputs: data.outputs, total: data.total ?? data.outputs.length }

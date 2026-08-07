@@ -786,6 +786,9 @@ export interface SystemStats {
   /** Generation model currently resident in VRAM (WGP/mmgp). `loaded`
    *  distinguishes "actually in memory now" from "last/selected type". */
   model: { name: string | null; model_type: string | null; loaded: boolean }
+  /** Changes when Maestro restarts or a different React build is deployed.
+   *  The client uses it to avoid running a stale bundle indefinitely. */
+  runtime?: { instance_id: string; ui_build_id: string }
 }
 
 export interface LlmModelOption {

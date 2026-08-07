@@ -7031,9 +7031,26 @@ export const useStore = create<AppState>((set, get) => ({
       const current = get().outputs
       const currentNames = new Set(current.map(o => o.name))
       const newItems = fresh.filter(o => !currentNames.has(o.name))
-      if (newItems.length > 0) {
-        // Prepend new items (newest first) and shift selectedOutput to keep the same item active
-        const merged = [...newItems, ...current]
+      const freshByName = new Map(fresh.map(output => [output.name, output]))
+      const updatedCurrent = current.map(output => {
+        const latest = freshByName.get(output.name)
+        if (!latest) return output
+        const unchanged = latest.url === output.url
+          && latest.type === output.type
+          && latest.mode === output.mode
+          && latest.edit_sub_mode === output.edit_sub_mode
+          && latest.favorite === output.favorite
+          && latest.size === output.size
+          && latest.created_at === output.created_at
+          && latest.thumbnail_url === output.thumbnail_url
+        return unchanged ? output : latest
+      })
+      const existingChanged = updatedCurrent.some((output, index) => output !== current[index])
+      if (newItems.length > 0 || existingChanged || total !== get().outputsTotal) {
+        // Prepend new items (newest first), update files that were first seen
+        // while still being written, and shift selection to keep the same
+        // logical item active.
+        const merged = [...newItems, ...updatedCurrent]
         const sel = get().selectedOutput
         set({ outputs: merged, outputsTotal: total, selectedOutput: sel + newItems.length })
       }

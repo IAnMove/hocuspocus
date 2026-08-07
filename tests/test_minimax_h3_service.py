@@ -446,6 +446,9 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
 
         h3.cancel_idle_shutdown()
 
+    def test_idle_shutdown_default_releases_host_memory_promptly(self):
+        self.assertEqual(h3.DEFAULT_IDLE_SHUTDOWN_SECONDS, 10.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,11 +37,6 @@ function RetryImage({ url, alt }: { url: string; alt: string }) {
   const retries = useRef(0)
   const maxRetries = 5
 
-  useEffect(() => {
-    retries.current = 0
-    setSrc(url)
-  }, [url])
-
   const scheduleRetry = useCallback(() => {
     if (retries.current < maxRetries) {
       retries.current++
@@ -120,6 +115,14 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const itemRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
+  const releaseVideo = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
+  }, [])
+
   // Measure actual height and report to parent
   useEffect(() => {
     const el = itemRef.current
@@ -168,11 +171,10 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
 
   // Pause video when scrolled out of view (but don't auto-play when scrolled in)
   useEffect(() => {
-    if (!videoRef.current) return
     if (!isActive) {
-      videoRef.current.pause()
+      releaseVideo()
     }
-  }, [isActive])
+  }, [isActive, releaseVideo])
 
   // A scrolled-away clip releases its MP4 source. Returning to it shows the
   // cheap server thumbnail again until the user explicitly presses Play.
@@ -182,7 +184,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
 
   useEffect(() => {
     setVideoReady(false)
-  }, [file.url])
+    return releaseVideo
+  }, [file.url, releaseVideo])
 
   const params = meta?.params as Record<string, unknown> | null
   const uploadFilenames = meta?.upload_filenames as Record<string, string> | undefined
@@ -545,7 +548,11 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             )}
           </div>
         ) : (
-          <RetryImage url={isActive ? file.url : (file.thumbnail_url || file.url)} alt={file.name} />
+          <RetryImage
+            key={isActive ? file.url : (file.thumbnail_url || file.url)}
+            url={isActive ? file.url : (file.thumbnail_url || file.url)}
+            alt={file.name}
+          />
         )}
       </div>
 
