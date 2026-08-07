@@ -1,17 +1,4 @@
-"""Maestro family handler for MiniMax H3 Base.
-
-Two checkpoints are exposed.  FL2VA is the unified one: text-to-video,
-image-to-video, first/last-frame video, and continuation, all with native
-stereo audio.  Ref2VA conditions on material that is not a frame of the
-output -- reference stills carrying an identity or a subject, a reference
-clip carrying a look or a motion, and audio references carrying a voice,
-including the reference clip's own soundtrack.
-
-One reference clip, not two.  H3 accepts a second, but Maestro has a single
-``video_guide`` input and no ``video_guide2``; adding one means new
-attachment plumbing shared by every model, so the second slot is left unbuilt
-rather than offered as a control that cannot receive a file.
-"""
+"""Maestro family handler for MiniMax H3 Base FL2VA and Ref2VA."""
 
 from __future__ import annotations
 
@@ -19,26 +6,26 @@ import os
 
 import torch
 
-from .prompt_enhancer import (
-    FL2VA_IMAGE_SYSTEM_PROMPT,
-    FL2VA_PROMPT_INFOS,
-    FL2VA_TEXT_SYSTEM_PROMPT,
-    REF2VA_IMAGE_SYSTEM_PROMPT,
-    REF2VA_PROMPT_INFOS,
-    REF2VA_TEXT_SYSTEM_PROMPT,
-)
-
 
 _MODEL_TYPE = "minimax_h3"
-_MODEL_TYPE_REF2VA = "minimax_h3_ref2va"
+_REF2VA_MODEL_TYPE = "minimax_h3_ref2va"
+_FULL_MODEL_TYPE = "minimax_h3_full"
+_REF2VA_FULL_MODEL_TYPE = "minimax_h3_ref2va_full"
 _COMFY_REPO = "Comfy-Org/MiniMax-H3"
 _COMFY_REVISION = "0543966fbdce5ba05709a8f2031c94bdba629b4a"
 _OFFICIAL_REPO = "MiniMaxAI/MiniMax-H3"
 _OFFICIAL_REVISION = "5d9b308a59ab12e67147f191e184baf704185bd1"
+_DEEPBEEP_REPO = "DeepBeepMeep/MiniMax-H3"
+_DEEPBEEP_REVISION = "fec7846aef352e58a1cfb699455e3d104281e68b"
 _ASSETS_ROOT = "minimax_h3"
 
 _TRANSFORMER = "minimax_h3_fl2va_pruned_fp8_scaled.safetensors"
+_REF2VA_TRANSFORMER = "minimax_h3_ref2va_pruned_fp8_scaled.safetensors"
 _TEXT_ENCODER = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+_TEXT_ENCODER_BF16 = "Qwen3-VL-32B-Instruct-layer50_bf16.safetensors"
+_TEXT_ENCODER_INT8 = "Qwen3-VL-32B-Instruct-layer50_quanto_bf16_int8.safetensors"
+_TEXT_ENCODER_GGUF_Q2 = "qwen3vl-32B-MiniMax-H3-Q2_K.gguf"
+_TEXT_ENCODER_GGUF_Q4 = "qwen3vl-32B-MiniMax-H3-Q4_K_M.gguf"
 _VIDEO_VAE = "minimax_h3_video_vae_fp16.safetensors"
 _AUDIO_VAE = "minimax_h3_audio_vae_fp32.safetensors"
 
@@ -48,79 +35,177 @@ _AUDIO_VAE = "minimax_h3_audio_vae_fp32.safetensors"
 # the entire available VRAM budget.  ``workingVRAM`` reserves this amount
 # independently of the user's card size; MMGP streams more transformer
 # blocks on smaller cards instead of starving the first denoising step.
-#
-# Sized for the largest canvas the model will accept rather than for 480p.
-# Attention holds query, key and value for the whole packed sequence at
-# once, each of them ``rows * heads * head_dim`` -- about 1 GB apiece per
-# 80k rows -- and the residual stream alongside them.  A 480p-sized
-# reservation left MMGP holding ~26 GB of weights on a 31 GB card, which is
-# short by roughly one of those tensors, so the first block of the first
-# step died allocating ``value``.  This is a worst-case figure because
-# ``load_model`` is per-model, not per-generation: it cannot know the
-# resolution, so it must cover the largest.  The cost is more block
-# streaming at small canvases, which is slower but does not fail.
-_TRANSFORMER_WORKING_VRAM_MB = 16 * 1024
+_TRANSFORMER_WORKING_VRAM_MB = 10 * 1024
 
-
-# The shortest edge that still counts as "meant to be native". 640 is a canvas H3 lists in its own right
-# (1152x640), so the band starts above it: a request for 640 is a request for 640, while 704 or 720 is a
-# generic preset aiming at the same scale as native and falling short.
-_NATIVE_LIFT_FLOOR = 672
-
-
-def _snap_resolution(resolution):
-    """Snap a requested canvas onto the grid H3 can actually sample, keeping its size and aspect.
-
-    H3 needs both axes on a multiple of 32. The UI offers generic presets -- 848x480, 1280x720, 1920x1080 --
-    and none of those are multiples of 32 on both axes, so a membership test against a curated list rejects
-    almost all of them.
-
-    Rejecting used to mean falling back to 864x480, which is why every preset except 540p silently produced
-    a 480p render. Snapping keeps the resolution that was asked for: 1280x720 becomes 1280x704, 1920x1080
-    becomes 1920x1088.
-
-    Only the 32px grid is enforced, because that is the only thing `generate` actually requires. H3 defines
-    a 768*1344 figure, but it belongs to `resolve_canvas_size`, which resolves an aspect ratio into a
-    default canvas for reference material -- it is not a ceiling on the output, and imposing it here would
-    cap 1080p for no reason. What limits resolution in practice is VRAM.
-
-    Anything that is not a concrete WxH is returned untouched. The "auto" aspect resolves to sentinels like
-    `auto_720p`, which are resolved downstream from the source material -- replacing one with a fixed canvas
-    would be the same bug wearing a different hat.
-    """
-    from .packing import MINIMAX_H3_CANVAS_MULTIPLE, MINIMAX_H3_SHORT_EDGE
-
-    multiple = MINIMAX_H3_CANVAS_MULTIPLE
-    try:
-        raw_width, raw_height = (int(part) for part in str(resolution).lower().split("x", 1))
-    except (TypeError, ValueError):
-        return resolution
-    if raw_width <= 0 or raw_height <= 0:
-        return resolution
-
-    # A request that lands just under H3's native scale is lifted onto it, keeping its aspect ratio. The
-    # model's short edge is 768 -- `resolve_canvas_size` targets it and upstream's own list calls 1344x768
-    # "16:9 native" -- and a generic 720p preset rounds to 704, close enough to native to be clearly meant
-    # as it, but under the scale the model was trained at, which costs sharpness for nothing.
-    #
-    # Deliberately narrow, so smaller presets stay where they were put. The long edge must already reach
-    # native, which is what separates "a wide canvas falling short on its short edge" from "a small square":
-    # 540p's 736x736 and 480p's 672x672 have short edges inside the band but are simply small requests, and
-    # a plain short-edge test would inflate both.
-    short_edge, long_edge = min(raw_width, raw_height), max(raw_width, raw_height)
-    if _NATIVE_LIFT_FLOOR <= short_edge < MINIMAX_H3_SHORT_EDGE and long_edge >= MINIMAX_H3_SHORT_EDGE:
-        scale = MINIMAX_H3_SHORT_EDGE / short_edge
-        raw_width, raw_height = raw_width * scale, raw_height * scale
-
-    width = max(multiple, int(round(raw_width / multiple)) * multiple)
-    height = max(multiple, int(round(raw_height / multiple)) * multiple)
-    return f"{width}x{height}"
+# H3's video VAE accepts 17*n+5 pixel frames. 345 is the final valid
+# frame count at or below the official 15-second limit (14.375s at 24fps).
+# First/Last may continue beyond that duration, but every individual model
+# pass remains inside this native limit and reuses exactly one boundary frame.
+_H3_MIN_FRAMES = 124
+_H3_MAX_FRAMES = 345
+_H3_SLIDING_WINDOW_DEFAULTS = {
+    "window_min": _H3_MIN_FRAMES,
+    "window_max": _H3_MAX_FRAMES,
+    "window_step": 17,
+    "window_default": _H3_MAX_FRAMES,
+    "overlap_min": 1,
+    "overlap_max": 1,
+    "overlap_step": 0,
+    "overlap_default": 1,
+    "discard_last_frames": 0,
+}
 
 
 def _hf_url(repo_id: str, revision: str, *parts: str) -> str:
     path = "/".join(part.strip("/\\") for part in parts if part)
     return f"https://huggingface.co/{repo_id}/resolve/{revision}/{path}"
 
+
+def _text_encoder_variants() -> dict[str, dict]:
+    deepbeep_folder = "Qwen3-VL-32B-Instruct"
+    return {
+        "nvfp4_awq": {
+            "name": "NVFP4 AWQ (Recommended)",
+            "size_hint": (
+                "~15.7 GB download · native acceleration requires an RTX 50-series "
+                "GPU; RTX 40 and older use Maestro's proven compatibility fallback"
+            ),
+            "URLs": [
+                _hf_url(
+                    _COMFY_REPO,
+                    _COMFY_REVISION,
+                    "text_encoders",
+                    _TEXT_ENCODER,
+                )
+            ],
+        },
+        "gguf_q2_k": {
+            "name": "GGUF Q2_K (Lowest RAM)",
+            "size_hint": "~8.5 GB download · lowest system-memory use",
+            "URLs": [
+                _hf_url(
+                    _DEEPBEEP_REPO,
+                    _DEEPBEEP_REVISION,
+                    deepbeep_folder,
+                    _TEXT_ENCODER_GGUF_Q2,
+                )
+            ],
+        },
+        "gguf_q4_k_m": {
+            "name": "GGUF Q4_K_M",
+            "size_hint": "~14.6 GB download · balanced quality and system-memory use",
+            "URLs": [
+                _hf_url(
+                    _DEEPBEEP_REPO,
+                    _DEEPBEEP_REVISION,
+                    deepbeep_folder,
+                    _TEXT_ENCODER_GGUF_Q4,
+                )
+            ],
+        },
+        "int8": {
+            "name": "Quanto INT8",
+            "size_hint": "~26.7 GB download · optional high-fidelity encoder with high system-memory use",
+            "URLs": [
+                _hf_url(
+                    _DEEPBEEP_REPO,
+                    _DEEPBEEP_REVISION,
+                    deepbeep_folder,
+                    _TEXT_ENCODER_INT8,
+                )
+            ],
+        },
+        "bf16": {
+            "name": "BF16 (Maximum Fidelity)",
+            "size_hint": "~51.5 GB download · maximum fidelity and very high system-memory use",
+            "URLs": [
+                _hf_url(
+                    _DEEPBEEP_REPO,
+                    _DEEPBEEP_REVISION,
+                    deepbeep_folder,
+                    _TEXT_ENCODER_BF16,
+                )
+            ],
+        },
+    }
+
+
+def _recommend_text_encoder(hardware: dict | None, available=None) -> str:
+    """Choose a proven encoder whose format fits system RAM."""
+
+    choices = set(available or _text_encoder_variants())
+    hardware = hardware or {}
+    try:
+        ram_gb = float(hardware.get("ram_gb") or 0)
+    except (TypeError, ValueError):
+        ram_gb = 0
+    # The Comfy NVFP4-AWQ conditioner is Maestro's known-good H3 path.  RTX
+    # 50 cards execute it natively; older NVIDIA cards use the compatibility
+    # kernels successfully.  Prefer it whenever system RAM can hold it rather
+    # than silently switching established users to a newly added encoder.
+    if "nvfp4_awq" in choices and (hardware.get("supports_nvfp4") or ram_gb >= 24):
+        return "nvfp4_awq"
+    if ram_gb >= 56 and "int8" in choices:
+        return "int8"
+    if ram_gb >= 24 and "gguf_q4_k_m" in choices:
+        return "gguf_q4_k_m"
+    if "gguf_q2_k" in choices:
+        return "gguf_q2_k"
+    if "nvfp4_awq" in choices:
+        return "nvfp4_awq"
+    return next(iter(choices), "nvfp4_awq")
+
+
+_H3_RESOLUTION_PRESETS = {
+    "480p": {
+        "label": "480p",
+        "values": {
+            "auto": "auto_480p",
+            "16:9": "864x480",
+            "9:16": "480x864",
+            "1:1": "640x640",
+            "4:3": "640x480",
+            "3:4": "480x640",
+        },
+    },
+    "540p": {
+        "label": "540p",
+        "values": {
+            "auto": "auto_540p",
+            "16:9": "960x544",
+            "9:16": "544x960",
+            "1:1": "736x736",
+            "4:3": "736x544",
+            "3:4": "544x736",
+        },
+    },
+    # Keep the shared UI's stable 720p key, but label and map it to H3's
+    # official 768px-short-edge native canvas.
+    "720p": {
+        "label": "768p",
+        "values": {
+            "auto": "auto_720p",
+            "16:9": "1344x768",
+            "9:16": "768x1344",
+            "1:1": "768x768",
+            "4:3": "1024x768",
+            "3:4": "768x1024",
+        },
+    },
+}
+_H3_RESOLUTION_PRESET_ORDER = ["480p", "540p", "720p"]
+_H3_AUTO_RESOLUTION_BUDGETS = {
+    "auto": 1344 * 768,
+    "auto_480p": 864 * 480,
+    "auto_540p": 960 * 544,
+    "auto_720p": 1344 * 768,
+}
+_H3_AUTO_RESOLUTION_FALLBACKS = {
+    "auto": "1344x768",
+    "auto_480p": "864x480",
+    "auto_540p": "960x544",
+    "auto_720p": "1344x768",
+}
 
 _RESOLUTIONS = [
     ("1344x768 (16:9 native)", "1344x768"),
@@ -132,18 +217,91 @@ _RESOLUTIONS = [
     ("640x1152 (9:16)", "640x1152"),
     ("960x544 (16:9)", "960x544"),
     ("544x960 (9:16)", "544x960"),
+    ("736x544 (4:3)", "736x544"),
+    ("544x736 (3:4)", "544x736"),
+    ("736x736 (1:1)", "736x736"),
     ("864x480 (16:9 low VRAM)", "864x480"),
     ("480x864 (9:16 low VRAM)", "480x864"),
+    ("640x480 (4:3 low VRAM)", "640x480"),
+    ("480x640 (3:4 low VRAM)", "480x640"),
     ("640x640 (1:1 low VRAM)", "640x640"),
     ("608x352 (16:9 minimum)", "608x352"),
     ("352x608 (9:16 minimum)", "352x608"),
 ]
 
+_LEGACY_RESOLUTION_ALIASES = {
+    "848x480": "864x480",
+    "480x848": "480x864",
+    "672x672": "640x640",
+    "832x608": "736x544",
+    "608x832": "544x736",
+    "1280x720": "1344x768",
+    "1280x704": "1344x768",
+    "720x1280": "768x1344",
+    "704x1280": "768x1344",
+    "1024x1024": "768x768",
+    "1104x832": "1024x768",
+    "832x1104": "768x1024",
+    "1920x1088": "1344x768",
+    "1088x1920": "768x1344",
+}
+
+
+def _normalize_h3_resolution(value) -> str:
+    """Preserve requested orientation while snapping old presets to H3."""
+
+    resolution = str(value or "864x480").strip().lower()
+    if resolution in _H3_AUTO_RESOLUTION_BUDGETS:
+        return resolution
+    if resolution in _LEGACY_RESOLUTION_ALIASES:
+        return _LEGACY_RESOLUTION_ALIASES[resolution]
+
+    supported = [item for _, item in _RESOLUTIONS]
+    if resolution in supported:
+        return resolution
+    try:
+        width_text, height_text = resolution.split("x", 1)
+        width, height = int(width_text), int(height_text)
+        if width <= 0 or height <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return "864x480"
+
+    orientation = 0 if width == height else (1 if width > height else -1)
+    candidates = []
+    for candidate in supported:
+        candidate_width, candidate_height = (int(part) for part in candidate.split("x", 1))
+        candidate_orientation = (
+            0
+            if candidate_width == candidate_height
+            else (1 if candidate_width > candidate_height else -1)
+        )
+        if candidate_orientation == orientation:
+            candidates.append((candidate, candidate_width, candidate_height))
+    if not candidates:
+        return "864x480"
+
+    target_aspect = width / height
+    target_area = width * height
+
+    def score(item):
+        _, candidate_width, candidate_height = item
+        aspect_error = abs((candidate_width / candidate_height) - target_aspect) / target_aspect
+        area_error = abs((candidate_width * candidate_height) - target_area) / target_area
+        return aspect_error * 8 + area_error
+
+    return min(candidates, key=score)[0]
+
 
 class family_handler:
     @staticmethod
     def query_supported_types():
-        return [_MODEL_TYPE, _MODEL_TYPE_REF2VA]
+        return [
+            _MODEL_TYPE,
+            _FULL_MODEL_TYPE,
+            _REF2VA_MODEL_TYPE,
+            _REF2VA_FULL_MODEL_TYPE,
+        ]
 
     @staticmethod
     def query_family_maps():
@@ -158,134 +316,145 @@ class family_handler:
         return {"minimax_h3": (55, "MiniMax H3")}
 
     @staticmethod
+    def recommend_text_encoder(hardware, model_def=None):
+        variants = (model_def or {}).get("minimax_h3_text_encoder_variants")
+        return _recommend_text_encoder(hardware, variants)
+
+    @staticmethod
     def query_model_def(base_model_type, model_def):
-        reference_mode = base_model_type == _MODEL_TYPE_REF2VA
-        definition = {
+        omni_reference = base_model_type in {
+            _REF2VA_MODEL_TYPE,
+            _REF2VA_FULL_MODEL_TYPE,
+        }
+        full_checkpoint = base_model_type in {
+            _FULL_MODEL_TYPE,
+            _REF2VA_FULL_MODEL_TYPE,
+        }
+        text_encoder_variants = _text_encoder_variants()
+        workflow_help = (
+            "OMNI REFERENCES\n"
+            "Use ordered image, video, and audio references to guide identity, "
+            "appearance, motion, scenes, voices, or sound. The references guide "
+            "a newly generated result rather than becoming fixed first/last frames. "
+            "H3 also generates synchronized stereo audio. Omni uses one native "
+            "model pass and is limited to 14.4 seconds."
+            if omni_reference
+            else
+            "FIRST / LAST\n"
+            "Generate from text alone, a first frame, a last frame, or both. H3 "
+            "generates synchronized stereo audio, but this workflow does not accept "
+            "reference audio. Longer videos continue through native 14.4-second "
+            "windows using the prior window's last frame."
+        )
+        checkpoint_help = (
+            "FULL 33B\n"
+            "The larger original checkpoint uses more disk, RAM, and weight "
+            "streaming. Choose it when you want the Full model or need an H3 "
+            "Turbo / distilled LoRA."
+            if full_checkpoint
+            else
+            "PRUNED 20B (RECOMMENDED)\n"
+            "The lighter checkpoint has the same workflow controls with lower "
+            "disk, RAM, and loading cost. H3 Turbo / distilled LoRAs are Full-only "
+            "and are hidden while this model is selected."
+        )
+        result = {
             "dtype": "bf16",
             "fps": 24,
             # H3's video VAE accepts only 17*n+5 frames.  124 is the first
             # valid count at or above five seconds; 345 is the last at or
             # below fifteen seconds.
-            # H3's prompt is one structured block (integrated_multimodal_
-            # description / overall_soundscape / non_diegetic_music separated
-            # by blank lines). Without this Maestro splits it on newlines and
-            # runs each field as its own generation.
-            "single_block_prompt": True,
-            "preserve_empty_prompt_lines": True,
-            "frames_minimum": 124,
+            "frames_minimum": _H3_MIN_FRAMES,
             "frames_steps": 17,
-            "frames_maximum": 345,
+            "frames_maximum": _H3_MAX_FRAMES,
             "latent_size": 17,
             "frame_alignment_modulus": 17,
             "frame_alignment_remainder": 5,
             "frame_alignment_mode": "ceil",
-            "sliding_window": False,
+            "sliding_window": not omni_reference,
+            "video_continuation": not omni_reference,
+            # The overall joined timeline need not itself lie on H3's
+            # per-pass 17*n+5 grid. Keep the requested total exact, align
+            # each pass independently, then trim only the final joined tail.
+            "sliding_window_exact_total_frames": not omni_reference,
+            "sliding_window_trim_to_requested": not omni_reference,
+            "sliding_window_end_image_at_final": not omni_reference,
+            # Director renders H3 as independent native-duration shots rather
+            # than pretending it supports the rolling-window contract.
+            "director_video_strategy": (
+                "omni_reference" if omni_reference else "bounded_start_end"
+            ),
+            "director_audio_input_mode": (
+                "reference_manifest" if omni_reference else "none"
+            ),
+            "director_reference_mode": (
+                "omni_manifest" if omni_reference else "start_end"
+            ),
+            # Ref2VA consumes the user's character/location references
+            # directly. FL2VA can render T2V or use generated start/end
+            # frames, selected per Director project.
+            "director_shot_image_support": (
+                "direct_references" if omni_reference else "optional"
+            ),
+            "director_endpoint_continuity": not omni_reference,
+            "director_trim_end_frames": False,
             "t2v_class": True,
-            "i2v_class": not reference_mode,
+            "i2v_class": not omni_reference,
+            "image_prompt_types_allowed": "" if omni_reference else "TSE",
+            "end_frames_always_enabled": not omni_reference,
             "returns_audio": True,
+            # Ref2VA accepts audio through its ordered Omni manifest, not
+            # through Wan's generic audio-guide input. Keep that capability
+            # explicit so the UI can distinguish Audio In from Audio Out.
+            "supports_reference_audio": omni_reference,
             "no_negative_prompt": True,
             "guidance_max_phases": 0,
             "visible_phases": 0,
             "compile": False,
             "resolutions": _RESOLUTIONS,
+            "resolution_presets": _H3_RESOLUTION_PRESETS,
+            "resolution_preset_order": _H3_RESOLUTION_PRESET_ORDER,
+            "supports_auto_aspect": True,
+            "auto_resolution_budgets": _H3_AUTO_RESOLUTION_BUDGETS,
+            "auto_resolution_fallbacks": _H3_AUTO_RESOLUTION_FALLBACKS,
             "profiles_dir": ["minimax_h3"],
             "minimax_h3_assets_root": _ASSETS_ROOT,
             "text_encoder_folder": _ASSETS_ROOT,
             "text_encoder_quantization": "int8",
-            "text_encoder_URLs": [
-                _hf_url(_COMFY_REPO, _COMFY_REVISION, "text_encoders", _TEXT_ENCODER)
-            ],
-            # H3 does not read a free-form prompt: it reads a structured, field-by-field block with its own
-            # dialogue markup. A generic enhancer rewrites that into prose the model cannot parse, so the two
-            # tasks get their own instructions. Ref2VA's are longer because its prompt has six sections, not three.
-            "prompt_infos": REF2VA_PROMPT_INFOS if reference_mode else FL2VA_PROMPT_INFOS,
-            "prompt_enhancer_button_label": "Write H3 Prompt",
-            "prompt_enhancer_def": {
-                "selection": ["T", "TI"],
-                "labels": {
-                    "T": "Write an H3 Reference Prompt from Text"
-                    if reference_mode
-                    else "Write an H3 Prompt from Text",
-                    "TI": "Write an H3 Reference Prompt from Text + First Reference Image"
-                    if reference_mode
-                    else "Write an H3 Prompt from Text + Start Image",
-                },
-                "default": "",
-            },
-            "text_prompt_enhancer_instructions": (
-                REF2VA_TEXT_SYSTEM_PROMPT if reference_mode else FL2VA_TEXT_SYSTEM_PROMPT
+            "text_encoder_URLs": text_encoder_variants["nvfp4_awq"]["URLs"],
+            "minimax_h3_text_encoder_default": "nvfp4_awq",
+            "minimax_h3_text_encoder_variants": text_encoder_variants,
+            "minimax_h3_full_checkpoint": full_checkpoint,
+            "selector_help": f"{workflow_help}\n\n{checkpoint_help}",
+            "lora_compatibility_note": (
+                "H3 Turbo / distilled LoRAs are supported by this Full checkpoint."
+                if full_checkpoint
+                else
+                "H3 Turbo / distilled LoRAs require an H3 Full model and are hidden for this Pruned model."
             ),
-            "video_prompt_enhancer_instructions": (
-                REF2VA_IMAGE_SYSTEM_PROMPT if reference_mode else FL2VA_IMAGE_SYSTEM_PROMPT
-            ),
-            "text_prompt_enhancer_max_tokens": 2048 if reference_mode else 1024,
-            "video_prompt_enhancer_max_tokens": 2048 if reference_mode else 1024,
         }
-        if reference_mode:
-            # Ref2VA conditions on material that is not on the output timeline, so it takes no start/end frame.
-            # Reference stills are passed as image refs and left alone: no background removal, no resizing onto the
-            # target canvas -- each keeps its own framing, which is the whole point of a reference.
-            definition.update(
+        if omni_reference:
+            result.update(
                 {
-                    "image_prompt_types_allowed": "T",
-                    "reference_image_enabled": True,
-                    "return_image_refs_tensor": False,
-                    "no_background_removal": True,
-                    "no_processing_on_last_images_refs": 9,
-                    "image_ref_choices": {
-                        "choices": [
-                            ("Generate without Reference Images", ""),
-                            ("Use Reference Images", "I"),
-                        ],
-                        "letters_filter": "I",
-                        "default": "",
-                        "label": "Reference Images",
+                    "omni_reference": True,
+                    "omni_reference_limits": {
+                        "image": 9,
+                        "video": 3,
+                        "audio": 3,
+                        "total": 12,
                     },
-                    # A reference clip is decoded by the model from its source path, not taken from the
-                    # guide pipeline -- see `reference_video_source_path` and `_decode_reference_video`.
-                    "reference_video_source_path": True,
-                    "guide_custom_choices": {
-                        "choices": [
-                            ("Generate without a Reference Video", ""),
-                            ("Use One Reference Video", "V"),
-                        ],
-                        "letters_filter": "V",
-                        "default": "",
-                        "label": "Reference Video",
-                    },
-                    "video_guide_label": "Reference Video",
-                    "any_audio_prompt": True,
-                    "audio_prompt_choices": True,
-                    "audio_guide_label": "Audio Reference 1",
-                    "audio_guide2_label": "Audio Reference 2",
-                    "audio_prompt_type_sources": {
-                        "selection": ["", "A", "AB", "K"],
-                        "labels": {
-                            "": "Generate without an Audio Reference",
-                            "A": "Use One Audio Reference",
-                            "AB": "Use Two Audio References",
-                            "K": "Use the Reference Video's Soundtrack",
-                        },
-                        "letters_filter": "ABK",
-                        "label": "Audio References",
-                        "show_label": True,
-                        "default": "",
-                    },
-                    "video_length_not_limited_by_audio": True,
+                    "omni_reference_detail_choices": [
+                        ("Match output (recommended)", "match"),
+                        ("Maximum reference detail", "max"),
+                    ],
+                    "omni_reference_detail_default": "match",
                 }
             )
         else:
-            definition.update(
-                {
-                    # "V" enables Studio's Extend: H3 cannot generate past 15s in one pass, so a continuation
-                    # starts a fresh clip from the last frame of the previous one rather than sliding a window
-                    # over shared latents.
-                    "image_prompt_types_allowed": "TSEV",
-                    "video_continuation": True,
-                    "end_frames_always_enabled": True,
-                }
+            result["sliding_window_defaults"] = dict(
+                _H3_SLIDING_WINDOW_DEFAULTS
             )
-        return definition
+        return result
 
     @staticmethod
     def register_lora_cli_args(parser, lora_root):
@@ -298,14 +467,6 @@ class family_handler:
                 f"(default: {os.path.join(lora_root, 'minimax_h3')})"
             ),
         )
-
-    @staticmethod
-    def get_rgb_factors(base_model_type):
-        # Without this wgp's preview helper returns None and the progress
-        # pane stays empty for the whole generation.
-        from shared.RGB_factors import get_rgb_factors
-
-        return get_rgb_factors("minimax_h3")
 
     @staticmethod
     def get_lora_dir(base_model_type, args, lora_root):
@@ -360,12 +521,20 @@ class family_handler:
             model_def=model_def or {},
             text_encoder_filename=text_encoder_filename,
             dtype=dtype,
+            minimax_h3_text_encoder=kwargs.get(
+                "minimax_h3_text_encoder",
+                (model_def or {}).get("minimax_h3_text_encoder_default", "nvfp4_awq"),
+            ),
         )
         pipe = {
             "transformer": model.transformer,
-            # Keep the wrapper top-level so MMGP's forward hook moves both
-            # the truncated language model and vision tower together.
-            "text_encoder": model.conditioner,
+            # Profile the two Qwen towers independently. Text-only FL2VA
+            # never needs the vision tower, while Ref2VA can release it
+            # before the 50-layer language model runs. This mirrors WanGP's
+            # H3 memory layout and avoids pinning both large components as a
+            # single co-resident conditioner.
+            "text_encoder": model.conditioner.language_model,
+            "vision_encoder": model.conditioner.visual,
             "vae": model.vae,
             "audio_vae": model.audio_vae,
         }
@@ -378,83 +547,26 @@ class family_handler:
 
     @staticmethod
     def update_default_settings(base_model_type, model_def, ui_defaults):
+        omni_reference = base_model_type in {
+            _REF2VA_MODEL_TYPE,
+            _REF2VA_FULL_MODEL_TYPE,
+        }
         ui_defaults.update(
             {
                 "num_inference_steps": 20,
-                "video_length": 124,
+                "video_length": _H3_MIN_FRAMES,
                 "resolution": "864x480",
                 "guidance_scale": 1.0,
                 "image_prompt_type": "",
+                "sliding_window_size": (
+                    _H3_MIN_FRAMES
+                    if omni_reference
+                    else _H3_MAX_FRAMES
+                ),
+                "sliding_window_overlap": 0 if omni_reference else 1,
+                "sliding_window_discard_last_frames": 0,
             }
         )
-        if base_model_type == _MODEL_TYPE_REF2VA:
-            # Both selectors start empty: Ref2VA generates from the prompt alone until references are added.
-            ui_defaults.setdefault("video_prompt_type", "")
-            ui_defaults.setdefault("audio_prompt_type", "")
-
-    @staticmethod
-    def validate_generative_settings(base_model_type, model_def, inputs):
-        # The UI's resolution presets are generic and mostly land off H3's 32px grid, so snap here as well
-        # as in fix_settings: this is the path a resolution takes when it is chosen rather than loaded.
-        resolution = inputs.get("resolution")
-        if resolution:
-            inputs["resolution"] = _snap_resolution(resolution)
-
-        # Ref2VA's limits are cheap to check here and expensive to discover after a model has been loaded and a
-        # generation has started, which is where an over-long reference otherwise surfaces.
-        if base_model_type != _MODEL_TYPE_REF2VA:
-            return None
-
-        if len(inputs.get("image_refs") or []) > 9:
-            return "MiniMax H3 Ref2VA accepts at most 9 reference images"
-
-        if "V" in (inputs.get("video_prompt_type") or ""):
-            reference_video = inputs.get("video_guide")
-            if reference_video is None:
-                return "A Reference Video is selected but no file was provided"
-            from shared.utils.utils import get_video_info
-
-            try:
-                fps, _, _, frames = get_video_info(reference_video)
-                duration = frames / fps
-            except Exception as error:
-                return f"Unable to read the Reference Video: {error}"
-            if not 2.0 <= duration <= 15.0:
-                return f"The Reference Video must be between 2 and 15 seconds long (found {duration:.2f}s)"
-
-        audio_prompt_type = inputs.get("audio_prompt_type") or ""
-        if "K" in audio_prompt_type:
-            # Caught here because the alternative is discovering it after the model has loaded: a clip with
-            # no audio track would simply contribute no reference, and the generation would look like the
-            # soundtrack option had been ignored.
-            if "V" not in (inputs.get("video_prompt_type") or "") or not inputs.get("video_guide"):
-                return "Using the Reference Video's soundtrack requires a Reference Video"
-            from shared.utils.audio_video import extract_audio_tracks
-
-            try:
-                if extract_audio_tracks(inputs["video_guide"], query_only=True) == 0:
-                    return "The Reference Video has no audio track to use as a soundtrack reference"
-            except Exception as error:
-                return f"Unable to inspect the Reference Video's soundtrack: {error}"
-
-        references = [inputs.get("audio_guide")] if "A" in audio_prompt_type else []
-        if "B" in audio_prompt_type:
-            references.append(inputs.get("audio_guide2"))
-
-        import librosa
-
-        for index, reference in enumerate(references, 1):
-            if reference is None:
-                return f"Audio Reference {index} is selected but no file was provided"
-            try:
-                duration = float(librosa.get_duration(path=os.fspath(reference)))
-            except Exception as error:
-                return f"Unable to read Audio Reference {index}: {error}"
-            if not 2.0 <= duration <= 15.0:
-                return (
-                    f"Audio Reference {index} must be between 2 and 15 seconds long (found {duration:.2f}s)"
-                )
-        return None
 
     @staticmethod
     def fix_settings(base_model_type, settings_version, model_def, ui_defaults):
@@ -466,7 +578,97 @@ class family_handler:
             requested_frames = int(ui_defaults.get("video_length", 124))
         except (TypeError, ValueError):
             requested_frames = 124
+        omni_reference = base_model_type in {
+            _REF2VA_MODEL_TYPE,
+            _REF2VA_FULL_MODEL_TYPE,
+        }
         aligned_frames = align_num_frames(max(1, requested_frames))
-        ui_defaults["video_length"] = min(345, max(124, aligned_frames))
-        ui_defaults["resolution"] = _snap_resolution(ui_defaults.get("resolution", "864x480"))
+        if omni_reference or requested_frames <= _H3_MAX_FRAMES + 1:
+            ui_defaults["video_length"] = min(
+                _H3_MAX_FRAMES,
+                max(_H3_MIN_FRAMES, aligned_frames),
+            )
+        else:
+            # A long First/Last setting is the joined output duration, not
+            # one H3 pass, so preserve it for the sliding-window scheduler.
+            ui_defaults["video_length"] = max(
+                _H3_MIN_FRAMES,
+                requested_frames,
+            )
+
+        try:
+            requested_window = int(
+                ui_defaults.get("sliding_window_size", _H3_MAX_FRAMES)
+            )
+        except (TypeError, ValueError):
+            requested_window = _H3_MAX_FRAMES
+        aligned_window = align_num_frames(max(1, requested_window))
+        ui_defaults["sliding_window_size"] = (
+            ui_defaults["video_length"]
+            if omni_reference
+            else min(
+                _H3_MAX_FRAMES,
+                max(_H3_MIN_FRAMES, aligned_window),
+            )
+        )
+        ui_defaults["sliding_window_overlap"] = 0 if omni_reference else 1
+        ui_defaults["sliding_window_discard_last_frames"] = 0
+        ui_defaults["resolution"] = _normalize_h3_resolution(
+            ui_defaults.get("resolution", "864x480")
+        )
         ui_defaults["guidance_scale"] = 1.0
+
+    @staticmethod
+    def validate_generative_settings(base_model_type, model_def, inputs):
+        """Enforce H3's single-pass and continuation geometry server-side."""
+
+        from .packing import align_num_frames
+
+        omni_reference = base_model_type in {
+            _REF2VA_MODEL_TYPE,
+            _REF2VA_FULL_MODEL_TYPE,
+        }
+        try:
+            requested_frames = int(inputs.get("video_length", _H3_MIN_FRAMES))
+        except (TypeError, ValueError):
+            requested_frames = _H3_MIN_FRAMES
+
+        if omni_reference:
+            inputs["video_length"] = min(
+                _H3_MAX_FRAMES,
+                max(_H3_MIN_FRAMES, align_num_frames(max(1, requested_frames))),
+            )
+            inputs["sliding_window_size"] = inputs["video_length"]
+            inputs["sliding_window_overlap"] = 0
+        else:
+            if requested_frames <= _H3_MAX_FRAMES + 1:
+                requested_frames = min(
+                    _H3_MAX_FRAMES,
+                    max(
+                        _H3_MIN_FRAMES,
+                        align_num_frames(max(1, requested_frames)),
+                    ),
+                )
+            else:
+                requested_frames = max(_H3_MIN_FRAMES, requested_frames)
+            inputs["video_length"] = requested_frames
+
+            try:
+                requested_window = int(
+                    inputs.get("sliding_window_size", _H3_MAX_FRAMES)
+                )
+            except (TypeError, ValueError):
+                requested_window = _H3_MAX_FRAMES
+            inputs["sliding_window_size"] = min(
+                _H3_MAX_FRAMES,
+                max(
+                    _H3_MIN_FRAMES,
+                    align_num_frames(max(1, requested_window)),
+                ),
+            )
+            inputs["sliding_window_overlap"] = 1
+
+        inputs["sliding_window_discard_last_frames"] = 0
+        inputs["sliding_window_overlap_noise"] = 0
+        inputs["sliding_window_color_correction_strength"] = 0
+        return None

@@ -1,11 +1,12 @@
 import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen } from 'lucide-react'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
-import { getFileUrl } from '../../api/client'
+import { fetchModelOptions, getFileUrl } from '../../api/client'
 import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
 import { DirectorSongSetup } from './DirectorSongSetup'
-import type { DirectorSkill, MusicVideoTreatment, ShortFilmCharacter, ShortFilmPath } from '../../types'
+import { InfoTooltip } from './InfoTooltip'
+import type { DirectorPipelineType, DirectorShotImageGuidance, DirectorSkill, ModelOptions, MusicVideoTreatment, ShortFilmCharacter, ShortFilmPath } from '../../types'
 
 const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
   .then(module => ({ default: module.ComicDirectorPanel })))
@@ -19,6 +20,17 @@ const AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a,.mp4,.mov,.mkv,.webm,.avi,.m4v'
 const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.bmp'
 const H3_VIDEO_ACCEPT = '.mp4,.mov,.mkv,.webm,.avi,.m4v'
 const H3_AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a'
+
+function directorWillGenerateShotImages(
+  support: 'required' | 'optional' | 'direct_references' | undefined,
+  guidance: DirectorShotImageGuidance,
+  hasVisualReferences: boolean,
+): boolean {
+  if (!support || support === 'required') return true
+  if (guidance === 'generate') return true
+  if (support === 'direct_references' || guidance === 'prompt_only') return false
+  return hasVisualReferences
+}
 
 function AudioScaleSlider() {
   const audioScale = useStore(s => s.directorAudioScale)
@@ -369,6 +381,18 @@ export function DirectorChat() {
   const musicVideoTreatment = useStore(s => s.directorMusicVideoTreatment)
   const setMusicVideoTreatment = useStore(s => s.setDirectorMusicVideoTreatment)
   const clipPlans = useStore(s => s.directorClipPlans)
+  const selectedDirectorShotImageSupport = useStore(s => s.models.find(
+    model => model.model_type === (s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'),
+  )?.director?.shot_image_support)
+  const directorShotImageGuidance = useStore(s => s.directorShotImageGuidance)
+  const directorHasVisualReferences = useStore(s => Boolean(
+    s.directorReferenceImage
+    || s.directorReferenceImagePath
+    || s.directorCharacterRefs.length
+    || s.directorCharacterRefPaths.length
+    || s.directorLocationRefs.length
+    || s.directorLocationRefPaths.length
+  ))
   const sceneDescription = useStore(s => s.directorSceneDescription)
   const audioFile = useStore(s => s.directorAudioFile)
   const referenceImage = useStore(s => s.directorReferenceImage)
@@ -395,6 +419,13 @@ export function DirectorChat() {
   const setAutoMode = useStore(s => s.setDirectorAutoMode)
   const seamless = useStore(s => s.directorSeamless)
   const setSeamless = useStore(s => s.setDirectorSeamless)
+  const selectedVideoSupportsSeamless = useStore(s => {
+    const selected = s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
+    const model = s.models.find(item => item.model_type === selected)
+    return model?.director
+      ? model.director.video.seamless.compatible === true
+      : true
+  })
   const skill = useStore(s => s.directorSkill)
   const setSkill = useStore(s => s.setDirectorSkill)
   const openSkill = (next: DirectorSkill) => setSkill(next)
@@ -426,6 +457,11 @@ export function DirectorChat() {
   const pipelineStatus = useStore(s => s.pipelineStatus)
   const pipelinePhase = pipelineStatus?.phase
   const pipelineIsActive = pipelineStatus?.status === 'running'
+  const usesShotImages = directorWillGenerateShotImages(
+    selectedDirectorShotImageSupport,
+    directorShotImageGuidance,
+    directorHasVisualReferences,
+  )
 
   const isShortFilm = skill === 'short_film'
   const isStoryPath = isShortFilm && shortFilmPath === 'story'
@@ -990,7 +1026,11 @@ export function DirectorChat() {
               <span className="text-xs text-text-muted">
                 {pipelinePhase === 'polishing_prompts'
                   ? 'Polishing prompts (3rd pass)...'
-                  : isStoryPath ? 'Planning scenes and writing prompts...' : isShortFilm ? 'Writing scene prompts...' : 'Writing image prompts...'}
+                  : isStoryPath
+                    ? `Planning scenes and writing ${usesShotImages ? 'prompts' : 'video prompts'}...`
+                    : isShortFilm
+                      ? `Writing ${usesShotImages ? 'scene prompts' : 'video prompts'}...`
+                      : `Writing ${usesShotImages ? 'image and video prompts' : 'video prompts'}...`}
               </span>
             </div>
             {pipelinePhase !== 'polishing_prompts' && <LlmThinkingStream stage="plan" />}
@@ -999,11 +1039,11 @@ export function DirectorChat() {
 
         {/* Completed planning streams stay in the chat history */}
         {(pastStep('plan') || (atStep('plan') && !loading)) && (
-          <LlmLogStage stage="plan" label={isShortFilm ? 'Scene planning' : 'Image prompts'} />
+          <LlmLogStage stage="plan" label={isShortFilm ? 'Scene planning' : usesShotImages ? 'Image and video prompts' : 'Video planning'} />
         )}
 
         {/* Review step (image prompts) */}
-        {(atStep('review') || pastStep('review')) && (
+        {usesShotImages && (atStep('review') || pastStep('review')) && (
           <SystemBubble>
             <ImagePromptsReview
               clipPlans={clipPlans}
@@ -1020,7 +1060,7 @@ export function DirectorChat() {
         )}
 
         {/* Image generation step */}
-        {(atStep('generate_images') || pastStep('generate_images')) && (
+        {usesShotImages && (atStep('generate_images') || pastStep('generate_images')) && (
           <SystemBubble>
             <ImageGenView
               loading={loading}
@@ -1094,10 +1134,16 @@ export function DirectorChat() {
         {skill && (
           <div className="space-y-2">
             <div className="flex items-center gap-4">
-              <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Each clip's end frame uses the next clip's start image for smooth transitions">
+              <label
+                className={`flex items-center gap-1.5 select-none ${selectedVideoSupportsSeamless ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                title={selectedVideoSupportsSeamless
+                  ? "Each clip's end frame uses the next clip's start image for smooth transitions"
+                  : 'The selected video model renders independent native-duration shots'}
+              >
                 <input
                   type="checkbox"
                   checked={seamless}
+                  disabled={!selectedVideoSupportsSeamless}
                   onChange={e => setSeamless(e.target.checked)}
                   className="accent-accent-blue w-3 h-3"
                 />
@@ -1724,10 +1770,21 @@ function AdditionalRefsSection() {
   const setIdentityScale = useStore(s => s.setDirectorIdentityGuidanceScale)
   const clipPlans = useStore(s => s.directorClipPlans)
   const h3ReferenceMode = useStore(s => s.savedParamsPerMode.video?.h3_reference_mode || 'first_frame')
-  const isH3 = videoModel === 'minimax_h3'
+  const isH3 = videoModel.startsWith('minimax_h3')
   const h3UserRefCount = (referenceImage ? 1 : 0) + charRefs.length + (locRefs.length ? 1 : 0) + h3VideoRefs.length + h3AudioRefs.length
+  const voiceReferenceEnabled = useStore(s => s.servicesConfig?.voice_reference_enabled ?? false)
+  const selectedVideoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
+  const supportsVoiceReference = useStore(s => (
+    s.models.find(model => model.model_type === selectedVideoModel)
+      ?.director?.supports_voice_reference ?? false
+  ))
+  const voiceReferenceMode = useStore(s => (
+    s.models.find(model => model.model_type === selectedVideoModel)
+      ?.director?.voice_reference_mode ?? 'none'
+  ))
   const [expanded, setExpanded] = useState(
-    charRefs.length > 0 || locRefs.length > 0 || h3VideoRefs.length > 0 || h3AudioRefs.length > 0 || voiceRef !== null
+    charRefs.length > 0 || locRefs.length > 0 || h3VideoRefs.length > 0
+      || h3AudioRefs.length > 0 || voiceRef !== null
   )
 
   const handleFiles = useCallback((files: FileList | null, type: 'char' | 'loc') => {
@@ -1739,7 +1796,11 @@ function AdditionalRefsSection() {
     Array.from(files).slice(0, available).forEach(f => { if (f.type.startsWith('image/')) add(f) })
   }, [addCharRef, addLocRef, charRefs.length, locRefs.length, referenceImage, isH3, h3ReferenceMode, h3UserRefCount])
 
-  const totalRefs = charRefs.length + locRefs.length + h3VideoRefs.length + h3AudioRefs.length + (voiceRef ? 1 : 0)
+  const nativeVoiceReference = voiceReferenceMode === 'native_reference'
+  const showVoiceReference = supportsVoiceReference
+    && (nativeVoiceReference || voiceReferenceEnabled)
+  const totalRefs = charRefs.length + locRefs.length + h3VideoRefs.length
+    + h3AudioRefs.length + (showVoiceReference && voiceRef ? 1 : 0)
 
   return (
     <div className="mt-1">
@@ -1800,8 +1861,9 @@ function AdditionalRefsSection() {
               <p className="text-[9px] text-text-muted italic">Scene/environment reference images</p>
             )}
           </div>
-          {/* Voice Reference (ID-LoRA) — gated by Services toggle */}
-          {useStore.getState().servicesConfig?.voice_reference_enabled && <div>
+          {/* LTX uses an ID-LoRA; H3 Omni maps the sample as a native voice
+              reference in each shot's Ref2VA manifest. */}
+          {showVoiceReference && <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] text-text-secondary"><Mic size={9} className="inline mr-0.5" />Voice ref</span>
               {!voiceRef ? (
@@ -1820,16 +1882,20 @@ function AdditionalRefsSection() {
                   <Mic size={10} className="text-accent-blue shrink-0" />
                   <span className="text-[9px] text-text-secondary truncate">{voiceRef.name}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                {!nativeVoiceReference && <div className="flex items-center gap-1.5">
                   <span className="text-[9px] text-text-muted whitespace-nowrap">Identity scale</span>
                   <input type="range" min={0} max={10} step={0.5} value={identityScale}
                     onChange={e => setIdentityScale(parseFloat(e.target.value))}
                     className="flex-1 h-1 accent-accent-blue" />
                   <span className="text-[9px] text-text-muted w-5 text-right">{identityScale}</span>
-                </div>
+                </div>}
               </div>
             ) : (
-              <p className="text-[9px] text-text-muted italic">~5 sec voice sample for consistent voice across clips</p>
+              <p className="text-[9px] text-text-muted italic">
+                {nativeVoiceReference
+                  ? 'Voice sample used by H3 Omni for the primary speaking character'
+                  : '~5 sec voice sample for consistent voice across clips'}
+              </p>
             )}
           </div>}
           {isH3 && <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-2 space-y-2">
@@ -2223,6 +2289,28 @@ function StructureView({
  */
 function DirectorAdvancedAccordion() {
   const [open, setOpen] = useState(false)
+  const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
+  const videoStepsByModel = useStore(s => s.directorVideoInferenceStepsByModel)
+  const setVideoSteps = useStore(s => s.setDirectorVideoInferenceSteps)
+  const [directorVideoOptions, setDirectorVideoOptions] = useState<ModelOptions | null>(null)
+  const shotImageSupport = useStore(s => s.models.find(
+    model => model.model_type === videoModel,
+  )?.director?.shot_image_support)
+  const shotImageGuidance = useStore(s => s.directorShotImageGuidance)
+  const setShotImageGuidance = useStore(s => s.setDirectorShotImageGuidance)
+  const hasVisualReferences = useStore(s => Boolean(
+    s.directorReferenceImage
+    || s.directorReferenceImagePath
+    || s.directorCharacterRefs.length
+    || s.directorCharacterRefPaths.length
+    || s.directorLocationRefs.length
+    || s.directorLocationRefPaths.length
+  ))
+  const generateShotImages = directorWillGenerateShotImages(
+    shotImageSupport,
+    shotImageGuidance,
+    hasVisualReferences,
+  )
 
   // Image post-processing
   const imgUpsampling = useStore(s => s.directorImageSpatialUpsampling)
@@ -2242,6 +2330,41 @@ function DirectorAdvancedAccordion() {
   const vidSelfRefiner = useStore(s => s.directorVideoSelfRefiner)
   const setVidSelfRefiner = useStore(s => s.setDirectorVideoSelfRefiner)
 
+  // Fetch the selected Director model's sampling contract without routing it
+  // through Studio's global modelOptions/params state. That separation is the
+  // point of this control: changing steps in either surface must not silently
+  // modify the other one.
+  useEffect(() => {
+    let cancelled = false
+    fetchModelOptions(videoModel)
+      .then(options => {
+        if (cancelled) return
+        setDirectorVideoOptions(options)
+        const rawDefault = options.default_num_inference_steps
+        if (rawDefault != null && Number.isFinite(rawDefault)) {
+          const current = useStore.getState().directorVideoInferenceStepsByModel[videoModel]
+          if (current == null) setVideoSteps(videoModel, rawDefault)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDirectorVideoOptions(null)
+      })
+    return () => { cancelled = true }
+  }, [setVideoSteps, videoModel])
+
+  const activeDirectorVideoOptions = directorVideoOptions?.model_type === videoModel
+    ? directorVideoOptions
+    : null
+  const rawDefaultVideoSteps = activeDirectorVideoOptions?.default_num_inference_steps
+  const defaultVideoSteps = rawDefaultVideoSteps == null
+    ? null
+    : Math.max(1, Math.min(50, Math.round(rawDefaultVideoSteps)))
+  const configuredVideoSteps = videoStepsByModel[videoModel]
+  const videoSteps = activeDirectorVideoOptions?.lock_inference_steps
+    ? defaultVideoSteps
+    : (configuredVideoSteps ?? defaultVideoSteps)
+  const videoStepsLocked = activeDirectorVideoOptions?.lock_inference_steps === true
+
   const upsamplingOptions = [
     { value: '', label: 'Off' },
     { value: 'lanczos1.5', label: 'Lanczos 1.5×' },
@@ -2259,8 +2382,35 @@ function DirectorAdvancedAccordion() {
       </button>
       {open && (
         <div className="px-2.5 pb-2.5 space-y-3">
+          {shotImageSupport && shotImageSupport !== 'required' && (
+            <div className="space-y-1 pt-1">
+              <label className="text-[11px] text-text-secondary block">Shot image guidance</label>
+              <select
+                value={shotImageGuidance}
+                onChange={e => setShotImageGuidance(e.target.value as DirectorShotImageGuidance)}
+                className="w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
+              >
+                <option value="auto">Auto (recommended)</option>
+                <option value="prompt_only">
+                  {shotImageSupport === 'direct_references' ? 'Direct references only' : 'Prompt only'}
+                </option>
+                <option value="generate">Generate shot images</option>
+              </select>
+              <p className="text-[10px] text-text-muted">
+                {shotImageSupport === 'direct_references'
+                  ? shotImageGuidance === 'generate'
+                    ? 'Creates a composition image for each shot before H3 uses the references.'
+                    : !hasVisualReferences
+                      ? 'Add at least one main, character, or location image, or choose generated shot images.'
+                    : 'H3 uses your character and location references directly; no image model runs.'
+                  : generateShotImages
+                    ? 'Creates start frames because visual references are present or generation was requested.'
+                    : 'H3 renders each scene directly from its video prompt.'}
+              </p>
+            </div>
+          )}
           {/* IMAGE section */}
-          <div className="space-y-2">
+          {generateShotImages && <div className="space-y-2">
             <div className="text-[10px] text-text-muted uppercase tracking-wider">Image</div>
 
             <div>
@@ -2306,11 +2456,59 @@ function DirectorAdvancedAccordion() {
                 </div>
               )}
             </div>
-          </div>
+          </div>}
 
           {/* VIDEO section */}
           <div className="space-y-2 pt-1 border-t border-border">
             <div className="text-[10px] text-text-muted uppercase tracking-wider pt-2">Video</div>
+
+            <div title="Applies to every newly generated Director shot and is saved with the project for later repair or regeneration.">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] text-text-secondary">Inference steps</label>
+                <div className="flex items-center gap-1.5">
+                  {!videoStepsLocked && defaultVideoSteps != null && configuredVideoSteps != null
+                    && configuredVideoSteps !== defaultVideoSteps && (
+                    <button
+                      type="button"
+                      onClick={() => setVideoSteps(videoModel, defaultVideoSteps)}
+                      className="text-[9px] text-accent-blue hover:text-accent-blue/80"
+                    >
+                      Default
+                    </button>
+                  )}
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    step={1}
+                    value={videoSteps ?? ''}
+                    disabled={videoSteps == null || videoStepsLocked}
+                    onChange={e => {
+                      const value = Number(e.target.value)
+                      if (Number.isFinite(value)) setVideoSteps(videoModel, value)
+                    }}
+                    className="w-14 bg-bg-tertiary border border-border rounded px-1.5 py-0.5 text-[11px] text-text-primary text-center focus:outline-none focus:border-accent-blue disabled:opacity-50"
+                  />
+                </div>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={50}
+                step={1}
+                value={videoSteps ?? 1}
+                disabled={videoSteps == null || videoStepsLocked}
+                onChange={e => setVideoSteps(videoModel, Number(e.target.value))}
+                className="w-full disabled:opacity-50"
+              />
+              <p className="text-[10px] text-text-muted mt-0.5">
+                {videoStepsLocked
+                  ? 'Fixed by this model.'
+                  : videoSteps == null
+                    ? 'Loading model default...'
+                    : `Director setting for this model${defaultVideoSteps === videoSteps ? ' (default)' : ''}.`}
+              </p>
+            </div>
 
             <div>
               <label className="text-[11px] text-text-secondary block mb-1">Upsampling</label>
@@ -2383,10 +2581,9 @@ function DirectorAdvancedAccordion() {
   )
 }
 
-/** Compact model picker for Director — same visibility rules as the Studio
- *  ModelSelector (enabledModels + Mature Mode gate), grouped by family.
- *  Changing it updates selectedModelPerMode, which the pipeline submission
- *  reads AND the LoRA accordions below re-fetch from (their modelType prop). */
+/** Compact model picker for Director. Director's automated stages have a
+ *  stricter input contract than Studio, so the backend publishes explicit
+ *  per-workflow compatibility metadata for this selector to enforce. */
 function DirectorModelPicker({ mode, value, onChange }: {
   mode: 'image' | 'video'
   value: string
@@ -2396,18 +2593,52 @@ function DirectorModelPicker({ mode, value, onChange }: {
   const families = useStore(s => s.families)
   const enabledModels = useStore(s => s.enabledModels)
   const nsfwMode = useStore(s => s.servicesConfig?.nsfw_mode ?? false)
+  const directorSkill = useStore(s => s.directorSkill)
+  const shortFilmPath = useStore(s => s.shortFilmPath)
+  const seamless = useStore(s => s.directorSeamless)
+
+  const pipelineType: DirectorPipelineType = directorSkill === 'music_video'
+    ? 'music_video'
+    : shortFilmPath === 'audio'
+      ? 'short_film_audio'
+      : 'short_film_story'
 
   const groups = useMemo(() =>
     getFamiliesForMode(mode, families).map(family => ({
       family,
       models: getModelsForFamily(family.id, models, mode)
         .filter(m => enabledModels.has(m.model_type))
-        .filter(m => !m.nsfw_only || nsfwMode),
+        .filter(m => !m.nsfw_only || nsfwMode)
+        .filter(m => mode === 'image'
+          ? m.director?.image.compatible === true
+          : m.director?.video[pipelineType].compatible === true
+            && (!seamless || m.director?.video.seamless.compatible === true)),
     })).filter(g => g.models.length > 0),
-  [mode, families, models, enabledModels, nsfwMode])
+  [mode, families, models, enabledModels, nsfwMode, pipelineType, seamless])
 
+  const compatibleModels = useMemo(
+    () => groups.flatMap(group => group.models),
+    [groups],
+  )
   const externalKnown = mode === 'image' && value === MINIMAX_IMAGE_API_MODEL
-  const known = externalKnown || groups.some(g => g.models.some(m => m.model_type === value))
+  const known = externalKnown || compatibleModels.some(model => model.model_type === value)
+  const preferredId = mode === 'image' ? 'flux2_klein_9b' : 'ltx2_22B_distilled_1_1'
+  const fallback = compatibleModels.find(model => model.model_type === preferredId)
+    || compatibleModels[0]
+  const selectedValue = known ? value : (fallback?.model_type || '')
+  const selectedModel = compatibleModels.find(model => model.model_type === selectedValue)
+
+  useEffect(() => {
+    if (!known && fallback && fallback.model_type !== value) {
+      onChange(fallback.model_type)
+    }
+  }, [fallback, known, onChange, value])
+
+  const title = mode === 'image'
+    ? 'Only models that can create an establishing image and edit reference-based start frames are shown.'
+    : pipelineType === 'short_film_story'
+      ? 'Only models that can render Director-planned shots with synchronized native audio are shown.'
+      : 'Only models that can follow the uploaded soundtrack or dialogue timeline are shown.'
 
   return (
     <div className="flex items-center gap-1.5">
@@ -2415,11 +2646,15 @@ function DirectorModelPicker({ mode, value, onChange }: {
         {mode === 'image' ? 'Image' : 'Video'}
       </span>
       <select
-        value={value}
+        value={selectedValue}
         onChange={e => onChange(e.target.value)}
+        disabled={compatibleModels.length === 0 && mode !== 'image'}
+        title={title}
         className="flex-1 min-w-0 bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
       >
-        {!known && <option value={value}>{value}</option>}
+        {compatibleModels.length === 0 && mode !== 'image' && (
+          <option value="">No compatible models enabled</option>
+        )}
         {mode === 'image' && (
           <optgroup label="External API">
             <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
@@ -2433,6 +2668,12 @@ function DirectorModelPicker({ mode, value, onChange }: {
           </optgroup>
         ))}
       </select>
+      {selectedModel?.selector_help && (
+        <InfoTooltip
+          text={selectedModel.selector_help}
+          label={`About ${selectedModel.name}`}
+        />
+      )}
     </div>
   )
 }
@@ -2450,12 +2691,25 @@ function DirectorLoraAccordion() {
   // (flux2_klein_9b) instead of the active Studio model fixes that.
   const imageModel = useStore(s => s.selectedModelPerMode.image || 'flux2_klein_9b')
   const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
+  const shotImageSupport = useStore(s => s.models.find(
+    model => model.model_type === videoModel,
+  )?.director?.shot_image_support)
+  const shotImageGuidance = useStore(s => s.directorShotImageGuidance)
+  const hasVisualReferences = useStore(s => Boolean(
+    s.directorReferenceImage
+    || s.directorReferenceImagePath
+    || s.directorCharacterRefs.length
+    || s.directorCharacterRefPaths.length
+    || s.directorLocationRefs.length
+    || s.directorLocationRefPaths.length
+  ))
+  const generateShotImages = directorWillGenerateShotImages(
+    shotImageSupport,
+    shotImageGuidance,
+    hasVisualReferences,
+  )
   const selectDirectorImageModel = useStore(s => s.selectDirectorImageModel)
   const selectDirectorVideoModel = useStore(s => s.selectDirectorVideoModel)
-  const h3Profile = useStore(s => s.savedParamsPerMode.video?.h3_model_profile || 'quality')
-  const setH3Profile = useStore(s => s.setDirectorH3Profile)
-  const h3ReferenceMode = useStore(s => s.savedParamsPerMode.video?.h3_reference_mode || 'first_frame')
-  const setH3ReferenceMode = useStore(s => s.setDirectorH3ReferenceMode)
   const minimaxImageReady = useStore(s => Boolean(s.servicesConfig?.minimax_api_key_set))
   const [imageOpen, setImageOpen] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
@@ -2465,48 +2719,22 @@ function DirectorLoraAccordion() {
       {/* Models the pipeline will use — visible + changeable here so the
           user can verify before starting; LoRA lists below follow. */}
       <div className="space-y-1 mb-1.5">
-        <DirectorModelPicker mode="image" value={imageModel} onChange={selectDirectorImageModel} />
-        {imageModel === MINIMAX_IMAGE_API_MODEL && (
-          <p className={`pl-[50px] text-[9px] leading-relaxed ${minimaxImageReady ? 'text-emerald-400' : 'text-amber-300'}`}>
-            {minimaxImageReady
-              ? 'External Image-01 API ready · no local VRAM or image LoRAs.'
-              : 'Add the MiniMax API key in Settings → Services before generating.'}
-          </p>
+        {generateShotImages && (
+          <>
+            <DirectorModelPicker mode="image" value={imageModel} onChange={selectDirectorImageModel} />
+            {imageModel === MINIMAX_IMAGE_API_MODEL && (
+              <p className={`pl-[50px] text-[9px] leading-relaxed ${minimaxImageReady ? 'text-emerald-400' : 'text-amber-300'}`}>
+                {minimaxImageReady
+                  ? 'External Image-01 API ready · no local VRAM or image LoRAs.'
+                  : 'Add the MiniMax API key in Settings → Services before generating.'}
+              </p>
+            )}
+          </>
         )}
         <DirectorModelPicker mode="video" value={videoModel} onChange={selectDirectorVideoModel} />
-        {videoModel === 'minimax_h3' && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-text-muted uppercase tracking-wider w-11 shrink-0">Mode</span>
-              <select value={h3ReferenceMode}
-                onChange={e => setH3ReferenceMode(e.target.value as 'first_frame' | 'references')}
-                className="flex-1 min-w-0 bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue">
-                <option value="first_frame">Exact shot frame · FL2VA</option>
-                <option value="references">Omni references · Ref2VA</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-text-muted uppercase tracking-wider w-11 shrink-0">Profile</span>
-              <select
-                value={h3Profile}
-                onChange={e => setH3Profile(e.target.value as 'balanced' | 'quality' | 'low_memory')}
-                className="flex-1 min-w-0 bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
-              >
-                <option value="quality">Quality 4090 · INT8</option>
-                <option value="balanced">Legacy Balanced · INT8</option>
-                <option value="low_memory">Low VRAM fallback · INT4</option>
-              </select>
-            </div>
-            <p className="pl-[50px] text-[9px] leading-tight text-text-muted">
-              {h3ReferenceMode === 'first_frame'
-                ? 'Preserves each approved shot frame exactly; additional images guide shot-frame creation only.'
-                : 'Composes a new frame from the references below; the opening frame is not locked.'}
-            </p>
-          </div>
-        )}
       </div>
       {/* Image LoRAs */}
-      {imageModel && imageModel !== MINIMAX_IMAGE_API_MODEL && (
+      {generateShotImages && imageModel && imageModel !== MINIMAX_IMAGE_API_MODEL && (
         <div className="border border-border rounded-lg overflow-hidden">
           <button
             onClick={() => setImageOpen(!imageOpen)}

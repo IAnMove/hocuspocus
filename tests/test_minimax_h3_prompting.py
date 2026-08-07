@@ -80,4 +80,5 @@ def test_clip_adapter_preserves_image_prompt_and_adapts_every_video_mode():
 
 def test_h3_guides_resolve_for_enhance_and_director_polish():
     assert "integrated_multimodal_description" in get_enhance_guide("minimax_h3", "video", True)
-    assert "subject_definitions" in get_video_guide("minimax_h3", "light")
+    assert "integrated_multimodal_description" in get_video_guide("minimax_h3", "light")
+    assert "subject_definitions" in get_video_guide("minimax_h3_ref2va", "light")

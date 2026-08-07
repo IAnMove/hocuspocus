@@ -1,18 +1,28 @@
 import { rememberPrompt } from '../lib/promptHistory'
-import type { ProductionPlan } from '../types'
-import type { ScailResolutionProfile } from '../types'
+import type { DirectorModelCompatibility, ProductionPlan, ScailResolutionProfile } from '../types'
 
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
 
 export interface ApiModel {
   model_type: string
   name: string
+  description?: string
+  selector_help?: string
+  lora_compatibility_note?: string
   family: string
   architecture: string
   is_i2v: boolean
   is_t2v: boolean
   guidance_max_phases: number
   fps: number
+  supports_end_frame?: boolean
+  /** Legacy broad flag: accepts input audio OR generates output audio. */
+  supports_audio?: boolean
+  supports_audio_input?: boolean
+  generates_audio?: boolean
+  supports_ref_images?: boolean
+  /** Per-workflow eligibility computed by the Director backend. */
+  director?: DirectorModelCompatibility
   is_downloaded?: boolean
   // True when the model JSON declares `"nsfw_only": true` in its
   // model block. The UI hides it from selectors and the visibility
@@ -787,7 +797,7 @@ export interface PipelineResourceSchedule {
 export interface PipelineStatus {
   id: string
   status: 'running' | 'paused' | 'preview_ready' | 'completed' | 'failed' | 'cancelled'
-  phase: 'planning' | 'polishing_prompts' | 'generating_images' | 'preview_ready' | 'generating_video' | 'post_processing' | 'completed'
+  phase: 'planning' | 'polishing_prompts' | 'generating_images' | 'preview_ready' | 'preparing_video' | 'generating_video' | 'post_processing' | 'completed' | 'failed' | 'cancelled'
   auto_mode: boolean
   progress: { current: number; total: number; message: string; step: number; total_steps: number }
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
@@ -806,6 +816,7 @@ export interface PipelineStatus {
   oom_info?: import('../types').OomInfo | null
   pause_reason: string | null
   llm_streaming: boolean
+  recovered_from_disk?: boolean
   /** Non-fatal warnings raised during the run — currently used for
    *  architecture-mismatch advisories when image LoRAs are dropped
    *  because they were trained for a different Flux variant than the
@@ -841,8 +852,8 @@ export async function startPipeline(params: Record<string, unknown>): Promise<{ 
     body: JSON.stringify(params),
   })
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: 'Failed to start pipeline' }))
-    throw new Error(body.detail || 'Failed to start pipeline')
+    const err = await res.json().catch(() => ({ detail: 'Failed to start pipeline' }))
+    throw new Error(err.detail || err.error || 'Failed to start pipeline')
   }
   return res.json()
 }
@@ -1769,7 +1780,15 @@ export async function mixAudio(tracks: { path: string; start_time: number; volum
 
 // --- Upload ---
 
-export async function uploadImage(file: File): Promise<{ filename: string; path: string; url: string; fps?: number; frame_count?: number }> {
+export async function uploadImage(file: File): Promise<{
+  filename: string
+  path: string
+  url: string
+  fps?: number
+  frame_count?: number
+  duration_seconds?: number
+  has_audio?: boolean
+}> {
   const form = new FormData()
   form.append('file', file)
   const res = await fetch(`${BASE}/api/v1/upload`, {
@@ -2660,6 +2679,7 @@ export async function llmEnhancePrompt(params: {
   tts_enhance_mode?: string
   tts_voice_count?: number
   max_new_tokens?: number
+  reference_context?: string
 }): Promise<{ original: string; enhanced: string }> {
   const res = await fetch(`${BASE}/api/v1/llm/enhance-prompt`, {
     method: 'POST',
@@ -2675,7 +2695,12 @@ export async function llmEnhancePrompt(params: {
 
 // --- Audio Analysis ---
 
-export async function uploadAudio(file: File): Promise<{ filename: string; path: string; url: string }> {
+export async function uploadAudio(file: File): Promise<{
+  filename: string
+  path: string
+  url: string
+  duration_seconds?: number | null
+}> {
   const form = new FormData()
   form.append('file', file)
   const res = await fetch(`${BASE}/api/v1/upload-audio`, {
