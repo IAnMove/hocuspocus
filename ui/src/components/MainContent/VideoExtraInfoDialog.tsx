@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { BadgeInfo, Check, Copy, Languages, Loader2, MessageSquareText, RefreshCw, Sparkles, X, Youtube } from 'lucide-react'
+import { BadgeInfo, CalendarDays, Check, Clock3, Copy, FileVideo2, Languages, Loader2, MessageSquareText, RefreshCw, SlidersHorizontal, Sparkles, X, Youtube } from 'lucide-react'
 import { fetchVideoExtraInfo, generateVideoExtraInfo } from '../../api/client'
-import type { VideoExtraInfo, VideoExtraInfoStatus } from '../../types'
+import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
+import type { VideoClipInfo, VideoExtraInfo, VideoExtraInfoStatus } from '../../types'
 
 const LANGUAGES = [
   ['es', 'Español'],
@@ -67,6 +68,47 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   )
 }
 
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return ''
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`
+}
+
+function formatDate(timestamp: number | null) {
+  if (timestamp == null || !Number.isFinite(timestamp) || timestamp <= 0) return ''
+  return new Date(timestamp * 1000).toLocaleString()
+}
+
+function clipInfoAsText(clip: VideoClipInfo) {
+  const breakdown = formatGenerationBreakdown(clip.generation_timings)
+  const lines = [
+    'CLIP INFORMATION',
+    `File: ${clip.name}`,
+    clip.created_at ? `Generated: ${formatDate(clip.created_at)}` : '',
+    clip.file_size_bytes ? `File size: ${formatBytes(clip.file_size_bytes)}` : '',
+    clip.generation_time_sec != null ? `Generation time: ${formatGenerationDuration(clip.generation_time_sec)}` : '',
+    breakdown ? `Timing breakdown: ${breakdown}` : '',
+    clip.model_type ? `Model: ${clip.model_type}` : '',
+    clip.resolution ? `Resolution: ${clip.resolution}` : '',
+    clip.video_length_frames != null ? `Frames: ${clip.video_length_frames}` : '',
+    clip.num_inference_steps != null ? `Inference steps: ${clip.num_inference_steps}` : '',
+    clip.guidance_scale != null ? `Guidance: ${clip.guidance_scale}` : '',
+    clip.seed != null ? `Seed: ${clip.seed}` : '',
+    clip.job_id ? `Job ID: ${clip.job_id}` : '',
+    clip.prompt ? `\nPROMPT\n${clip.prompt}` : '',
+    clip.audio_prompt ? `\nAUDIO PROMPT\n${clip.audio_prompt}` : '',
+    clip.negative_prompt ? `\nNEGATIVE PROMPT\n${clip.negative_prompt}` : '',
+    `\nALL SAVED METADATA\n${JSON.stringify(clip.saved_metadata, null, 2)}`,
+  ]
+  return lines.filter(Boolean).join('\n')
+}
+
 export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose: () => void }) {
   const [language, setLanguage] = useState(initialLanguage)
   const [status, setStatus] = useState<VideoExtraInfoStatus | null>(null)
@@ -123,9 +165,14 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
     }
   }
 
-  const allCopy = data
-    ? `${data.overview}\n\nYouTube\n${data.youtube.title}\n\n${data.youtube.description}\n\nX.com\n${data.x.post}`
+  const clip = status?.clip || null
+  const clipCopy = clip ? clipInfoAsText(clip) : ''
+  const publishingCopy = data
+    ? `PUBLISHING COPY\n${data.overview}\n\nYouTube\n${data.youtube.title}\n\n${data.youtube.description}\n\nX.com\n${data.x.post}`
     : ''
+  const allCopy = [clipCopy, publishingCopy].filter(Boolean).join('\n\n')
+  const generationBreakdown = clip ? formatGenerationBreakdown(clip.generation_timings) : ''
+  const savedMetadata = clip ? JSON.stringify(clip.saved_metadata, null, 2) : ''
 
   return createPortal(
     <div
@@ -183,6 +230,118 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
           <div className="mb-4 rounded-lg border border-border bg-bg-tertiary/60 px-3 py-2 text-[11px] leading-relaxed text-text-muted">
             This is written from the prompts and production properties already saved with the video. The media is not re-analysed.
           </div>
+
+          {clip && (
+            <section className="mb-4 space-y-3 rounded-lg border border-accent-blue/25 bg-accent-blue/5 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="flex items-center gap-1.5 text-xs font-medium text-text-primary">
+                  <FileVideo2 size={14} className="text-accent-blue" /> Clip information
+                </h3>
+                <CopyButton value={clipCopy} label="clip information" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {clip.created_at != null && (
+                  <div className="rounded-md bg-bg-primary/50 p-2">
+                    <div className="mb-1 flex items-center gap-1 text-[9px] uppercase tracking-wider text-text-muted"><CalendarDays size={10} /> Generated</div>
+                    <div className="text-[11px] text-text-primary">{formatDate(clip.created_at)}</div>
+                  </div>
+                )}
+                {clip.generation_time_sec != null && (
+                  <div className="rounded-md bg-bg-primary/50 p-2">
+                    <div className="mb-1 flex items-center gap-1 text-[9px] uppercase tracking-wider text-text-muted"><Clock3 size={10} /> Generation time</div>
+                    <div className="text-[11px] text-text-primary">{formatGenerationDuration(clip.generation_time_sec)}</div>
+                  </div>
+                )}
+                {clip.file_size_bytes > 0 && (
+                  <div className="rounded-md bg-bg-primary/50 p-2">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">File size</div>
+                    <div className="text-[11px] text-text-primary">{formatBytes(clip.file_size_bytes)}</div>
+                  </div>
+                )}
+                {clip.model_type && (
+                  <div className="rounded-md bg-bg-primary/50 p-2">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">Model</div>
+                    <div className="break-words text-[11px] text-text-primary">{clip.model_type}</div>
+                  </div>
+                )}
+                {clip.resolution && (
+                  <div className="rounded-md bg-bg-primary/50 p-2">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">Resolution</div>
+                    <div className="text-[11px] text-text-primary">{clip.resolution}</div>
+                  </div>
+                )}
+                {clip.video_length_frames != null && (
+                  <div className="rounded-md bg-bg-primary/50 p-2">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">Frames</div>
+                    <div className="text-[11px] text-text-primary">{String(clip.video_length_frames)}</div>
+                  </div>
+                )}
+                {clip.num_inference_steps != null && (
+                  <div className="rounded-md bg-bg-primary/50 p-2">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">Inference steps</div>
+                    <div className="text-[11px] text-text-primary">{String(clip.num_inference_steps)}</div>
+                  </div>
+                )}
+                {clip.seed != null && (
+                  <div className="rounded-md bg-bg-primary/50 p-2">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">Seed</div>
+                    <div className="break-all text-[11px] text-text-primary">{String(clip.seed)}</div>
+                  </div>
+                )}
+                {clip.job_id && (
+                  <div className="rounded-md bg-bg-primary/50 p-2">
+                    <div className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">Job ID</div>
+                    <div className="break-all text-[11px] text-text-primary">{clip.job_id}</div>
+                  </div>
+                )}
+              </div>
+
+              {generationBreakdown && (
+                <div className="rounded-md bg-bg-primary/50 px-2.5 py-2 text-[10px] text-text-muted">
+                  <span className="font-medium text-text-secondary">Timing breakdown:</span> {generationBreakdown}
+                </div>
+              )}
+
+              <div className="rounded-md bg-bg-primary/50 p-2.5">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-text-muted">Generation prompt</span>
+                  {clip.prompt && <CopyButton value={clip.prompt} label="generation prompt" />}
+                </div>
+                <p className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-text-secondary">
+                  {clip.prompt || 'No prompt was saved for this clip.'}
+                </p>
+              </div>
+
+              {clip.audio_prompt && (
+                <div className="rounded-md bg-bg-primary/50 p-2.5">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wider text-text-muted">Audio prompt</span>
+                    <CopyButton value={clip.audio_prompt} label="audio prompt" />
+                  </div>
+                  <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-text-secondary">{clip.audio_prompt}</p>
+                </div>
+              )}
+
+              {clip.negative_prompt && (
+                <div className="rounded-md bg-bg-primary/50 p-2.5">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wider text-text-muted">Negative prompt</span>
+                    <CopyButton value={clip.negative_prompt} label="negative prompt" />
+                  </div>
+                  <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-text-secondary">{clip.negative_prompt}</p>
+                </div>
+              )}
+
+              <details className="rounded-md bg-bg-primary/50 p-2.5">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[10px] uppercase tracking-wider text-text-muted hover:text-text-secondary">
+                  <SlidersHorizontal size={11} /> All saved settings
+                </summary>
+                <div className="mt-2 flex justify-end"><CopyButton value={savedMetadata} label="all saved settings" /></div>
+                <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-black/20 p-2 text-[10px] leading-relaxed text-text-muted">{savedMetadata}</pre>
+              </details>
+            </section>
+          )}
 
           {(loading || generating) && !data && (
             <div className="flex min-h-[190px] flex-col items-center justify-center gap-3 text-text-muted">
@@ -255,7 +414,7 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-          {data && <CopyButton value={allCopy} label="all extra info" />}
+          {allCopy && <CopyButton value={allCopy} label="all extra info" />}
           <button
             type="button"
             onClick={onClose}

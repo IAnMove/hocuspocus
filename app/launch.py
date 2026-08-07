@@ -15619,9 +15619,26 @@ def _saved_video_context_for_extra_info(name: str):
             except (OSError, ValueError, json.JSONDecodeError):
                 pipeline = None
 
-    from services.video_extra_info import build_saved_video_context
+    if pipeline and not metadata.get("generation_timings"):
+        from services.director_pipeline import enrich_output_metadata_with_pipeline_timing
+        metadata = enrich_output_metadata_with_pipeline_timing(metadata, pipeline)
+
+    from services.video_extra_info import build_saved_clip_info, build_saved_video_context
     context = build_saved_video_context(metadata, pipeline)
-    return meta_path, metadata, context
+    try:
+        file_stat = os.stat(filepath)
+        file_size_bytes = file_stat.st_size
+        file_modified_at = file_stat.st_mtime
+    except OSError:
+        file_size_bytes = 0
+        file_modified_at = None
+    clip = build_saved_clip_info(
+        name,
+        metadata,
+        file_size_bytes=file_size_bytes,
+        file_modified_at=file_modified_at,
+    )
+    return meta_path, metadata, context, clip
 
 
 @api.get("/api/v1/outputs/{name}/extra-info")
@@ -15633,7 +15650,7 @@ def get_video_extra_info(name: str, language: str = "es"):
         code, label = normalize_language(language)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    _, metadata, context = _saved_video_context_for_extra_info(name)
+    _, metadata, context, clip = _saved_video_context_for_extra_info(name)
     stored = metadata.get("video_extra_info")
     cached = stored.get(code) if isinstance(stored, dict) else None
     # Ignore stale copy if a sidecar/pipeline prompt was edited after it was
@@ -15649,6 +15666,7 @@ def get_video_extra_info(name: str, language: str = "es"):
         "data": cached if available else None,
         "prompt_count": context.get("prompt_count", 0),
         "director_context": context.get("director_context", False),
+        "clip": clip,
     }
 
 
@@ -15667,7 +15685,7 @@ async def generate_output_extra_info(name: str, request: Request):
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
-    meta_path, metadata, context = _saved_video_context_for_extra_info(name)
+    meta_path, metadata, context, _ = _saved_video_context_for_extra_info(name)
     stored = metadata.get("video_extra_info")
     cached = stored.get(code) if isinstance(stored, dict) else None
     if (

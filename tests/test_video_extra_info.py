@@ -3,11 +3,70 @@ import json
 import pytest
 
 from app.services.video_extra_info import (
+    build_saved_clip_info,
     build_saved_video_context,
     generate_video_extra_info,
     normalize_generated_copy,
     normalize_language,
 )
+
+
+def test_clip_info_exposes_prompt_timing_date_and_complete_saved_record():
+    metadata = {
+        "job_id": "a802b0da",
+        "created_at": 1786069490.9,
+        "generation_time": 345,
+        "generation_mode": "video",
+        "params": {
+            "prompt": "A founder confronts his stunned engineering team.",
+            "negative_prompt": "subtitles, watermark",
+            "h3_audio_prompt": "Quiet office ambience.",
+            "model_type": "minimax_h3",
+            "resolution": "544x960",
+            "video_length": 216,
+            "num_inference_steps": 20,
+            "guidance_scale": 1,
+            "seed": 128077046,
+            "h3_model_profile": "quality",
+        },
+        "video_extra_info": {"es": {"overview": "cached publishing copy"}},
+    }
+
+    clip = build_saved_clip_info(
+        "minimax_h3_a802b0da.mp4",
+        metadata,
+        file_size_bytes=732662,
+        file_modified_at=1786069489.8,
+    )
+
+    assert clip["prompt"].startswith("A founder")
+    assert clip["negative_prompt"] == "subtitles, watermark"
+    assert clip["audio_prompt"] == "Quiet office ambience."
+    assert clip["generation_time_sec"] == 345
+    assert clip["created_at"] == 1786069490.9
+    assert clip["file_size_bytes"] == 732662
+    assert clip["video_length_frames"] == 216
+    assert clip["saved_metadata"]["params"]["h3_model_profile"] == "quality"
+    assert "video_extra_info" not in clip["saved_metadata"]
+
+
+def test_clip_info_prefers_detailed_total_and_falls_back_to_file_date():
+    clip = build_saved_clip_info(
+        "director_final.mp4",
+        {
+            "generation_time": 12,
+            "generation_timings": {
+                "total_time_sec": 98.5,
+                "prompt_generation_time_sec": 4.5,
+            },
+            "params": {},
+        },
+        file_modified_at=1234,
+    )
+
+    assert clip["generation_time_sec"] == 98.5
+    assert clip["created_at"] == 1234
+    assert clip["generation_timings"]["prompt_generation_time_sec"] == 4.5
 
 
 def test_context_uses_saved_prompt_without_unrelated_settings():

@@ -200,6 +200,93 @@ def build_saved_video_context(metadata: dict, pipeline: Optional[dict] = None) -
     }
 
 
+def build_saved_clip_info(
+    name: str,
+    metadata: dict,
+    *,
+    file_size_bytes: int | None = None,
+    file_modified_at: float | None = None,
+) -> dict:
+    """Return the complete saved technical record for the Extra info dialog.
+
+    Only sidecar values and filesystem attributes supplied by the caller are
+    used. The video is never opened or analysed. ``saved_metadata`` keeps the
+    original generation record available for less common model-specific
+    settings, while the top-level fields provide a stable UI contract.
+    """
+    metadata = metadata if isinstance(metadata, dict) else {}
+    params = metadata.get("params") if isinstance(metadata.get("params"), dict) else {}
+    timings = (
+        metadata.get("generation_timings")
+        if isinstance(metadata.get("generation_timings"), dict)
+        else {}
+    )
+
+    def _number(value):
+        if isinstance(value, bool) or value is None:
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        if number != number or number in {float("inf"), float("-inf")}:
+            return None
+        return number
+
+    total_time = _number(timings.get("total_time_sec"))
+    if total_time is None:
+        total_time = _number(metadata.get("generation_time"))
+    created_at = _number(metadata.get("created_at"))
+    if created_at is None:
+        created_at = _number(file_modified_at)
+
+    prompt = _first_text(
+        [params],
+        "_tts_original_prompt",
+        "prompt",
+        "description",
+        limit=30000,
+    )
+    audio_prompt = _first_text(
+        [params],
+        "h3_audio_prompt",
+        "audio_prompt",
+        "mmaudio_prompt",
+        limit=10000,
+    )
+    negative_prompt = _first_text([params], "negative_prompt", limit=10000)
+    saved_metadata = {
+        key: value
+        for key, value in metadata.items()
+        if key != "video_extra_info"
+    }
+
+    return {
+        "name": str(name),
+        "created_at": created_at,
+        "file_modified_at": _number(file_modified_at),
+        "file_size_bytes": max(0, int(file_size_bytes or 0)),
+        "job_id": str(metadata.get("job_id") or ""),
+        "generation_mode": str(
+            metadata.get("generation_mode")
+            or params.get("generation_mode")
+            or ""
+        ),
+        "model_type": str(params.get("video_model") or params.get("model_type") or ""),
+        "resolution": str(params.get("resolution") or ""),
+        "seed": params.get("seed"),
+        "video_length_frames": params.get("video_length"),
+        "num_inference_steps": params.get("num_inference_steps"),
+        "guidance_scale": params.get("guidance_scale"),
+        "generation_time_sec": total_time,
+        "generation_timings": timings,
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "audio_prompt": audio_prompt,
+        "saved_metadata": saved_metadata,
+    }
+
+
 def _extract_json(raw: str) -> dict:
     text = str(raw or "").strip()
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.I)

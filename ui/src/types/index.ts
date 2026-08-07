@@ -491,6 +491,27 @@ export interface VideoExtraInfo {
   generated_at?: number
 }
 
+export interface VideoClipInfo {
+  name: string
+  created_at: number | null
+  file_modified_at: number | null
+  file_size_bytes: number
+  job_id: string
+  generation_mode: string
+  model_type: string
+  resolution: string
+  seed: string | number | null
+  video_length_frames: string | number | null
+  num_inference_steps: string | number | null
+  guidance_scale: string | number | null
+  generation_time_sec: number | null
+  generation_timings: OutputGenerationTimings
+  prompt: string
+  negative_prompt: string
+  audio_prompt: string
+  saved_metadata: Record<string, unknown>
+}
+
 export interface VideoExtraInfoStatus {
   available: boolean
   language: string
@@ -498,6 +519,7 @@ export interface VideoExtraInfoStatus {
   data: VideoExtraInfo | null
   prompt_count: number
   director_context: boolean
+  clip: VideoClipInfo
 }
 
 export interface MultiClipKeyframe {

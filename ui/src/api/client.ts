@@ -526,6 +526,7 @@ export async function fetchVideoExtraInfo(
 ): Promise<import('../types').VideoExtraInfoStatus> {
   const res = await fetch(
     `${BASE}/api/v1/outputs/${encodeURIComponent(name)}/extra-info?language=${encodeURIComponent(language)}`,
+    { cache: 'no-store' },
   )
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to load extra info' }))
