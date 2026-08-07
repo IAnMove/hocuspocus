@@ -147,6 +147,8 @@ type PendingDraft = {
 type MusicVideoGenerationSettings = {
   imageModel: string
   videoModel: string
+  generationMode: StoryProject['musicVideoGenerationMode']
+  directVideoMasterPrompt: string
   writingProvider: StoryWritingProvider
   writingModel: string
   writingBaseUrl: string
@@ -671,6 +673,9 @@ export function StoryLabPanel() {
   const selectedFilmImageModel = videoModels.find(model => model.model_type === filmImageModel)
   const selectedFilmVideoModel = videoModels.find(model => model.model_type === filmVideoModel)
   const filmImageReady = filmImageModel !== MINIMAX_IMAGE_API_MODEL || Boolean(servicesConfig?.minimax_api_key_set)
+  const directMusicVideo = project.musicVideoGenerationMode === 'direct_video'
+  const musicVideoImageReady = directMusicVideo || filmImageReady
+  const directVideoMasterReady = !directMusicVideo || Boolean(project.directVideoMasterPrompt.trim())
   const musicWritingReady = project.provider.writingProvider === 'maestro'
     || (project.provider.writingProvider === 'deepseek' && Boolean(servicesConfig?.deepseek_api_key_set))
     || (project.provider.writingProvider === 'minimax' && Boolean(servicesConfig?.minimax_api_key_set))
@@ -2538,18 +2543,23 @@ export function StoryLabPanel() {
     generationSettings: MusicVideoGenerationSettings = {
       imageModel: filmImageModel,
       videoModel: filmVideoModel,
+      generationMode: source.musicVideoGenerationMode,
+      directVideoMasterPrompt: source.directVideoMasterPrompt,
       writingProvider: source.provider.writingProvider,
       writingModel: source.provider.writingModel,
       writingBaseUrl: source.provider.writingBaseUrl,
     },
   ) => {
     const resolvedCue = effectiveMusicCue(source, cue, candidate)
-    const adaptation = buildMusicVideoAdaptation(source, resolvedCue)
+    const directVideo = generationSettings.generationMode === 'direct_video'
+    const adaptation = buildMusicVideoAdaptation(source, resolvedCue, {
+      generationMode: generationSettings.generationMode,
+    })
     const director = useStore.getState()
     director.directorReset()
     const store = useStore.getState()
     store.setGenerationMode('video')
-    if (generationSettings.imageModel) {
+    if (!directVideo && generationSettings.imageModel) {
       store.selectDirectorImageModel(generationSettings.imageModel)
     }
     if (generationSettings.videoModel) {
@@ -2558,10 +2568,14 @@ export function StoryLabPanel() {
     store.setSidebarMode('director')
     store.setDirectorSkill('music_video')
     store.setDirectorAutoMode(autoStart)
+    store.setDirectorMusicVideoTreatment({
+      generation_mode: generationSettings.generationMode,
+      direct_video_master_prompt: generationSettings.directVideoMasterPrompt,
+    })
     store.directorSetSceneDescription(adaptation.sceneDescription)
-    store.shortFilmSetVisualStyle(source.visualStyle)
-    store.shortFilmSetPreserveVisualStyle(source.enforceVisualStyle)
-    store.setDirectorCharacterVisualStyle(source.characterVisualStyle)
+    store.shortFilmSetVisualStyle(directVideo ? '' : source.visualStyle)
+    store.shortFilmSetPreserveVisualStyle(directVideo ? false : source.enforceVisualStyle)
+    store.setDirectorCharacterVisualStyle(directVideo ? '' : source.characterVisualStyle)
     store.setDirectorAllowClipText(source.allowClipText)
     useStore.setState({
       directorMusicSource: 'upload',
@@ -2576,7 +2590,7 @@ export function StoryLabPanel() {
       directorWritingBaseUrl: generationSettings.writingBaseUrl,
     })
 
-    for (const reference of adaptation.characterReferences) {
+    for (const reference of directVideo ? [] : adaptation.characterReferences) {
       const asset = source.assets[reference.assetId]
       if (!asset) continue
       try {
@@ -2591,7 +2605,7 @@ export function StoryLabPanel() {
         useStore.getState().directorSetCharacterRefLabel(index, reference.label)
       } catch { /* The written identity remains available in the visual brief. */ }
     }
-    for (const reference of adaptation.locationReferences) {
+    for (const reference of directVideo ? [] : adaptation.locationReferences) {
       const asset = source.assets[reference.assetId]
       if (!asset) continue
       try {
@@ -2645,6 +2659,10 @@ export function StoryLabPanel() {
       director.setSidebarMode('director')
       director.setDirectorSkill('music_video')
       director.setDirectorAutoMode(false)
+      director.setDirectorMusicVideoTreatment({
+        generation_mode: project.musicVideoGenerationMode,
+        direct_video_master_prompt: project.directVideoMasterPrompt,
+      })
       useStore.setState({ directorMusicSource: 'generate', directorStep: 'upload' })
       window.dispatchEvent(new Event('maestro:director-open'))
       return
@@ -2652,14 +2670,23 @@ export function StoryLabPanel() {
     setProductionBusy('music')
     const activity = beginStoryActivity(
       'preparing_music_video',
-      `Loading “${candidate.displayName || candidate.title || candidate.name}” and its Story references…`,
+      directMusicVideo
+        ? `Loading “${candidate.displayName || candidate.title || candidate.name}” for direct text-to-video…`
+        : `Loading “${candidate.displayName || candidate.title || candidate.name}” and its Story references…`,
       3,
     )
     try {
-      activity.update('Loading character and world references…', 'preparing_music_video', 1, 3)
+      activity.update(
+        directMusicVideo
+          ? 'Preparing the immutable master prompt; visual references remain unused…'
+          : 'Loading character and world references…',
+        'preparing_music_video', 1, 3,
+      )
       const generationSettings: MusicVideoGenerationSettings = {
         imageModel: filmImageModel,
         videoModel: filmVideoModel,
+        generationMode: project.musicVideoGenerationMode,
+        directVideoMasterPrompt: project.directVideoMasterPrompt,
         writingProvider: project.provider.writingProvider,
         writingModel: project.provider.writingModel,
         writingBaseUrl: project.provider.writingBaseUrl,
@@ -2702,6 +2729,8 @@ export function StoryLabPanel() {
               trimEnd: options.mode === 'trailer' ? options.excerpt?.end : undefined,
               imageModel: loaded.generationSettings.imageModel,
               videoModel: loaded.generationSettings.videoModel,
+              generationMode: loaded.generationSettings.generationMode,
+              directVideoMasterPrompt: loaded.generationSettings.directVideoMasterPrompt,
               writingProvider: loaded.generationSettings.writingProvider,
               writingModel: loaded.generationSettings.writingModel,
               writingBaseUrl: loaded.generationSettings.writingBaseUrl,
@@ -2715,7 +2744,9 @@ export function StoryLabPanel() {
         kind: 'ok',
         text: options.autoStart
           ? `The ${options.mode === 'trailer' ? 'musical trailer' : 'music video'} for “${loaded.adaptation.focusLabel}” is running in Director.`
-          : `The song, lyrics and visual references for “${loaded.adaptation.focusLabel}” are loaded in Director.`,
+          : loaded.generationSettings.generationMode === 'direct_video'
+            ? `The song, lyrics and direct T2V master prompt for “${loaded.adaptation.focusLabel}” are loaded in Director; no images were transferred.`
+            : `The song, lyrics and visual references for “${loaded.adaptation.focusLabel}” are loaded in Director.`,
       })
     } catch (error) {
       activity.fail(error, 'preparing_music_video')
@@ -2737,7 +2768,9 @@ export function StoryLabPanel() {
     }
     if (autoStart && !window.confirm(
       `Generate the ${musicProductionMode === 'trailer' ? 'musical trailer' : 'complete music video'} for “${selectedMusicOption.label}”? `
-      + 'This creates one start image and one video render per planned clip and may consume provider credits.',
+      + (directMusicVideo
+        ? 'This sends one pure text-to-video request per planned clip, without creating or uploading images, and may consume video-generation credits.'
+        : 'This creates one start image and one video render per planned clip and may consume provider credits.'),
     )) return
     await openMusicalTrailer(selectedMusicOption.candidate.id, {
       autoStart,
@@ -2777,6 +2810,10 @@ export function StoryLabPanel() {
           ? production.targetSnapshot.imageModel : filmImageModel,
         videoModel: typeof production.targetSnapshot?.videoModel === 'string'
           ? production.targetSnapshot.videoModel : filmVideoModel,
+        generationMode: production.targetSnapshot?.generationMode === 'direct_video'
+          ? 'direct_video' : source.musicVideoGenerationMode,
+        directVideoMasterPrompt: typeof production.targetSnapshot?.directVideoMasterPrompt === 'string'
+          ? production.targetSnapshot.directVideoMasterPrompt : source.directVideoMasterPrompt,
         writingProvider: savedWritingProvider === 'deepseek'
           || savedWritingProvider === 'minimax'
           || savedWritingProvider === 'openai'
@@ -2917,7 +2954,7 @@ export function StoryLabPanel() {
   useEffect(() => {
     if (!visibleTabIds.includes(tab)) setTab('overview')
   }, [project.projectType, tab]) // eslint-disable-line react-hooks/exhaustive-deps
-  const productionIssues = (() => {
+  const collectProductionIssues = (requiresVisualIdentities: boolean) => {
     if (project.workflowMode === 'automatic') return []
     const required: Array<keyof StoryProject['approvals']> = [
       'overview', 'world', 'characters', 'structure',
@@ -2928,12 +2965,20 @@ export function StoryLabPanel() {
       .map(section => `Approve ${section}`)
     if (project.characters.some(character =>
       character.approval !== 'approved'
-      || !character.primaryReferenceAssetId
-      || !project.assets[character.primaryReferenceAssetId])) {
-      issues.push('Approve every character identity')
+      || (requiresVisualIdentities && (
+        !character.primaryReferenceAssetId
+        || !project.assets[character.primaryReferenceAssetId]
+      )))) {
+      issues.push(!requiresVisualIdentities
+        ? 'Approve every character description'
+        : 'Approve every character identity')
     }
     return issues
-  })()
+  }
+  const productionIssues = collectProductionIssues(true)
+  const musicProductionIssues = collectProductionIssues(!directMusicVideo)
+  const visibleProductionIssues = project.projectType === 'music_video'
+    ? musicProductionIssues : productionIssues
 
   return (
     <div className="h-full min-h-0 flex flex-col rounded-xl border border-border bg-bg-primary overflow-hidden">
@@ -4087,6 +4132,47 @@ export function StoryLabPanel() {
                             <audio src={selectedMusicOption.candidate.source} controls preload="metadata" className="h-8 w-full" />
                           </div>
                         )}
+                        <div className="rounded-lg border border-fuchsia-500/35 bg-fuchsia-500/5 p-2.5 space-y-2.5">
+                          <div>
+                            <p className="text-[10px] font-medium text-fuchsia-200">Cómo generar los planos</p>
+                            <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
+                              El modo directo evita por completo MiniMax Image y cualquier referencia visual; cada clip nace únicamente del prompt de vídeo.
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => patch({ musicVideoGenerationMode: 'image_guided' })}
+                              className={`${button} flex-col ${!directMusicVideo ? 'border-pink-500/60 text-pink-300' : ''}`}
+                            >
+                              <span>Con imágenes</span>
+                              <span className="text-[9px] text-text-muted">Crea un fotograma inicial</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => patch({ musicVideoGenerationMode: 'direct_video' })}
+                              className={`${button} flex-col ${directMusicVideo ? 'border-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-200' : ''}`}
+                            >
+                              <span>Vídeo directo · sin imágenes</span>
+                              <span className="text-[9px] text-text-muted">T2V puro</span>
+                            </button>
+                          </div>
+                          {directMusicVideo && (
+                            <label className="block text-[10px] text-text-muted">Prompt maestro de mundo y estilo
+                              <textarea
+                                className={`${input} mt-1 min-h-36 resize-y leading-relaxed`}
+                                value={project.directVideoMasterPrompt}
+                                onChange={event => patch({ directVideoMasterPrompt: event.target.value })}
+                                placeholder="Este contrato se repetirá completo en cada clip y segmento"
+                              />
+                              <span className={`mt-1 block text-[9px] leading-relaxed ${directVideoMasterReady ? 'text-fuchsia-200/80' : 'text-amber-300'}`}>
+                                {directVideoMasterReady
+                                  ? 'El LLM sólo añadirá la situación concreta. Story Lab no cargará identidades, localizaciones, imágenes iniciales ni referencias H3.'
+                                  : 'Escribe el prompt maestro antes de generar.'}
+                              </span>
+                            </label>
+                          )}
+                        </div>
                         <div className="rounded-lg border border-border bg-bg-tertiary/40 p-2.5 space-y-2">
                           <div>
                             <p className="text-[10px] font-medium text-text-secondary">Generation models</p>
@@ -4124,21 +4210,28 @@ export function StoryLabPanel() {
                                 )}
                               </label>
                             )}
-                            <label className="block text-[10px] text-text-muted">Image model
-                              <select className={`${input} mt-1`} value={filmImageModel} onChange={event => selectDirectorImageModel(event.target.value)}>
-                                {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
-                                  <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
-                                )}
-                                <optgroup label="External API">
-                                  <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
-                                </optgroup>
-                                <optgroup label="Maestro local">
-                                  {selectableImageModels.map(model => (
-                                    <option key={model.model_type} value={model.model_type}>{model.name}</option>
-                                  ))}
-                                </optgroup>
-                              </select>
-                            </label>
+                            {directMusicVideo ? (
+                              <div className="rounded-md border border-fuchsia-500/25 bg-fuchsia-500/5 px-2 py-1.5 text-[10px] text-text-muted">
+                                <span className="block font-medium text-fuchsia-200">Image model · no usado</span>
+                                <span className="mt-1 block text-[9px]">No se generará, cargará ni enviará ninguna imagen.</span>
+                              </div>
+                            ) : (
+                              <label className="block text-[10px] text-text-muted">Image model
+                                <select className={`${input} mt-1`} value={filmImageModel} onChange={event => selectDirectorImageModel(event.target.value)}>
+                                  {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
+                                    <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
+                                  )}
+                                  <optgroup label="External API">
+                                    <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
+                                  </optgroup>
+                                  <optgroup label="Maestro local">
+                                    {selectableImageModels.map(model => (
+                                      <option key={model.model_type} value={model.model_type}>{model.name}</option>
+                                    ))}
+                                  </optgroup>
+                                </select>
+                              </label>
+                            )}
                             <label className="block text-[10px] text-text-muted">Video model
                               <select className={`${input} mt-1`} value={filmVideoModel} onChange={event => void selectDirectorVideoModel(event.target.value)}>
                                 {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && (
@@ -4155,12 +4248,16 @@ export function StoryLabPanel() {
                               <input className={`${input} mt-1`} value={project.provider.writingBaseUrl} onChange={event => patchMusicWritingProvider({ writingBaseUrl: event.target.value })} placeholder="https://…/v1" />
                             </label>
                           )}
-                          <p className={`text-[9px] ${musicWritingReady && filmImageReady ? 'text-text-muted' : 'text-amber-300'}`}>
-                            {musicWritingReady && filmImageReady
-                              ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · ${selectedFilmImageModel?.name || filmImageModel} · ${selectedFilmVideoModel?.name || filmVideoModel}`
+                          <p className={`text-[9px] ${musicWritingReady && musicVideoImageReady && directVideoMasterReady ? 'text-text-muted' : 'text-amber-300'}`}>
+                            {musicWritingReady && musicVideoImageReady && directVideoMasterReady
+                              ? directMusicVideo
+                                ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · T2V without images · ${selectedFilmVideoModel?.name || filmVideoModel}`
+                                : `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · ${selectedFilmImageModel?.name || filmImageModel} · ${selectedFilmVideoModel?.name || filmVideoModel}`
                               : !musicWritingReady
                                 ? 'Configure the selected planning LLM in Settings → Services before generating.'
-                                : 'Configure MiniMax in Settings → Services before using MiniMax Image.'}
+                                : !directVideoMasterReady
+                                  ? 'Define the direct-video master prompt before generating.'
+                                  : 'Configure MiniMax in Settings → Services before using MiniMax Image.'}
                           </p>
                         </div>
                         <div className="grid grid-cols-2 gap-1.5">
@@ -4228,7 +4325,7 @@ export function StoryLabPanel() {
                         <div className="grid gap-2 sm:grid-cols-2">
                           <button
                             className={`${button} w-full border-pink-500/60 text-pink-300`}
-                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length) || !musicWritingReady || !filmImageReady}
+                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady}
                             onClick={() => void stageMusicVideo(true)}
                           >
                             {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
@@ -4236,14 +4333,16 @@ export function StoryLabPanel() {
                           </button>
                           <button
                             className={`${button} w-full`}
-                            disabled={Boolean(productionBusy) || Boolean(productionIssues.length) || !musicWritingReady || !filmImageReady}
+                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady}
                             onClick={() => void stageMusicVideo(false)}
                           >
                             <ChevronRight size={13} /> Open {musicProductionMode === 'trailer' ? 'trailer' : 'music video'} in Director
                           </button>
                         </div>
                         <p className="text-[9px] text-text-muted">
-                          The selected song, structured lyrics, focus character/world, approved images and pacing are saved in Adaptation history and can be reopened independently.
+                          {directMusicVideo
+                            ? 'The selected song, structured lyrics, direct-video master prompt and pacing are saved in Adaptation history. Images remain in the Story library but are not sent to this production.'
+                            : 'The selected song, structured lyrics, focus character/world, approved images and pacing are saved in Adaptation history and can be reopened independently.'}
                         </p>
                       </>
                     ) : (
@@ -4373,9 +4472,9 @@ export function StoryLabPanel() {
                     <p className="text-[9px] text-text-muted">Uploaded songs work too. Beat-aware cuts synchronize editing rhythm; generated motion itself is not guaranteed to hit every beat semantically.</p>
                   </div>
                 </div>
-                {productionIssues.length > 0 && (
+                {visibleProductionIssues.length > 0 && (
                   <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
-                    Guided production is locked until review is complete: {productionIssues.join(' · ')}.
+                    Guided production is locked until review is complete: {visibleProductionIssues.join(' · ')}.
                   </div>
                 )}
                 <div className={`${panel} mt-4`}>

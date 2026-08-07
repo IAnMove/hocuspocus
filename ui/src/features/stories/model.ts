@@ -2,6 +2,7 @@ import type {
   StoryBeat, StoryCharacter, StoryLocation, StoryProject, StoryRelationship,
   StoryMusicCandidate, StoryMusicCue, StoryVisualAsset,
 } from './types'
+import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../../types'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
 
@@ -284,6 +285,8 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     characterVisualStyle: '',
     enforceVisualStyle: true,
     allowClipText: false,
+    musicVideoGenerationMode: 'image_guided',
+    directVideoMasterPrompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
     premise: '',
     logline: '',
     synopsis: '',
@@ -405,6 +408,12 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     characterVisualStyle: text(project.characterVisualStyle),
     enforceVisualStyle: project.enforceVisualStyle !== false,
     allowClipText: project.allowClipText === true,
+    musicVideoGenerationMode: project.musicVideoGenerationMode === 'direct_video'
+      ? 'direct_video' : 'image_guided',
+    directVideoMasterPrompt: text(
+      project.directVideoMasterPrompt,
+      DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
+    ),
     premise: text(project.premise),
     logline: text(project.logline),
     synopsis: text(project.synopsis),
@@ -503,11 +512,13 @@ export function changedSections(before: StoryProject, after: StoryProject): Stor
   const overviewBefore = [
     before.title, before.projectType, before.creativeBrief, before.language, before.genre, before.tone, before.audience,
     before.visualStyle, before.characterVisualStyle, before.enforceVisualStyle, before.allowClipText,
+    before.musicVideoGenerationMode, before.directVideoMasterPrompt,
     before.premise, before.logline, before.synopsis, before.theme, before.ending,
   ]
   const overviewAfter = [
     after.title, after.projectType, after.creativeBrief, after.language, after.genre, after.tone, after.audience,
     after.visualStyle, after.characterVisualStyle, after.enforceVisualStyle, after.allowClipText,
+    after.musicVideoGenerationMode, after.directVideoMasterPrompt,
     after.premise, after.logline, after.synopsis, after.theme, after.ending,
   ]
   const changed: StorySection[] = []

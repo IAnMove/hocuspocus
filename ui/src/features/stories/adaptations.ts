@@ -271,11 +271,17 @@ export interface MusicVideoAdaptation {
   locationReferences: Array<{ assetId: string; label: string }>
 }
 
+export interface MusicVideoAdaptationOptions {
+  generationMode?: StoryProject['musicVideoGenerationMode']
+}
+
 /** Build a song-led visual brief whose subject follows the authored music cue. */
 export function buildMusicVideoAdaptation(
   project: StoryProject,
   cue?: StoryMusicCue,
+  options: MusicVideoAdaptationOptions = {},
 ): MusicVideoAdaptation {
+  const directVideo = options.generationMode === 'direct_video'
   const focusKind = cue?.kind || 'story'
   const targetCharacter = focusKind === 'character'
     ? project.characters.find(character => character.id === cue?.targetId)
@@ -303,15 +309,59 @@ export function buildMusicVideoAdaptation(
   ]
   const focusLabel = targetCharacter?.name
     || (focusKind === 'world' ? `${project.title} · world` : project.title)
+  const directCharacterCanon = (character: StoryCharacter) => [
+    `${character.name} (${character.role || 'character'})`,
+    character.age ? `Age: ${character.age}.` : '',
+    character.pronouns ? `Pronouns: ${character.pronouns}.` : '',
+    character.appearance,
+    character.wardrobe ? `Canonical wardrobe: ${character.wardrobe}.` : '',
+    canonicalCharacterPsychology(character),
+  ].filter(Boolean).join('\n')
+  const directWorldCanon = [
+    line('World', project.world.summary),
+    line('Period', project.world.period),
+    line('Geography', project.world.geography),
+    line('Society', project.world.society),
+    line('Technology', project.world.technology),
+    line('World rules', project.world.rules.join('; ')),
+    ...project.world.locations.map(location => [
+      location.name,
+      location.purpose,
+      location.description,
+    ].filter(Boolean).join(' · ')),
+  ].filter(Boolean).join('\n')
+  const directStoryCanon = [
+    line('Source title', project.title),
+    line('Premise', project.premise),
+    line('Synopsis', project.synopsis),
+    line('Theme', project.theme),
+    line('Required ending', project.ending),
+    '',
+    'NARRATIVE CHARACTERS',
+    ...project.characters.map(directCharacterCanon),
+    '',
+    'DRAMATIC BEATS',
+    ...project.beats.map((beat, index) => [
+      `${index + 1}. ${beat.stage}${beat.title ? ` — ${beat.title}` : ''}`,
+      line('Action', beat.summary),
+      line('Conflict', beat.conflict),
+      line('Turn', beat.turn),
+    ].filter(Boolean).join(' · ')),
+    '',
+    'NARRATIVE WORLD FACTS',
+    directWorldCanon,
+  ].filter(Boolean).join('\n')
   const focusCanon = targetCharacter
-    ? [
+    ? directVideo ? directCharacterCanon(targetCharacter) : [
         `${targetCharacter.name} (${targetCharacter.role || 'character'})`,
         canonicalCharacterDescription(targetCharacter),
         canonicalCharacterPsychology(targetCharacter),
       ].join('\n')
     : focusKind === 'world'
-      ? [project.world.summary, project.world.visualPrompt, ...project.world.rules].filter(Boolean).join('\n')
-      : storyAdaptationContext(project)
+      ? directVideo
+        ? directWorldCanon
+        : [project.world.summary, project.world.visualPrompt, ...project.world.rules].filter(Boolean).join('\n')
+      : directVideo ? directStoryCanon : storyAdaptationContext(project)
 
   return {
     focusKind,
@@ -338,19 +388,21 @@ export function buildMusicVideoAdaptation(
       'FOCUS CANON',
       focusCanon,
       '',
-      'VISUAL WORLD BIBLE',
-      line('Global visual style', project.enforceVisualStyle ? project.visualStyle : ''),
-      line('Character rendering style', project.enforceVisualStyle ? project.characterVisualStyle : ''),
-      line('Visual language', project.world.visualLanguage),
-      line('Forbidden imagery', project.world.negativePrompt),
+      directVideo ? 'DIRECT VIDEO NARRATIVE CONTRACT' : 'VISUAL WORLD BIBLE',
+      directVideo
+        ? 'The immutable visual world/style prompt is supplied separately and is the only aesthetic authority. Use this Story material only for concrete subjects, places and actions; do not infer or repeat an alternate rendering style.'
+        : line('Global visual style', project.enforceVisualStyle ? project.visualStyle : ''),
+      directVideo ? line('Narrative world', project.world.summary) : line('Character rendering style', project.enforceVisualStyle ? project.characterVisualStyle : ''),
+      directVideo ? '' : line('Visual language', project.world.visualLanguage),
+      directVideo ? '' : line('Forbidden imagery', project.world.negativePrompt),
       project.allowClipText
         ? ''
         : 'FINAL VISIBLE-TEXT OVERRIDE: If any lyric, beat, location note or visual-language sentence above mentions words, code text, dialogue on screen or floating lettering, reinterpret that idea as nonverbal imagery. Do not include the quoted words or any text-rendering instruction in image_prompt, video_prompt, keyframes or window prompts.',
     ].filter(Boolean).join('\n'),
-    characterReferences: Array.from(
+    characterReferences: directVideo ? [] : Array.from(
       new Map(characterReferences.map(reference => [reference.assetId, reference])).values(),
     ),
-    locationReferences: Array.from(
+    locationReferences: directVideo ? [] : Array.from(
       new Map(locationReferences.map(reference => [reference.assetId, reference])).values(),
     ),
   }
