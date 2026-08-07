@@ -607,12 +607,24 @@ export function StoryLabPanel() {
     setMusicTrailerRange({ start: 0, end: duration, duration })
   }, [selectedMusicOption?.candidate.id, selectedMusicOption?.candidate.durationSeconds])
   const beginStoryActivity = (phase: string, message: string, total = 0) => {
-    const id = `story-lab:${project.id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+    const prefix = `story-lab:${project.id}:`
+    const activityStore = useStore.getState()
+    Object.values(activityStore.activities).forEach(previous => {
+      if (
+        previous.id.startsWith(prefix)
+        && (previous.status === 'failed' || previous.status === 'completed')
+      ) activityStore.removeActivity(previous.id)
+    })
+    const id = `${prefix}${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+    const writer = project.provider.writingProvider === 'maestro'
+      ? 'Maestro internal'
+      : project.provider.writingModel || project.provider.writingProvider
+    const title = `Story Lab · ${project.title.trim() || 'Untitled story'} · ${writer}`
     let failed = false
     useStore.getState().upsertActivity({
       id,
       kind: 'story_lab',
-      title: 'Story Lab',
+      title,
       status: 'running',
       phase,
       message,
@@ -628,7 +640,7 @@ export function StoryLabPanel() {
       useStore.getState().upsertActivity({
         id,
         kind: 'story_lab',
-        title: 'Story Lab',
+        title,
         status: 'running',
         phase: nextPhase,
         message: nextMessage,
@@ -645,7 +657,7 @@ export function StoryLabPanel() {
         useStore.getState().upsertActivity({
           id,
           kind: 'story_lab',
-          title: 'Story Lab',
+          title,
           status: 'failed',
           phase: nextPhase,
           message: errorMessage,
@@ -707,14 +719,17 @@ export function StoryLabPanel() {
   }, [activeWorkspace, loadWorkspace])
 
   useEffect(() => {
-    setRecoveryJobId(window.localStorage.getItem(storyJobKey(activeWorkspace, project.id)) || '')
+    const savedJobId = window.localStorage.getItem(storyJobKey(activeWorkspace, project.id)) || ''
+    setRecoveryJobId(savedJobId)
     setComicDirection(DEFAULT_COMIC_CHAPTER_DIRECTION)
     setComicPageCount(4)
     setComicPanelsPerPage(4)
     setFilmDirection(DEFAULT_SHORT_FILM_DIRECTION)
     setFilmDuration(45)
+    let hasLocalResult = false
     try {
       const saved = JSON.parse(window.localStorage.getItem(storyResultKey(activeWorkspace, project.id)) || 'null')
+      hasLocalResult = Boolean(saved?.result)
       setPendingDraft(saved?.result ? {
         scope: saved.scope || 'all',
         result: saved.result,
@@ -724,6 +739,33 @@ export function StoryLabPanel() {
     } catch {
       setPendingDraft(null)
     }
+    let disposed = false
+    if (savedJobId && !hasLocalResult) {
+      void api.getStoryGenerationStatus(savedJobId).then(status => {
+        const result = status.status === 'completed' ? status.result?.result : null
+        if (disposed || !result) return
+        const recovered = {
+          jobId: savedJobId,
+          scope: 'all',
+          result,
+        }
+        window.localStorage.setItem(
+          storyResultKey(activeWorkspace, project.id),
+          JSON.stringify(recovered),
+        )
+        setPendingDraft({
+          scope: 'all',
+          result,
+          selected: draftPaths(result),
+          replaceCollections: true,
+        })
+        setNotice({ kind: 'ok', text: 'A Story Lab result completed on the server and was recovered automatically. Review and apply it below.' })
+      }).catch(() => {
+        // The visible Resume control remains available for failed, cancelled,
+        // temporarily unreachable, or still-running checkpoints.
+      })
+    }
+    return () => { disposed = true }
   }, [activeWorkspace, project.id])
 
   useEffect(() => {
@@ -966,6 +1008,24 @@ export function StoryLabPanel() {
     window.localStorage.removeItem(storyResultKey(activeWorkspace, project.id))
     window.localStorage.removeItem(storyJobKey(activeWorkspace, project.id))
     setRecoveryJobId('')
+    const characterCount = Array.isArray(result.characters) ? result.characters.length : 0
+    const world = result.world && typeof result.world === 'object'
+      ? result.world as Record<string, unknown> : null
+    const locationCount = world && Array.isArray(world.locations) ? world.locations.length : 0
+    const structure = Array.isArray(result.structure) ? result.structure
+      : Array.isArray(result.beats) ? result.beats : []
+    const generatedMusic = result.music && typeof result.music === 'object'
+      ? result.music as Record<string, unknown> : null
+    const musicCount = generatedMusic && Array.isArray(generatedMusic.cues)
+      ? generatedMusic.cues.length : 0
+    const overview = result.overview && typeof result.overview === 'object'
+      ? result.overview as Record<string, unknown> : null
+    const appliedTitle = typeof overview?.title === 'string' && overview.title.trim()
+      ? overview.title.trim() : project.title || 'Untitled story'
+    setNotice({
+      kind: 'ok',
+      text: `Applied to “${appliedTitle}”: ${characterCount} characters · ${locationCount} locations · ${structure.length} moments · ${musicCount} song${musicCount === 1 ? '' : 's'}.`,
+    })
   }
 
   const completeGeneratedDraft = async (
@@ -1035,6 +1095,20 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: project.projectType === 'full_story' ? 'Write a premise first.' : 'Complete the creative brief first.' })
       return
     }
+    const existingStoryParts = [
+      project.characters.length ? `${project.characters.length} characters` : '',
+      project.world.locations.length ? `${project.world.locations.length} locations` : '',
+      project.beats.length ? `${project.beats.length} moments` : '',
+      project.music.cues.length
+        ? `${project.music.cues.length} song${project.music.cues.length === 1 ? '' : 's'}` : '',
+    ].filter(Boolean)
+    if (
+      scope === 'all'
+      && existingStoryParts.length
+      && !window.confirm(
+        `This Story already contains ${existingStoryParts.join(', ')}. Generate a new replacement draft? The current material remains unchanged until you review and apply the new draft.`,
+      )
+    ) return
     setBusy(scope)
     setNotice(null)
     const controller = new AbortController()
@@ -1124,6 +1198,10 @@ export function StoryLabPanel() {
           progress.current,
           progress.total,
         )
+      }, {
+        writingProvider: project.provider.writingProvider,
+        writingModel: project.provider.writingModel,
+        writingBaseUrl: project.provider.writingBaseUrl,
       })
       if (useStoryStore.getState().project.id !== sourceProjectId) return
       setPendingDraft({
@@ -1139,8 +1217,14 @@ export function StoryLabPanel() {
       }))
       setNotice({ kind: 'ok', text: 'Recovered Story Lab draft is ready for review.' })
     } catch (error) {
-      activity.fail(error)
-      setNotice({ kind: 'error', text: (error as Error).message })
+      const message = (error as Error).message
+      if (/cancelled/i.test(message)) {
+        useStore.getState().removeActivity(activity.id)
+        setNotice({ kind: 'ok', text: 'That saved attempt was cancelled. Any completed stages and newer completed drafts remain available.' })
+      } else {
+        activity.fail(error)
+        setNotice({ kind: 'error', text: message })
+      }
     } finally {
       activity.finish()
       setBusy(null)

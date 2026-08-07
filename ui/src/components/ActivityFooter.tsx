@@ -264,7 +264,7 @@ export function ActivityFooter() {
       {detailsOpen && rows.length > 0 && (
         <div className="absolute bottom-full left-3 mb-2 w-[min(34rem,calc(100vw-1.5rem))] max-h-72 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
           <div className="mb-1.5 flex items-center justify-between px-1">
-            <span className="font-semibold text-text-primary">Current activity</span>
+            <span className="font-semibold text-text-primary">{activeRows.length ? 'Current activity' : 'Recent activity'}</span>
             <span className="text-text-muted">{activeRows.length} active</span>
           </div>
           <div className="space-y-1.5">
@@ -368,7 +368,7 @@ export function ActivityFooter() {
         onClick={() => setDetailsOpen(open => !open)}
         className="flex items-center gap-1.5 shrink-0"
         aria-expanded={detailsOpen}
-        title="Show all current activities"
+        title="Show activity history"
       >
         {isActive ? (
           <Loader2 size={13} className="animate-spin text-accent-blue" />

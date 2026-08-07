@@ -1813,6 +1813,28 @@ export async function cancelStoryGeneration(jobId: string): Promise<void> {
   }
 }
 
+export interface StoryGenerationStatus {
+  jobId: string
+  status: string
+  message: string
+  stage: string
+  current: number
+  total: number
+  error?: string | null
+  result?: { result?: Record<string, unknown> } | null
+}
+
+export async function getStoryGenerationStatus(jobId: string): Promise<StoryGenerationStatus> {
+  const response = await fetch(
+    `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(jobId)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not read Story Lab job' }))
+    throw new Error(error.detail || 'Could not read Story Lab job')
+  }
+  return response.json()
+}
+
 export async function resumeStoryGeneration(
   jobId: string,
   onProgress?: (progress: {
@@ -1823,10 +1845,19 @@ export async function resumeStoryGeneration(
     current: number
     total: number
   }) => void,
+  writing?: {
+    writingProvider: import('../features/stories/types').StoryWritingProvider
+    writingModel?: string
+    writingBaseUrl?: string
+  },
 ): Promise<{ result: Record<string, unknown> }> {
   const resumed = await fetch(
     `${BASE}/api/v1/stories/generate/resume/${encodeURIComponent(jobId)}`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(writing || {}),
+    },
   )
   if (!resumed.ok) {
     const err = await resumed.json().catch(() => ({ detail: 'Could not resume Story Lab job' }))
@@ -1834,11 +1865,7 @@ export async function resumeStoryGeneration(
   }
   for (;;) {
     await new Promise(resolve => window.setTimeout(resolve, 1000))
-    const response = await fetch(
-      `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(jobId)}`,
-    )
-    if (!response.ok) throw new Error('Could not read resumed Story Lab job')
-    const status = await response.json()
+    const status = await getStoryGenerationStatus(jobId)
     onProgress?.(status)
     if (status.status === 'failed' || status.status === 'cancelled') {
       throw new Error(status.error || status.message)
@@ -1849,7 +1876,7 @@ export async function resumeStoryGeneration(
         jobId,
         result: status.result.result,
       }))
-      return status.result
+      return { result: status.result.result }
     }
   }
 }

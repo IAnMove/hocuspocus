@@ -13598,6 +13598,29 @@ def _story_checkpoint_request(body: dict) -> dict:
     return request
 
 
+def _story_resume_request(request: dict, override: dict | None) -> dict:
+    """Apply an explicit current writing profile to a durable resume request."""
+    updated = copy.deepcopy(request)
+    if not isinstance(override, dict):
+        return updated
+    provider = str(override.get("writingProvider") or "").strip()
+    if not provider:
+        return updated
+    updated["writingProvider"] = provider
+    updated["writingModel"] = str(override.get("writingModel") or "").strip()
+    updated["writingBaseUrl"] = str(override.get("writingBaseUrl") or "").strip()
+    project = updated.get("project")
+    if isinstance(project, dict):
+        profile = project.get("provider") if isinstance(project.get("provider"), dict) else {}
+        project["provider"] = {
+            **profile,
+            "writingProvider": updated["writingProvider"],
+            "writingModel": updated["writingModel"],
+            "writingBaseUrl": updated["writingBaseUrl"],
+        }
+    return updated
+
+
 _story_library_lock = threading.Lock()
 
 
@@ -14307,7 +14330,7 @@ def get_story_lab_generation(job_id: str):
 
 
 @api.post("/api/v1/stories/generate/resume/{job_id}")
-def resume_story_lab_generation(job_id: str):
+def resume_story_lab_generation(job_id: str, body: dict | None = None):
     job = _load_story_plan_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Story generation job not found")
@@ -14321,8 +14344,14 @@ def resume_story_lab_generation(job_id: str):
             "status": job.get("status"),
             "message": "Story generation is already running.",
         }
+    request = _story_resume_request(job.get("request") or {}, body)
+    # Resolve the profile before mutating the durable checkpoint so invalid
+    # model names or missing credentials fail without damaging recovery.
+    if isinstance(body, dict) and str(body.get("writingProvider") or "").strip():
+        _comic_writing_llm(request)
     _story_job_update(
         job_id,
+        request=request,
         status="queued",
         message="Resuming from the last completed Story Lab stage…",
         error=None,
