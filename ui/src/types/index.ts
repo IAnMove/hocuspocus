@@ -455,13 +455,49 @@ export interface SystemConfig {
   vram_safety_coefficient: number
 }
 
+export interface OutputGenerationTimings {
+  total_time_sec?: number | null
+  prompt_generation_time_sec?: number | null
+  image_generation_time_sec?: number | null
+  video_generation_time_sec?: number | null
+  assembly_time_sec?: number | null
+}
+
 export interface OutputMetadata {
   source: 'sidecar' | 'embedded' | 'none'
   params: Record<string, unknown> | null
   upload_filenames?: Record<string, string>
   job_id?: string
   generation_time?: number
+  generation_timings?: OutputGenerationTimings
+  director_pipeline_id?: string
   created_at?: number
+}
+
+export interface VideoExtraInfo {
+  overview: string
+  youtube: {
+    title: string
+    description: string
+  }
+  x: {
+    post: string
+  }
+  language: string
+  language_label: string
+  source_fingerprint: string
+  prompt_count: number
+  director_context: boolean
+  generated_at?: number
+}
+
+export interface VideoExtraInfoStatus {
+  available: boolean
+  language: string
+  language_label: string
+  data: VideoExtraInfo | null
+  prompt_count: number
+  director_context: boolean
 }
 
 export interface MultiClipKeyframe {

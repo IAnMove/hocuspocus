@@ -408,6 +408,10 @@ export function DirectorChat() {
   const shortFilmSetVisualStyle = useStore(s => s.shortFilmSetVisualStyle)
   const shortFilmPreserveVisualStyle = useStore(s => s.shortFilmPreserveVisualStyle)
   const shortFilmSetPreserveVisualStyle = useStore(s => s.shortFilmSetPreserveVisualStyle)
+  const directorCharacterVisualStyle = useStore(s => s.directorCharacterVisualStyle)
+  const setDirectorCharacterVisualStyle = useStore(s => s.setDirectorCharacterVisualStyle)
+  const directorAllowClipText = useStore(s => s.directorAllowClipText)
+  const setDirectorAllowClipText = useStore(s => s.setDirectorAllowClipText)
   const startDirectorPipeline = useStore(s => s.startDirectorPipeline)
   const pipelineStatus = useStore(s => s.pipelineStatus)
   const pipelinePhase = pipelineStatus?.phase
@@ -921,6 +925,34 @@ export function DirectorChat() {
                     <p className="mt-1 text-[9px] text-text-muted">
                       Loaded from the Story world bible. You can edit it for this film without changing the master Story.
                     </p>
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] text-text-muted">Character rendering style</span>
+                    <AutoResizeTextarea
+                      value={directorCharacterVisualStyle}
+                      onChange={e => setDirectorCharacterVisualStyle(e.target.value)}
+                      disabled={!shortFilmPreserveVisualStyle}
+                      rows={3}
+                      className="mt-1 w-full resize-none rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] leading-relaxed text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
+                      placeholder="e.g. realistic people, handmade claymation, or clean 2D anime cel shading"
+                    />
+                    <p className="mt-1 text-[9px] text-text-muted">
+                      Applied to every visible person independently from the world art direction.
+                    </p>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={directorAllowClipText}
+                      onChange={e => setDirectorAllowClipText(e.target.checked)}
+                      className="mt-0.5 accent-accent-blue"
+                    />
+                    <div>
+                      <span className="text-[10px] text-text-primary">Permitir generar clips con textos</span>
+                      <p className="text-[9px] text-text-muted leading-tight">
+                        Off by default. Dialogue and lyrics remain audio-only and are not rendered as visible lettering.
+                      </p>
+                    </div>
                   </label>
                 </div>
               </SystemBubble>

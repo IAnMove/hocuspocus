@@ -30,6 +30,7 @@ import threading
 import traceback
 import requests
 from pathlib import Path
+from urllib.parse import quote
 
 # --- Bootstrap: CWD must be app/ and sys.argv must be patched before importing wgp ---
 _app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -93,6 +94,7 @@ print("[Maestro] Importing WanGP engine...")
 import wgp
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import debug_trace
+from services.durable_generation_queue import DurableGenerationQueue
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 print(f"[Maestro] WanGP loaded: {len(wgp.displayed_model_types)} models available")
@@ -293,8 +295,73 @@ async def trace_user_mutations(request: Request, call_next):
 _jobs: dict = {}
 _gen_lock = threading.Lock()
 _active_gen_states: dict = {}  # job_id -> wgp gen state dict (for abort signaling)
+_queue_recovery_lock = threading.Lock()
+_durable_generation_queue = DurableGenerationQueue(
+    os.path.join(
+        os.path.realpath(wgp.server_config.get("save_path", "outputs")),
+        ".maestro_generation_queue.json",
+    )
+)
 _audio_analysis_execution_lock = threading.Lock()
 _H3_IDLE_SHUTDOWN_SECONDS = minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS
+
+
+def _is_durable_generation_job(job: dict) -> bool:
+    """Only persist ordinary Studio generations, not Director sub-jobs."""
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    return bool(params.get("model_type")) and not params.get("_director_pipeline_id")
+
+
+def _persist_generation_job(job: dict) -> None:
+    if not _is_durable_generation_job(job):
+        return
+    try:
+        _durable_generation_queue.upsert({
+            "id": job["id"],
+            "status": job.get("status", "queued"),
+            "created_at": job.get("created_at", time.time()),
+            "params": copy.deepcopy(job.get("params") or {}),
+            "workspace": job.get("workspace") or "default",
+        })
+    except Exception as exc:
+        # Persistence should protect a generation, never prevent it from
+        # starting if the disk is temporarily read-only or full.
+        print(f"[Queue recovery] Could not persist job {job.get('id')}: {exc}")
+
+
+def _remove_persisted_generation_job(job: dict) -> None:
+    if not _is_durable_generation_job(job):
+        return
+    try:
+        _durable_generation_queue.remove(str(job.get("id") or ""))
+    except Exception as exc:
+        print(f"[Queue recovery] Could not remove job {job.get('id')}: {exc}")
+
+
+def _new_generation_job(
+    params: dict,
+    workspace: str,
+    *,
+    job_id: str | None = None,
+    created_at: float | None = None,
+    recovered: bool = False,
+) -> dict:
+    return {
+        "id": job_id or uuid.uuid4().hex[:8],
+        "status": "queued",
+        "progress": 0,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Recovered · queued" if recovered else "Queued",
+        "created_at": created_at or time.time(),
+        "params": copy.deepcopy(params),
+        "output_files": [],
+        "error": None,
+        "workspace": workspace,
+        "out_dir": _workspace_dir(workspace),
+        "recovered": recovered,
+    }
 
 
 def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
@@ -388,6 +455,7 @@ def _request_generation_cancel(job_id: str) -> dict:
         job["_cancel_requested"] = True
         job["status"] = "cancelled"
         job["message"] = "Cancelled"
+        _remove_persisted_generation_job(job)
         return {"status": "cancelled", "was_running": False}
 
     if status == "running":
@@ -6875,6 +6943,8 @@ async def director_plan_short_film_script(request: Request):
             frames_minimum=body.get("frames_minimum", 5),
             visual_style=body.get("visual_style", ""),
             preserve_visual_style=body.get("preserve_visual_style", False),
+            character_visual_style=body.get("character_visual_style", ""),
+            allow_clip_text=body.get("allow_clip_text") is True,
         )
         return result
     except Exception as e:
@@ -7172,7 +7242,7 @@ _DIRECTOR_V2_PLANNER_KEYS = (
     "location_ref_paths", "location_ref_labels", "speaker_mappings", "characters",
     "audio_path", "target_duration", "target_scenes", "narrative_mode",
     "fps", "frames_steps", "frames_minimum", "concept", "visual_style",
-    "preserve_visual_style",
+    "preserve_visual_style", "character_visual_style", "allow_clip_text",
     "platform", "style", "transcript", "prompt_type", "image_model",
     "video_model", "seamless", "multishot_lora_mode",
     "music_video_treatment",
@@ -7324,6 +7394,8 @@ async def director_v2_plan(request: Request):
             body.get("visual_style", ""),
             preserve=bool(body.get("preserve_visual_style", False)),
             has_reference=has_reference,
+            character_visual_style=body.get("character_visual_style", ""),
+            allow_clip_text=body.get("allow_clip_text") is True,
         )
         if video_model == minimax_h3_service.MODEL_ID:
             from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
@@ -7333,6 +7405,14 @@ async def director_v2_plan(request: Request):
                 serialized_plan.get("shots") or [],
                 reference_mode=body.get("h3_reference_mode", "first_frame"),
                 audio_direction=body.get("h3_audio_prompt", ""),
+            )
+            clip_plans = enforce_visual_style_on_clip_plans(
+                clip_plans,
+                body.get("visual_style", ""),
+                preserve=bool(body.get("preserve_visual_style", False)),
+                has_reference=has_reference,
+                character_visual_style=body.get("character_visual_style", ""),
+                allow_clip_text=body.get("allow_clip_text") is True,
             )
         llm_service.update_activity_tracking(
             tracking_id,
@@ -7458,23 +7538,13 @@ async def generate(request: Request):
     workspace = body.pop("workspace", None) or _get_active_workspace()
     job_out_dir = _workspace_dir(workspace)
 
-    job_id = uuid.uuid4().hex[:8]
-    job = {
-        "id": job_id,
-        "status": "queued",
-        "progress": 0,
-        "step": 0,
-        "total_steps": 0,
-        "phase": "",
-        "message": "Queued",
-        "created_at": time.time(),
-        "params": body,
-        "output_files": [],
-        "error": None,
-        "workspace": workspace,
-        "out_dir": job_out_dir,
-    }
+    job = _new_generation_job(body, workspace)
+    job_id = job["id"]
+    job["out_dir"] = job_out_dir
     _jobs[job_id] = job
+    # Persist before the worker starts so a power loss in the tiny gap between
+    # API acknowledgement and thread scheduling cannot lose the request.
+    _persist_generation_job(job)
 
     if body.get("model_type") == minimax_h3_service.MODEL_ID:
         # Cancel any idle-release race as soon as the new H3 work enters the
@@ -10424,7 +10494,8 @@ def _run_generation(job_id: str):
                 return
 
             job["status"] = "running"
-            job["message"] = "Preparing..."
+            job["message"] = "Restarting recovered job from the beginning…" if job.get("recovered") else "Preparing..."
+            _persist_generation_job(job)
 
             # A Comfy sidecar owns the GPU while H3 runs. Stop it before any
             # normal WanGP job so the two runtimes never retain VRAM together.
@@ -11500,6 +11571,10 @@ def _run_generation(job_id: str):
                 job["total_steps"] = 0
                 job["phase"] = ""
                 job["message"] = "Cancelled"
+            # The generation itself is terminal now. Remove its request before
+            # optional model-idle cleanup so a shutdown during cleanup cannot
+            # offer a duplicate completed job for recovery.
+            _remove_persisted_generation_job(job)
             if (
                 job.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
                 # Story Director deliberately keeps H3 alive between its
@@ -11571,6 +11646,80 @@ def list_jobs():
             })
     active.sort(key=lambda x: x["created_at"])
     return {"jobs": active}
+
+
+def _recovery_job_summary(record: dict) -> dict:
+    params = record.get("params") if isinstance(record.get("params"), dict) else {}
+    prompt = str(params.get("prompt") or params.get("lyrics") or "").strip()
+    return {
+        "job_id": str(record.get("id") or ""),
+        "previous_status": str(record.get("status") or "queued"),
+        "created_at": float(record.get("created_at") or 0),
+        "workspace": str(record.get("workspace") or "default"),
+        "model_type": str(params.get("model_type") or ""),
+        "generation_mode": str(params.get("generation_mode") or ""),
+        "prompt_preview": prompt[:240],
+    }
+
+
+@api.get("/api/v1/jobs/recovery")
+def get_generation_queue_recovery():
+    """Return crash leftovers that are not active in this server process."""
+    candidates = _durable_generation_queue.list(exclude_ids=_jobs.keys())
+    return {"jobs": [_recovery_job_summary(record) for record in candidates]}
+
+
+@api.post("/api/v1/jobs/recovery/resume")
+def resume_generation_queue():
+    """Requeue persisted requests in their original submission order.
+
+    An interrupted running request restarts from its beginning: model runtimes
+    do not expose a portable mid-diffusion checkpoint.
+    """
+    resumed: list[dict] = []
+    threads: list[threading.Thread] = []
+    with _queue_recovery_lock:
+        candidates = _durable_generation_queue.list(exclude_ids=_jobs.keys())
+        for record in candidates:
+            job_id = str(record.get("id") or "").strip()
+            params = record.get("params")
+            if not job_id or not isinstance(params, dict) or not params.get("model_type"):
+                if job_id:
+                    _durable_generation_queue.remove(job_id)
+                continue
+            workspace = str(record.get("workspace") or "default")
+            job = _new_generation_job(
+                params,
+                workspace,
+                job_id=job_id,
+                created_at=float(record.get("created_at") or time.time()),
+                recovered=True,
+            )
+            _jobs[job_id] = job
+            _persist_generation_job(job)
+            if params.get("model_type") == minimax_h3_service.MODEL_ID:
+                minimax_h3_service.cancel_idle_shutdown()
+            threads.append(threading.Thread(
+                target=_run_generation,
+                args=(job_id,),
+                name=f"recovered-generation-{job_id}",
+                daemon=False,
+            ))
+            resumed.append(_recovery_job_summary(record))
+
+        # Populate the complete in-memory queue before any worker can finish,
+        # then start in saved order so the existing GPU mutex serialises it.
+        for thread in threads:
+            thread.start()
+    return {"resumed": resumed, "count": len(resumed)}
+
+
+@api.post("/api/v1/jobs/recovery/discard")
+def discard_generation_queue():
+    """Clear only inactive recovery candidates; never cancel live work."""
+    with _queue_recovery_lock:
+        removed = _durable_generation_queue.discard(exclude_ids=_jobs.keys())
+    return {"discarded": removed}
 
 
 # ============================================================================
@@ -13084,7 +13233,7 @@ def _story_project_prompt_context(project: dict, scope: str) -> str:
     overview_keys = (
         "title", "projectType", "creativeBrief", "language", "genre", "tone", "audience", "premise",
         "logline", "synopsis", "theme", "ending", "visualStyle",
-        "enforceVisualStyle",
+        "characterVisualStyle", "enforceVisualStyle", "allowClipText",
     )
     compact = {key: project.get(key) for key in overview_keys if key in project}
     # Characters are useful grounding for every downstream phase and are
@@ -13348,7 +13497,9 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     tone = str(body.get("tone") or project.get("tone") or "Cinematic").strip()
     audience = str(body.get("audience") or project.get("audience") or "General").strip()
     visual_style = str(project.get("visualStyle") or "").strip()[:4000]
+    character_visual_style = str(project.get("characterVisualStyle") or "").strip()[:2000]
     enforce_visual_style = project.get("enforceVisualStyle") is not False
+    allow_clip_text = project.get("allowClipText") is True
     llm_override = _comic_writing_llm(body)
     if not llm_override:
         _ensure_llm_loaded()
@@ -13430,7 +13581,9 @@ Genre: {genre}
 Tone: {tone}
 Audience: {audience}
 Global visual style (separate from story content): {visual_style or 'not set'}
+Character rendering style (mandatory for every visible person): {character_visual_style or 'not set'}
 Apply that style as a mandatory render-time constraint: {'yes' if enforce_visual_style else 'no'}
+Readable text inside future generated clips: {'allowed when explicitly requested' if allow_clip_text else 'forbidden; lyrics and dialogue are audio/performance only, and visual fields must not request captions, subtitles, signs, UI, floating words or quoted text'}
 Optional user instruction: {instruction or 'none'}
 Current manually edited project (preserve useful established facts and stable IDs):
 {current}
@@ -15008,10 +15161,35 @@ def get_latest_completed_director_comic_plan():
 _output_scan_cache_lock = threading.Lock()
 _output_scan_cache: dict[str, dict] = {}
 _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
+_MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
+    os.path.dirname(_app_dir), "cache", "media-thumbnails"
+)
+
+
+def _resolve_output_file(filename: str) -> str | None:
+    """Resolve an output in the active, default, or another workspace."""
+    save_root = wgp.server_config.get("save_path", "outputs")
+    roots = [_workspace_dir(), save_root]
+    if os.path.isdir(save_root):
+        roots.extend(
+            os.path.join(save_root, name)
+            for name in os.listdir(save_root)
+            if os.path.isdir(os.path.join(save_root, name))
+        )
+    seen: set[str] = set()
+    for root in roots:
+        root_real = os.path.realpath(root)
+        if root_real in seen:
+            continue
+        seen.add(root_real)
+        candidate = _safe_join(root_real, filename)
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    return None
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = ""):
+def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = "", media_type: str = ""):
     """List generated output files (newest first) from the active workspace.
 
     Supports pagination via limit/offset query params.
@@ -15199,9 +15377,14 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
                 if is_comic and os.path.isfile(os.path.join(out_dir, name[:-len(".comic.json")] + ".comic.preview.png"))
                 else (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png"
                       if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png"))
-                      else cached.get("thumbnail_url"))
+                      else (f"/api/v1/outputs/thumbnail/{quote(name, safe='')}?v={int(mtime * 1_000_000)}-{size}"
+                            if ftype in {"image", "video"}
+                            else cached.get("thumbnail_url")))
             ),
         })
+
+    if media_type:
+        files = [item for item in files if item["type"] == media_type]
 
     # Special filters: return ALL matches, bypass pagination
     if favorites_only:
@@ -15263,6 +15446,34 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
     return {"outputs": files, "total": total}
 
 
+@api.get("/api/v1/outputs/thumbnail/{filename:path}")
+def serve_output_thumbnail(filename: str):
+    """Lazily create one small static preview for an image or video output."""
+    from services.media_thumbnails import ensure_media_thumbnail
+
+    source = _resolve_output_file(filename)
+    if not source:
+        raise HTTPException(status_code=404, detail="Output not found")
+    extension = os.path.splitext(source)[1].lower()
+    image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
+    video_extensions = {".mp4", ".webm", ".gif", ".mov", ".mkv", ".avi", ".m4v"}
+    if extension not in image_extensions | video_extensions:
+        raise HTTPException(status_code=400, detail="This output has no media thumbnail")
+    try:
+        thumbnail = ensure_media_thumbnail(
+            source,
+            _MEDIA_THUMBNAIL_CACHE_DIR,
+            is_video=extension in video_extensions,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not create thumbnail: {exc}") from exc
+    return FileResponse(
+        thumbnail,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
 @api.get("/api/v1/file/{filename:path}")
 def serve_file(filename: str):
     """Serve an output file. Checks active workspace first, then all workspaces.
@@ -15274,22 +15485,9 @@ def serve_file(filename: str):
     user has to close the entire app to clean up.
     """
     from services.win_safe_files import share_delete_file_response
-    save_root = wgp.server_config.get("save_path", "outputs")
-    # 1. Check active workspace
-    filepath = _safe_join(_workspace_dir(), filename)
-    if filepath and os.path.isfile(filepath):
+    filepath = _resolve_output_file(filename)
+    if filepath:
         return share_delete_file_response(filepath)
-    # 2. Check base save_path (pre-workspace files)
-    filepath = _safe_join(save_root, filename)
-    if filepath and os.path.isfile(filepath):
-        return share_delete_file_response(filepath)
-    # 3. Search all workspace subdirectories (Director pipeline may have saved
-    #    to a different workspace than the one currently active in the browser)
-    if os.path.isdir(save_root):
-        for d in os.listdir(save_root):
-            candidate = _safe_join(save_root, d, filename)
-            if candidate and os.path.isfile(candidate):
-                return share_delete_file_response(candidate)
     raise HTTPException(status_code=404, detail="File not found")
 
 
@@ -15330,6 +15528,27 @@ def get_output_metadata(name: str):
                 embedded = _read_embedded()
                 if embedded and "seed" in embedded:
                     params["seed"] = embedded["seed"]
+            # Director finals created before timing was added to their
+            # sidecars can still recover the durable production statistics
+            # from the matching pipeline checkpoint. New finals already carry
+            # this payload, so they avoid the extra checkpoint read.
+            if not sidecar.get("generation_timings"):
+                pipeline_id = (
+                    sidecar.get("director_pipeline_id")
+                    or params.get("director_pipeline_id")
+                    or params.get("_director_pipeline_id")
+                )
+                if pipeline_id:
+                    from services.director_pipeline import (
+                        enrich_output_metadata_with_pipeline_timing,
+                        load_pipeline_state,
+                    )
+                    pipeline = load_pipeline_state(out_dir, str(pipeline_id))
+                    if pipeline:
+                        sidecar = enrich_output_metadata_with_pipeline_timing(
+                            sidecar,
+                            pipeline,
+                        )
             return {"source": "sidecar", **sidecar}
         except Exception:
             pass
@@ -15340,6 +15559,148 @@ def get_output_metadata(name: str):
         return {"source": "embedded", "params": embedded}
 
     return {"source": "none", "params": None}
+
+
+def _saved_video_context_for_extra_info(name: str):
+    """Load sidecar/pipeline context without reading the media itself."""
+    out_dir = _workspace_dir()
+    filepath = _safe_join(out_dir, name)
+    if filepath is None or not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="Output video not found")
+    if os.path.splitext(filepath)[1].lower() not in {".mp4", ".mkv", ".webm", ".mov", ".gif"}:
+        raise HTTPException(status_code=400, detail="Extra info is available for videos only")
+
+    meta_path = os.path.splitext(filepath)[0] + ".meta.json"
+    if not os.path.isfile(meta_path):
+        raise HTTPException(
+            status_code=400,
+            detail="This video has no saved prompt metadata; media re-analysis is disabled",
+        )
+    try:
+        with open(meta_path, "r", encoding="utf-8") as handle:
+            metadata = json.load(handle)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=500, detail="Could not read the video's saved metadata") from error
+    if not isinstance(metadata, dict):
+        raise HTTPException(status_code=500, detail="The video's saved metadata is invalid")
+
+    params = metadata.get("params") if isinstance(metadata.get("params"), dict) else {}
+    pipeline_id = (
+        metadata.get("director_pipeline_id")
+        or params.get("director_pipeline_id")
+        or params.get("_director_pipeline_id")
+    )
+    pipeline = None
+    # Pipeline IDs are generated as short hex strings. Validate before asking
+    # for its checkpoint filename. Read that JSON directly: the Extra info
+    # feature must not invoke media recovery/reconciliation or analyse frames.
+    if pipeline_id and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(pipeline_id)):
+        pipeline_path = _safe_join(out_dir, f"_director_pipeline_{pipeline_id}.json")
+        if pipeline_path and os.path.isfile(pipeline_path):
+            try:
+                with open(pipeline_path, "r", encoding="utf-8") as handle:
+                    candidate = json.load(handle)
+                if isinstance(candidate, dict):
+                    pipeline = candidate
+            except (OSError, ValueError, json.JSONDecodeError):
+                pipeline = None
+
+    from services.video_extra_info import build_saved_video_context
+    context = build_saved_video_context(metadata, pipeline)
+    return meta_path, metadata, context
+
+
+@api.get("/api/v1/outputs/{name}/extra-info")
+def get_video_extra_info(name: str, language: str = "es"):
+    """Return cached publishing copy for one language, if it exists."""
+    from services.video_extra_info import normalize_language
+
+    try:
+        code, label = normalize_language(language)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    _, metadata, context = _saved_video_context_for_extra_info(name)
+    stored = metadata.get("video_extra_info")
+    cached = stored.get(code) if isinstance(stored, dict) else None
+    # Ignore stale copy if a sidecar/pipeline prompt was edited after it was
+    # generated. The next explicit Generate click refreshes and persists it.
+    available = bool(
+        isinstance(cached, dict)
+        and cached.get("source_fingerprint") == context.get("source_fingerprint")
+    )
+    return {
+        "available": available,
+        "language": code,
+        "language_label": label,
+        "data": cached if available else None,
+        "prompt_count": context.get("prompt_count", 0),
+        "director_context": context.get("director_context", False),
+    }
+
+
+@api.post("/api/v1/outputs/{name}/extra-info")
+async def generate_output_extra_info(name: str, request: Request):
+    """Generate and persist platform copy from saved prompts only."""
+    from services import llm_service
+    from services.video_extra_info import (
+        generate_video_extra_info,
+        normalize_language,
+    )
+
+    body = await request.json()
+    try:
+        code, _ = normalize_language(body.get("language", "es"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    meta_path, metadata, context = _saved_video_context_for_extra_info(name)
+    stored = metadata.get("video_extra_info")
+    cached = stored.get(code) if isinstance(stored, dict) else None
+    if (
+        not body.get("regenerate")
+        and isinstance(cached, dict)
+        and cached.get("source_fingerprint") == context.get("source_fingerprint")
+    ):
+        return {"cached": True, "data": cached}
+
+    try:
+        _ensure_llm_loaded()
+        generated = generate_video_extra_info(context, code, llm_service.generate)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+    generated["generated_at"] = time.time()
+    latest = metadata
+    try:
+        # Re-read before the atomic update so another metadata writer cannot
+        # be accidentally discarded while the LLM is working.
+        with open(meta_path, "r", encoding="utf-8") as handle:
+            candidate = json.load(handle)
+        if isinstance(candidate, dict):
+            latest = candidate
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    saved = latest.get("video_extra_info")
+    if not isinstance(saved, dict):
+        saved = {}
+        latest["video_extra_info"] = saved
+    saved[code] = generated
+    temp_path = f"{meta_path}.{uuid.uuid4().hex[:8]}.tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(latest, handle, indent=2, ensure_ascii=False, default=str)
+        os.replace(temp_path, meta_path)
+    except OSError as error:
+        try:
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail="Could not save generated extra info") from error
+    return {"cached": False, "data": generated}
 
 
 @api.post("/api/v1/outputs/rejoin")
@@ -15511,6 +15872,29 @@ def probe_video_editor_source(body: dict):
         raise HTTPException(status_code=500, detail=f"Could not inspect video: {exc}") from exc
 
 
+@api.get("/api/v1/video-editor/thumbnail")
+def serve_video_editor_thumbnail(source: str):
+    """Return a static preview for an uploaded or workspace editor source."""
+    from services.media_thumbnails import ensure_media_thumbnail
+
+    try:
+        resolved = _resolve_video_editor_source(source)
+        thumbnail = ensure_media_thumbnail(
+            resolved,
+            _MEDIA_THUMBNAIL_CACHE_DIR,
+            is_video=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not create thumbnail: {exc}") from exc
+    return FileResponse(
+        thumbnail,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
 @api.post("/api/v1/video-editor/screenshot")
 def capture_video_editor_frame(body: dict):
     """Save the current source-video frame as a reusable Maestro image output."""
@@ -15631,6 +16015,8 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                                 "fit",
                                 "transition",
                                 "transition_duration",
+                                "transition_text",
+                                "transition_text_size",
                             }
                         }
                         for clip in body["clips"]
@@ -15677,6 +16063,8 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
 @api.post("/api/v1/video-editor/export")
 def start_video_editor_export(body: dict):
     """Queue a non-blocking FFmpeg export for uploaded and/or Maestro clips."""
+    from services.video_editor import normalise_time_card_text
+
     clips = body.get("clips")
     if not isinstance(clips, list) or not clips:
         raise HTTPException(status_code=400, detail="Add at least one video clip")
@@ -15706,7 +16094,11 @@ def start_video_editor_export(body: dict):
         "pixelize",
         "blur",
         "zoom-in",
+        "later-clock",
+        "later-tropical",
+        "later-cinematic",
     }
+    clean_clips = []
     for index, clip in enumerate(clips):
         if not isinstance(clip, dict):
             raise HTTPException(status_code=400, detail=f"Clip {index + 1} is invalid")
@@ -15715,10 +16107,22 @@ def start_video_editor_export(body: dict):
             raise HTTPException(status_code=400, detail=f"Clip {index + 1} has an unsupported transition")
         try:
             transition_duration = float(clip.get("transition_duration") or 0.4)
+            transition_text_size = float(clip.get("transition_text_size") or 100)
         except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail=f"Clip {index + 1} has an invalid transition duration") from exc
+            raise HTTPException(status_code=400, detail=f"Clip {index + 1} has invalid transition settings") from exc
         if transition_duration < 0.05 or transition_duration > 5:
             raise HTTPException(status_code=400, detail="Transition duration must be between 0.05 and 5 seconds")
+        if transition_text_size < 50 or transition_text_size > 160:
+            raise HTTPException(status_code=400, detail="Transition text size must be between 50% and 160%")
+        transition_text = normalise_time_card_text(clip.get("transition_text"))
+        clean_clip = dict(clip)
+        clean_clip.update({
+            "transition": transition,
+            "transition_duration": transition_duration,
+            "transition_text": transition_text,
+            "transition_text_size": transition_text_size,
+        })
+        clean_clips.append(clean_clip)
 
     safe_project_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("name") or "edited_video")).strip("_")
     safe_project_name = safe_project_name[:60] or "edited_video"
@@ -15734,7 +16138,7 @@ def start_video_editor_export(body: dict):
         suffix += 1
 
     clean_body = dict(body)
-    clean_body.update({"width": width, "height": height, "fps": fps})
+    clean_body.update({"width": width, "height": height, "fps": fps, "clips": clean_clips})
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     _video_editor_jobs[job_id] = {
         "job_id": job_id,

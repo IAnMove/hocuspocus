@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, SavedPipelineState, SystemDetectResponse, SystemStats } from '../types'
 import * as api from '../api/client'
 import { applyTheme, getStoredTheme, type ThemeId } from '../lib/theme'
+import { splitPromptSchedule } from '../lib/promptScheduler'
 
 // --- LocalStorage persistence for per-mode settings ---
 const STORAGE_KEY = 'maestro_mode_settings'
@@ -598,6 +599,12 @@ export interface ForegroundActivity {
   updatedAt?: number
 }
 
+interface ScheduledPromptSubmission {
+  prompt: string
+  position: number
+  total: number
+}
+
 interface AppState {
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1021,7 +1028,9 @@ interface AppState {
   // Generation state (queue)
   jobs: GenerationJob[]
   isGenerating: boolean
-  startGeneration: () => Promise<void>
+  promptSchedulerEnabled: boolean
+  setPromptSchedulerEnabled: (enabled: boolean) => void
+  startGeneration: (scheduledPrompt?: ScheduledPromptSubmission) => Promise<void>
   stopGeneration: (jobId?: string) => void
   dismissJob: (jobId: string) => void
   reconnectJobs: () => Promise<void>
@@ -1271,12 +1280,16 @@ interface AppState {
   shortFilmNarrative: boolean
   shortFilmVisualStyle: string
   shortFilmPreserveVisualStyle: boolean
+  directorCharacterVisualStyle: string
+  directorAllowClipText: boolean
   shortFilmSetCharacters: (characters: ShortFilmCharacter[]) => void
   shortFilmSetPath: (path: ShortFilmPath) => void
   shortFilmSetTargetDuration: (duration: number) => void
   shortFilmSetNarrative: (v: boolean) => void
   shortFilmSetVisualStyle: (style: string) => void
   shortFilmSetPreserveVisualStyle: (v: boolean) => void
+  setDirectorCharacterVisualStyle: (style: string) => void
+  setDirectorAllowClipText: (v: boolean) => void
   shortFilmUploadAndAnalyze: (file: File) => Promise<void>
   shortFilmSetPacingBias: (bias: number) => Promise<void>
   shortFilmPlanPrompts: () => Promise<void>
@@ -3065,8 +3078,35 @@ export const useStore = create<AppState>((set, get) => ({
 
   jobs: [],
   isGenerating: false,
+  promptSchedulerEnabled: false,
+  setPromptSchedulerEnabled: (enabled) => set({ promptSchedulerEnabled: enabled }),
 
-  startGeneration: async () => {
+  startGeneration: async (scheduledPrompt) => {
+    const initialState = get()
+
+    // Studio Prompt Scheduler: each non-empty line becomes its own normal
+    // generation request. Submitting the requests one at a time preserves the
+    // prompt order while the backend's existing generation lock keeps them in
+    // the shared GPU queue. This client-side split is intentional: WanGP has a
+    // native multi-line queue mode, but MiniMax H3 bypasses that parser and
+    // would otherwise receive the whole textarea as one prompt.
+    if (
+      !scheduledPrompt
+      && initialState.promptSchedulerEnabled
+      && initialState.generationMode === 'video'
+      && (initialState.params.image_mode as number) === 0
+    ) {
+      const scheduledPrompts = splitPromptSchedule(String(initialState.params.prompt || ''))
+      for (let index = 0; index < scheduledPrompts.length; index += 1) {
+        await get().startGeneration({
+          prompt: scheduledPrompts[index],
+          position: index + 1,
+          total: scheduledPrompts.length,
+        })
+      }
+      return
+    }
+
     // Auto-unload LLM before GPU-heavy generation to free VRAM
     if (get().llmStatus?.loaded) {
       try {
@@ -3461,27 +3501,49 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     const params: Record<string, unknown> = { ...state.params, generation_mode: state.generationMode, workspace: state.activeWorkspace }
+    if (scheduledPrompt) {
+      params.prompt = scheduledPrompt.prompt
+      params.repeat_generation = 1
+      // Every scheduler request contains exactly one prompt. Prevent any
+      // persisted sliding-window or multi-clip line policy from reinterpreting
+      // it after submission.
+      params.multi_prompts_gen_type = 2
+    }
 
-    // MiniMax H3 has two mutually exclusive conditioning contracts. After a
-    // Ref2VA run, selecting a new Start image can leave the persisted mode set
-    // to "references" even when all reference tiles have been removed. In
-    // that case the backend rejects the request before generation because
-    // Ref2VA has no reference input. Treat an unaccompanied Start image as an
-    // explicit FL2VA request and discard stale reference paths from the
-    // previous run. If live reference tiles are still present, keep Ref2VA so
-    // users can intentionally combine them.
+    // MiniMax H3 has two mutually exclusive conditioning contracts. A previous
+    // Ref2VA run can leave the persisted selector on "references" after every
+    // reference tile has been removed. This also affects pure text-to-video,
+    // not only a new Start image: Ref2VA cannot run without reference media,
+    // while FL2VA is H3's normal text/first-frame pipeline. Reset the stale
+    // selector and discard empty legacy fields before submission.
+    const hasH3References = (
+      state.imageRefs.length > 0
+      || (Array.isArray(params.image_refs) && params.image_refs.some(Boolean))
+      || (Array.isArray(params.h3_ref_videos) && params.h3_ref_videos.some(Boolean))
+      || (Array.isArray(params.h3_ref_audios) && params.h3_ref_audios.some(Boolean))
+    )
     if (
       params.model_type === 'minimax_h3'
-      && (state.startImage || params.image_start)
-      && (params.h3_reference_mode === 'references' || !params.h3_reference_mode)
-      && state.imageRefs.length === 0
-      && !(Array.isArray(params.h3_ref_videos) && params.h3_ref_videos.length > 0)
-      && !(Array.isArray(params.h3_ref_audios) && params.h3_ref_audios.length > 0)
+      && params.h3_reference_mode === 'references'
+      && !hasH3References
     ) {
       params.h3_reference_mode = 'first_frame'
       delete params.image_refs
       delete params.h3_ref_videos
       delete params.h3_ref_audios
+      set(s => ({
+        params: { ...s.params, h3_reference_mode: 'first_frame' },
+        savedParamsPerMode: {
+          ...s.savedParamsPerMode,
+          video: {
+            ...(s.savedParamsPerMode.video || {}),
+            h3_reference_mode: 'first_frame',
+            image_refs: undefined,
+            h3_ref_videos: undefined,
+            h3_ref_audios: undefined,
+          },
+        },
+      }))
     }
 
     // Tag avatar/edit-mode generations with their sub-mode so the gallery's
@@ -3958,7 +4020,9 @@ export const useStore = create<AppState>((set, get) => ({
       step: 0,
       totalSteps: 0,
       phase: '',
-      message: 'Submitting...',
+      message: scheduledPrompt
+        ? `Submitting ${scheduledPrompt.position}/${scheduledPrompt.total}...`
+        : 'Submitting...',
       outputFiles: [],
       error: null,
       createdAt: Date.now(),
@@ -4993,6 +5057,8 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmNarrative: false,
   shortFilmVisualStyle: '',
   shortFilmPreserveVisualStyle: true,
+  directorCharacterVisualStyle: '',
+  directorAllowClipText: false,
   llmStreamText: '',
   llmStreamDone: true,
   foregroundActivity: null,
@@ -6348,6 +6414,8 @@ export const useStore = create<AppState>((set, get) => ({
       shortFilmNarrative: false,
       shortFilmVisualStyle: '',
       shortFilmPreserveVisualStyle: true,
+      directorCharacterVisualStyle: '',
+      directorAllowClipText: false,
       // Detach this editor session from any prior recoverable pipeline. The
       // backend job is intentionally not cancelled and remains in Dashboard,
       // but its poller must not overwrite the next story loaded into Director.
@@ -6365,6 +6433,8 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmSetNarrative: (v) => set({ shortFilmNarrative: v }),
   shortFilmSetVisualStyle: (style) => set({ shortFilmVisualStyle: style }),
   shortFilmSetPreserveVisualStyle: (v) => set({ shortFilmPreserveVisualStyle: v }),
+  setDirectorCharacterVisualStyle: (style) => set({ directorCharacterVisualStyle: style }),
+  setDirectorAllowClipText: (v) => set({ directorAllowClipText: v }),
 
   shortFilmUploadAndAnalyze: async (file) => {
     const activity = beginAppActivity(get, {
@@ -6641,7 +6711,8 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmPlanFromStory: async () => {
     const { directorSceneDescription,
             shortFilmCharacters, shortFilmTargetDuration, shortFilmNarrative,
-            shortFilmVisualStyle, shortFilmPreserveVisualStyle } = get()
+            shortFilmVisualStyle, shortFilmPreserveVisualStyle,
+            directorCharacterVisualStyle, directorAllowClipText } = get()
     if (!directorSceneDescription.trim()) return
     const activity = beginAppActivity(get, {
       kind: 'story_film_planning',
@@ -6679,6 +6750,8 @@ export const useStore = create<AppState>((set, get) => ({
           narrative_mode: shortFilmNarrative,
           visual_style: shortFilmVisualStyle || undefined,
           preserve_visual_style: shortFilmPreserveVisualStyle,
+          character_visual_style: directorCharacterVisualStyle || undefined,
+          allow_clip_text: directorAllowClipText,
           fps: get().modelOptions?.fps ?? 24,
           frames_steps: get().modelOptions?.frames_steps ?? 4,
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
@@ -6727,6 +6800,8 @@ export const useStore = create<AppState>((set, get) => ({
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
           visual_style: shortFilmVisualStyle || undefined,
           preserve_visual_style: shortFilmPreserveVisualStyle,
+          character_visual_style: directorCharacterVisualStyle || undefined,
+          allow_clip_text: directorAllowClipText,
         })
         storyClips = result.clips
         plans = result.clip_plans.map(p => ({
@@ -7552,7 +7627,8 @@ export const useStore = create<AppState>((set, get) => ({
             directorVideoFilmGrainSaturation, directorVideoSelfRefiner,
             shortFilmPath, shortFilmCharacters, shortFilmTargetDuration,
             shortFilmNarrative, shortFilmVisualStyle,
-            shortFilmPreserveVisualStyle, modelOptions } = state
+            shortFilmPreserveVisualStyle, directorCharacterVisualStyle,
+            directorAllowClipText, modelOptions } = state
 
     const fps = modelOptions?.fps ?? 16
     const directorRes = resolutionMap[directorResolution]?.[directorAspectRatio] || resolutionMap[directorResolution]['16:9']
@@ -7679,6 +7755,8 @@ export const useStore = create<AppState>((set, get) => ({
       narrative_mode: shortFilmNarrative,
       visual_style: shortFilmVisualStyle || undefined,
       preserve_visual_style: shortFilmPreserveVisualStyle,
+      character_visual_style: directorCharacterVisualStyle || undefined,
+      allow_clip_text: directorAllowClipText,
       music_video_treatment: pipelineType === 'music_video'
         ? state.directorMusicVideoTreatment
         : undefined,

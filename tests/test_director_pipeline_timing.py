@@ -1,6 +1,62 @@
+import json
+from pathlib import Path
 from unittest.mock import patch
 
 from app.services import director_pipeline
+
+
+def test_pipeline_timing_metadata_normalizes_live_terminal_state():
+    timings = director_pipeline.pipeline_timing_metadata({
+        "created_at": 100.0,
+        "_completed_at": 410.125,
+        "_prompt_generation_time_sec": 12.345,
+        "_image_generation_time_sec": 45.6,
+        "_video_generation_time_sec": 200.0,
+        "_assembly_time_sec": None,
+    })
+
+    assert timings == {
+        "total_time_sec": 310.12,
+        "prompt_generation_time_sec": 12.35,
+        "image_generation_time_sec": 45.6,
+        "video_generation_time_sec": 200.0,
+        "assembly_time_sec": None,
+    }
+
+
+def test_final_output_sidecar_persists_total_and_phase_timings(tmp_path: Path):
+    sidecar_path = tmp_path / "final.meta.json"
+    sidecar_path.write_text(json.dumps({
+        "params": {"model_type": "minimax_h3", "resolution": "960x544"},
+        "generation_mode": "video",
+    }), encoding="utf-8")
+    pipeline = {
+        "id": "timed-final",
+        "created_at": 100.0,
+        "_completed_at": 410.0,
+        "_prompt_generation_time_sec": 10.0,
+        "_image_generation_time_sec": 20.0,
+        "_video_generation_time_sec": 250.0,
+        "_assembly_time_sec": 5.0,
+    }
+
+    assert director_pipeline.persist_pipeline_output_timing(
+        str(tmp_path),
+        "final.mp4",
+        pipeline,
+    )
+
+    saved = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert saved["generation_time"] == 310.0
+    assert saved["generation_timings"] == {
+        "total_time_sec": 310.0,
+        "prompt_generation_time_sec": 10.0,
+        "image_generation_time_sec": 20.0,
+        "video_generation_time_sec": 250.0,
+        "assembly_time_sec": 5.0,
+    }
+    assert saved["director_pipeline_id"] == "timed-final"
+    assert saved["params"]["director_pipeline_id"] == "timed-final"
 
 
 def test_pipeline_phase_timer_resets_only_when_phase_changes():

@@ -5,6 +5,7 @@ import {
   getPromptHistory, PROMPT_HISTORY_EVENT, rememberPrompt, removePromptHistoryEntry,
   type PromptHistoryEntry,
 } from '../../lib/promptHistory'
+import { splitPromptSchedule } from '../../lib/promptScheduler'
 
 const placeholders: Record<string, string> = {
   image: 'Describe your image...',
@@ -83,6 +84,8 @@ export function PromptInput() {
   const slidingWindowOverlap = useStore(s => s.slidingWindowOverlap)
   const modelOptions = useStore(s => s.modelOptions)
   const imageMode = useStore(s => s.params.image_mode)
+  const promptSchedulerEnabled = useStore(s => s.promptSchedulerEnabled)
+  const setPromptSchedulerEnabled = useStore(s => s.setPromptSchedulerEnabled)
   const negativePrompt = useStore(s => s.params.negative_prompt)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const modelType = useStore(s => s.params.model_type)
@@ -117,7 +120,10 @@ export function PromptInput() {
   const windowCount = stride > 0 && durationSeconds > slidingWindowSeconds
     ? 1 + Math.ceil((durationSeconds - slidingWindowSeconds + discardSec) / stride)
     : 1
-  const usesWindows = generationMode === 'video' && windowCount > 1 && imageMode !== 2
+  const showPromptScheduler = generationMode === 'video' && imageMode === 0
+  const schedulerApplies = showPromptScheduler && promptSchedulerEnabled
+  const scheduledPromptCount = schedulerApplies ? splitPromptSchedule(prompt).length : 0
+  const usesWindows = generationMode === 'video' && windowCount > 1 && imageMode !== 2 && !schedulerApplies
 
   // Close TTS menu on outside click
   useEffect(() => {
@@ -265,10 +271,35 @@ export function PromptInput() {
           )}
         </div>
       )}
+      {showPromptScheduler && (
+        <label className={`mb-2 flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors ${
+          promptSchedulerEnabled
+            ? 'border-accent-blue/40 bg-accent-blue/10'
+            : 'border-border bg-bg-tertiary/60 hover:border-border-light'
+        }`}>
+          <input
+            type="checkbox"
+            checked={promptSchedulerEnabled}
+            onChange={event => setPromptSchedulerEnabled(event.target.checked)}
+            className="shrink-0 accent-accent-blue"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[10px] font-medium text-text-secondary">Prompt scheduler</span>
+            <span className="block text-[9px] text-text-muted">Generar un vídeo por salto de línea</span>
+          </span>
+          {promptSchedulerEnabled && (
+            <span className="shrink-0 rounded-full bg-accent-blue/15 px-2 py-0.5 text-[9px] font-medium text-accent-blue">
+              {scheduledPromptCount} {scheduledPromptCount === 1 ? 'vídeo' : 'vídeos'}
+            </span>
+          )}
+        </label>
+      )}
       <textarea
         value={prompt}
         onChange={e => setParam('prompt', e.target.value)}
-        placeholder={usesWindows
+        placeholder={schedulerApplies
+          ? 'Un prompt por línea; cada línea se añadirá como un vídeo independiente...'
+          : usesWindows
           ? `Line 1 = window 1, line 2 = window 2... (${windowCount} windows)`
           : (placeholders[generationMode] || 'Describe your content...')}
         className="w-full flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 pr-10 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue transition-colors"

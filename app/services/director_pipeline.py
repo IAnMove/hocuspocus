@@ -242,6 +242,143 @@ def _comic_preflight_fingerprint(
     return _json_fingerprint(contract)
 
 
+def pipeline_timing_metadata(pipeline: dict) -> dict:
+    """Normalize persisted or live Director timing fields for output metadata."""
+
+    def _duration(saved_key: str, live_key: str):
+        value = pipeline.get(saved_key)
+        if value is None:
+            value = pipeline.get(live_key)
+        if value is None:
+            return None
+        try:
+            return round(max(0.0, float(value)), 2)
+        except (TypeError, ValueError):
+            return None
+
+    total_time_sec = _duration("total_time_sec", "_total_time_sec")
+    if total_time_sec is None:
+        created_at = pipeline.get("created_at")
+        completed_at = pipeline.get("completed_at")
+        if completed_at is None:
+            completed_at = pipeline.get("_completed_at")
+        try:
+            if created_at is not None and completed_at is not None:
+                total_time_sec = round(
+                    max(0.0, float(completed_at) - float(created_at)),
+                    2,
+                )
+        except (TypeError, ValueError):
+            total_time_sec = None
+
+    return {
+        "total_time_sec": total_time_sec,
+        "prompt_generation_time_sec": _duration(
+            "prompt_generation_time_sec",
+            "_prompt_generation_time_sec",
+        ),
+        "image_generation_time_sec": _duration(
+            "image_generation_time_sec",
+            "_image_generation_time_sec",
+        ),
+        "video_generation_time_sec": _duration(
+            "video_generation_time_sec",
+            "_video_generation_time_sec",
+        ),
+        "assembly_time_sec": _duration(
+            "assembly_time_sec",
+            "_assembly_time_sec",
+        ),
+    }
+
+
+def enrich_output_metadata_with_pipeline_timing(
+    metadata: dict,
+    pipeline: dict,
+) -> dict:
+    """Return output metadata with durable Director timing statistics."""
+    enriched = dict(metadata or {})
+    timings = pipeline_timing_metadata(pipeline or {})
+    if not any(value is not None for value in timings.values()):
+        return enriched
+
+    enriched["generation_timings"] = timings
+    if timings["total_time_sec"] is not None:
+        # ``generation_time`` is the existing gallery contract for ordinary
+        # jobs. Keeping it populated makes Director finals use the same total
+        # duration readout while ``generation_timings`` supplies the detail.
+        enriched["generation_time"] = timings["total_time_sec"]
+
+    pipeline_id = pipeline.get("pipeline_id") or pipeline.get("id")
+    if pipeline_id:
+        enriched["director_pipeline_id"] = str(pipeline_id)
+    return enriched
+
+
+def persist_pipeline_output_timing(
+    out_dir: str,
+    output_name: str,
+    pipeline: dict,
+) -> bool:
+    """Attach Director wall-clock and phase timings to a final media sidecar."""
+    filename = os.path.basename(str(output_name or ""))
+    if not filename:
+        return False
+    meta_path = os.path.join(
+        out_dir,
+        os.path.splitext(filename)[0] + ".meta.json",
+    )
+    metadata: dict = {}
+    if os.path.isfile(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                metadata = loaded
+        except Exception:
+            metadata = {}
+
+    metadata = enrich_output_metadata_with_pipeline_timing(metadata, pipeline)
+    params = metadata.get("params")
+    if not isinstance(params, dict):
+        params = {}
+        metadata["params"] = params
+    pipeline_id = pipeline.get("pipeline_id") or pipeline.get("id")
+    if pipeline_id:
+        params.setdefault("director_pipeline_id", str(pipeline_id))
+        metadata.setdefault("director_pipeline_id", str(pipeline_id))
+
+    temp_path = f"{meta_path}.{uuid.uuid4().hex[:8]}.tmp"
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(metadata, handle, indent=2, ensure_ascii=False, default=str)
+        os.replace(temp_path, meta_path)
+        return True
+    except Exception as error:
+        print(
+            f"[Pipeline] Failed to save final timing metadata for "
+            f"{filename}: {error}"
+        )
+        return False
+    finally:
+        try:
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
+        except OSError:
+            pass
+
+
+def _final_pipeline_output_name(output_files: list[str]) -> str:
+    """Choose the assembled deliverable from a Director output list."""
+    names = [str(name or "") for name in output_files if str(name or "")]
+    for name in reversed(names):
+        lowered = os.path.basename(name).lower()
+        if any(marker in lowered for marker in ("multiclip", "rejoin", "_movie")):
+            return name
+    return names[-1] if names else ""
+
+
 def _save_pipeline_state(pid: str) -> bool:
     # Parallel remote-image/local-video workers checkpoint the same pipeline.
     # Serialize snapshot creation as well as the atomic replace so an older
@@ -413,7 +550,9 @@ def _save_pipeline_state_serialized(pid: str) -> bool:
         "clips": clips,
         "output_files": p.get("output_files", []),
         "workspace": p.get("workspace") or "default",
-        "total_time_sec": (time.time() - p["created_at"]) if p.get("created_at") else None,
+        "total_time_sec": pipeline_timing_metadata(p)["total_time_sec"]
+        if p.get("_completed_at") is not None
+        else ((time.time() - p["created_at"]) if p.get("created_at") else None),
         # Full original request params, verbatim (it's the JSON dict the
         # endpoint received, so it's serializable). This is what makes a
         # crashed pipeline faithfully resumable — music-video mode in
@@ -795,6 +934,44 @@ def _update_saved_pipeline(out_dir: str, pid: str, updater) -> Optional[dict]:
     return state
 
 
+def _saved_prompt_contract(state: dict, prompt: str, mode: str) -> str:
+    """Reapply durable Story prompt policies to manual reruns and edits."""
+    snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
+    params = {**state, **snapshot}
+    try:
+        from services.director.policies import (
+            apply_character_visual_style_lock,
+            apply_no_visible_text_lock,
+            apply_visual_style_lock,
+        )
+    except ImportError:
+        from app.services.director.policies import (
+            apply_character_visual_style_lock,
+            apply_no_visible_text_lock,
+            apply_visual_style_lock,
+        )
+    result = str(prompt or "").strip()
+    preserve = bool(params.get("preserve_visual_style", False))
+    if preserve and params.get("visual_style"):
+        result = apply_visual_style_lock(
+            result,
+            params.get("visual_style", ""),
+            mode=mode,
+            preserve=True,
+            has_reference=_has_visual_references(params),
+        )
+    if preserve and params.get("character_visual_style"):
+        result = apply_character_visual_style_lock(
+            result,
+            params.get("character_visual_style", ""),
+            mode=mode,
+            preserve=True,
+        )
+    if params.get("allow_clip_text") is not True:
+        result = apply_no_visible_text_lock(result, mode=mode)
+    return result
+
+
 def rerun_clip_image(out_dir: str, pid: str, clip_index: int, prompt_override: str = None) -> dict:
     """Re-generate the start image for a single clip. Returns {job_id, filename} or raises."""
     state = load_pipeline_state(out_dir, pid)
@@ -805,7 +982,11 @@ def rerun_clip_image(out_dir: str, pid: str, clip_index: int, prompt_override: s
         raise ValueError(f"Clip index {clip_index} out of range (0-{len(clips)-1})")
 
     clip = clips[clip_index]
-    prompt = prompt_override or clip.get("image_prompt", "")
+    prompt = _saved_prompt_contract(
+        state,
+        prompt_override or clip.get("image_prompt", ""),
+        "image",
+    )
     if not prompt:
         raise ValueError("No image prompt for this clip")
 
@@ -878,7 +1059,7 @@ def rerun_clip_image(out_dir: str, pid: str, clip_index: int, prompt_override: s
         def _update(s):
             s["clips"][clip_index]["start_image_filename"] = new_filename
             if prompt_override:
-                s["clips"][clip_index]["image_prompt"] = prompt_override
+                s["clips"][clip_index]["image_prompt"] = prompt
         _update_saved_pipeline(out_dir, pid, _update)
 
     return {"filename": new_filename, "clip_index": clip_index}
@@ -894,7 +1075,11 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         raise ValueError(f"Clip index {clip_index} out of range (0-{len(clips)-1})")
 
     clip = clips[clip_index]
-    prompt = prompt_override or clip.get("video_prompt", "")
+    prompt = _saved_prompt_contract(
+        state,
+        prompt_override or clip.get("video_prompt", ""),
+        "video",
+    )
     if not prompt:
         raise ValueError("No video prompt for this clip")
 
@@ -942,7 +1127,7 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
             pid,
             clip_index,
             0,
-            prompt_override=prompt_override,
+            prompt_override=prompt if prompt_override else None,
             cascade=True,
             replace_shot_prompt=bool(prompt_override),
         )
@@ -1084,7 +1269,7 @@ def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: s
         def _update(s):
             s["clips"][clip_index]["video_filename"] = new_filename
             if prompt_override:
-                s["clips"][clip_index]["video_prompt"] = prompt_override
+                s["clips"][clip_index]["video_prompt"] = prompt
         _update_saved_pipeline(out_dir, pid, _update)
 
     return {"filename": new_filename, "clip_index": clip_index}
@@ -1210,6 +1395,7 @@ def rerun_h3_segment(
                 reference_mode=segment_mode,
                 audio_direction=str(video_params.get("h3_audio_prompt") or ""),
             )
+            prompt = _saved_prompt_contract(state, prompt, "video")
             gen_params = {
                 "model_type": "minimax_h3",
                 "prompt": prompt,
@@ -1353,6 +1539,11 @@ def rejoin_clips(out_dir: str, pid: str) -> dict:
             if created_at:
                 s["total_time_sec"] = round(assembled_at - float(created_at), 2)
         updated_state = _update_saved_pipeline(out_dir, pid, _update) or {}
+        persist_pipeline_output_timing(
+            clip_out_dir,
+            output_name,
+            updated_state,
+        )
 
         return {
             "filename": output_name,
@@ -3353,6 +3544,8 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
             params.get("visual_style", ""),
             preserve=bool(params.get("preserve_visual_style", False)),
             has_reference=_has_visual_references(params),
+            character_visual_style=params.get("character_visual_style", ""),
+            allow_clip_text=params.get("allow_clip_text") is True,
         )
         _update_pipeline(pid, clip_plans=clip_plans, llm_streaming=False)
         _save_pipeline_state(pid)  # Save after planning
@@ -3376,6 +3569,8 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
                 params.get("visual_style", ""),
                 preserve=bool(params.get("preserve_visual_style", False)),
                 has_reference=_has_visual_references(params),
+                character_visual_style=params.get("character_visual_style", ""),
+                allow_clip_text=params.get("allow_clip_text") is True,
             )
             _update_pipeline(pid, clip_plans=clip_plans)
 
@@ -3401,6 +3596,14 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
                     params,
                     clip_plans,
                     planned_clips,
+                )
+                clip_plans = enforce_visual_style_on_clip_plans(
+                    clip_plans,
+                    params.get("visual_style", ""),
+                    preserve=bool(params.get("preserve_visual_style", False)),
+                    has_reference=_has_visual_references(params),
+                    character_visual_style=params.get("character_visual_style", ""),
+                    allow_clip_text=params.get("allow_clip_text") is True,
                 )
                 _update_pipeline(
                     pid,
@@ -3729,11 +3932,24 @@ def _run_pipeline_traced(pid: str, resume: bool = False):
         if _pipeline_cancel_requested(pid):
             raise PipelineCancelled("Director pipeline was cancelled.")
 
+        completed_at = time.time()
+        with _pipeline_lock:
+            final_timing_state = dict(_pipelines.get(pid) or {})
+        final_timing_state["_completed_at"] = completed_at
+        final_timing_state["output_files"] = list(output_files)
+        final_output_name = _final_pipeline_output_name(output_files)
+        if final_output_name:
+            persist_pipeline_output_timing(
+                pipeline_out_dir,
+                final_output_name,
+                final_timing_state,
+            )
+
         _update_pipeline(pid,
                          status="completed",
                          phase="completed",
                          output_files=output_files,
-                         _completed_at=time.time(),
+                         _completed_at=completed_at,
                          progress={"current": 3, "total": 3, "message": "Done!", "step": 0, "total_steps": 0})
         _save_pipeline_state(pid)  # Save on completion
 
@@ -4364,6 +4580,8 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         "multishot_lora_mode": multishot_lora_mode,
         "visual_style": params.get("visual_style", ""),
         "preserve_visual_style": params.get("preserve_visual_style", False),
+        "character_visual_style": params.get("character_visual_style", ""),
+        "allow_clip_text": params.get("allow_clip_text") is True,
         "music_video_treatment": params.get("music_video_treatment"),
     }
 
@@ -4576,6 +4794,8 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
         params.get("visual_style", ""),
         preserve=bool(params.get("preserve_visual_style", False)),
         has_reference=_has_visual_references(params),
+        character_visual_style=params.get("character_visual_style", ""),
+        allow_clip_text=params.get("allow_clip_text") is True,
     )
     return clip_plans, planned_clips
 

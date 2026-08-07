@@ -178,6 +178,28 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(len(serialized["alternative_shots"]), 1)
         self.assertEqual(serialized["alternative_shots"][0]["clip_index"], 3)
 
+    def test_music_video_prompt_contract_separates_lyrics_from_visible_text(self):
+        calls = []
+
+        def generate(**kwargs):
+            calls.append(kwargs)
+            return json.dumps([_music_shot(1)])
+
+        MusicVideoPlanner(llm_generate=generate).plan(
+            clips=[{"start": 0, "end": 4, "label": "verse", "beat_count": 8}],
+            scene_description="A singer wakes inside a digital archive.",
+            lyrics=[{"start": 0, "end": 4, "text": "Despierta dentro de mí"}],
+            bpm=90,
+            preserve_visual_style=True,
+            character_visual_style="handmade plasticine claymation figures",
+            allow_clip_text=False,
+        )
+
+        self.assertIn("CHARACTER RENDERING CONTRACT — STRICT", calls[0]["system_prompt"])
+        self.assertIn("No readable text may appear", calls[0]["system_prompt"])
+        self.assertIn("never render as visible text", calls[0]["prompt"])
+        self.assertNotIn('lyrics: "Despierta dentro de mí"', calls[0]["prompt"])
+
     def test_character_and_location_references_are_preserved(self):
         body = {
             "story_description": "A compact episode.",
@@ -189,6 +211,8 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             "video_model": "ltx2_22B_distilled_1_1",
             "visual_style": "2D anime, clean cel shading",
             "preserve_visual_style": True,
+            "character_visual_style": "2D anime characters",
+            "allow_clip_text": False,
             "music_video_treatment": {"mode": "hybrid"},
         }
         self.assertEqual(_director_v2_planner_kwargs(body), body)

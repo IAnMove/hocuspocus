@@ -18,7 +18,12 @@ from ..schema import (
     AssetRef, SubjectRef, DialogueBeat, CameraPlan, AudioPlan,
     SpeakerMapEntry,
 )
-from ..policies import build_character_rules_block, build_camera_style_block
+from ..policies import (
+    build_camera_style_block,
+    build_character_rules_block,
+    build_character_visual_style_contract,
+    build_visible_text_contract,
+)
 from .base import BasePlanner
 
 
@@ -298,6 +303,7 @@ class MusicVideoPlanner(BasePlanner):
         clip_contexts = self._build_clip_contexts(
             clips, lyrics, performer_map, speaker_names, speaker_mappings,
             coverage_plan,
+            allow_clip_text=kwargs.get("allow_clip_text") is True,
         )
 
         # Call LLM for creative planning
@@ -611,6 +617,7 @@ class MusicVideoPlanner(BasePlanner):
         speaker_names: dict[str, str],
         speaker_mappings: Optional[dict],
         coverage_plan: Optional[list[dict[str, Any]]] = None,
+        allow_clip_text: bool = False,
     ) -> list[str]:
         """Build text descriptions for each clip (context for LLM)."""
         contexts = []
@@ -646,7 +653,14 @@ class MusicVideoPlanner(BasePlanner):
                 performer_hint += "."
 
             # Vocal info
-            vocal_info = f'lyrics: "{lyrics_snippet}"' if lyrics_snippet else "instrumental"
+            if lyrics_snippet:
+                vocal_info = (
+                    f'lyrics available for intentional on-screen use: "{lyrics_snippet}"'
+                    if allow_clip_text
+                    else f"audio lyrics for timing and semantic inspiration only; never render as visible text: {lyrics_snippet}"
+                )
+            else:
+                vocal_info = "instrumental"
 
             coverage = coverage_plan[i] if coverage_plan and i < len(coverage_plan) else {}
             coverage_hint = (
@@ -706,6 +720,13 @@ class MusicVideoPlanner(BasePlanner):
             "ltx2_music_video_rules.md" if is_ltx else "music_video_treatment_rules.md"
         )
         treatment = normalize_music_video_treatment(kwargs.get("music_video_treatment"))
+        character_style_contract = build_character_visual_style_contract(
+            kwargs.get("character_visual_style", ""),
+            preserve=bool(kwargs.get("preserve_visual_style", False)),
+        )
+        visible_text_contract = build_visible_text_contract(
+            kwargs.get("allow_clip_text") is True,
+        )
         motion_prompt_rule = (
             "Short energetic prompt describing action AFTER the start frame. Keywords. Vibes. Camera. 15-40 words."
             if is_ltx else
@@ -719,6 +740,10 @@ class MusicVideoPlanner(BasePlanner):
 {char_rules}
 
 {camera_block}
+
+{character_style_contract}
+
+{visible_text_contract}
 
 {'''VISUAL AESTHETIC — the reference photo defines the visual style for the entire music video.
 Match its aesthetic (color grading, film texture, era, tone) in every image_prompt unless the
@@ -924,6 +949,8 @@ Return ONLY a JSON array with exactly one complete object for each requested cli
 Do not return already completed indexes. Preserve the requested one-based clip_index values.
 Every image_prompt must describe a static first frame and contain at least 24 characters.
 Every video_prompt must describe subsequent action. {"Use 15-40 words." if is_ltx else "Use chronological, visually executable natural English."}
+{character_style_contract}
+{visible_text_contract}
 Use empty keyframe_prompts and window_prompts unless strictly necessary.
 Required object schema:
 {json.dumps(shot_schema, ensure_ascii=False)}"""

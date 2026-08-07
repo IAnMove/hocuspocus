@@ -182,6 +182,15 @@ def _dialogue_sentences(plan: dict, subject_ids: list[str]) -> list[str]:
 
 
 def _integrated_description(plan: dict, prompt: str) -> str:
+    try:
+        from .policies import strip_visible_text_directions
+    except ImportError:  # pragma: no cover - compatibility import path
+        from services.director.policies import strip_visible_text_directions
+
+    no_visible_text = "no visible text lock:" in str(prompt or "").casefold()
+    clean_visual_field = (
+        strip_visible_text_directions if no_visible_text else lambda value: str(value or "")
+    )
     definitions, subject_ids = _subject_definitions(plan)
     action = _strip_legacy_contracts(prompt)
     if not action:
@@ -193,11 +202,11 @@ def _integrated_description(plan: dict, prompt: str) -> str:
     parts: list[str] = []
     if definitions:
         parts.append("Visible subjects: " + "; ".join(definitions) + ".")
-    environment = _clean(plan.get("environment") or plan.get("spatial_setup"))
+    environment = _clean(clean_visual_field(plan.get("environment") or plan.get("spatial_setup")))
     if environment:
         parts.append(f"Environment: {environment}.")
-    style = _clean(plan.get("visual_style"))
-    lighting = _clean(plan.get("lighting"))
+    style = _clean(clean_visual_field(plan.get("visual_style")))
+    lighting = _clean(clean_visual_field(plan.get("lighting")))
     if style:
         parts.append(f"Visual treatment: {style}.")
     if lighting:
@@ -205,7 +214,7 @@ def _integrated_description(plan: dict, prompt: str) -> str:
     parts.append("Chronological action: " + action.rstrip(".") + ".")
     parts.extend(_dialogue_sentences(plan, subject_ids))
     parts.append(_camera_sentence(plan))
-    ending = _clean(plan.get("ending_beat"))
+    ending = _clean(clean_visual_field(plan.get("ending_beat")))
     if ending and ending.casefold() not in action.casefold():
         parts.append(f"The shot ends on {ending.rstrip('.')}.")
     parts.append(

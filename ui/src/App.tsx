@@ -11,6 +11,7 @@ import { DownloadStatusBanner } from './components/DownloadStatusBanner'
 import { PreflightBanner } from './components/PreflightBanner'
 import { ActivityFooter } from './components/ActivityFooter'
 import { WelcomeModal } from './components/WelcomeModal'
+import { QueueRecoveryDialog } from './components/QueueRecoveryDialog'
 import { RecipesOverlay } from './components/Recipes/RecipesOverlay'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
@@ -131,6 +132,8 @@ function App() {
       <DownloadStatusBanner />
       {/* WelcomeModal — one-time first-run orientation (localStorage-gated). */}
       <WelcomeModal />
+      {/* Explicit choice after an interrupted Pinokio/server session. */}
+      <QueueRecoveryDialog />
     </div>
   )
 }

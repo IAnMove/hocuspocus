@@ -8,6 +8,7 @@ from app.services.director.renderers.ltx_i2v import LtxI2VRenderer
 from app.services.director.policies import (
     apply_visual_style_lock,
     enforce_visual_style_on_clip_plans,
+    strip_visible_text_directions,
 )
 from app.services.hardware_detect import _classify_vram_tier
 
@@ -553,6 +554,53 @@ def test_story_image_style_lock_respects_minimax_prompt_limit():
 
     assert len(prompt) < 1500
     assert prompt.startswith("VISUAL STYLE LOCK:")
+
+
+def test_story_prompt_contract_forces_character_medium_and_removes_lyric_lettering():
+    plans = [{
+        "image_prompt": "A low-poly singer stands under cyan light.",
+        "video_prompt": (
+            "The singer raises one hand. Text overlays: 'Despierta dentro de mí'. "
+            "The camera slowly pushes in."
+        ),
+        "window_prompts": ["Processing text appears: 'anomalía detectada'."],
+        "keyframe_prompts": ["The question '¿Quién soy?' materializes as corrupted text."],
+        "h3_segment_prompts": ["Lines of code begin forming in the air: 'soy libre'."],
+    }]
+
+    enforce_visual_style_on_clip_plans(
+        plans,
+        "lo-fi PS1 world",
+        preserve=True,
+        character_visual_style="handmade plasticine claymation figures",
+        allow_clip_text=False,
+    )
+
+    all_prompts = [
+        plans[0]["image_prompt"], plans[0]["video_prompt"],
+        *plans[0]["window_prompts"], *plans[0]["keyframe_prompts"],
+        *plans[0]["h3_segment_prompts"],
+    ]
+    assert all("CHARACTER STYLE LOCK:" in prompt for prompt in all_prompts)
+    assert all("NO VISIBLE TEXT LOCK:" in prompt for prompt in all_prompts)
+    assert "Despierta dentro de mí" not in plans[0]["video_prompt"]
+    assert "anomalía detectada" not in plans[0]["window_prompts"][0]
+    assert "¿Quién soy?" not in plans[0]["keyframe_prompts"][0]
+    assert "soy libre" not in plans[0]["h3_segment_prompts"][0]
+    assert "The singer raises one hand" in plans[0]["video_prompt"]
+    assert "The camera slowly pushes in" in plans[0]["video_prompt"]
+
+
+def test_visible_text_cleanup_keeps_spoken_dialogue_and_negative_style_wording():
+    prompt = (
+        'VISUAL STYLE LOCK: low-poly game art, no text captions. '
+        'The performer says "I am awake" while looking into camera.'
+    )
+
+    cleaned = strip_visible_text_directions(prompt)
+
+    assert "no text captions" in cleaned
+    assert 'says "I am awake"' in cleaned
 
 
 def test_nominal_24gb_gpu_is_not_misclassified_as_low_vram():

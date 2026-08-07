@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Box, Film, Music, PanelRightClose, PanelRightOpen, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
-import { requestThumbnail } from '../../lib/thumbnailCache'
 import { useIsMobile } from '../../lib/useIsMobile'
 
 // Thumbnail dimensions: 80px wide, 16:9 aspect = 45px tall, 6px gap
@@ -9,21 +8,9 @@ const THUMB_HEIGHT = 45
 const THUMB_GAP = 6
 const THUMB_OVERSCAN = 10
 
-function VideoThumbnail({ src, name }: { src: string; name: string }) {
-  const [thumbUrl, setThumbUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-
-    requestThumbnail(src, name).then((dataUrl) => {
-      if (!cancelled && dataUrl) setThumbUrl(dataUrl)
-    })
-
-    return () => { cancelled = true }
-  }, [src, name])
-
-  if (thumbUrl) {
-    return <img src={thumbUrl} alt={name} className="w-full h-full object-cover" />
+function VideoThumbnail({ src, name }: { src: string | null | undefined; name: string }) {
+  if (src) {
+    return <img src={src} alt={name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
   }
 
   return (
@@ -148,7 +135,7 @@ function VirtualizedThumbnailList({ activeIndex, onThumbnailClick, onMobileClick
               }}
             >
               {file.type === 'video' ? (
-                <VideoThumbnail src={file.url} name={file.name} />
+                <VideoThumbnail src={file.thumbnail_url} name={file.name} />
               ) : file.type === 'audio' ? (
                 <div className="w-full h-full bg-bg-active flex items-center justify-center">
                   <Music size={14} className="text-text-muted" />
@@ -160,7 +147,7 @@ function VirtualizedThumbnailList({ activeIndex, onThumbnailClick, onMobileClick
                   ? <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-cover" />
                   : <div className="w-full h-full bg-bg-active flex items-center justify-center"><Film size={14} className="text-text-muted" /></div>
               ) : (
-                <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
+                <img src={file.thumbnail_url || file.url} alt={file.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
               )}
             </button>
           )

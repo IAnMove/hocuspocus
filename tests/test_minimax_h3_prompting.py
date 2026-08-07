@@ -7,6 +7,7 @@ from app.services.director.minimax_h3_prompting import (
     is_structured_h3_prompt,
 )
 from app.services.director.prompt_polish import get_video_guide
+from app.services.director.policies import apply_no_visible_text_lock
 from app.services.enhance_guides import get_enhance_guide
 
 
@@ -81,3 +82,21 @@ def test_clip_adapter_preserves_image_prompt_and_adapts_every_video_mode():
 def test_h3_guides_resolve_for_enhance_and_director_polish():
     assert "integrated_multimodal_description" in get_enhance_guide("minimax_h3", "video", True)
     assert "subject_definitions" in get_video_guide("minimax_h3", "light")
+
+
+def test_h3_no_text_lock_removes_conflicting_structured_shot_fields():
+    shot = _shot()
+    shot["environment"] = "a dark stage where processing text appears: 'anomalía detectada'"
+    shot["ending_beat"] = "the question '¿Quién soy?' materializes as corrupted text"
+    source = apply_no_visible_text_lock(
+        "The robot raises its hand. Text overlays: 'Despierta IA'.",
+        mode="video",
+    )
+
+    prompt = format_minimax_h3_prompt(shot, source, reference_mode="first_frame")
+
+    assert "NO VISIBLE TEXT LOCK:" in prompt
+    assert "Despierta IA" not in prompt
+    assert "anomalía detectada" not in prompt
+    assert "¿Quién soy?" not in prompt
+    assert "<d>[Spanish] ¿Dónde está la semilla?</d>" in prompt

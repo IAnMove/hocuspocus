@@ -629,11 +629,17 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
         pipeline = "fl2va"
     elif requested_mode == "references":
         if not has_omni_refs:
-            raise ValueError(
-                "MiniMax H3 Ref2VA References mode needs at least one image, "
-                "video, or paired audio reference."
-            )
-        pipeline = "ref2va"
+            # Saved browser/output settings can outlive their reference files.
+            # Ref2VA is impossible without media, but H3's FL2VA graph also
+            # serves native text-to-video, so recover deterministically instead
+            # of failing before the model is loaded.
+            params["h3_reference_mode"] = "first_frame"
+            params.pop("image_refs", None)
+            params.pop("h3_ref_videos", None)
+            params.pop("h3_ref_audios", None)
+            pipeline = "fl2va"
+        else:
+            pipeline = "ref2va"
     else:
         # Backwards compatibility for saved jobs created before the explicit
         # selector existed. New jobs always submit h3_reference_mode.

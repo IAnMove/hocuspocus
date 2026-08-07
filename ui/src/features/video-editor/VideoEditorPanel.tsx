@@ -22,7 +22,7 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react'
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 
@@ -39,6 +39,11 @@ type Transition =
   | 'pixelize'
   | 'blur'
   | 'zoom-in'
+  | 'later-clock'
+  | 'later-tropical'
+  | 'later-cinematic'
+
+type InterstitialTransition = 'later-clock' | 'later-tropical' | 'later-cinematic'
 
 interface SequenceStyle {
   opacity: number
@@ -52,6 +57,7 @@ interface EditorClip extends api.VideoEditorProbe {
   name: string
   source: string
   previewUrl: string
+  thumbnailUrl: string
   trimStart: number
   trimEnd: number
   volume: number
@@ -59,6 +65,8 @@ interface EditorClip extends api.VideoEditorProbe {
   fit: ClipFit
   transition: Transition
   transitionDuration: number
+  transitionText: string
+  transitionTextSize: number
 }
 
 interface ResolutionOption {
@@ -71,7 +79,17 @@ interface SequenceRuntime {
   activeSlot: 0 | 1
   clipIndex: number
   transitioning: boolean
+  interstitial: boolean
+  interstitialElapsed: number
+  interstitialLastFrame: number | null
   ended: boolean
+}
+
+interface SequenceInterstitial {
+  transition: InterstitialTransition
+  text: string
+  textSize: number
+  progress: number
 }
 
 const RESOLUTIONS: ResolutionOption[] = [
@@ -85,6 +103,7 @@ const RESOLUTIONS: ResolutionOption[] = [
 
 const VIDEO_ACCEPT = '.mp4,.webm,.mov,.mkv,.avi,.m4v'
 const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
+const MAESTRO_PICKER_PAGE_SIZE = 24
 const TRANSITIONS: Array<{ value: Transition; label: string; description: string }> = [
   { value: 'none', label: 'Hard cut', description: 'Immediate cut with no overlap.' },
   { value: 'crossfade', label: 'Crossfade', description: 'One shot dissolves smoothly into the next.' },
@@ -97,7 +116,17 @@ const TRANSITIONS: Array<{ value: Transition; label: string; description: string
   { value: 'pixelize', label: 'Digital pixel', description: 'The image breaks into pixels while changing shots.' },
   { value: 'blur', label: 'Motion blur', description: 'A fast horizontal blur hides the cut between moving shots.' },
   { value: 'zoom-in', label: 'Zoom portal', description: 'Push through the outgoing image and land inside the next shot.' },
+  { value: 'later-clock', label: 'Momentos después · Reloj', description: 'Inserts an original time card with a moving analogue clock.' },
+  { value: 'later-tropical', label: 'Momentos después · Meme', description: 'Inserts an original tropical time-card inspired by the classic meme format.' },
+  { value: 'later-cinematic', label: 'Momentos después · Cine', description: 'Inserts an elegant cinematic intertitle between the two clips.' },
 ]
+
+const TRANSITION_VALUES = new Set<Transition>(TRANSITIONS.map(option => option.value))
+const INTERSTITIAL_TRANSITIONS = new Set<Transition>([
+  'later-clock',
+  'later-tropical',
+  'later-cinematic',
+])
 
 const DEFAULT_SEQUENCE_STYLE: SequenceStyle = {
   opacity: 1,
@@ -108,6 +137,182 @@ const DEFAULT_SEQUENCE_STYLE: SequenceStyle = {
 
 function sequenceStyle(patch: Partial<SequenceStyle> = {}): SequenceStyle {
   return { ...DEFAULT_SEQUENCE_STYLE, ...patch }
+}
+
+function isInterstitialTransition(value: Transition): value is InterstitialTransition {
+  return INTERSTITIAL_TRANSITIONS.has(value)
+}
+
+function FittedCardText({
+  text,
+  textSize,
+  baseSize,
+  boxClassName,
+  className,
+}: {
+  text: string
+  textSize: number
+  baseSize: number
+  boxClassName: string
+  className: string
+}) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const textRef = useRef<HTMLParagraphElement>(null)
+
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    const textElement = textRef.current
+    if (!box || !textElement) return
+
+    const fit = () => {
+      const availableWidth = box.clientWidth
+      const availableHeight = box.clientHeight
+      if (!availableWidth || !availableHeight) return
+
+      const scale = Math.max(50, Math.min(160, textSize)) / 100
+      const target = Math.max(7, Math.min(availableWidth, availableHeight) * baseSize * scale)
+      let low = 6
+      let high = target
+      let fitted = low
+
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const candidate = (low + high) / 2
+        textElement.style.fontSize = `${candidate}px`
+        const fits = textElement.scrollWidth <= availableWidth + 1
+          && textElement.scrollHeight <= availableHeight + 1
+        if (fits) {
+          fitted = candidate
+          low = candidate
+        } else {
+          high = candidate
+        }
+      }
+      textElement.style.fontSize = `${fitted}px`
+    }
+
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(box)
+    return () => observer.disconnect()
+  }, [baseSize, text, textSize])
+
+  return (
+    <div ref={boxRef} className={`flex min-h-0 items-center justify-center ${boxClassName}`}>
+      <p
+        ref={textRef}
+        className={`w-full whitespace-pre-line break-words text-center [overflow-wrap:anywhere] ${className}`}
+      >
+        {text}
+      </p>
+    </div>
+  )
+}
+
+function LaterCard({
+  transition,
+  text,
+  textSize = 100,
+  progress = 0,
+  compact = false,
+}: {
+  transition: InterstitialTransition
+  text: string
+  textSize?: number
+  progress?: number
+  compact?: boolean
+}) {
+  const safeText = text.trim() || 'Momentos después…'
+  if (transition === 'later-clock') {
+    return (
+      <div
+        className="absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[#07111f] text-white"
+        style={{ backgroundImage: 'radial-gradient(circle at 18% 20%, #224a6b 0, transparent 42%), linear-gradient(145deg, #101f34, #020617 78%)' }}
+      >
+        <div className={`flex items-center justify-center ${compact ? 'gap-1.5' : 'h-full w-full gap-[clamp(1rem,6vw,5rem)] px-[8%]'}`}>
+          <div
+            className={`relative shrink-0 rounded-full border-[#fbbf24] shadow-2xl ${compact ? 'h-6 w-6 border-2' : 'h-[clamp(5rem,27vw,17rem)] w-[clamp(5rem,27vw,17rem)] border-[clamp(4px,.8vw,10px)]'}`}
+            style={{ backgroundImage: 'radial-gradient(circle, #f8fafc 0 67%, transparent 68%), repeating-conic-gradient(#172554 0deg 1.5deg, #f8fafc 1.5deg 30deg)' }}
+          >
+            <span
+              className={`absolute left-1/2 top-1/2 origin-bottom rounded-full bg-slate-900 ${compact ? 'h-2 w-[2px]' : 'h-[29%] w-[4%]'}`}
+              style={{ transform: 'translate(-50%, -100%) rotate(-48deg)' }}
+            />
+            <span
+              className={`absolute left-1/2 top-1/2 origin-bottom rounded-full bg-slate-900 ${compact ? 'h-2.5 w-[1px]' : 'h-[39%] w-[3%]'}`}
+              style={{ transform: 'translate(-50%, -100%) rotate(28deg)' }}
+            />
+            <span
+              className={`absolute left-1/2 top-1/2 origin-bottom rounded-full bg-red-500 ${compact ? 'h-2.5 w-px' : 'h-[42%] w-[1.5%]'}`}
+              style={{ transform: `translate(-50%, -100%) rotate(${132 + progress * 720}deg)` }}
+            />
+            <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 ${compact ? 'h-1 w-1' : 'h-[8%] w-[8%]'}`} />
+          </div>
+          {compact ? (
+            <p className="max-w-16 whitespace-pre-line break-words text-center text-[6px] font-semibold leading-tight [overflow-wrap:anywhere]">
+              {safeText}
+            </p>
+          ) : (
+            <FittedCardText
+              text={safeText}
+              textSize={textSize}
+              baseSize={0.17}
+              boxClassName="h-[64%] w-[42%]"
+              className="font-semibold leading-tight drop-shadow-lg"
+            />
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (transition === 'later-tropical') {
+    return (
+      <div
+        className="absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[#087f8c]"
+        style={{
+          backgroundImage: 'radial-gradient(circle at 12% 18%, #f4d35e 0 5%, transparent 5.5%), radial-gradient(circle at 82% 22%, #f95738 0 7%, transparent 7.5%), radial-gradient(circle at 22% 84%, #74c69d 0 8%, transparent 8.5%), radial-gradient(circle at 91% 78%, #ee964b 0 6%, transparent 6.5%), repeating-linear-gradient(42deg, transparent 0 34px, rgba(7,59,76,.2) 35px 38px)'
+        }}
+      >
+        <div className={`${compact ? 'inset-1 rounded' : 'inset-[9%] rounded-[clamp(1rem,4vw,3rem)] border-[clamp(2px,.5vw,7px)]'} absolute border border-[#f6f7d7]/85 bg-[#043b44]/75 shadow-2xl`} />
+        {compact ? (
+          <p className="relative max-w-[76%] -rotate-1 whitespace-pre-line break-words text-center text-[6px] font-black uppercase leading-[.95] text-[#f6f7d7] [overflow-wrap:anywhere]" style={{ textShadow: '1px 1px #073b4c' }}>
+            {safeText}
+          </p>
+        ) : (
+          <FittedCardText
+            text={safeText}
+            textSize={textSize}
+            baseSize={0.21}
+            boxClassName="relative h-[48%] w-[72%]"
+            className="-rotate-1 font-black uppercase leading-[.95] text-[#f6f7d7] [text-shadow:clamp(2px,.5vw,8px)_clamp(2px,.5vw,8px)_#073b4c]"
+          />
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[#170f0a] text-[#f4e8ce]"
+      style={{ backgroundImage: 'radial-gradient(ellipse at center, #382517 0, #170f0a 60%, #090604 100%)' }}
+    >
+      <div className={`absolute border border-[#c9a96e] ${compact ? 'inset-1' : 'inset-[7%]'}`} />
+      <div className={`absolute border border-[#685238] ${compact ? 'inset-1.5' : 'inset-[10%]'}`} />
+      {compact ? (
+        <p className="relative max-w-[72%] whitespace-pre-line break-words text-center text-[5px] font-serif font-semibold uppercase leading-tight tracking-[.12em] [overflow-wrap:anywhere]">
+          {safeText}
+        </p>
+      ) : (
+        <FittedCardText
+          text={safeText}
+          textSize={textSize}
+          baseSize={0.21}
+          boxClassName="relative h-[38%] w-[68%]"
+          className="font-serif font-semibold uppercase leading-tight tracking-[.12em]"
+        />
+      )}
+    </div>
+  )
 }
 
 function clipId(): string {
@@ -129,6 +334,9 @@ function transitionDurationAfter(clips: EditorClip[], index: number): number {
   const current = clips[index]
   const next = clips[index + 1]
   if (!current || !next || current.transition === 'none') return 0
+  if (isInterstitialTransition(current.transition)) {
+    return Math.max(0.5, Math.min(current.transitionDuration, 5))
+  }
   return Math.max(
     0.05,
     Math.min(current.transitionDuration, effectiveDuration(current) * 0.45, effectiveDuration(next) * 0.45),
@@ -138,7 +346,10 @@ function transitionDurationAfter(clips: EditorClip[], index: number): number {
 function clipTimelineStart(clips: EditorClip[], index: number): number {
   let start = 0
   for (let cursor = 0; cursor < index; cursor++) {
-    start += effectiveDuration(clips[cursor]) - transitionDurationAfter(clips, cursor)
+    const transitionDuration = transitionDurationAfter(clips, cursor)
+    start += effectiveDuration(clips[cursor]) + (
+      isInterstitialTransition(clips[cursor].transition) ? transitionDuration : -transitionDuration
+    )
   }
   return start
 }
@@ -161,7 +372,20 @@ function loadEditorDraft(): {
       option.width === saved.resolution?.width && option.height === saved.resolution?.height,
     ) || RESOLUTIONS[0]
     return {
-      clips: saved.clips.filter((clip: EditorClip) => typeof clip?.source === 'string'),
+      clips: saved.clips
+        .filter((clip: EditorClip) => typeof clip?.source === 'string')
+        .map((clip: EditorClip) => ({
+          ...clip,
+          thumbnailUrl: typeof clip.thumbnailUrl === 'string' && clip.thumbnailUrl
+            ? clip.thumbnailUrl
+            : api.getVideoEditorThumbnailUrl(clip.source),
+          transition: TRANSITION_VALUES.has(clip.transition) ? clip.transition : 'none',
+          transitionDuration: Number.isFinite(clip.transitionDuration) ? clip.transitionDuration : 0.5,
+          transitionText: typeof clip.transitionText === 'string' ? clip.transitionText : 'Momentos después…',
+          transitionTextSize: Number.isFinite(clip.transitionTextSize)
+            ? Math.max(50, Math.min(160, clip.transitionTextSize))
+            : 100,
+        })),
       projectName: typeof saved.projectName === 'string' ? saved.projectName : fallback.projectName,
       resolution,
       fps: [24, 25, 30, 50, 60].includes(saved.fps) ? saved.fps : 30,
@@ -179,7 +403,15 @@ export function VideoEditorPanel() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const sequenceRefs = useRef<Array<HTMLVideoElement | null>>([null, null])
   const sequenceFrameRef = useRef<number | null>(null)
-  const sequenceRuntimeRef = useRef<SequenceRuntime>({ activeSlot: 0, clipIndex: 0, transitioning: false, ended: false })
+  const sequenceRuntimeRef = useRef<SequenceRuntime>({
+    activeSlot: 0,
+    clipIndex: 0,
+    transitioning: false,
+    interstitial: false,
+    interstitialElapsed: 0,
+    interstitialLastFrame: null,
+    ended: false,
+  })
   const sequencePlayingRef = useRef(false)
   const sequenceSlotSeekRef = useRef<Array<number | null>>([null, null])
   const mountedRef = useRef(true)
@@ -200,11 +432,13 @@ export function VideoEditorPanel() {
     sequenceStyle(),
     sequenceStyle({ opacity: 0 }),
   ])
+  const [sequenceInterstitial, setSequenceInterstitial] = useState<SequenceInterstitial | null>(null)
   const [selectedTransitionIndex, setSelectedTransitionIndex] = useState<number | null>(null)
   const [adding, setAdding] = useState(false)
   const [addProgress, setAddProgress] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [maestroVideos, setMaestroVideos] = useState<api.ApiOutput[]>([])
+  const [maestroVideoTotal, setMaestroVideoTotal] = useState(0)
   const [pickerLoading, setPickerLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(null)
@@ -215,11 +449,14 @@ export function VideoEditorPanel() {
   const selectedIndex = selected ? clips.findIndex(clip => clip.id === selected.id) : -1
   const totalDuration = useMemo(() => {
     const raw = clips.reduce((total, clip) => total + effectiveDuration(clip), 0)
-    const overlap = clips.reduce(
-      (total, _clip, index) => total + transitionDurationAfter(clips, index),
+    const transitionDelta = clips.reduce(
+      (total, clip, index) => {
+        const duration = transitionDurationAfter(clips, index)
+        return total + (isInterstitialTransition(clip.transition) ? duration : -duration)
+      },
       0,
     )
-    return Math.max(0, raw - overlap)
+    return Math.max(0, raw + transitionDelta)
   }, [clips])
 
   useEffect(() => {
@@ -266,7 +503,7 @@ export function VideoEditorPanel() {
     setClips(current => current.map(clip => clip.id === id ? { ...clip, ...patch } : clip))
   }
 
-  const addSource = async (source: string, previewUrl: string, name: string) => {
+  const addSource = async (source: string, previewUrl: string, name: string, thumbnailUrl?: string | null) => {
     const media = await api.probeVideoEditorClip(source)
     const clip: EditorClip = {
       ...media,
@@ -274,6 +511,7 @@ export function VideoEditorPanel() {
       name,
       source,
       previewUrl,
+      thumbnailUrl: thumbnailUrl || api.getVideoEditorThumbnailUrl(source),
       trimStart: 0,
       trimEnd: media.duration,
       volume: 1,
@@ -281,6 +519,8 @@ export function VideoEditorPanel() {
       fit: 'fit',
       transition: 'none',
       transitionDuration: 0.5,
+      transitionText: 'Momentos después…',
+      transitionTextSize: 100,
     }
     setClips(current => [...current, clip])
     setSelectedId(clip.id)
@@ -334,9 +574,34 @@ export function VideoEditorPanel() {
     setPickerOpen(true)
     setPickerLoading(true)
     setError(null)
+    setMaestroVideos([])
+    setMaestroVideoTotal(0)
     try {
-      const result = await api.fetchOutputs(0, 0)
-      setMaestroVideos(result.outputs.filter(output => output.type === 'video'))
+      const result = await api.fetchOutputs(MAESTRO_PICKER_PAGE_SIZE, 0, { mediaType: 'video' })
+      setMaestroVideos(result.outputs)
+      setMaestroVideoTotal(result.total)
+    } catch (reason) {
+      setError((reason as Error).message)
+    } finally {
+      setPickerLoading(false)
+    }
+  }
+
+  const loadMoreMaestroVideos = async () => {
+    if (pickerLoading || maestroVideos.length >= maestroVideoTotal) return
+    setPickerLoading(true)
+    setError(null)
+    try {
+      const result = await api.fetchOutputs(
+        MAESTRO_PICKER_PAGE_SIZE,
+        maestroVideos.length,
+        { mediaType: 'video' },
+      )
+      setMaestroVideos(current => {
+        const known = new Set(current.map(output => output.name))
+        return [...current, ...result.outputs.filter(output => !known.has(output.name))]
+      })
+      setMaestroVideoTotal(result.total)
     } catch (reason) {
       setError((reason as Error).message)
     } finally {
@@ -351,7 +616,7 @@ export function VideoEditorPanel() {
     setAddProgress(`Adding ${output.name}`)
     try {
       const source = api.getFileUrl(output.name)
-      await addSource(source, source, output.name)
+      await addSource(source, source, output.name, output.thumbnail_url || api.getOutputThumbnailUrl(output.name))
     } catch (reason) {
       setError((reason as Error).message)
     } finally {
@@ -426,6 +691,13 @@ export function VideoEditorPanel() {
     const active = sequenceRefs.current[runtime.activeSlot]
     const inactive = sequenceRefs.current[runtime.activeSlot === 0 ? 1 : 0]
     if (!value) {
+      runtime.interstitialLastFrame = null
+      active?.pause()
+      inactive?.pause()
+      return
+    }
+    if (runtime.interstitial) {
+      runtime.interstitialLastFrame = performance.now()
       active?.pause()
       inactive?.pause()
       return
@@ -436,12 +708,58 @@ export function VideoEditorPanel() {
     }
   }
 
+  const removeClip = (id: string) => {
+    const index = clips.findIndex(clip => clip.id === id)
+    if (index < 0) return
+
+    setSequencePlaying(false)
+    videoRef.current?.pause()
+    sequenceRuntimeRef.current = {
+      activeSlot: 0,
+      clipIndex: 0,
+      transitioning: false,
+      interstitial: false,
+      interstitialElapsed: 0,
+      interstitialLastFrame: null,
+      ended: false,
+    }
+    sequenceSlotSeekRef.current = [null, null]
+    setSequenceMode(false)
+    setSequenceTime(0)
+    setSequenceSlotIndices([null, null])
+    setSequenceStyles([sequenceStyle(), sequenceStyle({ opacity: 0 })])
+    setSequenceInterstitial(null)
+    setSelectedTransitionIndex(null)
+    setDraggedId(current => current === id ? null : current)
+    setDropIndex(null)
+
+    const remaining = clips.filter(clip => clip.id !== id)
+    // A transition belongs to the exact outgoing→incoming pair. Removing the
+    // incoming clip must not silently apply that transition to a different one.
+    if (index > 0 && remaining[index - 1]) {
+      remaining[index - 1] = { ...remaining[index - 1], transition: 'none' }
+    }
+    setClips(remaining)
+    if (!selectedId || selectedId === id || !remaining.some(clip => clip.id === selectedId)) {
+      setSelectedId(remaining[Math.min(index, remaining.length - 1)]?.id || null)
+    }
+    setError(null)
+  }
+
   const startSequenceAt = (clipIndex: number, sourceTime?: number, autoplay = true) => {
     if (!clips[clipIndex]) return
     sequencePlayingRef.current = autoplay
     videoRef.current?.pause()
     const nextIndex = clipIndex + 1 < clips.length ? clipIndex + 1 : null
-    sequenceRuntimeRef.current = { activeSlot: 0, clipIndex, transitioning: false, ended: false }
+    sequenceRuntimeRef.current = {
+      activeSlot: 0,
+      clipIndex,
+      transitioning: false,
+      interstitial: false,
+      interstitialElapsed: 0,
+      interstitialLastFrame: null,
+      ended: false,
+    }
     sequenceSlotSeekRef.current = [
       sourceTime ?? clips[clipIndex].trimStart,
       nextIndex !== null ? clips[nextIndex].trimStart : null,
@@ -453,6 +771,7 @@ export function VideoEditorPanel() {
       sequenceStyle(),
       sequenceStyle({ opacity: 0 }),
     ])
+    setSequenceInterstitial(null)
     setSelectedId(clips[clipIndex].id)
     setSelectedTransitionIndex(null)
     const local = (sourceTime ?? clips[clipIndex].trimStart) - clips[clipIndex].trimStart
@@ -468,6 +787,30 @@ export function VideoEditorPanel() {
         clipIndex = index
         break
       }
+    }
+    const cardStart = clipTimelineStart(clips, clipIndex) + effectiveDuration(clips[clipIndex])
+    if (
+      isInterstitialTransition(clips[clipIndex].transition)
+      && clips[clipIndex + 1]
+      && clamped >= cardStart
+    ) {
+      const autoplay = sequencePlayingRef.current
+      startSequenceAt(clipIndex, clips[clipIndex].trimEnd - 0.01, autoplay)
+      const runtime = sequenceRuntimeRef.current
+      runtime.interstitial = true
+      runtime.interstitialElapsed = Math.min(
+        transitionDurationAfter(clips, clipIndex),
+        Math.max(0, clamped - cardStart),
+      )
+      runtime.interstitialLastFrame = autoplay ? performance.now() : null
+      setSequenceInterstitial({
+        transition: clips[clipIndex].transition as InterstitialTransition,
+        text: clips[clipIndex].transitionText,
+        textSize: clips[clipIndex].transitionTextSize,
+        progress: runtime.interstitialElapsed / transitionDurationAfter(clips, clipIndex),
+      })
+      setSequenceTime(clamped)
+      return
     }
     const local = clamped - clipTimelineStart(clips, clipIndex)
     const sourceTime = Math.min(
@@ -507,7 +850,7 @@ export function VideoEditorPanel() {
       && runtime.activeSlot !== slot
       && runtime.clipIndex + 1 === clipIndex
     )
-    if (sequencePlayingRef.current && (isActive || isTransitionTarget)) {
+    if (sequencePlayingRef.current && !runtime.interstitial && (isActive || isTransitionTarget)) {
       void video.play().catch(() => undefined)
     } else {
       video.pause()
@@ -516,6 +859,48 @@ export function VideoEditorPanel() {
 
   useEffect(() => {
     if (!sequenceMode) return
+
+    const advanceToNext = (
+      runtime: SequenceRuntime,
+      nextIndex: number,
+      nextClip: EditorClip,
+      inactiveSlot: 0 | 1,
+      nextVideo: HTMLVideoElement,
+    ) => {
+      const oldActiveSlot = runtime.activeSlot
+      runtime.activeSlot = inactiveSlot
+      runtime.clipIndex = nextIndex
+      runtime.transitioning = false
+      runtime.interstitial = false
+      runtime.interstitialElapsed = 0
+      runtime.interstitialLastFrame = null
+      setSequenceInterstitial(null)
+      const followingIndex = nextIndex + 1 < clips.length ? nextIndex + 1 : null
+      sequenceSlotSeekRef.current[inactiveSlot] = Math.max(
+        nextClip.trimStart,
+        nextVideo.currentTime || nextClip.trimStart,
+      )
+      sequenceSlotSeekRef.current[oldActiveSlot] = (
+        followingIndex !== null ? clips[followingIndex].trimStart : null
+      )
+      setSequenceSlotIndices(previous => {
+        const slots = [...previous]
+        slots[inactiveSlot] = nextIndex
+        slots[oldActiveSlot] = followingIndex
+        return slots
+      })
+      setSequenceStyles(previous => {
+        const styles = [...previous]
+        styles[inactiveSlot] = sequenceStyle()
+        styles[oldActiveSlot] = sequenceStyle({ opacity: 0 })
+        return styles
+      })
+      nextVideo.volume = clipVolume(nextClip)
+      if (sequencePlayingRef.current && nextVideo.paused) {
+        void nextVideo.play().catch(() => undefined)
+      }
+      setSelectedId(nextClip.id)
+    }
 
     const renderFrame = () => {
       const runtime = sequenceRuntimeRef.current
@@ -527,20 +912,52 @@ export function VideoEditorPanel() {
         return
       }
 
+      const nextIndex = runtime.clipIndex + 1
+      const nextClip = clips[nextIndex]
+      const inactiveSlot: 0 | 1 = runtime.activeSlot === 0 ? 1 : 0
+      const nextVideo = sequenceRefs.current[inactiveSlot]
+      const duration = transitionDurationAfter(clips, runtime.clipIndex)
+      const isTimeCard = isInterstitialTransition(currentClip.transition)
+
+      if (runtime.interstitial && isTimeCard) {
+        const now = performance.now()
+        if (sequencePlayingRef.current) {
+          if (runtime.interstitialLastFrame !== null) {
+            runtime.interstitialElapsed += Math.max(0, (now - runtime.interstitialLastFrame) / 1000)
+          }
+          runtime.interstitialLastFrame = now
+        } else {
+          runtime.interstitialLastFrame = null
+        }
+        const elapsed = Math.min(duration, runtime.interstitialElapsed)
+        const progress = duration > 0 ? elapsed / duration : 1
+        setSequenceTime(Math.min(
+          totalDuration,
+          clipTimelineStart(clips, runtime.clipIndex) + effectiveDuration(currentClip) + elapsed,
+        ))
+        setSequenceInterstitial({
+          transition: currentClip.transition as InterstitialTransition,
+          text: currentClip.transitionText,
+          textSize: currentClip.transitionTextSize,
+          progress,
+        })
+        if (elapsed >= duration && nextClip && nextVideo) {
+          advanceToNext(runtime, nextIndex, nextClip, inactiveSlot, nextVideo)
+        }
+        sequenceFrameRef.current = requestAnimationFrame(renderFrame)
+        return
+      }
+
       const localTime = Math.max(0, activeVideo.currentTime - currentClip.trimStart)
       setSequenceTime(Math.min(
         totalDuration,
         clipTimelineStart(clips, runtime.clipIndex) + localTime,
       ))
 
-      const nextIndex = runtime.clipIndex + 1
-      const nextClip = clips[nextIndex]
-      const inactiveSlot = runtime.activeSlot === 0 ? 1 : 0
-      const nextVideo = sequenceRefs.current[inactiveSlot]
-      const duration = transitionDurationAfter(clips, runtime.clipIndex)
       const transitionStart = currentClip.trimEnd - duration
       const inTransition = Boolean(
         nextClip
+        && !isTimeCard
         && duration > 0
         && activeVideo.currentTime >= transitionStart
       )
@@ -678,38 +1095,24 @@ export function VideoEditorPanel() {
           sequencePlayingRef.current = false
           setPlaying(false)
           setSequenceTime(totalDuration)
-        } else {
-          const oldActiveSlot = runtime.activeSlot
-          runtime.activeSlot = inactiveSlot
-          runtime.clipIndex = nextIndex
+        } else if (isTimeCard) {
+          runtime.interstitial = true
+          runtime.interstitialElapsed = 0
+          runtime.interstitialLastFrame = sequencePlayingRef.current ? performance.now() : null
           runtime.transitioning = false
-          const followingIndex = nextIndex + 1 < clips.length ? nextIndex + 1 : null
-          sequenceSlotSeekRef.current[inactiveSlot] = Math.max(
-            nextClip.trimStart,
-            nextVideo?.currentTime || nextClip.trimStart,
-          )
-          sequenceSlotSeekRef.current[oldActiveSlot] = (
-            followingIndex !== null ? clips[followingIndex].trimStart : null
-          )
-          setSequenceSlotIndices(previous => {
-            const slots = [...previous]
-            slots[inactiveSlot] = nextIndex
-            slots[oldActiveSlot] = followingIndex
-            return slots
-          })
-          setSequenceStyles(previous => {
-            const styles = [...previous]
-            styles[inactiveSlot] = sequenceStyle()
-            styles[oldActiveSlot] = sequenceStyle({ opacity: 0 })
-            return styles
-          })
+          nextVideo?.pause()
           if (nextVideo) {
+            nextVideo.currentTime = nextClip.trimStart
             nextVideo.volume = clipVolume(nextClip)
-            if (sequencePlayingRef.current && nextVideo.paused) {
-              void nextVideo.play().catch(() => undefined)
-            }
           }
-          setSelectedId(nextClip.id)
+          setSequenceInterstitial({
+            transition: currentClip.transition as InterstitialTransition,
+            text: currentClip.transitionText,
+            textSize: currentClip.transitionTextSize,
+            progress: 0,
+          })
+        } else if (nextVideo) {
+          advanceToNext(runtime, nextIndex, nextClip, inactiveSlot, nextVideo)
         }
       }
 
@@ -751,6 +1154,8 @@ export function VideoEditorPanel() {
           fit: clip.fit,
           transition: clip.transition,
           transition_duration: clip.transitionDuration,
+          transition_text: clip.transitionText,
+          transition_text_size: clip.transitionTextSize,
         })),
       })
       while (mountedRef.current) {
@@ -892,6 +1297,14 @@ export function VideoEditorPanel() {
                     />
                   )
                 })}
+                {sequenceInterstitial && (
+                  <LaterCard
+                    transition={sequenceInterstitial.transition}
+                    text={sequenceInterstitial.text}
+                    textSize={sequenceInterstitial.textSize}
+                    progress={sequenceInterstitial.progress}
+                  />
+                )}
               </div>
             ) : selected ? (
               <div
@@ -1055,7 +1468,15 @@ export function VideoEditorPanel() {
                   return (
                     <button
                       key={option.value}
-                      onClick={() => patchClip(clips[selectedTransitionIndex].id, { transition: option.value })}
+                      onClick={() => {
+                        const clip = clips[selectedTransitionIndex]
+                        patchClip(clip.id, {
+                          transition: option.value,
+                          ...(isInterstitialTransition(option.value) && !isInterstitialTransition(clip.transition)
+                            ? { transitionDuration: 2 }
+                            : {}),
+                        })
+                      }}
                       className={`group rounded-lg border p-2 text-left transition-colors ${
                         active
                           ? 'border-purple-400 bg-purple-500/10'
@@ -1101,6 +1522,13 @@ export function VideoEditorPanel() {
                         {option.value === 'zoom-in' && (
                           <div className="absolute left-1/2 top-1/2 h-5 w-8 -translate-x-1/2 -translate-y-1/2 border border-white/90 shadow-[0_0_10px_white]" />
                         )}
+                        {isInterstitialTransition(option.value) && (
+                          <LaterCard
+                            transition={option.value}
+                            text="Momentos después…"
+                            compact
+                          />
+                        )}
                       </div>
                       <span className={`text-[9px] ${active ? 'text-purple-300' : 'text-text-secondary'}`}>
                         {option.label}
@@ -1111,31 +1539,71 @@ export function VideoEditorPanel() {
               </div>
 
               {clips[selectedTransitionIndex].transition !== 'none' && (
-                <label className="block text-[10px] text-text-muted mt-3">
-                  Duration: {clips[selectedTransitionIndex].transitionDuration.toFixed(1)}s
-                  <input
-                    type="range"
-                    min={0.1}
-                    max={2}
-                    step={0.1}
-                    value={clips[selectedTransitionIndex].transitionDuration}
-                    onChange={event => patchClip(clips[selectedTransitionIndex].id, {
-                      transitionDuration: Number(event.target.value),
-                    })}
-                    className="block w-full mt-1"
-                  />
-                  <span className="block mt-1 text-[9px] text-text-muted/70">
-                    The preview and export clamp this automatically for very short clips.
-                  </span>
-                </label>
+                <div className="mt-3 space-y-3">
+                  {isInterstitialTransition(clips[selectedTransitionIndex].transition) && (
+                    <div className="space-y-3">
+                      <label className="block text-[10px] text-text-muted">
+                        Card text
+                        <textarea
+                          rows={3}
+                          maxLength={240}
+                          value={clips[selectedTransitionIndex].transitionText}
+                          placeholder="Momentos después…"
+                          onChange={event => patchClip(clips[selectedTransitionIndex].id, {
+                            transitionText: event.target.value,
+                          })}
+                          className="mt-1 block w-full resize-y rounded border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary"
+                        />
+                        <span className="mt-1 block text-[9px] text-text-secondary">
+                          Enter adds a manual line break. The text also wraps automatically to fit the card.
+                        </span>
+                      </label>
+                      <label className="block text-[10px] text-text-muted">
+                        Text size: {Math.round(clips[selectedTransitionIndex].transitionTextSize)}%
+                        <input
+                          type="range"
+                          min={50}
+                          max={160}
+                          step={5}
+                          value={clips[selectedTransitionIndex].transitionTextSize}
+                          onChange={event => patchClip(clips[selectedTransitionIndex].id, {
+                            transitionTextSize: Number(event.target.value),
+                          })}
+                          className="mt-1 block w-full"
+                        />
+                      </label>
+                    </div>
+                  )}
+                  <label className="block text-[10px] text-text-muted">
+                    Duration: {clips[selectedTransitionIndex].transitionDuration.toFixed(1)}s
+                    <input
+                      type="range"
+                      min={isInterstitialTransition(clips[selectedTransitionIndex].transition) ? 0.5 : 0.1}
+                      max={isInterstitialTransition(clips[selectedTransitionIndex].transition) ? 5 : 2}
+                      step={0.1}
+                      value={clips[selectedTransitionIndex].transitionDuration}
+                      onChange={event => patchClip(clips[selectedTransitionIndex].id, {
+                        transitionDuration: Number(event.target.value),
+                      })}
+                      className="block w-full mt-1"
+                    />
+                    <span className="block mt-1 text-[9px] text-text-muted/70">
+                      {isInterstitialTransition(clips[selectedTransitionIndex].transition)
+                        ? 'This card is inserted between clips and adds to the total duration.'
+                        : 'The preview and export clamp this automatically for very short clips.'}
+                    </span>
+                  </label>
+                </div>
               )}
 
               <button
                 onClick={() => {
+                  const transitionClip = clips[selectedTransitionIndex]
                   const start = clipTimelineStart(clips, selectedTransitionIndex)
-                    + effectiveDuration(clips[selectedTransitionIndex])
-                    - transitionDurationAfter(clips, selectedTransitionIndex)
-                    - 0.35
+                    + effectiveDuration(transitionClip)
+                    - (isInterstitialTransition(transitionClip.transition)
+                      ? 0.35
+                      : transitionDurationAfter(clips, selectedTransitionIndex) + 0.35)
                   seekSequence(Math.max(0, start))
                   window.setTimeout(() => setSequencePlaying(true), 80)
                 }}
@@ -1161,11 +1629,11 @@ export function VideoEditorPanel() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setClips(current => current.filter(clip => clip.id !== selected.id))}
-                  className="p-1 text-text-muted hover:text-red-400"
-                  title="Delete clip"
+                  onClick={() => removeClip(selected.id)}
+                  className="flex items-center gap-1 rounded border border-red-500/30 px-2 py-1 text-[10px] text-red-300 transition-colors hover:bg-red-500/15 hover:text-red-200"
+                  title="Remove this video from the timeline"
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={12} /> Remove
                 </button>
               </div>
 
@@ -1336,62 +1804,81 @@ export function VideoEditorPanel() {
                 const width = Math.max(110, Math.min(360, effectiveDuration(clip) * 24))
                 return (
                   <Fragment key={clip.id}>
-                    <button
-                      draggable
-                      onDragStart={event => {
-                        event.dataTransfer.effectAllowed = 'move'
-                        event.dataTransfer.setData('text/x-maestro-video-clip', clip.id)
-                        setDraggedId(clip.id)
-                      }}
-                      onDragEnd={() => {
-                        setDraggedId(null)
-                        setDropIndex(null)
-                      }}
-                      onDragOver={event => {
-                        event.preventDefault()
-                        event.dataTransfer.dropEffect = 'move'
-                        const bounds = event.currentTarget.getBoundingClientRect()
-                        setDropIndex(index + (event.clientX > bounds.left + bounds.width / 2 ? 1 : 0))
-                      }}
-                      onDrop={event => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        const bounds = event.currentTarget.getBoundingClientRect()
-                        const insertionIndex = index + (event.clientX > bounds.left + bounds.width / 2 ? 1 : 0)
-                        dropAtIndex(insertionIndex, event.dataTransfer.getData('text/x-maestro-video-clip'))
-                      }}
-                      onClick={() => {
-                        setSequencePlaying(false)
-                        setSequenceMode(false)
-                        setSelectedTransitionIndex(null)
-                        setSelectedId(clip.id)
-                      }}
-                      className={`relative overflow-hidden rounded-lg border text-left transition-colors ${
-                        selected?.id === clip.id && selectedTransitionIndex === null
-                          ? 'border-accent-blue ring-1 ring-accent-blue/50'
-                          : 'border-border hover:border-border-light'
-                      }`}
-                      style={{ width }}
-                    >
-                      {dropIndex === index && (
-                        <span className="absolute inset-y-1 left-0 z-30 w-1 rounded-full bg-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.9)]" />
-                      )}
-                      {dropIndex === index + 1 && index === clips.length - 1 && (
-                        <span className="absolute inset-y-1 right-0 z-30 w-1 rounded-full bg-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.9)]" />
-                      )}
-                      <video src={clip.previewUrl} preload="metadata" muted className="absolute inset-0 w-full h-full object-cover opacity-45" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40" />
-                      <div className="relative h-full p-2 flex flex-col">
-                        <div className="flex items-center gap-1 text-[9px] text-white/70">
-                          <GripVertical size={10} /> {index + 1}
-                          {clip.muted && <VolumeX size={9} className="ml-auto" />}
+                    <div className="relative shrink-0" style={{ width }}>
+                      <button
+                        draggable
+                        onDragStart={event => {
+                          event.dataTransfer.effectAllowed = 'move'
+                          event.dataTransfer.setData('text/x-maestro-video-clip', clip.id)
+                          setDraggedId(clip.id)
+                        }}
+                        onDragEnd={() => {
+                          setDraggedId(null)
+                          setDropIndex(null)
+                        }}
+                        onDragOver={event => {
+                          event.preventDefault()
+                          event.dataTransfer.dropEffect = 'move'
+                          const bounds = event.currentTarget.getBoundingClientRect()
+                          setDropIndex(index + (event.clientX > bounds.left + bounds.width / 2 ? 1 : 0))
+                        }}
+                        onDrop={event => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          const bounds = event.currentTarget.getBoundingClientRect()
+                          const insertionIndex = index + (event.clientX > bounds.left + bounds.width / 2 ? 1 : 0)
+                          dropAtIndex(insertionIndex, event.dataTransfer.getData('text/x-maestro-video-clip'))
+                        }}
+                        onClick={() => {
+                          setSequencePlaying(false)
+                          setSequenceMode(false)
+                          setSelectedTransitionIndex(null)
+                          setSelectedId(clip.id)
+                        }}
+                        className={`relative h-full w-full overflow-hidden rounded-lg border text-left transition-colors ${
+                          selected?.id === clip.id && selectedTransitionIndex === null
+                            ? 'border-accent-blue ring-1 ring-accent-blue/50'
+                            : 'border-border hover:border-border-light'
+                        }`}
+                      >
+                        {dropIndex === index && (
+                          <span className="absolute inset-y-1 left-0 z-30 w-1 rounded-full bg-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.9)]" />
+                        )}
+                        {dropIndex === index + 1 && index === clips.length - 1 && (
+                          <span className="absolute inset-y-1 right-0 z-30 w-1 rounded-full bg-accent-blue shadow-[0_0_8px_rgba(59,130,246,0.9)]" />
+                        )}
+                        <img
+                          src={clip.thumbnailUrl || api.getVideoEditorThumbnailUrl(clip.source)}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover opacity-45"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40" />
+                        <div className="relative flex h-full flex-col p-2">
+                          <div className="flex items-center gap-1 text-[9px] text-white/70">
+                            <GripVertical size={10} /> {index + 1}
+                            {clip.muted && <VolumeX size={9} className="ml-auto" />}
+                          </div>
+                          <div className="mt-auto">
+                            <p className="truncate text-[10px] text-white">{clip.name}</p>
+                            <p className="text-[9px] text-white/60">{formatTime(effectiveDuration(clip))}</p>
+                          </div>
                         </div>
-                        <div className="mt-auto">
-                          <p className="text-[10px] text-white truncate">{clip.name}</p>
-                          <p className="text-[9px] text-white/60">{formatTime(effectiveDuration(clip))}</p>
-                        </div>
-                      </div>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={event => {
+                          event.stopPropagation()
+                          removeClip(clip.id)
+                        }}
+                        className="absolute right-1 top-1 z-40 flex items-center gap-1 rounded-md border border-red-400/30 bg-black/75 px-1.5 py-1 text-[9px] text-red-200 shadow transition-colors hover:bg-red-500/35 hover:text-white"
+                        title={`Remove ${clip.name} from the timeline`}
+                        aria-label={`Remove ${clip.name} from the timeline`}
+                      >
+                        <Trash2 size={10} /> Remove
+                      </button>
+                    </div>
                     {index < clips.length - 1 && (
                       <button
                         onDragOver={event => {
@@ -1476,12 +1963,15 @@ export function VideoEditorPanel() {
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <FolderOpen size={15} className="text-accent-blue" />
               <span className="text-sm font-medium">Add a Maestro video</span>
+              {maestroVideoTotal > 0 && (
+                <span className="text-[10px] text-text-muted">{maestroVideos.length} / {maestroVideoTotal}</span>
+              )}
               <button onClick={() => setPickerOpen(false)} className="ml-auto p-1 rounded hover:bg-bg-hover">
                 <X size={15} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
-              {pickerLoading ? (
+              {pickerLoading && maestroVideos.length === 0 ? (
                 <div className="min-h-48 flex items-center justify-center text-text-muted">
                   <Loader2 size={22} className="animate-spin" />
                 </div>
@@ -1493,7 +1983,17 @@ export function VideoEditorPanel() {
                       onClick={() => void chooseMaestroVideo(output)}
                       className="rounded-lg overflow-hidden border border-border bg-bg-tertiary hover:border-accent-blue text-left"
                     >
-                      <video src={api.getFileUrl(output.name)} preload="metadata" muted className="w-full aspect-video object-cover bg-black" />
+                      {output.thumbnail_url ? (
+                        <img
+                          src={output.thumbnail_url}
+                          alt={output.name}
+                          className="w-full aspect-video object-cover bg-black"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <div className="flex aspect-video items-center justify-center bg-black text-text-muted"><Film size={20} /></div>
+                      )}
                       <p className="p-2 text-[10px] text-text-secondary truncate">{output.name}</p>
                     </button>
                   ))}
@@ -1501,6 +2001,19 @@ export function VideoEditorPanel() {
               ) : (
                 <div className="min-h-48 flex items-center justify-center text-xs text-text-muted">
                   No videos found in workspace “{activeWorkspace}”.
+                </div>
+              )}
+              {maestroVideos.length < maestroVideoTotal && (
+                <div className="flex justify-center py-4">
+                  <button
+                    type="button"
+                    onClick={() => void loadMoreMaestroVideos()}
+                    disabled={pickerLoading}
+                    className="flex items-center gap-2 rounded-lg border border-border bg-bg-tertiary px-3 py-2 text-xs text-text-secondary hover:border-accent-blue hover:text-text-primary disabled:opacity-60"
+                  >
+                    {pickerLoading && <Loader2 size={13} className="animate-spin" />}
+                    Load {Math.min(MAESTRO_PICKER_PAGE_SIZE, maestroVideoTotal - maestroVideos.length)} more
+                  </button>
                 </div>
               )}
             </div>

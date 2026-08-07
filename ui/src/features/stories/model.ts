@@ -86,6 +86,18 @@ export function applyStoryVisualStyle(
   return `${STYLE_LOCK_PREFIX} ${style} ${STYLE_LOCK_SUFFIX}${content ? ` ${content}` : ''}`
 }
 
+/** Keep character rendering separate in the editor while enforcing it with the global lock. */
+export function storyRenderStyle(project: Pick<StoryProject, 'visualStyle' | 'characterVisualStyle'>): string {
+  const globalStyle = project.visualStyle.trim()
+  const characterStyle = project.characterVisualStyle.trim()
+  return [
+    globalStyle,
+    characterStyle
+      ? `CHARACTER RENDERING STYLE: ${characterStyle}. Every visible person or character must use this exact rendering, material and design language consistently.`
+      : '',
+  ].filter(Boolean).join(' ')
+}
+
 export function storyId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
@@ -269,7 +281,9 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     tone: 'Cinematic',
     audience: 'General',
     visualStyle: '',
+    characterVisualStyle: '',
     enforceVisualStyle: true,
+    allowClipText: false,
     premise: '',
     logline: '',
     synopsis: '',
@@ -388,7 +402,9 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     tone: text(project.tone, fallback.tone),
     audience: text(project.audience, fallback.audience),
     visualStyle: text(project.visualStyle),
+    characterVisualStyle: text(project.characterVisualStyle),
     enforceVisualStyle: project.enforceVisualStyle !== false,
+    allowClipText: project.allowClipText === true,
     premise: text(project.premise),
     logline: text(project.logline),
     synopsis: text(project.synopsis),
@@ -486,12 +502,12 @@ export function normalizeStoryProject(value: unknown): StoryProject {
 export function changedSections(before: StoryProject, after: StoryProject): StorySection[] {
   const overviewBefore = [
     before.title, before.projectType, before.creativeBrief, before.language, before.genre, before.tone, before.audience,
-    before.visualStyle, before.enforceVisualStyle,
+    before.visualStyle, before.characterVisualStyle, before.enforceVisualStyle, before.allowClipText,
     before.premise, before.logline, before.synopsis, before.theme, before.ending,
   ]
   const overviewAfter = [
     after.title, after.projectType, after.creativeBrief, after.language, after.genre, after.tone, after.audience,
-    after.visualStyle, after.enforceVisualStyle,
+    after.visualStyle, after.characterVisualStyle, after.enforceVisualStyle, after.allowClipText,
     after.premise, after.logline, after.synopsis, after.theme, after.ending,
   ]
   const changed: StorySection[] = []

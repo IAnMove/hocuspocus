@@ -4625,6 +4625,8 @@ def plan_short_film_from_story(
     max_new_tokens: int = 1024,
     visual_style: str = "",
     preserve_visual_style: bool = False,
+    character_visual_style: str = "",
+    allow_clip_text: bool = False,
 ) -> dict:
     """Plan a short film scene structure from a story description.
 
@@ -4662,6 +4664,8 @@ def plan_short_film_from_story(
             )
     has_image = bool(reference_images)
     from services.director.policies import (
+        build_character_visual_style_contract,
+        build_visible_text_contract,
         build_visual_style_contract,
         enforce_visual_style_on_clip_plans,
     )
@@ -4670,6 +4674,11 @@ def plan_short_film_from_story(
         preserve=preserve_visual_style,
         has_reference=has_image,
     )
+    character_style_contract = build_character_visual_style_contract(
+        character_visual_style,
+        preserve=preserve_visual_style,
+    )
+    visible_text_contract = build_visible_text_contract(allow_clip_text)
 
     # ── Character context ─────────────────────────────────────────
     char_context = ""
@@ -4781,6 +4790,8 @@ def plan_short_film_from_story(
     system_prompt = (
         f"{role_section}"
         f"{style_contract}\n\n"
+        f"{character_style_contract}\n\n"
+        f"{visible_text_contract}\n\n"
         f"Break the concept into scenes within {target_duration} seconds total. "
         f"YOU decide how many scenes based on the story — let pacing dictate the cuts.\n"
         "For each scene, write a video_prompt and image_prompt.\n\n"
@@ -5100,5 +5111,7 @@ def plan_short_film_from_story(
         visual_style,
         preserve=preserve_visual_style,
         has_reference=has_image,
+        character_visual_style=character_visual_style,
+        allow_clip_text=allow_clip_text,
     )
     return {"clips": clips, "clip_plans": clip_plans}

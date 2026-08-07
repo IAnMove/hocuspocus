@@ -1,8 +1,10 @@
 import { useState, useRef } from 'react'
-import { Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Sparkles, Mic } from 'lucide-react'
+import { Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Sparkles, Mic, BadgeInfo } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { getStoredAssetUrl } from '../../api/client'
 import { modelDisplayName } from '../../lib/modelDisplay'
+import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
+import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 
 export function VideoInfoBar() {
   const outputs = useStore(s => s.filteredOutputs())
@@ -24,6 +26,7 @@ export function VideoInfoBar() {
   const [copied, setCopied] = useState(false)
   const [rejoining, setRejoining] = useState(false)
   const [upscaling, setUpscaling] = useState(false)
+  const [showExtraInfo, setShowExtraInfo] = useState(false)
 
   const selected = outputs[selectedOutput]
   if (!selected) return null
@@ -46,7 +49,8 @@ export function VideoInfoBar() {
   const modelLabel = modelDisplayName(modelType, models)
   const resolution = (params?.resolution as string) || ''
   const seed = params?.seed as number | undefined
-  const generationTime = meta?.generation_time
+  const generationTime = meta?.generation_timings?.total_time_sec ?? meta?.generation_time
+  const generationBreakdown = formatGenerationBreakdown(meta?.generation_timings)
 
   // Multi-clip group info
   const multiClipInfo = params?.multi_clip_info as { group_id: string; index: number; total: number } | undefined
@@ -135,11 +139,18 @@ export function VideoInfoBar() {
               {modelLabel && <span className="font-medium" title={modelType}>{modelLabel}</span>}
               {resolution && <span className="text-text-muted"> &middot; {resolution}</span>}
               {seed != null && seed >= 0 && <span className="text-text-muted"> &middot; seed {seed}</span>}
-              {generationTime != null && <span className="text-text-muted"> &middot; {generationTime}s</span>}
+              {generationTime != null && (
+                <span className="text-text-muted"> &middot; total {formatGenerationDuration(generationTime)}</span>
+              )}
               {clipIndex != null && clipTotal != null && (
                 <span className="text-accent-blue"> &middot; clip {clipIndex + 1}/{clipTotal}</span>
               )}
             </div>
+            {generationBreakdown && (
+              <div className="text-[10px] text-text-muted truncate mt-0.5" title={generationBreakdown}>
+                {generationBreakdown}
+              </div>
+            )}
             {prompt && (
               <div className="text-[11px] text-text-muted truncate mt-0.5" title={prompt}>
                 {prompt}
@@ -193,6 +204,14 @@ export function VideoInfoBar() {
         {selected.type === 'video' && (
           <>
             <button
+              onClick={() => setShowExtraInfo(true)}
+              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] text-text-secondary transition-colors hover:bg-bg-hover hover:text-accent-blue"
+              title="Generate descriptions and social copy from saved prompts"
+            >
+              <BadgeInfo size={14} />
+              Extra info
+            </button>
+            <button
               onClick={handleUpscale}
               disabled={upscaling}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors disabled:opacity-50"
@@ -222,6 +241,12 @@ export function VideoInfoBar() {
           {confirmDelete && <span className="text-[11px] font-medium">Delete?</span>}
         </button>
       </div>
+      {showExtraInfo && (
+        <VideoExtraInfoDialog
+          name={selected.name}
+          onClose={() => setShowExtraInfo(false)}
+        />
+      )}
     </div>
   )
 }

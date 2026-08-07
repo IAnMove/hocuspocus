@@ -195,8 +195,12 @@ export interface StoryProject {
   audience: string
   /** Global art direction, kept separate from narrative and subject prompts. */
   visualStyle: string
+  /** Rendering/material contract applied consistently to every visible person. */
+  characterVisualStyle: string
   /** Compose visualStyle as a highest-priority lock whenever Story renders an image. */
   enforceVisualStyle: boolean
+  /** Permit intentional readable lettering inside generated video clips. */
+  allowClipText: boolean
   premise: string
   logline: string
   synopsis: string

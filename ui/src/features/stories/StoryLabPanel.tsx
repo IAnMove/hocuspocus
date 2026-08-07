@@ -25,6 +25,7 @@ import {
   applyStoryVisualStyle,
   normalizeStoryCharacter,
   storyNegativePromptForStyle,
+  storyRenderStyle,
 } from './model'
 import type {
   StoryAssetKind, StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
@@ -40,6 +41,12 @@ const CHARACTER_IDENTITY_REFERENCE_LOCK = [
   'Use a frontal or gentle three-quarter view, a neutral readable pose, the canonical wardrobe, and a simple non-distracting background.',
   'Do not use a distant shot, full-body environmental composition, extreme profile, covered face, dramatic occlusion, action pose or additional characters.',
 ].join(' ')
+
+const CHARACTER_STYLE_PRESETS = [
+  ['Realistas', 'Photorealistic live-action people, natural skin texture, anatomically realistic proportions, authentic hair and fabric, cinematic photographic detail'],
+  ['Plastilina', 'Handmade claymation characters sculpted from plasticine, visible fingerprints and tool marks, tactile matte clay surfaces, stop-motion proportions'],
+  ['Anime', '2D anime characters, clean expressive linework, consistent cel shading, stylized facial proportions, illustrated skin and hair, never photorealistic'],
+] as const
 
 function moveItem<T>(items: T[], from: number, to: number): void {
   if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return
@@ -1191,16 +1198,17 @@ export function StoryLabPanel() {
     const negativePrompt = target.kind === 'world'
       ? current.world.negativePrompt
       : character?.negativePrompt || location?.negativePrompt || ''
+    const renderStyle = storyRenderStyle(current)
     const compatibleNegativePrompt = storyNegativePromptForStyle(
       negativePrompt,
-      current.visualStyle,
+      renderStyle,
       current.enforceVisualStyle,
     )
     const primaryReference = options.usePrimaryReference !== false && character?.primaryReferenceAssetId
       ? current.assets[character.primaryReferenceAssetId]?.source
       : undefined
     const effectivePrompt = [
-      applyStoryVisualStyle(prompt, current.visualStyle, current.enforceVisualStyle),
+      applyStoryVisualStyle(prompt, renderStyle, current.enforceVisualStyle),
       target.kind === 'character' ? CHARACTER_IDENTITY_REFERENCE_LOCK : '',
       'Single concept-art image, one coherent view, no contact sheet, no grid, no text, no labels.',
       compatibleNegativePrompt ? `Strictly avoid: ${compatibleNegativePrompt}.` : '',
@@ -1275,9 +1283,9 @@ export function StoryLabPanel() {
   }
 
   const writeStyleIntoPrompts = () => {
-    const style = project.visualStyle.trim()
+    const style = storyRenderStyle(project)
     if (!style) {
-      setNotice({ kind: 'error', text: 'Write a visual style before applying it to prompts.' })
+      setNotice({ kind: 'error', text: 'Write a global or character visual style before applying it to prompts.' })
       return
     }
     let changed = 0
@@ -1286,7 +1294,7 @@ export function StoryLabPanel() {
       const apply = (value: string) => {
         if (!value.trim()) return value
         changed += 1
-        return applyStoryVisualStyle(value, current.visualStyle, true)
+        return applyStoryVisualStyle(value, storyRenderStyle(current), true)
       }
       current.world.visualPrompt = apply(current.world.visualPrompt)
       current.world.locations.forEach(location => {
@@ -1307,8 +1315,8 @@ export function StoryLabPanel() {
 
   const regenerateStyledReferences = async () => {
     const current = useStoryStore.getState().project
-    if (!current.visualStyle.trim()) {
-      setNotice({ kind: 'error', text: 'Write a visual style before regenerating references.' })
+    if (!storyRenderStyle(current)) {
+      setNotice({ kind: 'error', text: 'Write a global or character visual style before regenerating references.' })
       return
     }
     const compactMode = current.projectType !== 'full_story'
@@ -1724,6 +1732,8 @@ export function StoryLabPanel() {
     store.shortFilmSetNarrative(adaptation.narrative)
     store.shortFilmSetVisualStyle(adaptation.visualStyle)
     store.shortFilmSetPreserveVisualStyle(adaptation.preserveVisualStyle)
+    store.setDirectorCharacterVisualStyle(source.characterVisualStyle)
+    store.setDirectorAllowClipText(source.allowClipText)
     store.setDirectorAutoMode(autoStart)
     useStore.setState({
       directorWritingProvider: source.provider.writingProvider,
@@ -2549,6 +2559,10 @@ export function StoryLabPanel() {
     store.setDirectorSkill('music_video')
     store.setDirectorAutoMode(autoStart)
     store.directorSetSceneDescription(adaptation.sceneDescription)
+    store.shortFilmSetVisualStyle(source.visualStyle)
+    store.shortFilmSetPreserveVisualStyle(source.enforceVisualStyle)
+    store.setDirectorCharacterVisualStyle(source.characterVisualStyle)
+    store.setDirectorAllowClipText(source.allowClipText)
     useStore.setState({
       directorMusicSource: 'upload',
       directorSongDescription: resolvedCue.brief,
@@ -3181,6 +3195,27 @@ export function StoryLabPanel() {
                       </>
                     )}
                     <Field label="Visual style / independent art direction" value={project.visualStyle} onChange={visualStyle => patch({ visualStyle })} rows={5} placeholder="For example: hand-painted 2D animation, watercolor backgrounds, clean ink contours, warm muted palette…" />
+                    <div className="space-y-1.5">
+                      <Field
+                        label="Estilo visual de los personajes"
+                        value={project.characterVisualStyle}
+                        onChange={characterVisualStyle => patch({ characterVisualStyle })}
+                        rows={5}
+                        placeholder="Realistas, plastilina, anime… Describe aquí el material, proporciones y acabado que deben compartir todas las personas."
+                      />
+                      <div className="flex flex-wrap gap-1.5">
+                        {CHARACTER_STYLE_PRESETS.map(([label, value]) => (
+                          <button
+                            key={label}
+                            type="button"
+                            className={`${button} px-2 py-1 text-[10px] ${project.characterVisualStyle === value ? 'border-accent-blue text-accent-blue' : ''}`}
+                            onClick={() => patch({ characterVisualStyle: value, enforceVisualStyle: true })}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="md:col-span-2 rounded-lg border border-border bg-bg-tertiary/50 p-3 space-y-2">
                       <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
                         <input
@@ -3190,15 +3225,27 @@ export function StoryLabPanel() {
                           onChange={event => patch({ enforceVisualStyle: event.target.checked })}
                         />
                         <span>
-                          <span className="font-medium text-text-primary">Enforce this style on every Story image</span>
-                          <span className="block mt-0.5 text-[10px] text-text-muted">Adds a highest-priority render-time lock while keeping story and subject prompts independent, so changing style does not require regenerating the bible.</span>
+                          <span className="font-medium text-text-primary">Enforce these styles on every Story image</span>
+                          <span className="block mt-0.5 text-[10px] text-text-muted">Adds the global art direction and character rendering as highest-priority locks, so every visible person keeps the selected medium.</span>
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={project.allowClipText}
+                          onChange={event => patch({ allowClipText: event.target.checked })}
+                        />
+                        <span>
+                          <span className="font-medium text-text-primary">Permitir generar clips con textos</span>
+                          <span className="block mt-0.5 text-[10px] text-text-muted">Desactivado por defecto. Las letras y diálogos siguen guiando el audio y la acción, pero no se convierten en subtítulos, carteles ni palabras visibles.</span>
                         </span>
                       </label>
                       <div className="flex flex-wrap gap-2">
-                        <button className={button} disabled={!project.visualStyle.trim()} onClick={writeStyleIntoPrompts}>
+                        <button className={button} disabled={!storyRenderStyle(project)} onClick={writeStyleIntoPrompts}>
                           <Palette size={13} /> Write/replace style lock in existing prompts
                         </button>
-                        <button className={button} disabled={!project.visualStyle.trim() || !styledReferenceTargetCount || Boolean(imageBusy) || referenceBatchBusy} onClick={regenerateStyledReferences}>
+                        <button className={button} disabled={!storyRenderStyle(project) || !styledReferenceTargetCount || Boolean(imageBusy) || referenceBatchBusy} onClick={regenerateStyledReferences}>
                           {referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Restyle {styledReferenceTargetCount} existing reference{styledReferenceTargetCount === 1 ? '' : 's'}
                         </button>
                       </div>
@@ -4166,6 +4213,18 @@ export function StoryLabPanel() {
                             ))}
                           </div>
                         </div>
+                        <label className="flex items-start gap-2 rounded-md border border-border bg-bg-tertiary/40 p-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={project.allowClipText}
+                            onChange={event => patch({ allowClipText: event.target.checked })}
+                            className="mt-0.5 accent-pink-400"
+                          />
+                          <span>
+                            <span className="block text-[10px] font-medium text-text-secondary">Permitir generar clips con textos</span>
+                            <span className="block text-[9px] leading-relaxed text-text-muted">Si está desactivado, las letras solo guían el ritmo, la interpretación y el significado visual; nunca se copian como texto dentro del plano.</span>
+                          </span>
+                        </label>
                         <div className="grid gap-2 sm:grid-cols-2">
                           <button
                             className={`${button} w-full border-pink-500/60 text-pink-300`}

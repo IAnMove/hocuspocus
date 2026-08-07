@@ -428,6 +428,126 @@ def build_visual_style_contract(
     return "\n".join(lines)
 
 
+def build_character_visual_style_contract(
+    character_visual_style: str,
+    *,
+    preserve: bool = True,
+) -> str:
+    """Build the planner instruction for a dedicated character medium."""
+    style = compact_visual_style(character_visual_style)
+    if not preserve or not style:
+        return ""
+    return "\n".join((
+        "CHARACTER RENDERING CONTRACT — STRICT:",
+        f"- Canonical character rendering/material: {style}.",
+        "- Repeat this contract in every image and video prompt. Every visible person or "
+        "character must use this exact material, proportions, surface treatment and design language.",
+        "- Lighting, pose, wardrobe and camera may change; the character rendering medium may not.",
+    ))
+
+
+def build_visible_text_contract(allow_clip_text: bool = False) -> str:
+    """Tell planners whether readable lettering may exist inside generated shots."""
+    if allow_clip_text:
+        return (
+            "VISIBLE TEXT POLICY: Readable lettering is allowed only when the user explicitly "
+            "authors it for a shot. Never add unrequested captions or subtitles."
+        )
+    return (
+        "VISIBLE TEXT POLICY — STRICT: No readable text may appear in any generated image or "
+        "video. Lyrics and dialogue are audio/performance context only. Never quote, copy, "
+        "display or materialize them as captions, subtitles, title cards, signs, labels, UI, "
+        "logos or floating words. Express meaning through action and imagery. Screens, code "
+        "and signage must remain abstract and unreadable."
+    )
+
+
+_VISIBLE_TEXT_MARKER = "NO VISIBLE TEXT LOCK:"
+_VISIBLE_TEXT_DIRECTIVE = re.compile(
+    r"\b(?:"
+    r"text.{0,100}(?::|appears?|materializ\w*|overlay\w*|display\w*|form\w*|float\w*)|"
+    r"(?:captions?|subtitles?|lettering|title\s+cards?)\s*(?::|appears?|materializ\w*|overlay\w*|display\w*)|"
+    r"readable\s+(?:words?|letters?|code)|processing\s+text|floating\s+words?|"
+    r"(?:question|lyrics?|words?|lines?\s+of\s+code).{0,100}(?:appear|materializ|overlay|display|form|float)"
+    r")",
+    flags=re.I,
+)
+
+
+def strip_visible_text_directions(prompt: str) -> str:
+    """Remove explicit visual-lettering instructions while preserving shot action.
+
+    Spoken dialogue is intentionally not removed. This targets directions such as
+    ``Text overlays: 'lyric'`` or ``the question materializes as corrupted text``.
+    """
+    text = str(prompt or "").strip()
+    if not text or _VISIBLE_TEXT_MARKER.casefold() in text.casefold():
+        return text
+    pieces = re.split(r"(?<=[.;])\s+|\n+", text)
+    kept: list[str] = []
+    for piece in pieces:
+        segment = piece.strip()
+        if not segment:
+            continue
+        match = _VISIBLE_TEXT_DIRECTIVE.search(segment)
+        if not match:
+            kept.append(segment)
+            continue
+        prefix = re.sub(
+            r"(?:\b(?:and|then|while|as)\b\s*)?$",
+            "",
+            segment[:match.start()].rstrip(" ,;:-"),
+            flags=re.I,
+        ).strip()
+        # Keep meaningful action that precedes a trailing lettering request.
+        if len(prefix) >= 12 and not prefix.endswith(":"):
+            kept.append(prefix.rstrip(" .") + ".")
+    return " ".join(kept).strip()
+
+
+def apply_character_visual_style_lock(
+    prompt: str,
+    character_visual_style: str,
+    *,
+    mode: str,
+    preserve: bool = True,
+) -> str:
+    """Prepend a dedicated, idempotent character-rendering lock."""
+    text = str(prompt or "").strip()
+    style = compact_visual_style(character_visual_style)
+    if not preserve or not style or "character style lock:" in text.casefold():
+        return text
+    lock = (
+        f"CHARACTER STYLE LOCK: {style}. Every visible person or character must keep this "
+        "exact rendering medium, material, proportions and surface treatment throughout."
+    )
+    combined = f"{lock} {text}".strip()
+    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
+        remaining = max(0, 1449 - len(lock))
+        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
+        combined = f"{lock} {shortened}".strip()
+    return combined
+
+
+def apply_no_visible_text_lock(prompt: str, *, mode: str) -> str:
+    """Strip visible-lettering directions and prepend the final render guard."""
+    text = str(prompt or "").strip()
+    if not text or _VISIBLE_TEXT_MARKER.casefold() in text.casefold():
+        return text
+    text = strip_visible_text_directions(text)
+    lock = (
+        f"{_VISIBLE_TEXT_MARKER} Render no readable words, letters, numbers, captions, "
+        "subtitles, title cards, labels, signs, UI, logos or watermarks. Lyrics and dialogue "
+        "remain audio/performance only; any screens or code are abstract and unreadable."
+    )
+    combined = f"{lock} {text}".strip()
+    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
+        remaining = max(0, 1449 - len(lock))
+        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
+        combined = f"{lock} {shortened}".strip()
+    return combined
+
+
 def apply_visual_style_lock(
     prompt: str,
     visual_style: str,
@@ -478,10 +598,38 @@ def enforce_visual_style_on_clip_plans(
     *,
     preserve: bool = True,
     has_reference: bool = False,
+    character_visual_style: str = "",
+    allow_clip_text: bool = True,
 ) -> list[dict]:
-    """Apply the final style lock to all still and moving prompt fields."""
-    if not preserve or not compact_visual_style(visual_style):
+    """Apply final style, character-medium and visible-text locks."""
+    has_global_style = preserve and bool(compact_visual_style(visual_style))
+    has_character_style = preserve and bool(compact_visual_style(character_visual_style))
+    if not has_global_style and not has_character_style and allow_clip_text:
         return clip_plans
+
+    def enforce(value: object, mode: str) -> str:
+        prompt = str(value or "").strip()
+        if not prompt:
+            return prompt
+        if has_global_style:
+            prompt = apply_visual_style_lock(
+                prompt,
+                visual_style,
+                mode=mode,
+                preserve=True,
+                has_reference=has_reference,
+            )
+        if has_character_style:
+            prompt = apply_character_visual_style_lock(
+                prompt,
+                character_visual_style,
+                mode=mode,
+                preserve=True,
+            )
+        if not allow_clip_text:
+            prompt = apply_no_visible_text_lock(prompt, mode=mode)
+        return prompt
+
     for plan in clip_plans or []:
         if not isinstance(plan, dict):
             continue
@@ -491,27 +639,16 @@ def enforce_visual_style_on_clip_plans(
             and metadata.get("motion_only_prompt")
         )
         if str(plan.get("image_prompt") or "").strip():
-            plan["image_prompt"] = apply_visual_style_lock(
-                plan["image_prompt"],
-                visual_style,
-                mode="image",
-                preserve=preserve,
-                has_reference=has_reference,
-            )
+            plan["image_prompt"] = enforce(plan["image_prompt"], "image")
         if (
             not motion_only_prompt
             and str(plan.get("video_prompt") or "").strip()
         ):
-            plan["video_prompt"] = apply_visual_style_lock(
-                plan["video_prompt"],
-                visual_style,
-                mode="video",
-                preserve=preserve,
-                has_reference=has_reference,
-            )
+            plan["video_prompt"] = enforce(plan["video_prompt"], "video")
         for field, mode in (
             ("window_prompts", "video"),
             ("keyframe_prompts", "image"),
+            ("h3_segment_prompts", "video"),
         ):
             if motion_only_prompt and mode == "video":
                 continue
@@ -519,13 +656,10 @@ def enforce_visual_style_on_clip_plans(
             if not isinstance(values, list):
                 continue
             plan[field] = [
-                apply_visual_style_lock(
+                enforce(
                     value.get("prompt", value.get("text", ""))
                     if isinstance(value, dict) else value,
-                    visual_style,
-                    mode=mode,
-                    preserve=preserve,
-                    has_reference=has_reference,
+                    mode,
                 )
                 for value in values
             ]
