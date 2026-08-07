@@ -13096,10 +13096,94 @@ def _normalize_story_stage_ids(
             used.add(candidate)
         return normalized
 
-    if scope == "music" and isinstance(normalized.get("music"), dict):
-        cues = normalized["music"].get("cues")
+    if scope == "music" and isinstance(normalized, dict):
+        # Keep a useful song when a provider returns the right content under
+        # a harmless wrapper alias (or returns the single music-video cue as
+        # the music object itself).  This also lets us repair small internal
+        # contradictions before a schema-repair call can discard the song.
+        raw_music = normalized.get("music")
+        if isinstance(raw_music, list):
+            music = {"cues": raw_music}
+        elif isinstance(raw_music, dict):
+            music = raw_music
+        else:
+            music = {}
+
+        cues = music.get("cues")
+        if not isinstance(cues, list):
+            cues = next((
+                music.get(key)
+                for key in ("songs", "tracks", "proposals", "items")
+                if isinstance(music.get(key), list)
+            ), None)
+        if not isinstance(cues, list):
+            single = next((
+                music.get(key)
+                for key in ("song", "track", "cue")
+                if isinstance(music.get(key), dict)
+            ), None)
+            if single is None and any(
+                key in music
+                for key in ("lyrics", "songLyrics", "song_lyrics", "style", "musicStyle")
+            ):
+                single = music
+            if isinstance(single, dict):
+                cues = [single]
+        if not isinstance(cues, list):
+            cues = next((
+                normalized.get(key)
+                for key in ("cues", "songs", "tracks", "proposals")
+                if isinstance(normalized.get(key), list)
+            ), None)
         if not isinstance(cues, list):
             return normalized
+        normalized["music"] = {"cues": cues}
+
+        project_type = str(project.get("projectType") or "full_story").strip().lower()
+        creative_brief = (
+            project.get("creativeBrief")
+            if isinstance(project.get("creativeBrief"), dict)
+            else {}
+        )
+        project_music = (
+            project.get("music") if isinstance(project.get("music"), dict) else {}
+        )
+
+        def cue_text(cue: dict, *keys: str) -> str:
+            for key in keys:
+                value = cue.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            return ""
+
+        def cue_lyrics(cue: dict) -> str:
+            value = next((
+                cue.get(key)
+                for key in ("lyrics", "songLyrics", "song_lyrics", "text")
+                if cue.get(key) not in (None, "")
+            ), "")
+            if isinstance(value, list):
+                return "\n".join(str(line).strip() for line in value if str(line).strip())
+            if isinstance(value, dict):
+                tags = {
+                    "intro": "Intro", "verse": "Verse", "verse1": "Verse",
+                    "verse2": "Verse", "prechorus": "Pre Chorus",
+                    "chorus": "Chorus", "hook": "Hook", "bridge": "Bridge",
+                    "outro": "Outro",
+                }
+                sections = []
+                for key, lines in value.items():
+                    text = (
+                        "\n".join(str(line).strip() for line in lines if str(line).strip())
+                        if isinstance(lines, list) else str(lines or "").strip()
+                    )
+                    if not text:
+                        continue
+                    token = re.sub(r"[^a-z0-9]+", "", str(key).casefold())
+                    sections.append(f"[{tags.get(token, 'Verse')}]\n\n{text}")
+                return "\n\n".join(sections)
+            return str(value or "").strip()
+
         characters = [
             character for character in project.get("characters", [])
             if isinstance(character, dict) and str(character.get("id") or "").strip()
@@ -13117,7 +13201,71 @@ def _normalize_story_stage_ids(
                 continue
             kind = str(cue.get("kind") or "").strip().lower()
             target = str(cue.get("targetId") or "").strip()
-            if kind == "character":
+            if project_type == "music_video":
+                # A non-empty lyrics field is authoritative for a vocal song;
+                # providers sometimes copy an instrumental default despite
+                # the explicit music-video contract.
+                kind = "story"
+                target = "story"
+                cue["kind"] = kind
+                cue["targetId"] = target
+                cue["title"] = cue_text(cue, "title", "name", "songTitle", "song_title") or (
+                    str(project.get("title") or "Main story song").strip()
+                )
+                story_direction = str(
+                    creative_brief.get("songStory")
+                    or project_music.get("brief")
+                    or project.get("premise")
+                    or "This song drives the visual story."
+                ).strip()
+                cue["purpose"] = cue_text(
+                    cue, "purpose", "goal", "concept", "description"
+                ) or story_direction
+                cue["brief"] = cue_text(
+                    cue, "brief", "description", "prompt", "songBrief", "song_brief"
+                ) or story_direction
+                cue["referenceSong"] = cue_text(
+                    cue, "referenceSong", "reference_song", "reference", "inspiration"
+                ) or "Original composition — No direct reference"
+                style = cue_text(
+                    cue, "style", "musicStyle", "music_style", "stylePrompt", "style_prompt"
+                ) or str(
+                    creative_brief.get("musicStyle")
+                    or project_music.get("style")
+                    or "cinematic story song, expressive lead vocal, dynamic original production"
+                ).strip()
+                cue["style"] = style[:300]
+                lyrics = cue_lyrics(cue)[:3500].strip()
+                if lyrics and not re.search(
+                    r"^\[(Verse|Chorus|Hook)\]\s*$", lyrics, re.MULTILINE
+                ):
+                    if "\n" not in lyrics and "/" in lyrics:
+                        lyrics = re.sub(r"\s*/\s*", "\n", lyrics)
+                    lyrics = f"[Verse]\n\n{lyrics}"[:3500].rstrip()
+                cue["lyrics"] = lyrics
+                cue["instrumental"] = False
+                requested_duration = creative_brief.get(
+                    "durationSeconds", project_music.get("targetDurationSeconds")
+                )
+                duration = (
+                    requested_duration
+                    if requested_duration not in (None, "")
+                    else cue.get("durationSeconds", cue.get("duration_seconds"))
+                )
+                if isinstance(duration, bool):
+                    duration = None
+                try:
+                    duration = int(float(duration))
+                except (TypeError, ValueError):
+                    duration = creative_brief.get(
+                        "durationSeconds", project_music.get("targetDurationSeconds", 90)
+                    )
+                    try:
+                        duration = int(float(duration))
+                    except (TypeError, ValueError):
+                        duration = 90
+                cue["durationSeconds"] = max(20, min(360, duration))
+            elif kind == "character":
                 target = character_lookup.get(_story_id_token(target), target)
             elif kind == "world":
                 target = "world"

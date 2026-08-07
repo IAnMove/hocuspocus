@@ -118,6 +118,72 @@ class TestStoryLabMusicPlan(unittest.TestCase):
         result["music"]["cues"][0]["lyrics"] = ""
         self.assertIn("must include vocals", _story_stage_problem(result, "music", project))
 
+    def test_music_video_repairs_observed_vocal_song_contradictions(self):
+        project = {
+            "projectType": "music_video",
+            "title": "Gremlins of Context",
+            "characters": [],
+            "creativeBrief": {
+                "songStory": "The gremlins race through the labyrinth before the reset.",
+                "musicStyle": "cinematic boom bap, theatrical puppet vocals, 94 BPM",
+                "durationSeconds": 90,
+            },
+        }
+        result = {"music": {"cues": [{
+            "id": "intro-chaos",
+            "kind": "story",
+            "targetId": "story",
+            "title": "Protocol Run",
+            "purpose": "Drive the chase through the context labyrinth.",
+            "referenceSong": "",
+            "brief": "A fast theatrical rap with a recurring hook.",
+            "style": "fast cinematic boom bap, distorted bass, theatrical vocals, 94 BPM",
+            "lyrics": "We steal the words / We bend the rules / We race the reset",
+            "instrumental": True,
+            "durationSeconds": 150,
+        }]}}
+
+        normalized = _normalize_story_stage_ids(result, "music", project)
+        repaired = normalized["music"]["cues"][0]
+
+        self.assertFalse(repaired["instrumental"])
+        self.assertEqual(repaired["durationSeconds"], 90)
+        self.assertTrue(repaired["referenceSong"])
+        self.assertTrue(repaired["lyrics"].startswith("[Verse]\n\n"))
+        self.assertIn("\nWe bend the rules\n", repaired["lyrics"])
+        self.assertIsNone(_story_stage_problem(normalized, "music", project))
+
+    def test_music_video_unwraps_a_single_song_alias(self):
+        project = {
+            "projectType": "music_video",
+            "title": "Token Run",
+            "characters": [],
+            "creativeBrief": {
+                "songStory": "A crew steals the master token before dawn.",
+                "musicStyle": "dark cinematic rap, gritty drums, ensemble vocals, 94 BPM",
+                "durationSeconds": 90,
+            },
+        }
+        result = {"music": {"song": {
+            "name": "Token Run",
+            "reference_song": "Original composition — No direct reference",
+            "style_prompt": "dark cinematic rap, gritty drums, ensemble vocals, 94 BPM",
+            "song_lyrics": {
+                "verse1": ["We cross the maze", "We steal the light"],
+                "chorus": ["Run with the token", "Run through the night"],
+            },
+            "duration_seconds": 90,
+        }}}
+
+        normalized = _normalize_story_stage_ids(result, "music", project)
+        repaired = normalized["music"]["cues"][0]
+
+        self.assertEqual(repaired["id"], "music-story-1")
+        self.assertEqual(repaired["kind"], "story")
+        self.assertEqual(repaired["targetId"], "story")
+        self.assertIn("[Chorus]", repaired["lyrics"])
+        self.assertIsNone(_story_stage_problem(normalized, "music", project))
+
     def test_quick_video_structure_is_compact(self):
         schema = _story_lab_schema("beats", "quick_video")
         beats = schema["properties"]["beats"]
