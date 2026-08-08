@@ -4,9 +4,39 @@ export interface ModelFamily {
   order: number
 }
 
+export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story'
+export type DirectorShotImageGuidance = 'auto' | 'prompt_only' | 'generate'
+export type DirectorShotImagePolicy = 'generate' | 'prompt_only' | 'direct_references'
+
+export interface DirectorCapabilityResult {
+  compatible: boolean
+  reason: string
+}
+
+export interface DirectorModelCompatibility {
+  image: DirectorCapabilityResult
+  video: Record<DirectorPipelineType | 'seamless', DirectorCapabilityResult>
+  supports_audio_input: boolean
+  generates_audio: boolean
+  supports_voice_reference: boolean
+  voice_reference_mode?: 'none' | 'id_lora' | 'native_reference'
+  video_strategy?: 'rolling_window' | 'bounded_start_end' | 'omni_reference'
+  audio_input_mode?: 'none' | 'generic_audio_guide' | 'reference_manifest'
+  reference_mode?: 'none' | 'start_frame' | 'start_end' | 'omni_manifest'
+  shot_image_support?: 'required' | 'optional' | 'direct_references'
+  supports_endpoint_continuity?: boolean
+  clip_min_frames?: number | null
+  clip_max_frames?: number | null
+  clip_frame_step?: number | null
+  max_image_refs: number | null
+}
+
 export interface ModelDef {
   model_type: string
   name: string
+  description?: string
+  selector_help?: string
+  lora_compatibility_note?: string
   family: string
   architecture: string
   is_i2v: boolean
@@ -14,8 +44,12 @@ export interface ModelDef {
   guidance_max_phases: number
   fps: number
   supports_end_frame?: boolean
+  /** Legacy broad flag: accepts input audio OR generates output audio. */
   supports_audio?: boolean
+  supports_audio_input?: boolean
+  generates_audio?: boolean
   supports_ref_images?: boolean
+  director?: DirectorModelCompatibility
   is_downloaded?: boolean
   // True when this model is only available with Mature Mode enabled.
   // Backend always returns the entry; UI filters it out when
@@ -26,6 +60,9 @@ export interface ModelDef {
   // Hunyuan3D variants stored in one shared HF repo: deleting this
   // model's cache also removes the weights of every listed sibling.
   shared_cache_group?: string[]
+  // Weight-managed tool models (e.g. UniRig): shown in the settings
+  // catalog for download/delete, but never selectable for generation.
+  tool_only?: boolean
 }
 
 export interface Resolution {
@@ -53,16 +90,40 @@ export interface GenerateParams {
   multi_prompts_gen_type?: number
   sliding_window_size?: number
   sliding_window_overlap?: number
+  /** Explicitly honor a manually locked window above the model's VRAM-aware recommendation. */
+  sliding_window_memory_override?: boolean
+  /** Optional model-specific transformer step cache. */
+  skip_steps_cache_type?: '' | 'first_block'
+  /** First Block Cache residual-change threshold. */
+  skip_steps_multiplier?: number
+  /** Percentage of denoising steps to run before caching may begin. */
+  skip_steps_start_step_perc?: number
   guidance_phases?: number
   video_prompt_type?: string
   audio_prompt_type?: string
   image_prompt_type?: string
   input_video_strength?: number
+  /** Keep an I2V start image's medium and rendering style in the motion prompt. */
+  preserve_source_style?: boolean
+  /** Fit without distortion (black matte) or explicitly crop to the video canvas. */
+  image_fit_mode?: 'contain' | 'source' | 'crop'
   flow_shift?: number
   audio_guide?: string
   audio_scale?: number
   video_guide?: string
   image_refs?: string[]
+  /** MiniMax H3 Ref2VA video references (their embedded audio is paired automatically). */
+  h3_ref_videos?: string[]
+  /** MiniMax H3 Ref2VA standalone audio references. */
+  h3_ref_audios?: string[]
+  h3_audio_shift?: number
+  /** Sound direction written into MiniMax H3's overall_soundscape field. */
+  h3_audio_prompt?: string
+  h3_ref_image_size?: 'match' | 'max'
+  /** Explicit H3 conditioning contract: exact start frame or omni references. */
+  h3_reference_mode?: 'first_frame' | 'references'
+  /** Quantized MiniMax H3 checkpoint pair; quality/INT8 is recommended for RTX 4090. */
+  h3_model_profile?: 'balanced' | 'quality' | 'low_memory'
   frames_positions?: string
   injection_strength?: number
   settings_version?: number
@@ -70,6 +131,7 @@ export interface GenerateParams {
   stage2_steps?: number
   generation_mode?: string
   per_clip_frames?: number[]
+  per_clip_keyframes?: string[][]
   remove_background_images_ref?: number
   // TTS-specific
   audio_guide2?: string
@@ -118,6 +180,65 @@ export interface GenerateParams {
   tts_comp_release?: number
   tts_comp_makeup?: number
   tts_voice_count?: number
+  // MiniMax H3 Ref2VA ordered Omni-reference manifest.
+  minimax_h3_references?: MiniMaxH3Reference[]
+  minimax_h3_reference_detail?: 'match' | 'max'
+  minimax_h3_text_encoder?: 'nvfp4_awq' | 'gguf_q2_k' | 'gguf_q4_k_m' | 'int8' | 'bf16'
+  /** One-click managed H3 Turbo recipe for Full or Pruned H3. */
+  minimax_h3_turbo_mode?: boolean
+  /** Automatically expand one long H3 concept into window-local prompts. */
+  minimax_h3_window_storyboard?: boolean
+  /** Compiled Context-IR prompts, one per continuation pass. */
+  h3_window_prompts?: string[]
+  h3_window_plan_signature?: string
+  h3_window_plan?: H3WindowPlan
+}
+
+export type MiniMaxH3ReferenceType = 'image' | 'video' | 'audio'
+export type MiniMaxH3AudioIntent = 'voice' | 'drive' | 'style'
+
+export interface MiniMaxH3Reference {
+  id: string
+  type: MiniMaxH3ReferenceType
+  path: string
+  filename: string
+  url?: string
+  role?: string
+  audio_intent?: MiniMaxH3AudioIntent
+  include_audio?: boolean
+  has_audio?: boolean
+  audio_path?: string
+  audio_filename?: string
+  audio_duration_seconds?: number | null
+  duration_seconds?: number | null
+}
+
+export interface H3WindowPlanWindow {
+  index: number
+  title: string
+  start_frame: number
+  end_frame: number
+  start_seconds: number
+  end_seconds: number
+  opening_state: string
+  closing_state: string
+  prompt: string
+}
+
+export interface H3WindowPlan {
+  source_prompt: string
+  signature: string
+  planned_by: 'llm' | 'deterministic_fallback' | 'not_needed'
+  total_frames: number
+  window_frames: number
+  effective_window_frames?: number
+  window_count: number
+  resolution: string
+  model_type: string
+  subject_continuity?: string
+  setting_continuity?: string
+  windows: H3WindowPlanWindow[]
+  window_prompts: string[]
 }
 
 /** OOM (out-of-VRAM) failure metadata. Set on jobs and pipelines that
@@ -147,14 +268,27 @@ export interface GenerationJob {
   message: string
   outputFiles: string[]
   error: string | null
+  createdAt?: number
+  taskTimings?: GenerationTaskTiming[]
   /** Present only on failed jobs that look like CUDA OOMs (see OomInfo). */
   oomInfo?: OomInfo | null
+  /** Exact prompts assigned to an in-flight H3 sliding-window generation. */
+  h3WindowPlan?: H3WindowPlan | null
+}
+
+export interface GenerationTaskTiming {
+  panel_no: number
+  panel_total: number
+  prompt_preview: string
+  status: 'running' | 'completed' | 'failed' | 'skipped'
+  total_seconds?: number
+  phase_timings: Array<{ phase: string; seconds: number }>
 }
 
 export interface OutputFile {
   name: string
   url: string
-  type: 'video' | 'image' | 'audio' | 'model3d'
+  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene' | 'comic'
   mode: GenerationMode | 'model3d' | null
   /** Edit sub-mode tag from the .meta.json sidecar params (set by the
    *  retake/inpaint/outpaint/restyle/edit_anything endpoints). The gallery's
@@ -168,12 +302,228 @@ export interface OutputFile {
   thumbnail_url?: string | null
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'avatars' | 'multiclip' | 'favorites'
-export type AspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
-export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '1080p'
+export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'
+export type SceneAtmosphereKind =
+  | 'rain'
+  | 'snow'
+  | 'dust'
+  | 'embers'
+  | 'fog'
+  | 'smoke'
+  | 'ash'
+  | 'fireflies'
+  | 'confetti'
+  | 'bokeh'
+  | 'sparkles'
+  | 'bubbles'
+  | 'speedlines'
+  | 'leaves'
+export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
+export type SceneFrameRate = 30 | 60
+export type SceneBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken'
+export type SceneMask = 'none' | 'rounded' | 'ellipse'
+
+export interface SceneKeyframe {
+  id: string
+  /** Seconds from the beginning of this layer's animation. */
+  time: number
+  x: number
+  y: number
+  scale: number
+  opacity: number
+  rotation: number
+  /** Easing used from this keyframe to the next one. */
+  curve: SceneCurve
+}
+
+export interface SceneAnimationEvent {
+  id: string
+  /** Local layer time in seconds, before offset/speed/loop are applied. */
+  time: number
+  name: string
+  /** Optional plain-text metadata for a game engine, sound cue or external tool. */
+  payload?: string
+}
+
+export interface SceneLayer {
+  id: string
+  name: string
+  type: SceneLayerType
+  source: string
+  thumbnail?: string
+  visible: boolean
+  z: number
+  /** Prevent accidental transform, timing and inspector edits. */
+  locked?: boolean
+  /** Object URLs cannot survive a scene export/import and need reassignment. */
+  missingAsset?: boolean
+  /** Image/video is cropped to cover the complete scene frame. */
+  fill?: boolean
+  /** Deterministic full-frame procedural particles, shared by preview,
+   * scene JSON and browser capture. Only used by effect layers. */
+  atmosphere?: {
+    kind: SceneAtmosphereKind
+    density: number
+    speed: number
+    size: number
+    wind: number
+    color: string
+  }
+  /** Camera-pan multiplier: 0 ignores camera pan, 1 follows it normally,
+   *  and values above 1 create foreground parallax. Camera zoom/roll still
+   *  affect every visual layer. Ignored by camera layers. */
+  parallax?: number
+  relationship?: {
+    type: 'parent' | 'follow' | 'lookAt'
+    targetLayerId: string
+    offsetX?: number
+    offsetY?: number
+    strength?: number
+    rotationOffset?: number
+  }
+  /** 2D composition effects shared by DOM preview and canvas capture. */
+  effects?: {
+    blur?: number
+    brightness?: number
+    contrast?: number
+    saturation?: number
+    hue?: number
+    glow?: number
+    shadow?: number
+    blendMode?: SceneBlendMode
+    mask?: SceneMask
+    maskRadius?: number
+  }
+  /** Repeats this visual layer along one axis and scrolls the copies in a
+   * seamless loop. Useful for music-video strips, cascades and tiled props. */
+  strip?: {
+    enabled: boolean
+    count: number
+    spacing: number
+    direction: 'up' | 'down' | 'left' | 'right'
+    /** Scene-percent units travelled per second. */
+    speed: number
+    /** Initial offset along the selected axis, in scene percent. */
+    phase?: number
+  }
+  transform: {
+    x: number
+    y: number
+    scale: number
+    opacity: number
+    /** 2D rotation for images/video/overlays. */
+    rotation?: number
+    /** Persisted model-viewer camera orbit in degrees. */
+    rotationX?: number
+    rotationY?: number
+  }
+  animation: {
+    start: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
+    end: { x: number; y: number; scale: number; opacity?: number; rotation?: number }
+    /** Multi-keyframe timeline. Older scenes continue to use start/end. */
+    keyframes?: SceneKeyframe[]
+    /** Metadata markers only; Maestro does not execute them during browser capture. */
+    events?: SceneAnimationEvent[]
+    duration: number
+    curve: SceneCurve
+    /** Scene time in seconds before this layer's local motion starts. */
+    offset?: number
+    /** Local motion playback multiplier. */
+    speed?: number
+    /** Repeat the selected local time range until the scene ends. */
+    loop?: boolean
+    /** Optional local in/out range, in seconds. */
+    trimStart?: number
+    trimEnd?: number
+    /** Deterministic camera shake; only used by camera layers. */
+    shake?: {
+      amount: number
+      frequency: number
+      seed?: number
+      /** Optional local-time window used when a shake preset is chained. */
+      startTime?: number
+      endTime?: number
+    }
+    spin?: boolean
+    rotationSpeed?: number
+    /** Name of a baked glTF skeletal clip to play (rigged GLB layers). */
+    clip?: string
+    /** Skeletal clip timing is independent from the layer transform timing. */
+    clipOffset?: number
+    clipSpeed?: number
+    clipReverse?: boolean
+    clipLoop?: boolean
+    clipTrimStart?: number
+    clipTrimEnd?: number
+    /** Optional motion relationship: this layer circles another scene layer. */
+    orbit?: {
+      targetLayerId: string
+      radiusX: number
+      radiusY: number
+      turns: number
+      phase: number
+      /** Number of evenly-spaced instances travelling around the target. */
+      count?: number
+      /** Keeps the original angle or points each instance toward/away from the target. */
+      facing?: 'fixed' | 'center' | 'outward'
+      /** Fine adjustment from the target layer's visual center, in scene percent. */
+      centerOffsetX?: number
+      centerOffsetY?: number
+    }
+  }
+}
+
+export interface Scene {
+  version: 1
+  name: string
+  width: number
+  height: number
+  /** Preview, timeline and browser capture sampling rate. Defaults to 30 for legacy scenes. */
+  fps?: SceneFrameRate
+  duration: number
+  layers: SceneLayer[]
+  composition?: {
+    showGrid: boolean
+    gridSize: number
+    snap: boolean
+    safeArea: 'none' | 'action' | 'title' | 'vertical' | 'all'
+  }
+}
+
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
+export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
+export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
+export type ScailResolutionProfile = '480p' | '512p' | '704p'
+/** Backward-compatible name for saved Recast/API callers. */
+export type RecastResolutionProfile = ScailResolutionProfile
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
-export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything'
+export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything' | 'recast'
 export type AudioSubMode = 'speech' | 'music' | 'sfx' | 'mixer'
+
+export interface RecastReferenceAsset {
+  file: File | null
+  path: string
+  url: string
+}
+
+export interface RecastCharacterMapping {
+  id: string
+  target: string
+  refFile: File | null
+  refPath: string
+  refUrl: string
+  additionalRefs: RecastReferenceAsset[]
+  referenceAlignedToSource: boolean
+}
+
+/** Optional SCAIL-2 Repaint correspondence. The source phrase is tracked
+ * through the control video and the target phrase is segmented in the edited
+ * first frame; both receive the same stable semantic color. */
+export interface RepaintRegionMapping {
+  id: string
+  source: string
+  target: string
+}
 
 export interface ChoiceConfig {
   selection?: string[]
@@ -185,15 +535,35 @@ export interface ChoiceConfig {
   letters_filter?: string
 }
 
+export interface SlidingWindowMemoryPolicy {
+  checkpoint?: 'full' | 'pruned'
+  manual_override?: boolean
+  auto_resolution_pixels?: Record<string, number>
+  resolution_bands: Array<{
+    min_pixels: number
+    vram_tiers: Array<{
+      max_vram_gb?: number
+      frames: number | null
+      fallback_resolution?: string
+    }>
+  }>
+}
+
 export interface ModelOptions {
   model_type: string
   architecture: string
   guidance_max_phases: number
   lock_guidance_phases: boolean
   sliding_window: boolean
+  video_continuation?: boolean
   motion_amplitude: boolean
   flow_shift: boolean
   tea_cache: boolean
+  first_block_cache?: boolean
+  skip_steps_multiplier_choices?: [string, number][] | null
+  skip_steps_multiplier_label?: string
+  default_skip_steps_multiplier?: number
+  default_skip_steps_start_step_perc?: number
   returns_audio: boolean
   any_audio_prompt: boolean
   audio_scale_name: string
@@ -204,15 +574,72 @@ export interface ModelOptions {
   t2v_class: boolean
   image_outputs: boolean
   supports_end_frame: boolean
+  /** Which conditioning letters the model accepts: T(ext), S(tart), E(nd), V(ideo), L(ast). */
+  image_prompt_types_allowed?: string
+  video_guide_label?: string | null
+  omni_reference?: boolean
+  omni_reference_limits?: {
+    image: number
+    video: number
+    audio: number
+    total: number
+  } | null
+  omni_reference_detail_choices?: [string, 'match' | 'max'][] | null
+  omni_reference_detail_default?: 'match' | 'max'
+  minimax_h3_text_encoder_choices?: {
+    value: string
+    label: string
+    size_hint: string
+    recommended?: boolean
+  }[] | null
+  minimax_h3_text_encoder_default?: string
+  minimax_h3_turbo?: {
+    filename: string
+    label: string
+    experimental: boolean
+    steps: number
+    weight: number
+    guide: string
+  } | null
+  minimax_h3_runtime_advisory?: {
+    level: 'warning' | 'info'
+    title: string
+    message: string
+    reasons: Array<{
+      code: 'triton_unavailable' | 'system_ram_low' | string
+      message: string
+    }>
+    recommended_model_type?: string
+    recommended_turbo?: boolean
+    estimated_pipeline_ram_gb?: number
+    minimum_system_ram_gb?: number
+    detected_ram_gb?: number | null
+    supports_triton?: boolean | null
+    blocking: boolean
+  } | null
+  resolution_presets?: Partial<Record<ResolutionPreset, {
+    label: string
+    experimental?: boolean
+    hint?: string
+    values: Partial<Record<AspectRatio, string>>
+  }>> | null
+  resolution_preset_order?: ResolutionPreset[] | null
+  supports_auto_aspect?: boolean
   guide_preprocessing: ChoiceConfig | null
   guide_custom_choices: ChoiceConfig | null
   image_ref_choices: ChoiceConfig | null
   audio_prompt_type_sources: ChoiceConfig | null
   background_removal_label: string | null
+  max_image_refs?: number | null
   sample_solvers: [string, string][] | null
   self_refiner: boolean
   self_refiner_max_plans: number
   sliding_window_defaults: Record<string, number> | null
+  sliding_window_auto_prompt_pacing?: boolean
+  sliding_window_memory_policy?: SlidingWindowMemoryPolicy | null
+  /** Native one-pass policy used by Director. Omni publishes this without
+   * exposing Studio sliding-window controls. */
+  director_memory_policy?: SlidingWindowMemoryPolicy | null
   // LTX-2 Dev pipeline capabilities (guidance controls in Advanced Settings)
   perturbation?: boolean
   reference_pipeline?: boolean
@@ -222,7 +649,17 @@ export interface ModelOptions {
   fps: number
   frames_minimum: number
   frames_steps: number
+  frames_maximum?: number | null
   default_num_inference_steps: number | null
+  /** Model's preferred flow shift, applied on model selection. Distinct from
+   *  the `flow_shift` boolean above, which only says whether to show the
+   *  control. */
+  default_flow_shift?: number | null
+  /** The model's declared temporal grid (mirrors align_model_frame_count).
+   *  modulus 0 means the model declares none and frame counts are left alone. */
+  frame_alignment_modulus?: number
+  frame_alignment_remainder?: number
+  frame_alignment_mode?: string
   default_guidance_scale: number | null
   hide_resolution_presets: boolean
   input_video_strength_label: string
@@ -233,9 +670,13 @@ export interface ModelOptions {
   pause_between_sentences: boolean
   temperature_enabled: boolean
   custom_settings_def: { id: string; label: string; name: string; type: string }[] | null
+  h3_reference_inputs?: boolean
 }
 
 export interface SystemConfig {
+  // Maestro release version (repo-root VERSION file), shown next to the
+  // app title. Optional: older backends don't send it.
+  app_version?: string
   attention_mode: string
   transformer_quantization: string
   vae_config: number
@@ -249,6 +690,28 @@ export interface SystemConfig {
   prompt_enhancer_quantization: string
   attention_modes_available: string[]
   vram_safety_coefficient: number
+  // Linked model folders (absolute paths outside the Maestro install,
+  // e.g. an existing Wan2GP install's ckpts). Searched read-only for
+  // already-downloaded checkpoints; new downloads always go to Maestro's
+  // own ckpts folder.
+  model_folders: string[]
+}
+
+export interface ModelFolderCandidate {
+  app: string
+  path: string
+  files: number
+  folders: number
+  size_gb: number
+  linked: boolean
+}
+
+export interface OutputGenerationTimings {
+  total_time_sec?: number | null
+  prompt_generation_time_sec?: number | null
+  image_generation_time_sec?: number | null
+  video_generation_time_sec?: number | null
+  assembly_time_sec?: number | null
 }
 
 export interface OutputMetadata {
@@ -257,7 +720,62 @@ export interface OutputMetadata {
   upload_filenames?: Record<string, string>
   job_id?: string
   generation_time?: number
+  generation_timings?: OutputGenerationTimings
+  director_pipeline_id?: string
   created_at?: number
+}
+
+export interface VideoExtraInfo {
+  overview: string
+  youtube: {
+    title: string
+    description: string
+  }
+  x: {
+    post: string
+  }
+  language: string
+  language_label: string
+  source_fingerprint: string
+  prompt_count: number
+  director_context: boolean
+  generated_at?: number
+}
+
+export interface VideoClipInfo {
+  name: string
+  created_at: number | null
+  file_modified_at: number | null
+  file_size_bytes: number
+  job_id: string
+  generation_mode: string
+  model_type: string
+  resolution: string
+  seed: string | number | null
+  video_length_frames: string | number | null
+  num_inference_steps: string | number | null
+  guidance_scale: string | number | null
+  generation_time_sec: number | null
+  generation_timings: OutputGenerationTimings
+  prompt: string
+  negative_prompt: string
+  audio_prompt: string
+  saved_metadata: Record<string, unknown>
+}
+
+export interface VideoExtraInfoStatus {
+  available: boolean
+  language: string
+  language_label: string
+  data: VideoExtraInfo | null
+  prompt_count: number
+  director_context: boolean
+  clip: VideoClipInfo
+}
+
+export interface MultiClipKeyframe {
+  file: File | null
+  path: string | null
 }
 
 export interface MultiClip {
@@ -267,6 +785,7 @@ export interface MultiClip {
   endImage: File | null
   endImagePath: string | null
   durationFrames?: number
+  keyframes: MultiClipKeyframe[]
 }
 
 export type SettingsTab = 'performance' | 'integrations'
@@ -282,12 +801,22 @@ export interface ServicesConfig {
   google_api_key_set: boolean
   openai_api_key: string
   openai_api_key_set: boolean
+  deepseek_api_key: string
+  deepseek_api_key_set: boolean
+  compatible_api_key: string
+  compatible_api_key_set: boolean
+  compatible_base_url: string
   anthropic_api_key: string
   anthropic_api_key_set: boolean
+  minimax_api_key: string
+  minimax_api_key_set: boolean
   use_director_v2: boolean
   nsfw_mode: boolean
   nsfw_accepted_at: string | null
   director_prompt_polish: 'off' | 'full_guide' | 'light_guide' | 'third_pass'
+  workflow_parallelism_enabled: boolean
+  debug_trace_enabled: boolean
+  debug_trace_log_path: string
   civitai_api_key: string
   civitai_api_key_set: boolean
   voice_reference_enabled: boolean
@@ -296,8 +825,11 @@ export interface ServicesConfig {
    *  (default), the Services panel hides Director v2 engine, Voice
    *  Reference, external API keys (Google/OpenAI/Anthropic), and the
    *  Studio prompt enhancer config; the Edit mode picker hides
-   *  Inpaint and Restyle. Flipping this on surfaces all of them. */
+   *  Inpaint. Flipping this on surfaces all of them. */
   show_experimental: boolean
+  /** Storage Manager opt-in: allow removing duplicate files FROM linked
+   *  installs (Recycle Bin only). Default off — informed consent. */
+  storage_allow_linked_removal?: boolean
   /** Performance auto-tune master switch. When true (default for fresh
    *  installs), Settings → System Performance shows a single auto card
    *  with detected hardware + recommended profile, and the underlying
@@ -407,6 +939,9 @@ export interface CivitAIModelVersion {
   images: CivitAIImage[]
   description?: string
   localArch?: string | null
+  /** Version release date from CivitAI — persisted into the download
+   *  sidecar so My LoRAs can sort by newest release. */
+  publishedAt?: string
 }
 
 export interface CivitAIFile {
@@ -440,6 +975,11 @@ export interface CivitAIDownload {
   bytes_downloaded: number
   bytes_total: number
   error: string | null
+  /** Unix timestamps (seconds) supplied by the download registry. */
+  started_at: number | null
+  completed_at: number | null
+  /** Present after a downloaded checkpoint is registered as a model. */
+  model_type?: string | null
   // Non-fatal warnings raised after the download finished — most
   // commonly the architecture-mismatch warning when a Klein-4B-trained
   // LoRA lands in flux2_klein_9b/ or vice versa. UI shows these inline
@@ -469,6 +1009,8 @@ export interface LoraInfo {
   preview_url: string | null
   civitai_model_id: number | null
   recommended_weights: LoraRecommendedWeights | null
+  /** Managed choices may be listed before their first-use download. */
+  managed?: boolean
   has_guide: boolean
   guide?: string | null
   /** NSFW flag from the .civitai.json sidecar (or inferred from filename/tags).
@@ -480,6 +1022,13 @@ export interface LoraInfo {
    *  at a glance which LoRAs they've corrected vs which are using CivitAI's
    *  raw flag. */
   nsfw_overridden?: boolean
+  /** ISO timestamp of when the file was downloaded — sidecar `downloadedAt`
+   *  when present, else the weight file's mtime. Shown as an age chip in
+   *  the Studio/Director LoRA pickers. */
+  downloaded_at?: string | null
+  /** ISO timestamp of the CivitAI version's publish date (sidecar
+   *  `publishedAt`). Null for HF/hand-installed LoRAs without sidecar data. */
+  released_at?: string | null
   /** Stable identifier that survives version updates.
    *  Format: `civitai:{modelId}` when sidecar has a CivitAI modelId,
    *  otherwise `local:{filename}`. Use this as the persistence key for
@@ -530,6 +1079,9 @@ export interface SystemStats {
   /** Generation model currently resident in VRAM (WGP/mmgp). `loaded`
    *  distinguishes "actually in memory now" from "last/selected type". */
   model: { name: string | null; model_type: string | null; loaded: boolean }
+  /** Changes when Maestro restarts or a different React build is deployed.
+   *  The client uses it to avoid running a stale bundle indefinitely. */
+  runtime?: { instance_id: string; ui_build_id: string }
 }
 
 export interface LlmModelOption {
@@ -573,6 +1125,7 @@ export interface AudioAnalysisResult {
   onset_envelope: number[]
   lyrics: LyricSegment[] | null
   vocals_path: string | null
+  warnings?: string[] | null
   song_structure?: SongStructureEntry[] | null
 }
 
@@ -599,6 +1152,33 @@ export interface SpeakerMapping {
 export interface ClipPlan {
   video_prompt: string
   image_prompt: string
+  window_prompts?: Array<string | { prompt?: string; text?: string }>
+  h3_segment_prompts?: string[]
+  metadata?: Record<string, unknown>
+}
+
+export type MusicVideoMode = 'performance' | 'narrative' | 'hybrid' | 'abstract'
+export type MusicVideoLipSync = 'frequent' | 'occasional' | 'none'
+export type MusicVideoGenerationMode = 'image_guided' | 'direct_video'
+
+export const LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT = 'A scene from the 1981 adult animated science fiction anthology film Heavy Metal, professional color grading, in the exact visual style and aesthetics of the 1981 film Heavy Metal. In the distinctive painted animation style of Heavy Metal 1981: painterly textures, grainy film texture, dark saturated colors, strong contrast, rough ink contours, airbrushed highlights and the classic heavy metal fantasy / sci-fi atmosphere of the 1981 film. World vocabulary: alien warriors, industrial spacecraft, decadent neon cities, monsters and alien deserts under red or purple skies. Never anime, clean digital art, modern 3D CGI or photorealistic live action.'
+
+export const DEFAULT_DIRECT_VIDEO_MASTER_PROMPT = 'Maintain one coherent visual language across every clip. Keep recurring characters, materials, palette, lighting and rendering technique consistent. Do not introduce another medium or visual style unless it is explicitly requested.'
+
+export interface MusicVideoTreatment {
+  generation_mode: MusicVideoGenerationMode
+  direct_video_master_prompt: string
+  mode: MusicVideoMode
+  performer_presence: number
+  lip_sync: MusicVideoLipSync
+  recurring_sets: string[]
+  wardrobe: string
+  palette: string
+  camera_language: string
+  recurring_motif: string
+  chorus_signature: string
+  surrealism: number
+  forbidden_elements: string
 }
 
 /** Partial plan returned from single-phase LLM calls */
@@ -621,7 +1201,7 @@ export interface DirectorImageGenProgress {
   status: 'generating' | 'polling' | 'downloading' | 'done' | 'error'
 }
 
-export type DirectorSkill = 'music_video' | 'short_film' | 'podcast' | 'viral_video'
+export type DirectorSkill = 'music_video' | 'short_film' | 'podcast' | 'viral_video' | 'comic'
 export type ShortFilmPath = 'audio' | 'story'
 
 export interface ShortFilmCharacter {
@@ -711,7 +1291,7 @@ export interface ShotPlan {
   ending_beat: string
   constraints?: string[]
   continuity_refs?: string[]
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface CharacterProfile {
@@ -755,14 +1335,48 @@ export interface PipelineClipState {
   start_image_filename: string | null
   keyframe_filenames: string[]
   video_filename: string | null
+  video_stale?: boolean
   tag: 'good' | 'needs_work' | null
   image_gen_time_sec: number | null
   video_gen_time_sec: number | null
+  h3_references?: H3ShotReferenceManifest | null
+  h3_segment_prompts?: string[]
+  h3_segments?: H3SegmentState[]
+  h3_prompt_validation?: 'optimized' | 'deterministic_fallback' | 'direct_video_contract' | null
+}
+
+export interface H3SegmentState {
+  index: number
+  filename: string
+  prompt: string
+  frames: number
+  seed: number
+  reference_mode: 'first_frame' | 'references' | 'direct_video'
+  start_image_filename?: string
+  stale?: boolean
+  created_at?: number
+  updated_at?: number
+}
+
+export interface H3ShotReferenceManifest {
+  shot_index: number
+  mode: 'first_frame' | 'references' | 'direct_video'
+  shot_frame: string
+  image_references: string[]
+  location_reference: string
+  location_label: string
+  requested_location_label?: string
+  video_references: string[]
+  audio_references: string[]
+  note: string
+  warnings?: string[]
+  continuity_mode?: 'identity_safe_hybrid' | 'direct_text_to_video'
 }
 
 export interface PipelineLlmPass {
   pass: string
   system_prompt: string
+  user_prompt?: string
   response_text: string
   thinking_text: string | null
 }
@@ -777,6 +1391,31 @@ export interface PipelineLlmLog {
   planning_time_sec: number
 }
 
+export type PipelineRepairStatus =
+  | 'queued'
+  | 'running'
+  | 'cancelling'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted'
+
+export interface PipelineRepairState {
+  operation_id: string
+  status: PipelineRepairStatus
+  phase: 'queued' | 'images' | 'videos' | 'rejoin' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  current: number
+  total: number
+  clip_index: number | null
+  message: string
+  error: string | null
+  cancel_requested?: boolean
+  started_at: number
+  updated_at: number
+  completed_at: number | null
+  result_filename: string | null
+}
+
 export interface SavedPipelineState {
   version: number
   pipeline_id: string
@@ -784,25 +1423,50 @@ export interface SavedPipelineState {
   completed_at: number | null
   status: string
   pipeline_type: string
+  generation_mode?: 'image_guided' | 'direct_video'
+  direct_video_master_prompt?: string
+  comic_id?: string | null
+  workspace?: string
+  preview_clips?: Array<Record<string, unknown>>
   scene_description: string
   reference_image_path: string | null
   auto_mode: boolean
   seamless: boolean
   image_model: string
   video_model: string
+  h3_reference_manifest?: H3ShotReferenceManifest[]
+  h3_prompt_validation?: {
+    status: 'optimized' | 'deterministic_fallback' | 'direct_video_contract'
+    segments?: number
+    error?: string
+  } | null
+  /** Effective saved behavior. Missing on legacy projects, which require images. */
+  shot_image_policy?: DirectorShotImagePolicy
+  shot_image_guidance?: DirectorShotImageGuidance
   llm_log: PipelineLlmLog | null
   clips: PipelineClipState[]
   output_files: string[]
+  final_output_filename?: string
+  prompt_generation_time_sec?: number | null
+  image_generation_time_sec?: number | null
+  video_generation_time_sec?: number | null
+  assembly_time_sec?: number | null
+  assembly_count?: number
+  assembled_at?: number | null
   total_time_sec: number | null
+  repair?: PipelineRepairState | null
 }
 
 export interface PipelineListItem {
   id: string
   status: string
   pipeline_type: string
+  generation_mode?: 'image_guided' | 'direct_video'
+  comic_id?: string | null
   created_at: number
   clip_count: number
   output_count: number
   scene_description: string
   workspace: string
+  repair_status?: PipelineRepairStatus | null
 }

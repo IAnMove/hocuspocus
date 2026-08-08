@@ -204,23 +204,33 @@ def recommend_settings(hw: dict) -> dict:
     gpu_name = hw.get("gpu_name", "GPU")
     vram_gb = hw.get("gpu_vram_gb", 0)
     ram_gb = hw.get("ram_gb", 0)
+    # Audio gets its own tiering. The shared profile table is calibrated
+    # for 20+ GB VIDEO models, but the whole ACE-Step 1.5 audio stack
+    # (XL transformer int8 ~5.3 GB + LM 4B int8 ~4.4 GB + codec) fits in
+    # VRAM on much smaller cards — and the fast LM decoders (vllm/cg)
+    # only engage when int(profile) is 1 or 3 (wgp.py gate: models
+    # resident in VRAM). Inheriting the video profile silently condemned
+    # every card under 24 GB to the legacy LM decoder at <1 token/sec,
+    # making LM songs take 10-15 minutes and look hung — exactly the
+    # hand-tuning Auto-Tune exists to prevent. On 12 GB+ cards pick
+    # profile 3 (LowRAM_HighVRAM) for audio; below 12 GB keep the
+    # conservative shared profile (the LM stack wouldn't fit anyway).
+    if (vram_gb or 0) >= 12 and int(profile) not in (1, 3):
+        audio_profile = 3
+    else:
+        audio_profile = profile
+
     reason = (
         f"{gpu_name} ({vram_gb} GB VRAM, {ram_gb} GB RAM): "
         f"VRAM tier={vram_tier}, RAM tier={ram_tier} → profile {profile:g}, "
+        f"audio profile {audio_profile:g}, "
         f"{quant.upper()}, VAE config {vae}, coefficient {coef}"
     )
 
     return {
         "video_profile": profile,
         "image_profile": profile,
-        # Audio uses the same profile as video/image — the hardware is
-        # the same hardware regardless of mode. Wan2GP's historical
-        # default of 3.5 (VeryLowRAM_HighVRAM) was a one-size-fits-all
-        # fallback that's actively wrong on machines with plenty of
-        # RAM: a user with 128 GB RAM + 24 GB VRAM should get Profile 1
-        # for audio too, not be artificially constrained to a "very low
-        # RAM" profile.
-        "audio_profile": profile,
+        "audio_profile": audio_profile,
         "transformer_quantization": quant,
         "vae_config": vae,
         "vram_safety_coefficient": coef,
@@ -331,6 +341,39 @@ _COEFFICIENT_FLOOR = 0.40
 # faster generation but we cap the upside conservatively.
 _COEFFICIENT_CEILING = 0.92
 
+# MiniMax H3 attention uses one packed text + audio + video sequence.  Its
+# peak therefore needs substantially more free activation VRAM than the
+# generic pixels x frames curve reserves.  The 960x544 / 345-frame baseline
+# is the released 540p near-15-second workload.  A clean 24 GB run needs
+# roughly 7 GB left outside the streamed transformer; every Ref2VA video adds
+# another full packed media sequence and needs about 10 GB at that baseline.
+_H3_BASELINE_PIXELS = 960 * 544
+_H3_BASELINE_FRAMES = 345
+_H3_MIN_ACTIVATION_RESERVE_GB = 5.0
+_H3_MAX_WEIGHT_BUDGET_GB = 18.0
+_H3_MIN_WEIGHT_BUDGET_GB = 3.5
+_H3_VIDEO_REFERENCE_RESERVE_GB = 10.0
+# MMGP applies the transformer's fixed ``workingVRAM`` reserve independently,
+# so there is no reason to repeat it for baseline 540p jobs.  Once the packed
+# sequence grows materially beyond that baseline, however, the fixed reserve
+# no longer represents H3's Q/K/V and residual peak. Native 768p x 345 frames
+# is almost 2x the baseline token load and hard-OOMed a 24 GB 4090 while MMGP
+# kept 13.35 GB of weights resident. H3 now routes through the shared
+# allocation-efficient attention backend and bounds projection temporaries.
+# A subsequent 1280x704 x 345-frame measurement still filled 24.0/24.6 GB at
+# a 9.9 GB transformer cap, before denoising step zero. Preserve enough room
+# for that measured full-window peak while shorter recommended windows retain
+# more transformer residency and therefore run faster.
+# Begin dynamic residency before the native packed sequence is 25% above
+# baseline. The measured 720p / 243-frame recommendation is already 1.22x;
+# relying on the generic cap there leaves too little real-world allocator
+# margin on display-attached cards.
+_H3_RUNTIME_SCALING_MIN_RATIO = 1.10
+_H3_LARGE_CANVAS_MIN_PIXELS = 1_400_000
+_H3_NATIVE_RUNTIME_EXCESS_SCALE = 0.70
+_H3_NATIVE_RUNTIME_SAFETY_MARGIN_GB = 1.0
+_H3_LARGE_CANVAS_RUNTIME_SAFETY_MARGIN_GB = 1.0
+
 
 def _parse_resolution(resolution) -> Optional[tuple]:
     """Parse a resolution string like "1280x720" or "1920x1080" → (w, h).
@@ -357,6 +400,140 @@ def _parse_resolution(resolution) -> Optional[tuple]:
         return None
 
 
+def compute_h3_weight_budget(
+    total_vram_gb: float,
+    resolution: Optional[str],
+    video_length_frames: Optional[int],
+    video_reference_count: int = 0,
+    runtime_workspace_gb: float = 0.0,
+    additional_reserve_gb: float = 0.0,
+) -> dict:
+    """Reserve packed-sequence activation memory for a MiniMax H3 job.
+
+    This is intentionally separate from ``compute_per_job_coefficient``:
+    H3 is a single-stage pipeline, but treating it like an ordinary
+    single-stage video model lets the light-job bonus keep too many weights
+    resident.  On a 24 GB RTX 4090, 960x544 x 336 frames then raised the
+    model cap to 19.3 GB and the process exited during its first denoising
+    step.  The same class of jobs had worked under the old incidental
+    two-stage reserve at roughly a 17.5 GB cap.
+
+    ``runtime_workspace_gb`` is MMGP's transformer's fixed working-VRAM
+    allowance. It is already supplied to MMGP independently, so baseline jobs
+    do not count it twice. When packed-token load materially exceeds the
+    baseline, the excess is scaled to cover the larger Q/K/V and residual
+    tensors. Native canvases use partial scaling to retain useful model
+    residency; experimental large canvases retain the stricter measured
+    scaling that prevents the observed 1080p OOM.
+
+    Returns the maximum resident-weight budget and the activation reserve
+    used to derive it.  MMGP streams weights that do not fit the budget.
+    """
+
+    try:
+        total_vram_gb = float(total_vram_gb)
+    except (TypeError, ValueError):
+        total_vram_gb = 0.0
+    if total_vram_gb <= 0:
+        return {
+            "weight_budget_gb": 0.0,
+            "activation_reserve_gb": 0.0,
+            "compute_ratio": 1.0,
+            "video_reference_count": max(0, int(video_reference_count or 0)),
+            "runtime_workspace_gb": 0.0,
+            "scaled_runtime_workspace_gb": 0.0,
+            "runtime_scaling_active": False,
+            "runtime_safety_margin_gb": 0.0,
+            "additional_reserve_gb": 0.0,
+        }
+
+    parsed = _parse_resolution(resolution)
+    if parsed:
+        width, height = parsed
+        pixels = max(1, width * height)
+    else:
+        pixels = _H3_BASELINE_PIXELS
+    try:
+        frames = max(1, int(video_length_frames or _H3_BASELINE_FRAMES))
+    except (TypeError, ValueError):
+        frames = _H3_BASELINE_FRAMES
+
+    compute_ratio = (
+        (pixels / float(_H3_BASELINE_PIXELS))
+        * (frames / float(_H3_BASELINE_FRAMES))
+    )
+    # A fixed floor covers Q/K/V, packed hidden states, the audio branch,
+    # allocator fragmentation, and VAE handoff.  The square-root term grows
+    # the reserve for H3's larger native 768p canvas without over-penalizing
+    # short 480p previews.
+    base_reserve_gb = _H3_MIN_ACTIVATION_RESERVE_GB + 2.0 * (compute_ratio ** 0.5)
+    reference_count = max(0, int(video_reference_count or 0))
+    reference_reserve_gb = (
+        _H3_VIDEO_REFERENCE_RESERVE_GB * reference_count * compute_ratio
+    )
+    try:
+        runtime_workspace_gb = max(0.0, float(runtime_workspace_gb or 0.0))
+    except (TypeError, ValueError):
+        runtime_workspace_gb = 0.0
+    runtime_scaling_active = (
+        runtime_workspace_gb > 0.0
+        and compute_ratio >= _H3_RUNTIME_SCALING_MIN_RATIO
+    )
+    large_canvas = pixels >= _H3_LARGE_CANVAS_MIN_PIXELS
+    runtime_excess_scale = (
+        1.0 if large_canvas else _H3_NATIVE_RUNTIME_EXCESS_SCALE
+    )
+    scaled_runtime_workspace_gb = (
+        runtime_workspace_gb
+        * (1.0 + (compute_ratio - 1.0) * runtime_excess_scale)
+        if runtime_scaling_active
+        else 0.0
+    )
+    try:
+        additional_reserve_gb = max(0.0, float(additional_reserve_gb or 0.0))
+    except (TypeError, ValueError):
+        additional_reserve_gb = 0.0
+    # MMGP budgets against total device memory. Keep an extra allocator and
+    # Windows display/browser margin once a pass exceeds H3's measured
+    # baseline load. Large experimental canvases retain the full-gigabyte
+    # margin; native canvases use a smaller one to preserve useful residency.
+    runtime_safety_margin_gb = 0.0
+    if scaled_runtime_workspace_gb > 0:
+        runtime_safety_margin_gb = (
+            _H3_LARGE_CANVAS_RUNTIME_SAFETY_MARGIN_GB
+            if large_canvas
+            else _H3_NATIVE_RUNTIME_SAFETY_MARGIN_GB
+        )
+    # The analytical reserve already includes any reference-video surcharge.
+    # Treat the runtime measurement as a lower bound rather than adding it a
+    # second time.  At the ordinary H3 canvas this mirrors MMGP's workingVRAM
+    # cap; at 1080p it tightens model residency in proportion to the larger
+    # packed sequence.
+    requested_reserve_gb = max(
+        base_reserve_gb + reference_reserve_gb,
+        scaled_runtime_workspace_gb,
+    ) + runtime_safety_margin_gb + additional_reserve_gb
+
+    # Always leave enough room to stream at least a small transformer slice.
+    max_reserve_gb = max(0.0, total_vram_gb - _H3_MIN_WEIGHT_BUDGET_GB)
+    activation_reserve_gb = min(requested_reserve_gb, max_reserve_gb)
+    weight_budget_gb = min(
+        _H3_MAX_WEIGHT_BUDGET_GB,
+        max(_H3_MIN_WEIGHT_BUDGET_GB, total_vram_gb - activation_reserve_gb),
+    )
+    return {
+        "weight_budget_gb": weight_budget_gb,
+        "activation_reserve_gb": activation_reserve_gb,
+        "compute_ratio": compute_ratio,
+        "video_reference_count": reference_count,
+        "runtime_workspace_gb": runtime_workspace_gb,
+        "scaled_runtime_workspace_gb": scaled_runtime_workspace_gb,
+        "runtime_scaling_active": runtime_scaling_active,
+        "runtime_safety_margin_gb": runtime_safety_margin_gb,
+        "additional_reserve_gb": additional_reserve_gb,
+    }
+
+
 def compute_per_job_coefficient(
     base_coef: float,
     total_vram_gb: float,
@@ -365,6 +542,7 @@ def compute_per_job_coefficient(
     stage_count: int = 1,
     resolution: Optional[str] = None,
     video_length_frames: Optional[int] = None,
+    model_activation_gb: float = 0.0,
 ) -> dict:
     """Compute a per-job VRAM safety coefficient.
 
@@ -397,6 +575,14 @@ def compute_per_job_coefficient(
             None skips the compute-size penalty/bonus entirely.
         video_length_frames: Total output frames. None or 0 skips the
             compute-size penalty/bonus. (For images, pass 1.)
+        model_activation_gb: Flat activation surcharge in GB for model
+            classes whose conditioning inflates the attention sequence
+            beyond what resolution × frames predicts (e.g. SCAIL-2
+            appends the driving video as in-context tokens and prepends
+            reference latents — ~35% more sequence than a classic Wan
+            job at the same size). The generic compute curve rates such
+            jobs "lighter than baseline" and would loosen the cap; this
+            surcharge tightens it instead so activations fit. 0 = no-op.
 
     Returns:
         Dict with keys:
@@ -518,8 +704,18 @@ def compute_per_job_coefficient(
                 f"vs baseline ({width}×{height} × {frames} frames, lighter than baseline)"
             )
 
+    # 3b. Model-class activation surcharge — see docstring. Sized by the
+    # caller from measurement; applied as a straight cap reduction.
+    model_activation_penalty = 0.0
+    if model_activation_gb and model_activation_gb > 0:
+        model_activation_penalty = float(model_activation_gb) / total_vram_gb
+        reasons.append(
+            f"-{model_activation_penalty:.3f} for model-class activation "
+            f"overhead ({model_activation_gb:.1f} GB)"
+        )
+
     # 4. Apply all adjustments, then clamp to floor/ceiling.
-    raw_effective = base_coef - lora_penalty - pass_penalty - compute_penalty
+    raw_effective = base_coef - lora_penalty - pass_penalty - compute_penalty - model_activation_penalty
     effective = min(max(raw_effective, _COEFFICIENT_FLOOR), _COEFFICIENT_CEILING)
     floored = raw_effective < _COEFFICIENT_FLOOR
     ceilinged = raw_effective > _COEFFICIENT_CEILING

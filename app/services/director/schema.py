@@ -125,6 +125,9 @@ class SubjectRef:
     visual_description: str
     character_id: Optional[str] = None
     position_or_relation: Optional[str] = None
+    # Shot-specific head-to-toe clothing. Kept separate from identity so
+    # prompt-only video workflows can repeat wardrobe exactly across cuts.
+    wardrobe: Optional[str] = None
     # The personal NAME the screenplay uses for this character in this
     # shot (e.g. "Nancy", "Blaine"). Often invented by the screenplay
     # LLM when the user-supplied character profile is generic. Carried
@@ -138,6 +141,8 @@ class SubjectRef:
             d["character_id"] = self.character_id
         if self.position_or_relation:
             d["position_or_relation"] = self.position_or_relation
+        if self.wardrobe:
+            d["wardrobe"] = self.wardrobe
         if self.speaker_name:
             d["speaker_name"] = self.speaker_name
         return d
@@ -148,6 +153,7 @@ class SubjectRef:
             visual_description=d["visual_description"],
             character_id=d.get("character_id"),
             position_or_relation=d.get("position_or_relation"),
+            wardrobe=d.get("wardrobe"),
             speaker_name=d.get("speaker_name"),
         )
 
@@ -247,7 +253,7 @@ class AudioPlan:
 
 # ── ShotPlan — the core unit ─────────────────────────────────────────
 
-VALID_SKILL_TYPES = {"music_video", "short_film", "podcast", "viral_video"}
+VALID_SKILL_TYPES = {"music_video", "short_film", "podcast", "viral_video", "comic_movie"}
 VALID_SOURCE_MODES = {"t2v", "i2v", "a2v", "retake", "extend"}
 VALID_IMAGE_STRATEGIES = {"reference_edit", "reference_inspired", "fresh_generation", "none"}
 VALID_CONTINUITY_STRATEGIES = {"independent", "continuous", "extend_previous"}
@@ -398,6 +404,14 @@ class ProductionPlan:
     reference_assets: Optional[ReferenceAssets] = None
     characters: Optional[list[CharacterProfile]] = None
     continuity_notes: Optional[list[str]] = None
+    # Optional editable creative treatment. Music-video productions use this
+    # to persist performance/narrative ratios, recurring sets and visual
+    # motifs separately from the individual shot prompts.
+    treatment: Optional[dict[str, Any]] = None
+    # Valid surplus ideas returned by a planner. They do not consume timeline
+    # slots automatically, but remain persisted for later clip replacement or
+    # edit re-segmentation instead of being discarded.
+    alternative_shots: Optional[list[dict]] = None
 
     def to_dict(self) -> dict:
         d = {
@@ -416,6 +430,10 @@ class ProductionPlan:
             d["characters"] = [c.to_dict() for c in self.characters]
         if self.continuity_notes:
             d["continuity_notes"] = self.continuity_notes
+        if self.treatment:
+            d["treatment"] = self.treatment
+        if self.alternative_shots:
+            d["alternative_shots"] = self.alternative_shots
         return d
 
     @staticmethod
@@ -429,6 +447,8 @@ class ProductionPlan:
             reference_assets=None,  # reconstructed externally if needed
             characters=[CharacterProfile.from_dict(c) for c in d.get("characters", [])] if d.get("characters") else None,
             continuity_notes=d.get("continuity_notes"),
+            treatment=d.get("treatment"),
+            alternative_shots=d.get("alternative_shots"),
         )
 
     def get_character(self, character_id: str) -> Optional[CharacterProfile]:

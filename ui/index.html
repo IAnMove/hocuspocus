@@ -2,32 +2,86 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/maestro.svg" />
+    <link rel="icon" type="image/png" href="/loreframe-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Maestro</title>
+    <!-- Hint the UA before CSS loads so native controls don't flash the
+         wrong scheme; the effective scheme comes from index.css
+         (:root dark, [data-theme="ivory"] light). theme-color tints
+         mobile browser chrome and is synced per theme by the inline
+         script below and by applyTheme() on switch. -->
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <title>Loreframe Lab · Experimental</title>
   </head>
   <body>
     <div id="root"></div>
     <script>
       // Apply theme BEFORE React mounts to avoid a flash of the wrong
-      // theme on load. Reads localStorage; if nothing stored, applies
-      // the project default (golden-hour). The Zustand store syncs on
-      // mount so the dropdown and DOM stay consistent.
-      //
-      // NOTE: keep this string in sync with DEFAULT_THEME in
-      // src/lib/theme.ts. Hardcoded here because this script runs
-      // before any module imports.
+      // theme on load. Resolves the preference (mode: dark/light/auto
+      // + theme family) exactly like src/lib/theme.ts, including
+      // migrating the legacy keys. Hardcoded here because this script
+      // runs before any module imports — keep the maps in sync with
+      // FAMILIES in src/lib/theme.ts.
       (function () {
+        // Family -> its light-variant CSS id. Keys double as the
+        // valid family-id set.
+        var LIGHT_OF = { 'golden-hour': 'ivory', 'default': 'daylight', 'onyx': 'pearl' };
+        // Any theme id (either variant) -> its family.
+        var FAMILY_OF = { 'golden-hour': 'golden-hour', 'ivory': 'golden-hour',
+                          'default': 'default', 'daylight': 'default',
+                          'onyx': 'onyx', 'pearl': 'onyx' };
+        // Page-background hex per theme, for the browser-chrome tint.
+        var bg = { 'golden-hour': '#050505', 'default': '#0a0a0f', 'onyx': '#000000',
+                   'ivory': '#f1f5f9', 'daylight': '#f4f5f7', 'pearl': '#f2f2f2' };
+        var mode = 'dark', family = 'golden-hour';
         try {
-          var t = localStorage.getItem('maestro-theme') || 'golden-hour';
-          if (t && t !== 'default') {
-            document.documentElement.setAttribute('data-theme', t);
-          }
+          var legacy = localStorage.getItem('maestro-theme');
+          if (legacy && !FAMILY_OF[legacy]) legacy = null;
+          var m = localStorage.getItem('maestro-theme-mode');
+          mode = (m === 'dark' || m === 'light' || m === 'auto') ? m
+               : (legacy && FAMILY_OF[legacy] !== legacy) ? 'light' : 'dark';
+          var f = localStorage.getItem('maestro-theme-family');
+          var d = localStorage.getItem('maestro-theme-dark'); // interim two-picker build
+          family = LIGHT_OF[f] ? f : LIGHT_OF[d] ? d
+                 : legacy ? FAMILY_OF[legacy] : 'golden-hour';
         } catch (e) {
-          // localStorage blocked (private mode etc) — apply the
-          // hardcoded default so the user still gets the intended look.
-          document.documentElement.setAttribute('data-theme', 'golden-hour');
+          // localStorage blocked (private mode etc) — fall through with
+          // the hardcoded defaults so the user still gets the intended look.
         }
+        var wantLight = mode === 'light' || (mode === 'auto' && window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: light)').matches);
+        var t = wantLight ? LIGHT_OF[family] : family;
+        if (t && t !== 'default') {
+          document.documentElement.setAttribute('data-theme', t);
+        }
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta && bg[t]) meta.setAttribute('content', bg[t]);
+      })();
+    </script>
+    <script>
+      // Boot watchdog: if React hasn't mounted within 10s, replace the
+      // silent black screen with a diagnostic page. Inline scripts are
+      // exempt from the strict ES-module MIME check, so this runs even
+      // when the bundle itself was refused (e.g. Windows machines whose
+      // registry serves .js as text/plain — a real community report:
+      // assets returned 200 but never executed, and users saw nothing
+      // but the theme background with no clue why).
+      (function () {
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.children.length > 0) return; // app mounted
+          document.body.innerHTML =
+            '<div style="max-width:640px;margin:15vh auto 0;padding:0 24px;' +
+            'font-family:system-ui,sans-serif;color:#e8e0d0;">' +
+            '<h1 style="font-size:20px;margin-bottom:12px;">Loreframe Lab UI failed to load</h1>' +
+            '<p style="line-height:1.6;font-size:14px;color:#b8b0a0;">The page was served but the app never started. In order, try:</p>' +
+            '<ol style="line-height:1.9;font-size:14px;color:#b8b0a0;padding-left:20px;">' +
+            '<li>Hard refresh: <b style="color:#e8e0d0">Ctrl+F5</b> (or Cmd+Shift+R)</li>' +
+            '<li>Press <b style="color:#e8e0d0">F12</b> &rarr; Console tab, and share the first red error on Discord/GitHub</li>' +
+            '<li>If the error mentions <b style="color:#e8e0d0">MIME type</b>: update Loreframe Lab, or add an antivirus exclusion for the pinokio folder</li>' +
+            '<li>Re-run <b style="color:#e8e0d0">Update</b> in Pinokio to rebuild the UI</li>' +
+            '</ol></div>';
+        }, 10000);
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>

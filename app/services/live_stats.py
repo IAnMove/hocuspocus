@@ -21,6 +21,10 @@ Design notes:
     degrades one number to 0 instead of failing the whole poll.
 """
 
+import hashlib
+from pathlib import Path
+import uuid
+
 import psutil
 
 try:
@@ -42,7 +46,30 @@ except Exception:
     pass
 
 
-def get_live_stats() -> dict:
+_SERVER_INSTANCE_ID = uuid.uuid4().hex
+
+
+def get_runtime_identity(ui_dist_dir: str | Path) -> dict:
+    """Identify this backend process and the React bundle it is serving.
+
+    A Pinokio popup can survive a backend restart. Without a small handshake,
+    that leaves the tab executing the previous JavaScript bundle indefinitely,
+    even though every API request now reaches the new server. The frontend
+    stores this identity in ``sessionStorage`` and reloads once when either the
+    process or ``ui/dist/index.html`` changes.
+    """
+    index_path = Path(ui_dist_dir) / "index.html"
+    try:
+        build_id = hashlib.sha256(index_path.read_bytes()).hexdigest()[:16]
+    except OSError:
+        build_id = "missing"
+    return {
+        "instance_id": _SERVER_INSTANCE_ID,
+        "ui_build_id": build_id,
+    }
+
+
+def get_live_stats(ui_dist_dir: str | Path | None = None) -> dict:
     """Return a snapshot of live CPU / RAM / GPU usage as JSON-able numbers."""
 
     # ---- CPU (non-blocking; since last call) -------------------------
@@ -91,7 +118,7 @@ def get_live_stats() -> dict:
         except Exception:
             pass
 
-    return {
+    result = {
         "cpu": {
             "percent": round(cpu_percent, 1),
         },
@@ -109,3 +136,6 @@ def get_live_stats() -> dict:
             "vram_percent": round(vram_percent, 1),
         },
     }
+    if ui_dist_dir is not None:
+        result["runtime"] = get_runtime_identity(ui_dist_dir)
+    return result

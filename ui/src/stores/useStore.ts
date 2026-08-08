@@ -1,10 +1,113 @@
 import { create } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, ShortFilmCharacter, ShortFilmPath, CivitAIModel, CivitAIDownload, PipelineListItem, SavedPipelineState, SystemDetectResponse, SystemStats } from '../types'
+import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan } from '../types'
+import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
-import { applyTheme, getStoredTheme, type ThemeId } from '../lib/theme'
+import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
+import { splitPromptSchedule } from '../lib/promptScheduler'
+
+const CIVIT_DOWNLOAD_POLL_MS = 2000
+const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
+let _civitDownloadPollTask: Promise<void> | null = null
+let _civitDownloadPollController: AbortController | null = null
+let _civitDownloadPollRequested = false
+const _civitRefreshedCheckpointDownloads = new Set<string>()
+const DIRECTOR_REPAIR_POLL_MS = 2000
+const DIRECTOR_REPAIR_ACTIVE = new Set(['queued', 'running', 'cancelling'])
+type DirectorRepairPoll = {
+  operationId: string
+  timer: number | null
+}
+const _directorRepairPolls = new Map<string, DirectorRepairPoll>()
+const _directorRepairDiscoveries = new Map<string, object>()
+let _dashboardPipelineLoadToken = 0
+let _dashboardPipelineListLoadToken = 0
+
+type OutpaintAspect = 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
+
+const _OUTPAINT_ASPECT_RATIOS: Array<[Exclude<OutpaintAspect, 'source'>, number]> = [
+  ['16:9', 16 / 9],
+  ['9:16', 9 / 16],
+  ['1:1', 1],
+  ['4:3', 4 / 3],
+  ['3:4', 3 / 4],
+]
+
+function _inferOutpaintAspect(width: number, height: number): OutpaintAspect | null {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+  const ratio = width / height
+  let nearest: Exclude<OutpaintAspect, 'source'> | null = null
+  let nearestError = Number.POSITIVE_INFINITY
+  for (const [aspect, target] of _OUTPAINT_ASPECT_RATIOS) {
+    const relativeError = Math.abs(ratio - target) / target
+    if (relativeError < nearestError) {
+      nearest = aspect
+      nearestError = relativeError
+    }
+  }
+  // Grid alignment can move either dimension by several pixels. Four percent
+  // safely recognizes those canvases without pretending an arbitrary ratio
+  // is one of the six choices supported by the composer.
+  return nearestError <= 0.04 ? nearest : null
+}
+
+function _repairNeedsPolling(repair: PipelineRepairState | null | undefined): boolean {
+  return !!repair && DIRECTOR_REPAIR_ACTIVE.has(repair.status)
+}
+
+function _stopDirectorRepairPoll(pid: string): void {
+  const poll = _directorRepairPolls.get(pid)
+  if (poll?.timer != null) window.clearTimeout(poll.timer)
+  _directorRepairPolls.delete(pid)
+}
+
+function _downloadTimestampMs(value: number | null | undefined): number | null {
+  const timestamp = Number(value)
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return null
+  return timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp
+}
+
+function _downloadNeedsPolling(download: CivitAIDownload, now: number): boolean {
+  if (download.status === 'downloading') return true
+  if (download.status !== 'completed') return false
+  const completedAt = _downloadTimestampMs(download.completed_at)
+  return completedAt !== null && now - completedAt < CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS
+}
+
+function _waitForDownloadPoll(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal.aborted) {
+      resolve()
+      return
+    }
+    const timer = window.setTimeout(done, ms)
+    function done() {
+      window.clearTimeout(timer)
+      signal.removeEventListener('abort', done)
+      resolve()
+    }
+    signal.addEventListener('abort', done, { once: true })
+  })
+}
+
+// Vite can replace this module without a full page unload. Abort the old
+// async loop so HMR never leaves an orphaned polling timer behind.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    _civitDownloadPollController?.abort()
+    _civitDownloadPollController = null
+    _civitDownloadPollTask = null
+    _civitDownloadPollRequested = false
+    _civitRefreshedCheckpointDownloads.clear()
+    for (const pid of _directorRepairPolls.keys()) {
+      _stopDirectorRepairPoll(pid)
+    }
+    _directorRepairDiscoveries.clear()
+  })
+}
 
 // --- LocalStorage persistence for per-mode settings ---
 const STORAGE_KEY = 'maestro_mode_settings'
+let _servicesConfigUpdateQueue: Promise<void> = Promise.resolve()
 
 // Persistence schema version. Bump when changing the LoRA-key strategy or
 // adding fields that need migration. Currently:
@@ -36,6 +139,24 @@ type SavedModeParams = Partial<GenerateParams> & {
   durationSeconds?: number
 }
 
+function snapshotModeParams(params: GenerateParams): SavedModeParams {
+  const snapshot: SavedModeParams = { ...params }
+  delete snapshot.model_type
+  delete snapshot.prompt
+  delete snapshot.activated_loras
+  delete snapshot.loras_multipliers
+  return snapshot
+}
+
+function restoreModeParams(snapshot?: SavedModeParams): Partial<GenerateParams> {
+  if (!snapshot) return {}
+  const restored: SavedModeParams = { ...snapshot }
+  delete restored.filmGrainIntensity
+  delete restored.filmGrainSaturation
+  delete restored.durationSeconds
+  return restored
+}
+
 interface PersistedModeSettings {
   generationMode: GenerationMode
   selectedModelPerMode: Partial<Record<GenerationMode, string>>
@@ -43,6 +164,11 @@ interface PersistedModeSettings {
   /** Runtime shape (filename-keyed). The on-disk shape is lora_id-keyed
    *  starting with v1; the persistence layer translates transparently. */
   savedLoraPerMode: Partial<Record<GenerationMode, LoraModeBlob>>
+  /** Per-mode main prompt (lyrics in audio mode). Tracked separately from
+   *  the params snapshot in memory. Still written for shape stability but
+   *  NO LONGER rehydrated on boot — a refresh starts with a clean prompt
+   *  (see the partial-hydration note in loadModels). */
+  savedPromptPerMode?: Partial<Record<GenerationMode, string>>
   /** Snapshot of lora_id → filename captured at last save. Returned by
    *  `_loadSettings` for use in mid-session reconciliation when the fresh
    *  lora map arrives, so we can rewrite filenames that changed since save. */
@@ -143,6 +269,8 @@ const EPHEMERAL_PARAM_FIELDS: ReadonlyArray<keyof SavedModeParams> = [
   'image_start',
   'image_end',
   'image_refs',
+  'h3_ref_videos',
+  'h3_ref_audios',
   'video_guide',
   'video_source',
   'audio_guide',
@@ -201,6 +329,7 @@ function _saveSettings(
         selectedModelPerMode: state.selectedModelPerMode,
         savedParamsPerMode: sanitizedParamsPerMode,
         savedLoraPerMode: translatedPerMode,
+        savedPromptPerMode: state.savedPromptPerMode,
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
     } else {
@@ -238,6 +367,7 @@ function _loadSettings(): PersistedModeSettings | null {
         // ghost references.
         savedParamsPerMode: _stripEphemeralParams(parsed.savedParamsPerMode || {}),
         savedLoraPerMode: translated,
+        savedPromptPerMode: parsed.savedPromptPerMode || {},
         _loraFilenameSnapshot: snapshot,
       }
     }
@@ -274,6 +404,11 @@ const _PRIMARY_MODEL_DEFAULT_FIELDS: ReadonlyArray<string> = [
   'num_inference_steps',
   'guidance_scale',
   'flow_shift',
+  'h3_audio_shift',
+  'h3_audio_prompt',
+  'h3_ref_image_size',
+  'h3_reference_mode',
+  'h3_model_profile',
   'sample_solver',
   'embedded_guidance_scale',
   'audio_guidance_scale',
@@ -295,6 +430,35 @@ const _PRIMARY_MODEL_DEFAULT_FIELDS: ReadonlyArray<string> = [
   // strips it for models that lack the capability anyway. Unchecking the
   // toggle holds until the model is re-selected, same as steps/guidance.
   'reference_pipeline',
+  // LM sampling knobs for the ACE-Step 1.5 family (and other LM-staged
+  // audio models). Their handlers seed tuned values (temperature 0.85,
+  // top_p 0.9, top_k off, LM CFG 2.5); without hydration the UI showed
+  // and SENT its generic temperature 1.0. Only models whose defaults
+  // carry these keys are affected — video model settings don't include
+  // them, so nothing changes there.
+  'temperature',
+  'top_p',
+  'top_k',
+  'alt_guidance_scale',
+  // Sliding-window geometry. The UI only writes sliding_window_size when
+  // the user touches the Advanced slider, so without hydration a request
+  // carries NO window size and the backend inherits one from unrelated
+  // primary settings — SCAIL-2 (window default 81) then ran a 10s
+  // generation as a single 160-frame window and overflowed VRAM at
+  // resolutions that fit fine per-window. LTX-2's defaults carry 481
+  // (~19s), so typical LTX generations stay single-window as before.
+  'sliding_window_size',
+  'sliding_window_overlap',
+  // Control-video coupling for the SCAIL-2 / Wan-Animate class:
+  // force_fps "control" makes the output follow the guide video's frame
+  // rate (user-reported: 25fps source came out 16fps without it), and
+  // audio_prompt_type "R" remuxes the guide's audio track into the
+  // output (user-reported: outputs were silent). Only the scail2 model
+  // settings carry force_fps; every other model's audio_prompt_type
+  // defaults to "" which matches the UI default, so nothing changes
+  // elsewhere.
+  'force_fps',
+  'audio_prompt_type',
 ]
 
 // Monotonic sequence for loadModelOptions staleness detection — only the
@@ -315,6 +479,17 @@ function _applyModelDefaults(
     if (active !== modelType) return
     const overrides: Record<string, unknown> = {}
     for (const field of _PRIMARY_MODEL_DEFAULT_FIELDS) {
+      // A one-click Full -> Pruned Turbo recommendation switches models and
+      // then restores the managed 6-step preset. Do not let the asynchronous
+      // base-model defaults response race in afterward and put it back at
+      // 20 steps. loadModelOptions applies the same Turbo contract.
+      if (
+        field === 'num_inference_steps'
+        && modelType.startsWith('minimax_h3')
+        && state.params.minimax_h3_turbo_mode === true
+      ) {
+        continue
+      }
       if ((d as Record<string, unknown>)[field] !== undefined) {
         overrides[field] = (d as Record<string, unknown>)[field]
       }
@@ -323,6 +498,38 @@ function _applyModelDefaults(
       storeSet(s => ({ params: { ...s.params, ...overrides } as GenerateParams }))
     }
   }).catch(() => { /* fetch failure shouldn't break model switch */ })
+}
+
+/** Mirror of the backend's align_model_frame_count.
+ *
+ *  Only models that declare a temporal grid (frame_alignment_modulus > 0) are
+ *  aligned here; every other model keeps the plain round(seconds * fps) it has
+ *  always used. Without this the slider can promise a duration the model
+ *  cannot produce: MiniMax H3 accepts 17n + 5 frames, so a 5s request (120)
+ *  becomes 124 and the clip is 5.17s, not 5.00s.
+ */
+export function alignFrameCount(
+  frames: number,
+  o: { frame_alignment_modulus?: number; frame_alignment_remainder?: number;
+       frame_alignment_mode?: string; frames_minimum?: number; frames_maximum?: number | null } | null | undefined,
+): number {
+  const modulus = o?.frame_alignment_modulus ?? 0
+  if (!modulus || modulus <= 0) return frames
+  const remainder = (o?.frame_alignment_remainder ?? 1) % modulus
+  const minimum = o?.frames_minimum ?? 1
+  const maximum = o?.frames_maximum ?? null
+  let n = Math.max(minimum, Math.round(frames))
+  if (maximum != null) n = Math.min(maximum, n)
+  const delta = ((n - remainder) % modulus + modulus) % modulus
+  if (delta) {
+    const mode = (o?.frame_alignment_mode ?? 'floor').toLowerCase()
+    if (mode === 'ceil') n += modulus - delta
+    else if (mode === 'nearest') n += delta >= modulus / 2 ? modulus - delta : -delta
+    else n -= delta
+  }
+  if (maximum != null && n > maximum) n -= modulus
+  while (n < minimum) n += modulus
+  return n
 }
 
 // Family → generation mode mapping
@@ -339,6 +546,7 @@ const familyModeMap: Record<string, GenerationMode> = {
   hunyuan_1_5: 'video',
   ltxv: 'video',
   ltx2: 'video',
+  minimax_h3: 'video',
   kandinsky5: 'video',
   tts: 'audio',
   longcat: 'avatar',
@@ -367,6 +575,9 @@ const videoEditModelTypes = new Set([
   'chrono_edit_distill',
   'lucy_edit_fastwan',
   'lucy_edit_fastwan_1_1',
+  // Dedicated to Edit → Recast; the general SCAIL Fast profile remains in
+  // Studio Video/Animate.
+  'scail2_14B_recast_fast',
 ])
 
 // Audio sub-families: split the single "tts" family into Speech, Music, SFX
@@ -376,18 +587,20 @@ const audioSubFamilies: ModelFamily[] = [
   { id: 'tts_sfx', label: 'Sound Effects', order: 202 },
 ]
 
-// Model types that belong to the Music sub-family (everything else in tts → Speech)
-const musicModelTypes = new Set([
-  'ace_step_v1',
-  'ace_step_v1_5',
-  'ace_step_v1_5_turbo_lm_0_6b',
-  'ace_step_v1_5_turbo_lm_1_7b',
-  'ace_step_v1_5_turbo_lm_4b',
-  'ace_step_v1_5_xl',
-  'ace_step_v1_5_xl_turbo_lm_4b',
-  'heartmula_oss_3b',
-  'heartmula_rl_oss_3b_20260123',
-])
+// Model types that belong to the Music sub-family (everything else in
+// tts → Speech). Membership is prefix-based for the known music model
+// lines so newly added variants (e.g. new ACE-Step checkpoints)
+// classify correctly without touching this file — the XL SFT models
+// were invisible in the Music group because an id list here missed
+// them. Keep the explicit set for one-off ids that don't share a
+// prefix with their line.
+const musicModelTypes = new Set<string>([])
+const musicModelPrefixes = ['ace_step', 'heartmula']
+
+function isMusicModelType(modelType: string): boolean {
+  if (musicModelTypes.has(modelType)) return true
+  return musicModelPrefixes.some(p => modelType.startsWith(p))
+}
 
 // Model types that belong to the SFX sub-family (MMAudio variants)
 const sfxModelTypes = new Set([
@@ -417,11 +630,14 @@ const HUNYUAN3D_MODEL_TYPES = [
 // Default enabled models (shown by default in selectors)
 const DEFAULT_ENABLED_MODELS = new Set([
   // Image
-  // Only Flux 2 Klein is enabled by default. Qwen Image Edit and
-  // other image models stay available via Settings → System → Model
-  // Visibility but are off by default to keep the first-launch
-  // picker focused.
+  // Keep the general-purpose Flux default plus the complete Krea 2 family:
+  // base RAW/Turbo generation and their identity-preserving Edit variants.
+  // Other image models remain opt-in through Model Visibility.
   'flux2_klein_9b',
+  'krea2_raw',
+  'krea2_turbo',
+  'krea2_raw_edit',
+  'krea2_turbo_edit',
   // Video
   // Default to just the LTX-2.3 Distilled 1.1 22B checkpoint (newer /
   // better quality). The FP8 build and every other video model
@@ -429,6 +645,17 @@ const DEFAULT_ENABLED_MODELS = new Set([
   // Settings → System → Model Visibility but off by default so the
   // first-launch picker isn't overwhelming.
   'ltx2_22B_distilled_1_1',
+  // SCAIL-2 character animation (Animate a character with a control
+  // video). Fast = lightx2v distill bundled (6 steps, no CFG, ~13x).
+  'scail2_14B',
+  'scail2_14B_fast',
+  'scail2_14B_recast_fast',
+  // MiniMax H3 Base: text, first/last-frame video, and native stereo audio.
+  'minimax_h3',
+  'minimax_h3_full',
+  // MiniMax H3 Ref2VA: ordered image, video, and audio references.
+  'minimax_h3_ref2va',
+  'minimax_h3_ref2va_full',
   // Audio — Speech
   'kugelaudio_0_open',
   'qwen3_tts_base',
@@ -438,6 +665,8 @@ const DEFAULT_ENABLED_MODELS = new Set([
   'ace_step_v1_5_turbo_lm_4b',
   'ace_step_v1_5_xl',
   'ace_step_v1_5_xl_turbo_lm_4b',
+  'ace_step_v1_5_xl_sft',
+  'ace_step_v1_5_xl_sft_lm_4b',
   // Audio — SFX
   'mmaudio_v2',
   'mmaudio_nsfw',
@@ -445,13 +674,68 @@ const DEFAULT_ENABLED_MODELS = new Set([
   'animate',
 ])
 
+/* Version of the curated defaults list above. enabledModels is a stored
+ * whitelist, so existing installs never re-read DEFAULT_ENABLED_MODELS —
+ * without this, entries added to the curated list in an update stay
+ * invisible for everyone who ever opened the app before. Bump the
+ * version when adding entries and list them under that version below:
+ * they get merged into existing installs' whitelists exactly ONCE, so
+ * a user who then disables them stays disabled forever. (This is
+ * deliberately narrower than auto-enabling every unknown model — only
+ * the curated list's own additions are pushed.) */
+const DEFAULTS_VERSION = 8
+const DEFAULTS_ADDED_IN: Record<number, string[]> = {
+  // v1.2.0: the ACE-Step XL SFT pair; LM_4B becomes the music default.
+  2: ['ace_step_v1_5_xl_sft', 'ace_step_v1_5_xl_sft_lm_4b'],
+  // v1.3.0: SCAIL-2 character animation, base + lightx2v-distilled Fast.
+  3: ['scail2_14B', 'scail2_14B_fast'],
+  // Dedicated Recast recipe: native replacement + official I2V LightX point.
+  4: ['scail2_14B_recast_fast'],
+  // Krea 2 image generation + identity-preserving image editing.
+  5: ['krea2_raw', 'krea2_turbo', 'krea2_raw_edit', 'krea2_turbo_edit'],
+  // MiniMax H3 Base native audio-video generation.
+  6: ['minimax_h3'],
+  // MiniMax H3 Base Omni Reference (Ref2VA).
+  7: ['minimax_h3_ref2va'],
+  // Full 33B H3 variants alongside the recommended Pruned 20B entries.
+  8: ['minimax_h3_full', 'minimax_h3_ref2va_full'],
+}
+const DEFAULTS_VERSION_KEY = 'maestro_defaults_version'
+
+/* The music default changed in v1.2.0 (Turbo LM_4B -> SFT LM_4B).
+ * A saved selection equal to the OLD default means the user was riding
+ * the default rather than expressing a preference — follow them to the
+ * new one, once, at the same version transition. Users who picked any
+ * other model keep their choice. */
+const OLD_MUSIC_DEFAULT = 'ace_step_v1_5_xl_turbo_lm_4b'
+const NEW_MUSIC_DEFAULT = 'ace_step_v1_5_xl_sft_lm_4b'
+
 const ENABLED_MODELS_KEY = 'maestro_enabled_models'
 const HUNYUAN3D_VISIBILITY_MIGRATION_KEY = 'maestro_hunyuan3d_visibility_v2'
+const MINIMAX_H3_VISIBILITY_MIGRATION_KEY = 'maestro_minimax_h3_visibility_v1'
+let _initializedMatureModels = new Set<string>()
+let _modelVisibilityHydrated = false
+let _modelVisibilityDefaultsVersion = 1
+let _modelVisibilitySaveTask: Promise<void> = Promise.resolve()
 
 function _saveEnabledModels(models: Set<string>) {
   try {
     localStorage.setItem(ENABLED_MODELS_KEY, JSON.stringify([...models]))
   } catch { /* quota exceeded */ }
+  const payload = {
+    enabled_models: [...models],
+    initialized_mature_models: [..._initializedMatureModels],
+    defaults_version: _modelVisibilityDefaultsVersion,
+  }
+  _modelVisibilitySaveTask = _modelVisibilitySaveTask
+    .catch(() => { /* a later save should still run */ })
+    .then(async () => {
+      try {
+        await api.updateModelVisibility(payload)
+      } catch (error) {
+        console.warn('Failed to persist model visibility:', error)
+      }
+    })
 }
 
 function _loadEnabledModels(): Set<string> | null {
@@ -467,10 +751,51 @@ function _loadEnabledModels(): Set<string> | null {
         _saveEnabledModels(models)
         localStorage.setItem(HUNYUAN3D_VISIBILITY_MIGRATION_KEY, '1')
       }
+      if (localStorage.getItem(MINIMAX_H3_VISIBILITY_MIGRATION_KEY) !== '1') {
+        // H3 did not exist when this persisted set was written, so enable the
+        // new model once for existing users. They can still hide it normally.
+        models.add('minimax_h3')
+        _saveEnabledModels(models)
+        localStorage.setItem(MINIMAX_H3_VISIBILITY_MIGRATION_KEY, '1')
+      }
       return models
     }
   } catch { /* ignore */ }
   return null
+}
+
+function _markMatureModelsInitialized(
+  models: ModelDef[],
+  modelTypes?: Iterable<string>,
+) {
+  const requested = modelTypes ? new Set(modelTypes) : null
+  for (const model of models) {
+    if (
+      model.nsfw_only
+      && (requested == null || requested.has(model.model_type))
+    ) {
+      _initializedMatureModels.add(model.model_type)
+    }
+  }
+}
+
+function _enableUninitializedMatureModels(
+  models: ModelDef[],
+  enabledModels: Set<string>,
+): Set<string> | null {
+  const next = new Set(enabledModels)
+  let changed = false
+  for (const model of models) {
+    if (
+      model.nsfw_only
+      && !_initializedMatureModels.has(model.model_type)
+    ) {
+      _initializedMatureModels.add(model.model_type)
+      next.add(model.model_type)
+      changed = true
+    }
+  }
+  return changed ? next : null
 }
 
 // Default model_type per generation mode
@@ -494,10 +819,14 @@ export function getModelMode(modelType: string, familyId: string): GenerationMod
   return getFamilyMode(familyId)
 }
 
-export function getFamiliesForMode(mode: GenerationMode, allFamilies: ModelFamily[], _editSubMode?: string, audioSubMode?: string): ModelFamily[] {
+export function getFamiliesForMode(mode: GenerationMode, allFamilies: ModelFamily[], editSubMode?: string, audioSubMode?: string): ModelFamily[] {
   if (mode === 'tools') return []
   if (mode === 'avatar') {
-    // All edit sub-modes (retake, inpaint, restyle) use LTX models
+    // Recast and Repaint run on SCAIL-2, which lives under the Wan 2.1
+    // family. The remaining edit sub-modes use LTX models.
+    if (editSubMode === 'recast' || editSubMode === 'restyle') {
+      return allFamilies.filter(f => f.id === 'wan')
+    }
     return allFamilies.filter(f => f.id === 'ltx2' || f.id === 'ltxv')
   }
   if (mode === 'audio') {
@@ -512,12 +841,12 @@ export function getFamiliesForMode(mode: GenerationMode, allFamilies: ModelFamil
 }
 
 /** Get models for a family ID, optionally filtered by generation mode */
-export function getModelsForFamily(familyId: string, allModels: ModelDef[], mode?: GenerationMode, _editSubMode?: string): ModelDef[] {
+export function getModelsForFamily(familyId: string, allModels: ModelDef[], mode?: GenerationMode, editSubMode?: string): ModelDef[] {
   if (familyId === 'tts_speech') {
-    return allModels.filter(m => m.family === 'tts' && !musicModelTypes.has(m.model_type) && !sfxModelTypes.has(m.model_type))
+    return allModels.filter(m => m.family === 'tts' && !isMusicModelType(m.model_type) && !sfxModelTypes.has(m.model_type))
   }
   if (familyId === 'tts_music') {
-    return allModels.filter(m => m.family === 'tts' && musicModelTypes.has(m.model_type))
+    return allModels.filter(m => m.family === 'tts' && isMusicModelType(m.model_type))
   }
   if (familyId === 'tts_sfx') {
     return allModels.filter(m => m.family === 'tts' && sfxModelTypes.has(m.model_type))
@@ -525,7 +854,22 @@ export function getModelsForFamily(familyId: string, allModels: ModelDef[], mode
   const familyModels = allModels.filter(m => m.family === familyId)
   // When mode is specified and the family spans multiple modes, filter to matching models
   if (mode === 'avatar') {
-    // All edit sub-modes use LTX video models
+    // Recast exposes its dedicated native-replacement Fast recipe plus HQ.
+    if (editSubMode === 'recast') {
+      return familyModels.filter(m =>
+        m.model_type === 'scail2_14B_recast_fast'
+        || m.model_type === 'scail2_14B'
+      )
+    }
+    // Repaint intentionally mirrors Studio Video/Frames SCAIL Animate:
+    // the edited first frame is the primary image and the source video
+    // supplies motion/camera movement.
+    if (editSubMode === 'restyle') {
+      return familyModels.filter(m =>
+        m.model_type === 'scail2_14B_fast'
+        || m.model_type === 'scail2_14B'
+      )
+    }
     return familyModels.filter(m => !avatarModelTypes.has(m.model_type) && !videoEditModelTypes.has(m.model_type))
   }
   if (mode === 'video') {
@@ -539,10 +883,24 @@ export function getModelsForFamily(familyId: string, allModels: ModelDef[], mode
 export function getDisplayFamily(model: ModelDef): string {
   if (model.family === 'tts') {
     if (sfxModelTypes.has(model.model_type)) return 'tts_sfx'
-    if (musicModelTypes.has(model.model_type)) return 'tts_music'
+    if (isMusicModelType(model.model_type)) return 'tts_music'
     return 'tts_speech'
   }
   return model.family
+}
+
+// Transient: the LTX model selected before entering either SCAIL-2 edit
+// workflow, so leaving Recast/Repaint restores the user's prior edit model.
+let _preScail2AvatarModel = ''
+
+const DEFAULT_RECAST_MAPPING: RecastCharacterMapping = {
+  id: 'recast-a',
+  target: 'person',
+  refFile: null,
+  refPath: '',
+  refUrl: '',
+  additionalRefs: [],
+  referenceAlignedToSource: false,
 }
 
 function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], models: ModelDef[]): string {
@@ -554,10 +912,41 @@ function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], m
   // Fallback: first model in first family of this mode
   const modeFamilies = getFamiliesForMode(mode, families)
   if (modeFamilies.length > 0) {
-    const firstModel = getModelsForFamily(modeFamilies[0].id, models, mode)[0]
+    const firstModel = getModelsForFamily(modeFamilies[0].id, models, mode).filter(m => !m.tool_only)[0]
     if (firstModel) return firstModel.model_type
   }
   return ''
+}
+
+export interface ForegroundActivity {
+  id: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  phase: string
+  message: string
+  title?: string
+  kind?: string
+  parentId?: string
+  current?: number
+  total?: number
+  progress?: number
+  detailMessage?: string
+  detailCurrent?: number
+  detailTotal?: number
+  tokenUsage?: {
+    promptTokens?: number
+    completionTokens?: number
+    totalTokens?: number
+    calls?: number
+  }
+  error?: string | null
+  startedAt?: number
+  updatedAt?: number
+}
+
+interface ScheduledPromptSubmission {
+  prompt: string
+  position: number
+  total: number
 }
 
 interface AppState {
@@ -593,6 +982,44 @@ interface AppState {
    *  man" effect). */
   editAnythingStartAnchor: string | null
   editAnythingEndAnchor: string | null
+  /** SCAIL-2 Repaint edited first frame (uploaded or returned from Image mode). */
+  editRepaintFrameFile: File | null
+  editRepaintFramePath: string
+  editRepaintFrameUrl: string
+  /** Optional source-video → edited-frame semantic correspondences. */
+  editRepaintMappings: RepaintRegionMapping[]
+  /** Spatial quality profile shared with Recast's SCAIL-2 canvas logic. */
+  editRepaintResolutionProfile: ScailResolutionProfile
+  setEditRepaintFrame: (file: File | null, path: string, url: string) => void
+  setEditRepaintMappings: (mappings: RepaintRegionMapping[]) => void
+  /** Recast (SCAIL-2 Replace): who to swap out, as a SAM3 keyword. */
+  editRecastTarget: string
+  /** Number of matching people to track and replace (SCAIL-2 supports 1-5). */
+  editRecastPersonCount: number
+  /** Recast reference character image (uploaded path + preview URL). */
+  editRecastRefFile: File | null
+  editRecastRefPath: string
+  editRecastRefUrl: string
+  /** Explicit source-person → replacement mappings in stable SCAIL color order. */
+  editRecastMappings: RecastCharacterMapping[]
+  setEditRecastMappings: (mappings: RecastCharacterMapping[]) => void
+  /** True when the reference preserves the selected source frame's layout. */
+  editRecastRefAligned: boolean
+  /** Remove unrelated reference scenery before SCAIL-2 encodes identity. */
+  editRecastIsolateReference: boolean
+  /** Derive a tighter same-character identity view when none is supplied. */
+  editRecastAutoFaceDetail: boolean
+  /** Rewrite and append Maestro's Recast identity/scene prompt guidance. */
+  editRecastEnhancePrompt: boolean
+  /** Strict source-pixel composite outside the tracked Recast target. */
+  editRecastProtectBystanders: boolean
+  /** Native SCAIL-2 color mapping for other visible identities. */
+  editRecastPreserveBystanders: boolean
+  /** Apply the official SCAIL-2 replacement Relighting LoRA. */
+  editRecastUseRelighting: boolean
+  /** Spatial quality profile, independent from the selected SCAIL-2 model. */
+  editRecastResolutionProfile: ScailResolutionProfile
+  setEditRecastRef: (file: File | null, path: string, url: string, aligned?: boolean) => void
   /** Round-trip marker for the "Edit Anchor in Image Mode" workflow.
    *  Populated when the user clicks "Edit Start" or "Edit End" on a
    *  boundary anchor slot. A banner at the top of the sidebar lets them
@@ -602,7 +1029,7 @@ interface AppState {
    *  the user does them sequentially. */
   editReturnTarget: {
     /** Which anchor slot we're populating on return. */
-    anchor: 'start' | 'end'
+    anchor: 'start' | 'end' | 'recast' | 'repaint'
     /** The pre-extracted source frame at the corresponding trim handle.
      *  This is the frame the user is editing in Image mode; if they
      *  cancel without applying, no anchor is set and the model falls
@@ -624,9 +1051,9 @@ interface AppState {
    *  sidebar to Studio Image mode (using the proper setGenerationMode
    *  so the model + LoRA + image-mode params all swap correctly) with
    *  that frame loaded as image_start. */
-  sendFrameToImageMode: (which: 'start' | 'end') => Promise<void>
-  /** Apply the latest Image-mode output as the anchor named by
-   *  editReturnTarget.anchor, then return to Edit Anything mode. */
+  sendFrameToImageMode: (which: 'start' | 'end' | 'recast' | 'repaint') => Promise<void>
+  /** Apply the latest Image-mode output to the requested anchor/reference,
+   *  then return to Edit Anything or Recast. */
   applyOutputAsAnchor: () => Promise<void>
   /** Skip applying — return to Edit Anything with the anchor unset
    *  (model will fall back to source-extracted frame at generation time,
@@ -721,6 +1148,10 @@ interface AppState {
   setOutpaintSourcePreservation: (v: number) => void
   outpaintLoraStrength: number
   setOutpaintLoraStrength: (v: number) => void
+  // Official LTX-2.3 binary-mask conditioning plus multiscale source blend.
+  // Enabled by default; false keeps the legacy black-sentinel path for A/B.
+  outpaintMaskPreserving: boolean
+  setOutpaintMaskPreserving: (v: boolean) => void
   outpaintPreserveSourceAudio: boolean
   setOutpaintPreserveSourceAudio: (v: boolean) => void
   // Lock source pixels: composite original source clip back into the source
@@ -776,11 +1207,14 @@ interface AppState {
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
 
-  // Theme — see lib/theme.ts. Persisted to localStorage; an inline
-  // script in index.html applies the persisted theme to <html>
-  // BEFORE React mounts to avoid a flash of the default theme.
-  theme: ThemeId
-  setTheme: (theme: ThemeId) => void
+  // Theme — see lib/theme.ts. Two-dimensional: a dark/light/auto mode
+  // plus a theme family (each family has a dark and a light variant).
+  // Persisted to localStorage; an inline script in index.html applies
+  // the resolved theme to <html> BEFORE React mounts to avoid a flash
+  // of the default theme.
+  themePrefs: ThemePrefs
+  setThemeMode: (mode: ThemeMode) => void
+  setThemeFamily: (family: FamilyId) => void
 
   // Retake Dialog
   retakeDialogOpen: boolean
@@ -798,10 +1232,15 @@ interface AppState {
   loadPipelineList: () => Promise<void>
   loadSavedPipeline: (pid: string) => Promise<void>
   tagClip: (pid: string, clipIndex: number, tag: string | null) => Promise<void>
+  startPipelineRepair: (pid: string) => Promise<PipelineRepairState>
+  cancelPipelineRepair: (pid: string) => Promise<PipelineRepairState>
+  pollPipelineRepair: (pid: string, operationId: string) => void
   rerunClipImage: (pid: string, clipIndex: number, prompt?: string) => Promise<unknown>
   rerunClipVideo: (pid: string, clipIndex: number, prompt?: string) => Promise<unknown>
+  rerunH3Segment: (pid: string, clipIndex: number, segmentIndex: number, prompt?: string) => Promise<unknown>
   rejoinPipelineClips: (pid: string) => Promise<unknown>
   resumePipeline: (pid: string) => Promise<void>
+  deletePipeline: (pid: string) => Promise<void>
   loadDirectorFromPipeline: (pid: string) => Promise<void>
 
   // Recipes (one-click Studio presets)
@@ -843,6 +1282,8 @@ interface AppState {
   toggleModelEnabled: (modelType: string) => void
   resetEnabledModels: () => void
   setAllModelsEnabled: (enabled: boolean) => void
+  /** Bulk-toggle a list of models (family-level enable/disable, issue #14). */
+  setModelsEnabled: (modelTypes: string[], enabled: boolean) => void
   // ModelSelector "+N more" hint → open Settings and expand Enabled Models.
   modelVisibilityFocus: GenerationMode | null
   openModelVisibility: (mode: GenerationMode) => void
@@ -865,6 +1306,13 @@ interface AppState {
   setSlidingWindowOverlap: (frames: number) => void
   slidingWindowLocked: boolean
   setSlidingWindowLocked: (locked: boolean) => void
+
+  // Real frame rate of the uploaded guide/control video (probed server-side
+  // at upload). Used by force_fps="control" models (SCAIL-2 class) to
+  // convert durationSeconds to frames at the rate the output will actually
+  // play at, instead of the model's nominal fps.
+  guideVideoFps: number | null
+  setGuideVideoFps: (fps: number | null) => void
 
   // Output count
   outputCount: number
@@ -974,16 +1422,21 @@ interface AppState {
   singlePromptMode: boolean
   setClipPrompt: (index: number, prompt: string) => void
   setClipStartImage: (index: number, file: File | null) => void
+  addClipKeyframe: (index: number, file: File) => void
+  removeClipKeyframe: (index: number, keyframeIndex: number) => void
   setSinglePromptMode: (v: boolean) => void
   syncClipCount: () => void
 
   // Generation state (queue)
   jobs: GenerationJob[]
   isGenerating: boolean
-  startGeneration: () => Promise<void>
+  promptSchedulerEnabled: boolean
+  setPromptSchedulerEnabled: (enabled: boolean) => void
+  startGeneration: (scheduledPrompt?: ScheduledPromptSubmission) => Promise<void>
   stopGeneration: (jobId?: string) => void
   dismissJob: (jobId: string) => void
   reconnectJobs: () => Promise<void>
+  reconnectDirectorPipelines: () => Promise<void>
 
   // LoRA state
   availableLoras: string[]
@@ -1051,11 +1504,26 @@ interface AppState {
   selectModel: (modelType: string) => void
 
   // Workspaces
-  workspaces: Array<{ name: string; path: string }>
+  workspaces: Array<{ name: string; path: string; file_count?: number }>
   activeWorkspace: string
+  /** Gallery is showing the virtual "Uploads" view (browse-only — the
+   *  server-side active workspace, and where generations save, is
+   *  untouched). Entered via switchWorkspace('__uploads__'). */
+  browsingUploads: boolean
   loadWorkspaces: () => Promise<void>
   switchWorkspace: (name: string) => Promise<void>
   createWorkspace: (name: string) => Promise<void>
+  deleteWorkspace: (name: string) => Promise<void>
+
+  // Storage Manager overlay
+  storageDashboardOpen: boolean
+  setStorageDashboardOpen: (open: boolean) => void
+
+  // LoRA picker sort order — store-backed (not per-component state) so
+  // simultaneously mounted pickers (e.g. Director's Image + Video
+  // accordions) stay in sync; persisted to localStorage.
+  loraPickerSort: 'name' | 'newest'
+  setLoraPickerSort: (sort: 'name' | 'newest') => void
 
   // Outputs
   outputs: OutputFile[]
@@ -1100,6 +1568,9 @@ interface AppState {
   // Prompt enhancement
   isEnhancing: boolean
   enhancePrompt: (ttsMode?: string) => Promise<void>
+  h3WindowPlan: H3WindowPlan | null
+  updateH3WindowPrompt: (index: number, prompt: string) => void
+  clearH3WindowPlan: () => void
 
   // Director (Music Video Director)
   sidebarMode: 'director' | 'studio'
@@ -1109,6 +1580,9 @@ interface AppState {
   directorAnalysis: AudioAnalysisResult | null
   directorPlannedClips: PlannedClip[]
   directorEnergyBias: number
+  directorPacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
+  directorMusicVideoTreatment: MusicVideoTreatment
+  setDirectorMusicVideoTreatment: (partial: Partial<MusicVideoTreatment>) => void
   directorClipPlans: ClipPlan[]
   directorSceneDescription: string
   directorLoading: boolean
@@ -1127,6 +1601,10 @@ interface AppState {
   directorLocationRefs: File[]
   directorLocationRefPaths: string[]
   directorLocationRefLabels: string[]
+  directorH3VideoRefs: File[]
+  directorH3VideoRefPaths: string[]
+  directorH3AudioRefs: File[]
+  directorH3AudioRefPaths: string[]
   directorVoiceRef: File | null
   directorVoiceRefPath: string | null
   directorIdentityGuidanceScale: number
@@ -1148,6 +1626,7 @@ interface AppState {
   directorSpeakerMappings: SpeakerMapping[]
   directorAutoMode: boolean
   directorSeamless: boolean
+  directorShotImageGuidance: DirectorShotImageGuidance
   /** Completed LLM stream outputs, kept so the thinking/output boxes stay
    *  in the chat history after each stage finishes instead of vanishing. */
   directorLlmLog: { stage: string; text: string }[]
@@ -1155,18 +1634,32 @@ interface AppState {
   directorSkill: DirectorSkill | null
   directorResolution: ResolutionPreset
   directorAspectRatio: AspectRatio
+  /** Director-owned inference-step choices, keyed by video model. Keeping
+   *  these separate from Studio prevents one surface from silently changing
+   *  the other and lets each Director model retain its own valid recipe. */
+  directorVideoInferenceStepsByModel: Record<string, number>
+  /** Optional expert override of Director's hardware-safe native-shot cap. */
+  directorVideoMaxShotFramesByModel: Record<string, number>
+  /** Director-owned H3 Turbo choices, separate from Studio's active mode. */
+  directorH3TurboModeByModel: Record<string, boolean>
   setDirectorAutoMode: (v: boolean) => void
   setDirectorSeamless: (v: boolean) => void
+  setDirectorShotImageGuidance: (v: DirectorShotImageGuidance) => void
   setDirectorSkill: (skill: DirectorSkill) => void
   setDirectorResolution: (preset: ResolutionPreset) => void
   setDirectorAspectRatio: (ratio: AspectRatio) => void
+  setDirectorVideoInferenceSteps: (modelType: string, steps: number | null) => void
+  setDirectorVideoMaxShotFrames: (modelType: string, frames: number | null) => void
+  setDirectorH3TurboMode: (modelType: string, enabled: boolean) => void
   selectDirectorImageModel: (modelType: string) => void
-  selectDirectorVideoModel: (modelType: string) => void
+  selectDirectorVideoModel: (modelType: string) => Promise<void>
+  setDirectorH3Profile: (profile: 'balanced' | 'quality' | 'low_memory') => void
+  setDirectorH3ReferenceMode: (mode: 'first_frame' | 'references') => void
   directorSetLora: (mode: 'image' | 'video', activated_loras: string[], loras_multipliers: string, loraWeights: Record<string, number[]>, availableLoras: string[]) => void
   setSidebarMode: (mode: 'director' | 'studio') => void
   directorSetSpeakerMapping: (speakerId: string, name: string, role: SpeakerMapping['role']) => void
   directorInsertSpeakerMention: (speakerId: string) => void
-  directorUploadAndAnalyze: (file: File) => Promise<void>
+  directorUploadAndAnalyze: (file: File, opts?: { lyricsHint?: string; trimStart?: number; trimEnd?: number }) => Promise<void>
   // Music Video: generate-the-track source + song setup
   directorMusicSource: 'upload' | 'generate' | null
   directorSongDescription: string
@@ -1183,8 +1676,9 @@ interface AppState {
   setDirectorSongDuration: (v: number) => void
   directorWriteSong: () => Promise<void>
   directorGenerateTrack: () => Promise<void>
-  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string }) => Promise<void>
+  directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string }) => Promise<void>
   directorSetEnergyBias: (bias: number) => Promise<void>
+  directorSetPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
   directorConfirmStructure: () => void
   directorSetSceneDescription: (prompt: string) => void
   directorSetReferenceImage: (file: File | null) => void
@@ -1196,6 +1690,10 @@ interface AppState {
   directorRemoveLocationRef: (index: number) => void
   directorSetLocationRefLabel: (index: number, label: string) => void
   directorReorderLocationRefs: (from: number, to: number) => void
+  directorAddH3VideoRef: (file: File) => void
+  directorRemoveH3VideoRef: (index: number) => void
+  directorAddH3AudioRef: (file: File) => void
+  directorRemoveH3AudioRef: (index: number) => void
   directorPlanPrompts: () => Promise<void>
   directorPlanVideoPrompts: () => Promise<void>
   directorGenerateStartImages: () => Promise<void>
@@ -1209,11 +1707,22 @@ interface AppState {
   shortFilmCharacters: ShortFilmCharacter[]
   shortFilmPath: ShortFilmPath | null
   shortFilmTargetDuration: number
+  directorWritingProvider: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible'
+  directorWritingModel: string
+  directorWritingBaseUrl: string
   shortFilmNarrative: boolean
+  shortFilmVisualStyle: string
+  shortFilmPreserveVisualStyle: boolean
+  directorCharacterVisualStyle: string
+  directorAllowClipText: boolean
   shortFilmSetCharacters: (characters: ShortFilmCharacter[]) => void
   shortFilmSetPath: (path: ShortFilmPath) => void
   shortFilmSetTargetDuration: (duration: number) => void
   shortFilmSetNarrative: (v: boolean) => void
+  shortFilmSetVisualStyle: (style: string) => void
+  shortFilmSetPreserveVisualStyle: (v: boolean) => void
+  setDirectorCharacterVisualStyle: (style: string) => void
+  setDirectorAllowClipText: (v: boolean) => void
   shortFilmUploadAndAnalyze: (file: File) => Promise<void>
   shortFilmSetPacingBias: (bias: number) => Promise<void>
   shortFilmPlanPrompts: () => Promise<void>
@@ -1225,14 +1734,76 @@ interface AppState {
   llmStreamDone: boolean
 
   // Director Pipeline (server-side)
+  foregroundActivity: ForegroundActivity | null
+  setForegroundActivity: (activity: ForegroundActivity | null) => void
+  activities: Record<string, ForegroundActivity>
+  upsertActivity: (activity: ForegroundActivity) => void
+  removeActivity: (activityId: string) => void
   pipelineId: string | null
   pipelineStatus: import('../api/client').PipelineStatus | null
+  activeDirectorPipelines: import('../api/client').ActiveDirectorPipeline[]
   pipelinePolling: boolean
-  startDirectorPipeline: () => Promise<void>
+  startDirectorPipeline: (useCurrentPlans?: boolean) => Promise<void>
   continuePipeline: (updates?: { clip_plans?: Array<{ video_prompt: string; image_prompt: string }> }) => Promise<void>
   stopPipeline: () => Promise<void>
   pollPipelineStatus: () => void
 }
+
+function beginAppActivity(
+  get: () => AppState,
+  options: { kind: string; title: string; phase: string; message: string; total?: number },
+) {
+  const id = `${options.kind}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+  const report = (
+    phase: string,
+    message: string,
+    current = 0,
+    total = options.total || 0,
+    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailCurrent' | 'detailTotal' | 'tokenUsage'>>,
+  ) => get().upsertActivity({
+    id,
+    kind: options.kind,
+    title: options.title,
+    status: 'running',
+    phase,
+    message,
+    current,
+    total,
+    ...details,
+  })
+  report(options.phase, options.message, 0, options.total || 0)
+  return {
+    id,
+    report,
+    finish: (message = 'Complete') => {
+      get().upsertActivity({
+        id,
+        kind: options.kind,
+        title: options.title,
+        status: 'completed',
+        phase: 'completed',
+        message,
+        current: options.total || 1,
+        total: options.total || 1,
+      })
+      window.setTimeout(() => get().removeActivity(id), 4000)
+    },
+    fail: (error: unknown, phase = options.phase) => {
+      const message = error instanceof Error ? error.message : String(error)
+      get().upsertActivity({
+        id,
+        kind: options.kind,
+        title: options.title,
+        status: 'failed',
+        phase,
+        message,
+        error: message,
+      })
+    },
+  }
+}
+
+let directorReconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 const defaultParams: GenerateParams = {
   prompt: '',
@@ -1247,6 +1818,9 @@ const defaultParams: GenerateParams = {
   repeat_generation: 1,
   activated_loras: [],
   loras_multipliers: '',
+  skip_steps_cache_type: '',
+  skip_steps_multiplier: 0.08,
+  skip_steps_start_step_perc: 25,
   settings_version: 2.52,
 }
 
@@ -1307,6 +1881,8 @@ const BLANK_VIDEO_INPUT_PARAMS: Partial<GenerateParams> = {
   image_start: undefined,
   image_end: undefined,
   image_refs: undefined,
+  h3_ref_videos: undefined,
+  h3_ref_audios: undefined,
   frames_positions: undefined,
   injection_strength: undefined,
   video_prompt_type: '',
@@ -1321,6 +1897,7 @@ const BLANK_VIDEO_INPUT_PARAMS: Partial<GenerateParams> = {
 const resolutionMap: Record<ResolutionPreset, Record<AspectRatio, string>> = {
   'auto': {
     'auto': 'auto',
+    '21:9': 'auto',
     '16:9': 'auto',
     '9:16': 'auto',
     '1:1': 'auto',
@@ -1329,6 +1906,7 @@ const resolutionMap: Record<ResolutionPreset, Record<AspectRatio, string>> = {
   },
   '480p': {
     'auto': 'auto_480p',
+    '21:9': '1120x480',
     '16:9': '848x480',
     '9:16': '480x848',
     '1:1': '672x672',
@@ -1337,6 +1915,7 @@ const resolutionMap: Record<ResolutionPreset, Record<AspectRatio, string>> = {
   },
   '540p': {
     'auto': 'auto_540p',
+    '21:9': '1280x544',
     '16:9': '960x544',
     '9:16': '544x960',
     '1:1': '736x736',
@@ -1345,20 +1924,69 @@ const resolutionMap: Record<ResolutionPreset, Record<AspectRatio, string>> = {
   },
   '720p': {
     'auto': 'auto_720p',
+    '21:9': '1664x704',
     '16:9': '1280x720',
     '9:16': '720x1280',
     '1:1': '1024x1024',
     '4:3': '1104x832',
     '3:4': '832x1104',
   },
+  '768p': {
+    'auto': 'auto_768p',
+    '21:9': '1792x768',
+    '16:9': '1344x768',
+    '9:16': '768x1344',
+    '1:1': '768x768',
+    '4:3': '1024x768',
+    '3:4': '768x1024',
+  },
   '1080p': {
     'auto': 'auto_1080p',
+    '21:9': '2560x1088',
     '16:9': '1920x1088',
     '9:16': '1088x1920',
     '1:1': '1024x1024',
     '4:3': '1920x1088',
     '3:4': '1088x1920',
   },
+}
+
+export function resolveResolution(
+  modelOptions: ModelOptions | null,
+  preset: ResolutionPreset,
+  ratio: AspectRatio,
+): string {
+  const modelValues = modelOptions?.resolution_presets?.[preset]?.values
+  return modelValues?.[ratio]
+    || modelValues?.['16:9']
+    || resolutionMap[preset]?.[ratio]
+    || resolutionMap[preset]?.['16:9']
+    || '1280x720'
+}
+
+function findResolutionSelection(
+  resolution: string,
+  modelOptions: ModelOptions | null,
+): { preset: ResolutionPreset; ratio: AspectRatio } | null {
+  const maps: Array<Partial<Record<ResolutionPreset, { values: Partial<Record<AspectRatio, string>> }>>> = []
+  if (modelOptions?.resolution_presets) maps.push(modelOptions.resolution_presets)
+  maps.push(Object.fromEntries(
+    Object.entries(resolutionMap).map(([preset, values]) => [preset, { values }]),
+  ) as Partial<Record<ResolutionPreset, { values: Partial<Record<AspectRatio, string>> }>>)
+
+  for (const presetMap of maps) {
+    for (const [preset, config] of Object.entries(presetMap)) {
+      for (const [ratio, value] of Object.entries(config?.values || {})) {
+        if (value === resolution) {
+          return {
+            preset: preset as ResolutionPreset,
+            ratio: ratio as AspectRatio,
+          }
+        }
+      }
+    }
+  }
+  return null
 }
 
 // Memoization cache for filteredOutputs — ensures stable references
@@ -1382,6 +2010,10 @@ function computeFilteredOutputs(outputs: OutputFile[], mediaFilter: MediaFilter)
     _foCachedResult = outputs.filter(o => o.type === 'audio')
   } else if (mediaFilter === 'model3d') {
     _foCachedResult = outputs.filter(o => o.type === 'model3d')
+  } else if (mediaFilter === 'scenes') {
+    _foCachedResult = outputs.filter(o => o.type === 'scene')
+  } else if (mediaFilter === 'comics') {
+    _foCachedResult = outputs.filter(o => o.type === 'comic')
   } else if (mediaFilter === 'avatars') {
     // "Edits" filter — show outputs from any of the Edit tab sub-modes.
     // Filter by `edit_sub_mode` (set by retake/inpaint/outpaint/restyle/
@@ -1405,7 +2037,43 @@ export const useStore = create<AppState>((set, get) => ({
   // Generation mode
   generationMode: 'video',
   editSubMode: 'retake' as import('../types').EditSubMode,
-  setEditSubMode: (mode: import('../types').EditSubMode) => set({ editSubMode: mode }),
+  setEditSubMode: (mode: import('../types').EditSubMode) => {
+    const s = get()
+    const prev = s.editSubMode
+    set({ editSubMode: mode })
+    if (mode === prev || s.generationMode !== 'avatar') return
+    // Recast uses SCAIL-2 Replace; Repaint uses the proven SCAIL-2 Animate
+    // path from Studio Video/Frames. Swap recipes when moving between those
+    // modes and restore the previous LTX edit model when leaving both.
+    const current = (s.params.model_type as string) || ''
+    const isScail2 = (mt: string) => s.models.find(m => m.model_type === mt)?.architecture === 'scail2_14B'
+    const enteringScail2Edit = mode === 'recast' || mode === 'restyle'
+    const leavingScail2Edit = prev === 'recast' || prev === 'restyle'
+    if (enteringScail2Edit) {
+      const valid = mode === 'recast'
+        ? current === 'scail2_14B_recast_fast' || current === 'scail2_14B'
+        : current === 'scail2_14B_fast' || current === 'scail2_14B'
+      if (!valid) {
+        if (!leavingScail2Edit && !isScail2(current)) {
+          _preScail2AvatarModel = current
+        }
+        const preferred = mode === 'recast'
+          ? 'scail2_14B_recast_fast'
+          : 'scail2_14B_fast'
+        const target = s.models.some(m => m.model_type === preferred)
+          ? preferred
+          : s.models.some(m => m.model_type === 'scail2_14B')
+            ? 'scail2_14B'
+            : undefined
+        if (target) get().selectModel(target)
+      }
+    } else if (leavingScail2Edit && isScail2(current)) {
+      const restore = _preScail2AvatarModel && s.models.some(m => m.model_type === _preScail2AvatarModel)
+        ? _preScail2AvatarModel
+        : getDefaultModelForMode('avatar', s.families, s.models)
+      if (restore) get().selectModel(restore)
+    }
+  },
   editVideoPath: '',
   editVideoUrl: '',
   editVideoFile: null,
@@ -1418,10 +2086,62 @@ export const useStore = create<AppState>((set, get) => ({
   editAnythingLoraStrength: 1.0,
   editAnythingStartAnchor: null,
   editAnythingEndAnchor: null,
+  editRepaintFrameFile: null,
+  editRepaintFramePath: '',
+  editRepaintFrameUrl: '',
+  editRepaintMappings: [],
+  editRepaintResolutionProfile: '480p',
+  setEditRepaintFrame: (file, path, url) => set({
+    editRepaintFrameFile: file,
+    editRepaintFramePath: path,
+    editRepaintFrameUrl: url,
+  }),
+  setEditRepaintMappings: mappings => set({
+    editRepaintMappings: mappings.slice(0, 5),
+  }),
+  editRecastTarget: 'person',
+  editRecastPersonCount: 1,
+  editRecastRefFile: null,
+  editRecastRefPath: '',
+  editRecastRefUrl: '',
+  editRecastMappings: [{ ...DEFAULT_RECAST_MAPPING }],
+  editRecastRefAligned: false,
+  editRecastIsolateReference: true,
+  editRecastAutoFaceDetail: true,
+  editRecastEnhancePrompt: false,
+  editRecastProtectBystanders: false,
+  editRecastPreserveBystanders: true,
+  editRecastUseRelighting: false,
+  editRecastResolutionProfile: '480p',
+  setEditRecastMappings: mappings => set({
+    editRecastMappings: mappings,
+    editRecastTarget: mappings[0]?.target || 'person',
+    editRecastPersonCount: Math.min(5, Math.max(1, mappings.length || 1)),
+    editRecastRefFile: mappings[0]?.refFile || null,
+    editRecastRefPath: mappings[0]?.refPath || '',
+    editRecastRefUrl: mappings[0]?.refUrl || '',
+    editRecastRefAligned: mappings[0]?.referenceAlignedToSource === true,
+  }),
+  setEditRecastRef: (file, path, url, aligned = false) => set(s => ({
+    editRecastRefFile: file,
+    editRecastRefPath: path,
+    editRecastRefUrl: url,
+    editRecastRefAligned: aligned,
+    editRecastMappings: [
+      {
+        ...(s.editRecastMappings[0] || DEFAULT_RECAST_MAPPING),
+        refFile: file,
+        refPath: path,
+        refUrl: url,
+        referenceAlignedToSource: aligned,
+      },
+      ...s.editRecastMappings.slice(1),
+    ],
+  })),
   editReturnTarget: null,
   setEditAnythingStartAnchor: (path: string | null) => set({ editAnythingStartAnchor: path }),
   setEditAnythingEndAnchor: (path: string | null) => set({ editAnythingEndAnchor: path }),
-  sendFrameToImageMode: async (which: 'start' | 'end') => {
+  sendFrameToImageMode: async (which: 'start' | 'end' | 'recast' | 'repaint') => {
     const state = get()
     const clipPath = state.editVideoPath
     if (!clipPath) {
@@ -1444,20 +2164,30 @@ export const useStore = create<AppState>((set, get) => ({
     // Decide which timestamp to grab. End frame is one frame INSIDE the
     // exclusive end (at -0.04s = ~one frame at 25fps) so it matches what
     // the retake pipeline will pin during inference.
-    const tStart = which === 'start' ? startTime : Math.max(0, endTime - 0.04)
+    const tStart = which === 'end' ? Math.max(0, endTime - 0.04) : startTime
     try {
-      const res = await fetch('/api/v1/extract-frames', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          video_path: clipPath,
-          ...(which === 'start' ? { start_time: tStart } : { end_time: tStart }),
-        }),
-      })
-      if (!res.ok) throw new Error(`extract-frames failed: ${res.status}`)
-      const data = await res.json()
-      const framePath = (which === 'start' ? data.start_path : data.end_path) as string
-      const frameUrl = (which === 'start' ? data.start_url : data.end_url) as string
+      let framePath = ''
+      let frameUrl = ''
+      // Repaint can refine its existing edited frame. The first trip starts
+      // from the source trim frame; later trips start from the applied result.
+      if (which === 'repaint' && state.editRepaintFramePath) {
+        framePath = state.editRepaintFramePath
+        const frameName = framePath.replace(/\\/g, '/').split('/').pop() || ''
+        frameUrl = state.editRepaintFrameUrl || api.getFileUrl(frameName)
+      } else {
+        const res = await fetch('/api/v1/extract-frames', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            video_path: clipPath,
+            ...(which === 'end' ? { end_time: tStart } : { start_time: tStart }),
+          }),
+        })
+        if (!res.ok) throw new Error(`extract-frames failed: ${res.status}`)
+        const data = await res.json()
+        framePath = (which === 'end' ? data.end_path : data.start_path) as string
+        frameUrl = (which === 'end' ? data.end_url : data.start_url) as string
+      }
 
       // Use setGenerationMode rather than poking generationMode directly.
       // This is the proper switch — it picks the right model for image
@@ -1474,7 +2204,7 @@ export const useStore = create<AppState>((set, get) => ({
       // own useEffect picks the right imageRefType when imageRefs goes
       // from empty to populated; we leave that to it.
       const blob = await fetch(frameUrl).then(r => r.blob())
-      const file = new File([blob], `${which}_frame.png`, { type: 'image/png' })
+      const file = new File([blob], `${which}_frame.png`, { type: blob.type || 'image/png' })
       set(s => ({
         // Replace any pre-existing refs with just our extracted frame
         // for the duration of the round-trip. Restored from the
@@ -1514,7 +2244,30 @@ export const useStore = create<AppState>((set, get) => ({
     // gallery name is enough.
     const outputPath = latestImage.name
 
-    if (target.anchor === 'start') {
+    if (target.anchor === 'recast') {
+      set(s => ({
+        editRecastRefFile: null,
+        editRecastRefPath: outputPath,
+        editRecastRefUrl: latestImage.url,
+        editRecastRefAligned: true,
+        editRecastMappings: [
+          {
+            ...(s.editRecastMappings[0] || DEFAULT_RECAST_MAPPING),
+            refFile: null,
+            refPath: outputPath,
+            refUrl: latestImage.url,
+            referenceAlignedToSource: true,
+          },
+          ...s.editRecastMappings.slice(1),
+        ],
+      }))
+    } else if (target.anchor === 'repaint') {
+      set({
+        editRepaintFrameFile: null,
+        editRepaintFramePath: outputPath,
+        editRepaintFrameUrl: latestImage.url,
+      })
+    } else if (target.anchor === 'start') {
       set({ editAnythingStartAnchor: outputPath })
     } else {
       set({ editAnythingEndAnchor: outputPath })
@@ -1525,7 +2278,11 @@ export const useStore = create<AppState>((set, get) => ({
     // swap so they land back on their video model with the right LoRAs.
     get().setGenerationMode('avatar')
     set({
-      editSubMode: 'edit_anything',
+      editSubMode: target.anchor === 'recast'
+        ? 'recast'
+        : target.anchor === 'repaint'
+          ? 'restyle'
+          : 'edit_anything',
       editReturnTarget: null,
       imageRefs: target.savedImageRefs,
       imageRefType: target.savedImageRefType,
@@ -1538,7 +2295,11 @@ export const useStore = create<AppState>((set, get) => ({
     const target = get().editReturnTarget
     get().setGenerationMode('avatar')
     set({
-      editSubMode: 'edit_anything',
+      editSubMode: target?.anchor === 'recast'
+        ? 'recast'
+        : target?.anchor === 'repaint'
+          ? 'restyle'
+          : 'edit_anything',
       editReturnTarget: null,
       ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
     })
@@ -1547,7 +2308,11 @@ export const useStore = create<AppState>((set, get) => ({
     const target = get().editReturnTarget
     get().setGenerationMode('avatar')
     set({
-      editSubMode: 'edit_anything',
+      editSubMode: target?.anchor === 'recast'
+        ? 'recast'
+        : target?.anchor === 'repaint'
+          ? 'restyle'
+          : 'edit_anything',
       editReturnTarget: null,
       ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
     })
@@ -1630,6 +2395,8 @@ export const useStore = create<AppState>((set, get) => ({
   setOutpaintSourcePreservation: (v) => set({ outpaintSourcePreservation: v }),
   outpaintLoraStrength: 1.0,
   setOutpaintLoraStrength: (v) => set({ outpaintLoraStrength: v }),
+  outpaintMaskPreserving: true,
+  setOutpaintMaskPreserving: (v) => set({ outpaintMaskPreserving: v }),
   outpaintPreserveSourceAudio: true,
   setOutpaintPreserveSourceAudio: (v) => set({ outpaintPreserveSourceAudio: v }),
   outpaintLockSourcePixels: false,  // default OFF — visible rectangle seam outweighs benefit
@@ -1665,7 +2432,9 @@ export const useStore = create<AppState>((set, get) => ({
     // Determine model for target sub-mode
     const audioSubModeDefaults: Record<import('../types').AudioSubMode, string> = {
       speech: 'kugelaudio_0_open',
-      music: 'ace_step_v1_5_xl_turbo_lm_4b',
+      // XL SFT LM_4B: the premium CFG variant + strongest LM — the
+      // quality default. Turbo variants remain enabled for speed.
+      music: 'ace_step_v1_5_xl_sft_lm_4b',
       sfx: 'mmaudio_v2',
       mixer: '',  // Mixer doesn't use a model — it's an ffmpeg-based tool
     }
@@ -1694,7 +2463,7 @@ export const useStore = create<AppState>((set, get) => ({
       const s = get()
       const prev = s.generationMode
       if (prev === mode) { set({ generationMode: mode }); return }
-      const { model_type: _mt, prompt: _p, activated_loras: _al, loras_multipliers: _lm, ...paramsSnapshot } = s.params
+      const paramsSnapshot = snapshotModeParams(s.params)
       const savedModels = { ...s.selectedModelPerMode, [prev]: s.params.model_type }
       const savedParams = {
         ...s.savedParamsPerMode,
@@ -1712,7 +2481,7 @@ export const useStore = create<AppState>((set, get) => ({
         savedLoraPerMode: savedLoras,
         savedPromptPerMode: savedPrompts,
       })
-      _saveSettings({ generationMode: prev, selectedModelPerMode: savedModels, savedParamsPerMode: savedParams, savedLoraPerMode: savedLoras }, s.loraIdByFilename)
+      _saveSettings({ generationMode: prev, selectedModelPerMode: savedModels, savedParamsPerMode: savedParams, savedLoraPerMode: savedLoras, savedPromptPerMode: savedPrompts }, s.loraIdByFilename)
       return
     }
     const { families, models, generationMode: prevMode, params, selectedModelPerMode, savedLoraPerMode, savedParamsPerMode, loraWeights, availableLoras, savedPromptPerMode } = get()
@@ -1738,7 +2507,7 @@ export const useStore = create<AppState>((set, get) => ({
     // video_guide, image_refs, frames_positions, MMAudio_*, etc. — is
     // captured here so it survives a switch-and-return AND doesn't
     // leak into other modes.
-    const { model_type: _mt, prompt: _p, activated_loras: _al, loras_multipliers: _lm, ...paramsSnapshot } = params
+    const paramsSnapshot = snapshotModeParams(params)
     const savedParams = {
       ...savedParamsPerMode,
       [prevMode]: {
@@ -1778,11 +2547,11 @@ export const useStore = create<AppState>((set, get) => ({
       ? restoredSnapshot.durationSeconds as number
       : 5
     // Strip filmGrain + durationSeconds keys before applying — they don't belong in params
-    const { filmGrainIntensity: _fgi, filmGrainSaturation: _fgs, durationSeconds: _ds, ...restoredParams } = restoredSnapshot || {}
+    const restoredParams = restoreModeParams(restoredSnapshot)
     // Restore saved prompt for target mode (or empty for first visit)
     const restoredPrompt = savedPrompts[mode] ?? ''
 
-    set(_s => ({
+    set(() => ({
       generationMode: mode,
       selectedModelPerMode: savedModels,
       savedLoraPerMode: savedLoras,
@@ -1808,6 +2577,7 @@ export const useStore = create<AppState>((set, get) => ({
         activated_loras: sameModel ? restoredLora.activated_loras : [],
         loras_multipliers: sameModel ? restoredLora.loras_multipliers : '',
       },
+      h3WindowPlan: null,
       loraWeights: sameModel ? restoredLora.loraWeights : {},
       availableLoras: sameModel ? restoredLora.availableLoras : [],
     }))
@@ -1829,6 +2599,7 @@ export const useStore = create<AppState>((set, get) => ({
       selectedModelPerMode: savedModels,
       savedParamsPerMode: savedParams,
       savedLoraPerMode: savedLoras,
+      savedPromptPerMode: savedPrompts,
     }, get().loraIdByFilename)
   },
 
@@ -1837,7 +2608,14 @@ export const useStore = create<AppState>((set, get) => ({
     // Per-sub-mode isolation: remember the outgoing sub-mode BEFORE the
     // param write flips image_mode (see videoSubModeStash).
     const prevImageMode = key === 'image_mode' ? ((get().params.image_mode as number) ?? 0) : null
-    set(s => ({ params: { ...s.params, [key]: value } }))
+    const invalidatesH3Plan = [
+      'prompt', 'model_type', 'resolution', 'image_start', 'image_end',
+      'image_mode',
+    ].includes(String(key))
+    set(s => ({
+      params: { ...s.params, [key]: value },
+      ...(invalidatesH3Plan ? { h3WindowPlan: null } : {}),
+    }))
     // Auto-parse speaker names from prompt whenever audio mode has at least
     // one voice slot. Previously gated on audio_prompt_type.includes('B')
     // (multi-voice only), but the user expects single-voice ("Peter: hello")
@@ -1914,22 +2692,24 @@ export const useStore = create<AppState>((set, get) => ({
         set({ clips: [], singlePromptMode: false })
       }
     }
-    // Persist the changed param to the current mode's snapshot so
-    // it survives a mode switch + return AND is restored across page
-    // reloads. Skip keys that are tracked in their own per-mode
-    // structures (model_type, prompt, LoRA fields) to avoid double-
-    // bookkeeping. Everything else — repeat_generation, negative_prompt,
+    // Snapshot the changed param into the current mode's IN-MEMORY
+    // record so it survives a mode switch + return within this session.
+    // Skip keys that are tracked in their own per-mode structures
+    // (model_type, prompt, LoRA fields) to avoid double-bookkeeping.
+    // Everything else — repeat_generation, negative_prompt,
     // num_inference_steps, video_prompt_type, video_guide, image_refs,
     // frames_positions, MMAudio_*, etc. — gets snapshotted here.
     //
-    // The previous version only persisted 4 specific keys, which meant
-    // settings like repeat_generation leaked between modes (set 10 in
-    // image, switch to video, video also tries to make 10) AND were
-    // lost across reloads. This generic version eliminates both bugs.
+    // Deliberately NOT written to localStorage: a page refresh starts
+    // the working state (prompt, seed, LoRA selection, Advanced values)
+    // from the model's defaults. v1.2.0 persisted every edit across
+    // refreshes and users found the stale text/seeds surprising —
+    // in-session mode-switch persistence is the wanted behavior,
+    // refresh is a clean slate (see loadModels).
     if (key !== 'model_type' && key !== 'prompt' && key !== 'activated_loras' && key !== 'loras_multipliers') {
       const s = get()
       const mode = s.generationMode
-      const { model_type: _mt, prompt: _p, activated_loras: _al, loras_multipliers: _lm, ...paramsSnapshot } = s.params
+      const paramsSnapshot = snapshotModeParams(s.params)
       const updatedSavedParams = {
         ...s.savedParamsPerMode,
         [mode]: {
@@ -1939,15 +2719,11 @@ export const useStore = create<AppState>((set, get) => ({
         },
       }
       set({ savedParamsPerMode: updatedSavedParams })
-      _saveSettings({
-        generationMode: s.generationMode,
-        selectedModelPerMode: s.selectedModelPerMode,
-        savedParamsPerMode: updatedSavedParams,
-        savedLoraPerMode: s.savedLoraPerMode,
-      }, s.loraIdByFilename)
     }
   },
-  setParams: (partial) => set(s => ({ params: { ...s.params, ...partial } })),
+  setParams: (partial) => {
+    set(s => ({ params: { ...s.params, ...partial } }))
+  },
 
   settingsOpen: false,
   toggleSettings: () => set(s => ({ settingsOpen: !s.settingsOpen })),
@@ -1956,13 +2732,21 @@ export const useStore = create<AppState>((set, get) => ({
   toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
-  // Theme — initial value reads from localStorage so it matches what
-  // the inline script in index.html applied to <html>. setTheme writes
-  // both to the DOM and localStorage via applyTheme.
-  theme: getStoredTheme() as ThemeId,
-  setTheme: (theme) => {
-    applyTheme(theme)
-    set({ theme })
+  // Theme — initial value reads from localStorage (with legacy
+  // single-theme migration) so it matches what the inline script in
+  // index.html applied to <html>. The setters write to the DOM and
+  // localStorage via applyThemePrefs, which also installs the OS
+  // scheme listener that makes 'auto' live-switch.
+  themePrefs: getStoredPrefs(),
+  setThemeMode: (mode) => {
+    const prefs = { ...get().themePrefs, mode }
+    applyThemePrefs(prefs)
+    set({ themePrefs: prefs })
+  },
+  setThemeFamily: (family) => {
+    const prefs = { ...get().themePrefs, family }
+    applyThemePrefs(prefs)
+    set({ themePrefs: prefs })
   },
 
   // CivitAI LoRA Browser
@@ -1978,25 +2762,101 @@ export const useStore = create<AppState>((set, get) => ({
   dashboardLoading: false,
   setDashboardOpen: (open) => {
     set({ dashboardOpen: open })
-    if (open) get().loadPipelineList()
+    if (open) {
+      get().loadPipelineList()
+      const selected = get().dashboardSelectedPipeline
+      if (selected) get().loadSavedPipeline(selected.pipeline_id)
+    }
   },
   loadPipelineList: async () => {
+    const loadToken = ++_dashboardPipelineListLoadToken
     try {
       const { pipelines } = await api.fetchPipelineList()
+      if (loadToken !== _dashboardPipelineListLoadToken) return
       set({ dashboardPipelineList: pipelines })
+      // Opening Productions should take the user straight back to live work,
+      // even if an older production was selected the last time it was open.
+      const active = pipelines.find(pipeline => pipeline.status === 'running')
+      if (active && get().dashboardSelectedPipeline?.pipeline_id !== active.id) {
+        await get().loadSavedPipeline(active.id)
+      }
+
+      // The repair worker belongs to the server, so a browser reload must
+      // rediscover active operations and resume UI polling without requiring
+      // the Dashboard to be opened first. Keep discovery separate from the
+      // selected pipeline so bootstrapping never opens or changes the overlay.
+      for (const item of pipelines) {
+        if (!item.repair_status || !DIRECTOR_REPAIR_ACTIVE.has(item.repair_status)) continue
+        if (_directorRepairPolls.has(item.id) || _directorRepairDiscoveries.has(item.id)) continue
+
+        const discovery = {}
+        _directorRepairDiscoveries.set(item.id, discovery)
+        void api.fetchSavedPipeline(item.id).then(pipeline => {
+          if (_directorRepairDiscoveries.get(item.id) !== discovery) return
+          if (_directorRepairPolls.has(item.id)) return
+
+          const repair = pipeline.repair
+          if (_repairNeedsPolling(repair)) {
+            get().pollPipelineRepair(item.id, repair!.operation_id)
+            return
+          }
+
+          // The operation may have finished between the list and detail
+          // requests. Reflect that terminal state and refresh newly-created
+          // media instead of waiting for another Dashboard visit.
+          set(s => ({
+            dashboardPipelineList: s.dashboardPipelineList.map(entry =>
+              entry.id === item.id
+                ? { ...entry, repair_status: repair?.status || null }
+                : entry),
+          }))
+          void get().loadOutputs()
+        }).catch(e => {
+          console.warn(`Failed to reconnect Director repair for ${item.id}:`, e)
+        }).finally(() => {
+          if (_directorRepairDiscoveries.get(item.id) === discovery) {
+            _directorRepairDiscoveries.delete(item.id)
+          }
+        })
+      }
     } catch (e) {
+      if (loadToken !== _dashboardPipelineListLoadToken) return
       console.error('Failed to load pipeline list:', e)
     }
   },
   loadSavedPipeline: async (pid) => {
+    const loadToken = ++_dashboardPipelineLoadToken
     set({ dashboardLoading: true })
     try {
       const pipeline = await api.fetchSavedPipeline(pid)
+      if (loadToken !== _dashboardPipelineLoadToken) return
       set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      if (_repairNeedsPolling(pipeline.repair)) {
+        get().pollPipelineRepair(pid, pipeline.repair!.operation_id)
+      }
     } catch (e) {
+      if (loadToken !== _dashboardPipelineLoadToken) return
       console.error('Failed to load pipeline:', e)
       set({ dashboardLoading: false })
     }
+  },
+  deletePipeline: async (pid) => {
+    // Clear the selection AND drop the pid from the list in the same
+    // update: the dashboard's auto-load effect selects pipelineList[0]
+    // whenever selection is null, so a stale list would immediately
+    // re-fetch the pipeline being deleted (re-mounting its <img>/<video>
+    // elements and re-locking the files on Windows).
+    _dashboardPipelineLoadToken += 1
+    _dashboardPipelineListLoadToken += 1
+    set(s => ({
+      dashboardSelectedPipeline: null,
+      dashboardPipelineList: s.dashboardPipelineList.filter(p => p.id !== pid),
+    }))
+    await api.deletePipeline(pid)
+    await get().loadPipelineList()
+    // Pipeline media were gallery items too — refresh the feed.
+    get().loadOutputs()
+    get().loadWorkspaces()
   },
   tagClip: async (pid, clipIndex, tag) => {
     try {
@@ -2014,6 +2874,96 @@ export const useStore = create<AppState>((set, get) => ({
       console.error('Failed to tag clip:', e)
     }
   },
+  startPipelineRepair: async (pid: string) => {
+    const { repair } = await api.startPipelineRepair(pid)
+    set(s => {
+      const dashboardPipelineList = s.dashboardPipelineList.map(item =>
+        item.id === pid ? { ...item, repair_status: repair.status } : item)
+      if (!s.dashboardSelectedPipeline || s.dashboardSelectedPipeline.pipeline_id !== pid) {
+        return { dashboardPipelineList }
+      }
+      return {
+        dashboardPipelineList,
+        dashboardSelectedPipeline: {
+          ...s.dashboardSelectedPipeline,
+          repair,
+        },
+      }
+    })
+    get().pollPipelineRepair(pid, repair.operation_id)
+    return repair
+  },
+  cancelPipelineRepair: async (pid: string) => {
+    const { repair } = await api.cancelPipelineRepair(pid)
+    set(s => {
+      const dashboardPipelineList = s.dashboardPipelineList.map(item =>
+        item.id === pid ? { ...item, repair_status: repair.status } : item)
+      if (!s.dashboardSelectedPipeline || s.dashboardSelectedPipeline.pipeline_id !== pid) {
+        return { dashboardPipelineList }
+      }
+      return {
+        dashboardPipelineList,
+        dashboardSelectedPipeline: {
+          ...s.dashboardSelectedPipeline,
+          repair,
+        },
+      }
+    })
+    get().pollPipelineRepair(pid, repair.operation_id)
+    return repair
+  },
+  pollPipelineRepair: (pid: string, operationId: string) => {
+    const existing = _directorRepairPolls.get(pid)
+    if (existing?.operationId === operationId) return
+    if (existing) _stopDirectorRepairPoll(pid)
+
+    const poll: DirectorRepairPoll = { operationId, timer: null }
+    _directorRepairPolls.set(pid, poll)
+
+    const tick = async () => {
+      if (_directorRepairPolls.get(pid) !== poll) return
+      poll.timer = null
+      try {
+        const pipeline = await api.fetchSavedPipeline(pid)
+        if (_directorRepairPolls.get(pid) !== poll) return
+
+        const repair = pipeline.repair
+        set(s => {
+          const dashboardPipelineList = s.dashboardPipelineList.map(item =>
+            item.id === pid ? { ...item, repair_status: repair?.status || null } : item)
+          if (!s.dashboardSelectedPipeline || s.dashboardSelectedPipeline.pipeline_id !== pid) {
+            return { dashboardPipelineList }
+          }
+          return { dashboardPipelineList, dashboardSelectedPipeline: pipeline }
+        })
+
+        if (repair?.operation_id !== operationId) {
+          _stopDirectorRepairPoll(pid)
+          if (_repairNeedsPolling(repair)) {
+            get().pollPipelineRepair(pid, repair!.operation_id)
+          } else {
+            void get().loadPipelineList()
+            void get().loadOutputs()
+          }
+          return
+        }
+        if (!_repairNeedsPolling(repair)) {
+          _stopDirectorRepairPoll(pid)
+          void get().loadPipelineList()
+          void get().loadOutputs()
+          return
+        }
+      } catch (e) {
+        console.warn(`Director repair poll failed for ${pid}; retrying:`, e)
+      }
+
+      if (_directorRepairPolls.get(pid) === poll) {
+        poll.timer = window.setTimeout(tick, DIRECTOR_REPAIR_POLL_MS)
+      }
+    }
+
+    void tick()
+  },
   rerunClipImage: async (pid: string, clipIndex: number, prompt?: string) => {
     set({ dashboardLoading: true })
     try {
@@ -2021,6 +2971,9 @@ export const useStore = create<AppState>((set, get) => ({
       // Refresh the pipeline to get updated state
       const pipeline = await api.fetchSavedPipeline(pid)
       set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      // New files (rerun clip / rejoin video) land in the outputs folder —
+      // refresh the gallery so they appear without a browser reload.
+      get().loadOutputs()
       return result
     } catch (e) {
       console.error('Re-run image failed:', e)
@@ -2034,9 +2987,26 @@ export const useStore = create<AppState>((set, get) => ({
       const result = await api.rerunClipVideo(pid, clipIndex, prompt)
       const pipeline = await api.fetchSavedPipeline(pid)
       set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      // New files (rerun clip / rejoin video) land in the outputs folder —
+      // refresh the gallery so they appear without a browser reload.
+      get().loadOutputs()
       return result
     } catch (e) {
       console.error('Re-run video failed:', e)
+      set({ dashboardLoading: false })
+      throw e
+    }
+  },
+  rerunH3Segment: async (pid: string, clipIndex: number, segmentIndex: number, prompt?: string) => {
+    set({ dashboardLoading: true })
+    try {
+      const result = await api.rerunH3Segment(pid, clipIndex, segmentIndex, prompt)
+      const pipeline = await api.fetchSavedPipeline(pid)
+      await get().loadOutputs()
+      set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      return result
+    } catch (e) {
+      console.error('H3 segment regeneration failed:', e)
       set({ dashboardLoading: false })
       throw e
     }
@@ -2047,6 +3017,9 @@ export const useStore = create<AppState>((set, get) => ({
       const result = await api.rejoinPipeline(pid)
       const pipeline = await api.fetchSavedPipeline(pid)
       set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      // New files (rerun clip / rejoin video) land in the outputs folder —
+      // refresh the gallery so they appear without a browser reload.
+      get().loadOutputs()
       return result
     } catch (e) {
       console.error('Rejoin failed:', e)
@@ -2058,7 +3031,14 @@ export const useStore = create<AppState>((set, get) => ({
     // Kick the crashed pipeline back into running server-side, then close
     // the Dashboard and reconnect the Director view to it so progress shows.
     await api.resumePipeline(pid)
-    set({ dashboardOpen: false, pipelineId: pid })
+    set({
+      dashboardOpen: false,
+      pipelineId: pid,
+      pipelineStatus: null,
+      pipelinePolling: true,
+      directorLoading: true,
+      directorError: null,
+    })
     get().pollPipelineStatus()
   },
 
@@ -2121,6 +3101,7 @@ export const useStore = create<AppState>((set, get) => ({
       loraWeights,
       availableLoras: [],
       selectedModelPerMode: { ...s.selectedModelPerMode, [mode]: recipe.model_type },
+      h3WindowPlan: null,
     }))
 
     if (recipe.model_type) {
@@ -2162,6 +3143,7 @@ export const useStore = create<AppState>((set, get) => ({
       model_id: 0, version_id: 0, trained_words: [],
       model_name: lora.filename, images: [],
     })
+    get().pollCivitAIDownloads()
   },
   loadDirectorFromPipeline: async (pid) => {
     try {
@@ -2184,6 +3166,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review_video',
         directorAutoMode: pipeline.auto_mode,
         directorSeamless: pipeline.seamless,
+        directorShotImageGuidance: pipeline.shot_image_guidance || 'auto',
         dashboardOpen: true,
         dashboardSelectedPipeline: pipeline,
       })
@@ -2199,6 +3182,9 @@ export const useStore = create<AppState>((set, get) => ({
   setLoraBrowserOpen: (open, arch) => {
     if (open) {
       set({ loraBrowserOpen: true, loraBrowserArch: arch || null, civitSearchResults: [], civitSearchCursor: null, civitSelectedModel: null })
+      // Adopt downloads started by URL imports, recipes, or another browser
+      // session instead of assuming this store initiated every transfer.
+      get().pollCivitAIDownloads()
     } else {
       set({ loraBrowserOpen: false })
       // Refresh LoRA list after closing (may have downloaded new ones)
@@ -2259,18 +3245,83 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   pollCivitAIDownloads: () => {
+    // Mark every invocation, including calls made while the singleton loop is
+    // awaiting an older request. The active loop consumes this before exit
+    // and takes a new snapshot that was initiated after the caller arrived.
+    _civitDownloadPollRequested = true
+    if (_civitDownloadPollTask) return
+
+    const controller = new AbortController()
+    _civitDownloadPollController = controller
     const poll = async () => {
+      let consecutiveErrors = 0
       try {
-        const { downloads } = await api.fetchCivitAIDownloads()
-        set({ civitDownloads: downloads })
-        if (downloads.some(d => d.status === 'downloading')) {
-          setTimeout(poll, 2000)
+        while (!controller.signal.aborted) {
+          _civitDownloadPollRequested = false
+          try {
+            const { downloads } = await api.fetchCivitAIDownloads()
+            consecutiveErrors = 0
+            set({ civitDownloads: downloads })
+
+            // Checkpoint downloads are registered on the server before their
+            // terminal record is published. Refresh here, in the singleton
+            // poller, so navigating away from ModelDetail cannot skip it and
+            // a Content-Disposition filename change cannot break matching.
+            const completedCheckpoints = downloads.filter(download =>
+              download.status === 'completed'
+              && !!download.model_type
+              && !_civitRefreshedCheckpointDownloads.has(download.id)
+            )
+            if (completedCheckpoints.length > 0) {
+              try {
+                await api.reloadModels()
+                await get().loadModels()
+                completedCheckpoints.forEach(download => {
+                  _civitRefreshedCheckpointDownloads.add(download.id)
+                })
+              } catch (error) {
+                // Keep the IDs unmarked so a later poll retries the refresh.
+                console.warn('Checkpoint model refresh failed; will retry:', error)
+              }
+            }
+
+            // A caller joined while this request was in flight. Its freshness
+            // guarantee requires another request, even when this response has
+            // no active/recent downloads and would normally end the loop.
+            if (_civitDownloadPollRequested) continue
+
+            // Keep taking snapshots while work is active and through the
+            // completed row's 30-second display window. This guarantees a
+            // caller that joins late still observes the terminal record.
+            if (!downloads.some(download => _downloadNeedsPolling(download, Date.now()))) return
+            await _waitForDownloadPoll(CIVIT_DOWNLOAD_POLL_MS, controller.signal)
+          } catch (error) {
+            if (controller.signal.aborted) return
+            consecutiveErrors += 1
+            if (_civitDownloadPollRequested) continue
+            const knownWork = get().civitDownloads.some(download =>
+              _downloadNeedsPolling(download, Date.now())
+            )
+            // Retry transient failures while the browser is open or known
+            // work is active. A background adoption probe gets three retries
+            // before yielding; a later caller can safely start a fresh loop.
+            if (!get().loraBrowserOpen && !knownWork && consecutiveErrors > 3) {
+              console.warn('Download polling paused after repeated errors:', error)
+              return
+            }
+            const retryMs = Math.min(10_000, 1000 * (2 ** Math.min(consecutiveErrors - 1, 3)))
+            await _waitForDownloadPoll(retryMs, controller.signal)
+          }
         }
-      } catch {
-        // silent
+      } finally {
+        if (_civitDownloadPollController === controller) {
+          _civitDownloadPollController = null
+          _civitDownloadPollTask = null
+        }
       }
     }
-    poll()
+
+    _civitDownloadPollTask = poll()
   },
 
   // Models & families
@@ -2279,6 +3330,7 @@ export const useStore = create<AppState>((set, get) => ({
   modelsLoaded: false,
   enabledModels: _loadEnabledModels() ?? new Set(DEFAULT_ENABLED_MODELS),
   toggleModelEnabled: (modelType) => {
+    _markMatureModelsInitialized(get().models, [modelType])
     set(s => {
       const next = new Set(s.enabledModels)
       if (next.has(modelType)) next.delete(modelType)
@@ -2288,11 +3340,13 @@ export const useStore = create<AppState>((set, get) => ({
     })
   },
   resetEnabledModels: () => {
+    _markMatureModelsInitialized(get().models)
     const next = new Set(DEFAULT_ENABLED_MODELS)
     _saveEnabledModels(next)
     set({ enabledModels: next })
   },
   setAllModelsEnabled: (enabled) => {
+    _markMatureModelsInitialized(get().models)
     if (enabled) {
       const all = new Set(get().models.map(m => m.model_type))
       _saveEnabledModels(all)
@@ -2302,6 +3356,18 @@ export const useStore = create<AppState>((set, get) => ({
       _saveEnabledModels(empty)
       set({ enabledModels: empty })
     }
+  },
+  setModelsEnabled: (modelTypes, enabled) => {
+    _markMatureModelsInitialized(get().models, modelTypes)
+    set(s => {
+      const next = new Set(s.enabledModels)
+      for (const mt of modelTypes) {
+        if (enabled) next.add(mt)
+        else next.delete(mt)
+      }
+      _saveEnabledModels(next)
+      return { enabledModels: next }
+    })
   },
   // Open Settings → Performance and ask the Enabled Models section to
   // expand + scroll to the given mode (fired by the ModelSelector hint).
@@ -2318,26 +3384,129 @@ export const useStore = create<AppState>((set, get) => ({
       // /api/v1/models already lists them (family included) with real
       // download state, so re-adding them from the capabilities endpoint
       // would duplicate every variant in the selectors.
-      const data = await api.fetchModels()
+      const shouldHydrateVisibility = !_modelVisibilityHydrated
+      const [data, visibility] = await Promise.all([
+        api.fetchModels(),
+        shouldHydrateVisibility
+          ? api.fetchModelVisibility().catch(error => {
+              console.warn('Failed to load model visibility:', error)
+              return null
+            })
+          : Promise.resolve(null),
+      ])
       const families = data.families
-      const backendModels = data.models.map(m => ({
-        model_type: m.model_type,
-        name: m.name,
-        family: m.family,
-        architecture: m.architecture,
-        is_i2v: m.is_i2v,
-        is_t2v: m.is_t2v,
+      // Keep the complete backend capability record. Director publishes a
+      // stricter per-workflow contract than Studio; rebuilding model objects
+      // field-by-field used to discard that metadata and leave both Director
+      // selectors empty even though compatible models were enabled.
+      const backendModels: ModelDef[] = data.models.map(m => ({
+        ...m,
         guidance_max_phases: m.guidance_max_phases ?? 1,
         fps: m.fps ?? 16,
         is_downloaded: m.is_downloaded ?? false,
         nsfw_only: m.nsfw_only ?? false,
         shared_cache_group: m.shared_cache_group,
+        tool_only: m.tool_only ?? false,
       }))
       // Inject models maintained by Maestro services alongside backend models.
       const models = [...backendModels, ...SFX_VIRTUAL_MODELS]
 
-      // Hydrate persisted per-mode settings from localStorage
+      // Pinokio can assign a different web-server port on every launch.
+      // Browser localStorage is origin-bound, so hydrate durable visibility
+      // once from the server config and keep localStorage only as a
+      // migration/cache layer.
+      if (shouldHydrateVisibility && visibility) {
+        let restoredModels: Set<string>
+        if (visibility.configured) {
+          restoredModels = new Set(visibility.enabled_models)
+          _initializedMatureModels = new Set(
+            visibility.initialized_mature_models,
+          )
+          _modelVisibilityDefaultsVersion = (
+            visibility.defaults_version || 1
+          )
+        } else {
+          const legacyModels = _loadEnabledModels()
+          restoredModels = legacyModels ?? new Set(DEFAULT_ENABLED_MODELS)
+          const legacyDefaultsVersion = parseInt(
+            localStorage.getItem(DEFAULTS_VERSION_KEY) || '',
+            10,
+          )
+          _modelVisibilityDefaultsVersion = legacyModels
+            ? (legacyDefaultsVersion || 1)
+            : DEFAULTS_VERSION
+          // An existing browser whitelist is an explicit snapshot. Mark the
+          // current Mature entries initialized so migration cannot re-enable
+          // one the user deliberately disabled.
+          _initializedMatureModels = legacyModels
+            ? new Set(
+                models
+                  .filter(model => model.nsfw_only)
+                  .map(model => model.model_type),
+              )
+            : new Set()
+        }
+        _modelVisibilityHydrated = true
+        set({ enabledModels: restoredModels })
+        if (!visibility.configured) _saveEnabledModels(restoredModels)
+      }
+
+      // One-time curated-defaults upgrade for existing installs (see
+      // DEFAULTS_VERSION). Fresh installs already start from the full
+      // DEFAULT_ENABLED_MODELS list; for them this only stamps the
+      // version key.
+      let migrateMusicDefault = false
+      try {
+        const storedVer = _modelVisibilityHydrated
+          ? _modelVisibilityDefaultsVersion
+          : (
+              parseInt(
+                localStorage.getItem(DEFAULTS_VERSION_KEY) || '1',
+                10,
+              ) || 1
+            )
+        if (storedVer < DEFAULTS_VERSION) {
+          const additions: string[] = []
+          for (let v = storedVer + 1; v <= DEFAULTS_VERSION; v++) {
+            additions.push(...(DEFAULTS_ADDED_IN[v] || []))
+          }
+          const present = additions.filter(id => models.some(m => m.model_type === id))
+          if (present.length > 0) {
+            set(s => {
+              const next = new Set(s.enabledModels)
+              present.forEach(id => next.add(id))
+              _saveEnabledModels(next)
+              return { enabledModels: next }
+            })
+          }
+          migrateMusicDefault = storedVer < 2
+          _modelVisibilityDefaultsVersion = DEFAULTS_VERSION
+          localStorage.setItem(DEFAULTS_VERSION_KEY, String(DEFAULTS_VERSION))
+          _saveEnabledModels(get().enabledModels)
+        }
+      } catch { /* localStorage blocked — defaults only apply this session */ }
+
+      // Hydrate persisted per-mode settings from localStorage.
+      //
+      // Deliberately PARTIAL: only the last generation mode and the
+      // per-mode model selections survive a page refresh. The working
+      // state — prompt text and Advanced settings (seed, steps, LoRA
+      // selection, …) — starts fresh from the model's defaults on every
+      // load. The per-mode snapshots (savedParamsPerMode /
+      // savedLoraPerMode / savedPromptPerMode) still carry edits across
+      // MODE SWITCHES within a session, in-memory only. v1.2.0 restored
+      // them here on refresh; stale text/seeds/LoRAs re-appearing after
+      // a reload felt wrong, so a refresh is a clean slate again.
       const saved = _loadSettings()
+      // v2 migration: users whose saved audio model IS the old music
+      // default follow it to the new default (see NEW_MUSIC_DEFAULT).
+      // (The old-model-params concern the migration used to handle is
+      // gone: saved params no longer rehydrate, and the defaults
+      // hydration below runs on every boot.)
+      if (migrateMusicDefault && saved?.selectedModelPerMode?.audio === OLD_MUSIC_DEFAULT
+          && models.some(m => m.model_type === NEW_MUSIC_DEFAULT)) {
+        saved.selectedModelPerMode = { ...saved.selectedModelPerMode, audio: NEW_MUSIC_DEFAULT }
+      }
       let mode = get().generationMode
       let initialModelType: string
 
@@ -2349,24 +3518,33 @@ export const useStore = create<AppState>((set, get) => ({
         initialModelType = savedModel && models.some(m => m.model_type === savedModel)
           ? savedModel
           : getDefaultModelForMode(mode, families, models)
-        // Restore saved params for this mode
-        const savedParams = saved.savedParamsPerMode?.[mode]
+        const bootedIntoRecast = mode === 'avatar'
+          && (initialModelType === 'scail2_14B_recast_fast' || initialModelType === 'scail2_14B')
+        const bootedIntoRepaint = mode === 'avatar'
+          && initialModelType === 'scail2_14B_fast'
 
         set(s => ({
           families,
           models,
           modelsLoaded: true,
           generationMode: mode,
-          selectedModelPerMode: saved.selectedModelPerMode || {},
-          savedParamsPerMode: saved.savedParamsPerMode || {},
-          savedLoraPerMode: saved.savedLoraPerMode || {},
-          // Stash the lora_id → filename snapshot from disk so the upcoming
-          // refreshLoraIdMap() call can reconcile filename renames since save.
-          _loraFilenameSnapshotAtLoad: saved._loraFilenameSnapshot || {},
+          ...(bootedIntoRecast
+            ? { editSubMode: 'recast' as const }
+            : bootedIntoRepaint
+              ? { editSubMode: 'restyle' as const }
+              : {}),
+          // Seed the VALIDATED boot model into the map (the saved entry
+          // may point at a removed model) — _applyModelDefaults' race
+          // guard compares against selectedModelPerMode[mode].
+          selectedModelPerMode: { ...(saved.selectedModelPerMode || {}), [mode]: initialModelType },
+          // Mode-shaping mirrored from setGenerationMode: booting into
+          // image mode needs image_mode 1 + Auto resolution. These used
+          // to arrive via the restored params snapshot.
+          ...(mode === 'image' ? { resolutionPreset: 'auto' as ResolutionPreset, aspectRatio: 'auto' as AspectRatio } : {}),
           params: {
             ...s.params,
             model_type: initialModelType || s.params.model_type,
-            ...(savedParams || {}),
+            ...(mode === 'image' ? { image_mode: 1 } : {}),
           },
         }))
       } else {
@@ -2375,11 +3553,21 @@ export const useStore = create<AppState>((set, get) => ({
           families,
           models,
           modelsLoaded: true,
-          params: { ...s.params, model_type: initialModelType || s.params.model_type },
+          selectedModelPerMode: { [mode]: initialModelType },
+          ...(mode === 'image' ? { resolutionPreset: 'auto' as ResolutionPreset, aspectRatio: 'auto' as AspectRatio } : {}),
+          params: {
+            ...s.params,
+            model_type: initialModelType || s.params.model_type,
+            ...(mode === 'image' ? { image_mode: 1 } : {}),
+          },
         }))
       }
 
-      // Load LoRAs and model options for the initial model
+      // Load LoRAs, model options, and tuned defaults for the initial
+      // model. The defaults hydration (steps, guidance, LM sampling…)
+      // must run on every boot now that saved params don't rehydrate —
+      // without it the sliders would show INITIAL_PARAMS' generic values
+      // instead of the model's.
       const mt = initialModelType || get().params.model_type
       if (mt) {
         // Restore saved LoRA state for this mode if the model matches
@@ -2399,6 +3587,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (!sfxModelTypes.has(mt) && mode !== 'model3d') {
           get().loadLoras(mt)
           get().loadModelOptions(mt)
+          _applyModelDefaults(get, set, mt)
         }
       }
       // Refresh the lora_id ↔ filename map from /installed and reconcile
@@ -2407,28 +3596,20 @@ export const useStore = create<AppState>((set, get) => ({
       // filename without user intervention).
       get().refreshLoraIdMap()
 
-      // Cold-start case for nsfw_only auto-enable: if Mature Mode is
-      // already on (loaded from server config), make sure all nsfw_only
-      // models are in enabledModels. updateServicesConfig handles the
-      // toggle-on path, but on first launch / page refresh the persisted
-      // enabledModels set may pre-date the nsfw_only models existing in
-      // the registry — without this sweep they'd be hidden from selectors
-      // until the user manually flips Mature Mode off and back on.
+      // Auto-enable each Mature model once, then preserve an explicit
+      // disable. The initialized IDs live in the same server-side visibility
+      // record, so a changing Pinokio port cannot reset this decision.
       const cfg = get().servicesConfig
-      if (cfg?.nsfw_mode) {
-        const nsfwModels = models.filter(m => m.nsfw_only).map(m => m.model_type)
-        if (nsfwModels.length > 0) {
-          set(s => {
-            const next = new Set(s.enabledModels)
-            let changed = false
-            for (const mt of nsfwModels) {
-              if (!next.has(mt)) { next.add(mt); changed = true }
-            }
-            if (!changed) return s
-            _saveEnabledModels(next)
-            return { enabledModels: next }
-          })
-        }
+      if (cfg?.nsfw_mode && _modelVisibilityHydrated) {
+        set(s => {
+          const next = _enableUninitializedMatureModels(
+            models,
+            s.enabledModels,
+          )
+          if (!next) return s
+          _saveEnabledModels(next)
+          return { enabledModels: next }
+        })
       }
     } catch (e) {
       console.error('Failed to load models:', e)
@@ -2438,41 +3619,74 @@ export const useStore = create<AppState>((set, get) => ({
   resolutionPreset: '720p',
   setResolutionPreset: (preset) => {
     const ratio = get().aspectRatio
-    const resolution = resolutionMap[preset]?.[ratio] || resolutionMap[preset]['16:9']
+    const resolution = resolveResolution(get().modelOptions, preset, ratio)
     set(s => ({
       resolutionPreset: preset,
       params: { ...s.params, resolution },
+      h3WindowPlan: null,
     }))
   },
 
   aspectRatio: '16:9',
   setAspectRatio: (ratio) => {
     const preset = get().resolutionPreset
-    const resolution = resolutionMap[preset]?.[ratio] || resolutionMap[preset]['16:9']
+    const resolution = resolveResolution(get().modelOptions, preset, ratio)
     set(s => ({
       aspectRatio: ratio,
       params: { ...s.params, resolution },
+      h3WindowPlan: null,
     }))
   },
 
   durationSeconds: 5,
   setDurationSeconds: (s) => {
-    const fps = get().modelOptions?.fps ?? 16
-    const frames = Math.round(s * fps)
+    const options = get().modelOptions
+    const fps = options?.fps ?? 16
+    const minimum = Math.max(1, (options?.frames_minimum || fps) / fps)
+    const nativeMaximum = options?.frames_maximum
+      ? options.frames_maximum / fps
+      : null
+    const maximum = options?.sliding_window || nativeMaximum == null
+      ? Number.POSITIVE_INFINITY
+      : nativeMaximum
+    let seconds = Math.min(maximum, Math.max(minimum, s))
+    if (
+      options?.sliding_window
+      && nativeMaximum
+      && seconds <= Math.round(nativeMaximum * 10) / 10
+    ) {
+      seconds = Math.min(seconds, nativeMaximum)
+    }
+    const frames = alignFrameCount(Math.round(seconds * fps), options)
     set(state => ({
-      durationSeconds: s,
+      durationSeconds: seconds,
       params: { ...state.params, video_length: frames },
+      h3WindowPlan: null,
     }))
     get().syncClipCount()
   },
 
+  guideVideoFps: null,
+  setGuideVideoFps: (fps) => set({ guideVideoFps: fps }),
+
   slidingWindowSeconds: 5,
   setSlidingWindowSeconds: (s) => {
-    const fps = get().modelOptions?.fps ?? 16
-    const frames = Math.round(s * fps)
+    const options = get().modelOptions
+    const fps = options?.fps ?? 16
+    const swDefaults = options?.sliding_window_defaults
+    let frames = Math.round(s * fps)
+    if (swDefaults) {
+      const minimum = swDefaults.window_min ?? 1
+      const maximum = swDefaults.window_max ?? frames
+      const step = Math.max(1, swDefaults.window_step ?? 1)
+      frames = minimum + Math.round((frames - minimum) / step) * step
+      frames = Math.max(minimum, Math.min(maximum, frames))
+    }
+    const seconds = frames / fps
     set(state => ({
-      slidingWindowSeconds: s,
+      slidingWindowSeconds: seconds,
       params: { ...state.params, sliding_window_size: frames },
+      h3WindowPlan: null,
     }))
     get().syncClipCount()
   },
@@ -2482,10 +3696,14 @@ export const useStore = create<AppState>((set, get) => ({
     set(state => ({
       slidingWindowOverlap: frames,
       params: { ...state.params, sliding_window_overlap: frames },
+      h3WindowPlan: null,
     }))
   },
   slidingWindowLocked: false,
-  setSlidingWindowLocked: (locked) => set({ slidingWindowLocked: locked }),
+  setSlidingWindowLocked: (locked) => set({
+    slidingWindowLocked: locked,
+    h3WindowPlan: null,
+  }),
 
   outputCount: 1,
   setOutputCount: (n) => set(s => ({
@@ -2498,10 +3716,12 @@ export const useStore = create<AppState>((set, get) => ({
   setStartImage: (f) => set(s => ({
     startImage: f,
     params: f === null ? { ...s.params, image_start: undefined } : s.params,
+    h3WindowPlan: null,
   })),
   setEndImage: (f) => set(s => ({
     endImage: f,
     params: f === null ? { ...s.params, image_end: undefined } : s.params,
+    h3WindowPlan: null,
   })),
 
   // Image references
@@ -2580,7 +3800,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newJob: GenerationJob = {
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
       phase: '', message: tool === 'upscale' ? 'Submitting upscale...' : 'Submitting revoice...',
-      outputFiles: [], error: null, oomInfo: null,
+      outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
     }
     set(st => ({ isGenerating: true, jobs: [newJob, ...st.jobs] }))
 
@@ -2852,9 +4072,27 @@ export const useStore = create<AppState>((set, get) => ({
   setClipStartImage: (index, file) => {
     const clips = [...get().clips]
     if (clips[index]) {
-      clips[index] = { ...clips[index], startImage: file }
+      clips[index] = { ...clips[index], startImage: file, startImagePath: null }
       set({ clips })
     }
+  },
+  addClipKeyframe: (index, file) => {
+    const clips = [...get().clips]
+    if (!clips[index]) return
+    clips[index] = {
+      ...clips[index],
+      keyframes: [...(clips[index].keyframes || []), { file, path: null }],
+    }
+    set({ clips })
+  },
+  removeClipKeyframe: (index, keyframeIndex) => {
+    const clips = [...get().clips]
+    if (!clips[index]) return
+    clips[index] = {
+      ...clips[index],
+      keyframes: (clips[index].keyframes || []).filter((_, i) => i !== keyframeIndex),
+    }
+    set({ clips })
   },
   setSinglePromptMode: (v) => set({ singlePromptMode: v }),
   syncClipCount: () => {
@@ -2871,7 +4109,14 @@ export const useStore = create<AppState>((set, get) => ({
     if (count > current.length) {
       const newClips = [...current]
       for (let i = current.length; i < count; i++) {
-        newClips.push({ prompt: '', startImage: null, startImagePath: null, endImage: null, endImagePath: null })
+        newClips.push({
+          prompt: '',
+          startImage: null,
+          startImagePath: null,
+          endImage: null,
+          endImagePath: null,
+          keyframes: [],
+        })
       }
       set({ clips: newClips })
     } else {
@@ -2881,8 +4126,35 @@ export const useStore = create<AppState>((set, get) => ({
 
   jobs: [],
   isGenerating: false,
+  promptSchedulerEnabled: false,
+  setPromptSchedulerEnabled: (enabled) => set({ promptSchedulerEnabled: enabled }),
 
-  startGeneration: async () => {
+  startGeneration: async (scheduledPrompt) => {
+    const initialState = get()
+
+    // Studio Prompt Scheduler: each non-empty line becomes its own normal
+    // generation request. Submitting the requests one at a time preserves the
+    // prompt order while the backend's existing generation lock keeps them in
+    // the shared GPU queue. This client-side split is intentional: WanGP has a
+    // native multi-line queue mode, but MiniMax H3 bypasses that parser and
+    // would otherwise receive the whole textarea as one prompt.
+    if (
+      !scheduledPrompt
+      && initialState.promptSchedulerEnabled
+      && initialState.generationMode === 'video'
+      && (initialState.params.image_mode as number) === 0
+    ) {
+      const scheduledPrompts = splitPromptSchedule(String(initialState.params.prompt || ''))
+      for (let index = 0; index < scheduledPrompts.length; index += 1) {
+        await get().startGeneration({
+          prompt: scheduledPrompts[index],
+          position: index + 1,
+          total: scheduledPrompts.length,
+        })
+      }
+      return
+    }
+
     // Auto-unload LLM before GPU-heavy generation to free VRAM
     if (get().llmStatus?.loaded) {
       try {
@@ -2893,13 +4165,26 @@ export const useStore = create<AppState>((set, get) => ({
 
     const state = get()
 
-    // Validate: i2v-only models require a start image
+    // Validate: i2v-only models require a start image — Video mode only.
+    // Edit sub-modes supply their own source media and validate in their
+    // own branches (Recast runs the i2v-only SCAIL-2 against a source
+    // video + reference image; this guard silently ate its clicks).
     const isI2vOnly = state.modelOptions?.i2v_class && !state.modelOptions?.t2v_class
+    const isOmniReference = state.modelOptions?.omni_reference === true
     const hasStartImage = state.startImage || state.params.image_start
     const hasMultiClipImages = state.clips.some(c => c.startImage || c.startImagePath)
-    if (isI2vOnly && !hasStartImage && !hasMultiClipImages) {
+    if (state.generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage && !hasMultiClipImages) {
       console.error('This model requires a start image')
       // Could show a toast/notification here in the future
+      return
+    }
+    const omniReferences = state.params.minimax_h3_references ?? []
+    if (
+      state.generationMode === 'video'
+      && isOmniReference
+      && !omniReferences.some(reference => reference.type === 'image' || reference.type === 'video')
+    ) {
+      console.error('MiniMax H3 Omni Reference needs at least one image or video reference')
       return
     }
 
@@ -2908,9 +4193,9 @@ export const useStore = create<AppState>((set, get) => ({
       if (!state.blendClipAPath || !state.blendClipBPath) return
       const prompt = (state.params.prompt as string || '').trim()
 
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting blend...', outputFiles: [], error: null, oomInfo: null,
+    const newJob: GenerationJob = {
+      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+      phase: '', message: 'Submitting blend...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
 
@@ -3046,9 +4331,9 @@ export const useStore = create<AppState>((set, get) => ({
       const trimEnd = state.outpaintTrimEnd || 0
       const sendTrim = trimEnd > trimStart && trimEnd > 0.05
 
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting outpaint...', outputFiles: [], error: null, oomInfo: null,
+    const newJob: GenerationJob = {
+      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+      phase: '', message: 'Submitting outpaint...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
 
@@ -3069,15 +4354,20 @@ export const useStore = create<AppState>((set, get) => ({
           pad_bottom: padBottom,
           pad_left: padLeft,
           pad_right: padRight,
+          outpaint_aspect: state.outpaintAspect,
           resolution_preset: state.outpaintResolutionPreset,
-          source_preservation: state.outpaintSourcePreservation,
-          outpaint_lora_strength: state.outpaintLoraStrength,
+          source_preservation: 1.0,
+          outpaint_lora_strength: 1.0,
+          mask_preserving_outpaint: state.outpaintMaskPreserving,
           preserve_source_audio: state.outpaintPreserveSourceAudio,
-          lock_source_pixels: state.outpaintLockSourcePixels,
+          lock_source_pixels: false,
           trim_window_smear: state.outpaintTrimSmear,
           sliding_window_size: windowFrames,
           sliding_window_overlap: overlapFrames,
           ...(sendTrim ? { start_time: trimStart, end_time: trimEnd } : {}),
+          num_inference_steps: (state.params.num_inference_steps as number) ?? undefined,
+          guidance_scale: (state.params.guidance_scale as number) ?? undefined,
+          negative_prompt: (state.params.negative_prompt as string) || undefined,
           seed: (state.params.seed as number) ?? -1,
           activated_loras: (state.params.activated_loras as string[]) || [],
           loras_multipliers: (state.params.loras_multipliers as string) || '',
@@ -3135,15 +4425,234 @@ export const useStore = create<AppState>((set, get) => ({
       return
     }
 
+    // ── Edit mode: Recast (SCAIL-2 Replace) ─────────────────────
+    // Standalone branch: the prompt is OPTIONAL here (the server has a
+    // sensible default), unlike the shared edit block below which
+    // hard-requires one.
+    // Repaint is the easy front door to the proven Studio Video/Frames
+    // SCAIL-2 Animate path: an edited first frame defines the finished look
+    // while the source video supplies motion and camera movement.
+    if (state.generationMode === 'avatar' && state.editSubMode === 'restyle') {
+      if (!state.editVideoPath || !state.editRepaintFramePath) return
+      const repaintMappings = state.editRepaintMappings.slice(0, 5)
+      if (repaintMappings.some(mapping => !mapping.source.trim() || !mapping.target.trim())) return
+      const promptText = ((state.params.prompt as string) || '').trim()
+      const newJob: GenerationJob = {
+        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+        phase: '', message: 'Submitting repaint...', outputFiles: [], error: null, oomInfo: null,
+      }
+      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+
+      try {
+        const repaintModel = (state.params.model_type as string) || ''
+        const repaintIsScail2 = repaintModel === 'scail2_14B_fast' || repaintModel === 'scail2_14B'
+        const result = await api.submitRepaint({
+          video_path: state.editVideoPath,
+          target_frame_path: state.editRepaintFramePath,
+          region_mappings: repaintMappings.map(mapping => ({
+            id: mapping.id,
+            source: mapping.source.trim(),
+            target: mapping.target.trim(),
+          })),
+          ...(promptText ? { prompt: promptText } : {}),
+          resolution_profile: state.editRepaintResolutionProfile,
+          ...(repaintIsScail2 ? {
+            model_type: repaintModel,
+            num_inference_steps: (state.params.num_inference_steps as number) ?? undefined,
+            ...(repaintModel === 'scail2_14B' ? {
+              guidance_scale: (state.params.guidance_scale as number) ?? undefined,
+            } : {}),
+          } : {}),
+          start_time: state.editStartTime,
+          end_time: state.editEndTime,
+          seed: (state.params.seed as number) ?? -1,
+          negative_prompt: (state.params.negative_prompt as string) || '',
+          activated_loras: (state.params.activated_loras as string[]) || [],
+          loras_multipliers: (state.params.loras_multipliers as string) || '',
+          workspace: state.activeWorkspace,
+        })
+
+        set(s => ({
+          jobs: s.jobs.map(j => j === newJob
+            ? { ...j, id: result.job_id, status: 'running', message: 'Queued...' }
+            : j),
+        }))
+
+        const pollInterval = setInterval(async () => {
+          if (!get().jobs.find(j => j.id === result.job_id)) {
+            clearInterval(pollInterval)
+            return
+          }
+          try {
+            const status = await api.fetchJobStatus(result.job_id)
+            set(s => ({
+              jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
+                ...j,
+                status: status.status,
+                progress: status.progress / 100,
+                step: status.step,
+                totalSteps: status.total_steps,
+                phase: status.phase,
+                message: status.message,
+                outputFiles: status.output_files,
+                error: status.error,
+                oomInfo: status.oom_info ?? null,
+              }),
+            }))
+            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'completed') {
+              clearInterval(pollInterval)
+              set(s => {
+                const remaining = s.jobs.filter(j => j.id !== result.job_id)
+                return {
+                  jobs: remaining,
+                  isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
+                }
+              })
+              get().loadOutputs()
+            } else if (status.status === 'failed' || status.status === 'cancelled') {
+              clearInterval(pollInterval)
+              set(s => ({
+                isGenerating: s.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')),
+              }))
+            }
+          } catch { /* ignore poll errors */ }
+        }, 2000)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Repaint failed'
+        set(s => ({
+          jobs: s.jobs.map(j => j === newJob
+            ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg }
+            : j),
+          isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
+        }))
+        console.error('Repaint failed:', msg)
+      }
+      return
+    }
+
+    if (state.generationMode === 'avatar' && state.editSubMode === 'recast') {
+      const recastMappings = state.editRecastMappings.slice(0, 5)
+      if (
+        !state.editVideoPath
+        || recastMappings.length === 0
+        || recastMappings.some(mapping => !mapping.target.trim() || !mapping.refPath)
+      ) return
+      const promptText = ((state.params.prompt as string) || '').trim()
+
+      const newJob: GenerationJob = {
+        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+        phase: '', message: 'Submitting recast...', outputFiles: [], error: null, oomInfo: null,
+      }
+      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+
+      try {
+        // Honor the selector's Recast SCAIL-2 choice (dedicated Fast vs
+        // native base). Guard on
+        // architecture so a stale LTX model_type can never reach the
+        // recast endpoint — the server then falls back to Fast.
+        const recastModel = (state.params.model_type as string) || ''
+        const recastIsScail2 = state.models.find(m => m.model_type === recastModel)?.architecture === 'scail2_14B'
+        const result = await api.submitRecast({
+          video_path: state.editVideoPath,
+          // Legacy fields remain populated for old sidecars/API clients, while
+          // the explicit cards provide deterministic target/color assignment.
+          ref_image_path: recastMappings[0].refPath,
+          target: recastMappings[0].target || 'person',
+          person_count: recastMappings.length,
+          reference_aligned_to_source: recastMappings[0].referenceAlignedToSource,
+          character_mappings: recastMappings.map(mapping => ({
+            id: mapping.id,
+            target: mapping.target.trim(),
+            ref_image_path: mapping.refPath,
+            additional_ref_image_paths: mapping.additionalRefs
+              .map(reference => reference.path)
+              .filter(Boolean),
+            reference_aligned_to_source: mapping.referenceAlignedToSource,
+          })),
+          // Simplified Recast recipe: identity preparation and native
+          // bystander preservation are automatic; prompt rewriting and the
+          // seam-prone post-composite remain off. The backend still accepts
+          // all legacy fields for saved/API callers.
+          isolate_reference: true,
+          auto_face_detail: true,
+          enhance_prompt: false,
+          protect_bystanders: false,
+          preserve_bystanders: true,
+          use_relighting: state.editRecastUseRelighting,
+          resolution_profile: state.editRecastResolutionProfile,
+          ...(promptText ? { prompt: promptText } : {}),
+          ...(recastIsScail2 ? {
+            model_type: recastModel,
+            num_inference_steps: (state.params.num_inference_steps as number) ?? undefined,
+            ...(recastModel === 'scail2_14B' ? {
+              guidance_scale: (state.params.guidance_scale as number) ?? undefined,
+            } : {}),
+          } : {}),
+          start_time: state.editStartTime,
+          end_time: state.editEndTime,
+          seed: (state.params.seed as number) ?? -1,
+          negative_prompt: (state.params.negative_prompt as string) || '',
+          activated_loras: (state.params.activated_loras as string[]) || [],
+          loras_multipliers: (state.params.loras_multipliers as string) || '',
+          workspace: state.activeWorkspace,
+        })
+
+        set(s => ({
+          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'running', message: 'Queued...' } : j),
+        }))
+
+        const pollInterval = setInterval(async () => {
+          if (!get().jobs.find(j => j.id === result.job_id)) { clearInterval(pollInterval); return }
+          try {
+            const status = await api.fetchJobStatus(result.job_id)
+            set(s => ({
+              jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
+                ...j, status: status.status, progress: status.progress / 100,
+                step: status.step, totalSteps: status.total_steps,
+                phase: status.phase, message: status.message,
+                outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
+              }),
+            }))
+            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'completed') {
+              clearInterval(pollInterval)
+              set(s => {
+                const remaining = s.jobs.filter(j => j.id !== result.job_id)
+                return {
+                  jobs: remaining,
+                  isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
+                }
+              })
+              get().loadOutputs()
+            } else if (status.status === 'failed' || status.status === 'cancelled') {
+              clearInterval(pollInterval)
+              set(s => ({
+                isGenerating: s.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')),
+              }))
+            }
+          } catch { /* ignore poll errors */ }
+        }, 2000)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Recast failed'
+        set(s => ({
+          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
+          isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
+        }))
+        console.error('Recast failed:', msg)
+      }
+      return
+    }
+
     // ── Edit mode: Retake / Inpaint / Edit Anything ─────────────
     if (state.generationMode === 'avatar' && (state.editSubMode === 'retake' || state.editSubMode === 'inpaint' || state.editSubMode === 'edit_anything')) {
       if (!state.editVideoPath) return
       const prompt = (state.params.prompt as string || '').trim()
       if (!prompt) return
 
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting...', outputFiles: [], error: null, oomInfo: null,
+    const newJob: GenerationJob = {
+      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
+      phase: '', message: 'Submitting...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
 
@@ -3277,6 +4786,114 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     const params: Record<string, unknown> = { ...state.params, generation_mode: state.generationMode, workspace: state.activeWorkspace }
+    if (scheduledPrompt) {
+      params.prompt = scheduledPrompt.prompt
+      params.repeat_generation = 1
+      // Every scheduler request contains exactly one prompt. Prevent any
+      // persisted sliding-window or multi-clip line policy from reinterpreting
+      // it after submission.
+      params.multi_prompts_gen_type = 2
+    }
+
+    if (state.generationMode === 'video') {
+      const fps = state.modelOptions?.fps ?? 16
+      const supportsSlidingWindows = state.modelOptions?.sliding_window === true
+      const minimumFrames = state.modelOptions?.frames_minimum ?? 1
+      const maximumFrames = state.modelOptions?.frames_maximum ?? null
+      let requestedFrames = Math.max(
+        minimumFrames,
+        Math.round(state.durationSeconds * fps),
+      )
+      if (!supportsSlidingWindows && maximumFrames != null) {
+        requestedFrames = Math.min(maximumFrames, requestedFrames)
+      } else if (
+        supportsSlidingWindows
+        && maximumFrames != null
+        && requestedFrames <= maximumFrames + 1
+      ) {
+        requestedFrames = Math.min(maximumFrames, requestedFrames)
+      }
+      params.video_length = requestedFrames
+
+      if (supportsSlidingWindows) {
+        const swDefaults = state.modelOptions?.sliding_window_defaults
+        let windowFrames = Math.round(state.slidingWindowSeconds * fps)
+        if (swDefaults) {
+          const windowMinimum = swDefaults.window_min ?? 1
+          const windowMaximum = swDefaults.window_max ?? windowFrames
+          const windowStep = Math.max(1, swDefaults.window_step ?? 1)
+          windowFrames = windowMinimum
+            + Math.round((windowFrames - windowMinimum) / windowStep) * windowStep
+          windowFrames = Math.max(
+            windowMinimum,
+            Math.min(windowMaximum, windowFrames),
+          )
+        }
+        params.sliding_window_size = windowFrames
+        params.sliding_window_overlap = swDefaults?.overlap_default
+          ?? state.slidingWindowOverlap
+        params.sliding_window_discard_last_frames = swDefaults?.discard_last_frames ?? 0
+        if (state.modelOptions?.sliding_window_memory_policy?.manual_override) {
+          params.sliding_window_memory_override = state.slidingWindowLocked
+        } else {
+          delete params.sliding_window_memory_override
+        }
+      } else {
+        delete params.sliding_window_size
+        delete params.sliding_window_overlap
+        delete params.sliding_window_discard_last_frames
+        delete params.sliding_window_memory_override
+      }
+    }
+
+    if (isOmniReference) {
+      // Ref2VA has its own ordered media manifest. Do not let a saved Frames,
+      // Multi-Shot, Extend, or Blend state silently enter those pipelines.
+      params.image_mode = 0
+      params.image_prompt_type = ''
+      delete params.image_start
+      delete params.image_end
+      delete params.video_source
+    } else {
+      // Keep Omni references in the model's in-memory working set, but do not
+      // leak them into unrelated model requests or their saved sidecars.
+      delete params.minimax_h3_references
+      delete params.minimax_h3_reference_detail
+    }
+    if (!state.modelOptions?.minimax_h3_text_encoder_choices?.length) {
+      delete params.minimax_h3_text_encoder
+    }
+    if (state.modelOptions?.first_block_cache) {
+      const allowedThresholds = (
+        state.modelOptions.skip_steps_multiplier_choices || []
+      ).map(choice => choice[1])
+      const requestedThreshold = Number(
+        params.skip_steps_multiplier
+        ?? state.modelOptions.default_skip_steps_multiplier
+        ?? 0.08
+      )
+      params.skip_steps_multiplier = allowedThresholds.includes(requestedThreshold)
+        ? requestedThreshold
+        : (allowedThresholds[0] ?? 0.08)
+      params.skip_steps_start_step_perc = Math.max(
+        0,
+        Math.min(
+          100,
+          Number(
+            params.skip_steps_start_step_perc
+            ?? state.modelOptions.default_skip_steps_start_step_perc
+            ?? 25
+          ),
+        ),
+      )
+      if (params.skip_steps_cache_type !== 'first_block') {
+        params.skip_steps_cache_type = ''
+      }
+    } else {
+      delete params.skip_steps_cache_type
+      delete params.skip_steps_multiplier
+      delete params.skip_steps_start_step_perc
+    }
 
     // STG (Spatio-Temporal Guidance) wiring. The backend only runs STG when
     // perturbation_switch === 2 (skip-self-attention) — stg_scale alone is
@@ -3302,11 +4919,48 @@ export const useStore = create<AppState>((set, get) => ({
       delete params.reference_pipeline
     }
 
+    // MiniMax H3 has two mutually exclusive conditioning contracts. After a
+    // Ref2VA run, selecting a new Start image can leave the persisted mode set
+    // to "references" even when all reference tiles have been removed. In
+    // that case the backend rejects the request before generation because
+    // Ref2VA has no reference input. Treat an unaccompanied Start image as an
+    // explicit FL2VA request and discard stale reference paths from the
+    // previous run. If live reference tiles are still present, keep Ref2VA so
+    // users can intentionally combine them.
+    const hasH3References = (
+      state.imageRefs.length > 0
+      || (Array.isArray(params.image_refs) && params.image_refs.some(Boolean))
+      || (Array.isArray(params.h3_ref_videos) && params.h3_ref_videos.some(Boolean))
+      || (Array.isArray(params.h3_ref_audios) && params.h3_ref_audios.some(Boolean))
+    )
+    if (
+      params.model_type === 'minimax_h3'
+      && params.h3_reference_mode === 'references'
+      && !hasH3References
+    ) {
+      params.h3_reference_mode = 'first_frame'
+      delete params.image_refs
+      delete params.h3_ref_videos
+      delete params.h3_ref_audios
+      set(s => ({
+        params: { ...s.params, h3_reference_mode: 'first_frame' },
+        savedParamsPerMode: {
+          ...s.savedParamsPerMode,
+          video: {
+            ...(s.savedParamsPerMode.video || {}),
+            h3_reference_mode: 'first_frame',
+            image_refs: undefined,
+            h3_ref_videos: undefined,
+            h3_ref_audios: undefined,
+          },
+        },
+      }))
+    }
+
     // Tag avatar/edit-mode generations with their sub-mode so the gallery's
     // Edits filter and the loadSettingsFromOutput restore path can identify
-    // them. Restyle is the one edit sub-mode that flows through the standard
-    // submit (no dedicated endpoint); the others (retake/inpaint/outpaint/
-    // edit_anything) tag themselves on the server side.
+    // them. Dedicated edit endpoints tag their jobs on the server; this is
+    // retained for compatible generic edit submissions.
     if (state.generationMode === 'avatar' && state.editSubMode) {
       params.edit_sub_mode = state.editSubMode
     }
@@ -3322,14 +4976,53 @@ export const useStore = create<AppState>((set, get) => ({
       return mt.includes('distilled') ? 0.7 : 1.0
     })()
 
+    // force_fps="control" models (SCAIL-2 class) generate at the control
+    // video's frame rate, but durationSeconds→video_length math uses the
+    // model's nominal fps (16). Against a 25fps guide that under-counts
+    // frames by a third: a "10s" request would cover only 6.4s of the
+    // source performance. When the guide's real fps is known (probed at
+    // upload), recompute the frame count at the rate the output will
+    // actually play at.
+    if (
+      state.generationMode === 'video' &&
+      params.video_guide &&
+      params.force_fps === 'control' &&
+      state.guideVideoFps && state.guideVideoFps > 0
+    ) {
+      // Cap at 30fps to match the server's follow-rate cap — a 60fps
+      // guide would double the frame count (and sliding windows) for
+      // no visible gain.
+      const fpsUsed = Math.min(state.guideVideoFps, 30)
+      params.video_length = Math.max(5, Math.round(state.durationSeconds * fpsUsed))
+    }
+    // Always tell the server what duration the user actually asked for.
+    // For control-fps models the server recomputes video_length from
+    // this at the guide's REAL frame rate — the durable fix for stale
+    // restores (Load Settings from old sidecars carries frame counts
+    // computed under the wrong fps) and for sessions where the guide's
+    // fps never got probed. Underscore keys ride through harmlessly.
+    if (state.generationMode === 'video' && params.video_guide) {
+      ;(params as Record<string, unknown>)._duration_seconds = state.durationSeconds
+    }
+
     // Smart multi-line prompt handling for video Frames mode:
     // When there's no sliding window (single window), send all lines as ONE prompt
     // with newlines preserved (LTX uses newlines as temporal markers within the clip).
     // When there IS sliding window, each line becomes a window prompt (mode 1).
-    if (state.generationMode === 'video' && state.params.image_mode !== 2) {
+    if (state.generationMode === 'video' && (isOmniReference || state.params.image_mode !== 2)) {
       const prompt = (params.prompt as string) || ''
-      const hasSlidingWindow = state.durationSeconds > state.slidingWindowSeconds
-      if (hasSlidingWindow && prompt.includes('\n')) {
+      const hasSlidingWindow = state.modelOptions?.sliding_window === true
+        && state.durationSeconds > state.slidingWindowSeconds
+      if (
+        hasSlidingWindow
+        && state.modelOptions?.sliding_window_auto_prompt_pacing === true
+      ) {
+        // H3's structured Context-IR prompt contains semantic line breaks;
+        // they are not one prompt per continuation window. Keep the complete
+        // shot plan intact so the backend can assign its timeline and tagged
+        // dialogue across the automatically sized VRAM-safe passes.
+        params.multi_prompts_gen_type = 2
+      } else if (hasSlidingWindow && prompt.includes('\n')) {
         // Sliding window: each line = one window prompt (rolling generation)
         params.multi_prompts_gen_type = 1
       } else if (!hasSlidingWindow && prompt.includes('\n')) {
@@ -3370,6 +5063,16 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Audio mode: branch by sub-mode (Speech/Music vs SFX)
     if (state.generationMode === 'audio') {
+      // Record the active sub-tab in the request so it lands in the
+      // .meta.json sidecar — Load Settings uses it to restore Speech /
+      // Music / SFX, not just the Audio tab. Underscore keys ride
+      // through generation untouched, same as _tts_*. Music also saves
+      // its song-writer inputs (UI-only, not consumed by generation).
+      params._audio_sub_mode = state.audioSubMode
+      if (state.audioSubMode === 'music') {
+        params._music_description = state.musicDescription || ''
+        params._music_instrumental = !!state.musicInstrumental
+      }
       if (state.audioSubMode === 'sfx') {
         // SFX mode: use MMAudio to generate sound effects
         // MMAudio runs as post-processing on a video model, so use a video model as carrier
@@ -3378,6 +5081,9 @@ export const useStore = create<AppState>((set, get) => ({
         if (isSfxVirtual) {
           // Swap virtual MMAudio model for a real video model; backend uses MMAudio params
           params.model_type = 'ltx2_22B_distilled_1_1'
+          // Keep the virtual id so Load Settings can restore the SFX tab's
+          // model selection (the sidecar otherwise records only the carrier).
+          params._sfx_virtual_model = sfxModel
         }
         params.MMAudio_setting = 1
         // Always set MMAudio variant explicitly so backend doesn't fall back to server config
@@ -3501,10 +5207,11 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     // Multi-clip path
-    if (state.params.image_mode === 2) {
+    if (!isOmniReference && state.params.image_mode === 2) {
       const clips = state.clips
       const imagePaths: string[] = []
       const endImagePaths: string[] = []
+      const perClipKeyframes: string[][] = []
       let hasAnyEndImage = false
 
       for (const clip of clips) {
@@ -3538,6 +5245,21 @@ export const useStore = create<AppState>((set, get) => ({
         } else {
           endImagePaths.push('')
         }
+
+        const clipKeyframes: string[] = []
+        for (const keyframe of clip.keyframes || []) {
+          if (keyframe.file) {
+            try {
+              const result = await api.uploadImage(keyframe.file)
+              clipKeyframes.push(result.path)
+            } catch (e) {
+              console.error('Failed to upload clip keyframe:', e)
+            }
+          } else if (keyframe.path) {
+            clipKeyframes.push(keyframe.path)
+          }
+        }
+        perClipKeyframes.push(clipKeyframes)
       }
 
       let promptLines: string[]
@@ -3553,6 +5275,11 @@ export const useStore = create<AppState>((set, get) => ({
       if (hasAnyEndImage) {
         params.image_end = endImagePaths
       }
+      if (perClipKeyframes.some(keyframes => keyframes.length > 0)) {
+        params.per_clip_keyframes = perClipKeyframes
+      } else {
+        delete params.per_clip_keyframes
+      }
       params.multi_prompts_gen_type = 3
       params.image_mode = 0
       params.image_prompt_type = hasAnyEndImage ? 'SE' : 'S'
@@ -3560,7 +5287,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
     // Single I2V path: Upload images if present (new File upload takes priority)
     // Skip in image mode — startImage is for video I2V, not image generation
-    else if (state.startImage && state.generationMode !== 'image') {
+    else if (!isOmniReference && state.startImage && state.generationMode !== 'image') {
       try {
         const result = await api.uploadImage(state.startImage)
         params.image_start = result.path
@@ -3571,14 +5298,14 @@ export const useStore = create<AppState>((set, get) => ({
       } catch (e) {
         console.error('Failed to upload start image:', e)
       }
-    } else if (params.image_start && state.generationMode !== 'image') {
+    } else if (!isOmniReference && params.image_start && state.generationMode !== 'image') {
       // Re-roll case: image_start is already an absolute path from sidecar metadata
       params.image_mode = 0
       const ipt = (params.image_prompt_type as string) || ''
       if (!ipt.includes('S')) params.image_prompt_type = 'S' + ipt
       if (params.input_video_strength == null) params.input_video_strength = _defaultIVS
     }
-    if (state.endImage) {
+    if (!isOmniReference && state.endImage) {
       try {
         const result = await api.uploadImage(state.endImage)
         params.image_end = result.path
@@ -3593,7 +5320,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     // Continue mode: set video_source and image_prompt_type="V"
-    if (state.generationMode === 'video' && params.image_mode === 3 && state.continueVideoPath) {
+    if (!isOmniReference && state.generationMode === 'video' && params.image_mode === 3 && state.continueVideoPath) {
       params.video_source = state.continueVideoPath
       params.image_prompt_type = 'V'
       params.image_mode = 0
@@ -3645,8 +5372,12 @@ export const useStore = create<AppState>((set, get) => ({
       params.image_mode = 0
     }
 
-    // Image references (from ImageRefSection)
-    if (state.imageRefType && state.imageRefs.length > 0) {
+    // Image references (from ImageRefSection). H3 FL2VA intentionally sends
+    // only its first/last frame; omni references remain visible in the UI but
+    // are submitted only after the user explicitly chooses Ref2VA.
+    const h3FirstFrameMode = params.model_type === 'minimax_h3'
+      && (params.h3_reference_mode ?? 'first_frame') === 'first_frame'
+    if (!h3FirstFrameMode && state.imageRefType && state.imageRefs.length > 0) {
       const refPaths: string[] = []
       for (const file of state.imageRefs) {
         try {
@@ -3700,6 +5431,34 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
+    if (h3FirstFrameMode) {
+      delete params.image_refs
+      delete params.h3_ref_videos
+      delete params.h3_ref_audios
+    }
+
+    // Image conditioning alone does not guarantee that a video model will
+    // retain an illustrated medium. Prefix every I2V prompt with a compact,
+    // deterministic style anchor by default. This is deliberately applied at
+    // submit time so it also covers direct Studio jobs, re-rolls and
+    // multi-clip generations; Director applies the same policy server-side.
+    const hasI2VStart = state.generationMode === 'video'
+      && String(params.image_prompt_type || '').includes('S')
+      && Boolean(params.image_start)
+    if (hasI2VStart && params.preserve_source_style !== false) {
+      const anchor = 'Use the supplied image as the exact first frame. Preserve its visual medium, palette, linework, shading and character design throughout, including anime or cel shading when visible; do not restyle it or make an illustrated source photorealistic.'
+      const rawPrompt = String(params.prompt || '')
+      if (!rawPrompt.toLowerCase().includes('preserve its visual medium')) {
+        params.prompt = rawPrompt
+          .split('\n')
+          .map(line => line.trim() ? `${anchor} ${line.trim()}` : anchor)
+          .join('\n')
+      }
+    }
+    // UI-only policy flag: the backend receives the resulting prompt, not an
+    // unknown generation parameter.
+    delete params.preserve_source_style
+
     // Voice reference (ID-LoRA) — upload if present, add to params
     if (state.directorVoiceRef) {
       let vrPath = state.directorVoiceRefPath
@@ -3716,6 +5475,31 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
+    const h3WindowStoryboardActive = (
+      state.generationMode === 'video'
+      && state.modelOptions?.sliding_window_auto_prompt_pacing === true
+      && params.minimax_h3_window_storyboard !== false
+      && state.params.image_mode !== 2
+      && Number(params.video_length || 0) > Number(params.sliding_window_size || 0)
+    )
+    if (state.modelOptions?.sliding_window_auto_prompt_pacing === true) {
+      params.minimax_h3_window_storyboard = h3WindowStoryboardActive
+      if (h3WindowStoryboardActive && state.h3WindowPlan) {
+        params.h3_window_prompts = state.h3WindowPlan.windows.map(window => window.prompt)
+        params.h3_window_plan_signature = state.h3WindowPlan.signature
+        params.h3_window_plan = state.h3WindowPlan
+      } else {
+        delete params.h3_window_prompts
+        delete params.h3_window_plan_signature
+        delete params.h3_window_plan
+      }
+    } else {
+      delete params.minimax_h3_window_storyboard
+      delete params.h3_window_prompts
+      delete params.h3_window_plan_signature
+      delete params.h3_window_plan
+    }
+
     const newJob: GenerationJob = {
       id: '',
       status: 'queued',
@@ -3723,9 +5507,12 @@ export const useStore = create<AppState>((set, get) => ({
       step: 0,
       totalSteps: 0,
       phase: '',
-      message: 'Submitting...',
+      message: scheduledPrompt
+        ? `Submitting ${scheduledPrompt.position}/${scheduledPrompt.total}...`
+        : h3WindowStoryboardActive ? 'Planning H3 windows...' : 'Submitting...',
       outputFiles: [],
       error: null,
+      createdAt: Date.now(),
       oomInfo: null,
     }
 
@@ -3735,11 +5522,28 @@ export const useStore = create<AppState>((set, get) => ({
     }))
 
     try {
-      const { job_id } = await api.submitGeneration(params)
+      const { job_id, h3_window_plan } = await api.submitGeneration(params)
+
+      if (h3_window_plan) {
+        const planFps = state.modelOptions?.fps ?? 24
+        const effectiveWindowFrames = h3_window_plan.effective_window_frames
+          || h3_window_plan.window_frames
+        set(s => ({
+          h3WindowPlan: h3_window_plan,
+          slidingWindowSeconds: effectiveWindowFrames / planFps,
+          params: { ...s.params, sliding_window_size: effectiveWindowFrames },
+        }))
+      }
 
       // Update the job with its server-assigned ID
       set(s => ({
-        jobs: s.jobs.map(j => j === newJob ? { ...j, id: job_id, status: 'running', message: 'Queued...' } : j),
+        jobs: s.jobs.map(j => j === newJob ? {
+          ...j,
+          id: job_id,
+          status: 'running',
+          message: 'Queued...',
+          h3WindowPlan: h3_window_plan ?? null,
+        } : j),
       }))
 
       // Poll for status on this specific job
@@ -3765,6 +5569,7 @@ export const useStore = create<AppState>((set, get) => ({
               outputFiles: status.output_files,
               error: status.error,
               oomInfo: status.oom_info ?? null,
+              taskTimings: status.task_timings ?? [],
             }),
           }))
 
@@ -3858,7 +5663,10 @@ export const useStore = create<AppState>((set, get) => ({
             message: j.message,
             outputFiles: j.output_files,
             error: j.error,
+            createdAt: j.created_at < 1_000_000_000_000 ? j.created_at * 1000 : j.created_at,
             oomInfo: (j as { oom_info?: import('../types').OomInfo | null }).oom_info ?? null,
+            taskTimings: j.task_timings ?? [],
+            h3WindowPlan: j.h3_window_plan ?? null,
           }))
         if (newJobs.length > 0) {
           set(s => ({
@@ -3882,6 +5690,7 @@ export const useStore = create<AppState>((set, get) => ({
                     outputFiles: status.output_files,
                     error: status.error,
                     oomInfo: status.oom_info ?? null,
+                    taskTimings: status.task_timings ?? [],
                   }),
                 }))
                 if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
@@ -3908,6 +5717,72 @@ export const useStore = create<AppState>((set, get) => ({
     } catch {
       // Backend might not have the endpoint yet, silently ignore
     }
+  },
+
+  reconnectDirectorPipelines: async () => {
+    if (directorReconnectTimer) clearTimeout(directorReconnectTimer)
+    const refresh = async () => {
+      try {
+        const data = await api.fetchActiveDirectorPipelines()
+        set({ activeDirectorPipelines: data.pipelines })
+
+        // Restore the primary pipeline state so Director's existing inspector
+        // can reconnect to the same run, while the footer displays every live
+        // pipeline returned by the backend.
+        const primary = data.pipelines[0]
+        if (primary && !get().pipelineId) {
+          set({
+            pipelineId: primary.id,
+            pipelineStatus: primary as import('../api/client').PipelineStatus,
+            pipelinePolling: true,
+            directorLoading: primary.status === 'running' || primary.status === 'queued',
+          })
+          get().pollPipelineStatus()
+        }
+        directorReconnectTimer = data.pipelines.length > 0
+          ? setTimeout(refresh, 2000)
+          : null
+      } catch {
+        // Older backends do not expose the in-memory endpoint. Story Lab
+        // productions still persist their pipeline id, so recover those runs
+        // directly and keep the footer useful during a rolling backend update.
+        try {
+          const library = await api.fetchStoryLibrary(get().activeWorkspace)
+          const pipelineIds = Object.values(library.projects)
+            .flatMap(project => project.productions || [])
+            .map(production => production.targetSnapshot?.pipelineId)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+          const uniqueIds = [...new Set(pipelineIds)]
+          const statuses = await Promise.allSettled(uniqueIds.map(id => api.fetchPipelineStatus(id)))
+          const active = statuses
+            .filter((result): result is PromiseFulfilledResult<import('../api/client').PipelineStatus> => result.status === 'fulfilled')
+            .map(result => result.value)
+            .filter((status): status is import('../api/client').PipelineStatus & { status: 'running' | 'paused' } =>
+              status.status === 'running' || status.status === 'paused')
+            .map(status => ({
+              ...status,
+              pipeline_type: 'music_video',
+              created_at: 0,
+              updated_at: Date.now(),
+            }))
+          set({ activeDirectorPipelines: active })
+          const primary = active[0]
+          if (primary && !get().pipelineId) {
+            set({
+              pipelineId: primary.id,
+              pipelineStatus: primary,
+              pipelinePolling: true,
+              directorLoading: true,
+            })
+            get().pollPipelineStatus()
+          }
+          directorReconnectTimer = active.length > 0 ? setTimeout(refresh, 2000) : null
+        } catch {
+          directorReconnectTimer = null
+        }
+      }
+    }
+    await refresh()
   },
 
   // LoRA state
@@ -4015,6 +5890,7 @@ export const useStore = create<AppState>((set, get) => ({
           selectedModelPerMode: ns.selectedModelPerMode,
           savedParamsPerMode: ns.savedParamsPerMode,
           savedLoraPerMode: ns.savedLoraPerMode,
+          savedPromptPerMode: ns.savedPromptPerMode,
         }, byFilename)
       } else {
         set({ loraIdByFilename: byFilename, filenameByLoraId: byLoraId })
@@ -4046,11 +5922,18 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   toggleLora: (filename) => {
-    const { params, loraWeights, modelOptions } = get()
+    const { params, loraWeights, modelOptions, generationMode, editSubMode } = get()
     const current = [...params.activated_loras]
     const idx = current.indexOf(filename)
     const newWeights = { ...loraWeights }
-    const phases = modelOptions?.guidance_max_phases ?? 1
+    // SCAIL-2 Recast is intentionally a single-phase pipeline even though
+    // the shared Wan model family advertises support for up to three phases.
+    const recastSinglePhase = generationMode === 'avatar' && editSubMode === 'recast'
+    const phases = recastSinglePhase ? 1 : Math.max(1, modelOptions?.guidance_max_phases ?? 1)
+    const removedTurboPreset = (
+      idx >= 0
+      && filename === modelOptions?.minimax_h3_turbo?.filename
+    )
 
     if (idx >= 0) {
       current.splice(idx, 1)
@@ -4063,7 +5946,10 @@ export const useStore = create<AppState>((set, get) => ({
     // Serialize multipliers
     const multipliers = current.map(name => {
       const w = newWeights[name] || [1.0]
-      return w.map(v => v.toFixed(2)).join(';')
+      return Array.from(
+        { length: phases },
+        (_, i) => w[i] ?? w[w.length - 1] ?? 1.0,
+      ).map(v => v.toFixed(2)).join(';')
     }).join(' ')
 
     set(s => ({
@@ -4072,6 +5958,7 @@ export const useStore = create<AppState>((set, get) => ({
         ...s.params,
         activated_loras: current,
         loras_multipliers: multipliers,
+        ...(removedTurboPreset ? { minimax_h3_turbo_mode: false } : {}),
       },
     }))
     // Persist LoRA state
@@ -4081,8 +5968,20 @@ export const useStore = create<AppState>((set, get) => ({
       ...s.savedLoraPerMode,
       [mode]: { activated_loras: current, loras_multipliers: multipliers, loraWeights: newWeights, availableLoras: s.availableLoras },
     }
-    set({ savedLoraPerMode: updatedLoraPerMode })
-    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode }, s.loraIdByFilename)
+    const updatedParamsPerMode = removedTurboPreset
+      ? {
+          ...s.savedParamsPerMode,
+          [mode]: {
+            ...(s.savedParamsPerMode[mode] || {}),
+            minimax_h3_turbo_mode: false,
+          },
+        }
+      : s.savedParamsPerMode
+    set({
+      savedLoraPerMode: updatedLoraPerMode,
+      savedParamsPerMode: updatedParamsPerMode,
+    })
+    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: updatedParamsPerMode, savedLoraPerMode: updatedLoraPerMode, savedPromptPerMode: s.savedPromptPerMode }, s.loraIdByFilename)
   },
 
   ensureTransitionLoraForBlend: async () => {
@@ -4187,16 +6086,26 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setLoraWeight: (filename, phaseIndex, value) => {
-    const { params, loraWeights } = get()
+    const { params, loraWeights, modelOptions, generationMode, editSubMode } = get()
     const newWeights = { ...loraWeights }
     if (!newWeights[filename]) return
-    newWeights[filename] = [...newWeights[filename]]
+    const recastSinglePhase = generationMode === 'avatar' && editSubMode === 'recast'
+    const phases = recastSinglePhase ? 1 : Math.max(1, modelOptions?.guidance_max_phases ?? 1)
+    if (phaseIndex < 0 || phaseIndex >= phases) return
+    const currentWeights = newWeights[filename]
+    newWeights[filename] = Array.from(
+      { length: phases },
+      (_, i) => currentWeights[i] ?? currentWeights[currentWeights.length - 1] ?? 1.0,
+    )
     newWeights[filename][phaseIndex] = value
 
     // Reserialize
     const multipliers = params.activated_loras.map(name => {
       const w = newWeights[name] || [1.0]
-      return w.map(v => v.toFixed(2)).join(';')
+      return Array.from(
+        { length: phases },
+        (_, i) => w[i] ?? w[w.length - 1] ?? 1.0,
+      ).map(v => v.toFixed(2)).join(';')
     }).join(' ')
 
     set(s => ({
@@ -4211,7 +6120,7 @@ export const useStore = create<AppState>((set, get) => ({
       [mode]: { activated_loras: s.params.activated_loras, loras_multipliers: multipliers, loraWeights: newWeights, availableLoras: s.availableLoras },
     }
     set({ savedLoraPerMode: updatedLoraPerMode })
-    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode }, s.loraIdByFilename)
+    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode, savedPromptPerMode: s.savedPromptPerMode }, s.loraIdByFilename)
   },
 
   // Presets
@@ -4248,6 +6157,11 @@ export const useStore = create<AppState>((set, get) => ({
           seed: params.seed,
           negative_prompt: params.negative_prompt,
           flow_shift: params.flow_shift,
+          h3_audio_shift: params.h3_audio_shift,
+          h3_audio_prompt: params.h3_audio_prompt,
+          h3_ref_image_size: params.h3_ref_image_size,
+          h3_reference_mode: params.h3_reference_mode,
+          h3_model_profile: params.h3_model_profile,
           self_refiner_setting: params.self_refiner_setting,
           stage2_steps: params.stage2_steps,
         },
@@ -4294,18 +6208,90 @@ export const useStore = create<AppState>((set, get) => ({
       // params (default steps/guidance) and modelOptions with the WRONG
       // model's values — last requested wins.
       if (seq !== _modelOptionsSeq) return
-      const { durationSeconds, slidingWindowSeconds } = get()
+      const activeState = get()
+      const { durationSeconds, slidingWindowSeconds, aspectRatio } = activeState
       const fps = options.fps || 16
+      const isH3 = modelType === 'minimax_h3' || modelType === 'minimax_h3_ref2va'
       // Set overlap from model defaults
       const swDefaults = (options as unknown as Record<string, unknown>).sliding_window_defaults as Record<string, number> | undefined
       const overlapDefault = swDefaults?.overlap_default ?? 5
       const discardDefault = swDefaults?.discard_last_frames ?? 0
+      const minimumDuration = Math.max(1, (options.frames_minimum || fps) / fps)
+      const nativeMaximumDuration = options.frames_maximum
+        ? options.frames_maximum / fps
+        : null
+      const maximumDuration = !options.sliding_window && nativeMaximumDuration
+        ? nativeMaximumDuration
+        : Number.POSITIVE_INFINITY
+      let nextDurationSeconds = Math.min(
+        maximumDuration,
+        Math.max(minimumDuration, durationSeconds),
+      )
+      if (
+        options.sliding_window
+        && nativeMaximumDuration
+        && nextDurationSeconds <= Math.round(nativeMaximumDuration * 10) / 10
+      ) {
+        // H3's native ceiling is 14.375s but the UI displays one decimal.
+        // Treat displayed 14.4s as that same one-window endpoint instead of
+        // scheduling a second minimum-size pass for one rounded frame.
+        nextDurationSeconds = Math.min(
+          nextDurationSeconds,
+          nativeMaximumDuration,
+        )
+      }
+      let nextWindowFrames = Math.round(slidingWindowSeconds * fps)
+      if (options.sliding_window && swDefaults?.window_default != null) {
+        nextWindowFrames = swDefaults.window_default
+      }
+      if (options.sliding_window && swDefaults) {
+        nextWindowFrames = Math.max(
+          swDefaults.window_min ?? 1,
+          Math.min(swDefaults.window_max ?? nextWindowFrames, nextWindowFrames),
+        )
+      } else if (!options.sliding_window) {
+        nextWindowFrames = Math.round(nextDurationSeconds * fps)
+      }
+      const nextWindowSeconds = nextWindowFrames / fps
       const paramUpdates: Record<string, unknown> = {
         guidance_phases: options.guidance_max_phases,
-        video_length: Math.round(durationSeconds * fps),
-        sliding_window_size: Math.round(slidingWindowSeconds * fps),
+        video_length: alignFrameCount(Math.round(nextDurationSeconds * fps), options),
+        sliding_window_size: nextWindowFrames,
         sliding_window_overlap: overlapDefault,
         sliding_window_discard_last_frames: discardDefault,
+      }
+      let nextResolutionPreset = activeState.resolutionPreset
+      let nextAspectRatio = activeState.aspectRatio
+      const modelPresetOrder = options.resolution_preset_order || []
+      if (modelPresetOrder.length > 0) {
+        if (!modelPresetOrder.includes(nextResolutionPreset)) {
+          // A model-specific list can contain an expensive experimental tier
+          // at the end. Select its ordinary 720p tier when the previous
+          // model's preset is unavailable instead of silently jumping to the
+          // largest canvas.
+          nextResolutionPreset = modelPresetOrder.includes('720p')
+            ? '720p'
+            : modelPresetOrder[0]
+        }
+        if (nextAspectRatio === 'auto' && !options.supports_auto_aspect) {
+          nextAspectRatio = '16:9'
+        }
+        paramUpdates.resolution = resolveResolution(
+          options,
+          nextResolutionPreset,
+          nextAspectRatio,
+        )
+      } else if (
+        nextAspectRatio === 'auto'
+        && activeState.generationMode !== 'image'
+        && !options.supports_auto_aspect
+      ) {
+        nextAspectRatio = '16:9'
+        paramUpdates.resolution = resolveResolution(
+          options,
+          nextResolutionPreset,
+          nextAspectRatio,
+        )
       }
       // Apply model defaults for inference steps and guidance scale
       if (options.default_num_inference_steps != null) {
@@ -4313,6 +6299,35 @@ export const useStore = create<AppState>((set, get) => ({
       }
       if (options.default_guidance_scale != null) {
         paramUpdates.guidance_scale = options.default_guidance_scale
+      }
+      // Flow shift is model-specific but was never applied on model switch,
+      // so it carried over from whichever model was selected before.
+      if (options.default_flow_shift != null) {
+        paramUpdates.flow_shift = options.default_flow_shift
+      }
+      if (options.minimax_h3_text_encoder_choices?.length) {
+        const currentEncoder = get().params.minimax_h3_text_encoder
+        const valid = options.minimax_h3_text_encoder_choices.some(
+          choice => choice.value === currentEncoder
+        )
+        if (!valid) {
+          paramUpdates.minimax_h3_text_encoder = (
+            options.minimax_h3_text_encoder_default
+            || options.minimax_h3_text_encoder_choices[0].value
+          )
+        }
+      }
+      if (options.minimax_h3_turbo) {
+        // A restored Turbo preset always displays the same step count the
+        // backend will enforce. This also closes a race where model defaults
+        // (20 steps) arrive after the user checks Turbo (6 steps).
+        if (get().params.minimax_h3_turbo_mode === true) {
+          paramUpdates.num_inference_steps = options.minimax_h3_turbo.steps
+        }
+      } else {
+        // Model switches preserve most Studio params. Never carry the Full-H3
+        // Turbo flag invisibly into a Pruned H3 or unrelated model.
+        paramUpdates.minimax_h3_turbo_mode = false
       }
       // TTS default duration. Prefer the model's declared `default` (DramaBox
       // uses 0 = auto-derive from prompt); fall back to `max` (legacy behavior
@@ -4340,12 +6355,26 @@ export const useStore = create<AppState>((set, get) => ({
       }
       set(s => ({
         ...ttsDefaults,
+        ...(isH3 ? {
+          durationSeconds: 124 / fps,
+          resolutionPreset: '540p' as ResolutionPreset,
+        } : {}),
         modelOptions: options,
         modelOptionsLoading: false,
+        durationSeconds: (
+          typeof ttsDefaults.durationSeconds === 'number'
+            ? ttsDefaults.durationSeconds
+            : nextDurationSeconds
+        ),
+        slidingWindowSeconds: nextWindowSeconds,
         slidingWindowOverlap: overlapDefault,
+        slidingWindowLocked: false,
+        resolutionPreset: nextResolutionPreset,
+        aspectRatio: nextAspectRatio,
         params: {
           ...s.params,
           ...paramUpdates,
+          ...(isH3 ? { resolution: resolutionMap['540p'][aspectRatio] } : {}),
         },
       }))
     } catch {
@@ -4420,15 +6449,53 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const config = await api.fetchServicesConfig()
       set({ servicesConfig: config, servicesConfigLoading: false })
+      if (
+        config.nsfw_mode
+        && _modelVisibilityHydrated
+        && get().models.length > 0
+      ) {
+        set(s => {
+          const next = _enableUninitializedMatureModels(
+            s.models,
+            s.enabledModels,
+          )
+          if (!next) return s
+          _saveEnabledModels(next)
+          return { enabledModels: next }
+        })
+      }
     } catch (e) {
       console.error('Failed to load services config:', e)
       set({ servicesConfigLoading: false })
     }
   },
   updateServicesConfig: async (partial) => {
+    // Keep controlled settings inputs stable immediately. Previously the
+    // select stayed bound to the old server value until PUT + refetch
+    // completed, so choosing another LLM visibly snapped back to Qwen.
+    // Serialize writes as well: remote URLs are edited character-by-character
+    // and out-of-order PUT completions must never restore an older value.
+    const optimistic = Object.fromEntries(
+      Object.entries(partial).filter(([key]) => !key.endsWith('_api_key')),
+    ) as Partial<ServicesConfig>
+    if (Object.keys(optimistic).length > 0) {
+      set(state => ({
+        servicesConfig: state.servicesConfig
+          ? { ...state.servicesConfig, ...optimistic }
+          : state.servicesConfig,
+      }))
+    }
+    const updateTask = _servicesConfigUpdateQueue.then(async () => {
+      const result = await api.updateServicesConfig(partial)
+      set(state => ({
+        servicesConfig: state.servicesConfig
+          ? { ...state.servicesConfig, ...(result.updated as Partial<ServicesConfig>) }
+          : state.servicesConfig,
+      }))
+    })
+    _servicesConfigUpdateQueue = updateTask.catch(() => undefined)
     try {
-      await api.updateServicesConfig(partial)
-      get().loadServicesConfig()
+      await updateTask
       // When Mature Mode flips ON, auto-add all nsfw_only models to
       // enabledModels so they show up in selectors immediately. Without
       // this the user would have to walk Settings → System → Model
@@ -4439,24 +6506,30 @@ export const useStore = create<AppState>((set, get) => ({
       // (they're filtered from view by the nsfw_only + nsfw_mode check
       // in ModelSelector / SystemSettingsPanel anyway). That way if the
       // user toggles mature mode back on later, their selections persist.
+      get().loadServicesConfig()
       if (partial.nsfw_mode === true) {
-        const nsfwModels = get().models.filter(m => m.nsfw_only).map(m => m.model_type)
-        if (nsfwModels.length > 0) {
+        if (_modelVisibilityHydrated) {
           set(s => {
-            const next = new Set(s.enabledModels)
-            let changed = false
-            for (const mt of nsfwModels) {
-              if (!next.has(mt)) { next.add(mt); changed = true }
-            }
-            if (!changed) return s
+            const next = _enableUninitializedMatureModels(s.models, s.enabledModels)
+            if (!next) return s
             _saveEnabledModels(next)
             return { enabledModels: next }
           })
+        } else {
+          const nsfwModels = get().models.filter(m => m.nsfw_only).map(m => m.model_type)
+          if (nsfwModels.length > 0) {
+            set(s => {
+              const next = new Set(s.enabledModels)
+              nsfwModels.forEach(modelType => next.add(modelType))
+              _saveEnabledModels(next)
+              return { enabledModels: next }
+            })
+          }
         }
       }
     } catch (e) {
       console.error('Failed to update services config:', e)
-      get().loadServicesConfig()
+      await get().loadServicesConfig()
     }
   },
 
@@ -4501,15 +6574,62 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Prompt enhancement
   isEnhancing: false,
+  h3WindowPlan: null,
+  updateH3WindowPrompt: (index, prompt) => set(s => {
+    if (!s.h3WindowPlan || index < 0 || index >= s.h3WindowPlan.windows.length) return {}
+    const windows = s.h3WindowPlan.windows.map((window, windowIndex) => (
+      windowIndex === index ? { ...window, prompt } : window
+    ))
+    return {
+      h3WindowPlan: {
+        ...s.h3WindowPlan,
+        windows,
+        window_prompts: windows.map(window => window.prompt),
+      },
+    }
+  }),
+  clearH3WindowPlan: () => set({ h3WindowPlan: null }),
   enhancePrompt: async (ttsMode?: string) => {
-    const { params, generationMode, startImage, imageRefs } = get()
+    const state = get()
+    const { params, generationMode, startImage, endImage, imageRefs } = state
     if (!params.prompt.trim()) return
     set({ isEnhancing: true })
     try {
       // Collect images relevant to the CURRENT mode only
       const imagePaths: string[] = []
+      let referenceContext: string | undefined
+      const isOmniReference = state.modelOptions?.omni_reference === true
 
-      if (generationMode === 'image') {
+      if (isOmniReference) {
+        let pictureIndex = 0
+        let videoIndex = 0
+        let audioIndex = 0
+        const labelLines: string[] = []
+        for (const reference of params.minimax_h3_references ?? []) {
+          const note = (reference.role || reference.filename || 'reference').trim()
+          if (reference.type === 'audio') {
+            const intent = reference.audio_intent ?? 'voice'
+            if (intent === 'drive') {
+              labelLines.push(`<Audio ${++audioIndex}>: ${note}; intent=AUDIO REUSE / PERFORMANCE DRIVER; retention=partially_copy; preserve its audible timeline and synchronize action to it`)
+            } else if (intent === 'style') {
+              labelLines.push(`<Audio ${++audioIndex}>: ${note}; intent=AUDIO REFERENCE; retention=weak_reference; borrow only rhythm/style/texture and do not copy the source signal or words`)
+            } else {
+              labelLines.push(`<Audio ${++audioIndex}>: ${note}; intent=VOICE REFERENCE; retention=reference; use timbre/emotion/delivery for new scripted dialogue without copying source words, timing, or waveform`)
+            }
+          } else if (reference.type === 'image') {
+            labelLines.push(`<Picture ${++pictureIndex}>: visual identity/appearance reference for ${note}; retention=reference for identity only; do not reproduce its background, framing, composition, or pose`)
+            if (reference.path) imagePaths.push(reference.path)
+          } else {
+            const nextVideoIndex = videoIndex + 1
+            if ((reference.has_audio || reference.audio_path) && reference.include_audio !== false) {
+              labelLines.push(`<Audio ${++audioIndex}>: soundtrack paired with <Video ${nextVideoIndex}>; intent=AUDIO REUSE / PERFORMANCE DRIVER; retention=partially_copy; preserve its audible timeline and synchronize action to it`)
+            }
+            videoIndex = nextVideoIndex
+            labelLines.push(`<Video ${videoIndex}>: motion/camera/scene/timing reference for ${note}`)
+          }
+        }
+        referenceContext = labelLines.join('\n')
+      } else if (generationMode === 'image') {
         // Image mode: send reference images only
         for (const ref of imageRefs) {
           try {
@@ -4530,16 +6650,67 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       // Include duration/window info for video models
-      const state = get()
       const fps = state.modelOptions?.fps ?? 16
       const swDefaults = (state.modelOptions as Record<string, unknown> | null)?.sliding_window_defaults as Record<string, number> | undefined
       const discardFrames = swDefaults?.discard_last_frames ?? 0
       const overlapSec = state.slidingWindowOverlap / fps
       const discardSec = discardFrames / fps
       const stride = state.slidingWindowSeconds - discardSec - overlapSec
-      const windowCount = stride > 0 && state.durationSeconds > state.slidingWindowSeconds
+      const supportsSlidingWindows = state.modelOptions?.sliding_window === true
+      const windowCount = supportsSlidingWindows && stride > 0 && state.durationSeconds > state.slidingWindowSeconds
         ? 1 + Math.ceil((state.durationSeconds - state.slidingWindowSeconds + discardSec) / stride)
         : 1
+
+      const shouldPlanH3Windows = (
+        generationMode === 'video'
+        && state.modelOptions?.sliding_window_auto_prompt_pacing === true
+        && params.image_mode !== 2
+        && windowCount > 1
+      )
+      if (shouldPlanH3Windows) {
+        // The ordinary H3 enhancer writes one complete Context-IR timeline.
+        // Multi-window H3 instead needs a structured storyboard whose prompts
+        // contain only their own local actions. Include both endpoint images
+        // so the planner can preserve the requested visual trajectory.
+        if (endImage) {
+          try {
+            const uploaded = await api.uploadImage(endImage)
+            imagePaths.push(uploaded.path)
+          } catch { /* best effort */ }
+        } else if (params.image_end && typeof params.image_end === 'string') {
+          imagePaths.push(params.image_end)
+        }
+        const plan = await api.planH3Windows({
+          prompt: params.prompt,
+          model_type: params.model_type,
+          resolution: params.resolution,
+          total_frames: Math.max(1, Math.round(state.durationSeconds * fps)),
+          window_frames: Math.max(1, Math.round(state.slidingWindowSeconds * fps)),
+          overlap_frames: state.slidingWindowOverlap,
+          discard_frames: discardFrames,
+          sliding_window_memory_override: state.slidingWindowLocked,
+          has_start_image: !!(startImage || params.image_start),
+          has_end_image: !!(endImage || params.image_end),
+          image_paths: imagePaths.length > 0 ? imagePaths : undefined,
+        })
+        const effectiveWindowFrames = plan.effective_window_frames || plan.window_frames
+        set(s => ({
+          h3WindowPlan: plan,
+          slidingWindowSeconds: effectiveWindowFrames / fps,
+          // Clicking Enhance on a multi-window H3 First/Last job is an
+          // explicit request to plan the idea across those windows. Turn the
+          // planner back on even when an old saved setting left legacy mode
+          // disabled; otherwise the ordinary H3 enhancer flattens every
+          // window into one globally timed screenplay.
+          params: {
+            ...s.params,
+            sliding_window_size: effectiveWindowFrames,
+            minimax_h3_window_storyboard: true,
+          },
+          isEnhancing: false,
+        }))
+        return
+      }
 
       // TTS dialogue needs more tokens for longer conversations
       const maxTokens = (generationMode === 'audio' && ttsMode) ? 2048 : undefined
@@ -4556,6 +6727,7 @@ export const useStore = create<AppState>((set, get) => ({
         activated_loras: params.activated_loras.length > 0 ? params.activated_loras : undefined,
         tts_enhance_mode: ttsMode || undefined,
         tts_voice_count: state.ttsVoiceCount || undefined,
+        reference_context: referenceContext,
       })
       set(s => ({
         params: { ...s.params, prompt: result.enhanced },
@@ -4584,6 +6756,26 @@ export const useStore = create<AppState>((set, get) => ({
   directorAnalysis: null,
   directorPlannedClips: [],
   directorEnergyBias: 0,
+  directorPacingProfile: 'balanced',
+  directorMusicVideoTreatment: {
+    generation_mode: 'image_guided',
+    direct_video_master_prompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
+    mode: 'hybrid',
+    performer_presence: 60,
+    lip_sync: 'frequent',
+    recurring_sets: ['Main performance set', 'Story world', 'Bridge contrast set'],
+    wardrobe: '',
+    palette: '',
+    camera_language: 'Controlled cinematic movement; intimate verses and bold chorus coverage',
+    recurring_motif: '',
+    chorus_signature: 'Return to the main performance set with direct-to-camera delivery and the boldest lighting',
+    surrealism: 35,
+    forbidden_elements: '',
+  },
+  setDirectorMusicVideoTreatment: (partial) => set(state => ({
+    directorMusicVideoTreatment: { ...state.directorMusicVideoTreatment, ...partial },
+    ...(partial.generation_mode === 'direct_video' ? { directorSeamless: false } : {}),
+  })),
   directorClipPlans: [],
   directorSceneDescription: '',
   directorLoading: false,
@@ -4597,6 +6789,10 @@ export const useStore = create<AppState>((set, get) => ({
   directorLocationRefs: [],
   directorLocationRefPaths: [],
   directorLocationRefLabels: [],
+  directorH3VideoRefs: [],
+  directorH3VideoRefPaths: [],
+  directorH3AudioRefs: [],
+  directorH3AudioRefPaths: [],
   directorVoiceRef: null,
   directorVoiceRefPath: null,
   directorIdentityGuidanceScale: 3.0,
@@ -4617,6 +6813,7 @@ export const useStore = create<AppState>((set, get) => ({
   // to retake/review than one rolling-window render).
   directorAutoMode: true,
   directorSeamless: false,
+  directorShotImageGuidance: 'auto' as DirectorShotImageGuidance,
   directorLlmLog: [],
   directorSkill: null,
   directorMusicSource: null,
@@ -4634,17 +6831,74 @@ export const useStore = create<AppState>((set, get) => ({
   setDirectorSongDuration: (v) => set({ directorSongDuration: v }),
   directorResolution: '720p' as ResolutionPreset,
   directorAspectRatio: '16:9' as AspectRatio,
+  directorVideoInferenceStepsByModel: {},
+  directorVideoMaxShotFramesByModel: {},
+  directorH3TurboModeByModel: {},
   shortFilmCharacters: [],
   shortFilmPath: null,
   shortFilmTargetDuration: 30,
+  directorWritingProvider: 'maestro',
+  directorWritingModel: '',
+  directorWritingBaseUrl: '',
   shortFilmNarrative: false,
+  shortFilmVisualStyle: '',
+  shortFilmPreserveVisualStyle: true,
+  directorCharacterVisualStyle: '',
+  directorAllowClipText: false,
   llmStreamText: '',
   llmStreamDone: true,
+  foregroundActivity: null,
+  activities: {},
   pipelineId: null,
   pipelineStatus: null,
+  activeDirectorPipelines: [],
   pipelinePolling: false,
+  upsertActivity: (activity) => set(state => {
+    const previous = state.activities[activity.id]
+    const now = Date.now()
+    return {
+      activities: {
+        ...state.activities,
+        [activity.id]: {
+          ...previous,
+          ...activity,
+          startedAt: previous?.startedAt || activity.startedAt || now,
+          updatedAt: activity.updatedAt || now,
+        },
+      },
+    }
+  }),
+  removeActivity: (activityId) => set(state => {
+    if (!state.activities[activityId]) return {}
+    const activities = { ...state.activities }
+    delete activities[activityId]
+    return { activities }
+  }),
+  // Compatibility bridge for older feature panels. New workflows should use
+  // the registry directly so concurrent activities cannot overwrite one another.
+  setForegroundActivity: (activity) => set(state => {
+    const activities = { ...state.activities }
+    if (!activity) {
+      if (state.foregroundActivity?.id) delete activities[state.foregroundActivity.id]
+      return { foregroundActivity: null, activities }
+    }
+    if (state.foregroundActivity?.id && state.foregroundActivity.id !== activity.id) {
+      delete activities[state.foregroundActivity.id]
+    }
+    const previous = activities[activity.id]
+    const now = Date.now()
+    const normalized = {
+      ...previous,
+      ...activity,
+      startedAt: previous?.startedAt || activity.startedAt || now,
+      updatedAt: activity.updatedAt || now,
+    }
+    activities[activity.id] = normalized
+    return { foregroundActivity: normalized, activities }
+  }),
   setDirectorAutoMode: (v) => set({ directorAutoMode: v }),
   setDirectorSeamless: (v) => set({ directorSeamless: v }),
+  setDirectorShotImageGuidance: (v) => set({ directorShotImageGuidance: v }),
   directorAppendLlmLog: (stage, text) => set(s => {
     const t = (text || '').trim()
     if (!t) return {}
@@ -4655,7 +6909,7 @@ export const useStore = create<AppState>((set, get) => ({
     return { directorLlmLog: [...s.directorLlmLog, { stage, text: t }] }
   }),
   setDirectorSkill: (skill) => {
-    set({ directorSkill: skill })
+    set({ directorSkill: skill, ...(skill === 'music_video' ? { directorPacingProfile: 'balanced' as const } : {}) })
     // Music director default for image-to-video reference strength is
     // 0.7 (loosens the lock to the start frame so motion can develop
     // naturally) rather than 1.0 (rigid frame). Only initialize when
@@ -4676,6 +6930,30 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setDirectorResolution: (preset) => set({ directorResolution: preset }),
   setDirectorAspectRatio: (ratio) => set({ directorAspectRatio: ratio }),
+  setDirectorVideoInferenceSteps: (modelType, steps) => set(s => {
+    const next = { ...s.directorVideoInferenceStepsByModel }
+    if (steps == null || !Number.isFinite(steps)) {
+      delete next[modelType]
+    } else {
+      next[modelType] = Math.max(1, Math.min(50, Math.round(steps)))
+    }
+    return { directorVideoInferenceStepsByModel: next }
+  }),
+  setDirectorVideoMaxShotFrames: (modelType, frames) => set(s => {
+    const next = { ...s.directorVideoMaxShotFramesByModel }
+    if (frames == null || !Number.isFinite(frames) || frames <= 0) {
+      delete next[modelType]
+    } else {
+      next[modelType] = Math.round(frames)
+    }
+    return { directorVideoMaxShotFramesByModel: next }
+  }),
+  setDirectorH3TurboMode: (modelType, enabled) => set(s => ({
+    directorH3TurboModeByModel: {
+      ...s.directorH3TurboModeByModel,
+      [modelType]: enabled,
+    },
+  })),
 
   selectDirectorImageModel: (modelType) => {
     set(s => ({
@@ -4687,14 +6965,81 @@ export const useStore = create<AppState>((set, get) => ({
       selectedModelPerMode: s.selectedModelPerMode,
       savedParamsPerMode: s.savedParamsPerMode,
       savedLoraPerMode: s.savedLoraPerMode,
+      savedPromptPerMode: s.savedPromptPerMode,
     }, s.loraIdByFilename)
   },
 
-  selectDirectorVideoModel: (modelType) => {
+  selectDirectorVideoModel: async (modelType) => {
     set(s => ({
       selectedModelPerMode: { ...s.selectedModelPerMode, video: modelType },
+      ...(s.generationMode === 'video' ? {
+        params: { ...s.params, model_type: modelType },
+      } : {}),
     }))
-    get().loadModelOptions(modelType)
+    await get().loadModelOptions(modelType)
+    if (modelType === 'minimax_h3') {
+      set({ directorResolution: '540p' as ResolutionPreset })
+    }
+    try {
+      const defaults = await api.fetchDefaults(modelType)
+      if (get().selectedModelPerMode.video === modelType) {
+        const overrides: Record<string, unknown> = {}
+        for (const field of _PRIMARY_MODEL_DEFAULT_FIELDS) {
+          if (defaults[field] !== undefined) overrides[field] = defaults[field]
+        }
+        if (Object.keys(overrides).length > 0) {
+          set(s => ({
+            savedParamsPerMode: {
+              ...s.savedParamsPerMode,
+              video: { ...(s.savedParamsPerMode.video || {}), ...overrides },
+            },
+            ...(s.generationMode === 'video' ? {
+              params: { ...s.params, ...overrides, model_type: modelType } as GenerateParams,
+            } : {}),
+          }))
+        }
+      }
+    } catch {
+      // Model selection remains usable if the optional defaults request fails.
+    }
+    const s = get()
+    _saveSettings({
+      generationMode: s.generationMode,
+      selectedModelPerMode: s.selectedModelPerMode,
+      savedParamsPerMode: s.savedParamsPerMode,
+      savedLoraPerMode: s.savedLoraPerMode,
+    }, s.loraIdByFilename)
+  },
+
+  setDirectorH3Profile: (profile) => {
+    set(s => ({
+      savedParamsPerMode: {
+        ...s.savedParamsPerMode,
+        video: { ...(s.savedParamsPerMode.video || {}), h3_model_profile: profile },
+      },
+      ...(s.generationMode === 'video' ? {
+        params: { ...s.params, h3_model_profile: profile },
+      } : {}),
+    }))
+    const s = get()
+    _saveSettings({
+      generationMode: s.generationMode,
+      selectedModelPerMode: s.selectedModelPerMode,
+      savedParamsPerMode: s.savedParamsPerMode,
+      savedLoraPerMode: s.savedLoraPerMode,
+    }, s.loraIdByFilename)
+  },
+
+  setDirectorH3ReferenceMode: (mode) => {
+    set(s => ({
+      savedParamsPerMode: {
+        ...s.savedParamsPerMode,
+        video: { ...(s.savedParamsPerMode.video || {}), h3_reference_mode: mode },
+      },
+      ...(s.generationMode === 'video' ? {
+        params: { ...s.params, h3_reference_mode: mode },
+      } : {}),
+    }))
     const s = get()
     _saveSettings({
       generationMode: s.generationMode,
@@ -4750,7 +7095,18 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  directorUploadAndAnalyze: async (file) => {
+  directorUploadAndAnalyze: async (file, opts) => {
+    const activityId = `director-audio:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+    get().upsertActivity({
+      id: activityId,
+      kind: 'audio_analysis',
+      title: 'Prepare music video',
+      status: 'running',
+      phase: 'uploading_audio',
+      message: `Uploading “${file.name}”…`,
+      current: 1,
+      total: 10,
+    })
     set({
       directorLoading: true,
       directorLoadingMessage: 'Uploading audio...',
@@ -4760,11 +7116,49 @@ export const useStore = create<AppState>((set, get) => ({
     })
     try {
       const uploaded = await api.uploadAudio(file)
-      await get().directorAnalyzeAndPlan(uploaded.path, { transcribe: true })
+      const shouldTrim = Number.isFinite(opts?.trimStart)
+        && Number.isFinite(opts?.trimEnd)
+        && Number(opts?.trimEnd) > Number(opts?.trimStart) + 0.99
+      if (shouldTrim) {
+        get().upsertActivity({
+          id: activityId,
+          kind: 'audio_analysis',
+          title: 'Prepare musical trailer',
+          status: 'running',
+          phase: 'trimming_audio',
+          message: `Cutting ${Number(opts?.trimStart).toFixed(1)}s–${Number(opts?.trimEnd).toFixed(1)}s…`,
+          current: 1,
+          total: 10,
+        })
+      }
+      const prepared = shouldTrim
+        ? await api.trimAudio({
+            audio_path: uploaded.path,
+            start: Number(opts?.trimStart),
+            end: Number(opts?.trimEnd),
+          })
+        : uploaded
+      await get().directorAnalyzeAndPlan(prepared.path, {
+        transcribe: true,
+        lyricsHint: opts?.lyricsHint,
+        classifyLyricsHint: shouldTrim ? '' : opts?.lyricsHint,
+        activityId,
+      })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Upload failed'
       console.error('Director upload failed:', e)
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
+      if (get().activities[activityId]?.status !== 'failed') {
+        get().upsertActivity({
+          id: activityId,
+          kind: 'audio_analysis',
+          title: 'Prepare music video',
+          status: 'failed',
+          phase: 'uploading_audio',
+          message: msg,
+          error: msg,
+        })
+      }
     }
   },
 
@@ -4774,6 +7168,33 @@ export const useStore = create<AppState>((set, get) => ({
   // identical regardless of where the audio came from.
   directorAnalyzeAndPlan: async (audioPath, opts) => {
     const transcribe = opts?.transcribe !== false
+    let activityId = opts?.activityId
+      || `director-audio:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+    const analysisSteps: Record<string, number> = {
+      loading_audio: 2,
+      detecting_beats: 3,
+      identifying_sections: 4,
+      loading_vocal_model: 4,
+      extracting_vocals: 5,
+      loading_transcription_model: 5,
+      transcribing: 6,
+      loading_diarization_model: 6,
+      identifying_speakers: 7,
+      finalizing: 8,
+    }
+    const reportActivity = (phase: string, message: string, current?: number) => {
+      get().upsertActivity({
+        id: activityId,
+        kind: 'audio_analysis',
+        title: 'Prepare music video',
+        status: 'running',
+        phase,
+        message,
+        current: current ?? analysisSteps[phase] ?? 2,
+        total: 10,
+      })
+    }
+    reportActivity('analyzing_audio', 'Analyzing audio…', 2)
     set({
       directorAudioPath: audioPath,
       directorLoading: true,
@@ -4781,42 +7202,42 @@ export const useStore = create<AppState>((set, get) => ({
       directorError: null,
       directorStep: 'analyze',
     })
-    // Poll the backend's audio-analyze status during the long synchronous
-    // /audio/analyze call so the UI can show "Loading transcription model
-    // (first use downloads ~300MB)..." vs "Transcribing audio..." instead of
-    // a single "Analyzing audio..." for the entire first-run wait. Cleared on
-    // success or failure in the finally block.
-    let analyzePoll: ReturnType<typeof setInterval> | null = null
-    const startAnalyzePolling = () => {
-      analyzePoll = setInterval(async () => {
-        try {
-          const status = await api.fetchAudioAnalyzeStatus()
-          if (!status.step) return  // No analyze in flight or just cleared
-          set({ directorLoadingMessage: `${status.detail}...` })
-        } catch { /* polling errors are non-fatal */ }
-      }, 1000)
-    }
-    const stopAnalyzePolling = () => {
-      if (analyzePoll !== null) {
-        clearInterval(analyzePoll)
-        analyzePoll = null
-      }
-    }
     try {
-      startAnalyzePolling()
-      let analysis = await api.analyzeAudio({
+      const accepted = await api.startAudioAnalysisJob({
         audio_path: audioPath,
         transcribe,
         extract_vocals: transcribe,
         lyrics_hint: opts?.lyricsHint || undefined,
       })
-      stopAnalyzePolling()
+      if (activityId !== accepted.job_id) get().removeActivity(activityId)
+      activityId = accepted.job_id
+      reportActivity('queued', 'Audio analysis queued…', 1)
+      void get().reconnectJobs()
+
+      let analysis: AudioAnalysisResult | null = null
+      for (;;) {
+        const status = await api.fetchAudioAnalysisJob(accepted.job_id)
+        set({ directorLoadingMessage: status.message })
+        reportActivity(status.phase || 'analyzing_audio', status.message, status.step)
+        if (status.status === 'completed') {
+          analysis = status.result
+          break
+        }
+        if (status.status === 'failed') throw new Error(status.error || status.message)
+        if (status.status === 'cancelled') throw new Error('Audio analysis cancelled')
+        await new Promise(resolve => window.setTimeout(resolve, 1000))
+      }
+      if (!analysis) throw new Error('Audio analysis completed without a result')
 
       // Try LLM-based section classification (falls back to heuristic)
       if (analysis.lyrics && analysis.lyrics.length > 0) {
         try {
           set({ directorLoadingMessage: 'Identifying sections (LLM)...' })
-          const classified = await api.classifySections({ analysis })
+          reportActivity('classifying_sections', 'Classifying verses, choruses and bridges…', 8)
+          const classified = await api.classifySections({
+            analysis,
+            lyrics_hint: (opts?.classifyLyricsHint ?? opts?.lyricsHint) || undefined,
+          })
           analysis = {
             ...analysis,
             sections: classified.sections,
@@ -4849,9 +7270,11 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Plan beat-aligned clip structure
       set({ directorLoadingMessage: 'Planning clip structure...' })
+      reportActivity('planning_clips', 'Planning beat-aligned clips…', 9)
       const structure = await api.planClipStructure({
         analysis,
         energy_bias: get().directorEnergyBias,
+        pacing_profile: get().directorSkill === 'music_video' ? get().directorPacingProfile : undefined,
         fps: get().modelOptions?.fps ?? 16,
         frames_steps: get().modelOptions?.frames_steps ?? 4,
         frames_minimum: get().modelOptions?.frames_minimum ?? 5,
@@ -4860,22 +7283,42 @@ export const useStore = create<AppState>((set, get) => ({
         // whose fps fallback of 16 used to shrink clips by 16/25).
         video_model: get().selectedModelPerMode.video || undefined,
       })
-      // Music Video skips the manual clip-structure review step entirely —
-      // the beat-aligned clips are used as-is. Short Film keeps it.
-      const skipStructure = get().directorSkill === 'music_video'
       set({
         directorPlannedClips: structure.clips,
-        directorStep: skipStructure ? 'style' : 'structure',
+        directorStep: 'structure',
         directorLoading: false,
         directorLoadingMessage: null,
       })
+      get().upsertActivity({
+        id: activityId,
+        kind: 'audio_analysis',
+        title: 'Prepare music video',
+        status: 'completed',
+        phase: 'ready_for_structure_review',
+        message: `${structure.clips.length} clips planned — review the pacing`,
+        current: 10,
+        total: 10,
+      })
+      window.setTimeout(() => get().removeActivity(activityId), 5000)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Analysis failed'
       console.error('Director analysis failed:', e)
+      if (msg === 'Audio analysis cancelled') {
+        set({ directorLoading: false, directorLoadingMessage: null, directorError: null, directorStep: 'upload' })
+        get().removeActivity(activityId)
+        return
+      }
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
+      get().upsertActivity({
+        id: activityId,
+        kind: 'audio_analysis',
+        title: 'Prepare music video',
+        status: 'failed',
+        phase: 'analyzing_audio',
+        message: msg,
+        error: msg,
+      })
       throw e
-    } finally {
-      stopAnalyzePolling()
     }
   },
 
@@ -4886,23 +7329,38 @@ export const useStore = create<AppState>((set, get) => ({
     const s = get()
     const description = s.directorSongDescription.trim()
     if (!description) return
+    const activity = beginAppActivity(get, {
+      kind: 'director_songwriting',
+      title: 'Music Video Director',
+      phase: 'writing_song',
+      message: 'Writing the music prompt and structured lyrics…',
+      total: 2,
+    })
     let refPath = s.directorReferenceImagePath
-    if (!refPath && s.directorReferenceImage) {
-      try {
-        refPath = (await api.uploadImage(s.directorReferenceImage)).path
-        set({ directorReferenceImagePath: refPath })
-      } catch { /* image upload is best-effort */ }
+    try {
+      if (!refPath && s.directorReferenceImage) {
+        activity.report('uploading_artwork', 'Uploading the visual reference…', 1, 2)
+        try {
+          refPath = (await api.uploadImage(s.directorReferenceImage)).path
+          set({ directorReferenceImagePath: refPath })
+        } catch { /* image upload is best-effort */ }
+      }
+      activity.report('writing_song', 'Writing the music prompt and structured lyrics…', 1, 2)
+      set({ directorError: null })
+      const r = await api.writeSong({
+        description,
+        instrumental: s.directorSongInstrumental,
+        reference_image_path: refPath || undefined,
+      })
+      set({
+        directorSongStyle: r.style || '',
+        directorSongLyrics: s.directorSongInstrumental ? '[Instrumental]' : (r.lyrics || ''),
+      })
+      activity.finish('Song prompt and lyrics ready')
+    } catch (error) {
+      activity.fail(error)
+      throw error
     }
-    set({ directorError: null })
-    const r = await api.writeSong({
-      description,
-      instrumental: s.directorSongInstrumental,
-      reference_image_path: refPath || undefined,
-    })
-    set({
-      directorSongStyle: r.style || '',
-      directorSongLyrics: s.directorSongInstrumental ? '[Instrumental]' : (r.lyrics || ''),
-    })
   },
 
   // Music Video: generate the track (writing the song first if the user only
@@ -4919,6 +7377,13 @@ export const useStore = create<AppState>((set, get) => ({
       set({ directorError: 'Describe your song (or fill in Style / Lyrics) first.' })
       return
     }
+    const activity = beginAppActivity(get, {
+      kind: 'director_music',
+      title: 'Music Video Director',
+      phase: 'generating_music',
+      message: 'Preparing music generation…',
+      total: 2,
+    })
     // Upload the reference image so it can inform BOTH the music and visuals.
     let refPath = s.directorReferenceImagePath
     if (!refPath && s.directorReferenceImage) {
@@ -4951,6 +7416,7 @@ export const useStore = create<AppState>((set, get) => ({
       })
       setTimeout(() => { void get().reconnectJobs() }, 1200)
       setTimeout(() => { void get().reconnectJobs() }, 5000)
+      activity.report('generating_music', 'Generating the music track…', 1, 2)
       const r = await trackPromise
       // Persist the (possibly LLM-written) song back into the editable fields.
       set({
@@ -4964,6 +7430,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (!get().directorSceneDescription.trim() && description) {
         set({ directorSceneDescription: description })
       }
+      activity.finish('Music track ready; starting audio analysis')
       // Same analyze → plan-structure chain as the upload flow. Instrumental
       // tracks skip transcription (no lyrics to find). For vocal tracks we
       // KNOW the written lyrics — seed Whisper with them so the timed
@@ -4972,15 +7439,11 @@ export const useStore = create<AppState>((set, get) => ({
         transcribe: !instrumental,
         lyricsHint: instrumental ? undefined : (r.lyrics || lyrics || undefined),
       })
-      // The song description doubles as the scene description, so the manual
-      // 'style' step isn't needed — proceed straight to planning. Auto runs the
-      // full server-side pipeline; manual runs the frontend plan→review chain.
-      if (get().directorStep === 'style') {
-        if (get().directorAutoMode) {
-          await get().startDirectorPipeline()
-        } else {
-          await get().directorPlanPrompts()
-        }
+      // Manual mode now pauses on the visible structure review. Auto mode
+      // accepts the selected pacing profile and continues hands-free.
+      if (get().directorStep === 'structure' && get().directorAutoMode) {
+        get().directorConfirmStructure()
+        await get().startDirectorPipeline()
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Music generation failed'
@@ -4992,12 +7455,17 @@ export const useStore = create<AppState>((set, get) => ({
         directorError: msg,
         directorStep: 'upload',
       })
+      activity.fail(e, 'generating_music')
     }
   },
 
   directorSetEnergyBias: async (bias) => {
     const { directorAnalysis } = get()
     if (!directorAnalysis) return
+    const activity = beginAppActivity(get, {
+      kind: 'clip_replanning', title: 'Director', phase: 'planning_clips',
+      message: 'Recalculating clip structure…', total: 1,
+    })
     set({ directorLoading: true, directorEnergyBias: bias })
     try {
       const structure = await api.planClipStructure({
@@ -5009,9 +7477,38 @@ export const useStore = create<AppState>((set, get) => ({
         video_model: get().selectedModelPerMode.video || undefined,
       })
       set({ directorPlannedClips: structure.clips, directorLoading: false })
+      activity.finish(`${structure.clips.length} clips replanned`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to update structure'
       set({ directorLoading: false, directorError: msg })
+      activity.fail(e, 'planning_clips')
+    }
+  },
+
+  directorSetPacingProfile: async (profile) => {
+    const { directorAnalysis } = get()
+    set({ directorPacingProfile: profile })
+    if (!directorAnalysis) return
+    const activity = beginAppActivity(get, {
+      kind: 'clip_replanning', title: 'Music Video Director', phase: 'planning_clips',
+      message: `Applying ${profile} editing rhythm…`, total: 1,
+    })
+    set({ directorLoading: true, directorError: null })
+    try {
+      const structure = await api.planClipStructure({
+        analysis: directorAnalysis,
+        pacing_profile: profile,
+        fps: get().modelOptions?.fps ?? 16,
+        frames_steps: get().modelOptions?.frames_steps ?? 4,
+        frames_minimum: get().modelOptions?.frames_minimum ?? 5,
+        video_model: get().selectedModelPerMode.video || undefined,
+      })
+      set({ directorPlannedClips: structure.clips, directorLoading: false })
+      activity.finish(`${structure.clips.length} clips planned with ${profile} pacing`)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to update music-video pacing'
+      set({ directorLoading: false, directorError: msg })
+      activity.fail(e, 'planning_clips')
     }
   },
 
@@ -5066,6 +7563,32 @@ export const useStore = create<AppState>((set, get) => ({
     const [lF] = labels.splice(from, 1); labels.splice(to, 0, lF)
     return { directorLocationRefs: refs, directorLocationRefPaths: paths, directorLocationRefLabels: labels }
   }),
+  directorAddH3VideoRef: (file) => {
+    set(s => s.directorH3VideoRefs.length >= 3 ? {} : ({
+      directorH3VideoRefs: [...s.directorH3VideoRefs, file],
+      savedParamsPerMode: {
+        ...s.savedParamsPerMode,
+        video: { ...(s.savedParamsPerMode.video || {}), h3_reference_mode: 'references' },
+      },
+    }))
+  },
+  directorRemoveH3VideoRef: (index) => set(s => ({
+    directorH3VideoRefs: s.directorH3VideoRefs.filter((_, i) => i !== index),
+    directorH3VideoRefPaths: s.directorH3VideoRefPaths.filter((_, i) => i !== index),
+  })),
+  directorAddH3AudioRef: (file) => {
+    set(s => s.directorH3AudioRefs.length >= 3 ? {} : ({
+      directorH3AudioRefs: [...s.directorH3AudioRefs, file],
+      savedParamsPerMode: {
+        ...s.savedParamsPerMode,
+        video: { ...(s.savedParamsPerMode.video || {}), h3_reference_mode: 'references' },
+      },
+    }))
+  },
+  directorRemoveH3AudioRef: (index) => set(s => ({
+    directorH3AudioRefs: s.directorH3AudioRefs.filter((_, i) => i !== index),
+    directorH3AudioRefPaths: s.directorH3AudioRefPaths.filter((_, i) => i !== index),
+  })),
 
   directorSetSceneDescription: (prompt) => set({ directorSceneDescription: prompt }),
 
@@ -5103,10 +7626,21 @@ export const useStore = create<AppState>((set, get) => ({
   directorPlanPrompts: async () => {
     const { directorPlannedClips, directorSceneDescription, directorAnalysis } = get()
     if (!directorPlannedClips.length || !directorSceneDescription.trim()) return
+    const directVideo = get().directorMusicVideoTreatment.generation_mode === 'direct_video'
+    const activity = beginAppActivity(get, {
+      kind: 'director_planning',
+      title: 'Music Video Director',
+      phase: 'uploading_artwork',
+      message: 'Preparing visual references…',
+      total: 3,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan' })
     try {
       // Upload all reference images
-      const { refImagePath, charPaths, locPaths } = await get()._uploadDirectorRefs()
+      const { refImagePath, charPaths, locPaths } = directVideo
+        ? { refImagePath: null, charPaths: [] as string[], locPaths: [] as string[] }
+        : await get()._uploadDirectorRefs()
+      activity.report('planning', `Planning ${directorPlannedClips.length} shots with the LLM…`, 1, 3)
       const { directorCharacterRefLabels: charLabels, directorLocationRefLabels: locLabels } = get()
       const extraRefs = {
         ...(charPaths.length > 0 ? { character_ref_paths: charPaths, character_ref_labels: charLabels } : {}),
@@ -5125,22 +7659,69 @@ export const useStore = create<AppState>((set, get) => ({
       // ?? not || — an explicit user-toggled `false` must be respected
       // (legacy v1 path); only fall back to true when servicesConfig
       // hasn't loaded yet or the field is undefined.
-      const useV2 = get().servicesConfig?.use_director_v2 ?? true
+      const useV2 = directVideo || (get().servicesConfig?.use_director_v2 ?? true)
       let plans: Array<{ video_prompt: string; image_prompt: string }>
 
       if (useV2) {
         // Director v2: structured planning → rendering → validation
-        const result = await api.directorV2Plan({
-          skill_type: 'music_video',
-          clips: directorPlannedClips,
-          scene_description: directorSceneDescription,
-          lyrics: directorAnalysis?.lyrics ?? undefined,
-          bpm: directorAnalysis?.bpm ?? 120,
-          reference_image_path: refImagePath ?? undefined,
-          ...extraRefs,
-          speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
-          prompt_type: 'both',
-        })
+        let keepPollingPlan = true
+        const progressPoll = (async () => {
+          while (keepPollingPlan) {
+            try {
+              const progress = await api.getDirectorV2PlanProgress(activity.id)
+              if (progress) {
+                const streamed = (progress.stream_text || '').replace(/\s+/g, ' ').trim()
+                const streamPreview = streamed.slice(-1200)
+                const detail = (
+                  progress.phase === 'writing_scenes' && streamPreview
+                    ? streamPreview
+                    : progress.detail || streamPreview || 'The LLM is preparing the next visual prompt…'
+                ).trim()
+                activity.report(
+                  progress.phase || 'planning',
+                  `Planning ${directorPlannedClips.length} shots with the LLM…`,
+                  1,
+                  3,
+                  {
+                    detailMessage: detail,
+                    detailCurrent: progress.current || 0,
+                    detailTotal: progress.total || directorPlannedClips.length,
+                    tokenUsage: progress.usage ? {
+                      promptTokens: progress.usage.prompt_tokens || 0,
+                      completionTokens: progress.usage.completion_tokens || 0,
+                      totalTokens: progress.usage.total_tokens || 0,
+                      calls: progress.usage.calls || 0,
+                    } : undefined,
+                  },
+                )
+              }
+            } catch { /* Progress is informative; the main planning request owns errors. */ }
+            await new Promise(resolve => window.setTimeout(resolve, 800))
+          }
+        })()
+        let result: api.DirectorV2PlanResponse
+        try {
+          result = await api.directorV2Plan({
+            activity_id: activity.id,
+            skill_type: 'music_video',
+            clips: directorPlannedClips,
+            scene_description: directorSceneDescription,
+            lyrics: directorAnalysis?.lyrics ?? undefined,
+            bpm: directorAnalysis?.bpm ?? 120,
+            reference_image_path: refImagePath ?? undefined,
+            ...extraRefs,
+            speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
+            image_model: get().selectedModelPerMode.image || undefined,
+            video_model: get().selectedModelPerMode.video || undefined,
+            h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+            h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
+            music_video_treatment: get().directorMusicVideoTreatment,
+            prompt_type: 'both',
+          })
+        } finally {
+          keepPollingPlan = false
+          await progressPoll
+        }
         plans = result.clip_plans.map(p => ({
           video_prompt: p.video_prompt || '',
           image_prompt: p.image_prompt || '',
@@ -5156,6 +7737,10 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
           prompt_type: 'both',
+          music_video_treatment: get().directorMusicVideoTreatment,
+          video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
         })
         plans = result.clip_plans.map(p => ({
           video_prompt: p.video_prompt || '',
@@ -5164,27 +7749,41 @@ export const useStore = create<AppState>((set, get) => ({
       }
       set({
         directorClipPlans: plans,
-        directorStep: 'review',
+        directorStep: directVideo ? 'review_video' : 'review',
         directorLoading: false,
       })
+      activity.finish(`${plans.length} visual shot plans ready for review`)
 
       // Auto-mode: skip review, proceed to image gen. directorGenerateStartImages
       // now generates an establishing/anchor image first when no reference was
       // provided, so every clip shares a consistent look (instead of skipping
       // images entirely as it used to).
       if (get().directorAutoMode) {
-        get().directorGenerateStartImages()
+        if (directVideo) get().directorGenerate()
+        else get().directorGenerateStartImages()
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Planning failed'
       console.error('Director planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'style' })
+      activity.fail(e, 'planning')
     }
   },
 
   directorPlanVideoPrompts: async () => {
+    if (get().directorMusicVideoTreatment.generation_mode === 'direct_video') {
+      await get().directorPlanPrompts()
+      return
+    }
     const { directorPlannedClips, directorSceneDescription, directorAnalysis, directorClipPlans, directorReferenceImagePath } = get()
     if (!directorPlannedClips.length || !directorClipPlans.length) return
+    const activity = beginAppActivity(get, {
+      kind: 'director_video_prompts',
+      title: 'Music Video Director',
+      phase: 'planning',
+      message: `Planning motion for ${directorPlannedClips.length} clips…`,
+      total: directorPlannedClips.length,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan_video' })
     try {
       // Build speaker_mappings
@@ -5209,6 +7808,10 @@ export const useStore = create<AppState>((set, get) => ({
         speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
         prompt_type: 'video',
         existing_image_prompts: existingImagePrompts,
+        music_video_treatment: get().directorMusicVideoTreatment,
+        video_model: get().selectedModelPerMode.video || undefined,
+        h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+        h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
       })
       // Merge video prompts into existing clip plans
       const updatedPlans = directorClipPlans.map((plan, i) => ({
@@ -5220,6 +7823,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review_video',
         directorLoading: false,
       })
+      activity.finish(`${updatedPlans.length} video prompts ready`)
 
       // Auto-mode: skip review, apply to editor and start generation
       if (get().directorAutoMode) {
@@ -5229,6 +7833,7 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : 'Video prompt planning failed'
       console.error('Director video planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'generate_images' })
+      activity.fail(e, 'planning')
     }
   },
 
@@ -5243,12 +7848,36 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   directorGenerateStartImages: async () => {
+    if (get().directorMusicVideoTreatment.generation_mode === 'direct_video') {
+      set({
+        directorClipImages: [],
+        directorImageGenProgress: null,
+        directorStep: 'review_video',
+        directorLoading: false,
+      })
+      if (get().directorAutoMode) get().directorGenerate()
+      return
+    }
     const { directorClipPlans, directorPlannedClips, params, selectedModelPerMode, savedParamsPerMode, savedLoraPerMode, directorResolution, directorAspectRatio, directorSceneDescription } = get()
     if (!directorClipPlans.length) return
+    const needsAnchor = !get().directorReferenceImage && !get().directorReferenceImagePath
+    const activityTotal = directorClipPlans.length + (needsAnchor ? 1 : 0)
+    const activity = beginAppActivity(get, {
+      kind: 'director_images',
+      title: 'Music Video Director',
+      phase: 'generating_images',
+      message: `Preparing ${activityTotal} start images…`,
+      total: activityTotal,
+    })
 
     // Use saved image-mode settings if available, otherwise fall back to defaults
     const imageModel = selectedModelPerMode.image || 'flux2_klein_9b'
-    const directorRes = resolutionMap[directorResolution]?.[directorAspectRatio] || resolutionMap[directorResolution]['16:9']
+    const imageOptions = await api.fetchModelOptions(imageModel).catch(() => null)
+    const directorRes = resolveResolution(
+      imageOptions,
+      directorResolution,
+      directorAspectRatio,
+    )
     // Director's hardcoded image_model fallback is flux2_klein_9b, which is
     // step-distilled to 4 inference steps (per app/defaults/flux2_klein_9b.json).
     const imageParams = savedParamsPerMode.image || { num_inference_steps: 4, guidance_scale: 1, resolution: directorRes }
@@ -5282,6 +7911,7 @@ export const useStore = create<AppState>((set, get) => ({
         seed: -1,
         settings_version: 2.52,
         generation_mode: 'image',
+        workspace: get().activeWorkspace,
         repeat_generation: 1,
         negative_prompt: '',
         video_length: 1,
@@ -5290,12 +7920,19 @@ export const useStore = create<AppState>((set, get) => ({
         ...buildImgPostProc(),
       }
       const { job_id } = await api.submitGeneration(genParams)
+      void get().reconnectJobs()
       let outputFiles: string[] = []
       let attempts = 0
       const maxAttempts = 300  // 300 × 2s = 10 minutes
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 2000))
         const status = await api.fetchJobStatus(job_id)
+        activity.report(
+          'generating_images',
+          `${label} · ${status.message || `${Math.round(status.progress)}%`}`,
+          Math.min(activityTotal, get().directorClipImages.length),
+          activityTotal,
+        )
         if (status.status === 'completed') { outputFiles = status.output_files; break }
         if (status.status === 'failed') throw new Error(status.error || `${label} generation failed`)
         attempts++
@@ -5335,6 +7972,7 @@ export const useStore = create<AppState>((set, get) => ({
           },
         })
         const anchorPrompt = directorSceneDescription.trim() || directorClipPlans[0]?.image_prompt || 'cinematic establishing shot'
+        activity.report('generating_images', 'Generating the shared establishing image…', 0, activityTotal)
         const { file: anchorFile } = await genImage(anchorPrompt, [], 'Establishing image')
         // Adopt as the reference image (uploaded just below via _uploadDirectorRefs).
         set({ directorReferenceImage: anchorFile, directorReferenceImagePath: null })
@@ -5356,6 +7994,7 @@ export const useStore = create<AppState>((set, get) => ({
         set({
           directorImageGenProgress: { current: base + i, total, currentClipLabel: clipLabel, status: 'generating' },
         })
+        activity.report('generating_images', `Generating ${clipLabel}…`, base + i, total)
         const { file, filename } = await genImage(plan.image_prompt, allRefs, clipLabel)
         generatedImages.push({ clipIndex: i, prompt: plan.image_prompt, file, filename })
         set({ directorClipImages: [...generatedImages] })
@@ -5365,6 +8004,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorImageGenProgress: { current: total, total, currentClipLabel: '', status: 'done' },
         directorLoading: false,
       })
+      activity.finish(`${total} start images ready`)
 
       // Video prompts already generated in the combined LLM pass — go straight to review
       const hasVideoPrompts = get().directorClipPlans.some(p => p.video_prompt)
@@ -5387,6 +8027,7 @@ export const useStore = create<AppState>((set, get) => ({
           ? { ...get().directorImageGenProgress!, status: 'error' }
           : null,
       })
+      activity.fail(e, 'generating_images')
     }
   },
 
@@ -5395,10 +8036,15 @@ export const useStore = create<AppState>((set, get) => ({
             directorAudioPath, directorAudioFile, directorSeamless,
             selectedModelPerMode, savedParamsPerMode, savedLoraPerMode } = get()
     if (!directorClipPlans.length) return
+    const directVideo = get().directorMusicVideoTreatment.generation_mode === 'direct_video'
 
     // Use saved video-mode settings if available
     const videoModel = selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
     const videoParams = savedParamsPerMode.video
+      ? { ...savedParamsPerMode.video }
+      : {}
+    const directorSteps = get().directorVideoInferenceStepsByModel[videoModel]
+    if (directorSteps != null) videoParams.num_inference_steps = directorSteps
     const videoLora = savedLoraPerMode.video
 
     const fps = get().modelOptions?.fps ?? 16
@@ -5408,11 +8054,11 @@ export const useStore = create<AppState>((set, get) => ({
     // Build clips with per-clip durations and images
     const clips: MultiClip[] = directorClipPlans.map((plan, i) => {
       const plannedClip = directorPlannedClips[i]
-      const clipImage = directorClipImages.find(img => img.clipIndex === i)
+      const clipImage = directVideo ? undefined : directorClipImages.find(img => img.clipIndex === i)
 
       // Seamless mode: use next clip's start image as this clip's end image
       let endImage: File | null = null
-      if (directorSeamless && i < directorClipPlans.length - 1) {
+      if (!directVideo && directorSeamless && i < directorClipPlans.length - 1) {
         const nextClipImage = directorClipImages.find(img => img.clipIndex === i + 1)
         endImage = nextClipImage?.file ?? null
       }
@@ -5424,6 +8070,7 @@ export const useStore = create<AppState>((set, get) => ({
         endImage,
         endImagePath: null,
         durationFrames: plannedClip?.duration_frames,
+        keyframes: [],
       }
     })
 
@@ -5466,11 +8113,28 @@ export const useStore = create<AppState>((set, get) => ({
             directorSeamless, directorResolution, directorAspectRatio,
             selectedModelPerMode, savedParamsPerMode, savedLoraPerMode } = get()
     if (!directorClipPlans.length) return
+    const directVideo = get().directorMusicVideoTreatment.generation_mode === 'direct_video'
+    if (directVideo) {
+      // H3's generic Studio endpoint treats a multi-shot request as one H3
+      // generation.  Keep reviewed direct prompts in Director's sequential,
+      // resumable server pipeline and do not ask the LLM to plan them again.
+      void get().startDirectorPipeline(true)
+      return
+    }
 
     // Use saved video-mode settings if available, override resolution with director's choice
     const videoModel = selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
-    const directorRes = resolutionMap[directorResolution]?.[directorAspectRatio] || resolutionMap[directorResolution]['16:9']
+    const cachedDirectorVideoOptions = get().modelOptions?.model_type === videoModel
+      ? get().modelOptions
+      : null
+    const directorRes = resolveResolution(
+      cachedDirectorVideoOptions,
+      directorResolution,
+      directorAspectRatio,
+    )
     const videoParams = savedParamsPerMode.video ? { ...savedParamsPerMode.video, resolution: directorRes } : { num_inference_steps: 8, guidance_scale: 1, resolution: directorRes }
+    const directorSteps = get().directorVideoInferenceStepsByModel[videoModel]
+    if (directorSteps != null) videoParams.num_inference_steps = directorSteps
     const videoLora = savedLoraPerMode.video
 
     const fps = get().modelOptions?.fps ?? 16
@@ -5479,11 +8143,11 @@ export const useStore = create<AppState>((set, get) => ({
 
     const clips: MultiClip[] = directorClipPlans.map((plan, i) => {
       const plannedClip = directorPlannedClips[i]
-      const clipImage = directorClipImages.find(img => img.clipIndex === i)
+      const clipImage = directVideo ? undefined : directorClipImages.find(img => img.clipIndex === i)
 
       // Seamless mode: use next clip's start image as this clip's end image
       let endImage: File | null = null
-      if (directorSeamless && i < directorClipPlans.length - 1) {
+      if (!directVideo && directorSeamless && i < directorClipPlans.length - 1) {
         const nextClipImage = directorClipImages.find(img => img.clipIndex === i + 1)
         endImage = nextClipImage?.file ?? null
       }
@@ -5495,6 +8159,7 @@ export const useStore = create<AppState>((set, get) => ({
         endImage,
         endImagePath: null,
         durationFrames: plannedClip?.duration_frames,
+        keyframes: [],
       }
     })
 
@@ -5550,6 +8215,22 @@ export const useStore = create<AppState>((set, get) => ({
       directorAnalysis: null,
       directorPlannedClips: [],
       directorEnergyBias: 0,
+      directorPacingProfile: 'balanced',
+      directorMusicVideoTreatment: {
+        generation_mode: 'image_guided',
+        direct_video_master_prompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
+        mode: 'hybrid',
+        performer_presence: 60,
+        lip_sync: 'frequent',
+        recurring_sets: ['Main performance set', 'Story world', 'Bridge contrast set'],
+        wardrobe: '',
+        palette: '',
+        camera_language: 'Controlled cinematic movement; intimate verses and bold chorus coverage',
+        recurring_motif: '',
+        chorus_signature: 'Return to the main performance set with direct-to-camera delivery and the boldest lighting',
+        surrealism: 35,
+        forbidden_elements: '',
+      },
       directorClipPlans: [],
       directorSceneDescription: '',
       directorLoading: false,
@@ -5562,6 +8243,10 @@ export const useStore = create<AppState>((set, get) => ({
       directorLocationRefs: [],
       directorLocationRefPaths: [],
       directorLocationRefLabels: [],
+      directorH3VideoRefs: [],
+      directorH3VideoRefPaths: [],
+      directorH3AudioRefs: [],
+      directorH3AudioRefPaths: [],
       directorVoiceRef: null,
       directorVoiceRefPath: null,
       directorClipImages: [],
@@ -5570,6 +8255,7 @@ export const useStore = create<AppState>((set, get) => ({
       directorSpeakerMappings: [],
       directorAutoMode: true,
       directorSeamless: false,
+      directorShotImageGuidance: 'auto' as DirectorShotImageGuidance,
       directorLlmLog: [],
       directorSkill: null,
       directorMusicSource: null,
@@ -5582,7 +8268,20 @@ export const useStore = create<AppState>((set, get) => ({
       shortFilmCharacters: [],
       shortFilmPath: null,
       shortFilmTargetDuration: 30,
+      directorWritingProvider: 'maestro',
+      directorWritingModel: '',
+      directorWritingBaseUrl: '',
       shortFilmNarrative: false,
+      shortFilmVisualStyle: '',
+      shortFilmPreserveVisualStyle: true,
+      directorCharacterVisualStyle: '',
+      directorAllowClipText: false,
+      // Detach this editor session from any prior recoverable pipeline. The
+      // backend job is intentionally not cancelled and remains in Dashboard,
+      // but its poller must not overwrite the next story loaded into Director.
+      pipelineId: null,
+      pipelineStatus: null,
+      pipelinePolling: false,
     })
   },
 
@@ -5592,8 +8291,19 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmSetPath: (path) => set({ shortFilmPath: path }),
   shortFilmSetTargetDuration: (duration) => set({ shortFilmTargetDuration: duration }),
   shortFilmSetNarrative: (v) => set({ shortFilmNarrative: v }),
+  shortFilmSetVisualStyle: (style) => set({ shortFilmVisualStyle: style }),
+  shortFilmSetPreserveVisualStyle: (v) => set({ shortFilmPreserveVisualStyle: v }),
+  setDirectorCharacterVisualStyle: (style) => set({ directorCharacterVisualStyle: style }),
+  setDirectorAllowClipText: (v) => set({ directorAllowClipText: v }),
 
   shortFilmUploadAndAnalyze: async (file) => {
+    const activity = beginAppActivity(get, {
+      kind: 'short_film_audio',
+      title: 'Short Film Director',
+      phase: 'uploading_audio',
+      message: `Uploading “${file.name}”…`,
+      total: 10,
+    })
     set({
       directorLoading: true,
       directorLoadingMessage: 'Uploading audio...',
@@ -5601,35 +8311,29 @@ export const useStore = create<AppState>((set, get) => ({
       directorAudioFile: file,
       directorStep: 'analyze',
     })
-    // Same polling pattern as directorUploadAndAnalyze — see comment
-    // there for the full rationale on /api/v1/audio/analyze/status.
-    let analyzePoll: ReturnType<typeof setInterval> | null = null
-    const startAnalyzePolling = () => {
-      analyzePoll = setInterval(async () => {
-        try {
-          const status = await api.fetchAudioAnalyzeStatus()
-          if (!status.step) return
-          set({ directorLoadingMessage: `${status.detail}...` })
-        } catch { /* polling errors are non-fatal */ }
-      }, 1000)
-    }
-    const stopAnalyzePolling = () => {
-      if (analyzePoll !== null) {
-        clearInterval(analyzePoll)
-        analyzePoll = null
-      }
-    }
     try {
       const uploaded = await api.uploadAudio(file)
       set({ directorAudioPath: uploaded.path, directorLoadingMessage: 'Analyzing audio...' })
-
-      startAnalyzePolling()
-      const analysis = await api.analyzeAudio({
+      const accepted = await api.startAudioAnalysisJob({
         audio_path: uploaded.path,
         transcribe: true,
         extract_vocals: true,
       })
-      stopAnalyzePolling()
+      void get().reconnectJobs()
+      let analysis: AudioAnalysisResult | null = null
+      for (;;) {
+        const status = await api.fetchAudioAnalysisJob(accepted.job_id)
+        set({ directorLoadingMessage: status.message })
+        activity.report(status.phase || 'analyzing_audio', status.message, status.step, 10)
+        if (status.status === 'completed') {
+          analysis = status.result
+          break
+        }
+        if (status.status === 'failed') throw new Error(status.error || status.message)
+        if (status.status === 'cancelled') throw new Error('Audio analysis cancelled')
+        await new Promise(resolve => window.setTimeout(resolve, 1000))
+      }
+      if (!analysis) throw new Error('Audio analysis completed without a result')
 
       set({ directorAnalysis: analysis })
 
@@ -5653,6 +8357,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Plan dialogue-paced clip structure (not beat-aligned)
       set({ directorLoadingMessage: 'Planning scenes...' })
+      activity.report('planning_clips', 'Planning dialogue-paced scenes…', 9, 10)
       const structure = await api.planDialogueScenes({
         analysis,
         pacing_bias: get().directorEnergyBias,
@@ -5666,18 +8371,22 @@ export const useStore = create<AppState>((set, get) => ({
         directorLoading: false,
         directorLoadingMessage: null,
       })
+      activity.finish(`${structure.clips.length} dialogue scenes ready for review`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Analysis failed'
       console.error('Short film analysis failed:', e)
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
-    } finally {
-      stopAnalyzePolling()
+      activity.fail(e, 'analyzing_audio')
     }
   },
 
   shortFilmSetPacingBias: async (bias) => {
     const { directorAnalysis } = get()
     if (!directorAnalysis) return
+    const activity = beginAppActivity(get, {
+      kind: 'scene_replanning', title: 'Short Film Director', phase: 'planning_clips',
+      message: 'Recalculating dialogue scene pacing…', total: 1,
+    })
     set({ directorLoading: true, directorEnergyBias: bias })
     try {
       const structure = await api.planDialogueScenes({
@@ -5688,9 +8397,11 @@ export const useStore = create<AppState>((set, get) => ({
         frames_minimum: get().modelOptions?.frames_minimum ?? 5,
       })
       set({ directorPlannedClips: structure.clips, directorLoading: false })
+      activity.finish(`${structure.clips.length} scenes replanned`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to update structure'
       set({ directorLoading: false, directorError: msg })
+      activity.fail(e, 'planning_clips')
     }
   },
 
@@ -5698,6 +8409,13 @@ export const useStore = create<AppState>((set, get) => ({
     const { directorPlannedClips, directorSceneDescription, directorAnalysis,
             shortFilmCharacters } = get()
     if (!directorPlannedClips.length || !directorSceneDescription.trim()) return
+    const activity = beginAppActivity(get, {
+      kind: 'short_film_planning',
+      title: 'Short Film Director',
+      phase: 'planning',
+      message: `Planning ${directorPlannedClips.length} scenes…`,
+      total: directorPlannedClips.length,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan' })
     try {
       // Upload all reference images
@@ -5733,6 +8451,10 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
           characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
+          image_model: get().selectedModelPerMode.image || undefined,
+          video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -5748,6 +8470,9 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
           characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
+          video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -5760,6 +8485,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review',
         directorLoading: false,
       })
+      activity.finish(`${plans.length} short-film scenes ready for review`)
 
       // Auto-mode: skip review
       if (get().directorAutoMode) {
@@ -5774,6 +8500,7 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : 'Planning failed'
       console.error('Short film planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'style' })
+      activity.fail(e, 'planning')
     }
   },
 
@@ -5781,6 +8508,13 @@ export const useStore = create<AppState>((set, get) => ({
     const { directorPlannedClips, directorSceneDescription, directorAnalysis,
             directorClipPlans, directorReferenceImagePath, shortFilmCharacters } = get()
     if (!directorPlannedClips.length || !directorClipPlans.length) return
+    const activity = beginAppActivity(get, {
+      kind: 'short_film_video_prompts',
+      title: 'Short Film Director',
+      phase: 'planning',
+      message: `Planning motion for ${directorPlannedClips.length} scenes…`,
+      total: directorPlannedClips.length,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan_video' })
     try {
       const speakerMappings: Record<string, { name: string; role: string }> = {}
@@ -5791,18 +8525,26 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       const existingImagePrompts = directorClipPlans.map(p => p.image_prompt || '')
-      const { directorCharacterRefPaths: crp2, directorLocationRefPaths: lrp2 } = get()
+      const {
+        directorCharacterRefPaths: crp2,
+        directorCharacterRefLabels: crl2,
+        directorLocationRefPaths: lrp2,
+        directorLocationRefLabels: lrl2,
+      } = get()
       const result = await api.planShortFilmPrompts({
         clips: directorPlannedClips,
         scene_description: directorSceneDescription,
         lyrics: directorAnalysis?.lyrics ?? undefined,
         reference_image_path: directorReferenceImagePath,
-        ...(crp2.length > 0 ? { character_ref_paths: crp2 } : {}),
-        ...(lrp2.length > 0 ? { location_ref_paths: lrp2 } : {}),
+        ...(crp2.length > 0 ? { character_ref_paths: crp2, character_ref_labels: crl2 } : {}),
+        ...(lrp2.length > 0 ? { location_ref_paths: lrp2, location_ref_labels: lrl2 } : {}),
         speaker_mappings: Object.keys(speakerMappings).length > 0 ? speakerMappings : undefined,
         characters: shortFilmCharacters.length > 0 ? shortFilmCharacters : undefined,
         prompt_type: 'video',
         existing_image_prompts: existingImagePrompts,
+        video_model: get().selectedModelPerMode.video || undefined,
+        h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+        h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
       })
       const updatedPlans = directorClipPlans.map((plan, i) => ({
         ...plan,
@@ -5813,6 +8555,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review_video',
         directorLoading: false,
       })
+      activity.finish(`${updatedPlans.length} scene motion prompts ready`)
 
       if (get().directorAutoMode) {
         get().directorGenerate()
@@ -5821,13 +8564,23 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : 'Video prompt planning failed'
       console.error('Short film video planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'generate_images' })
+      activity.fail(e, 'planning')
     }
   },
 
   shortFilmPlanFromStory: async () => {
     const { directorSceneDescription,
-            shortFilmCharacters, shortFilmTargetDuration, shortFilmNarrative } = get()
+            shortFilmCharacters, shortFilmTargetDuration, shortFilmNarrative,
+            shortFilmVisualStyle, shortFilmPreserveVisualStyle,
+            directorCharacterVisualStyle, directorAllowClipText } = get()
     if (!directorSceneDescription.trim()) return
+    const activity = beginAppActivity(get, {
+      kind: 'story_film_planning',
+      title: 'Short Film Director',
+      phase: 'planning',
+      message: 'Planning the Story adaptation with the LLM…',
+      total: 3,
+    })
     set({ directorLoading: true, directorError: null, directorStep: 'plan', llmStreamText: '', llmStreamDone: false })
     try {
       // Upload all reference images
@@ -5843,7 +8596,7 @@ export const useStore = create<AppState>((set, get) => ({
       // hasn't loaded yet or the field is undefined.
       const useV2 = get().servicesConfig?.use_director_v2 ?? true
       let plans: Array<{ video_prompt: string; image_prompt: string }>
-      let storyClips: any[] | undefined
+      let storyClips: PlannedClip[] | undefined
 
       if (useV2) {
         const result = await api.directorV2Plan({
@@ -5855,9 +8608,17 @@ export const useStore = create<AppState>((set, get) => ({
           ...extraRefs,
           target_duration: shortFilmTargetDuration,
           narrative_mode: shortFilmNarrative,
+          visual_style: shortFilmVisualStyle || undefined,
+          preserve_visual_style: shortFilmPreserveVisualStyle,
+          character_visual_style: directorCharacterVisualStyle || undefined,
+          allow_clip_text: directorAllowClipText,
           fps: get().modelOptions?.fps ?? 24,
           frames_steps: get().modelOptions?.frames_steps ?? 4,
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
+          image_model: get().selectedModelPerMode.image || undefined,
+          video_model: get().selectedModelPerMode.video || undefined,
+          h3_reference_mode: get().savedParamsPerMode.video?.h3_reference_mode as 'first_frame' | 'references' | undefined,
+          h3_audio_prompt: get().savedParamsPerMode.video?.h3_audio_prompt as string | undefined,
           prompt_type: 'both',
         })
         plans = result.clip_plans.map(p => ({
@@ -5865,18 +8626,24 @@ export const useStore = create<AppState>((set, get) => ({
           image_prompt: p.image_prompt || '',
         }))
         // Extract clips from production plan shots
-        const pp = result.production_plan as any
-        if (pp?.shots) {
+        const pp = result.production_plan
+        if (pp.shots) {
           let cumulative = 0
-          storyClips = pp.shots.map((s: any) => {
+          storyClips = pp.shots.map((shot) => {
+            const duration = shot.duration_sec || 15
+            const metadataFrames = shot.metadata?.duration_frames
             const clip = {
               start: cumulative,
-              end: cumulative + (s.duration_sec || 15),
-              duration_frames: s.metadata?.duration_frames || Math.round((s.duration_sec || 15) * (get().modelOptions?.fps ?? 24)),
-              label: s.narrative_role || s.scene_type || 'scene',
+              end: cumulative + duration,
+              duration_frames: typeof metadataFrames === 'number'
+                ? metadataFrames
+                : Math.round(duration * (get().modelOptions?.fps ?? 24)),
+              section_label: shot.narrative_role || shot.scene_type || 'scene',
+              energy: 0.5,
+              suggested_prompt_hint: shot.scene_goal || '',
               beat_count: 0,
             }
-            cumulative += s.duration_sec || 15
+            cumulative += duration
             return clip
           })
         }
@@ -5891,6 +8658,10 @@ export const useStore = create<AppState>((set, get) => ({
           fps: get().modelOptions?.fps ?? 24,
           frames_steps: get().modelOptions?.frames_steps ?? 4,
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
+          visual_style: shortFilmVisualStyle || undefined,
+          preserve_visual_style: shortFilmPreserveVisualStyle,
+          character_visual_style: directorCharacterVisualStyle || undefined,
+          allow_clip_text: directorAllowClipText,
         })
         storyClips = result.clips
         plans = result.clip_plans.map(p => ({
@@ -5907,6 +8678,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'review',
         directorLoading: false,
       })
+      activity.finish(`${plans.length} Story film scenes ready for review`)
 
       // Auto-mode: skip review steps
       if (get().directorAutoMode) {
@@ -5922,6 +8694,7 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : 'Story planning failed'
       console.error('Short film story planning failed:', e)
       set({ directorLoading: false, directorError: msg, directorStep: 'style' })
+      activity.fail(e, 'planning')
     }
   },
 
@@ -5933,8 +8706,10 @@ export const useStore = create<AppState>((set, get) => ({
         model_type: modelType,
         activated_loras: [],
         loras_multipliers: '',
+        minimax_h3_turbo_mode: false,
       },
       selectedModelPerMode: { ...s.selectedModelPerMode, [currentMode]: modelType },
+      h3WindowPlan: null,
       loraWeights: {},
       availableLoras: [],
     }))
@@ -5957,6 +8732,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Workspaces
   workspaces: [],
   activeWorkspace: 'default',
+  browsingUploads: false,
   loadWorkspaces: async () => {
     try {
       const data = await api.fetchWorkspaces()
@@ -5966,9 +8742,17 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   switchWorkspace: async (name) => {
+    // Virtual "Uploads" view: browse the uploads folder WITHOUT touching
+    // the server-side active workspace — generations keep saving to the
+    // real workspace; uploads are read-only in the gallery.
+    if (name === '__uploads__') {
+      set({ browsingUploads: true, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
+      get().loadOutputs()
+      return
+    }
     try {
       await api.setActiveWorkspace(name)
-      set({ activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
+      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
       get().loadOutputs()
       get().loadWorkspaces()
     } catch (e) {
@@ -5979,13 +8763,37 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       await api.createWorkspace(name)
       await api.setActiveWorkspace(name)
-      set({ activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
+      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
       get().loadOutputs()
       get().loadWorkspaces()
     } catch (e) {
       console.error('Failed to create workspace:', e)
       throw e
     }
+  },
+  deleteWorkspace: async (name) => {
+    // The server refuses 'default', refuses while anything generates, and
+    // auto-switches to default when the deleted workspace was active —
+    // its switched_to_default answer is authoritative (a client-side
+    // activeWorkspace comparison could disagree after a desync and would
+    // widen it by force-resetting state the server never changed).
+    const result = await api.deleteWorkspace(name)
+    if (result.switched_to_default) {
+      set({ browsingUploads: false, activeWorkspace: 'default', outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
+      get().loadOutputs()
+    }
+    get().loadWorkspaces()
+  },
+
+  storageDashboardOpen: false,
+  setStorageDashboardOpen: (open) => set({ storageDashboardOpen: open }),
+
+  loraPickerSort: (() => {
+    try { return localStorage.getItem('maestro_lora_picker_sort') === 'newest' ? 'newest' as const : 'name' as const } catch { return 'name' as const }
+  })(),
+  setLoraPickerSort: (sort) => {
+    try { localStorage.setItem('maestro_lora_picker_sort', sort) } catch { /* private mode */ }
+    set({ loraPickerSort: sort })
   },
 
   outputs: [],
@@ -6037,8 +8845,9 @@ export const useStore = create<AppState>((set, get) => ({
   outputsLoading: false,
   loadOutputs: async () => {
     const PAGE_SIZE = 100
-    const { mediaFilter, outputSearchQuery } = get()
+    const { mediaFilter, outputSearchQuery, browsingUploads } = get()
     const isBackendFilter = mediaFilter === 'favorites' || mediaFilter === 'multiclip' || outputSearchQuery.trim()
+    const ws = browsingUploads ? '__uploads__' : undefined
     set({ outputsLoading: true })
     try {
       const { outputs: apiOutputs, total } = isBackendFilter
@@ -6046,8 +8855,9 @@ export const useStore = create<AppState>((set, get) => ({
             favoritesOnly: mediaFilter === 'favorites',
             multiclipOnly: mediaFilter === 'multiclip',
             search: outputSearchQuery.trim() || undefined,
+            workspace: ws,
           })
-        : await api.fetchOutputs(PAGE_SIZE, 0)
+        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace: ws })
       const outputs: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
@@ -6076,7 +8886,9 @@ export const useStore = create<AppState>((set, get) => ({
     const total = get().outputsTotal
     if (current.length >= total) return // All loaded
     try {
-      const { outputs: apiOutputs, total: newTotal } = await api.fetchOutputs(PAGE_SIZE, current.length)
+      const { outputs: apiOutputs, total: newTotal } = await api.fetchOutputs(PAGE_SIZE, current.length, {
+        workspace: get().browsingUploads ? '__uploads__' : undefined,
+      })
       const more: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
@@ -6118,9 +8930,26 @@ export const useStore = create<AppState>((set, get) => ({
       const current = get().outputs
       const currentNames = new Set(current.map(o => o.name))
       const newItems = fresh.filter(o => !currentNames.has(o.name))
-      if (newItems.length > 0) {
-        // Prepend new items (newest first) and shift selectedOutput to keep the same item active
-        const merged = [...newItems, ...current]
+      const freshByName = new Map(fresh.map(output => [output.name, output]))
+      const updatedCurrent = current.map(output => {
+        const latest = freshByName.get(output.name)
+        if (!latest) return output
+        const unchanged = latest.url === output.url
+          && latest.type === output.type
+          && latest.mode === output.mode
+          && latest.edit_sub_mode === output.edit_sub_mode
+          && latest.favorite === output.favorite
+          && latest.size === output.size
+          && latest.created_at === output.created_at
+          && latest.thumbnail_url === output.thumbnail_url
+        return unchanged ? output : latest
+      })
+      const existingChanged = updatedCurrent.some((output, index) => output !== current[index])
+      if (newItems.length > 0 || existingChanged || total !== get().outputsTotal) {
+        // Prepend new items (newest first), update files that were first seen
+        // while still being written, and shift selection to keep the same
+        // logical item active.
+        const merged = [...newItems, ...updatedCurrent]
         const sel = get().selectedOutput
         set({ outputs: merged, outputsTotal: total, selectedOutput: sel + newItems.length })
       }
@@ -6186,8 +9015,25 @@ export const useStore = create<AppState>((set, get) => ({
     const uploadFilenames = selectedOutputMeta.upload_filenames as Record<string, string> | undefined
     console.log('[LoadSettings] applying settings — model_type:', p.model_type, '| param keys:', Object.keys(p).length)
 
-    const modelType = (p.model_type as string) || ''
+    let modelType = (p.model_type as string) || ''
     if (!modelType) return
+
+    // Migrate Recast sidecars made before the dedicated model existed. Those
+    // jobs used the general I2V Fast accelerator with replacement conditioning;
+    // loading them now should reproduce the corrected native-replacement recipe.
+    const migratedLegacyRecast = p.edit_sub_mode === 'recast'
+      && modelType === 'scail2_14B_fast'
+      && models.some(m => m.model_type === 'scail2_14B_recast_fast')
+    if (migratedLegacyRecast) modelType = 'scail2_14B_recast_fast'
+
+    // SFX generations swap the virtual MMAudio model for a video carrier
+    // at submit, so the sidecar records the carrier. Restore the virtual
+    // id — resubmitting re-swaps it, and mode/sub-tab detection below
+    // classifies it as audio/sfx instead of video.
+    const sfxVirtual = p._sfx_virtual_model as string | undefined
+    if ((p._audio_sub_mode === 'sfx' || p.sfx_mode) && sfxVirtual && models.some(m => m.model_type === sfxVirtual)) {
+      modelType = sfxVirtual
+    }
 
     // Per-sub-mode isolation: pencil-load may jump the sidebar to another
     // video sub-mode (or clobber the current one) by writing params
@@ -6211,6 +9057,35 @@ export const useStore = create<AppState>((set, get) => ({
     if (model) {
       const mode = getModelMode(modelType, model.family)
       set({ generationMode: mode })
+      // Audio outputs restore the SUB-TAB too (Speech / Music / SFX) —
+      // previously the pencil landed on the Audio tab but left whatever
+      // sub-tab was last open. Newer sidecars record _audio_sub_mode;
+      // older ones fall back to classifying the model. Direct set, NOT
+      // setAudioSubMode — that would call selectModel and clobber the
+      // params restored below.
+      if (mode === 'audio') {
+        const recordedSub = p._audio_sub_mode as import('../types').AudioSubMode | undefined
+        const inferredSub: import('../types').AudioSubMode =
+          sfxModelTypes.has(modelType) || p.sfx_mode ? 'sfx'
+          : isMusicModelType(modelType) ? 'music'
+          : 'speech'
+        const subMode = (recordedSub === 'speech' || recordedSub === 'music' || recordedSub === 'sfx')
+          ? recordedSub : inferredSub
+        const restoredLyrics = (p._tts_original_prompt as string) || (p.prompt as string) || ''
+        set(s => ({
+          audioSubMode: subMode,
+          selectedModelPerAudioSubMode: { ...s.selectedModelPerAudioSubMode, [subMode]: modelType },
+          // Music: restore the song-writer inputs alongside the fields.
+          // Older sidecars lack _music_description — clear rather than
+          // leave a stale description that didn't produce this song
+          // (instrumental still infers from the lyrics sentinel).
+          ...(subMode === 'music' ? {
+            musicDescription: (p._music_description as string) || '',
+            musicInstrumental: !!p._music_instrumental
+              || restoredLyrics.trim().toLowerCase() === '[instrumental]',
+          } : {}),
+        }))
+      }
     }
 
     // Load model capabilities BEFORE applying the restored params.
@@ -6222,15 +9097,26 @@ export const useStore = create<AppState>((set, get) => ({
     // modelOptions matches the restored model before rerollGeneration
     // submits (stale capabilities used to strip stg_scale/perturbation_*
     // from the request, which then poisoned the next sidecar with zeros).
-    get().loadLoras(modelType)
-    await get().loadModelOptions(modelType)
+    // (Virtual SFX models have no LoRAs/options endpoints — same guard
+    // as boot.)
+    if (!sfxModelTypes.has(modelType)) {
+      get().loadLoras(modelType)
+      await get().loadModelOptions(modelType)
+    }
 
     // Detect I2V: if image_start was used or image_prompt_type contains "S"
     const hadStartImage = !!(p.image_start || (p.image_prompt_type as string || '').includes('S'))
     const hadEndImage = !!(p.image_end || (p.image_prompt_type as string || '').includes('E'))
 
-    // TTS: restore original prompt with character names (before Speaker 1/2 swap)
-    const originalPrompt = (p._tts_original_prompt as string) || (p.prompt as string) || ''
+    // TTS restores names before Speaker 1/2 substitution. Edit workflows
+    // restore the user's text rather than internal conditioning guidance.
+    const originalPrompt = (p._tts_original_prompt as string) || (
+      p.edit_sub_mode === 'recast' && typeof p.edit_recast_raw_prompt === 'string'
+        ? p.edit_recast_raw_prompt as string
+        : p.edit_sub_mode === 'outpaint' && typeof p.edit_outpaint_raw_prompt === 'string'
+          ? p.edit_outpaint_raw_prompt as string
+          : p.prompt as string
+    ) || ''
 
     // Build params from metadata
     // For image_mode: use 1 (I2V UI toggle) if start image was used, else 0
@@ -6239,8 +9125,8 @@ export const useStore = create<AppState>((set, get) => ({
       model_type: modelType,
       resolution: (p.resolution as string) || '1280x720',
       video_length: (p.video_length as number) || 81,
-      num_inference_steps: (p.num_inference_steps as number) || 20,
-      guidance_scale: (p.guidance_scale as number) || 5.0,
+      num_inference_steps: migratedLegacyRecast ? 8 : (p.num_inference_steps as number) || 20,
+      guidance_scale: migratedLegacyRecast ? 1 : (p.guidance_scale as number) || 5.0,
       seed: (p.seed as number) ?? -1,
       // Restore the ACTUAL saved output mode (0 = video, 1 = image). The old
       // `hadStartImage ? 1 : 0` was wrong: an I2V *video* clip has a start image
@@ -6262,12 +9148,22 @@ export const useStore = create<AppState>((set, get) => ({
     newParams.audio_prompt_type = (p.audio_prompt_type as string) || ''
     newParams.image_prompt_type = (p.image_prompt_type as string) || ''
     newParams.input_video_strength = (p.input_video_strength as number) ?? undefined
-    newParams.flow_shift = (p.flow_shift as number) ?? undefined
+    newParams.flow_shift = migratedLegacyRecast ? 1 : (p.flow_shift as number) ?? undefined
+    newParams.h3_audio_shift = (p.h3_audio_shift as number) ?? undefined
+    newParams.h3_audio_prompt = (p.h3_audio_prompt as string) || undefined
+    newParams.h3_ref_image_size = (p.h3_ref_image_size as 'match' | 'max') ?? undefined
+    newParams.h3_reference_mode = (p.h3_reference_mode as 'first_frame' | 'references') ?? undefined
     newParams.self_refiner_setting = (p.self_refiner_setting as number) ?? undefined
     newParams.audio_guide = (p.audio_guide as string) || ''
     newParams.audio_guide2 = (p.audio_guide2 as string) || ''
+    // Style / Music Caption (ACE-Step). Was never copied here, so the
+    // pencil restored only the lyrics — clear when absent so a stale
+    // caption can't leak into an unrelated restore.
+    newParams.alt_prompt = (p.alt_prompt as string) || ''
     newParams.video_guide = (p.video_guide as string) || ''
     newParams.image_refs = Array.isArray(p.image_refs) ? (p.image_refs as string[]) : []
+    newParams.h3_ref_videos = Array.isArray(p.h3_ref_videos) ? (p.h3_ref_videos as string[]) : []
+    newParams.h3_ref_audios = Array.isArray(p.h3_ref_audios) ? (p.h3_ref_audios as string[]) : []
     newParams.frames_positions = (p.frames_positions as string) || ''
     newParams.injection_strength = (p.injection_strength as number) ?? undefined
     newParams.remove_background_images_ref = (p.remove_background_images_ref as number) ?? 0
@@ -6308,6 +9204,12 @@ export const useStore = create<AppState>((set, get) => ({
     (newParams as Record<string, unknown>).keyframe_inject_mode = (p.keyframe_inject_mode as string) ?? undefined;
     (newParams as Record<string, unknown>).temperature = (p.temperature as number) ?? undefined;
     (newParams as Record<string, unknown>).audio_guidance_scale = (p.audio_guidance_scale as number) ?? undefined
+    newParams.minimax_h3_window_storyboard = (p.minimax_h3_window_storyboard as boolean) ?? undefined
+    const restoredH3WindowPlan = (
+      p.h3_window_plan
+      && typeof p.h3_window_plan === 'object'
+      && Array.isArray((p.h3_window_plan as Record<string, unknown>).windows)
+    ) ? p.h3_window_plan as unknown as H3WindowPlan : null
 
     // Detect multi-clip output and reconstruct clips
     if (p.multi_prompts_gen_type === 3 && Array.isArray(p.image_start)) {
@@ -6348,49 +9250,19 @@ export const useStore = create<AppState>((set, get) => ({
           endImage: null,
           endImagePath: null,
           durationFrames: perClipFrames[i] || undefined,
+          keyframes: (perClipKeyframes[i] || [])
+            .filter(path => typeof path === 'string' && path.length > 0)
+            .map(path => ({ file: null, path })),
         })
       }
       set({ clips, singlePromptMode: false })
       newParams.image_mode = 2
       newParams.multi_prompts_gen_type = 3
 
-      // Surface per-clip keyframes via image_refs + frames_positions so
-      // ControlVideoSection's restore picks them up. NOTE: MultiClip's type
-      // doesn't yet carry per-clip keyframes, so all clips' keyframes get
-      // concatenated into a single image_refs array with "L" positions
-      // (the same encoding launch.py uses at line 7353). Re-running the
-      // generation will dispatch keyframes to clips by position order,
-      // matching the original layout. Documented as a known limitation:
-      // editing one clip's keyframes after restore affects the whole pool.
-      if (perClipKeyframes.length > 0) {
-        const flatRefs: string[] = []
-        const flatPositions: string[] = []
-        for (const clipKfs of perClipKeyframes) {
-          if (Array.isArray(clipKfs)) {
-            for (const kf of clipKfs) {
-              if (kf) {
-                flatRefs.push(kf)
-                flatPositions.push('L')
-              }
-            }
-          }
-        }
-        if (flatRefs.length > 0) {
-          newParams.image_refs = flatRefs
-          newParams.frames_positions = flatPositions.join(' ')
-          // Ensure KFI is in video_prompt_type so ControlVideoSection
-          // recognizes the inject-frame mode on restore.
-          const vpt = newParams.video_prompt_type || ''
-          if (!vpt.includes('KFI')) {
-            newParams.video_prompt_type = vpt + 'KFI'
-          }
-        }
-      }
-
-      // Fetch clip images from upload URLs to show previews. Prefer
-      // upload_filenames.image_start (already-extracted basenames) when
-      // present; fall back to deriving basenames from params.image_start
-      // paths so older sidecars without upload_filenames still restore.
+      // Fetch clip images from their real storage location. User-provided
+      // images live in uploads, while Director comic frames live in outputs.
+      // Prefer the original sidecar path because it retains that distinction;
+      // fetchStoredAsset falls back for old basename-only sidecars.
       const uploadNames = Array.isArray(uploadFilenames?.image_start)
         ? uploadFilenames.image_start as string[]
         : imagePaths.map(p => (p || '').replace(/\\/g, '/').split('/').pop() || '')
@@ -6398,7 +9270,8 @@ export const useStore = create<AppState>((set, get) => ({
         const fname = uploadNames[i]
         if (fname) {
           const idx = i
-          fetch(api.getUploadUrl(fname))
+          const storedPath = imagePaths[i] || fname
+          api.fetchStoredAsset(storedPath)
             .then(r => r.ok ? r.blob() : null)
             .then(blob => {
               if (!blob) return
@@ -6459,6 +9332,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     set(s => ({
       params: { ...s.params, ...newParams },
+      h3WindowPlan: restoredH3WindowPlan,
       loraWeights,
       startImage: null,
       endImage: null,
@@ -6494,8 +9368,7 @@ export const useStore = create<AppState>((set, get) => ({
       const refPromises = imageRefPaths.map(refPath => {
         const fname = refPath.replace(/\\/g, '/').split('/').pop() || ''
         if (!fname) return Promise.resolve(null)
-        const url = `/api/v1/uploads/${fname}`
-        return fetch(url)
+        return api.fetchStoredAsset(refPath)
           .then(r => r.ok ? r.blob() : null)
           .then(blob => blob ? new File([blob], fname, { type: blob.type || 'image/png' }) : null)
           .catch(() => null)
@@ -6519,15 +9392,12 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Derive resolution preset and aspect ratio
     const res = newParams.resolution || '1280x720'
-    for (const [preset, ratioMap] of Object.entries(resolutionMap)) {
-      for (const [ratio, value] of Object.entries(ratioMap)) {
-        if (value === res) {
-          set({
-            resolutionPreset: preset as ResolutionPreset,
-            aspectRatio: ratio as AspectRatio,
-          })
-        }
-      }
+    const resolutionSelection = findResolutionSelection(res, get().modelOptions)
+    if (resolutionSelection) {
+      set({
+        resolutionPreset: resolutionSelection.preset,
+        aspectRatio: resolutionSelection.ratio,
+      })
     }
 
     // Restore start/end images from upload URLs as File objects. Prefer
@@ -6540,7 +9410,7 @@ export const useStore = create<AppState>((set, get) => ({
       ? uploadFilenames.image_end
       : null) || _deriveBase(p.image_end)
     if (hadStartImage && startFile) {
-      fetch(api.getUploadUrl(startFile))
+      api.fetchStoredAsset(typeof p.image_start === 'string' ? p.image_start : startFile)
         .then(r => r.ok ? r.blob() : null)
         .then(blob => {
           if (!blob) return
@@ -6550,7 +9420,7 @@ export const useStore = create<AppState>((set, get) => ({
         .catch(() => {})
     }
     if (hadEndImage && endFile) {
-      fetch(api.getUploadUrl(endFile))
+      api.fetchStoredAsset(typeof p.image_end === 'string' ? p.image_end : endFile)
         .then(r => r.ok ? r.blob() : null)
         .then(blob => {
           if (!blob) return
@@ -6571,7 +9441,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (editSubMode) {
       set({
         generationMode: 'avatar',
-        editSubMode: editSubMode as 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything',
+        editSubMode: editSubMode as 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything' | 'recast',
       })
 
       // Re-link the source video. The sidecar stores either edit_video_path
@@ -6581,28 +9451,26 @@ export const useStore = create<AppState>((set, get) => ({
       const editVideoPath = (p.edit_video_path as string) || (p.retake_video as string) || ''
       if (editVideoPath) {
         const fname = editVideoPath.replace(/\\/g, '/').split('/').pop() || ''
-        const url = `/api/v1/uploads/${fname}`
-        // Probe metadata via a hidden <video> first so duration/resolution
-        // are correct, then fetch the blob to populate editVideoFile.
         if (fname) {
-          const video = document.createElement('video')
-          video.src = url
-          video.muted = true
-          video.onloadedmetadata = () => {
-            const duration = video.duration && isFinite(video.duration) ? video.duration : 0
-            const resolution = `${video.videoWidth}x${video.videoHeight}`
-            fetch(url)
-              .then(r => r.ok ? r.blob() : null)
-              .then(blob => {
-                if (!blob) return
-                const file = new File([blob], fname, { type: blob.type || 'video/mp4' })
+          // Fetch first so basename-only legacy sidecars can fall back between
+          // outputs and uploads before probing browser video metadata.
+          api.fetchStoredAsset(editVideoPath)
+            .then(r => r.ok ? r.blob() : null)
+            .then(blob => {
+              if (!blob) return
+              const file = new File([blob], fname, { type: blob.type || 'video/mp4' })
+              const url = URL.createObjectURL(file)
+              const video = document.createElement('video')
+              video.src = url
+              video.muted = true
+              video.onloadedmetadata = () => {
+                const duration = video.duration && isFinite(video.duration) ? video.duration : 0
+                const resolution = `${video.videoWidth}x${video.videoHeight}`
                 get().setEditVideo(file, editVideoPath, url, duration, resolution)
-              })
-              .catch(() => {})
-          }
-          // If metadata never loads (file moved/deleted), still set the path
-          // so the user can re-attach manually.
-          set({ editVideoPath, editVideoUrl: url })
+              }
+              set({ editVideoPath, editVideoUrl: url })
+            })
+            .catch(() => {})
         }
       }
 
@@ -6633,6 +9501,144 @@ export const useStore = create<AppState>((set, get) => ({
           set({ editAnythingLoraStrength: p.edit_anything_lora_strength as number })
         }
       }
+      if (editSubMode === 'restyle') {
+        const savedRepaintMappings = Array.isArray(p.edit_repaint_region_mappings)
+          ? p.edit_repaint_region_mappings
+            .slice(0, 5)
+            .map((raw, index): RepaintRegionMapping | null => {
+              if (!raw || typeof raw !== 'object') return null
+              const mapping = raw as Record<string, unknown>
+              const source = String(mapping.source || '').trim()
+              const target = String(mapping.target || '').trim()
+              if (!source || !target) return null
+              return {
+                id: String(mapping.id || `repaint-${index + 1}`),
+                source,
+                target,
+              }
+            })
+            .filter((mapping): mapping is RepaintRegionMapping => mapping !== null)
+          : []
+        const repaintFrame = String(p.edit_repaint_target_frame || p.image_start || '')
+        const repaintFrameName = repaintFrame.replace(/\\/g, '/').split('/').pop() || ''
+        set({
+          editRepaintMappings: savedRepaintMappings,
+          editRepaintResolutionProfile: p.edit_repaint_resolution_profile === '704p'
+            ? '704p'
+            : p.edit_repaint_resolution_profile === '512p'
+              ? '512p'
+              : '480p',
+          editRepaintFrameFile: null,
+          editRepaintFramePath: repaintFrame,
+          editRepaintFrameUrl: repaintFrameName ? api.getFileUrl(repaintFrameName) : '',
+        })
+        if (repaintFrame && repaintFrameName) {
+          const repaintUrl = api.getFileUrl(repaintFrameName)
+          fetch(repaintUrl)
+            .then(r => r.ok ? r.blob() : null)
+            .then(blob => {
+              if (!blob) return
+              get().setEditRepaintFrame(
+                new File([blob], repaintFrameName, { type: blob.type || 'image/png' }),
+                repaintFrame,
+                URL.createObjectURL(blob),
+              )
+            })
+            .catch(() => {})
+        }
+      }
+      if (editSubMode === 'recast') {
+        const savedMappings = p.edit_recast_character_mappings
+        if (Array.isArray(savedMappings)) {
+          const restoredMappings = savedMappings
+            .slice(0, 5)
+            .map((raw, index): RecastCharacterMapping | null => {
+              if (!raw || typeof raw !== 'object') return null
+              const mapping = raw as Record<string, unknown>
+              const refPath = String(mapping.ref_image_path || '')
+              const target = String(mapping.target || '').trim()
+              if (!refPath || !target) return null
+              const refName = refPath.replace(/\\/g, '/').split('/').pop() || ''
+              const additionalPaths = Array.isArray(mapping.additional_ref_image_paths)
+                ? mapping.additional_ref_image_paths.map(path => String(path || '')).filter(Boolean)
+                : []
+              return {
+                id: String(mapping.id || `recast-${index + 1}`),
+                target,
+                refFile: null,
+                refPath,
+                refUrl: api.getFileUrl(refName),
+                additionalRefs: additionalPaths.map(path => {
+                  const name = path.replace(/\\/g, '/').split('/').pop() || ''
+                  return { file: null, path, url: api.getFileUrl(name) }
+                }),
+                referenceAlignedToSource: mapping.reference_aligned_to_source === true,
+              }
+            })
+            .filter((mapping): mapping is RecastCharacterMapping => mapping !== null)
+          if (restoredMappings.length > 0) {
+            set({
+              editRecastMappings: restoredMappings,
+              editRecastTarget: restoredMappings[0].target,
+              editRecastPersonCount: restoredMappings.length,
+              editRecastRefFile: null,
+              editRecastRefPath: restoredMappings[0].refPath,
+              editRecastRefUrl: restoredMappings[0].refUrl,
+              editRecastRefAligned: restoredMappings[0].referenceAlignedToSource,
+            })
+          }
+        }
+        if (!Array.isArray(savedMappings) || savedMappings.length === 0) {
+          set(s => ({
+            editRecastMappings: [{
+              ...(s.editRecastMappings[0] || DEFAULT_RECAST_MAPPING),
+              target: String(p.edit_recast_target || 'person'),
+              referenceAlignedToSource: p.edit_recast_ref_aligned === true,
+            }],
+          }))
+        }
+        if (p.edit_recast_target) set({ editRecastTarget: p.edit_recast_target as string })
+        if (p.edit_recast_person_count != null) {
+          const count = Number(p.edit_recast_person_count)
+          set({ editRecastPersonCount: Math.min(5, Math.max(1, Number.isFinite(count) ? Math.round(count) : 1)) })
+        }
+        set({
+          editRecastIsolateReference: p.edit_recast_isolate_reference !== false,
+          editRecastAutoFaceDetail: p.edit_recast_auto_face_detail !== false,
+          editRecastEnhancePrompt: p.edit_recast_enhance_prompt === true,
+          editRecastProtectBystanders: p.edit_recast_protect_bystanders === true,
+          editRecastPreserveBystanders: p.edit_recast_preserve_bystanders !== undefined
+            ? p.edit_recast_preserve_bystanders === true
+            : p.edit_recast_preserve_scene_reference !== undefined
+              ? p.edit_recast_preserve_scene_reference === true
+              : true,
+          editRecastUseRelighting: p.edit_recast_use_relighting === true,
+          editRecastResolutionProfile: p.edit_recast_resolution_profile === '704p'
+            ? '704p'
+            : p.edit_recast_resolution_profile === '512p'
+              ? '512p'
+              : '480p',
+        })
+        const recastRef = (p.edit_recast_ref_path as string) || ''
+        if (recastRef) {
+          const refName = recastRef.replace(/\\/g, '/').split('/').pop() || ''
+          // Recast references can be either uploads or Image-mode outputs.
+          const refUrl = api.getFileUrl(refName)
+          fetch(refUrl)
+            .then(r => r.ok ? r.blob() : null)
+            .then(blob => {
+              if (!blob) return
+              const file = new File([blob], refName, { type: blob.type || 'image/png' })
+              get().setEditRecastRef(
+                file,
+                recastRef,
+                URL.createObjectURL(file),
+                p.edit_recast_ref_aligned === true,
+              )
+            })
+            .catch(() => {})
+        }
+      }
       if (editSubMode === 'outpaint') {
         // Padding (pixels) — preserved as-is; the OutpaintCanvas reads
         // outpaintAspect + outpaintVideoBox to compose, but we also mirror
@@ -6643,9 +9649,27 @@ export const useStore = create<AppState>((set, get) => ({
         const padRight = (p.outpaint_pad_right as number) ?? 0
         set({ outpaintPadding: { top: padTop, bottom: padBottom, left: padLeft, right: padRight } })
 
-        if (p.outpaint_aspect) {
-          set({ outpaintAspect: p.outpaint_aspect as 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4' })
+        const canvasW = (p._outpaint_canvas_w as number) || 0
+        const canvasH = (p._outpaint_canvas_h as number) || 0
+        const savedAspect = String(p.outpaint_aspect || '') as OutpaintAspect
+        const validSavedAspect = (
+          savedAspect === 'source'
+          || _OUTPAINT_ASPECT_RATIOS.some(([aspect]) => aspect === savedAspect)
+        )
+        let restoredAspect: OutpaintAspect | null = validSavedAspect ? savedAspect : null
+        if (!restoredAspect) {
+          let aspectW = canvasW
+          let aspectH = canvasH
+          if (aspectW <= 0 || aspectH <= 0) {
+            const resolutionMatch = /^(\d+)x(\d+)$/i.exec(String(p.resolution || '').trim())
+            if (resolutionMatch) {
+              aspectW = Number(resolutionMatch[1])
+              aspectH = Number(resolutionMatch[2])
+            }
+          }
+          restoredAspect = _inferOutpaintAspect(aspectW, aspectH)
         }
+        if (restoredAspect) set({ outpaintAspect: restoredAspect })
         if (p.outpaint_resolution_preset) {
           set({ outpaintResolutionPreset: p.outpaint_resolution_preset as 'auto' | '480p' | '540p' | '720p' | '1080p' })
         }
@@ -6655,21 +9679,26 @@ export const useStore = create<AppState>((set, get) => ({
         if (p.outpaint_lora_strength_ui != null) {
           set({ outpaintLoraStrength: p.outpaint_lora_strength_ui as number })
         }
+        if (p.outpaint_mask_preserving != null) {
+          set({ outpaintMaskPreserving: !!p.outpaint_mask_preserving })
+        }
 
         // Recompute the canvas-relative video box from saved pad pixels +
         // saved canvas dimensions, so the OutpaintCanvas reproduces the
         // exact composition. Falls back to centered-fit if anything is
         // missing.
-        const canvasW = (p._outpaint_canvas_w as number) || 0
-        const canvasH = (p._outpaint_canvas_h as number) || 0
         if (canvasW > 0 && canvasH > 0) {
-          const srcW = canvasW - padLeft - padRight
-          const srcH = canvasH - padTop - padBottom
+          const savedX = (p._outpaint_overlay_x as number) ?? padLeft
+          const savedY = (p._outpaint_overlay_y as number) ?? padTop
+          const srcW = (p._outpaint_overlay_w as number)
+            || (canvasW - padLeft - padRight)
+          const srcH = (p._outpaint_overlay_h as number)
+            || (canvasH - padTop - padBottom)
           if (srcW > 0 && srcH > 0) {
             set({
               outpaintVideoBox: {
-                x: padLeft / canvasW,
-                y: padTop / canvasH,
+                x: savedX / canvasW,
+                y: savedY / canvasH,
                 w: srcW / canvasW,
                 h: srcH / canvasH,
               },
@@ -6745,25 +9774,93 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // ── Director Pipeline (server-side) ──────────────────────────────
-  startDirectorPipeline: async () => {
+  startDirectorPipeline: async (useCurrentPlans = false) => {
     const state = get()
+    const directVideo = (
+      state.directorSkill === 'music_video'
+      && state.directorMusicVideoTreatment.generation_mode === 'direct_video'
+    )
     const { directorPlannedClips, directorSceneDescription,
             directorAudioPath, directorAnalysis, directorReferenceImagePath,
-            directorAutoMode, directorSeamless, directorResolution, directorAspectRatio,
+            directorAutoMode, directorSeamless, directorShotImageGuidance,
+            directorResolution, directorAspectRatio,
+            directorVideoMaxShotFramesByModel, directorH3TurboModeByModel,
             selectedModelPerMode, savedParamsPerMode, savedLoraPerMode,
             directorSpeakerMappings, directorImageSpatialUpsampling,
             directorImageFilmGrainIntensity, directorImageFilmGrainSaturation,
             directorVideoSpatialUpsampling, directorVideoFilmGrainIntensity,
             directorVideoFilmGrainSaturation, directorVideoSelfRefiner,
             shortFilmPath, shortFilmCharacters, shortFilmTargetDuration,
-            shortFilmNarrative, modelOptions } = state
+            shortFilmNarrative, shortFilmVisualStyle,
+            shortFilmPreserveVisualStyle, directorCharacterVisualStyle,
+            directorAllowClipText } = state
 
-    const fps = modelOptions?.fps ?? 16
-    const directorRes = resolutionMap[directorResolution]?.[directorAspectRatio] || resolutionMap[directorResolution]['16:9']
+    const selectedImageModel = selectedModelPerMode.image || 'flux2_klein_9b'
+    const selectedVideoModel = selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
+
+    // Director model choices are independent from whichever Studio model was
+    // edited most recently. Hydrate each selected model's own tuned defaults,
+    // then reuse saved Studio overrides only when they explicitly belong to
+    // that same model. This prevents a distilled model's settings from
+    // leaking into a full model (or vice versa) after a Director-only switch.
+    const [imageModelDefaults, videoModelDefaults, fetchedImageOptions, fetchedVideoOptions] = await Promise.all([
+      api.fetchDefaults(selectedImageModel).catch(() => ({})),
+      api.fetchDefaults(selectedVideoModel).catch(() => ({})),
+      api.fetchModelOptions(selectedImageModel).catch(() => null),
+      api.fetchModelOptions(selectedVideoModel).catch(() => null),
+    ])
+    const cachedVideoOptions = state.modelOptions?.model_type === selectedVideoModel
+      ? state.modelOptions
+      : null
+    const directorVideoOptions = fetchedVideoOptions || cachedVideoOptions
+    const directorImageOptions = fetchedImageOptions
+    const directorImageResolution = resolveResolution(
+      directorImageOptions,
+      directorResolution,
+      directorAspectRatio,
+    )
+    const directorVideoResolution = resolveResolution(
+      directorVideoOptions,
+      directorResolution,
+      directorAspectRatio,
+    )
+    const fps = directorVideoOptions?.fps ?? 16
+    const savedImageParams = savedParamsPerMode.image || {}
+    const savedVideoParams = savedParamsPerMode.video || {}
+    const matchingImageParams = savedImageParams.model_type === selectedImageModel
+      ? savedImageParams
+      : {}
+    const matchingVideoParams = savedVideoParams.model_type === selectedVideoModel
+      ? savedVideoParams
+      : {}
+    const rawDefaultVideoSteps = (
+      directorVideoOptions?.default_num_inference_steps
+      ?? (videoModelDefaults as Record<string, unknown>).num_inference_steps
+      ?? 8
+    )
+    const parsedDefaultVideoSteps = Number(rawDefaultVideoSteps)
+    const defaultVideoSteps = Number.isFinite(parsedDefaultVideoSteps) && parsedDefaultVideoSteps > 0
+      ? Math.max(1, Math.min(50, Math.round(parsedDefaultVideoSteps)))
+      : 8
+    const configuredVideoSteps = state.directorVideoInferenceStepsByModel[selectedVideoModel]
+    // A model may publish a fixed distilled recipe. In that case the model
+    // default wins even if an older adjustable build left an override behind.
+    let directorVideoSteps = directorVideoOptions?.lock_inference_steps
+      ? defaultVideoSteps
+      : (configuredVideoSteps ?? defaultVideoSteps)
+    const directorTurboOption = directorVideoOptions?.minimax_h3_turbo
+    const savedDirectorVideoLoras = savedLoraPerMode.video
+    const directorTurboEnabled = Boolean(
+      directorTurboOption
+      && directorH3TurboModeByModel[selectedVideoModel] === true
+      && savedDirectorVideoLoras?.activated_loras?.includes(directorTurboOption.filename)
+    )
+    if (directorTurboEnabled) directorVideoSteps = directorTurboOption!.steps
+    const directorMaxShotFrames = directorVideoMaxShotFramesByModel[selectedVideoModel]
 
     // Upload all reference images (main + character + location) if not already uploaded
-    let refImagePath = directorReferenceImagePath
-    if (!refImagePath && state.directorReferenceImage) {
+    let refImagePath = directVideo ? null : directorReferenceImagePath
+    if (!directVideo && !refImagePath && state.directorReferenceImage) {
       try {
         const uploaded = await api.uploadImage(state.directorReferenceImage)
         refImagePath = uploaded.path
@@ -6773,30 +9870,82 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
     // Upload character refs that haven't been uploaded yet
-    const charPaths = [...state.directorCharacterRefPaths]
-    for (let i = charPaths.length; i < state.directorCharacterRefs.length; i++) {
+    const charPaths = directVideo ? [] : [...state.directorCharacterRefPaths]
+    for (let i = charPaths.length; !directVideo && i < state.directorCharacterRefs.length; i++) {
       try {
         const uploaded = await api.uploadImage(state.directorCharacterRefs[i])
         charPaths.push(uploaded.path)
-      } catch { /* skip failed uploads */ }
+      } catch (error) {
+        // Paths are a compact prefix aligned with labels. Continuing after a
+        // failed middle upload would attach the next character's image to the
+        // wrong name, which is worse than omitting the remaining references.
+        console.error('Failed to upload a character reference for pipeline:', error)
+        break
+      }
     }
     if (charPaths.length > state.directorCharacterRefPaths.length) {
       set({ directorCharacterRefPaths: charPaths })
     }
     // Upload location refs that haven't been uploaded yet
-    const locPaths = [...state.directorLocationRefPaths]
-    for (let i = locPaths.length; i < state.directorLocationRefs.length; i++) {
+    const locPaths = directVideo ? [] : [...state.directorLocationRefPaths]
+    for (let i = locPaths.length; !directVideo && i < state.directorLocationRefs.length; i++) {
       try {
         const uploaded = await api.uploadImage(state.directorLocationRefs[i])
         locPaths.push(uploaded.path)
-      } catch { /* skip failed uploads */ }
+      } catch (error) {
+        console.error('Failed to upload a location reference for pipeline:', error)
+        break
+      }
     }
     if (locPaths.length > state.directorLocationRefPaths.length) {
       set({ directorLocationRefPaths: locPaths })
     }
-    // Upload voice reference if not already uploaded
+    const selectedVideoDefinition = state.models.find(
+      model => model.model_type === selectedVideoModel,
+    )
+    const supportsVoiceReference = (
+      selectedVideoDefinition?.director?.supports_voice_reference === true
+    )
+    const voiceReferenceMode = (
+      selectedVideoDefinition?.director?.voice_reference_mode ?? 'none'
+    )
+
+    // Preserve pre-release arbitrary H3 media references while routing the
+    // official Omni model through the same lazy upload path.
+    const h3ReferenceMode = directVideo
+      ? 'first_frame'
+      : savedParamsPerMode.video?.h3_reference_mode || 'first_frame'
+    const isH3Omni = selectedVideoModel.startsWith('minimax_h3_ref2va')
+      || (selectedVideoModel === 'minimax_h3' && h3ReferenceMode === 'references')
+    const h3VideoRefPaths = [...state.directorH3VideoRefPaths]
+    const h3AudioRefPaths = [...state.directorH3AudioRefPaths]
+    if (!directVideo && isH3Omni) {
+      for (let i = h3VideoRefPaths.length; i < state.directorH3VideoRefs.length; i++) {
+        try {
+          const uploaded = await api.uploadImage(state.directorH3VideoRefs[i])
+          h3VideoRefPaths.push(uploaded.path)
+        } catch (error) {
+          console.error('Failed to upload an H3 video reference:', error)
+          break
+        }
+      }
+      for (let i = h3AudioRefPaths.length; i < state.directorH3AudioRefs.length; i++) {
+        try {
+          const uploaded = await api.uploadAudio(state.directorH3AudioRefs[i])
+          h3AudioRefPaths.push(uploaded.path)
+        } catch (error) {
+          console.error('Failed to upload an H3 audio reference:', error)
+          break
+        }
+      }
+      set({ directorH3VideoRefPaths: h3VideoRefPaths, directorH3AudioRefPaths: h3AudioRefPaths })
+    }
+
+    // Voice Reference is an LTX-2 ID-LoRA or a native H3 Omni audio
+    // reference. Keep the local selection across model switches, but only
+    // upload and submit it when the selected Director model can consume it.
     let voiceRefPath = state.directorVoiceRefPath
-    if (!voiceRefPath && state.directorVoiceRef) {
+    if (supportsVoiceReference && !voiceRefPath && state.directorVoiceRef) {
       try {
         const uploaded = await api.uploadAudio(state.directorVoiceRef)
         voiceRefPath = uploaded.path
@@ -6811,7 +9960,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     const pipelineParams: Record<string, unknown> = {
       pipeline_type: pipelineType,
-      auto_mode: directorAutoMode,
+      auto_mode: useCurrentPlans ? true : directorAutoMode,
       workspace: get().activeWorkspace,
       scene_description: directorSceneDescription,
       audio_path: directorAudioPath,
@@ -6821,10 +9970,15 @@ export const useStore = create<AppState>((set, get) => ({
       location_ref_paths: locPaths.length > 0 ? locPaths : undefined,
       location_ref_labels: state.directorLocationRefLabels.length > 0 ? state.directorLocationRefLabels : undefined,
       planned_clips: directorPlannedClips,
-      seamless: directorSeamless,
+      provided_clip_plans: useCurrentPlans ? state.directorClipPlans : undefined,
+      seamless: directVideo ? false : directorSeamless,
+      shot_image_guidance: directorShotImageGuidance,
+      director_resolution_preset: directorResolution,
+      director_aspect_ratio: directorAspectRatio,
+      director_max_shot_frames: directorMaxShotFrames,
       fps,
-      frames_steps: modelOptions?.frames_steps || 8,
-      frames_minimum: modelOptions?.frames_minimum || 41,
+      frames_steps: directorVideoOptions?.frames_steps ?? 4,
+      frames_minimum: directorVideoOptions?.frames_minimum ?? 5,
 
       // Director v2 flag — see prior callsites: ?? not || so explicit
       // user toggle-off is respected (legacy v1), only fall back to
@@ -6835,28 +9989,50 @@ export const useStore = create<AppState>((set, get) => ({
       llm_model_id: state.servicesConfig?.llm_model_id || state.llmStatus?.model_id,
       llm_device: state.servicesConfig?.llm_device || state.llmStatus?.device,
       llm_provider: state.servicesConfig?.llm_provider || 'local',
+      writing_provider: state.directorWritingProvider,
+      writing_model: state.directorWritingModel,
+      writing_base_url: state.directorWritingBaseUrl,
       lyrics: directorAnalysis?.lyrics || '',
       bpm: directorAnalysis?.bpm,
       speaker_mappings: directorSpeakerMappings,
       characters: shortFilmCharacters,
       target_duration: shortFilmTargetDuration,
       narrative_mode: shortFilmNarrative,
+      visual_style: shortFilmVisualStyle || undefined,
+      preserve_visual_style: shortFilmPreserveVisualStyle,
+      character_visual_style: directorCharacterVisualStyle || undefined,
+      allow_clip_text: directorAllowClipText,
+      music_video_treatment: pipelineType === 'music_video'
+        ? state.directorMusicVideoTreatment
+        : undefined,
 
       // Image gen settings
-      image_model: selectedModelPerMode.image || 'flux2_klein_9b',
-      // Default image steps = 4 to match the Director image_model
-      // fallback (flux2_klein_9b is step-distilled to 4). User overrides
-      // via Studio image-mode settings still win — they live in
-      // savedParamsPerMode.image and replace the fallback dict entirely.
-      image_params: { ...(savedParamsPerMode.image || { num_inference_steps: 4, guidance_scale: 1 }), resolution: directorRes },
+      image_model: selectedImageModel,
+      image_params: {
+        ...imageModelDefaults,
+        ...matchingImageParams,
+        resolution: directorImageResolution,
+      },
       image_loras: savedLoraPerMode.image || {},
       image_spatial_upsampling: directorImageSpatialUpsampling,
       image_film_grain_intensity: directorImageFilmGrainIntensity,
       image_film_grain_saturation: directorImageFilmGrainSaturation,
 
       // Video gen settings
-      video_model: selectedModelPerMode.video || 'ltx2_22B_distilled_1_1',
-      video_params: { ...(savedParamsPerMode.video || { num_inference_steps: 8, guidance_scale: 1 }), resolution: directorRes },
+      video_model: selectedVideoModel,
+      video_params: {
+        ...videoModelDefaults,
+        ...matchingVideoParams,
+        // Director owns this value. Studio's Advanced step count is separate
+        // state and must not leak into a new Director project.
+        num_inference_steps: directorVideoSteps,
+        resolution: directorVideoResolution,
+        ...(isH3Omni ? {
+          h3_ref_videos: h3VideoRefPaths,
+          h3_ref_audios: h3AudioRefPaths,
+        } : {}),
+        minimax_h3_turbo_mode: directorTurboEnabled,
+      },
       video_loras: savedLoraPerMode.video || {},
       video_spatial_upsampling: directorVideoSpatialUpsampling,
       video_film_grain_intensity: directorVideoFilmGrainIntensity,
@@ -6864,12 +10040,13 @@ export const useStore = create<AppState>((set, get) => ({
       video_self_refiner: directorVideoSelfRefiner,
       audio_scale: get().directorAudioScale,
 
-      // Voice identity (ID-LoRA). The CelebVHQ ID-LoRA auto-loads
-      // for both dev and distilled pipelines when voice_reference is
-      // set (see ltx2.get_loras_transformer).
-      ...(voiceRefPath ? {
+      // Voice identity: LTX uses the CelebVHQ ID-LoRA; H3 Omni maps the
+      // same upload into each shot's native Ref2VA manifest.
+      ...(supportsVoiceReference && voiceRefPath ? {
         voice_reference: voiceRefPath,
-        identity_guidance_scale: state.directorIdentityGuidanceScale,
+        ...(voiceReferenceMode === 'id_lora' ? {
+          identity_guidance_scale: state.directorIdentityGuidanceScale,
+        } : {}),
       } : {}),
     }
 
@@ -6916,6 +10093,18 @@ export const useStore = create<AppState>((set, get) => ({
     const pid = get().pipelineId
     if (!pid) return
 
+    // The output gallery used to be reloaded on every two-second pipeline
+    // heartbeat. Besides rescanning the whole workspace on the backend, that
+    // replaced the gallery array even when no file had changed and caused a
+    // visible editor blink. Refresh only when the pipeline reports a new
+    // completed image/video checkpoint.
+    let lastOutputRefreshSignature = ''
+    const refreshOutputsWhenChanged = (signature: string) => {
+      if (signature === lastOutputRefreshSignature) return
+      lastOutputRefreshSignature = signature
+      get().refreshOutputs()
+    }
+
     const poll = async () => {
       if (!get().pipelinePolling || get().pipelineId !== pid) return
 
@@ -6927,7 +10116,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (status.clip_plans?.length && !get().directorClipPlans.length) {
           set({
             directorClipPlans: status.clip_plans,
-            directorStep: 'review',
+            directorStep: status.generation_mode === 'direct_video' ? 'review_video' : 'review',
           })
         }
 
@@ -6961,6 +10150,8 @@ export const useStore = create<AppState>((set, get) => ({
               status: 'generating',
             },
           })
+        } else if (status.phase === 'preparing_direct_video') {
+          set({ directorStep: 'review_video', directorClipImages: [], directorImageGenProgress: null })
         } else if (status.phase === 'generating_images') {
           set({
             directorStep: 'generate_images',
@@ -6971,12 +10162,20 @@ export const useStore = create<AppState>((set, get) => ({
               status: 'generating',
             },
           })
-          // Refresh media feed to show new images as they're generated
-          get().refreshOutputs()
+          const completedImages = (status.clip_images || []).filter(Boolean)
+          refreshOutputsWhenChanged(`images:${completedImages.join('|')}`)
+        } else if (status.phase === 'preparing_video') {
+          // H3 prompt-only/direct-reference projects intentionally skip the
+          // image review stage and proceed straight to video rendering.
+          set({
+            directorStep: 'review_video',
+            directorImageGenProgress: null,
+          })
         } else if (status.phase === 'generating_video') {
           set({ directorStep: 'review_video' })
-          // Refresh media feed to show new video clips as they complete
-          get().refreshOutputs()
+          refreshOutputsWhenChanged(
+            `video:${status.progress.current}:${(status.output_files || []).join('|')}`,
+          )
         }
 
         // Handle LLM streaming
@@ -6989,9 +10188,22 @@ export const useStore = create<AppState>((set, get) => ({
           set({ directorLoading: false })
           if (status.pause_reason === 'review_prompts') {
             set({ directorStep: 'review' })
+          } else if (status.pause_reason === 'review_video_prompts') {
+            set({ directorStep: 'review_video' })
           } else if (status.pause_reason === 'review_images') {
             set({ directorStep: 'review_video' })
           }
+        }
+
+        // Comic PRE is a deliberate terminal checkpoint: prompts and I2V
+        // canvases are ready, but no video generation should start until the
+        // user approves all clips or chooses one card in the comic editor.
+        if (status.status === 'preview_ready') {
+          set({
+            pipelinePolling: false,
+            directorLoading: false,
+          })
+          return
         }
 
         // Handle completion
@@ -7007,10 +10219,14 @@ export const useStore = create<AppState>((set, get) => ({
 
         // Handle failure
         if (status.status === 'failed' || status.status === 'cancelled') {
+          const imageProgress = get().directorImageGenProgress
           set({
             pipelinePolling: false,
             directorLoading: false,
             directorError: status.error || 'Pipeline stopped',
+            directorImageGenProgress: imageProgress
+              ? { ...imageProgress, status: 'error' }
+              : null,
           })
           return  // Stop polling
         }

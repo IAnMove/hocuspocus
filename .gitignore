@@ -21,6 +21,12 @@ ENVIRONMENT
 # Kept locally for the maintainer's reference; not shipped via git.
 docs/release_todo.md
 
+# Local implementation handoff for the future Series Lab. Intentionally kept
+# across branch switches on this workstation, but not published until its
+# prerequisite branches have been merged and the design is approved.
+/SERIES_LAB_IMPLEMENTATION_PLAN.local.md
+/seriessteps.md
+
 # Uploaded files
 uploads/
 
@@ -75,6 +81,11 @@ app/services/sam/checkpoints/
 # Native Hunyuan3D runtime and official source checkouts
 app/services/hunyuan3d/env/
 app/services/hunyuan3d/vendor/
+app/services/rigging/vendor/
+
+# MiniMax H3 isolated ComfyUI runtime, inputs/outputs, and model weights
+app/services/minimax_h3/env/
+app/services/minimax_h3/vendor/
 
 # Retired optional content supplement pack — the download apparatus is
 # gone (nothing reads the pack anymore), but leftover local copies may
@@ -92,9 +103,7 @@ app/postprocessing/seedvc/
 
 # Local build/archive outputs (formerly supplement-pack zips) — never tracked.
 dist/
-
-# Cloned dependency repos (re-clone on install)
-app/preprocessing/video_depth_anything/
+.codex-tmp/
 
 # Cloned upstream plugins (re-downloaded by WanGP plugin manager)
 app/plugins/wan2gp-gallery/
@@ -103,3 +112,4 @@ app/plugins/wan2gp-lora-multipliers-ui/
 
 # Python bytecode (anywhere)
 __pycache__/
+app/wgp_config.json.bak

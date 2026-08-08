@@ -4,10 +4,10 @@ module.exports = {
   },
   run: [
     {
-      when: "{{gpu === 'amd' || platform === 'darwin'}}",
+      when: "{{gpu !== 'nvidia'}}",
       method: "notify",
       params: {
-        html: "This app requires an NVIDIA GPU. Not compatible with AMD GPUs and macOS."
+        html: "This app requires an NVIDIA GPU on Windows or Linux."
       },
       next: null
     },
@@ -172,6 +172,37 @@ module.exports = {
       params: {
         path: "app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed",
         text: "ok"
+      }
+    },
+    // MiniMax H3 runs in an isolated ComfyUI checkout because its quantized
+    // ConvRot stack must not change Maestro/WanGP's Python dependencies.
+    // Mirrors system/examples/comfy/install.js: clone, isolated env, then uv.
+    {
+      when: "{{!exists('app/services/minimax_h3/vendor/ComfyUI/main.py')}}",
+      method: "shell.run",
+      params: {
+        message: [
+          "git clone --depth 1 --branch minimax_h3 https://github.com/kijai/ComfyUI app/services/minimax_h3/vendor/ComfyUI",
+          "git -C app/services/minimax_h3/vendor/ComfyUI fetch --depth 1 origin e2ab36d933356bc8cd6ecb39c655fe8be75af4e5",
+          "git -C app/services/minimax_h3/vendor/ComfyUI checkout e2ab36d933356bc8cd6ecb39c655fe8be75af4e5"
+        ]
+      }
+    },
+    {
+      method: "shell.run",
+      params: {
+        conda: { path: "app/services/minimax_h3/env", python: "3.11" },
+        message: [
+          "uv pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu130",
+          "uv pip install -r app/services/minimax_h3/vendor/ComfyUI/requirements.txt"
+        ]
+      }
+    },
+    {
+      method: "fs.write",
+      params: {
+        path: "app/services/minimax_h3/env/.maestro_minimax_h3_v2.installed",
+        text: "e2ab36d933356bc8cd6ecb39c655fe8be75af4e5 torch-2.10.0-cu130"
       }
     },
     // Fetch the seed-vc voice-conversion component (GPL-3.0). It lives in

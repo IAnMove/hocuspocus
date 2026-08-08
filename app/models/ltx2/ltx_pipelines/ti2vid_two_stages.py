@@ -51,6 +51,7 @@ from .utils.helpers import (
 from .utils.media_io import encode_video
 from .utils.types import PipelineComponents
 from shared.utils.loras_mutipliers import update_loras_slists
+from shared.utils.ltx_prompt_queue import format_ltx_prompt_progress
 from shared.utils.self_refiner import create_self_refiner_handler, normalize_self_refiner_plan
 from shared.utils.text_encoder_cache import TextEncoderCache
 
@@ -77,6 +78,7 @@ class TI2VidTwoStagesPipeline:
         model_device: torch.device | None = None,
         stage_1_models: object | None = None,
         stage_2_models: object | None = None,
+        cache_namespace: object | None = None,
     ):
         self.device = device
         self.dtype = torch.bfloat16
@@ -111,7 +113,7 @@ class TI2VidTwoStagesPipeline:
             dtype=self.dtype,
             device=device,
         )
-        self.text_encoder_cache = TextEncoderCache()
+        self.text_encoder_cache = TextEncoderCache(namespace=cache_namespace)
 
     def _get_stage_model(self, stage: int, name: str):
         if stage == 1:
@@ -181,6 +183,9 @@ class TI2VidTwoStagesPipeline:
         sample_solver: str = "euler",
         stg_schedule: list[float] | None = None,
         text_attention_amplifier: dict | None = None,
+        prefetch_prompts: list[str] | None = None,
+        prefetch_window: dict[str, int] | None = None,
+        phase_callback: Callable[[str], None] | None = None,
     ) -> tuple[Iterator[torch.Tensor], torch.Tensor]:
         assert_resolution(height=height, width=width, is_two_stage=True)
 
@@ -270,12 +275,21 @@ class TI2VidTwoStagesPipeline:
             video_connector,
             audio_connector,
         )
-        contexts = self.text_encoder_cache.encode(
+        requested_prompts = [prompt, negative_prompt]
+        if prefetch_prompts:
+            requested_prompts.extend(str(item) for item in prefetch_prompts if item)
+        requested_prompts = list(dict.fromkeys(requested_prompts))
+        progress_label = format_ltx_prompt_progress(prefetch_window)
+        if progress_label and phase_callback is not None:
+            phase_callback(progress_label)
+        encoded_contexts = self.text_encoder_cache.encode(
             encode_fn,
-            [prompt, negative_prompt],
+            requested_prompts,
             device=self.device,
             parallel=True,
         )
+        context_by_prompt = dict(zip(requested_prompts, encoded_contexts))
+        contexts = [context_by_prompt[prompt], context_by_prompt[negative_prompt]]
 
         torch.cuda.synchronize()
         del text_encoder

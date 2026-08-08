@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { RefreshCw, ShieldAlert, ShieldCheck, Lock } from 'lucide-react'
+import { RefreshCw, ShieldAlert, ShieldCheck, Lock, Loader2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { testLlmConnection } from '../../api/client'
 
 function ApiKeyField({ label, maskedValue, isSet, onSave }: {
   label: string
@@ -217,7 +218,7 @@ function NsfwToggleSection() {
               {nsfwEnabled ? (
                 <ShieldAlert size={14} className="text-red-400 shrink-0" />
               ) : (
-                <ShieldCheck size={14} className="text-green-400 shrink-0" />
+                <ShieldCheck size={14} className="text-indicator-success shrink-0" />
               )}
               NSFW Mode
               {isPublicProvider && <Lock size={11} className="text-text-muted" />}
@@ -238,7 +239,7 @@ function NsfwToggleSection() {
                 : nsfwEnabled ? 'bg-red-500' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               nsfwEnabled && !isPublicProvider ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>
@@ -265,6 +266,12 @@ export function ServicesSettingsPanel() {
   const llmModels = useStore(s => s.llmModels)
   const loadLlmModels = useStore(s => s.loadLlmModels)
   const [refreshing, setRefreshing] = useState(false)
+  const [llmTest, setLlmTest] = useState<{ status: 'idle' | 'testing' | 'ok' | 'error'; message: string }>({
+    status: 'idle',
+    message: '',
+  })
+  const pendingLlmConfig = useRef<Promise<void>>(Promise.resolve())
+  const [llmConfigSaving, setLlmConfigSaving] = useState(false)
   if (servicesConfigLoading && !servicesConfig) {
     return <div className="text-xs text-text-muted py-4 text-center">Loading...</div>
   }
@@ -281,6 +288,35 @@ export function ServicesSettingsPanel() {
     setRefreshing(true)
     await loadLlmModels()
     setRefreshing(false)
+  }
+
+  const resetLlmTest = () => {
+    setLlmTest({ status: 'idle', message: '' })
+  }
+
+  const saveLlmConfig = (partial: Partial<typeof servicesConfig>) => {
+    setLlmConfigSaving(true)
+    const request = updateConfig(partial)
+    pendingLlmConfig.current = request
+    void request.finally(() => {
+      if (pendingLlmConfig.current === request) setLlmConfigSaving(false)
+    })
+    return request
+  }
+
+  const handleTestLlm = async () => {
+    setLlmTest({ status: 'testing', message: 'Testing LLM connection...' })
+    try {
+      await pendingLlmConfig.current
+      const result = await testLlmConnection()
+      const response = (result.response || '').trim()
+      setLlmTest({ status: 'ok', message: `OK: ${response}` })
+    } catch (error) {
+      setLlmTest({
+        status: 'error',
+        message: `Error: ${(error as Error).message || 'failed to connect'}`,
+      })
+    }
   }
 
   // Filter models by current provider (show local + remote of current provider)
@@ -311,7 +347,7 @@ export function ServicesSettingsPanel() {
                 : 'Auto-loads when needed'}
             </div>
           </div>
-          <div className={`w-2 h-2 rounded-full shrink-0 ${llmStatus?.loaded ? 'bg-green-400' : 'bg-text-muted/30'}`} />
+          <div className={`w-2 h-2 rounded-full shrink-0 ${llmStatus?.loaded ? 'bg-indicator-success' : 'bg-text-muted/30'}`} />
         </div>
 
         {/* Provider selector */}
@@ -328,9 +364,8 @@ export function ServicesSettingsPanel() {
               if (PUBLIC_PROVIDERS.has(newProvider) && servicesConfig.nsfw_mode) {
                 updates.nsfw_mode = false
               }
-              updateConfig(updates)
-              // Refresh model list for new provider
-              setTimeout(() => loadLlmModels(), 500)
+              void saveLlmConfig(updates).then(() => loadLlmModels())
+              resetLlmTest()
             }}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
@@ -350,14 +385,17 @@ export function ServicesSettingsPanel() {
             <input
               type="text"
               value={servicesConfig.llm_remote_url}
-              onChange={e => updateConfig({ llm_remote_url: e.target.value })}
+              onChange={e => {
+                void saveLlmConfig({ llm_remote_url: e.target.value })
+                resetLlmTest()
+              }}
               placeholder={isRemote ? 'http://192.168.1.100:1234' : 'https://api.openai.com'}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             />
             <p className="text-[10px] text-text-muted mt-1">
               {isRemote
                 ? 'URL of your LM Studio, Ollama, or other OpenAI-compatible server'
-                : 'Leave blank for default OpenAI endpoint'}
+                : 'OpenAI API base URL; leave blank to use the default.'}
             </p>
           </div>
         )}
@@ -381,7 +419,10 @@ export function ServicesSettingsPanel() {
           </div>
           <select
             value={servicesConfig.llm_model_id}
-            onChange={e => updateConfig({ llm_model_id: e.target.value })}
+            onChange={e => {
+              void saveLlmConfig({ llm_model_id: e.target.value })
+              resetLlmTest()
+            }}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
             {filteredModels.map(m => (
@@ -397,6 +438,37 @@ export function ServicesSettingsPanel() {
           )}
         </div>
 
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[11px] text-text-muted uppercase tracking-wider">
+              Test LLM
+            </label>
+            <button
+              onClick={handleTestLlm}
+              disabled={llmTest.status === 'testing' || llmConfigSaving}
+              className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {llmTest.status === 'testing' || llmConfigSaving ? (
+                <>
+                  <Loader2 size={10} className="animate-spin" />
+                  {llmTest.status === 'testing' ? 'Testing' : 'Saving'}
+                </>
+              ) : (
+                'Test'
+              )}
+            </button>
+          </div>
+          <div
+            className={`text-[10px] ${
+              llmTest.status === 'ok' ? 'text-emerald-400'
+                : llmTest.status === 'error' ? 'text-red-400'
+                  : 'text-text-muted'
+            }`}
+          >
+            {llmTest.message || 'Run a quick hello check against the configured model/provider.'}
+          </div>
+        </div>
+
         {/* Device selector (local only) */}
         {isLocal && (
           <div>
@@ -405,7 +477,10 @@ export function ServicesSettingsPanel() {
             </label>
             <select
               value={servicesConfig.llm_device}
-              onChange={e => updateConfig({ llm_device: e.target.value })}
+              onChange={e => {
+                updateConfig({ llm_device: e.target.value })
+                resetLlmTest()
+              }}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             >
               <option value="cpu">CPU (recommended)</option>
@@ -416,6 +491,21 @@ export function ServicesSettingsPanel() {
             </p>
           </div>
         )}
+      </div>
+
+      <hr className="border-border" />
+
+      <div className="space-y-3">
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">MiniMax API</h3>
+        <p className="text-[10px] text-text-muted">
+          One MiniMax key is shared by its text and Image-01 APIs. Writing and image models remain independently selectable in Comics, Story Lab and Director.
+        </p>
+        <ApiKeyField
+          label="MiniMax API Key"
+          maskedValue={servicesConfig.minimax_api_key}
+          isSet={servicesConfig.minimax_api_key_set}
+          onSave={value => updateConfig({ minimax_api_key: value })}
+        />
       </div>
 
       {/* Studio Prompt Enhancer — experimental gate. Default UI uses
@@ -531,7 +621,7 @@ export function ServicesSettingsPanel() {
               servicesConfig.use_director_v2 ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.use_director_v2 ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>
@@ -543,14 +633,14 @@ export function ServicesSettingsPanel() {
             Director Prompt Polish
           </label>
           <select
-            value={servicesConfig.director_prompt_polish || 'third_pass'}
+            value={servicesConfig.director_prompt_polish || 'off'}
             onChange={e => updateConfig({ director_prompt_polish: e.target.value as 'off' | 'full_guide' | 'light_guide' | 'third_pass' })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
-            <option value="third_pass">Third Pass (Enhance Pipeline) — recommended</option>
+            <option value="off">Off — use validated Director prompts</option>
+            <option value="third_pass">Third Pass (Model-aware) — recommended</option>
             <option value="light_guide">Lightweight Guide Inject (legacy)</option>
             <option value="full_guide">Full Guide Inject (legacy)</option>
-            <option value="off">Off</option>
           </select>
           <p className="text-[10px] text-text-muted mt-1">
             {servicesConfig.director_prompt_polish === 'full_guide'
@@ -558,10 +648,59 @@ export function ServicesSettingsPanel() {
               : servicesConfig.director_prompt_polish === 'light_guide'
               ? 'Legacy: injects a lightweight dialect cheat sheet (~200 tokens) into the Director planner.'
               : servicesConfig.director_prompt_polish === 'off'
-              ? 'Director uses its built-in prompting rules only. No model-specific optimization.'
-              : 'Default. Runs each Director prompt through the model\'s enhance pipeline after planning, so video and image prompts are dialect-correct for LTX-2, Flux, etc.'}
+              ? 'Uses the complete prompts produced and validated by Director, with no additional LLM calls.'
+              : 'Default and model-aware. H3 keeps its native video prompts while generated image prompts may still be polished; other models use their dialect-specific enhance pipeline.'}
           </p>
         </div>
+
+        {/* Resource-aware workflow overlap */}
+        <label className="flex items-center justify-between cursor-pointer group">
+          <div className="flex-1 mr-3 min-w-0">
+            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
+              Parallel workflows by resource
+            </div>
+            <div className="text-[10px] text-text-muted mt-0.5">
+              Overlaps work only across different servers or devices. Each local GPU and each remote host remains a sequential queue.
+            </div>
+          </div>
+          <div
+            onClick={() => updateConfig({ workflow_parallelism_enabled: !servicesConfig.workflow_parallelism_enabled })}
+            className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+              servicesConfig.workflow_parallelism_enabled ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
+            }`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              servicesConfig.workflow_parallelism_enabled ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
+          </div>
+        </label>
+
+        {/* Structured debug tracing */}
+        <label className="flex items-center justify-between cursor-pointer group">
+          <div className="flex-1 mr-3 min-w-0">
+            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
+              Debug trace
+            </div>
+            <div className="text-[10px] text-text-muted mt-0.5">
+              Saves sanitized LLM requests/results and user actions as JSONL. Off by default.
+            </div>
+            {servicesConfig.debug_trace_enabled && servicesConfig.debug_trace_log_path && (
+              <div className="text-[10px] text-text-muted mt-1 font-mono truncate" title={servicesConfig.debug_trace_log_path}>
+                {servicesConfig.debug_trace_log_path}
+              </div>
+            )}
+          </div>
+          <div
+            onClick={() => updateConfig({ debug_trace_enabled: !servicesConfig.debug_trace_enabled })}
+            className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+              servicesConfig.debug_trace_enabled ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
+            }`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              servicesConfig.debug_trace_enabled ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
+          </div>
+        </label>
 
         {/* Multi-Shot LoRA Mode toggle (Beta) — Phase 1 of LoRA
             capabilities catalog. When on, Pass 2 emits storyboard-format
@@ -591,33 +730,22 @@ export function ServicesSettingsPanel() {
               servicesConfig.director_multishot_lora_mode ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.director_multishot_lora_mode ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>
         </label>
 
-        {/* Voice Reference (ID-LoRA) toggle — experimental.
-            Disabled by default. Currently relies on third-party ID-LoRAs
-            whose distilled-model compatibility is inconsistent (most
-            produce noise on distilled pipelines unless retrained on the
-            target architecture). Surfaces a voice-sample dropzone in
-            Studio Video and Director when enabled.
-            Wrapped in the show_experimental gate so the entire affordance
-            stays out of the way for non-power users. */}
-        {servicesConfig.show_experimental && (
+        {/* Voice Reference (ID-LoRA) is a standard setting, independent of
+            the in-development feature gate and enabled by default. */}
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3">
-            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors flex items-center gap-2">
+            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
               Voice Reference (ID-LoRA)
-              <span className="text-[9px] uppercase tracking-wider text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded px-1.5 py-px">
-                Experimental
-              </span>
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
               Adds a voice-sample dropzone to Studio Video and Director for speaker identity preservation across clips.
-              Most third-party ID-LoRAs produce noise on distilled models — best results require a LoRA trained against
-              the active model. Disabled by default.
+              Maestro loads the matching ID-LoRA when a reference is supplied. Enabled by default.
             </div>
           </div>
           <div
@@ -626,12 +754,11 @@ export function ServicesSettingsPanel() {
               servicesConfig.voice_reference_enabled ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.voice_reference_enabled ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>
         </label>
-        )}
       </div>
 
       <hr className="border-border" />
@@ -703,21 +830,56 @@ export function ServicesSettingsPanel() {
 
       <hr className="border-border" />
 
-      {/* API Keys.
-          The three external-AI provider keys (Google / OpenAI /
-          Anthropic) are gated by the experimental toggle — non-power
-          users running the local LLM exclusively never need them, and
-          surfacing them in the default UI invites confused calls about
-          "do I need these to use Maestro?"
-          The CivitAI key stays visible always since LoRA download
-          rate-limit relief is broadly useful, not a power-user feature. */}
+      {/* Named comic-writing profiles stay visible because the comic editor
+          exposes these providers outside the experimental feature gate. */}
       <div className="space-y-4">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">API Keys</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Comic writing providers</h3>
+        <p className="text-[10px] text-text-muted">
+          Credentials remain in Maestro settings and are never embedded in an exported comic.
+        </p>
+
+        <ApiKeyField
+          label="DeepSeek API key"
+          maskedValue={servicesConfig.deepseek_api_key}
+          isSet={servicesConfig.deepseek_api_key_set}
+          onSave={val => updateConfig({ deepseek_api_key: val })}
+        />
+
+        <ApiKeyField
+          label="OpenAI API key"
+          maskedValue={servicesConfig.openai_api_key}
+          isSet={servicesConfig.openai_api_key_set}
+          onSave={val => updateConfig({ openai_api_key: val })}
+        />
+
+        <div className="rounded-lg border border-border bg-bg-tertiary/20 p-3 space-y-3">
+          <div>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+              Custom compatible base URL
+            </label>
+            <input
+              type="url"
+              value={servicesConfig.compatible_base_url || ''}
+              onChange={event => updateConfig({ compatible_base_url: event.target.value })}
+              placeholder="http://127.0.0.1:1234"
+              className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+            />
+          </div>
+          <ApiKeyField
+            label="Custom compatible API key (optional)"
+            maskedValue={servicesConfig.compatible_api_key}
+            isSet={servicesConfig.compatible_api_key_set}
+            onSave={val => updateConfig({ compatible_api_key: val })}
+          />
+          <p className="text-[10px] text-text-muted">
+            Used only by the custom comic-writing profile. Local servers may leave the key empty.
+          </p>
+        </div>
 
         {servicesConfig.show_experimental && (
           <>
             <p className="text-[10px] text-text-muted">
-              Required for their respective providers. Also used for external AI services in Director mode.
+              Additional experimental service credentials.
             </p>
 
             <ApiKeyField
@@ -725,13 +887,6 @@ export function ServicesSettingsPanel() {
               maskedValue={servicesConfig.google_api_key}
               isSet={servicesConfig.google_api_key_set}
               onSave={val => updateConfig({ google_api_key: val })}
-            />
-
-            <ApiKeyField
-              label="OpenAI API Key"
-              maskedValue={servicesConfig.openai_api_key}
-              isSet={servicesConfig.openai_api_key_set}
-              onSave={val => updateConfig({ openai_api_key: val })}
             />
 
             <ApiKeyField
@@ -780,9 +935,8 @@ export function ServicesSettingsPanel() {
               focused on features known to work well.
             </div>
             <div className="text-[10px] text-text-muted mt-1 leading-relaxed">
-              Currently gates: Director v2 engine, Voice Reference, external
-              LLM APIs (Google / OpenAI / Anthropic), Studio Prompt Enhancer
-              config, Inpaint and Restyle edit modes.
+              Currently gates: external LLM APIs (Google / OpenAI / Anthropic),
+              Studio Prompt Enhancer config, and the Inpaint edit mode.
             </div>
           </div>
           <div
@@ -791,7 +945,7 @@ export function ServicesSettingsPanel() {
               servicesConfig.show_experimental ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.show_experimental ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
           </div>

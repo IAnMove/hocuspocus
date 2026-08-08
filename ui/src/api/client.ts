@@ -1,14 +1,28 @@
+import { rememberPrompt } from '../lib/promptHistory'
+import type { DirectorModelCompatibility, H3WindowPlan, ProductionPlan, ScailResolutionProfile } from '../types'
+
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
 
 export interface ApiModel {
   model_type: string
   name: string
+  description?: string
+  selector_help?: string
+  lora_compatibility_note?: string
   family: string
   architecture: string
   is_i2v: boolean
   is_t2v: boolean
   guidance_max_phases: number
   fps: number
+  supports_end_frame?: boolean
+  /** Legacy broad flag: accepts input audio OR generates output audio. */
+  supports_audio?: boolean
+  supports_audio_input?: boolean
+  generates_audio?: boolean
+  supports_ref_images?: boolean
+  /** Per-workflow eligibility computed by the Director backend. */
+  director?: DirectorModelCompatibility
   is_downloaded?: boolean
   // True when the model JSON declares `"nsfw_only": true` in its
   // model block. The UI hides it from selectors and the visibility
@@ -17,6 +31,9 @@ export interface ApiModel {
   // Hunyuan3D variants stored in one shared HF repo: deleting this
   // model's cache also removes the weights of every listed sibling.
   shared_cache_group?: string[]
+  // Weight-managed tool models (e.g. UniRig): shown in the settings
+  // catalog for download/delete, but never selectable for generation.
+  tool_only?: boolean
 }
 
 export interface ApiFamily {
@@ -32,13 +49,13 @@ export interface ApiResolution {
 
 export interface ApiOutput {
   name: string
-  type: 'video' | 'image' | 'audio' | 'model3d'
+  type: 'video' | 'image' | 'audio' | 'model3d' | 'scene' | 'comic'
   mode: string | null
   favorite?: boolean
   size: number
   created_at: number
   url: string
-  /** Static source image for a 3D output's history-card preview. */
+  /** Small static preview for image/video cards and saved 3D/scene assets. */
   thumbnail_url?: string | null
   /** Edit-mode sub-classification (retake / inpaint / outpaint / restyle /
    *  edit_anything). Field added as a recovery stub after a git
@@ -58,9 +75,19 @@ export interface ApiJobStatus {
   message: string
   output_files: string[]
   error: string | null
+  task_timings?: ApiTaskTiming[]
   /** Present only on failed jobs that look like CUDA OOMs.
    *  See `OomInfo` in types/index.ts. */
   oom_info?: import('../types').OomInfo | null
+}
+
+export interface ApiTaskTiming {
+  panel_no: number
+  panel_total: number
+  prompt_preview: string
+  status: 'running' | 'completed' | 'failed' | 'skipped'
+  total_seconds?: number
+  phase_timings: Array<{ phase: string; seconds: number }>
 }
 
 // --- Models & Families ---
@@ -68,6 +95,33 @@ export interface ApiJobStatus {
 export async function fetchModels(): Promise<{ families: ApiFamily[]; models: ApiModel[] }> {
   const res = await fetch(`${BASE}/api/v1/models`)
   if (!res.ok) throw new Error('Failed to fetch models')
+  return res.json()
+}
+
+export interface ModelVisibilitySettings {
+  configured: boolean
+  enabled_models: string[]
+  initialized_mature_models: string[]
+  defaults_version: number
+}
+
+export async function fetchModelVisibility(): Promise<ModelVisibilitySettings> {
+  const res = await fetch(`${BASE}/api/v1/model-visibility`)
+  if (!res.ok) throw new Error('Failed to fetch model visibility')
+  return res.json()
+}
+
+export async function updateModelVisibility(params: {
+  enabled_models: string[]
+  initialized_mature_models: string[]
+  defaults_version: number
+}): Promise<ModelVisibilitySettings> {
+  const res = await fetch(`${BASE}/api/v1/model-visibility`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) throw new Error('Failed to save model visibility')
   return res.json()
 }
 
@@ -82,6 +136,20 @@ export async function reloadModels(): Promise<{ status: string; model_count: num
 export async function deleteModel(modelType: string): Promise<{ deleted: string[]; model_type: string; affected_models?: string[] }> {
   const res = await fetch(`${BASE}/api/v1/models/${encodeURIComponent(modelType)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete model')
+  return res.json()
+}
+
+export type ModelDownloadStatus = 'downloading' | 'completed' | 'failed'
+
+export async function downloadModel(modelType: string): Promise<{ status: ModelDownloadStatus; model_type: string }> {
+  const res = await fetch(`${BASE}/api/v1/models/${encodeURIComponent(modelType)}/download`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to start model download')
+  return res.json()
+}
+
+export async function fetchModelDownloads(): Promise<{ downloads: Record<string, { status: ModelDownloadStatus; error: string | null }> }> {
+  const res = await fetch(`${BASE}/api/v1/models/downloads/status`)
+  if (!res.ok) throw new Error('Failed to fetch model download status')
   return res.json()
 }
 
@@ -104,7 +172,7 @@ export async function fetchDefaults(modelType: string): Promise<Record<string, u
 
 // --- Generation ---
 
-export async function submitGeneration(params: Record<string, unknown>): Promise<{ job_id: string }> {
+export async function submitGeneration(params: Record<string, unknown>): Promise<{ job_id: string; h3_window_plan?: H3WindowPlan }> {
   const res = await fetch(`${BASE}/api/v1/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -113,6 +181,40 @@ export async function submitGeneration(params: Record<string, unknown>): Promise
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Generation failed' }))
     throw new Error(err.detail || 'Generation failed')
+  }
+  const result = await res.json()
+  rememberPrompt({
+    prompt: params.prompt,
+    negativePrompt: params.negative_prompt,
+    mode: params.generation_mode,
+    model: params.model_type,
+    workspace: params.workspace,
+    source: 'generation',
+  })
+  return result
+}
+
+export async function planH3Windows(params: {
+  prompt: string
+  model_type: string
+  resolution: string
+  total_frames: number
+  window_frames: number
+  overlap_frames: number
+  discard_frames: number
+  sliding_window_memory_override?: boolean
+  has_start_image?: boolean
+  has_end_image?: boolean
+  image_paths?: string[]
+}): Promise<H3WindowPlan> {
+  const res = await fetch(`${BASE}/api/v1/llm/plan-h3-windows`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'H3 window planning failed' }))
+    throw new Error(err.detail || 'H3 window planning failed')
   }
   return res.json()
 }
@@ -128,9 +230,22 @@ export async function fetchJobStatus(jobId: string): Promise<ApiJobStatus> {
 export async function writeSong(params: {
   description: string
   instrumental?: boolean
+  target?: 'ace-step' | 'minimax'
+  model?: 'music-3.0' | 'music-2.6' | 'music-cover'
+  reference_song?: string
+  style_direction?: string
+  lyrics_direction?: string
+  story_context?: string
+  language?: string
+  duration_seconds?: number
   seed?: number
   reference_image_path?: string
-}): Promise<{ style: string; lyrics: string; raw: string }> {
+  include_lyria?: boolean
+  max_new_tokens?: number
+  writingProvider?: import('../features/stories/types').StoryWritingProvider
+  writingModel?: string
+  writingBaseUrl?: string
+}): Promise<{ style: string; lyrics: string; lyria_prompt: string; warnings?: string[]; raw: string }> {
   const res = await fetch(`${BASE}/api/v1/llm/write-song`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -139,6 +254,55 @@ export async function writeSong(params: {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Song writing failed' }))
     throw new Error(err.detail || 'Song writing failed')
+  }
+  return res.json()
+}
+
+export interface MiniMaxMusicCandidate {
+  filename: string
+  audio_path: string
+  source: string
+  duration_seconds: number
+  provider: 'minimax'
+  model: string
+}
+
+export async function generateStoryMusicCandidates(params: {
+  prompt: string
+  lyrics: string
+  count: 1 | 2 | 3
+  model?: 'music-3.0' | 'music-2.6' | 'music-cover'
+  reference_audio_filename?: string
+  instrumental?: boolean
+  workspace?: string
+}): Promise<{ candidates: MiniMaxMusicCandidate[] }> {
+  const res = await fetch(`${BASE}/api/v1/stories/music-candidates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'MiniMax Music generation failed' }))
+    throw new Error(error.detail || 'MiniMax Music generation failed')
+  }
+  return res.json()
+}
+
+export async function translateStoryLyrics(params: {
+  lyrics: string
+  targetLanguage: string
+  writingProvider: import('../features/stories/types').StoryWritingProvider
+  writingModel?: string
+  writingBaseUrl?: string
+}): Promise<{ lyrics: string; targetLanguage: string }> {
+  const res = await fetch(`${BASE}/api/v1/stories/translate-lyrics`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Lyric translation failed' }))
+    throw new Error(error.detail || 'Lyric translation failed')
   }
   return res.json()
 }
@@ -214,6 +378,7 @@ export async function submitToolRevoice(params: {
 export interface Workspace {
   name: string
   path: string
+  file_count?: number
 }
 
 export async function fetchWorkspaces(): Promise<{ workspaces: Workspace[]; active: string }> {
@@ -243,6 +408,15 @@ export async function createWorkspace(name: string): Promise<void> {
   }
 }
 
+export async function deleteWorkspace(name: string): Promise<{ switched_to_default: boolean; files_deleted: number }> {
+  const res = await fetch(`${BASE}/api/v1/workspaces/${encodeURIComponent(name)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to delete workspace' }))
+    throw new Error(err.detail || 'Failed to delete workspace')
+  }
+  return res.json()
+}
+
 // --- Job Management ---
 
 export async function cancelJob(jobId: string): Promise<void> {
@@ -253,10 +427,45 @@ export async function cancelJob(jobId: string): Promise<void> {
 export async function fetchActiveJobs(): Promise<{ jobs: Array<{
   job_id: string; status: string; progress: number; step: number;
   total_steps: number; phase: string; message: string; output_files: string[];
-  error: string | null; created_at: number;
+  error: string | null; created_at: number; task_timings?: ApiTaskTiming[];
+  h3_window_plan?: H3WindowPlan | null;
 }> }> {
   const res = await fetch(`${BASE}/api/v1/jobs`)
   if (!res.ok) throw new Error('Failed to fetch jobs')
+  return res.json()
+}
+
+export interface RecoverableGenerationJob {
+  job_id: string
+  previous_status: 'queued' | 'running' | string
+  created_at: number
+  workspace: string
+  model_type: string
+  generation_mode: string
+  prompt_preview: string
+}
+
+export async function fetchGenerationQueueRecovery(): Promise<{ jobs: RecoverableGenerationJob[] }> {
+  const res = await fetch(`${BASE}/api/v1/jobs/recovery`)
+  if (!res.ok) throw new Error('Could not inspect the saved generation queue')
+  return res.json()
+}
+
+export async function resumeGenerationQueue(): Promise<{ resumed: RecoverableGenerationJob[]; count: number }> {
+  const res = await fetch(`${BASE}/api/v1/jobs/recovery/resume`, { method: 'POST' })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not resume the saved queue' }))
+    throw new Error(error.detail || 'Could not resume the saved queue')
+  }
+  return res.json()
+}
+
+export async function discardGenerationQueue(): Promise<{ discarded: number }> {
+  const res = await fetch(`${BASE}/api/v1/jobs/recovery/discard`, { method: 'POST' })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not discard the saved queue' }))
+    throw new Error(error.detail || 'Could not discard the saved queue')
+  }
   return res.json()
 }
 
@@ -284,26 +493,88 @@ export async function toggleFavorite(name: string): Promise<{ name: string; favo
 
 // --- Outputs ---
 
-export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string }): Promise<{ outputs: ApiOutput[]; total: number }> {
+export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type'] }): Promise<{ outputs: ApiOutput[]; total: number }> {
   const params = new URLSearchParams()
   if (limit > 0) params.set('limit', String(limit))
   if (offset > 0) params.set('offset', String(offset))
   if (opts?.favoritesOnly) params.set('favorites_only', 'true')
   if (opts?.multiclipOnly) params.set('multiclip_only', 'true')
   if (opts?.search) params.set('search', opts.search)
+  // "__uploads__" browses the uploads folder (virtual Uploads view)
+  if (opts?.workspace) params.set('workspace', opts.workspace)
+  if (opts?.mediaType) params.set('media_type', opts.mediaType)
   const qs = params.toString()
-  const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`)
+  const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`, { cache: 'no-store' })
   if (!res.ok) throw new Error('Failed to fetch outputs')
   const data = await res.json()
   return { outputs: data.outputs, total: data.total ?? data.outputs.length }
+}
+
+export async function saveScene(scene: import('../types').Scene, preview: string): Promise<{ name: string; type: 'scene'; url: string; thumbnail_url: string }> {
+  const res = await fetch(`${BASE}/api/v1/scenes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scene, preview }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to save scene' }))
+    throw new Error(error.detail || 'Failed to save scene')
+  }
+  return res.json()
 }
 
 export function getFileUrl(filename: string): string {
   return `${BASE}/api/v1/file/${encodeURIComponent(filename)}`
 }
 
+export function getOutputThumbnailUrl(filename: string): string {
+  return `${BASE}/api/v1/outputs/thumbnail/${encodeURIComponent(filename)}`
+}
+
 export function getUploadUrl(filename: string): string {
   return `${BASE}/api/v1/uploads/${encodeURIComponent(filename)}`
+}
+
+function storedAssetFilename(pathOrFilename: string): string {
+  const normalized = String(pathOrFilename || '').replace(/\\/g, '/')
+  const withoutQuery = normalized.split(/[?#]/, 1)[0]
+  const encodedName = withoutQuery.split('/').pop() || ''
+  try {
+    return decodeURIComponent(encodedName)
+  } catch {
+    return encodedName
+  }
+}
+
+/**
+ * Resolve a persisted sidecar path to the endpoint that actually owns it.
+ *
+ * Director-generated conditioning frames live in outputs, while files the
+ * user selected live in uploads. Older restore code discarded the directory
+ * and sent every basename to /uploads, which made generated comic frames 404.
+ */
+export function getStoredAssetUrl(pathOrFilename: string): string {
+  const normalized = String(pathOrFilename || '').replace(/\\/g, '/')
+  const filename = storedAssetFilename(normalized)
+  const isUpload = normalized.startsWith('/api/v1/uploads/')
+    || /(^|\/)uploads\//i.test(normalized)
+  return isUpload ? getUploadUrl(filename) : getFileUrl(filename)
+}
+
+/**
+ * Fetch a stored asset with a compatibility fallback for old sidecars that
+ * persisted only a basename and therefore lost whether it came from uploads
+ * or outputs.
+ */
+export async function fetchStoredAsset(pathOrFilename: string): Promise<Response> {
+  const filename = storedAssetFilename(pathOrFilename)
+  const primary = getStoredAssetUrl(pathOrFilename)
+  const fallback = primary === getFileUrl(filename)
+    ? getUploadUrl(filename)
+    : getFileUrl(filename)
+  const first = await fetch(primary)
+  if (first.ok || primary === fallback) return first
+  return fetch(fallback)
 }
 
 export async function fetchOutputMetadata(name: string): Promise<import('../types').OutputMetadata> {
@@ -339,6 +610,38 @@ export async function fetchOutputMetadata(name: string): Promise<import('../type
   throw lastErr  // all attempts failed — loadOutputMetadata's catch sets meta null
 }
 
+export async function fetchVideoExtraInfo(
+  name: string,
+  language: string,
+): Promise<import('../types').VideoExtraInfoStatus> {
+  const res = await fetch(
+    `${BASE}/api/v1/outputs/${encodeURIComponent(name)}/extra-info?language=${encodeURIComponent(language)}`,
+    { cache: 'no-store' },
+  )
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to load extra info' }))
+    throw new Error(error.detail || 'Failed to load extra info')
+  }
+  return res.json()
+}
+
+export async function generateVideoExtraInfo(
+  name: string,
+  language: string,
+  regenerate = false,
+): Promise<{ cached: boolean; data: import('../types').VideoExtraInfo }> {
+  const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}/extra-info`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language, regenerate }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to generate extra info' }))
+    throw new Error(error.detail || 'Failed to generate extra info')
+  }
+  return res.json()
+}
+
 export async function deleteOutput(name: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete output')
@@ -354,6 +657,153 @@ export async function rejoinClips(groupId: string, audioFile?: string): Promise<
   return res.json()
 }
 
+export interface VideoEditorProbe {
+  duration: number
+  width: number
+  height: number
+  fps: number
+  has_audio: boolean
+  pixel_format: string
+  has_alpha: boolean
+}
+
+export interface VideoEditorExportJob {
+  job_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  progress: number
+  message: string
+  filename: string | null
+  url: string | null
+  error: string | null
+  result?: { duration: number; clip_count: number }
+}
+
+export async function probeVideoEditorClip(source: string): Promise<VideoEditorProbe> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/probe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not inspect video' }))
+    throw new Error(error.detail || 'Could not inspect video')
+  }
+  return res.json()
+}
+
+export function getVideoEditorThumbnailUrl(source: string): string {
+  const params = new URLSearchParams({ source })
+  return `${BASE}/api/v1/video-editor/thumbnail?${params.toString()}`
+}
+
+export interface VideoEditorScreenshot {
+  filename: string
+  url: string
+  time: number
+  width: number
+  height: number
+}
+
+export async function captureVideoEditorFrame(payload: {
+  source: string
+  time: number
+  name: string
+}): Promise<VideoEditorScreenshot> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/screenshot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not capture video frame' }))
+    throw new Error(error.detail || 'Could not capture video frame')
+  }
+  return res.json()
+}
+
+export async function startVideoEditorExport(payload: {
+  name: string
+  width: number
+  height: number
+  fps: number
+  clips: Array<{
+    name: string
+    source: string
+    trim_start: number
+    trim_end: number
+    volume: number
+    muted: boolean
+    fit: 'fit' | 'fill'
+    transition:
+      | 'none'
+      | 'crossfade'
+      | 'fade-black'
+      | 'wipe-left'
+      | 'slide-left'
+      | 'slide-right'
+      | 'circle-open'
+      | 'dissolve'
+      | 'pixelize'
+      | 'blur'
+      | 'zoom-in'
+      | 'later-clock'
+      | 'later-tropical'
+      | 'later-cinematic'
+    transition_duration: number
+    transition_text: string
+    transition_text_size: number
+  }>
+}): Promise<{ job_id: string }> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not start export' }))
+    throw new Error(error.detail || 'Could not start export')
+  }
+  return res.json()
+}
+
+export async function fetchVideoEditorExport(jobId: string): Promise<VideoEditorExportJob> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/export/${encodeURIComponent(jobId)}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not read export status' }))
+    throw new Error(error.detail || 'Could not read export status')
+  }
+  return res.json()
+}
+
+export async function startComicAnimatic(payload: {
+  comic_id: string
+  comic_title: string
+  width: number
+  height: number
+  fps: number
+  transition: string
+  transition_duration: number
+  panels: Array<{
+    source: string
+    page_number: number
+    panel_number: number
+    duration: number
+    motion: string
+    script: string
+  }>
+}): Promise<{ job_id: string }> {
+  const res = await fetch(`${BASE}/api/v1/comics/animatic`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not start comic animatic' }))
+    throw new Error(error.detail || 'Could not start comic animatic')
+  }
+  return res.json()
+}
+
 export async function fetchGroupClips(groupId: string): Promise<{ group_id: string; clips: Array<{ filename: string; index: number; total: number; prompt: string }> }> {
   const res = await fetch(`${BASE}/api/v1/outputs/group/${encodeURIComponent(groupId)}`)
   if (!res.ok) throw new Error('Failed to fetch group clips')
@@ -362,14 +812,111 @@ export async function fetchGroupClips(groupId: string): Promise<{ group_id: stri
 
 // --- Director Pipeline ---
 
+export interface PipelinePreviewClip {
+  index: number
+  page_number: number | null
+  panel_number: number | null
+  label: string
+  image_filename: string
+  end_image_filename: string
+  source_resolution: string
+  input_resolution: string
+  output_resolution: string
+  video_model: string
+  prompt: string
+  base_prompt?: string
+  prompt_overridden?: boolean
+  negative_prompt: string
+  num_inference_steps: number
+  stage2_steps: number
+  guidance_scale: number
+  runtime_recipe?: string
+  requested_num_inference_steps?: number
+  requested_stage2_steps?: number
+  requested_guidance_scale?: number
+  guidance_note?: string
+  input_video_strength: number
+  seed: number
+  fps: number
+  frames: number
+  output_frames?: number
+  duration_seconds: number
+  image_prompt_type: 'S' | 'SE'
+  fit_mode: string
+  motion_mode: string
+  camera_locked: boolean
+  fidelity: string
+  self_refiner: number
+  spatial_upsampling: string
+  film_grain_intensity: number
+  film_grain_saturation: number
+  single_stage_pipeline: number
+  progressive_pipeline: number
+  activated_loras: string[]
+  lora_multipliers: string
+  panel_id?: string
+  shot_id?: string
+  source_panel_ids?: string[]
+  source_image_filename?: string
+  renderer?: 'hold' | 'parallax' | 'cinemagraph' | 'ltx'
+  effective_renderer?: 'hold' | 'parallax' | 'cinemagraph' | 'ltx'
+  motion_level?: number
+  dialogue?: string
+  included?: boolean
+  order?: number
+  test_selected?: boolean
+  camera_move?: string
+  needs_reframe?: boolean
+  reframe_approved?: boolean
+  used_prepared_keyframe?: boolean
+  effective_fit_mode?: string
+  retained_fraction?: number
+  risk_tags?: string[]
+}
+
+export interface PipelineQualityGate {
+  status: 'pending' | 'failed' | 'review_required' | 'passed' | 'waived'
+  fingerprint: string
+  tested_indices: number[]
+  required_test_indices?: number[]
+  failures: string[]
+  results?: Record<string, {
+    passed?: boolean
+    status?: string
+    failures?: string[]
+    warnings?: string[]
+    renderer?: string
+    video_filename?: string
+    error?: string
+    pipeline_id?: string
+    output_files?: string[]
+  }>
+  waiver_reason?: string
+}
+
+export interface PipelineResourceSchedule {
+  mode: string
+  images_ready?: number
+  images_total?: number
+  lanes: Record<string, { key: string; label: string; location: string }>
+}
+
 export interface PipelineStatus {
   id: string
-  status: 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
-  phase: 'planning' | 'polishing_prompts' | 'generating_images' | 'generating_video' | 'post_processing' | 'completed'
+  status: 'running' | 'paused' | 'preview_ready' | 'completed' | 'failed' | 'cancelled'
+  phase: 'planning' | 'polishing_prompts' | 'preparing_direct_video' | 'generating_images' | 'preview_ready' | 'preparing_video' | 'generating_video' | 'post_processing' | 'completed' | 'failed' | 'cancelled'
+  generation_mode?: 'image_guided' | 'direct_video'
   auto_mode: boolean
   progress: { current: number; total: number; message: string; step: number; total_steps: number }
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
   clip_images: string[]
+  preview_clips?: PipelinePreviewClip[]
+  /** Hash of the exact frozen source images, shot plan and render settings.
+   *  PATCH and generation calls echo this value so stale browser tabs cannot
+   *  mutate or launch a different PRE accidentally. */
+  preview_fingerprint?: string
+  preview_approved?: boolean
+  quality_gate?: PipelineQualityGate
   output_files: string[]
   error: string | null
   /** Present only on failed pipelines that look like CUDA OOMs.
@@ -377,12 +924,33 @@ export interface PipelineStatus {
   oom_info?: import('../types').OomInfo | null
   pause_reason: string | null
   llm_streaming: boolean
+  recovered_from_disk?: boolean
   /** Non-fatal warnings raised during the run — currently used for
    *  architecture-mismatch advisories when image LoRAs are dropped
    *  because they were trained for a different Flux variant than the
    *  active model (e.g. Flux 2 Dev LoRA on Klein 9B). The chat renders
    *  these inline so users see why some selected LoRAs weren't applied. */
   lora_warnings?: string[]
+  resource_schedule?: PipelineResourceSchedule
+  created_at?: number
+  updated_at?: number
+  phase_started_at?: number
+}
+
+export interface ActiveDirectorPipeline {
+  id: string
+  status: 'running' | 'queued' | 'paused'
+  phase: string
+  auto_mode?: boolean
+  progress: { current: number; total: number; message: string; step: number; total_steps: number }
+  output_files?: string[]
+  error?: string | null
+  pipeline_type?: string
+  workspace?: string
+  created_at?: number
+  updated_at?: number
+  phase_started_at?: number
+  resource_schedule?: PipelineResourceSchedule
 }
 
 export async function startPipeline(params: Record<string, unknown>): Promise<{ pipeline_id: string }> {
@@ -391,13 +959,22 @@ export async function startPipeline(params: Record<string, unknown>): Promise<{ 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  if (!res.ok) throw new Error('Failed to start pipeline')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to start pipeline' }))
+    throw new Error(err.detail || err.error || 'Failed to start pipeline')
+  }
   return res.json()
 }
 
 export async function fetchPipelineStatus(pid: string): Promise<PipelineStatus> {
   const res = await fetch(`${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}`)
   if (!res.ok) throw new Error('Failed to fetch pipeline status')
+  return res.json()
+}
+
+export async function fetchActiveDirectorPipelines(): Promise<{ pipelines: ActiveDirectorPipeline[] }> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/active`)
+  if (!res.ok) throw new Error('Failed to fetch active Director pipelines')
   return res.json()
 }
 
@@ -408,6 +985,93 @@ export async function continuePipeline(pid: string, updates?: { clip_plans?: Arr
     body: JSON.stringify(updates || {}),
   })
   if (!res.ok) throw new Error('Failed to continue pipeline')
+}
+
+export async function generatePipelinePreview(
+  pid: string,
+  options: {
+    clipIndex?: number
+    clipIndices?: number[]
+    expectedFingerprint: string
+    runType: 'test' | 'full'
+  },
+): Promise<{ pipeline_id: string; source_preview_pipeline_id: string; clip_index?: number; reused?: boolean }> {
+  const selectedIndices = (options.clipIndices || [])
+    .filter(value => Number.isInteger(value) && value >= 0)
+    .map(Number)
+  const selection = selectedIndices.length
+    ? { clip_indices: Array.from(new Set(selectedIndices)) }
+    : Number.isInteger(options.clipIndex)
+      ? { clip_index: options.clipIndex }
+      : {}
+  const res = await fetch(
+    `${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}/generate-preview`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...selection,
+        expected_fingerprint: options.expectedFingerprint,
+        run_type: options.runType,
+      }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: 'Failed to generate PRE clip' }))
+    throw new Error(body.detail || 'Failed to generate PRE clip')
+  }
+  return res.json()
+}
+
+export interface PipelinePreviewClipUpdate {
+  index: number
+  included: boolean
+  order: number
+  prompt?: string
+  prompt_override?: boolean
+  renderer: 'hold' | 'parallax' | 'cinemagraph' | 'ltx'
+  motion_level: number
+  fit_mode: 'reframe' | 'cover' | 'contain'
+  duration_seconds: number
+  camera_move: string
+  seed: number
+  test_selected: boolean
+  reframe_approved?: boolean
+}
+
+export async function updatePipelinePreview(
+  pid: string,
+  clips: PipelinePreviewClipUpdate[],
+  options: {
+    expectedFingerprint: string
+    approvePreview?: boolean
+    acceptQualityTest?: boolean
+    qualityWaiver?: boolean
+    waiverReason?: string
+  },
+): Promise<PipelineStatus | { preview_clips: PipelinePreviewClip[] }> {
+  const res = await fetch(
+    `${BASE}/api/v1/director/pipeline/${encodeURIComponent(pid)}/preview`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clips,
+        expected_fingerprint: options.expectedFingerprint,
+        ...(options.approvePreview ? { approve_preview: true } : {}),
+        ...(options.acceptQualityTest ? { accept_quality_test: true } : {}),
+        ...(options.qualityWaiver ? {
+          quality_waiver: true,
+          waiver_reason: options.waiverReason || '',
+        } : {}),
+      }),
+    },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: 'Failed to update comic PRE' }))
+    throw new Error(body.detail || 'Failed to update comic PRE')
+  }
+  return res.json()
 }
 
 export async function stopPipeline(pid: string): Promise<void> {
@@ -521,7 +1185,9 @@ export async function fetchPipelineList(): Promise<{ pipelines: import('../types
 }
 
 export async function fetchSavedPipeline(pid: string): Promise<import('../types').SavedPipelineState> {
-  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}`)
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}`, {
+    cache: 'no-store',
+  })
   if (!res.ok) throw new Error('Pipeline not found')
   return res.json()
 }
@@ -533,6 +1199,34 @@ export async function tagPipelineClip(pid: string, clipIndex: number, tag: strin
     body: JSON.stringify({ tag }),
   })
   if (!res.ok) throw new Error('Failed to tag clip')
+}
+
+export async function startPipelineRepair(pid: string): Promise<{
+  pipeline_id: string
+  repair: import('../types').PipelineRepairState
+}> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/repair`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Repair failed to start' }))
+    throw new Error(err.error || err.detail || 'Repair failed to start')
+  }
+  return res.json()
+}
+
+export async function cancelPipelineRepair(pid: string): Promise<{
+  pipeline_id: string
+  repair: import('../types').PipelineRepairState
+}> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/repair/cancel`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Repair cancel failed' }))
+    throw new Error(err.error || err.detail || 'Repair cancel failed')
+  }
+  return res.json()
 }
 
 export async function rerunClipImage(pid: string, clipIndex: number, prompt?: string): Promise<{ filename: string; clip_index: number }> {
@@ -561,7 +1255,29 @@ export async function rerunClipVideo(pid: string, clipIndex: number, prompt?: st
   return res.json()
 }
 
-export async function rejoinPipeline(pid: string): Promise<{ filename: string }> {
+export async function rerunH3Segment(
+  pid: string,
+  clipIndex: number,
+  segmentIndex: number,
+  prompt?: string,
+): Promise<{ filename: string; filenames: string[]; clip_index: number; segment_index: number; requires_rejoin: boolean }> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/clips/${clipIndex}/segments/${segmentIndex}/rerun`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: prompt || undefined, cascade: true }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Segment regeneration failed' }))
+    throw new Error(err.error || 'Segment regeneration failed')
+  }
+  return res.json()
+}
+
+export async function rejoinPipeline(pid: string): Promise<{
+  filename: string
+  assembly_time_sec: number
+  total_time_sec: number | null
+}> {
   const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/rejoin`, {
     method: 'POST',
   })
@@ -572,16 +1288,30 @@ export async function rejoinPipeline(pid: string): Promise<{ filename: string }>
   return res.json()
 }
 
+export async function deletePipeline(pid: string): Promise<{ media_deleted: number; media_deferred: number }> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Delete failed' }))
+    throw new Error(err.detail || 'Delete failed')
+  }
+  return res.json()
+}
+
 // --- Director v2 ---
 
 export interface DirectorV2PlanRequest {
   skill_type: string
+  activity_id?: string
   scene_description?: string
   story_description?: string
   clips?: unknown[]
   lyrics?: unknown[]
   bpm?: number
   reference_image_path?: string
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
   speaker_mappings?: Record<string, unknown>
   characters?: Array<{ name: string; description: string }>
   audio_path?: string
@@ -593,15 +1323,42 @@ export interface DirectorV2PlanRequest {
   frames_minimum?: number
   concept?: string
   visual_style?: string
+  preserve_visual_style?: boolean
+  character_visual_style?: string
+  allow_clip_text?: boolean
   platform?: string
   style?: string
   prompt_type?: string
+  image_model?: string
+  video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
+  seamless?: boolean
+  multishot_lora_mode?: boolean
+  music_video_treatment?: import('../types').MusicVideoTreatment
   director_flags?: Record<string, boolean>
+}
+
+export interface DirectorV2PlanProgress {
+  id: string
+  status: 'running' | 'completed' | 'failed'
+  phase: string
+  current: number
+  total: number
+  detail: string
+  stream_text?: string
+  stream_done?: boolean
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    calls?: number
+  }
 }
 
 export interface DirectorV2PlanResponse {
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
-  production_plan: Record<string, unknown>
+  production_plan: ProductionPlan
   skill_type: string
 }
 
@@ -615,6 +1372,13 @@ export async function directorV2Plan(params: DirectorV2PlanRequest): Promise<Dir
     const err = await res.json().catch(() => ({ detail: 'Plan failed' }))
     throw new Error(err.detail || 'Director v2 plan failed')
   }
+  return res.json()
+}
+
+export async function getDirectorV2PlanProgress(activityId: string): Promise<DirectorV2PlanProgress | null> {
+  const res = await fetch(`${BASE}/api/v1/director/v2/plan/progress/${encodeURIComponent(activityId)}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error('Could not read Director planning progress')
   return res.json()
 }
 
@@ -777,14 +1541,241 @@ export async function submitEditAnything(params: {
   return res.json()
 }
 
+// --- Repaint (SCAIL-2 Animate: edited first frame + source motion) ---
+
+export interface RepaintRegionRequest {
+  id?: string;
+  /** Person/object phrase to track through the source video. */
+  source: string;
+  /** Corresponding person/object phrase in the edited first frame. */
+  target: string;
+}
+
+export async function submitRepaint(params: {
+  video_path: string;
+  target_frame_path: string;
+  region_mappings?: RepaintRegionRequest[];
+  prompt?: string;
+  start_time?: number;
+  end_time?: number;
+  model_type?: string;
+  negative_prompt?: string;
+  seed?: number;
+  num_inference_steps?: number;
+  /** SCAIL-2 HQ only. Fast is CFG-distilled and stays at 1. */
+  guidance_scale?: number;
+  resolution_profile?: ScailResolutionProfile;
+  activated_loras?: string[];
+  loras_multipliers?: string;
+  workspace?: string;
+}): Promise<{
+  job_id: string;
+  status: string;
+  frames?: number;
+  region_count?: number;
+  resolution_profile?: ScailResolutionProfile;
+  resolution?: string;
+  sliding_window_size?: number;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+}> {
+  const res = await fetch(`${BASE}/api/v1/repaint`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Repaint failed' }))
+    throw new Error(err.detail || 'Repaint failed')
+  }
+  return res.json()
+}
+
+export async function repaintPreview(params: {
+  video_path: string;
+  target_frame_path: string;
+  region_mappings: RepaintRegionRequest[];
+  time?: number;
+  workspace?: string;
+}): Promise<{
+  found: boolean;
+  frame_index: number;
+  source_preview: string;
+  target_preview: string;
+  mapping_results: Array<{
+    mapping_index: number;
+    source: string;
+    target: string;
+    source_found: boolean;
+    target_found: boolean;
+    color: number[];
+  }>;
+}> {
+  const res = await fetch(`${BASE}/api/v1/repaint/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Repaint preview failed' }))
+    throw new Error(err.detail || 'Repaint preview failed')
+  }
+  return res.json()
+}
+
+// --- Recast (SCAIL-2 Replace: swap a person for a reference character) ---
+
+export async function submitRecast(params: {
+  video_path: string;
+  ref_image_path?: string;
+  /** Same-character views for the legacy single-mapping request. */
+  additional_ref_image_paths?: string[];
+  /** Deterministic source-person → replacement-reference assignments. */
+  character_mappings?: Array<{
+    id?: string;
+    target: string;
+    ref_image_path: string;
+    additional_ref_image_paths?: string[];
+    reference_aligned_to_source?: boolean;
+  }>;
+  /** Who to replace, as a SAM3 keyword ("woman", "man in red"). */
+  target?: string;
+  /** Number of matching people to track and replace (1-5). */
+  person_count?: number;
+  /** The reference is an edited copy of the selected source first frame. */
+  reference_aligned_to_source?: boolean;
+  /** Preserve original subject identity while neutralizing reference scenery. */
+  isolate_reference?: boolean;
+  /** Derive a tighter same-character identity view when none is supplied. */
+  auto_face_detail?: boolean;
+  /** Rewrite and append Maestro's identity/scene continuity guidance. */
+  enhance_prompt?: boolean;
+  /** Strict post-composite fallback; may create visible lighting/color seams. */
+  protect_bystanders?: boolean;
+  /** Experimental: preserve other visible identities with native SCAIL-2 color correspondence. */
+  preserve_bystanders?: boolean;
+  /** Apply the official SCAIL-2 replacement Relighting LoRA. */
+  use_relighting?: boolean;
+  /** Spatial quality only; does not select a model or change its step schedule. */
+  resolution_profile?: ScailResolutionProfile;
+  /** Optional scene/character description — a good one helps identity. */
+  prompt?: string;
+  start_time?: number;
+  end_time?: number;
+  model_type?: string;
+  negative_prompt?: string;
+  seed?: number;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+  activated_loras?: string[];
+  loras_multipliers?: string;
+  workspace?: string;
+}): Promise<{
+  job_id: string;
+  status: string;
+  frames?: number;
+  target?: string;
+  person_count?: number;
+  resolution_profile?: ScailResolutionProfile;
+  resolution?: string;
+  sliding_window_size?: number;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+}> {
+  const res = await fetch(`${BASE}/api/v1/recast`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Recast failed' }))
+    throw new Error(err.detail || 'Recast failed')
+  }
+  return res.json()
+}
+
+export async function recastPreview(params: {
+  video_path: string;
+  target?: string;
+  person_count?: number;
+  ref_image_path?: string;
+  additional_ref_image_paths?: string[];
+  character_mappings?: Array<{
+    id?: string;
+    target: string;
+    ref_image_path?: string;
+    additional_ref_image_paths?: string[];
+    reference_aligned_to_source?: boolean;
+  }>;
+  isolate_reference?: boolean;
+  auto_face_detail?: boolean;
+  resolution_profile?: ScailResolutionProfile;
+  time?: number;
+  end_time?: number;
+  workspace?: string;
+}): Promise<{
+  found: boolean;
+  matched_people: number;
+  requested_people: number;
+  frame_index: number;
+  time_seconds?: number;
+  timeline_start_seconds?: number;
+  timeline_end_seconds?: number;
+  sampled_frame_count?: number;
+  preview: string;
+  resolution_profile?: ScailResolutionProfile;
+  output_resolution?: number[];
+  mapping_results?: Array<{
+    mapping_index: number;
+    target: string;
+    found: boolean;
+    color: number[];
+    overlap_fraction: number;
+    first_frame_index?: number | null;
+    first_time_seconds?: number | null;
+    anchor_frame_index?: number | null;
+    anchor_time_seconds?: number | null;
+  }>;
+  reference_previews?: Array<{
+    mapping_index: number;
+    view_index: number;
+    kind: 'primary' | 'additional' | 'auto_face_detail';
+    mask_source: string;
+    source_size: number[];
+    prepared_size: number[];
+    crop_box?: number[];
+    detail_size?: number[];
+    detail_source?: string;
+    prepared_image: string;
+    clip_identity_image?: string;
+    semantic_mask: string;
+  }>;
+}> {
+  const res = await fetch(`${BASE}/api/v1/recast/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Preview failed' }))
+    throw new Error(err.detail || 'Preview failed')
+  }
+  return res.json()
+}
+
 // --- Outpaint ---
 
 export async function submitOutpaint(params: {
   video_path: string; prompt: string; model_type: string;
   pad_top?: number; pad_bottom?: number; pad_left?: number; pad_right?: number;
+  outpaint_aspect?: 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
   resolution_preset?: 'auto' | '480p' | '540p' | '720p' | '1080p';
   source_preservation?: number;
   outpaint_lora_strength?: number;
+  mask_preserving_outpaint?: boolean;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+  negative_prompt?: string;
   seed?: number;
   activated_loras?: string[]; loras_multipliers?: string;
   workspace?: string;
@@ -899,7 +1890,15 @@ export async function mixAudio(tracks: { path: string; start_time: number; volum
 
 // --- Upload ---
 
-export async function uploadImage(file: File): Promise<{ filename: string; path: string; url: string }> {
+export async function uploadImage(file: File): Promise<{
+  filename: string
+  path: string
+  url: string
+  fps?: number
+  frame_count?: number
+  duration_seconds?: number
+  has_audio?: boolean
+}> {
   const form = new FormData()
   form.append('file', file)
   const res = await fetch(`${BASE}/api/v1/upload`, {
@@ -910,11 +1909,547 @@ export async function uploadImage(file: File): Promise<{ filename: string; path:
   return res.json()
 }
 
+export interface StoryAssetSuggestion {
+  index: number
+  kind: import('../features/stories/types').StoryAssetKind
+  targetId: string
+  name: string
+  nameOriginal: string
+  description: string
+  visualPrompt: string
+  confidence: number
+  reason: string
+  source: string
+}
+
+export async function analyzeStoryAssets(params: {
+  assets: Array<{ name: string; path: string; url: string }>
+  description: string
+  project: import('../features/stories/types').StoryProject
+  writingProvider: import('../features/stories/types').StoryWritingProvider
+  writingModel: string
+  writingBaseUrl: string
+  activity_id: string
+}): Promise<{ assets: StoryAssetSuggestion[] }> {
+  const response = await fetch(`${BASE}/api/v1/stories/assets/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Smart asset analysis failed' }))
+    throw new Error(error.detail || 'Smart asset analysis failed')
+  }
+  return response.json()
+}
+
+// --- Comics ---
+
+export async function saveComicProject(
+  project: import('../features/comics/types').ComicProject,
+  preview?: string,
+  existingName?: string | null,
+): Promise<{ name: string; type: 'comic'; url: string; thumbnail_url: string }> {
+  const method = existingName ? 'PUT' : 'POST'
+  const url = existingName
+    ? `${BASE}/api/v1/comics/${encodeURIComponent(existingName)}`
+    : `${BASE}/api/v1/comics`
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project, preview }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to save comic' }))
+    throw new Error(err.detail || 'Failed to save comic')
+  }
+  return res.json()
+}
+
+export async function loadComicProject(name: string): Promise<import('../features/comics/types').ComicProject> {
+  const res = await fetch(`${BASE}/api/v1/comics/${encodeURIComponent(name)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to load comic' }))
+    throw new Error(err.detail || 'Failed to load comic')
+  }
+  const data = await res.json()
+  return data.project
+}
+
+export interface ComicHistoryEntry {
+  id: string
+  comicId: string
+  title: string
+  createdAt: string
+  reason: string
+  persistedName: string | null
+  pageCount: number
+  assetCount: number
+}
+
+export async function createComicHistory(
+  project: import('../features/comics/types').ComicProject,
+  reason = 'Automatic checkpoint',
+  persistedName?: string | null,
+): Promise<ComicHistoryEntry> {
+  const res = await fetch(`${BASE}/api/v1/comics/history`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project, reason, persisted_name: persistedName || null }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to back up comic' }))
+    throw new Error(err.detail || 'Failed to back up comic')
+  }
+  return res.json()
+}
+
+export async function listComicHistory(comicId?: string): Promise<ComicHistoryEntry[]> {
+  const query = comicId ? `?comic_id=${encodeURIComponent(comicId)}` : ''
+  const res = await fetch(`${BASE}/api/v1/comics/history${query}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to load comic history' }))
+    throw new Error(err.detail || 'Failed to load comic history')
+  }
+  const data = await res.json()
+  return data.history || []
+}
+
+export async function loadComicHistory(id: string): Promise<{
+  project: import('../features/comics/types').ComicProject
+  entry: ComicHistoryEntry
+}> {
+  const res = await fetch(`${BASE}/api/v1/comics/history/${encodeURIComponent(id)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to restore comic backup' }))
+    throw new Error(err.detail || 'Failed to restore comic backup')
+  }
+  return res.json()
+}
+
+export async function generateComicWithMiniMax(params: {
+  prompt: string
+  aspect_ratio: string
+  subject_reference?: string
+}): Promise<{ asset: import('../features/comics/types').ComicAsset }> {
+  const res = await fetch(`${BASE}/api/v1/comics/generate/minimax`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'MiniMax generation failed' }))
+    throw new Error(`HTTP ${res.status}: ${err.detail || 'MiniMax generation failed'}`)
+  }
+  return res.json()
+}
+
+export async function generateStorySection(params: {
+  scope: import('../features/stories/types').StoryGenerationScope
+  premise: string
+  language: string
+  genre: string
+  tone: string
+  audience: string
+  instruction?: string
+  project: import('../features/stories/types').StoryProject
+  writingProvider: import('../features/stories/types').StoryWritingProvider
+  writingModel?: string
+  writingBaseUrl?: string
+  workspace?: string
+}, onProgress?: (progress: {
+  jobId: string
+  status: string
+  message: string
+  stage: string
+  current: number
+  total: number
+}) => void, signal?: AbortSignal): Promise<{ result: Record<string, unknown> }> {
+  const res = await fetch(`${BASE}/api/v1/stories/generate/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+    signal,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Story generation failed' }))
+    throw new Error(err.detail || 'Story generation failed')
+  }
+  const accepted = await res.json()
+  rememberPrompt({
+    prompt: params.premise,
+    mode: `story-${params.scope}`,
+    model: params.writingModel || params.writingProvider,
+    workspace: params.workspace,
+    source: 'generation',
+  })
+  window.localStorage.setItem('maestro-last-story-plan-job', accepted.jobId)
+  onProgress?.(accepted)
+  const cancelRemote = () => {
+    void fetch(
+      `${BASE}/api/v1/stories/generate/cancel/${encodeURIComponent(accepted.jobId)}`,
+      { method: 'POST', keepalive: true },
+    )
+  }
+  signal?.addEventListener('abort', cancelRemote, { once: true })
+  try {
+    for (;;) {
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          window.clearTimeout(timer)
+          reject(new DOMException('Story generation cancelled', 'AbortError'))
+        }
+        const timer = window.setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve()
+        }, 1000)
+        signal?.addEventListener('abort', onAbort, { once: true })
+      })
+      const statusResponse = await fetch(
+        `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(accepted.jobId)}`,
+        { signal },
+      )
+      if (!statusResponse.ok) {
+        const err = await statusResponse.json().catch(() => ({ detail: 'Could not read Story Lab job' }))
+        throw new Error(err.detail || 'Could not read Story Lab job')
+      }
+      const status = await statusResponse.json()
+      onProgress?.(status)
+      if (status.status === 'failed' || status.status === 'cancelled') {
+        throw new Error(`${status.error || status.message} Resume job: ${accepted.jobId}`)
+      }
+      if (status.status === 'completed') {
+        if (!status.result?.result) throw new Error('Story Lab job completed without a draft')
+        window.localStorage.setItem('maestro-last-story-plan-result', JSON.stringify({
+          jobId: accepted.jobId,
+          projectId: params.project.id,
+          scope: params.scope,
+          result: status.result.result,
+        }))
+        return status.result
+      }
+    }
+  } finally {
+    signal?.removeEventListener('abort', cancelRemote)
+  }
+}
+
+export interface StoryLibraryPayload {
+  version: 2
+  activeId: string
+  projects: Record<string, import('../features/stories/types').StoryProject>
+}
+
+export async function fetchStoryLibrary(workspace: string): Promise<StoryLibraryPayload> {
+  const response = await fetch(
+    `${BASE}/api/v1/stories/library?workspace=${encodeURIComponent(workspace)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not load Story Lab library' }))
+    throw new Error(error.detail || 'Could not load Story Lab library')
+  }
+  return response.json()
+}
+
+export async function saveStoryLibrary(
+  workspace: string,
+  library: StoryLibraryPayload,
+): Promise<StoryLibraryPayload> {
+  const response = await fetch(`${BASE}/api/v1/stories/library`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, library }),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not save Story Lab library' }))
+    throw new Error(error.detail || 'Could not save Story Lab library')
+  }
+  return response.json()
+}
+
+export async function cancelStoryGeneration(jobId: string): Promise<void> {
+  const response = await fetch(
+    `${BASE}/api/v1/stories/generate/cancel/${encodeURIComponent(jobId)}`,
+    { method: 'POST' },
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not cancel Story Lab job' }))
+    throw new Error(error.detail || 'Could not cancel Story Lab job')
+  }
+}
+
+export interface StoryGenerationStatus {
+  jobId: string
+  status: string
+  message: string
+  stage: string
+  current: number
+  total: number
+  error?: string | null
+  result?: { result?: Record<string, unknown> } | null
+}
+
+export async function getStoryGenerationStatus(jobId: string): Promise<StoryGenerationStatus> {
+  const response = await fetch(
+    `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(jobId)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not read Story Lab job' }))
+    throw new Error(error.detail || 'Could not read Story Lab job')
+  }
+  return response.json()
+}
+
+export async function resumeStoryGeneration(
+  jobId: string,
+  onProgress?: (progress: {
+    jobId: string
+    status: string
+    message: string
+    stage: string
+    current: number
+    total: number
+  }) => void,
+  writing?: {
+    writingProvider: import('../features/stories/types').StoryWritingProvider
+    writingModel?: string
+    writingBaseUrl?: string
+  },
+): Promise<{ result: Record<string, unknown> }> {
+  const resumed = await fetch(
+    `${BASE}/api/v1/stories/generate/resume/${encodeURIComponent(jobId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(writing || {}),
+    },
+  )
+  if (!resumed.ok) {
+    const err = await resumed.json().catch(() => ({ detail: 'Could not resume Story Lab job' }))
+    throw new Error(err.detail || 'Could not resume Story Lab job')
+  }
+  for (;;) {
+    await new Promise(resolve => window.setTimeout(resolve, 1000))
+    const status = await getStoryGenerationStatus(jobId)
+    onProgress?.(status)
+    if (status.status === 'failed' || status.status === 'cancelled') {
+      throw new Error(status.error || status.message)
+    }
+    if (status.status === 'completed') {
+      if (!status.result?.result) throw new Error('Story Lab job completed without a draft')
+      window.localStorage.setItem('maestro-last-story-plan-result', JSON.stringify({
+        jobId,
+        result: status.result.result,
+      }))
+      return { result: status.result.result }
+    }
+  }
+}
+
+export type ComicPlanProgress = {
+  jobId?: string
+  status: 'queued' | 'loading_llm' | 'planning' | 'planning_bible' | 'planning_page' | 'completed' | 'failed'
+  message: string
+  provider?: string
+  model?: string
+  createdAt?: number
+  current?: number
+  total?: number
+  stage?: 'bible' | 'page'
+  page?: number
+}
+
+export async function planComic(
+  params: import('../features/comics/types').ComicDirectorRequest & { workspace?: string },
+  onProgress?: (progress: ComicPlanProgress) => void,
+  signal?: AbortSignal,
+): Promise<{ plan: import('../features/comics/types').ComicPlan }> {
+  const start = await fetch(`${BASE}/api/v1/director/comic/plan/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+    signal,
+  })
+  if (!start.ok) {
+    const err = await start.json().catch(() => ({ detail: 'Comic planning failed to start' }))
+    throw new Error(err.detail || 'Comic planning failed')
+  }
+  const accepted = await start.json() as ComicPlanProgress & { jobId: string }
+  try {
+    window.localStorage.setItem('maestro-last-comic-plan-job', accepted.jobId)
+  } catch {
+    // Recovery still works by manually entering the job ID.
+  }
+  onProgress?.(accepted)
+  for (;;) {
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        window.clearTimeout(timer)
+        reject(new DOMException('Comic planning cancelled', 'AbortError'))
+      }
+      const timer = window.setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort)
+        resolve()
+      }, 1000)
+      signal?.addEventListener('abort', onAbort, { once: true })
+    })
+    const response = await fetch(
+      `${BASE}/api/v1/director/comic/plan/status/${encodeURIComponent(accepted.jobId)}`,
+      { signal },
+    )
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: 'Could not read comic planning status' }))
+      throw new Error(err.detail || 'Could not read comic planning status')
+    }
+    const status = await response.json() as ComicPlanProgress & {
+      error?: string
+      result?: { plan: import('../features/comics/types').ComicPlan }
+    }
+    onProgress?.(status)
+    if (status.status === 'failed') throw new Error(status.error || status.message)
+    if (status.status === 'completed') {
+      if (!status.result?.plan) throw new Error('Comic Director completed without a plan')
+      try {
+        window.localStorage.setItem('maestro-last-comic-plan-result', JSON.stringify({
+          jobId: accepted.jobId,
+          plan: status.result.plan,
+        }))
+      } catch {
+        // The server job remains recoverable while Maestro is running.
+      }
+      return status.result
+    }
+  }
+}
+
+export async function fetchComicPlanJob(jobId: string): Promise<{
+  jobId: string
+  status: ComicPlanProgress['status']
+  message: string
+  error?: string
+  request?: import('../features/comics/types').ComicDirectorRequest
+  result?: { plan: import('../features/comics/types').ComicPlan }
+}> {
+  const response = await fetch(
+    `${BASE}/api/v1/director/comic/plan/status/${encodeURIComponent(jobId)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Comic planning job not found' }))
+    throw new Error(error.detail || 'Comic planning job not found')
+  }
+  return response.json()
+}
+
+export async function resumeComicPlanJob(jobId: string): Promise<{
+  jobId: string
+  status: ComicPlanProgress['status']
+  message: string
+}> {
+  const response = await fetch(
+    `${BASE}/api/v1/director/comic/plan/resume/${encodeURIComponent(jobId)}`,
+    { method: 'POST' },
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not resume comic planning' }))
+    throw new Error(error.detail || 'Could not resume comic planning')
+  }
+  return response.json()
+}
+
+export async function waitForComicPlanJob(
+  jobId: string,
+  onProgress?: (progress: ComicPlanProgress) => void,
+): Promise<{ plan: import('../features/comics/types').ComicPlan }> {
+  for (;;) {
+    await new Promise(resolve => window.setTimeout(resolve, 1000))
+    const job = await fetchComicPlanJob(jobId)
+    onProgress?.(job)
+    if (job.status === 'failed') throw new Error(job.error || job.message)
+    if (job.status === 'completed') {
+      if (!job.result?.plan) throw new Error('Comic Director completed without a plan')
+      try {
+        window.localStorage.setItem('maestro-last-comic-plan-result', JSON.stringify({
+          jobId,
+          plan: job.result.plan,
+        }))
+      } catch {
+        // The durable server checkpoint remains available.
+      }
+      return job.result
+    }
+  }
+}
+
+export async function fetchLatestCompletedComicPlan(): Promise<{
+  jobId: string
+  request?: import('../features/comics/types').ComicDirectorRequest
+  result: { plan: import('../features/comics/types').ComicPlan }
+  finishedAt?: number
+}> {
+  const response = await fetch(`${BASE}/api/v1/director/comic/plan/recent/completed`)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'No completed comic plan is available' }))
+    throw new Error(error.detail || 'No completed comic plan is available')
+  }
+  return response.json()
+}
+
+export async function rewriteComicTextPage(params: {
+  plan: import('../features/comics/types').ComicPlan
+  pageIndex: number
+  mode: 'rewrite' | 'translate'
+  instruction?: string
+  targetLanguage?: string
+  dialogueDensity: import('../features/comics/types').ComicDirectorRequest['dialogueDensity']
+  glossary?: import('../features/comics/types').ComicGlossaryEntry[]
+  writingProvider?: import('../features/comics/types').ComicDirectorRequest['writingProvider']
+  writingModel?: string
+  writingBaseUrl?: string
+}): Promise<{ page: import('../features/comics/types').ComicPlanPage }> {
+  const response = await fetch(`${BASE}/api/v1/director/comic/text/page`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Comic text operation failed' }))
+    throw new Error(error.detail || 'Comic text operation failed')
+  }
+  return response.json()
+}
+
+export async function reviseComicStory(params: {
+  plan: import('../features/comics/types').ComicPlan
+  instruction?: string
+  dialogueDensity: import('../features/comics/types').ComicDirectorRequest['dialogueDensity']
+  productionMode?: import('../features/comics/types').ComicDirectorRequest['productionMode']
+  writingProvider?: import('../features/comics/types').ComicDirectorRequest['writingProvider']
+  writingModel?: string
+  writingBaseUrl?: string
+}): Promise<{ plan: import('../features/comics/types').ComicPlan }> {
+  const response = await fetch(`${BASE}/api/v1/director/comic/story/revise`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Comic story revision failed' }))
+    throw new Error(error.detail || 'Comic story revision failed')
+  }
+  return response.json()
+}
+
 // --- System Config ---
 
 export async function fetchSystemConfig(): Promise<import('../types').SystemConfig> {
   const res = await fetch(`${BASE}/api/v1/system-config`)
   if (!res.ok) throw new Error('Failed to fetch system config')
+  return res.json()
+}
+
+export async function scanModelFolders(): Promise<{ candidates: import('../types').ModelFolderCandidate[] }> {
+  const res = await fetch(`${BASE}/api/v1/model-folders/scan`)
+  if (!res.ok) throw new Error('Failed to scan for model folders')
   return res.json()
 }
 
@@ -950,6 +2485,19 @@ export async function fetchSystemDetect(): Promise<import('../types').SystemDete
 export async function fetchSystemStats(): Promise<import('../types').SystemStats> {
   const res = await fetch(`${BASE}/api/v1/system-stats`)
   if (!res.ok) throw new Error('Failed to fetch system stats')
+  return res.json()
+}
+
+/** Manually unload the resident generation model (and LLM) to free
+ *  VRAM/RAM. Models stay loaded between generations by design; this is
+ *  the explicit opt-out. 409s when a generation or Director run is
+ *  active. Returns which models were released. */
+export async function releaseModels(): Promise<{ released: string[] }> {
+  const res = await fetch(`${BASE}/api/v1/system/release-model`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Unload failed' }))
+    throw new Error(err.detail || 'Unload failed')
+  }
   return res.json()
 }
 
@@ -1034,6 +2582,7 @@ export interface Hunyuan3DCapabilities {
 
 export interface Hunyuan3DJob {
   job_id: string
+  operation?: 'generate' | 'retexture'
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   progress: number
   phase: string
@@ -1052,6 +2601,8 @@ export async function fetchHunyuan3DCapabilities(): Promise<Hunyuan3DCapabilitie
 }
 
 export async function startHunyuan3DJob(params: {
+  operation?: 'generate' | 'retexture'
+  source_model?: string
   preset?: string
   model_id?: string
   prompt?: string
@@ -1102,6 +2653,107 @@ export async function cancelHunyuan3DJob(jobId: string): Promise<Hunyuan3DJob> {
   return res.json()
 }
 
+// --- Rig & Animate (procedural skeletons for 3D outputs) ---
+
+export interface RigEngine {
+  id: string
+  label: string
+  description: string
+  installed: boolean
+  install_hint: string | null
+}
+
+export interface RigAnimation {
+  id: string
+  label: string
+  description: string
+  category?: string
+}
+
+export type RigProfileId = 'prop' | 'vehicle' | 'humanoid' | 'quadruped' | 'flying' | 'serpentine'
+
+export interface RigProfile {
+  id: RigProfileId
+  label: string
+  description: string
+  default_spine_joints: number
+  default_axis_mode: 'auto' | 'x' | 'y' | 'z'
+  default_weight_falloff: number
+  recommended_animations: string[]
+  allowed_animations: string[]
+}
+
+export interface RigCapabilities {
+  engines: RigEngine[]
+  animations: RigAnimation[]
+  /** Optional during rolling upgrades from backends predating rig profiles. */
+  rig_profiles?: RigProfile[]
+  default_rig_profile?: RigProfileId
+  default_spine_joints: number
+  active_jobs: number
+}
+
+export interface RigJob {
+  job_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  phase: string
+  message: string
+  error: string | null
+  filename: string | null
+  url: string | null
+  engine: string
+  rig_profile?: RigProfileId
+  source_file: string
+  animations?: string[]
+  created_at: number
+  updated_at: number
+}
+
+export async function fetchRigCapabilities(): Promise<RigCapabilities> {
+  const res = await fetch(`${BASE}/api/v1/rig/capabilities`)
+  if (!res.ok) throw new Error('Failed to fetch rig capabilities')
+  return res.json()
+}
+
+export async function startRigJob(params: {
+  source: string
+  engine?: string
+  rig_profile?: RigProfileId
+  animations?: string[]
+  spine_joints?: number
+  axis_mode?: 'auto' | 'x' | 'y' | 'z'
+  weight_falloff?: number
+}): Promise<RigJob> {
+  const res = await fetch(`${BASE}/api/v1/rig/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Rig job failed to start' }))
+    throw new Error(err.detail || 'Rig job failed to start')
+  }
+  return res.json()
+}
+
+export async function fetchRigJob(jobId: string): Promise<RigJob> {
+  const res = await fetch(`${BASE}/api/v1/rig/status/${encodeURIComponent(jobId)}`)
+  if (!res.ok) {
+    // 404 → the registry lost the job (backend restart); callers stop polling.
+    const error = new Error(res.status === 404 ? 'Rig job not found' : 'Failed to fetch rig job')
+    ;(error as Error & { status?: number }).status = res.status
+    throw error
+  }
+  return res.json()
+}
+
+export async function cancelRigJob(jobId: string): Promise<RigJob> {
+  const res = await fetch(`${BASE}/api/v1/rig/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to cancel rig job')
+  return res.json()
+}
+
 // --- LLM Service ---
 
 export async function fetchLlmStatus(): Promise<import('../types').LlmStatus> {
@@ -1136,6 +2788,20 @@ export async function fetchLlmModels(): Promise<{ models: import('../types').Llm
   return res.json()
 }
 
+export async function testLlmConnection(): Promise<{ ok: boolean; response: string; status: import('../types').LlmStatus }> {
+  let res: Response
+  try {
+    res = await fetch(`${BASE}/api/v1/llm/test`, { method: 'POST' })
+  } catch {
+    throw new Error('Maestro backend is unreachable. Reopen the current WebUI from Pinokio and try again')
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'LLM test failed' }))
+    throw new Error(err.detail || 'LLM test failed')
+  }
+  return res.json()
+}
+
 export async function llmEnhancePrompt(params: {
   prompt: string
   mode?: string
@@ -1150,6 +2816,7 @@ export async function llmEnhancePrompt(params: {
   tts_enhance_mode?: string
   tts_voice_count?: number
   max_new_tokens?: number
+  reference_context?: string
 }): Promise<{ original: string; enhanced: string }> {
   const res = await fetch(`${BASE}/api/v1/llm/enhance-prompt`, {
     method: 'POST',
@@ -1165,7 +2832,12 @@ export async function llmEnhancePrompt(params: {
 
 // --- Audio Analysis ---
 
-export async function uploadAudio(file: File): Promise<{ filename: string; path: string; url: string }> {
+export async function uploadAudio(file: File): Promise<{
+  filename: string
+  path: string
+  url: string
+  duration_seconds?: number | null
+}> {
   const form = new FormData()
   form.append('file', file)
   const res = await fetch(`${BASE}/api/v1/upload-audio`, {
@@ -1175,6 +2847,21 @@ export async function uploadAudio(file: File): Promise<{ filename: string; path:
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Upload failed' }))
     throw new Error(err.detail || 'Audio upload failed')
+  }
+  return res.json()
+}
+
+export async function trimAudio(params: { audio_path: string; start: number; end: number }): Promise<{
+  filename: string; path: string; url: string; start: number; end: number; duration: number
+}> {
+  const res = await fetch(`${BASE}/api/v1/audio/trim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Audio trim failed' }))
+    throw new Error(err.detail || 'Audio trim failed')
   }
   return res.json()
 }
@@ -1196,6 +2883,45 @@ export async function analyzeAudio(params: {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Analysis failed' }))
     throw new Error(err.detail || 'Audio analysis failed')
+  }
+  return res.json()
+}
+
+export interface AudioAnalysisJobStatus {
+  job_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  step: number
+  total_steps: number
+  phase: string
+  message: string
+  error: string | null
+  result: import('../types').AudioAnalysisResult | null
+}
+
+export async function startAudioAnalysisJob(params: {
+  audio_path: string
+  transcribe?: boolean
+  extract_vocals?: boolean
+  lyrics_hint?: string
+}): Promise<{ job_id: string }> {
+  const res = await fetch(`${BASE}/api/v1/audio/analyze/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Analysis queue failed' }))
+    throw new Error(err.detail || 'Audio analysis could not be queued')
+  }
+  return res.json()
+}
+
+export async function fetchAudioAnalysisJob(jobId: string): Promise<AudioAnalysisJobStatus> {
+  const res = await fetch(`${BASE}/api/v1/audio/analyze/jobs/${encodeURIComponent(jobId)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Analysis job unavailable' }))
+    throw new Error(err.detail || 'Audio analysis job unavailable')
   }
   return res.json()
 }
@@ -1269,6 +2995,7 @@ export async function planClipPrompts(params: {
 export async function planClipStructure(params: {
   analysis: import('../types').AudioAnalysisResult
   energy_bias?: number
+  pacing_profile?: 'cinematic' | 'balanced' | 'rhythmic'
   fps?: number
   frames_steps?: number
   frames_minimum?: number
@@ -1293,10 +3020,11 @@ export async function planClipStructure(params: {
 
 export async function classifySections(params: {
   analysis: import('../types').AudioAnalysisResult
+  lyrics_hint?: string
 }): Promise<{
   sections: import('../types').AudioSection[]
   song_structure: { label: string; display_label: string; start: number }[]
-  method: 'llm' | 'heuristic'
+  method: 'lyrics_hint' | 'llm' | 'heuristic'
 }> {
   const res = await fetch(`${BASE}/api/v1/director/classify-sections`, {
     method: 'POST',
@@ -1316,9 +3044,17 @@ export async function planClipPromptsAndImages(params: {
   lyrics?: import('../types').LyricSegment[]
   bpm: number
   reference_image_path?: string | null
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
   speaker_mappings?: Record<string, { name: string; role: string }>
   prompt_type?: 'image' | 'video' | 'both'
   existing_image_prompts?: string[]
+  video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
+  music_video_treatment?: import('../types').MusicVideoTreatment
 }): Promise<{ clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-prompts-and-images`, {
     method: 'POST',
@@ -1358,10 +3094,17 @@ export async function planShortFilmPrompts(params: {
   scene_description: string
   lyrics?: import('../types').LyricSegment[]
   reference_image_path?: string | null
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
   speaker_mappings?: Record<string, { name: string; role: string }>
   characters?: { name: string; description: string }[]
   prompt_type?: 'image' | 'video' | 'both'
   existing_image_prompts?: string[]
+  video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
 }): Promise<{ clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-short-film-prompts`, {
     method: 'POST',
@@ -1385,12 +3128,20 @@ export async function planShortFilmScript(params: {
   story_description: string
   characters?: { name: string; description: string }[]
   reference_image_path?: string | null
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
   target_duration?: number
   target_scenes?: number
   narrative_mode?: boolean
   fps?: number
   frames_steps?: number
   frames_minimum?: number
+  visual_style?: string
+  preserve_visual_style?: boolean
+  character_visual_style?: string
+  allow_clip_text?: boolean
 }): Promise<{ clips: import('../types').PlannedClip[]; clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-short-film-script`, {
     method: 'POST',
@@ -1517,7 +3268,7 @@ export async function startCivitAIDownload(params: {
   model_name: string; images: { url: string }[]
   description?: string; version_description?: string; base_model?: string
   example_prompts?: string[]; tags?: string[]
-  nsfw?: boolean; target_dir_name?: string
+  nsfw?: boolean; target_dir_name?: string; published_at?: string
   // Checkpoint imports: kind='checkpoint' routes the file into ckpts/ and
   // registers a finetune for target_architecture instead of saving a LoRA.
   // auto_quantize=true sets the finetune to load-time int8 (mmgp).
@@ -1561,7 +3312,7 @@ export async function fetchLoraGuide(modelType: string, filename: string): Promi
 }
 
 export async function importHuggingFaceLora(url: string, targetDir?: string, filename?: string): Promise<{
-  status: string; download_id: string; filename: string; target_dir: string; repo_id: string; base_model: string
+  status: string; download_id: string; filename: string; target_dir: string; repo_id?: string; base_model: string
 }> {
   const res = await fetch(`${BASE}/api/v1/huggingface/import-lora`, {
     method: 'POST',
@@ -1607,6 +3358,9 @@ export type LoraUpdateStatus = 'current' | 'available' | 'unknown' | 'local' | '
 export interface InstalledLora {
   filename: string
   directory: string
+  /** File lives in a linked install's loras folder (read-only), not
+   *  Maestro's own. Sidecars/guides for it live in Maestro's mirror. */
+  linked?: boolean
   trained_words: string[]
   preview_url: string | null
   civitai_model_id: number | null
@@ -1633,6 +3387,14 @@ export interface InstalledLora {
   current_version_id?: number | null
   latest_published_at?: string | null
   latest_changelog?: string | null
+  /** On-disk size of the .safetensors file (null when unreadable). */
+  size_bytes?: number | null
+  /** When the file arrived: sidecar downloadedAt (CivitAI downloads) or
+   *  the weight file's mtime (HF/hand-installed). ISO string. */
+  downloaded_at?: string | null
+  /** The version's CivitAI release date (publishedAt) — captured at
+   *  download time, backfilled for older files by Check Updates. */
+  released_at?: string | null
 }
 
 export async function fetchInstalledLoras(): Promise<{
@@ -1643,6 +3405,99 @@ export async function fetchInstalledLoras(): Promise<{
 }> {
   const res = await fetch(`${BASE}/api/v1/loras/installed`)
   if (!res.ok) throw new Error('Failed to fetch installed LoRAs')
+  return res.json()
+}
+
+// --- Storage (duplicates + usage analytics) ---
+
+export interface StorageDuplicate {
+  kind: 'checkpoint' | 'lora'
+  filename: string
+  rel_path: string
+  primary_path: string
+  size_bytes: number
+  linked_path: string
+  linked_size_bytes: number
+  linked_install: string
+}
+
+export interface StorageUsageModel {
+  model_type: string
+  name: string
+  size_bytes: number
+  /** Bytes living in the primary (deletable) roots — what deleting frees. */
+  primary_bytes: number
+  /** Display name of the base model whose weights this entry aliases
+   *  (finetunes with "URLs": "<base>") — deleting this row frees nothing. */
+  alias_of?: string | null
+  use_count: number
+  last_used: number | null
+}
+
+export interface StorageUsageLora {
+  filename: string
+  directory: string
+  linked: boolean
+  size_bytes: number
+  use_count: number
+  last_used: number | null
+}
+
+export interface StorageUsage {
+  models: StorageUsageModel[]
+  /** Globally deduped — per-model sizes overlap on shared weights
+   *  (base transformers, text encoders), so summing rows over-counts. */
+  models_total_bytes: number
+  loras: StorageUsageLora[]
+  workspaces: { name: string; file_count: number; size_bytes: number }[]
+  scanned_sidecars: number
+}
+
+export async function fetchStorageUsage(): Promise<StorageUsage> {
+  const res = await fetch(`${BASE}/api/v1/storage/usage`)
+  if (!res.ok) throw new Error('Failed to fetch storage usage')
+  return res.json()
+}
+
+export async function fetchStorageDuplicates(): Promise<{ duplicates: StorageDuplicate[]; conflicts: StorageDuplicate[]; total_reclaimable_bytes: number }> {
+  const res = await fetch(`${BASE}/api/v1/storage/duplicates`)
+  if (!res.ok) throw new Error('Failed to scan for duplicates')
+  return res.json()
+}
+
+export async function reclaimDuplicate(path: string): Promise<{ freed_bytes: number }> {
+  const res = await fetch(`${BASE}/api/v1/storage/duplicates/reclaim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Reclaim failed' }))
+    throw new Error(err.detail || 'Reclaim failed')
+  }
+  return res.json()
+}
+
+export async function removeLinkedDuplicate(path: string): Promise<{ freed_bytes: number; recycled: boolean }> {
+  const res = await fetch(`${BASE}/api/v1/storage/duplicates/remove-linked`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Remove failed' }))
+    throw new Error(err.detail || 'Remove failed')
+  }
+  return res.json()
+}
+
+export async function deleteLoraFile(directory: string, filename: string): Promise<{ deleted: string; deferred: boolean }> {
+  const params = new URLSearchParams({ directory: directory || '.', filename })
+  const res = await fetch(`${BASE}/api/v1/loras/file?${params.toString()}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to delete LoRA' }))
+    throw new Error(err.detail || 'Failed to delete LoRA')
+  }
   return res.json()
 }
 

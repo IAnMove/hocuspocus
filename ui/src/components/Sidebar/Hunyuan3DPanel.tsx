@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, ChevronDown, Cpu, Layers3, Loader2, Play, Square, Upload, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Box, ChevronDown, Cpu, Layers3, Loader2, Palette, Play, RefreshCw, Square, Upload, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { ModelSelector } from './ModelSelector'
 import {
   cancelHunyuan3DJob,
+  fetchOutputs,
   fetchHunyuan3DCapabilities,
   fetchHunyuan3DJob,
   startHunyuan3DJob,
@@ -14,6 +15,7 @@ import {
 
 type ViewName = 'front' | 'left' | 'right' | 'back'
 type UploadedView = { path: string; name: string; url: string }
+type RetextureSource = { path: string; name: string; thumbnail?: string | null }
 
 const viewLabels: Record<ViewName, string> = {
   front: 'Front',
@@ -69,6 +71,11 @@ export function Hunyuan3DPanel() {
   const setParam = useStore(state => state.setParam)
   const selectMaestroModel = useStore(state => state.selectModel)
   const [capabilities, setCapabilities] = useState<Hunyuan3DCapabilities | null>(null)
+  const [operation, setOperation] = useState<'generate' | 'retexture'>('generate')
+  const [retextureSources, setRetextureSources] = useState<RetextureSource[]>([])
+  const [sourceModel, setSourceModel] = useState<RetextureSource | null>(null)
+  const [sourcesLoading, setSourcesLoading] = useState(false)
+  const [uploadingModel, setUploadingModel] = useState(false)
   const [capabilityError, setCapabilityError] = useState<string | null>(null)
   const [views, setViews] = useState<Partial<Record<ViewName, UploadedView>>>({})
   const [uploadingView, setUploadingView] = useState<ViewName | null>(null)
@@ -92,6 +99,7 @@ export function Hunyuan3DPanel() {
   const [job, setJob] = useState<Hunyuan3DJob | null>(null)
   const [error, setError] = useState<string | null>(null)
   const completedJobRef = useRef<string | null>(null)
+  const modelInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchHunyuan3DCapabilities().then(setCapabilities).catch(err => {
@@ -100,10 +108,37 @@ export function Hunyuan3DPanel() {
   }, [])
 
   const selectedModel = useMemo(() => capabilities?.models.find(model => model.id === modelId), [capabilities, modelId])
-  const isMultiview = !!selectedModel?.multiview
+  const isMultiview = operation === 'generate' && !!selectedModel?.multiview
   const isRunning = job?.status === 'queued' || job?.status === 'running'
   const installed = !!capabilities?.runtime.installed
-  const hasInput = isMultiview ? !!views.front : !!views.front || !!prompt.trim()
+  const hasTextureReference = !!views.front || !!prompt.trim()
+  const hasInput = operation === 'retexture'
+    ? !!sourceModel && hasTextureReference && textureMode !== 'none'
+    : isMultiview ? !!views.front : hasTextureReference
+
+  const loadRetextureSources = useCallback(async () => {
+    setSourcesLoading(true)
+    try {
+      const { outputs: files } = await fetchOutputs(0, 0, { search: '.glb' })
+      setRetextureSources(files
+        .filter(file => file.type === 'model3d' && /\.glb$/i.test(file.name))
+        .map(file => ({ path: file.name, name: file.name, thumbnail: file.thumbnail_url })))
+    } catch {
+      setRetextureSources([])
+    } finally {
+      setSourcesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (operation === 'retexture') void loadRetextureSources()
+  }, [operation, loadRetextureSources])
+
+  useEffect(() => {
+    if (operation !== 'retexture') return
+    setOutputFormat('glb')
+    if (textureMode === 'none') setTextureMode(selectedModel?.engine === 'v21' ? 'pbr' : 'v2-turbo')
+  }, [operation, selectedModel?.engine, textureMode])
 
   const applyPreset = (presetId: string) => {
     const next = capabilities?.presets.find(item => item.id === presetId)
@@ -150,13 +185,33 @@ export function Hunyuan3DPanel() {
     }
   }
 
+  const uploadSourceModel = async (file: File) => {
+    if (!/\.glb$/i.test(file.name)) {
+      setError('Retexturing currently accepts GLB files only.')
+      return
+    }
+    setUploadingModel(true)
+    setError(null)
+    try {
+      const result = await uploadImage(file)
+      setSourceModel({ path: result.path, name: file.name })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'GLB upload failed')
+    } finally {
+      setUploadingModel(false)
+    }
+  }
+
+  const activeJobId = job?.job_id
+  const activeJobStatus = job?.status
+
   useEffect(() => {
-    if (!job || (job.status !== 'queued' && job.status !== 'running')) return
+    if (!activeJobId || (activeJobStatus !== 'queued' && activeJobStatus !== 'running')) return
     let disposed = false
     let failures = 0
     const poll = async () => {
       try {
-        const next = await fetchHunyuan3DJob(job.job_id)
+        const next = await fetchHunyuan3DJob(activeJobId)
         failures = 0
         if (!disposed) setJob(next)
       } catch (err) {
@@ -179,22 +234,25 @@ export function Hunyuan3DPanel() {
       disposed = true
       window.clearInterval(timer)
     }
-  }, [job?.job_id, job?.status])
+  }, [activeJobId, activeJobStatus])
 
   useEffect(() => {
     if (job?.status === 'completed' && completedJobRef.current !== job.job_id) {
       completedJobRef.current = job.job_id
       void loadOutputs()
+      if (job.operation === 'retexture') void loadRetextureSources()
       setMediaFilter('model3d')
     }
     if (job?.status === 'failed') setError(job.error || job.message)
-  }, [job, loadOutputs, setMediaFilter])
+  }, [job, loadOutputs, loadRetextureSources, setMediaFilter])
 
   const run = async () => {
     setError(null)
     try {
       const images = Object.fromEntries(Object.entries(views).filter(([, value]) => !!value).map(([name, value]) => [name, value!.path]))
       const nextJob = await startHunyuan3DJob({
+        operation,
+        source_model: operation === 'retexture' ? sourceModel?.path : undefined,
         preset,
         model_id: modelId,
         prompt: prompt.trim(),
@@ -221,7 +279,7 @@ export function Hunyuan3DPanel() {
       if (modelId && !enabledModels.has(modelId)) toggleModelEnabled(modelId)
       setJob(nextJob)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Hunyuan3D generation failed')
+      setError(err instanceof Error ? err.message : operation === 'retexture' ? 'Hunyuan3D retexture failed' : 'Hunyuan3D generation failed')
     }
   }
 
@@ -245,6 +303,10 @@ export function Hunyuan3DPanel() {
         </div>
         <div className="flex items-center gap-1 text-[9px] text-accent-green bg-accent-green/10 border border-accent-green/20 rounded-full px-2 py-1 whitespace-nowrap"><Cpu size={10} /> VRAM released after each job</div>
       </div>
+      <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-primary p-1">
+        <button type="button" disabled={isRunning} onClick={() => setOperation('generate')} className={`rounded-md px-2 py-1.5 text-[10px] transition-colors disabled:opacity-50 ${operation === 'generate' ? 'bg-accent-blue/15 text-accent-blue' : 'text-text-muted hover:text-text-primary'}`}><span className="flex items-center justify-center gap-1"><Box size={11} /> Generate model</span></button>
+        <button type="button" disabled={isRunning} onClick={() => setOperation('retexture')} className={`rounded-md px-2 py-1.5 text-[10px] transition-colors disabled:opacity-50 ${operation === 'retexture' ? 'bg-purple-500/15 text-purple-300' : 'text-text-muted hover:text-text-primary'}`}><span className="flex items-center justify-center gap-1"><Palette size={11} /> Retexture GLB</span></button>
+      </div>
 
       {!capabilities ? (
         <div className="flex items-center justify-center py-8 text-xs text-text-muted"><Loader2 size={15} className="animate-spin mr-2" /> Loading models...</div>
@@ -255,6 +317,19 @@ export function Hunyuan3DPanel() {
         </div>
       ) : (
         <>
+          {operation === 'retexture' && <div className="space-y-2 rounded-lg border border-purple-400/30 bg-purple-500/[.06] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div><div className="text-[10px] font-medium uppercase tracking-wider text-purple-200">Source GLB</div><p className="mt-0.5 text-[9px] text-text-muted">The original is never overwritten. Hunyuan creates a new static textured copy.</p></div>
+              <div className="flex gap-1">
+                <button type="button" onClick={() => void loadRetextureSources()} title="Refresh GLB gallery" className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary"><RefreshCw size={11} className={sourcesLoading ? 'animate-spin' : ''} /></button>
+                <button type="button" disabled={uploadingModel} onClick={() => modelInputRef.current?.click()} className="flex items-center gap-1 rounded border border-border px-2 py-1 text-[9px] text-text-secondary disabled:opacity-50">{uploadingModel ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />} Import</button>
+                <input ref={modelInputRef} type="file" accept=".glb,model/gltf-binary" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void uploadSourceModel(file); event.target.value = '' }} />
+              </div>
+            </div>
+            {sourcesLoading ? <div className="flex items-center gap-1.5 py-3 text-[9px] text-text-muted"><Loader2 size={11} className="animate-spin" /> Loading GLBs…</div> : retextureSources.length > 0 && <div className="grid max-h-48 grid-cols-3 gap-1.5 overflow-y-auto pr-0.5">{retextureSources.map(file => <button key={file.path} type="button" onClick={() => setSourceModel(file)} title={file.name} className={`relative aspect-square overflow-hidden rounded border ${sourceModel?.path === file.path ? 'border-purple-300 ring-1 ring-purple-300/50' : 'border-border hover:border-purple-400/60'}`}>{file.thumbnail ? <img src={file.thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" /> : <span className="flex h-full items-center justify-center bg-bg-tertiary"><Box size={16} className="text-text-muted" /></span>}<span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 text-[7px] text-white">{file.name}</span></button>)}</div>}
+            {sourceModel ? <div className="flex items-center justify-between gap-2 rounded border border-purple-300/30 bg-bg-primary px-2 py-1.5"><span className="truncate text-[9px] text-purple-100">{sourceModel.name}</span><button type="button" onClick={() => setSourceModel(null)} className="text-text-muted hover:text-red-300"><X size={11} /></button></div> : <p className="text-[9px] text-amber-300">Choose a gallery GLB or import one.</p>}
+            <p className="text-[8px] leading-relaxed text-text-muted">Animated/rigged GLBs are intentionally rejected because Hunyuan Paint rebuilds UVs. Retexture the static base first, then rig its new copy.</p>
+          </div>}
           <div>
             <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Performance profile</label>
             <div className="grid grid-cols-2 gap-1.5">
@@ -275,14 +350,14 @@ export function Hunyuan3DPanel() {
 
           {!isMultiview && (
             <div>
-              <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Prompt or reference image</label>
-              <textarea value={prompt} onChange={event => setParam('prompt', event.target.value)} rows={3} placeholder="Describe a single object, or upload a reference below..." className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-xs text-text-primary resize-none focus:outline-none focus:border-accent-blue" />
+              <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">{operation === 'retexture' ? 'Describe the new texture or use an image' : 'Prompt or reference image'}</label>
+              <textarea value={prompt} onChange={event => setParam('prompt', event.target.value)} rows={3} placeholder={operation === 'retexture' ? 'Example: worn red painted steel with scratched edges and dark panels…' : 'Describe a single object, or upload a reference below...'} className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-xs text-text-primary resize-none focus:outline-none focus:border-accent-blue" />
             </div>
           )}
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">{isMultiview ? 'Reference views' : 'Reference image'}</label>
+              <label className="text-[10px] text-text-muted uppercase tracking-wider">{isMultiview ? 'Reference views' : operation === 'retexture' ? 'Texture reference image' : 'Reference image'}</label>
               {isMultiview && <span className="text-[9px] text-text-muted">Front required; others optional</span>}
             </div>
             <div className={`grid gap-2 ${isMultiview ? 'grid-cols-4' : 'grid-cols-1 max-w-[92px]'}`}>
@@ -306,7 +381,7 @@ export function Hunyuan3DPanel() {
                   </select>
                 </label>
                 <label className="text-[10px] text-text-muted">Output
-                  <select value={outputFormat} onChange={event => setOutputFormat(event.target.value)} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary">
+                  <select value={outputFormat} disabled={operation === 'retexture'} onChange={event => setOutputFormat(event.target.value)} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary disabled:opacity-60">
                     {capabilities.output_formats.map(format => <option key={format} value={format} disabled={textureMode === 'pbr' && format !== 'glb'}>{format.toUpperCase()}{textureMode === 'pbr' && format !== 'glb' ? ' (PBR requires GLB)' : ''}</option>)}
                   </select>
                 </label>
@@ -342,9 +417,9 @@ export function Hunyuan3DPanel() {
           {error && <p className="text-[10px] text-red-400 whitespace-pre-wrap">{error}</p>}
 
           {isRunning ? (
-            <button onClick={() => void cancel()} className="w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 text-xs font-medium"><Square size={13} /> Cancel 3D generation</button>
+            <button onClick={() => void cancel()} className="w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 text-xs font-medium"><Square size={13} /> Cancel {operation === 'retexture' ? 'retexture' : '3D generation'}</button>
           ) : (
-            <button disabled={!hasInput} onClick={() => void run()} className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${hasInput ? 'bg-cta hover:brightness-110 shadow-accent-glow text-white' : 'bg-bg-tertiary border border-border text-text-muted cursor-not-allowed'}`}><Play size={13} fill={hasInput ? 'currentColor' : 'none'} /> Generate 3D asset</button>
+            <button disabled={!hasInput} onClick={() => void run()} className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all ${hasInput ? 'bg-cta hover:brightness-110 shadow-accent-glow text-white' : 'bg-bg-tertiary border border-border text-text-muted cursor-not-allowed'}`}><Play size={13} fill={hasInput ? 'currentColor' : 'none'} /> {operation === 'retexture' ? 'Create retextured GLB copy' : 'Generate 3D asset'}</button>
           )}
           <p className="text-[9px] text-text-muted text-center">First use downloads only the selected checkpoint. The isolated worker exits after export.</p>
         </>

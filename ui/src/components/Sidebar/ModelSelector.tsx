@@ -1,6 +1,7 @@
 import { ChevronDown, Check, Plus } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
+import { InfoTooltip } from './InfoTooltip'
 
 export function ModelSelector() {
   const models = useStore(s => s.models)
@@ -44,7 +45,8 @@ export function ModelSelector() {
   //   2. nsfw_only gate (Mature Mode must be on for those to appear).
   const groups = modeFamilies.map(family => ({
     family,
-    models: getModelsForFamily(family.id, models, generationMode, effectiveSubMode)
+    models: getModelsForFamily(family.id, models, generationMode)
+      .filter(m => !m.tool_only)
       .filter(m => enabledModels.has(m.model_type))
       .filter(m => !m.nsfw_only || nsfwMode),
   })).filter(g => g.models.length > 0)
@@ -52,7 +54,8 @@ export function ModelSelector() {
   // How many models are available for this mode but NOT enabled — powers the
   // "+N" hint that nudges users toward Settings → Enabled Models.
   const disabledCount = modeFamilies.reduce((n, family) => {
-    const avail = getModelsForFamily(family.id, models, generationMode, effectiveSubMode)
+    const avail = getModelsForFamily(family.id, models, generationMode)
+      .filter(m => !m.tool_only)
       .filter(m => !m.nsfw_only || nsfwMode)
     return n + avail.filter(m => !enabledModels.has(m.model_type)).length
   }, 0)
@@ -62,6 +65,7 @@ export function ModelSelector() {
       {/* Trigger button */}
       <button
         onClick={() => setOpen(!open)}
+        title={currentModel?.selector_help || currentModel?.description}
         className="w-full flex items-center gap-1.5 bg-bg-tertiary border border-border rounded-lg px-2.5 py-2 text-left hover:border-border-light transition-colors"
       >
         <span className="flex-1 min-w-0 truncate text-xs text-text-primary">
@@ -95,23 +99,36 @@ export function ModelSelector() {
                 {/* Models in family */}
                 {famModels.map(model => {
                   const isSelected = model.model_type === currentModelType
+                  const help = model.selector_help
                   return (
-                    <button
+                    <div
                       key={model.model_type}
-                      onClick={() => {
-                        selectModel(model.model_type)
-                        setOpen(false)
-                      }}
-                      className={`w-full px-3 py-1.5 flex items-center gap-2 text-left transition-colors ${
+                      className={`group w-full flex items-center transition-colors ${
                         isSelected
                           ? 'bg-accent-blue/10 text-text-primary'
                           : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
                       }`}
                     >
-                      <span className="flex-1 min-w-0 text-xs truncate">{model.name}</span>
-                      <ModelBadges model={model} />
-                      {isSelected && <Check size={12} className="shrink-0 text-accent-blue" />}
-                    </button>
+                      <button
+                        onClick={() => {
+                          selectModel(model.model_type)
+                          setOpen(false)
+                        }}
+                        className="min-w-0 flex-1 px-3 py-1.5 flex items-center gap-2 text-left"
+                      >
+                        <span className="flex-1 min-w-0 text-xs truncate">{model.name}</span>
+                        <ModelBadges model={model} />
+                        {isSelected && <Check size={12} className="shrink-0 text-accent-blue" />}
+                      </button>
+                      {help && (
+                        <span className="pr-2">
+                          <InfoTooltip
+                            text={help}
+                            label={`About ${model.name}`}
+                          />
+                        </span>
+                      )}
+                    </div>
                   )
                 })}
               </div>
@@ -124,19 +141,43 @@ export function ModelSelector() {
 }
 
 function ModelBadges({ model }: {
-  model: { is_i2v: boolean; is_t2v: boolean; supports_end_frame?: boolean; supports_audio?: boolean; supports_ref_images?: boolean }
+  model: {
+    model_type: string
+    is_i2v: boolean
+    is_t2v: boolean
+    supports_end_frame?: boolean
+    supports_audio?: boolean
+    supports_audio_input?: boolean
+    generates_audio?: boolean
+    supports_ref_images?: boolean
+  }
 }) {
-  const badges: string[] = []
-  if (model.is_i2v && model.supports_end_frame) badges.push('S/E Frame')
-  else if (model.is_i2v) badges.push('I2V')
-  if (model.supports_audio) badges.push('Audio')
-  if (model.supports_ref_images) badges.push('Ref')
+  const badges: Array<{ label: string; title: string }> = []
+  const workflowIsAlreadyInName = model.model_type.startsWith('minimax_h3')
+  if (!workflowIsAlreadyInName && model.is_i2v && model.supports_end_frame) {
+    badges.push({ label: 'First / Last', title: 'Accepts a first frame, a last frame, or both' })
+  } else if (!workflowIsAlreadyInName && model.is_i2v) {
+    badges.push({ label: 'I2V', title: 'Accepts an input image' })
+  }
+  if (model.generates_audio) {
+    badges.push({ label: 'Audio Out', title: 'Generates synchronized audio with the video' })
+  }
+  if (model.supports_audio_input) {
+    badges.push({ label: 'Audio In', title: 'Accepts audio input; H3 Omni uses it as an ordered audio reference' })
+  }
+  if (model.supports_ref_images) {
+    badges.push({ label: 'Refs', title: 'Accepts one or more reference images' })
+  }
   if (badges.length === 0) return null
   return (
     <span className="flex gap-0.5 shrink-0">
       {badges.map(b => (
-        <span key={b} className="text-[9px] px-1 py-0.5 rounded bg-bg-tertiary text-text-muted leading-none">
-          {b}
+        <span
+          key={b.label}
+          title={b.title}
+          className="text-[9px] px-1 py-0.5 rounded bg-bg-tertiary text-text-muted leading-none"
+        >
+          {b.label}
         </span>
       ))}
     </span>

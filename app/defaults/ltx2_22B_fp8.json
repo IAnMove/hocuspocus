@@ -2,9 +2,9 @@
     "model": {
         "name": "LTX-2.3 Dev FP8 22B",
         "architecture": "ltx2_22B",
-        "description": "FP8 mixed-precision quantized LTX-2.3 dev checkpoint (22B). ~50% memory reduction vs full precision.",
+        "description": "Official Lightricks FP8 mixed-precision LTX-2.3 dev checkpoint (22B). Higher-quality development variant; slower than distilled.",
         "URLs": [
-            "https://huggingface.co/drbaph/LTX-2.3-FP8/resolve/main/ltx-2.3-22b-dev-fp8.safetensors"
+            "https://huggingface.co/Lightricks/LTX-2.3-fp8/resolve/main/ltx-2.3-22b-dev-fp8.safetensors"
         ],
         "preload_URLs": "ltx2_22B",
         "loras": [

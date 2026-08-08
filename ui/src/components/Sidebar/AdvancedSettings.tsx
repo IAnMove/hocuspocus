@@ -7,6 +7,7 @@ import { LoraSelector } from '../SettingsDrawer/LoraSelector'
 import { ResolutionPresets } from './ResolutionPresets'
 import { AspectRatioGrid } from './AspectRatioGrid'
 import { WindowSettings } from './DurationSlider'
+import type { GenerateParams } from '../../types'
 
 function PresetManager() {
   const presets = useStore(s => s.presets)
@@ -109,25 +110,55 @@ function PresetManager() {
 /** Active advanced features as human-readable labels. Drives the badge
  *  count AND its hover tooltip, so a surprising number names its source
  *  instead of sending the user hunting through every section. */
-export function useAdvancedActiveItems(): string[] {
+function useAdvancedActiveItems(): string[] {
   const params = useStore(s => s.params)
   const modelOptions = useStore(s => s.modelOptions)
   const spatialUpsampling = useStore(s => s.spatialUpsampling)
   const filmGrainIntensity = useStore(s => s.filmGrainIntensity)
+  const generationMode = useStore(s => s.generationMode)
+  const editSubMode = useStore(s => s.editSubMode)
+  const isScailEdit = (
+    generationMode === 'avatar'
+    && (editSubMode === 'recast' || editSubMode === 'restyle')
+  )
+  const isScailHq = isScailEdit && params.model_type === 'scail2_14B'
 
   const items: string[] = []
   if (params.seed !== -1) items.push(`Seed ${params.seed}`)
-  if ((params.negative_prompt?.length ?? 0) > 0) items.push('Negative prompt')
+  if (params.minimax_h3_turbo_mode) items.push('H3 Turbo')
+  if (params.skip_steps_cache_type === 'first_block') {
+    items.push(`H3 cache ${params.skip_steps_multiplier ?? 0.08}`)
+  }
+  if (
+    modelOptions?.sliding_window_auto_prompt_pacing === true
+    && params.minimax_h3_window_storyboard === false
+  ) items.push('H3 window planning off')
+  if (
+    (params.negative_prompt?.length ?? 0) > 0
+    && (!isScailEdit || isScailHq)
+  ) items.push('Negative prompt')
   for (const l of params.activated_loras) items.push(`LoRA: ${l.replace(/\.(safetensors|sft)$/i, '')}`)
-  if (spatialUpsampling) items.push(`Upscaling (${spatialUpsampling})`)
-  if (filmGrainIntensity > 0) items.push('Film grain')
-  if ((params.self_refiner_setting ?? 0) > 0) items.push('Self refiner')
+  if (!isScailEdit && spatialUpsampling) items.push(`Upscaling (${spatialUpsampling})`)
+  if (!isScailEdit && filmGrainIntensity > 0) items.push('Film grain')
+  if (!isScailEdit && (params.self_refiner_setting ?? 0) > 0) items.push('Self refiner')
+  if (
+    modelOptions?.minimax_h3_text_encoder_choices?.length
+    && params.minimax_h3_text_encoder
+    && params.minimax_h3_text_encoder !== modelOptions.minimax_h3_text_encoder_default
+  ) {
+    const selected = modelOptions.minimax_h3_text_encoder_choices.find(
+      choice => choice.value === params.minimax_h3_text_encoder
+    )
+    items.push(`H3 encoder: ${selected?.label || params.minimax_h3_text_encoder}`)
+  }
   // injection_strength only matters when injected frames actually exist.
   // The persisted snapshot strips image_refs (file paths are ephemeral)
   // but kept the strength value — counting it alone produced a ghost
   // badge with nothing visibly active in the panel.
   const refCount = Array.isArray(params.image_refs) ? params.image_refs.length : (params.image_refs ? 1 : 0)
-  if (params.injection_strength != null && params.injection_strength !== 1.0 && refCount > 0) items.push('Injection strength')
+  if (!isScailEdit && params.injection_strength != null && params.injection_strength !== 1.0 && refCount > 0) items.push('Injection strength')
+  if (params.preserve_source_style === false) items.push('Source restyling allowed')
+  if (params.image_fit_mode === 'crop') items.push('I2V crop to canvas')
   // Process letter codes persist by design (the dropdown remembers the
   // user's choice across sessions), but their REQUIRED inputs are
   // ephemeral and stripped from persistence: frames injection ("F")
@@ -137,7 +168,7 @@ export function useAdvancedActiveItems(): string[] {
   // a TRAILING "T" (the extend-alignment flag); an internal "T" is a real
   // process letter (depth_temporal: TVG/PTVG/TEVG) and must survive.
   const vptVisible = (params.video_prompt_type || '').replace(/T$/, '')
-  if (modelOptions?.guide_custom_choices && vptVisible) {
+  if (!isScailEdit && modelOptions?.guide_custom_choices && vptVisible) {
     const effective = vptVisible.includes('F')
       ? refCount > 0
       : vptVisible.includes('V')
@@ -148,23 +179,52 @@ export function useAdvancedActiveItems(): string[] {
   return items
 }
 
-/** Count active advanced features for the badge */
-export function useAdvancedCount(): number {
-  return useAdvancedActiveItems().length
-}
-
 export function AdvancedSettings() {
   const [open, setOpen] = useState(false)
   const params = useStore(s => s.params)
   const setParam = useStore(s => s.setParam)
   const modelOptions = useStore(s => s.modelOptions)
   const generationMode = useStore(s => s.generationMode)
+  const editSubMode = useStore(s => s.editSubMode)
   const audioSubMode = useStore(s => s.audioSubMode)
   const isAudio = generationMode === 'audio'
   const isSfx = isAudio && audioSubMode === 'sfx'
-  const isAudioOnly = modelOptions?.audio_only || isSfx
+  const isAudioOnly = modelOptions?.audio_only === true || isSfx
   const isVideo = generationMode === 'video'
   const isAvatar = generationMode === 'avatar'
+  const isOutpaint = isAvatar && editSubMode === 'outpaint'
+  const isRecast = isAvatar && editSubMode === 'recast'
+  const isRepaint = isAvatar && editSubMode === 'restyle'
+  const isScailEdit = isRecast || isRepaint
+  const scailModelType = String(params.model_type || '')
+  const isScailFast = (
+    isScailEdit
+    && (
+      scailModelType === 'scail2_14B_fast'
+      || scailModelType === 'scail2_14B_recast_fast'
+    )
+  )
+  const isScailHq = isScailEdit && scailModelType === 'scail2_14B'
+  const h3TurboMode = (
+    params.minimax_h3_turbo_mode === true
+    && modelOptions?.minimax_h3_turbo != null
+  )
+  const showInferenceSteps = (
+    !isAudioOnly
+    && (isScailEdit || !modelOptions?.lock_inference_steps)
+  )
+  const showGuidanceScale = (
+    !isAudioOnly
+    && (
+      isScailEdit
+        ? isScailHq
+        : !modelOptions?.lock_guidance_scale
+    )
+  )
+  const showNegativePrompt = (
+    !modelOptions?.no_negative_prompt
+    && (!isScailEdit || isScailHq)
+  )
   const hasStartImage = useStore(s => !!(s.startImage || s.params.image_start))
   const hasEndImage = useStore(s => !!(s.endImage || s.params.image_end))
   const hasImageRefs = useStore(s => {
@@ -226,16 +286,133 @@ export function AdvancedSettings() {
 
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-              {/* Resolution + Aspect */}
-              {!isAudio && (
+              {/* Recast/Repaint own their output-quality profiles in the main
+                  workflow. Their dedicated endpoints also choose adaptive
+                  windows, so generic controls would be misleading here. */}
+              {!isAudio && !isScailEdit && (
                 <>
-                  {!modelOptions?.hide_resolution_presets && <ResolutionPresets />}
+                  {!isOutpaint && !modelOptions?.hide_resolution_presets && <ResolutionPresets />}
                   {!isAvatar && <AspectRatioGrid />}
                 </>
               )}
 
+              {/* The Qwen conditioner is shared by every H3 transformer.
+                  Expose it once here instead of multiplying model entries. */}
+              {modelOptions?.minimax_h3_text_encoder_choices?.length ? (
+                <div>
+                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+                    H3 Text Encoder
+                  </label>
+                  <select
+                    value={params.minimax_h3_text_encoder || modelOptions.minimax_h3_text_encoder_default || modelOptions.minimax_h3_text_encoder_choices[0]?.value}
+                    onChange={e => setParam('minimax_h3_text_encoder', e.target.value as GenerateParams['minimax_h3_text_encoder'])}
+                    className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
+                  >
+                    {modelOptions.minimax_h3_text_encoder_choices.map(choice => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[9px] text-text-muted mt-1">
+                    {modelOptions.minimax_h3_text_encoder_choices.find(
+                      choice => choice.value === (params.minimax_h3_text_encoder || modelOptions.minimax_h3_text_encoder_default)
+                    )?.size_hint || 'Changing this reloads the H3 model.'}
+                  </p>
+                </div>
+              ) : null}
+
+              {modelOptions?.first_block_cache && (
+                <div className="space-y-2 p-2.5 bg-bg-tertiary/40 rounded-lg border border-border/60">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={params.skip_steps_cache_type === 'first_block'}
+                      onChange={e => {
+                        setParam(
+                          'skip_steps_cache_type',
+                          e.target.checked ? 'first_block' : '',
+                        )
+                        if (e.target.checked && params.skip_steps_multiplier == null) {
+                          setParam(
+                            'skip_steps_multiplier',
+                            modelOptions.default_skip_steps_multiplier ?? 0.08,
+                          )
+                        }
+                      }}
+                      className="accent-accent-blue"
+                    />
+                    <span className="text-[11px] text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
+                      First Block Cache
+                    </span>
+                    <span className="text-[9px] text-amber-300/90 border border-amber-400/30 rounded px-1 py-0.5">
+                      Experimental
+                    </span>
+                  </label>
+                  {params.skip_steps_cache_type === 'first_block' && (
+                    <div className="space-y-2 pl-1 border-l border-border ml-1">
+                      <div>
+                        <label className="text-[10px] text-text-muted block mb-1">
+                          {modelOptions.skip_steps_multiplier_label || 'Cache Threshold'}
+                        </label>
+                        <select
+                          value={params.skip_steps_multiplier ?? modelOptions.default_skip_steps_multiplier ?? 0.08}
+                          onChange={e => setParam('skip_steps_multiplier', Number(e.target.value))}
+                          className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
+                        >
+                          {(modelOptions.skip_steps_multiplier_choices || []).map(([label, value]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[10px] text-text-muted">Warmup</label>
+                          <span className="text-[10px] text-text-secondary">
+                            {params.skip_steps_start_step_perc ?? modelOptions.default_skip_steps_start_step_perc ?? 25}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={75}
+                          step={5}
+                          value={params.skip_steps_start_step_perc ?? modelOptions.default_skip_steps_start_step_perc ?? 25}
+                          onChange={e => setParam('skip_steps_start_step_perc', Number(e.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[9px] text-text-muted">
+                    Reuses stable transformer work after warmup. Best suited to 15-20 step H3 runs; higher thresholds can change motion or fine detail.
+                  </p>
+                </div>
+              )}
+
               {/* Window Settings */}
-              {(isVideo || isAvatar) && <WindowSettings />}
+              {(isVideo || (isAvatar && !isScailEdit))
+                && modelOptions?.sliding_window
+                && <WindowSettings />}
+
+              {isVideo && modelOptions?.sliding_window_auto_prompt_pacing === true && (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={params.minimax_h3_window_storyboard !== false}
+                      onChange={e => setParam('minimax_h3_window_storyboard', e.target.checked)}
+                      className="accent-accent-blue"
+                    />
+                    <span className="text-[11px] text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
+                      Plan Prompt Across Windows
+                    </span>
+                  </label>
+                  <p className="text-[9px] text-text-muted">
+                    H3 expands one idea into complete window-local visual and audio prompts. Enhance enables this automatically; disable afterward only to supply manual line-per-window prompts.
+                  </p>
+                </div>
+              )}
 
               {/* TTS Settings */}
               {isAudioOnly && (
@@ -330,16 +507,16 @@ export function AdvancedSettings() {
                   ))}
 
                   {/* Compressor Settings — shown when Smooth Speaker Volumes is enabled */}
-                  {params.tts_dynaudnorm && (
+                  {params.tts_dynaudnorm === true && (
                     <div className="space-y-3 p-2.5 bg-bg-tertiary/50 rounded-lg border border-border/50">
                       <label className="text-[10px] text-text-muted uppercase tracking-wider block">Speaker Transition Compressor</label>
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-text-muted">Threshold</label>
-                          <span className="text-[10px] text-text-secondary">{params.tts_comp_threshold || -25}dB</span>
+                          <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_threshold ?? -25)}dB</span>
                         </div>
                         <input type="range" min={-50} max={-10} step={1}
-                          value={params.tts_comp_threshold || -25}
+                          value={Number(params.tts_comp_threshold ?? -25)}
                           onChange={e => setParam('tts_comp_threshold', parseInt(e.target.value))}
                           className="w-full" />
                         <p className="text-[9px] text-text-muted">Volume level where boosting kicks in. Lower = catches quieter parts.</p>
@@ -347,10 +524,10 @@ export function AdvancedSettings() {
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-text-muted">Attack</label>
-                          <span className="text-[10px] text-text-secondary">{params.tts_comp_attack || 5}ms</span>
+                          <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_attack ?? 5)}ms</span>
                         </div>
                         <input type="range" min={1} max={50} step={1}
-                          value={params.tts_comp_attack || 5}
+                          value={Number(params.tts_comp_attack ?? 5)}
                           onChange={e => setParam('tts_comp_attack', parseInt(e.target.value))}
                           className="w-full" />
                         <p className="text-[9px] text-text-muted">How fast the compressor reacts. Low = catches brief dips at speaker transitions.</p>
@@ -358,10 +535,10 @@ export function AdvancedSettings() {
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-text-muted">Release</label>
-                          <span className="text-[10px] text-text-secondary">{params.tts_comp_release || 100}ms</span>
+                          <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_release ?? 100)}ms</span>
                         </div>
                         <input type="range" min={20} max={500} step={10}
-                          value={params.tts_comp_release || 100}
+                          value={Number(params.tts_comp_release ?? 100)}
                           onChange={e => setParam('tts_comp_release', parseInt(e.target.value))}
                           className="w-full" />
                         <p className="text-[9px] text-text-muted">How fast it returns to normal after boosting. Higher = smoother.</p>
@@ -369,10 +546,10 @@ export function AdvancedSettings() {
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[10px] text-text-muted">Makeup Gain</label>
-                          <span className="text-[10px] text-text-secondary">{params.tts_comp_makeup || 4}dB</span>
+                          <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_makeup ?? 4)}dB</span>
                         </div>
                         <input type="range" min={0} max={12} step={1}
-                          value={params.tts_comp_makeup || 4}
+                          value={Number(params.tts_comp_makeup ?? 4)}
                           onChange={e => setParam('tts_comp_makeup', parseInt(e.target.value))}
                           className="w-full" />
                         <p className="text-[9px] text-text-muted">How much to boost the quiet parts. Higher = louder transitions.</p>
@@ -383,29 +560,28 @@ export function AdvancedSettings() {
               )}
 
               {/* Post Processing */}
-              {!isAudio && <PostProcessing />}
+              {!isAudio && !isScailEdit && <PostProcessing />}
 
-              {/* Seed */}
-              {((
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] text-text-muted uppercase tracking-wider">Seed</label>
-                    <button onClick={() => setParam('seed', -1)} className="text-[10px] text-accent-blue hover:text-accent-blue-hover">
-                      Random
-                    </button>
-                  </div>
-                  <input
-                    type="number"
-                    value={params.seed}
-                    onChange={e => setParam('seed', Number(e.target.value))}
-                    className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
-                    placeholder="-1 for random"
-                  />
+              {(
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] text-text-muted uppercase tracking-wider">Seed</label>
+                  <button onClick={() => setParam('seed', -1)} className="text-[10px] text-accent-blue hover:text-accent-blue-hover">
+                    Random
+                  </button>
                 </div>
-              ) as any)}
+                <input
+                  type="number"
+                  value={Number(params.seed)}
+                  onChange={e => setParam('seed', Number(e.target.value))}
+                  className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
+                  placeholder="-1 for random"
+                />
+              </div>
+              ) as any /* eslint-disable-line @typescript-eslint/no-explicit-any -- preserves the legacy JSX child inference boundary. */}
 
               {/* Self Refiner */}
-              {modelOptions?.self_refiner && (
+              {!isScailEdit && modelOptions?.self_refiner === true ? (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Self Refiner</label>
                   <select
@@ -418,11 +594,46 @@ export function AdvancedSettings() {
                     <option value={2}>Enabled with P2-Norm</option>
                   </select>
                 </div>
+              ) : null}
+
+              {/* I2V style anchoring. The start frame carries much of the
+                  appearance, but an explicit prompt anchor materially reduces
+                  anime/comic inputs drifting toward photorealism. */}
+              {isVideo && (hasStartImage || params.image_mode === 2) && (
+                <div className="space-y-2">
+                  <label className="block text-[10px] text-text-muted">
+                    Start image fit
+                    <select
+                      value={params.image_fit_mode === 'crop' ? 'crop' : 'contain'}
+                      onChange={e => setParam('image_fit_mode', e.target.value as 'contain' | 'crop')}
+                      className="mt-1 w-full rounded-lg border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:border-accent-blue focus:outline-none"
+                    >
+                      <option value="contain">Fit with black bars · no distortion</option>
+                      <option value="crop">Crop to fill canvas · edges may be lost</option>
+                    </select>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={params.preserve_source_style !== false}
+                      onChange={e => setParam('preserve_source_style', e.target.checked)}
+                      className="accent-accent-blue"
+                    />
+                    <span className="text-[11px] uppercase tracking-wider text-text-muted">
+                      Preserve source image style
+                    </span>
+                  </label>
+                  <p className="text-[9px] text-text-muted/60">
+                    Fit preserves the complete source inside the selected canvas;
+                    black bars appear only when aspect ratios differ. Crop fills
+                    the canvas but can remove content near the edges.
+                  </p>
+                </div>
               )}
 
               {/* Stage 2 Steps */}
               {/* Pipeline Mode Toggle — distilled LTX models only */}
-              {modelOptions?.lock_inference_steps && (
+              {!isScailEdit && modelOptions?.lock_inference_steps && (
                 <div className="space-y-3">
                   {/* Single / 2-Stage / 3-Stage segmented control — mutually exclusive */}
                   <div>
@@ -576,7 +787,7 @@ export function AdvancedSettings() {
                   2.0/1.5 then off, STG on blocks 14+19 for the first 4
                   steps, RF euler_ancestral). Shown only for models whose
                   def declares reference_pipeline support. */}
-              {(modelOptions as Record<string, unknown> | null)?.reference_pipeline && (
+              {!isScailEdit && (modelOptions as Record<string, unknown> | null)?.reference_pipeline && (
                 <div className="space-y-1">
                   <label className="flex items-center gap-2 cursor-pointer group">
                     <input type="checkbox"
@@ -595,29 +806,43 @@ export function AdvancedSettings() {
                 </div>
               )}
 
-              {/* Inference Steps (hidden for distilled/locked models and TTS) */}
-              {!modelOptions?.lock_inference_steps && !isAudioOnly && (
+              {/* Dedicated SCAIL edit endpoints honor this value for both
+                  Fast and HQ; other distilled models retain their lock. */}
+              {showInferenceSteps && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-[11px] text-text-muted uppercase tracking-wider">Inference Steps</label>
                     <input
                       type="number"
                       value={params.num_inference_steps}
+                      disabled={h3TurboMode}
                       onChange={e => setParam('num_inference_steps', Number(e.target.value))}
-                      className="w-16 bg-bg-tertiary border border-border rounded px-2 py-0.5 text-xs text-text-primary text-center focus:outline-none focus:border-accent-blue"
+                      className="w-16 bg-bg-tertiary border border-border rounded px-2 py-0.5 text-xs text-text-primary text-center focus:outline-none focus:border-accent-blue disabled:cursor-not-allowed disabled:opacity-50"
                     />
                   </div>
                   <input
                     type="range" min={1} max={50} step={1}
                     value={params.num_inference_steps}
+                    disabled={h3TurboMode}
                     onChange={e => setParam('num_inference_steps', Number(e.target.value))}
-                    className="w-full"
+                    className="w-full disabled:cursor-not-allowed disabled:opacity-50"
                   />
+                  {h3TurboMode && (
+                    <p className="text-[9px] text-text-muted mt-0.5">
+                      Turbo mode locks this preset to {modelOptions?.minimax_h3_turbo?.steps} steps.
+                    </p>
+                  )}
+                  {isScailFast && (
+                    <p className="text-[9px] text-text-muted mt-0.5">
+                      Fast keeps its distilled CFG 1 recipe; guidance and
+                      negative-prompt controls do not apply.
+                    </p>
+                  )}
                 </div>
               )}
 
               {/* Guidance Scale (hidden for TTS — shown in TTS section above) */}
-              {!modelOptions?.lock_guidance_scale && !isAudioOnly && (
+              {showGuidanceScale && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-[11px] text-text-muted uppercase tracking-wider">Guidance Scale</label>
@@ -639,7 +864,7 @@ export function AdvancedSettings() {
               )}
 
               {/* LTX-2 Dev Pipeline Controls — only for models with perturbation/CFG-Star support */}
-              {(modelOptions as Record<string, unknown> | null)?.perturbation && (
+              {!isScailEdit && (modelOptions as Record<string, unknown> | null)?.perturbation && (
                 <>
                   {/* STG Scale */}
                   <div>
@@ -698,7 +923,7 @@ export function AdvancedSettings() {
               )}
 
               {/* Keyframe Conditioning Mode — Start/End frames */}
-              {(isVideo || isAvatar) && (hasStartImage || hasEndImage) && (
+              {!isScailEdit && (isVideo || isAvatar) && (hasStartImage || hasEndImage) && (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Start/End Frame Mode</label>
                   <select
@@ -714,7 +939,7 @@ export function AdvancedSettings() {
               )}
 
               {/* Keyframe Conditioning Mode — Injected keyframes */}
-              {(isVideo || isAvatar) && hasImageRefs && (
+              {!isScailEdit && (isVideo || isAvatar) && hasImageRefs && (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Injected Keyframe Mode</label>
                   <select
@@ -730,7 +955,7 @@ export function AdvancedSettings() {
               )}
 
               {/* Negative Prompt */}
-              {!modelOptions?.no_negative_prompt && (
+              {showNegativePrompt && (
                 <div>
                   <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">Negative Prompt</label>
                   <textarea
@@ -788,16 +1013,18 @@ export function AdvancedSettings() {
               {/* Presets */}
               <PresetManager />
 
-              {/* LoRAs */}
-              <LoraSelector />
+              {/* Official Outpaint owns its stage-one-only IC-LoRA schedule. */}
+              {!isOutpaint && <LoraSelector />}
 
-              {/* Control Video / Frames Injection */}
-              {(modelOptions?.guide_preprocessing || modelOptions?.guide_custom_choices) && (
+              {/* Dedicated SCAIL edit endpoints own their source video,
+                  edited/reference frames, masks, and process selection. */}
+              {(modelOptions?.guide_preprocessing || modelOptions?.guide_custom_choices) &&
+                !isScailEdit && (
                 <ControlVideoSection />
               )}
 
-              {/* Output Count */}
-              <div>
+              {/* Dedicated Recast/Repaint submissions create one edit job. */}
+              {!isScailEdit && <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[11px] text-text-muted uppercase tracking-wider">Output Count</label>
                   <span className="text-xs text-text-secondary">{params.repeat_generation || 1}</span>
@@ -808,7 +1035,7 @@ export function AdvancedSettings() {
                   onChange={e => setParam('repeat_generation', Number(e.target.value))}
                   className="w-full"
                 />
-              </div>
+              </div>}
             </div>
           </div>
     </>

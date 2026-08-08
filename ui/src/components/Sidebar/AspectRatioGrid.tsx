@@ -2,6 +2,7 @@ import { useStore } from '../../stores/useStore'
 import type { AspectRatio } from '../../types'
 
 const standardRatios: { value: AspectRatio; icon: string }[] = [
+  { value: '21:9', icon: '▭' },
   { value: '16:9', icon: '▬' },
   { value: '9:16', icon: '▮' },
   { value: '1:1', icon: '◼' },
@@ -13,9 +14,10 @@ export function AspectRatioGrid() {
   const aspectRatio = useStore(s => s.aspectRatio)
   const setAspectRatio = useStore(s => s.setAspectRatio)
   const generationMode = useStore(s => s.generationMode)
+  const modelOptions = useStore(s => s.modelOptions)
   const isImage = generationMode === 'image'
 
-  const ratios = isImage
+  const ratios = isImage || modelOptions?.supports_auto_aspect
     ? [{ value: 'auto' as AspectRatio, icon: '⊞' }, ...standardRatios]
     : standardRatios
 

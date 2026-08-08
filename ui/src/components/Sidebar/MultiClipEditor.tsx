@@ -1,11 +1,27 @@
-import { Upload, X } from 'lucide-react'
+import { useEffect, useMemo } from 'react'
+import { ImagePlus, Upload, X } from 'lucide-react'
+import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 
-function ClipDropZone({ file, onFile, onClear }: {
+function useAssetPreview(file: File | null, path: string | null) {
+  const url = useMemo(
+    () => file ? URL.createObjectURL(file) : (path ? api.getStoredAssetUrl(path) : null),
+    [file, path],
+  )
+  useEffect(() => {
+    if (!file || !url) return
+    return () => URL.revokeObjectURL(url)
+  }, [file, url])
+  return url
+}
+
+function ClipDropZone({ file, path, onFile, onClear }: {
   file: File | null
+  path: string | null
   onFile: (f: File) => void
   onClear: () => void
 }) {
+  const previewUrl = useAssetPreview(file, path)
   return (
     <div
       className="relative border border-dashed border-border rounded-lg p-2 flex items-center justify-center gap-1 cursor-pointer hover:border-border-light transition-colors min-h-[60px]"
@@ -26,10 +42,10 @@ function ClipDropZone({ file, onFile, onClear }: {
         input.click()
       }}
     >
-      {file ? (
+      {previewUrl ? (
         <>
           <img
-            src={URL.createObjectURL(file)}
+            src={previewUrl}
             alt="clip"
             className="w-full h-full object-cover rounded absolute inset-0"
           />
@@ -56,6 +72,8 @@ export function MultiClipEditor() {
   const setSinglePromptMode = useStore(s => s.setSinglePromptMode)
   const setClipPrompt = useStore(s => s.setClipPrompt)
   const setClipStartImage = useStore(s => s.setClipStartImage)
+  const addClipKeyframe = useStore(s => s.addClipKeyframe)
+  const removeClipKeyframe = useStore(s => s.removeClipKeyframe)
   const slidingWindowSeconds = useStore(s => s.slidingWindowSeconds)
 
   if (clips.length === 0) return null
@@ -86,9 +104,44 @@ export function MultiClipEditor() {
 
             <ClipDropZone
               file={clip.startImage}
+              path={clip.startImagePath}
               onFile={f => setClipStartImage(i, f)}
               onClear={() => setClipStartImage(i, null)}
             />
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-wider text-text-muted">
+                  Keyframes · {clip.keyframes.length}
+                </span>
+                <label className="inline-flex cursor-pointer items-center gap-1 rounded border border-border px-1.5 py-1 text-[10px] text-text-secondary hover:border-border-light">
+                  <ImagePlus size={12} />
+                  Add
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={event => {
+                      const file = event.target.files?.[0]
+                      if (file) addClipKeyframe(i, file)
+                      event.currentTarget.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+              {clip.keyframes.length > 0 && (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {clip.keyframes.map((keyframe, keyframeIndex) => (
+                    <KeyframeThumbnail
+                      key={`${keyframe.path || keyframe.file?.name || 'keyframe'}-${keyframeIndex}`}
+                      file={keyframe.file}
+                      path={keyframe.path}
+                      onRemove={() => removeClipKeyframe(i, keyframeIndex)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
             <textarea
               value={singlePromptMode && i > 0 ? clips[0].prompt : clip.prompt}
@@ -107,6 +160,28 @@ export function MultiClipEditor() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function KeyframeThumbnail({ file, path, onRemove }: {
+  file: File | null
+  path: string | null
+  onRemove: () => void
+}) {
+  const previewUrl = useAssetPreview(file, path)
+  if (!previewUrl) return null
+  return (
+    <div className="group relative aspect-video overflow-hidden rounded border border-border bg-bg-tertiary">
+      <img src={previewUrl} alt="Clip keyframe" className="h-full w-full object-cover" />
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute right-0.5 top-0.5 rounded-full bg-bg-primary/85 p-0.5 opacity-80 hover:opacity-100"
+        aria-label="Remove keyframe"
+      >
+        <X size={10} />
+      </button>
     </div>
   )
 }

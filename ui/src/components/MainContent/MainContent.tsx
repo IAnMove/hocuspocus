@@ -1,20 +1,66 @@
-import { useRef, useCallback, useState, useEffect, useMemo, type JSX } from 'react'
-import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked } from 'lucide-react'
+import { lazy, Suspense, useRef, useCallback, useState, useEffect, useMemo, type JSX } from 'react'
+import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked, Upload, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { TabFilter } from './TabFilter'
 import { ThumbnailGallery } from './ThumbnailGallery'
 import { MediaFeedItem } from './MediaFeedItem'
 import { useStore } from '../../stores/useStore'
 import type { GenerationJob } from '../../types'
+import { stageSceneForEditor } from '../../lib/sceneOutput'
+
+const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
+  .then(module => ({ default: module.SceneAnimatorPanel })))
+const RigAnimatePanel = lazy(() => import('../Sidebar/RigAnimatePanel')
+  .then(module => ({ default: module.RigAnimatePanel })))
+const ComicEditorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
+  .then(module => ({ default: module.ComicEditorPanel })))
+const VideoEditorPanel = lazy(() => import('../../features/video-editor/VideoEditorPanel')
+  .then(module => ({ default: module.VideoEditorPanel })))
+const StoryLabPanel = lazy(() => import('../../features/stories/StoryLabPanel')
+  .then(module => ({ default: module.StoryLabPanel })))
+
+function PanelLoadingFallback() {
+  return (
+    <div className="flex flex-1 items-center justify-center text-text-muted">
+      <Loader2 size={22} className="animate-spin text-accent-blue" />
+      <span className="ml-2 text-xs">Opening workspace…</span>
+    </div>
+  )
+}
 
 function WorkspaceSelector() {
   const workspaces = useStore(s => s.workspaces)
   const activeWorkspace = useStore(s => s.activeWorkspace)
+  const browsingUploads = useStore(s => s.browsingUploads)
   const switchWorkspace = useStore(s => s.switchWorkspace)
   const createWorkspace = useStore(s => s.createWorkspace)
+  const deleteWorkspace = useStore(s => s.deleteWorkspace)
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const handleDelete = async (name: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (confirmDelete !== name) {
+      setConfirmDelete(name)
+      setTimeout(() => setConfirmDelete(c => (c === name ? null : c)), 4000)
+      return
+    }
+    setConfirmDelete(null)
+    setDeleting(name)
+    setDeleteError(null)
+    try {
+      await deleteWorkspace(name)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err))
+      setTimeout(() => setDeleteError(null), 6000)
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   // Close on outside click
   useEffect(() => {
@@ -50,7 +96,7 @@ function WorkspaceSelector() {
         title="Switch workspace"
       >
         <FolderOpen size={12} />
-        <span className="max-w-[120px] truncate">{activeWorkspace}</span>
+        <span className="max-w-[120px] truncate">{browsingUploads ? 'Uploads' : activeWorkspace}</span>
       </button>
 
       {open && (
@@ -60,17 +106,54 @@ function WorkspaceSelector() {
           </div>
           <div className="max-h-[200px] overflow-y-auto">
             {workspaces.map(ws => (
-              <button
-                key={ws.name}
-                onClick={() => { switchWorkspace(ws.name); setOpen(false) }}
-                className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-bg-hover transition-colors ${
-                  ws.name === activeWorkspace ? 'text-accent-blue' : 'text-text-secondary'
-                }`}
-              >
-                <span className="truncate">{ws.name}</span>
-                {ws.name === activeWorkspace && <Check size={12} />}
-              </button>
+              <div key={ws.name} className="flex items-center group hover:bg-bg-hover transition-colors">
+                <button
+                  onClick={() => { switchWorkspace(ws.name); setOpen(false) }}
+                  className={`flex-1 min-w-0 text-left px-3 py-2 text-xs flex items-center justify-between ${
+                    ws.name === activeWorkspace && !browsingUploads ? 'text-accent-blue' : 'text-text-secondary'
+                  }`}
+                >
+                  <span className="truncate">{ws.name}</span>
+                  {ws.name === activeWorkspace && !browsingUploads && <Check size={12} className="shrink-0" />}
+                </button>
+                {/* default IS the outputs folder itself — not deletable */}
+                {ws.name !== 'default' && (
+                  <button
+                    onClick={e => handleDelete(ws.name, e)}
+                    disabled={deleting === ws.name}
+                    className={`px-2 py-2 shrink-0 transition-colors ${
+                      confirmDelete === ws.name
+                        ? 'text-red-400 bg-red-500/15'
+                        : deleting === ws.name
+                          ? 'text-text-muted cursor-wait'
+                          : 'text-text-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400'
+                    }`}
+                    title={confirmDelete === ws.name
+                      ? `Click again to permanently delete "${ws.name}" and its ${ws.file_count ?? 0} files`
+                      : `Delete workspace (${ws.file_count ?? 0} files)`}
+                  >
+                    {deleting === ws.name ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                  </button>
+                )}
+              </div>
             ))}
+          </div>
+          {deleteError && (
+            <div className="px-3 py-1.5 text-[10px] text-red-400 border-t border-border leading-snug">{deleteError}</div>
+          )}
+          {/* Virtual Uploads view — browse user-uploaded media (read-only;
+              generations keep saving to the real active workspace). */}
+          <div className="border-t border-border">
+            <button
+              onClick={() => { switchWorkspace('__uploads__'); setOpen(false) }}
+              className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-bg-hover transition-colors ${
+                browsingUploads ? 'text-accent-blue' : 'text-text-secondary'
+              }`}
+              title="Browse media you've uploaded — reuse as inputs"
+            >
+              <span className="flex items-center gap-1.5"><Upload size={12} /> Uploads</span>
+              {browsingUploads && <Check size={12} />}
+            </button>
           </div>
           <div className="border-t border-border p-2">
             {creating ? (
@@ -126,6 +209,20 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
   const phase = stripTimeSuffix(job.phase || job.message)
   const isFailed = job.status === 'failed' || job.status === 'cancelled'
   const errorText = job.error || job.message || (job.status === 'cancelled' ? 'Cancelled' : 'Generation failed')
+  const completedPanelTimings = (job.taskTimings ?? [])
+    .filter(item => typeof item.total_seconds === 'number')
+    .slice(-4)
+  const [showH3Prompts, setShowH3Prompts] = useState(false)
+  const h3WindowMatch = (job.phase || job.message || '').match(/Sliding Window\s+(\d+)\/(\d+)/i)
+  const activeH3Window = h3WindowMatch ? Number(h3WindowMatch[1]) : 1
+  const activeH3PlanWindow = job.h3WindowPlan?.windows.find(
+    window => window.index === activeH3Window,
+  ) || job.h3WindowPlan?.windows[0]
+
+  useEffect(() => {
+    const reset = window.setTimeout(() => setShowH3Prompts(false), 0)
+    return () => window.clearTimeout(reset)
+  }, [job.h3WindowPlan?.signature])
 
   return (
     <div className={`rounded-xl border overflow-hidden ${
@@ -136,7 +233,7 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
         {isFailed && (
           <button
             onClick={onDismiss}
-            className="absolute top-2 right-2 p-1.5 rounded-full bg-black/40 text-white/80 hover:bg-red-600 hover:text-white transition-colors z-10"
+            className="absolute top-2 right-2 p-1.5 rounded-full bg-bg-active text-text-secondary hover:bg-red-600 hover:text-white transition-colors z-10"
             title="Dismiss"
           >
             <X size={14} />
@@ -156,6 +253,15 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
               <p className="text-[10px] text-text-muted mt-0.5">
                 Step {job.step}/{job.totalSteps}
               </p>
+            )}
+            {!isFailed && completedPanelTimings.length > 0 && (
+              <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
+                {completedPanelTimings.map(item => (
+                  <span key={`${item.panel_no}-${item.status}`}>
+                    Viñeta {item.panel_no}: {item.total_seconds!.toFixed(1)}s
+                  </span>
+                ))}
+              </div>
             )}
             {isFailed && (
               <p className="text-[11px] text-text-secondary mt-2 max-h-24 overflow-y-auto px-2 leading-relaxed whitespace-pre-wrap break-words">
@@ -179,6 +285,52 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
           )}
         </div>
       </div>
+
+      {job.h3WindowPlan && activeH3PlanWindow && (
+        <div className="border-t border-border bg-bg-secondary/60 px-3 py-2">
+          <div className="flex items-center justify-between gap-2 text-[10px] text-text-muted">
+            <span className="font-medium text-text-secondary">
+              Exact H3 prompt · Window {activeH3PlanWindow.index}/{job.h3WindowPlan.window_count}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowH3Prompts(open => !open)}
+              className="flex items-center gap-1 text-accent-blue hover:text-accent-blue/80"
+            >
+              {showH3Prompts ? 'Hide all' : 'View all'}
+              {showH3Prompts ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            </button>
+          </div>
+          <p className="mt-1 text-[10px] leading-relaxed text-text-muted line-clamp-3 whitespace-pre-wrap break-words">
+            {activeH3PlanWindow.prompt}
+          </p>
+          {showH3Prompts && (
+            <div className="mt-2 max-h-80 overflow-y-auto space-y-2 border-t border-border pt-2">
+              {job.h3WindowPlan.windows.map(window => (
+                <div
+                  key={`${window.index}-${window.start_frame}`}
+                  className={`rounded-md border p-2 ${
+                    window.index === activeH3Window
+                      ? 'border-accent-blue/70 bg-accent-blue/5'
+                      : 'border-border bg-bg-tertiary/60'
+                  }`}
+                >
+                  <div className="mb-1 flex items-center justify-between text-[9px] text-text-muted">
+                    <span>
+                      Window {window.index}: {window.title || `Beat ${window.index}`}
+                      {window.index === activeH3Window ? ' · Generating now' : ''}
+                    </span>
+                    <span>{window.start_seconds.toFixed(1)}–{window.end_seconds.toFixed(1)}s</span>
+                  </div>
+                  <pre className="whitespace-pre-wrap break-words font-sans text-[10px] leading-relaxed text-text-secondary">
+                    {window.prompt}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bottom bar */}
       <div className="px-3 py-2 min-h-[40px] flex items-center justify-between">
@@ -277,9 +429,11 @@ export function MainContent() {
   const stopGeneration = useStore(s => s.stopGeneration)
   const dismissJob = useStore(s => s.dismissJob)
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
+  const selectedOutput = useStore(s => s.selectedOutput)
+  const setMediaFilter = useStore(s => s.setMediaFilter)
 
   const feedRef = useRef<HTMLDivElement>(null)
-  const [activeIndex, setActiveIndex] = useState(0)
+  const activeIndex = selectedOutput
   const isUserScrolling = useRef(false)
   const scrollTargetIndex = useRef<number | null>(null)
 
@@ -363,15 +517,20 @@ export function MainContent() {
 
   const handleItemVisible = useCallback((index: number) => {
     if (scrollTargetIndex.current !== null) return
-    setActiveIndex(index)
     if (isUserScrolling.current) {
       setSelectedOutput(index)
     }
   }, [setSelectedOutput])
 
   const handleThumbnailClick = useCallback((index: number) => {
+    const file = outputs[index]
+    if (file?.type === 'scene') {
+      void stageSceneForEditor(file)
+        .then(() => setMediaFilter('scene3d'))
+        .catch(error => console.error('Failed to open scene:', error))
+      return
+    }
     setSelectedOutput(index)
-    setActiveIndex(index)
     scrollTargetIndex.current = index
     isUserScrolling.current = false
     const feedEl = feedRef.current
@@ -443,7 +602,7 @@ export function MainContent() {
       }
     }
     requestAnimationFrame(align)
-  }, [setSelectedOutput, getItemHeight, placeholderTotalHeight])
+  }, [getItemHeight, outputs, placeholderTotalHeight, setMediaFilter, setSelectedOutput])
 
   // Infinite scroll: load more when near the bottom
   const loadingMore = useRef(false)
@@ -493,6 +652,7 @@ export function MainContent() {
     }
     return items
   }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets])
+  const mediaFilter = useStore(s => s.mediaFilter)
 
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden">
@@ -501,7 +661,12 @@ export function MainContent() {
         <TabFilter />
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-[10px] md:text-xs text-text-muted hidden md:block">
-            {outputsTotal > outputs.length
+            {mediaFilter === 'scene3d' ? '3D Video editor'
+              : mediaFilter === 'animate3d' ? 'Rig & Animate'
+              : mediaFilter === 'comics' ? 'Comic Studio'
+              : mediaFilter === 'stories' ? 'Story Lab'
+              : mediaFilter === 'videoeditor' ? 'Video Editor'
+              : outputsTotal > outputs.length
               ? `${outputs.length} / ${outputsTotal} items`
               : `${outputs.length} ${outputs.length === 1 ? 'item' : 'items'}`}
           </div>
@@ -511,6 +676,38 @@ export function MainContent() {
 
       {/* Content area: feed + thumbnails */}
       <div className="flex-1 flex flex-row gap-0 overflow-hidden relative">
+        <Suspense fallback={<PanelLoadingFallback />}>
+        {mediaFilter === 'scene3d' ? (
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
+            <div className="max-w-[1600px] mx-auto">
+              <SceneAnimatorPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'animate3d' ? (
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
+            <div className="max-w-2xl mx-auto">
+              <RigAnimatePanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'stories' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <StoryLabPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'comics' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <ComicEditorPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'videoeditor' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <VideoEditorPanel />
+            </div>
+          </div>
+        ) : <>
         {/* Scrollable media feed */}
         <div
           ref={feedRef}
@@ -601,6 +798,8 @@ export function MainContent() {
           activeIndex={activeIndex}
           onThumbnailClick={handleThumbnailClick}
         />
+        </>}
+        </Suspense>
       </div>
     </main>
   )

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
+import hashlib
+import json
+import time
 from typing import Any, Callable, Iterable, Hashable
 
 import torch
@@ -14,10 +17,31 @@ class _CacheEntry:
 
 
 class TextEncoderCache:
-    def __init__(self, max_size_mb: float = 100) -> None:
+    def __init__(
+        self,
+        max_size_mb: float = 100,
+        namespace: Any = None,
+        max_batch_size: int = 4,
+    ) -> None:
+        if max_batch_size < 1:
+            raise ValueError("max_batch_size must be at least 1.")
         self.max_size_bytes = int(max_size_mb * 1024 * 1024)
+        self.namespace = namespace
+        self.max_batch_size = int(max_batch_size)
         self._entries: "OrderedDict[Hashable, _CacheEntry]" = OrderedDict()
         self._size_bytes = 0
+        self.last_report: dict[str, Any] = {}
+
+    @staticmethod
+    def make_key(prompt: str, configuration: Any) -> str:
+        payload = json.dumps(
+            {"prompt": prompt, "configuration": configuration},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            default=str,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def encode(
         self,
@@ -34,7 +58,9 @@ class TextEncoderCache:
         if not prompts_list:
             return []
         if cache_keys is None:
-            keys_list = prompts_list
+            keys_list = [
+                self.make_key(prompt, self.namespace) for prompt in prompts_list
+            ]
         else:
             if len(prompts_list) == 1 and not isinstance(cache_keys, list):
                 keys_list = [cache_keys]
@@ -43,14 +69,19 @@ class TextEncoderCache:
             if len(keys_list) != len(prompts_list):
                 raise ValueError("cache_keys must match the number of prompts.")
 
+        hits = 0
+        misses = 0
+        started = time.perf_counter()
         if not parallel:
             results: list[Any] = []
             for prompt, cache_key in zip(prompts_list, keys_list):
                 cached = self._entries.get(cache_key)
                 if cached is not None:
+                    hits += 1
                     self._entries.move_to_end(cache_key)
                     results.append(self._to_device(cached.value, device))
                     continue
+                misses += 1
                 encoded = encode_fn([prompt])
                 if isinstance(encoded, (list, tuple)):
                     if not encoded:
@@ -59,6 +90,13 @@ class TextEncoderCache:
                 else:
                     encoded_item = encoded
                 results.append(self._store(cache_key, encoded_item, device))
+            self.last_report = {
+                "prompts": len(prompts_list),
+                "hits": hits,
+                "misses": misses,
+                "seconds": time.perf_counter() - started,
+                "parallel": False,
+            }
             return results
 
         results = [None] * len(prompts_list)
@@ -69,23 +107,69 @@ class TextEncoderCache:
         for idx, (prompt, cache_key) in enumerate(zip(prompts_list, keys_list)):
             cached = self._entries.get(cache_key)
             if cached is None:
+                misses += 1
                 missing_prompts.append(prompt)
                 missing_indices.append(idx)
                 missing_keys.append(cache_key)
                 continue
+            hits += 1
             self._entries.move_to_end(cache_key)
             results[idx] = self._to_device(cached.value, device)
 
-        if missing_prompts:
-            encoded_batch = encode_fn(missing_prompts)
-            if not isinstance(encoded_batch, list):
-                encoded_batch = list(encoded_batch)
-            if len(encoded_batch) != len(missing_prompts):
-                raise ValueError("encode_fn returned unexpected number of embeddings.")
-            for cache_key, idx, encoded in zip(missing_keys, missing_indices, encoded_batch):
+        batch_sizes = []
+        attempted_batch_sizes = []
+        oom_retries = 0
+
+        def encode_batch(prompt_batch: list[str]) -> list[Any]:
+            nonlocal oom_retries
+            attempted_batch_sizes.append(len(prompt_batch))
+            try:
+                encoded = encode_fn(prompt_batch)
+                if not isinstance(encoded, list):
+                    encoded = list(encoded)
+                if len(encoded) != len(prompt_batch):
+                    raise ValueError("encode_fn returned unexpected number of embeddings.")
+                batch_sizes.append(len(prompt_batch))
+                return encoded
+            except RuntimeError as error:
+                if not self._is_cuda_oom(error) or len(prompt_batch) == 1:
+                    raise
+                oom_retries += 1
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                midpoint = max(1, len(prompt_batch) // 2)
+                return (
+                    encode_batch(prompt_batch[:midpoint])
+                    + encode_batch(prompt_batch[midpoint:])
+                )
+
+        for start in range(0, len(missing_prompts), self.max_batch_size):
+            stop = start + self.max_batch_size
+            prompt_batch = missing_prompts[start:stop]
+            key_batch = missing_keys[start:stop]
+            index_batch = missing_indices[start:stop]
+            encoded_batch = encode_batch(prompt_batch)
+            for cache_key, idx, encoded in zip(key_batch, index_batch, encoded_batch):
                 results[idx] = self._store(cache_key, encoded, device)
 
+        self.last_report = {
+            "prompts": len(prompts_list),
+            "hits": hits,
+            "misses": misses,
+            "seconds": time.perf_counter() - started,
+            "parallel": True,
+            "batch_sizes": batch_sizes,
+            "attempted_batch_sizes": attempted_batch_sizes,
+            "oom_retries": oom_retries,
+        }
         return results
+
+    @staticmethod
+    def _is_cuda_oom(error: RuntimeError) -> bool:
+        if isinstance(error, torch.OutOfMemoryError):
+            return True
+        message = str(error).lower()
+        return "out of memory" in message and ("cuda" in message or "gpu" in message)
 
     def _store(self, cache_key: Hashable, encoded: Any, device: torch.device | str | None) -> Any:
         cached_value = self._detach_to_cpu(encoded)

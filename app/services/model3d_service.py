@@ -224,6 +224,10 @@ _jobs: dict[str, dict[str, Any]] = {}
 _processes: dict[str, subprocess.Popen] = {}
 _lock = threading.RLock()
 _generation_slot = threading.Semaphore(1)
+# Public alias: any Maestro service that runs its own GPU-heavy worker
+# (e.g. rig_service's UniRig jobs) must hold this slot too, so 3D
+# generation and AI rigging never compete for the same VRAM.
+GPU_SLOT = _generation_slot
 
 _TERMINAL_STATES = {"completed", "failed", "cancelled"}
 # Job-registry hygiene: keep a short history of finished jobs for status
@@ -339,7 +343,14 @@ def _bounded_float(value: Any, default: float, low: float, high: float) -> float
         return default
 
 
-def _prepare_request(body: dict[str, Any], image_paths: dict[str, str]) -> dict[str, Any]:
+def _prepare_request(
+    body: dict[str, Any],
+    image_paths: dict[str, str],
+    source_mesh_path: str | None = None,
+) -> dict[str, Any]:
+    operation = str(body.get("operation") or "generate").strip().lower()
+    if operation not in {"generate", "retexture"}:
+        raise ValueError(f"Unsupported Hunyuan3D operation: {operation}")
     preset_id = str(body.get("preset") or "balanced")
     preset = dict(PRESETS.get(preset_id, PRESETS["balanced"]))
     model_id = str(body.get("model_id") or preset["model_id"])
@@ -349,7 +360,14 @@ def _prepare_request(body: dict[str, Any], image_paths: dict[str, str]) -> dict[
 
     prompt = str(body.get("prompt") or "").strip()
     clean_images = {key: value for key, value in image_paths.items() if key in {"front", "left", "right", "back"} and value}
-    if model["multiview"]:
+    if operation == "retexture":
+        if not source_mesh_path:
+            raise ValueError("Choose a GLB to retexture")
+        if Path(source_mesh_path).suffix.lower() != ".glb":
+            raise ValueError("Retexturing currently supports GLB source files only")
+        if not clean_images and not prompt:
+            raise ValueError("Provide a texture reference image or describe the new material")
+    elif model["multiview"]:
         if "front" not in clean_images:
             raise ValueError("Multi-view models require at least a front image")
     elif not clean_images and not prompt:
@@ -358,10 +376,14 @@ def _prepare_request(body: dict[str, Any], image_paths: dict[str, str]) -> dict[
     output_format = str(body.get("output_format") or "glb").lower().lstrip(".")
     if output_format not in MODEL3D_EXTENSIONS:
         raise ValueError(f"Unsupported 3D output format: {output_format}")
+    if operation == "retexture" and output_format != "glb":
+        raise ValueError("Retextured assets are exported as GLB copies")
 
     texture_mode = str(body.get("texture_mode", preset["texture_mode"]))
     if texture_mode not in {"none", "v2", "v2-turbo", "pbr"}:
         raise ValueError(f"Unsupported texture mode: {texture_mode}")
+    if operation == "retexture" and texture_mode == "none":
+        raise ValueError("Choose a Hunyuan Paint texture mode for retexturing")
     if texture_mode == "pbr" and model["engine"] != "v21":
         raise ValueError("PBR materials require the Hunyuan3D 2.1 model")
     if texture_mode == "pbr" and output_format != "glb":
@@ -389,9 +411,11 @@ def _prepare_request(body: dict[str, Any], image_paths: dict[str, str]) -> dict[
         settings["mc_algo"] = "dmc"
 
     return {
+        "operation": operation,
         "preset": preset_id,
         "model": model,
         "images": clean_images,
+        "source_mesh": source_mesh_path,
         "settings": settings,
     }
 
@@ -413,7 +437,13 @@ def _prune_finished_jobs_locked() -> None:
             _jobs.pop(job_id, None)
 
 
-def start_job(*, body: dict[str, Any], image_paths: dict[str, str], output_dir: str) -> dict[str, Any]:
+def start_job(
+    *,
+    body: dict[str, Any],
+    image_paths: dict[str, str],
+    output_dir: str,
+    source_mesh_path: str | None = None,
+) -> dict[str, Any]:
     runtime = installation_status()
     if not runtime["installed"]:
         raise RuntimeError(runtime["install_hint"])
@@ -424,17 +454,18 @@ def start_job(*, body: dict[str, Any], image_paths: dict[str, str], output_dir: 
     if active >= _MAX_ACTIVE_JOBS:
         raise ValueError("Too many queued 3D jobs; wait for the current ones to finish or cancel them")
 
-    request_data = _prepare_request(body, image_paths)
+    request_data = _prepare_request(body, image_paths, source_mesh_path)
     job_id = uuid.uuid4().hex
     job = {
         "job_id": job_id,
         "status": "queued",
         "progress": 0.0,
         "phase": "queued",
-        "message": "Queued Hunyuan3D generation",
+        "message": "Queued Hunyuan3D retexture" if request_data["operation"] == "retexture" else "Queued Hunyuan3D generation",
         "error": None,
         "filename": None,
         "url": None,
+        "operation": request_data["operation"],
         "model_id": request_data["model"]["id"],
         "created_at": time.time(),
         "updated_at": time.time(),
@@ -495,9 +526,14 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         return
     model_id = request_data["model"]["id"]
     output_format = request_data["settings"]["output_format"]
+    operation = request_data.get("operation") or "generate"
     safe_model = re.sub(r"[^a-zA-Z0-9._-]+", "-", model_id)
     stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    filename = f"{stamp}_{safe_model}_{job_id[:8]}.{output_format}"
+    if operation == "retexture":
+        source_stem = re.sub(r"[^a-zA-Z0-9._-]+", "-", Path(request_data["source_mesh"]).stem)[:48]
+        filename = f"{stamp}_retextured_{source_stem}_{job_id[:8]}.{output_format}"
+    else:
+        filename = f"{stamp}_{safe_model}_{job_id[:8]}.{output_format}"
     output_path = Path(output_dir) / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
@@ -533,7 +569,13 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     })
     lines: list[str] = []
     try:
-        _update_job(job_id, status="running", phase="starting", message="Starting isolated Hunyuan3D worker", progress=0.02)
+        _update_job(
+            job_id,
+            status="running",
+            phase="starting",
+            message=("Starting isolated Hunyuan3D retexture worker" if operation == "retexture" else "Starting isolated Hunyuan3D worker"),
+            progress=0.02,
+        )
         process = subprocess.Popen(
             command,
             cwd=str(SERVICE_DIR),
@@ -620,6 +662,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                     "params": {
                         **request_data["settings"],
                         "model_id": model_id,
+                        "operation": operation,
+                        "source_model": os.path.basename(request_data["source_mesh"]) if request_data.get("source_mesh") else None,
                         "preset": request_data["preset"],
                         "images": request_data["images"],
                     },
@@ -632,7 +676,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             job_id,
             status="completed",
             phase="completed",
-            message="3D asset generated; worker exited and VRAM was released",
+            message=("GLB retextured as a new copy; worker exited and VRAM was released" if operation == "retexture" else "3D asset generated; worker exited and VRAM was released"),
             progress=1.0,
             filename=filename,
             url=f"/api/v1/file/{filename}",
@@ -642,7 +686,13 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         with _lock:
             cancelled = _jobs.get(job_id, {}).get("status") == "cancelled"
         if not cancelled:
-            _update_job(job_id, status="failed", phase="failed", message="Hunyuan3D generation failed", error=str(exc))
+            _update_job(
+                job_id,
+                status="failed",
+                phase="failed",
+                message=("Hunyuan3D retexture failed" if operation == "retexture" else "Hunyuan3D generation failed"),
+                error=str(exc),
+            )
         _cleanup_partial_output(output_path)
     finally:
         with _lock:
@@ -671,7 +721,7 @@ def cancel_job(job_id: str) -> dict[str, Any] | None:
         job.update({
             "status": "cancelled",
             "phase": "cancelled",
-            "message": "3D generation cancelled",
+            "message": "3D retexture cancelled" if job.get("operation") == "retexture" else "3D generation cancelled",
             "updated_at": time.time(),
         })
         job.pop("request", None)

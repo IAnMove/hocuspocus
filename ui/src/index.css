@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* A Scene Animator GLB is one visual layer among DOM image/video layers.
+   model-viewer's loading poster is opaque by default, which otherwise masks
+   the layers below it and makes CSS z-index look broken. */
+model-viewer.scene-animator-model {
+  background-color: transparent;
+  --poster-color: transparent;
+}
+
 /* ─── Theme tokens ──────────────────────────────────────────────────────
  * Tailwind v4 reads `@theme` once at compile time and emits utility
  * classes that reference these CSS variables via `var(--color-...)` at
@@ -7,8 +15,9 @@
  * cascades into every utility class without recompilation.
  *
  * The default values below are the original Maestro palette (cool
- * charcoal). The Golden Hour theme overrides each variable to a warm
- * cinematic palette. To add a new theme, add another `[data-theme="..."]`
+ * charcoal). Loreframe Blue reuses the legacy Golden Hour ids while
+ * replacing its orange brand accents with blue and cyan. To add a new
+ * theme, add another `[data-theme="..."]`
  * block below — no code changes elsewhere are required for elements
  * that use semantic tokens.
  *
@@ -39,20 +48,48 @@
   --color-accent-blue: #3b82f6;
   --color-accent-blue-hover: #2563eb;
 
-  /* Functional status indicators — NOT remapped per theme.
+  /* Functional status indicators — HUE-stable across themes.
    * These are universal "verified-good vs caution" semantic colors
    * that need to stay visually distinct in every theme. Used for
    * things like:
    *   - LoRA selector: CivitAI-recommended (success/green) vs
    *     fallback-default (warning/amber) weight ranges
    *   - LoRA "guide available" indicator (success/green)
-   * Keeping these out of the per-theme remap means a user who learns
-   * "green dot = recommended" in one theme sees the same meaning in
-   * any other theme. Decorative greens/ambers (progress bars, active
+   *   - warning/success status text across banners and callouts
+   * The HUES never change (a user who learns "green dot =
+   * recommended" sees the same meaning in any theme), but LIGHTNESS
+   * may adapt: light themes darken both (amber #fbbf24 is invisible
+   * on paper). Decorative greens/ambers (progress bars, active
    * indicators, etc.) can still be remapped via accent-green and
    * accent-warm without colliding with these status colors. */
   --color-indicator-success: #22c55e;
   --color-indicator-warning: #fbbf24;
+
+  /* Categorical chip palette — hue-per-category colors for small
+   * decorative UI (Director song-section chips, tab pills, energy
+   * dots, count badges). On the dark themes these are the tailwind
+   * -400 shades the components historically hardcoded (so nothing
+   * changes visually); light themes swap each hue to its -600/-700
+   * stop so chips stay legible on paper. Components must use these
+   * instead of literal text-{hue}-400 classes. */
+  --color-chip-yellow: #facc15;
+  --color-chip-green: #4ade80;
+  --color-chip-cyan: #22d3ee;
+  --color-chip-blue: #60a5fa;
+  --color-chip-purple: #c084fc;
+  --color-chip-pink: #f472b6;
+  --color-chip-teal: #2dd4bf;
+  --color-chip-orange: #fb923c;
+  --color-chip-gray: #9ca3af;
+  --color-chip-red: #f87171;
+
+  /* Media canvas — the letterbox surface directly behind <video>/
+   * <img> in the feed. Dark themes alias their bg-tertiary (no
+   * visual change); light themes keep it DARK: bright letterbox
+   * bars around footage cause glare and washed-out perceived
+   * contrast (same reason YouTube's light mode keeps the player
+   * area dark). */
+  --color-media-canvas: #1a1a25;
 
   /* Warm accent (selection rings, "TAKES" label, active highlights).
      In default theme this is amber too — the cool palette uses
@@ -62,23 +99,23 @@
 
   /* Cool accent — used for "AI" badges where we want a contrast
      against the dominant warm/cool palette. In default theme this
-     equals accent-blue; in Golden Hour it's a violet that pops
-     against the warm sea. */
+     equals accent-blue; in Loreframe Blue it stays violet to contrast
+     with the dominant blue controls. */
   --color-accent-cool-from: #3b82f6;
   --color-accent-cool-to: #6366f1;
 
   /* CTA gradient — primary action buttons (e.g. Generate).
      In default theme both stops equal accent-green so the gradient
      renders as the original flat green (preserves the default look).
-     In Golden Hour both stops shift to red/orange for a sunset
-     gradient. Components using `bg-cta` adapt automatically. */
+     In Loreframe Blue the stops form a blue cinematic gradient.
+     Components using `bg-cta` adapt automatically. */
   --color-gradient-cta-from: #22c55e;
   --color-gradient-cta-to: #22c55e;
 
   /* Toggle-active gradient — used for active states on mode toggles
      (Director/Studio pill, similar). Default theme: both stops equal
      accent-blue so the active button renders as the original flat
-     blue. Golden Hour: shifts to the warm red→orange gradient. Kept
+     blue. Loreframe Blue: shifts to a deeper blue gradient. Kept
      separate from the CTA gradient so a future theme can choose
      different colors for primary actions vs active toggles. */
   --color-gradient-toggle-from: #3b82f6;
@@ -88,132 +125,92 @@
      around the currently-selected media asset in the gallery.
      Default theme: both stops equal accent-blue, so the active frame
      reads as a flat blue ring (matches the prior border-accent-blue
-     behaviour). Golden Hour: warm red→orange diagonal gradient that
-     reads like stage-light spill across the asset's edge. */
+     behaviour). Loreframe Blue: blue→cyan diagonal gradient that
+     reads like cool stage-light spill across the asset's edge. */
   --color-gradient-active-frame-from: #3b82f6;
   --color-gradient-active-frame-to: #3b82f6;
 
   /* Theme-aware glow shadows. Empty in default theme (no glow);
-     set to a warm bloom in Golden Hour for active rings. */
+     set to a cool blue bloom in Loreframe Blue for active rings. */
   --shadow-accent-glow: 0 0 0 transparent;
   --shadow-active-ring: 0 0 0 2px var(--color-accent-blue);
 }
 
-/* ─── Golden Hour theme ─────────────────────────────────────────────────
- * Warm cinematic palette. Inspired by late-afternoon sunlight: deep
- * coffee-toned charcoals for surfaces, warm cream text, amber/gold for
- * highlights and selections, red→orange gradient for primary actions,
- * and a violet counterpoint for AI/intelligence affordances.
+/* Native UI (select popups, checkboxes, Firefox scrollbars, form
+ * autofill) follows the declared color scheme, not the app tokens.
+ * The app chrome is dark by default; Ivory overrides to light in
+ * its own block (attribute selector, later in the file, wins). */
+:root {
+  color-scheme: dark;
+}
+
+/* ─── Loreframe Blue theme ───────────────────────────────────────────────
+ * Experimental Loreframe Lab palette. The legacy `golden-hour` id is
+ * intentionally retained so existing stored preferences keep working.
+ * Near-black surfaces remain unchanged; brand actions, selections and
+ * borders move from orange to electric blue and cyan. Functional success
+ * and warning indicators retain their stable green and amber meanings.
  */
 [data-theme="golden-hour"] {
-  /* Deep neutral near-black backgrounds. Pure neutrals (no warm bias)
-     so the warm accents and warm borders carry the theme identity
-     without competing against the chrome. The ladder runs DEEPER
-     than v3 to match the reference render's near-pure-black
-     surfaces — the warm borders need a deep canvas to pop against. */
+  /* Keep the original near-black surface ladder. */
   --color-bg-primary: #050505;
   --color-bg-secondary: #0a0a0a;
   --color-bg-tertiary: #121212;
   --color-bg-hover: #1a1a1a;
   --color-bg-active: #222222;
 
-  /* Warm-tinted borders. THIS is what makes Golden Hour feel "alive"
-     in the reference render: every control, section, dropdown, chip,
-     and slider gets a subtle warm dark outline. The borders carry the
-     theme identity even when the background is neutral and the
-     control is empty — without these, the chrome reads as a flat
-     neutral void with disconnected warm accents. With them, the
-     entire sidebar feels like a unified warm-cinematic space.
-
-     Calibrated to be visible but never loud — saturation roughly
-     matches a "mid-bg" surface, just shifted warm. */
-  --color-border: #3d2818;
-  --color-border-light: #5a3a22;
+  /* Cool outlines carry the fork's identity without changing layout. */
+  --color-border: #172554;
+  --color-border-light: #1e3a5f;
 
   /* Text — neutral off-white with no temperature bias */
   --color-text-primary: #eaeaea;
   --color-text-secondary: #999999;
   --color-text-muted: #8a8a8a;  /* was #555555 (2.7:1) — raised for WCAG-legible muted text, issue #7 */
 
-  /* Repoint semantic accents — both go warm in Golden Hour so the
-     theme reads cohesively, with deliberate hue separation between
-     them so they don't visually merge:
-       accent-blue  (action):           orange-500  punchy red-orange,
-                                                    used for primary
-                                                    affordances, focus
-                                                    rings, toggles.
-       accent-green (success/progress): amber-500   golden warm, used
-                                                    for progress bars,
-                                                    checkmarks, "done"
-                                                    states, LoRA active
-                                                    indicators.
-     A green progress bar against the warm theme felt out of place;
-     amber-500 (more golden than orange-500) keeps the "completion"
-     feel while sitting cleanly inside the warm palette. */
-  --color-accent-green: #f59e0b;
-  --color-accent-green-hover: #fbbf24;
-  --color-accent-blue: #f97316;
-  --color-accent-blue-hover: #fb923c;
+  --color-accent-green: #22c55e;
+  --color-accent-green-hover: #16a34a;
+  --color-accent-blue: #2563eb;
+  --color-accent-blue-hover: #3b82f6;
 
-  --color-accent-warm: #f59e0b;
-  --color-accent-warm-hover: #fbbf24;
+  --color-accent-warm: #38bdf8;
+  --color-accent-warm-hover: #7dd3fc;
 
-  --color-accent-cool-from: #a855f7;
-  --color-accent-cool-to: #c084fc;
+  --color-accent-cool-from: #6366f1;
+  --color-accent-cool-to: #8b5cf6;
 
-  /* Sunset gradient for primary actions — punchy red→orange */
-  --color-gradient-cta-from: #dc2626;
-  --color-gradient-cta-to: #f97316;
+  /* Dark enough at both stops to preserve white-label contrast. */
+  --color-gradient-cta-from: #1d4ed8;
+  --color-gradient-cta-to: #0369a1;
+  --color-gradient-toggle-from: #1d4ed8;
+  --color-gradient-toggle-to: #0369a1;
 
-  /* Toggle-active gradient — same red→orange so the active mode
-     pill matches the reference render's vibrant CTA energy. */
-  --color-gradient-toggle-from: #dc2626;
-  --color-gradient-toggle-to: #f97316;
+  --color-gradient-active-frame-from: #1d4ed8;
+  --color-gradient-active-frame-to: #38bdf8;
 
-  /* Active-frame gradient — diagonal deep-red→bright-gold around the
-     currently-selected asset. Wide hue gap (red-800 → amber-300) so
-     the transition reads clearly even on a 2px border. Combined with
-     shadow-active-ring's directional shadow biases, the active asset
-     looks like it's lit by a warm light source at top-left, with the
-     gradient on the bezel and the spillover glow integrating into
-     the surroundings. */
-  --color-gradient-active-frame-from: #991b1b;
-  --color-gradient-active-frame-to: #fbbf24;
+  /* Media canvas follows this theme's bg-tertiary (unchanged look) */
+  --color-media-canvas: #121212;
 
-  /* Warm bloom for primary actions */
-  --shadow-accent-glow: 0 0 18px rgba(249, 115, 22, 0.45);
+  /* Restrained cool bloom for primary actions. */
+  --shadow-accent-glow: 0 0 18px rgba(37, 99, 235, 0.38);
 
   /* Active-ring shadow — minimal. The visual character of the active
-   * frame in Golden Hour now lives ON the bezel itself (see the
+   * frame in Loreframe Blue lives ON the bezel itself (see the
    * .frame-active-gradient override below — conic gradient with
    * spotlight stops). The shadow is a tiny outer wash so the bright
-   * stops on the bezel "leak" a hint of warmth without an obvious
+   * stops on the bezel "leak" a hint of blue without an obvious
    * halo competing with the on-bezel effect. */
-  --shadow-active-ring: 0 0 6px rgba(249, 115, 22, 0.15);
+  --shadow-active-ring: 0 0 6px rgba(56, 189, 248, 0.16);
 }
 
-/* Golden Hour active-frame bezel: conic-gradient "spotlight stops".
+/* Loreframe Blue active-frame bezel: conic-gradient spotlight stops.
  *
- * The user wants the BORDER LINE itself to vary — bright orange in
- * some sections like spotlights catching the edge, dimmer ember
- * tones in other sections. Crucially, the dim sections should still
+ * The border line varies between electric blue and cyan as light catches
+ * the edge. Crucially, the dim sections should still
  * be visible against the panel — never fading fully into the
  * background. This is what a conic-gradient does naturally: it
  * sweeps a colour list around a centre point, so each side of the
  * border picks up a different stop.
- *
- * The stops below are deliberately asymmetric — three "hot zones"
- * (orange, gold, ember-red) at 25-50°, 160-185°, and 285-315°,
- * separated by deep burnt-orange "shadow" sections (#7c2d12,
- * tailwind orange-900) that read as ember glow rather than negative
- * space. Sharp transitions on the leading edge of each hot zone
- * (shadow→bright over 25°) create the "spotlight just hits the
- * edge here" feel; gentler transitions away.
- *
- * Earlier version used `var(--color-bg-primary)` for the valley
- * stops which made the border literally invisible on those sides —
- * fixed 2026-05-03 by swapping to orange-900 so the bezel stays
- * coherent all the way around.
  *
  * `from 30deg` rotates the stops so the hot zones don't land on
  * exact cardinal sides — keeps the effect organic rather than
@@ -223,21 +220,225 @@
     linear-gradient(var(--color-bg-secondary), var(--color-bg-secondary)),
     conic-gradient(
       from 30deg,
-      #7c2d12 0deg,
-      #ea580c 28deg,
-      #f97316 52deg,
-      #7c2d12 95deg,
-      #7c2d12 135deg,
-      #fbbf24 162deg,
-      #f97316 188deg,
-      #7c2d12 232deg,
-      #7c2d12 262deg,
-      #dc2626 287deg,
-      #ea580c 315deg,
-      #7c2d12 360deg
+      #172554 0deg,
+      #1d4ed8 28deg,
+      #38bdf8 52deg,
+      #172554 95deg,
+      #172554 135deg,
+      #67e8f9 162deg,
+      #2563eb 188deg,
+      #172554 232deg,
+      #172554 262deg,
+      #1d4ed8 287deg,
+      #0284c7 315deg,
+      #172554 360deg
     );
   background-origin: border-box;
   background-clip: padding-box, border-box;
+}
+
+/* ─── Loreframe Blue light theme ─────────────────────────────────────────
+ * The legacy `ivory` id remains for stored-preference compatibility.
+ * Cool paper surfaces and blue actions mirror Loreframe Blue in daylight.
+ *
+ * The elevation ladder remains inverted relative to the dark themes.
+ */
+[data-theme="ivory"] {
+  /* Native form controls (selects, checkboxes, scrollbars the UA
+     draws) must render light — without this they stay dark because
+     the app's default themes never declare a scheme. */
+  color-scheme: light;
+
+  --color-bg-primary: #f1f5f9;
+  --color-bg-secondary: #f8fafc;
+  --color-bg-tertiary: #ffffff;
+  --color-bg-hover: #e2e8f0;
+  --color-bg-active: #cbd5e1;
+
+  --color-border: #cbd5e1;
+  --color-border-light: #94a3b8;
+
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+
+  --color-accent-blue: #1d4ed8;
+  --color-accent-blue-hover: #1e40af;
+  --color-accent-green: #15803d;
+  --color-accent-green-hover: #166534;
+
+  --color-accent-warm: #0369a1;
+  --color-accent-warm-hover: #075985;
+
+  /* Violet counterpoint for AI badges. */
+  --color-accent-cool-from: #7c3aed;
+  --color-accent-cool-to: #8b5cf6;
+
+  /* Functional indicators — HUES stay green/amber (so learned
+     meaning carries across themes) but both darken, because #22c55e
+     and especially #fbbf24 are near-invisible on paper. */
+  --color-indicator-success: #15803d;
+  --color-indicator-warning: #b45309;
+
+  /* Categorical chips — same hues as the dark themes, dropped to
+     their -600/-700 stops for legibility on paper. */
+  --color-chip-yellow: #a16207;
+  --color-chip-green: #15803d;
+  --color-chip-cyan: #0e7490;
+  --color-chip-blue: #1d4ed8;
+  --color-chip-purple: #7e22ce;
+  --color-chip-pink: #be185d;
+  --color-chip-teal: #0f766e;
+  --color-chip-orange: #c2410c;
+  --color-chip-gray: #4b5563;
+  --color-chip-red: #b91c1c;
+
+  /* Media canvas stays dark so video letterboxing does not glare. */
+  --color-media-canvas: #111827;
+
+  --color-gradient-cta-from: #1d4ed8;
+  --color-gradient-cta-to: #0369a1;
+  --color-gradient-toggle-from: #1d4ed8;
+  --color-gradient-toggle-to: #0369a1;
+  --color-gradient-active-frame-from: #1d4ed8;
+  --color-gradient-active-frame-to: #0284c7;
+
+  /* Light themes signal elevation with soft drop shadows, not glow */
+  --shadow-accent-glow: 0 2px 12px rgba(37, 99, 235, 0.22);
+  --shadow-active-ring: 0 0 0 2px rgba(29, 78, 216, 0.3);
+}
+
+/* ─── Daylight theme ─────────────────────────────────────────────────────
+ * Light theme — Classic in daylight. Cool gray-white paper, blue
+ * accents, flat green CTA. The conventional "light mode" for users
+ * coming from bright rooms. Same inverted elevation ladder as Ivory.
+ */
+[data-theme="daylight"] {
+  color-scheme: light;
+
+  --color-bg-primary: #f4f5f7;
+  --color-bg-secondary: #fafbfc;
+  --color-bg-tertiary: #ffffff;
+  --color-bg-hover: #e9ebef;
+  --color-bg-active: #dde0e6;
+
+  --color-border: #d5d9e0;
+  --color-border-light: #c3c8d2;
+
+  --color-text-primary: #1d2129;
+  --color-text-secondary: #57606e;
+  --color-text-muted: #68707f;
+
+  /* blue-600 action accent — dark enough for the app-wide hardcoded
+     white button text; hover darkens (light-theme convention). */
+  --color-accent-blue: #2563eb;
+  --color-accent-blue-hover: #1d4ed8;
+  /* green-700 success/progress — white text passes AA on it. */
+  --color-accent-green: #15803d;
+  --color-accent-green-hover: #166534;
+
+  --color-accent-warm: #b45309;
+  --color-accent-warm-hover: #92400e;
+
+  --color-accent-cool-from: #4f46e5;
+  --color-accent-cool-to: #4338ca;
+
+  --color-indicator-success: #15803d;
+  --color-indicator-warning: #b45309;
+
+  /* Same light chip stops as Ivory — they're hue-per-category and
+     theme-agnostic on paper. */
+  --color-chip-yellow: #a16207;
+  --color-chip-green: #15803d;
+  --color-chip-cyan: #0e7490;
+  --color-chip-blue: #1d4ed8;
+  --color-chip-purple: #7e22ce;
+  --color-chip-pink: #be185d;
+  --color-chip-teal: #0f766e;
+  --color-chip-orange: #c2410c;
+  --color-chip-gray: #4b5563;
+  --color-chip-red: #b91c1c;
+
+  /* Flat green CTA (Classic's identity) and flat blue toggles/frames */
+  --color-gradient-cta-from: #15803d;
+  --color-gradient-cta-to: #15803d;
+  --color-gradient-toggle-from: #2563eb;
+  --color-gradient-toggle-to: #2563eb;
+  --color-gradient-active-frame-from: #2563eb;
+  --color-gradient-active-frame-to: #2563eb;
+
+  /* Media letterbox stays dark — cool near-black to match the palette */
+  --color-media-canvas: #14161a;
+
+  --shadow-accent-glow: 0 2px 12px rgba(37, 99, 235, 0.22);
+  --shadow-active-ring: 0 0 0 2px rgba(37, 99, 235, 0.35);
+}
+
+/* ─── Pearl theme ────────────────────────────────────────────────────────
+ * Light theme — Onyx in daylight. Monochrome: white and grey paper,
+ * charcoal text and accents. Like Onyx, the only hue comes from the
+ * functional indicator and chip tokens.
+ */
+[data-theme="pearl"] {
+  color-scheme: light;
+
+  --color-bg-primary: #f2f2f2;
+  --color-bg-secondary: #f9f9f9;
+  --color-bg-tertiary: #ffffff;
+  --color-bg-hover: #e8e8e8;
+  --color-bg-active: #dedede;
+
+  --color-border: #d4d4d4;
+  --color-border-light: #bfbfbf;
+
+  --color-text-primary: #171717;
+  --color-text-secondary: #525252;
+  --color-text-muted: #646464;
+
+  /* Charcoal accents — same dual-duty calibration as Onyx (button
+     background under white text AND text/border on light surfaces),
+     inverted: #525252 carries white text at 7.4:1 and reads clearly
+     as text on the paper surfaces. Hover darkens. */
+  --color-accent-blue: #525252;
+  --color-accent-blue-hover: #404040;
+  --color-accent-green: #525252;
+  --color-accent-green-hover: #404040;
+
+  --color-accent-warm: #737373;
+  --color-accent-warm-hover: #525252;
+
+  /* Slightly blue-grey for AI badges — nearly neutral, mirrors Onyx */
+  --color-accent-cool-from: #64748b;
+  --color-accent-cool-to: #475569;
+
+  --color-indicator-success: #15803d;
+  --color-indicator-warning: #b45309;
+
+  --color-chip-yellow: #a16207;
+  --color-chip-green: #15803d;
+  --color-chip-cyan: #0e7490;
+  --color-chip-blue: #1d4ed8;
+  --color-chip-purple: #7e22ce;
+  --color-chip-pink: #be185d;
+  --color-chip-teal: #0f766e;
+  --color-chip-orange: #c2410c;
+  --color-chip-gray: #4b5563;
+  --color-chip-red: #b91c1c;
+
+  /* Dark charcoal gradient for the CTA — Onyx's light-grey gradient
+     inverted; white label reads at 10:1+. */
+  --color-gradient-cta-from: #404040;
+  --color-gradient-cta-to: #171717;
+  --color-gradient-toggle-from: #404040;
+  --color-gradient-toggle-to: #6b6b6b;
+  --color-gradient-active-frame-from: #737373;
+  --color-gradient-active-frame-to: #737373;
+
+  /* Neutral near-black media letterbox */
+  --color-media-canvas: #191919;
+
+  --shadow-accent-glow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  --shadow-active-ring: 0 0 0 2px rgba(82, 82, 82, 0.4);
 }
 
 /* ─── Onyx theme ─────────────────────────────────────────────────────────
@@ -312,11 +513,14 @@
      uses hardcoded white text + shadow-accent-glow halo, so the
      background needs to be dark enough that white text reads
      cleanly without competing with the glow. Range chosen to
-     roughly match Golden Hour's #dc2626→#f97316 luminance band
+     roughly match Loreframe Blue's action-gradient luminance band
      (~0.08→0.27) so both themes feel similarly "lit" against
      their dark chrome without blowing out the foreground text. */
   --color-gradient-toggle-from: #4d4d4d;
   --color-gradient-toggle-to: #8c8c8c;
+
+  /* Media canvas follows this theme's bg-tertiary (unchanged look) */
+  --color-media-canvas: #1a1a1a;
 
   /* Active-frame gradient — flat mid-grey ring around the
      selected asset. Both stops the same so it reads as a clean
@@ -324,8 +528,8 @@
   --color-gradient-active-frame-from: #888888;
   --color-gradient-active-frame-to: #888888;
 
-  /* Glow shadows — subtle white wash, much dimmer than Golden
-     Hour's warm bloom. Maintains the active-asset focus signal
+  /* Glow shadows — subtle white wash, much dimmer than Loreframe
+     Blue's cool bloom. Maintains the active-asset focus signal
      without breaking the minimalist feel. */
   --shadow-accent-glow: 0 0 12px rgba(255, 255, 255, 0.18);
   --shadow-active-ring: 0 0 4px rgba(255, 255, 255, 0.12);
@@ -357,7 +561,7 @@
    * Default theme: linear gradient with both stops the same colour
    * (= flat solid bezel, preserves prior look).
    *
-   * Golden Hour: see [data-theme="golden-hour"] block below — uses a
+   * Loreframe Blue: see [data-theme="golden-hour"] block above — uses a
    * conic-gradient for "spotlights along the edge" effect.
    *
    * Use with `border-2 border-transparent` and a wrapping element
@@ -428,6 +632,14 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-border-light); }
+
+/* Higher-contrast scrollbar for surfaces where the thumb must be
+   findable, not just decorative — e.g. the Director composer once it
+   hits its max height (issue #11: "the scroll bar has such low
+   contrast it's invisible"). text-muted is already WCAG-raised in
+   every theme (issue #7), so this stays theme-aware. */
+.scrollbar-visible::-webkit-scrollbar-thumb { background: var(--color-text-muted); }
+.scrollbar-visible { scrollbar-color: var(--color-text-muted) transparent; scrollbar-width: thin; }
 
 input[type="range"] {
   -webkit-appearance: none;

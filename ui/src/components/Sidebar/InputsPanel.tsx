@@ -1,7 +1,12 @@
 import { useState, useMemo, useEffect } from 'react'
-import { X, Upload, Plus, Music, Film, Mic } from 'lucide-react'
+import { X, Upload, Plus, Music, Film, Mic, Layers, Loader2, AlertTriangle } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
+
+// A reference clip has to be long enough to carry a subject or a motion, and short enough that its
+// conditioning rows don't dwarf the shot being generated. Mirrors the backend validator.
+const REFERENCE_CLIP_MIN_SECONDS = 2
+const REFERENCE_CLIP_MAX_SECONDS = 15
 
 // Unified, media-driven "Inputs" panel for Studio Frames mode (image_mode 0).
 //
@@ -32,6 +37,11 @@ interface InjectedFrame {
   // back to a native start/end frame can reuse it (restored frames have null
   // and fall back to their uploaded path).
   file: File | null
+}
+
+interface ImageSize {
+  width: number
+  height: number
 }
 
 const OFFSET_PRESETS = [
@@ -92,6 +102,7 @@ export function InputsPanel() {
   const audioGuideFilename = useStore(s => s.audioGuideFilename)
   const setAudioGuideFilename = useStore(s => s.setAudioGuideFilename)
   const setDurationSeconds = useStore(s => s.setDurationSeconds)
+  const setGuideVideoFps = useStore(s => s.setGuideVideoFps)
   const voiceRefEnabled = useStore(s => !!s.servicesConfig?.voice_reference_enabled)
   const directorVoiceRef = useStore(s => s.directorVoiceRef)
   const setDirectorVoiceRef = useStore(s => s.setDirectorVoiceRef)
@@ -111,6 +122,10 @@ export function InputsPanel() {
   const setContinueVideo = useStore(s => s.setContinueVideo)
   const clearContinueVideo = useStore(s => s.clearContinueVideo)
   const isExtend = (params.image_mode as number) === 3
+  const isH3 = modelOptions?.architecture === 'minimax_h3'
+  const h3RefVideos = params.h3_ref_videos || []
+  const h3RefAudios = params.h3_ref_audios || []
+  const h3ReferenceCount = imageRefs.length + h3RefVideos.length + h3RefAudios.length
 
   const [selected, setSelected] = useState<string | null>(null)
   const [injectedFrames, setInjectedFrames] = useState<InjectedFrame[]>([])
@@ -119,6 +134,9 @@ export function InputsPanel() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [frameDragKey, setFrameDragKey] = useState<string | null>(null)
   const [frameDragOverKey, setFrameDragOverKey] = useState<string | null>(null)
+  const [compositeBusy, setCompositeBusy] = useState(false)
+  const [compositeNotice, setCompositeNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const [startImageSize, setStartImageSize] = useState<ImageSize | null>(null)
 
   // ── Inject capability + window layout ──────────────────────────────
   const supportsInject = useMemo(() => {
@@ -154,10 +172,27 @@ export function InputsPanel() {
   const audioPT = (params.audio_prompt_type as string) || ''
   const audioBase = audioPT.replace(/[NV]/g, '')
   const audioFlags = audioPT.replace(/[^NV]/g, '')
-  const hasSoundtrack = !audioOnly && audioBase.includes('A')
-  const hasControlVid = audioBase === 'K'
+  // Media presence and audio behavior are independent. A control video can
+  // keep driving motion while LTX-2 generates its soundtrack from text,
+  // derives fresh audio from the video, or uses an uploaded soundtrack.
+  const hasSoundtrack = supportsSoundtrack && !!params.audio_guide
+  const hasControlVid = supportsControlVid && !!params.video_guide
   const soundtrackName = audioGuideFilename || (params.audio_guide ? basename(params.audio_guide as string) : null)
   const controlVidName = videoGuideFilename || (params.video_guide ? basename(params.video_guide as string) : null)
+
+  // ── Guide video (motion source) for guide_custom_choices models ────
+  // Models like SCAIL-2 take a Control Video as the motion/scene guide
+  // (video_prompt_type contains 'V') with no audio coupling. Models with
+  // guide_preprocessing keep their upload in Advanced Settings, and
+  // K-audio models keep the soundtrack-coupled tile above — this tile
+  // only fills the gap between them.
+  const guideCfg = modelOptions?.guide_custom_choices as { choices?: [string, string][]; default?: string } | undefined
+  const guideDefault = guideCfg?.default || ''
+  const guideValues = guideCfg?.choices?.map(([, value]) => value) || []
+  const rawControlProcess = guideValues.find(value => value === 'VG' || value === 'V') || ''
+  const guideProcess = ((params.video_prompt_type as string) || guideDefault).replace(/T$/, '')
+  const supportsGuideVid = !!guideCfg && !modelOptions?.guide_preprocessing && !supportsControlVid && guideProcess.includes('V')
+  const hasGuideVid = supportsGuideVid && !!params.video_guide
 
   // ── Reference images (image_ref_choices) ───────────────────────────
   const refCfg = modelOptions?.image_ref_choices as { choices?: [string, string][] } | undefined
@@ -165,6 +200,12 @@ export function InputsPanel() {
   const hasLandscapeMode = refCfg?.choices?.some(([, v]) => v.includes('K')) ?? false
   const hasPeopleMode = refCfg?.choices?.some(([, v]) => v === 'I') ?? false
   const refBgLabel = modelOptions?.background_removal_label
+  // max_image_refs includes the Edit source image, when present.
+  const configuredMaxRefs = modelOptions?.max_image_refs ?? null
+  const maxRefs = configuredMaxRefs == null
+    ? null
+    : Math.max(0, configuredMaxRefs - ((params.image_mode as number) === 2 ? 1 : 0))
+  const canAddRef = maxRefs == null || imageRefs.length < maxRefs
   const defaultRefType = hasLandscapeMode ? 'KI' : hasPeopleMode ? 'I' : ''
 
   // Auto-set the ref type when references are added/removed (mirrors ImageRefSection).
@@ -174,13 +215,86 @@ export function InputsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageRefs.length])
 
+  // Some models take a reference *video* alongside reference images (MiniMax H3 Ref2VA borrows a subject or
+  // a motion from a clip). That input otherwise lives behind a dropdown in Advanced Settings, which is the
+  // last place anyone looks, so the Reference tile accepts a clip too and turns the option on itself.
+  const refVideoValue = guideValues.find(value => value === 'V')
+  const supportsRefVideo = !!guideCfg && !modelOptions?.guide_preprocessing && !supportsControlVid && !!refVideoValue
+
+  // Read a clip's duration without decoding it: metadata is enough, and it keeps an over-long file from
+  // being uploaded at all.
+  const probeClipDuration = (file: File) =>
+    new Promise<number>(resolve => {
+      const url = URL.createObjectURL(file)
+      const probe = document.createElement('video')
+      probe.preload = 'metadata'
+      const finish = (seconds: number) => {
+        URL.revokeObjectURL(url)
+        resolve(seconds)
+      }
+      probe.onloadedmetadata = () => finish(Number.isFinite(probe.duration) ? probe.duration : 0)
+      probe.onerror = () => finish(0)
+      probe.src = url
+    })
+
+  const attachReferenceVideo = async (file: File) => {
+    if (!file.type.startsWith('video/')) return
+    // Rejected here rather than at generation time: the backend validator would catch it too, but only
+    // after the user had queued a job and waited for the model to load.
+    const duration = await probeClipDuration(file)
+    if (duration > 0 && (duration < REFERENCE_CLIP_MIN_SECONDS || duration > REFERENCE_CLIP_MAX_SECONDS)) {
+      window.alert(
+        `A reference video must be between ${REFERENCE_CLIP_MIN_SECONDS} and ${REFERENCE_CLIP_MAX_SECONDS} ` +
+        `seconds long.\n\n"${file.name}" is ${duration.toFixed(1)}s.\n\nPick a different clip, or trim this one.`
+      )
+      pickReferences()
+      return
+    }
+    try {
+      const result = await api.uploadImage(file)
+      setParam('video_guide', result.path)
+      const current = (params.video_prompt_type as string) || ''
+      if (!current.includes('V')) setParam('video_prompt_type', current + refVideoValue)
+    } catch (e) {
+      console.error('Reference video upload failed:', e)
+    }
+  }
+
+  // Ref2VA is only meaningful while it has reference media. Returning to an
+  // empty reference strip must also return H3 to its normal FL2VA/T2V mode so
+  // the saved selector cannot poison the next generation.
+  useEffect(() => {
+    if (isH3 && h3ReferenceCount === 0 && params.h3_reference_mode === 'references') {
+      setParam('h3_reference_mode', 'first_frame')
+    }
+  }, [h3ReferenceCount, isH3, params.h3_reference_mode, setParam])
+
   const pickReferences = () => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.png,.jpg,.jpeg,.webp,.bmp'
+    input.accept = '.png,.jpg,.jpeg,.webp,.bmp' + (supportsRefVideo ? ',.mp4,.mov,.webm,.mkv,.avi,.m4v' : '')
     input.multiple = true
-    input.onchange = () => Array.from(input.files || []).forEach(addImageRef)
+    input.onchange = () => {
+      const files = Array.from(input.files || [])
+      // A clip is not a reference image: route it to the reference-video input instead of the ref list,
+      // where it would be uploaded as a still and then ignored at generation time.
+      const clips = supportsRefVideo ? files.filter(f => f.type.startsWith('video/')) : []
+      const stills = files.filter(f => !clips.includes(f))
+      if (isH3 && files.length > 0) setParam('h3_reference_mode', 'references')
+      if (clips.length > 0) void attachReferenceVideo(clips[0])
+      const modelRoom = maxRefs == null ? stills.length : Math.max(0, maxRefs - imageRefs.length)
+      const available = isH3
+        ? Math.max(0, Math.min(modelRoom, 9 - imageRefs.length, 12 - h3ReferenceCount))
+        : modelRoom
+      stills.slice(0, available).forEach(addImageRef)
+    }
     input.click()
+  }
+
+  const dropOnReferenceTile = (file: File) => {
+    if (isH3) setParam('h3_reference_mode', 'references')
+    if (supportsRefVideo && file.type.startsWith('video/')) void attachReferenceVideo(file)
+    else if (!isH3 || h3ReferenceCount < 12) addImageRef(file)
   }
 
   // Extend mode: the source video to continue from.
@@ -214,7 +328,7 @@ export function InputsPanel() {
           win = Math.max(0, parseInt(m[1], 10) - 1)
           offset = snapToOffsetPreset(Math.min(100, parseInt(m[2], 10)) / 100)
         }
-        return { path: refPath, filename, position: pos, previewUrl: `/api/v1/uploads/${filename}`, window: win, offset, file: null }
+        return { path: refPath, filename, position: pos, previewUrl: api.getStoredAssetUrl(refPath), window: win, offset, file: null }
       })
       const same = restored.length === injectedFrames.length &&
         restored.every((r, i) => r.path === injectedFrames[i]?.path && r.position === injectedFrames[i]?.position)
@@ -237,6 +351,85 @@ export function InputsPanel() {
   }
   const pickImage = (onFile: (f: File) => void) => pickFile('image/*', onFile)
 
+  const createCompositeStartImage = async () => {
+    const storedStart = Array.isArray(params.image_start)
+      ? params.image_start.find(Boolean) || ''
+      : String(params.image_start || '')
+    if ((!startImage && !storedStart) || imageRefs.length === 0) return
+    setCompositeBusy(true)
+    setCompositeNotice(null)
+    try {
+      const maestro = useStore.getState()
+      const imageModel = maestro.selectedModelPerMode.image || 'flux2_klein_9b'
+      const model = maestro.models.find(item => item.model_type === imageModel)
+      if (model && !model.supports_ref_images) {
+        throw new Error(`The selected image model “${imageModel}” does not support reference images. Choose a reference-capable image model first.`)
+      }
+
+      const startPath = startImage
+        ? (await api.uploadImage(startImage)).path
+        : storedStart
+      const referencePaths: string[] = []
+      for (const reference of imageRefs) {
+        referencePaths.push((await api.uploadImage(reference)).path)
+      }
+      const imageParams = maestro.savedParamsPerMode.image || {}
+      const imageLoras = maestro.savedLoraPerMode.image
+      const action = String(params.prompt || '').trim()
+      const compositePrompt = [
+        'Create one production-ready composite still for use as the exact first frame of a video.',
+        'Treat Picture 1 as the authoritative base scene: preserve its environment, camera position, framing, perspective and lighting.',
+        'Place the people or objects from Pictures 2 onward naturally inside that scene, preserving their recognizable identity, face, body proportions, wardrobe and visual medium.',
+        action ? `Stage this requested moment as a static opening frame: ${action}` : 'Stage the referenced subjects naturally in the base scene.',
+        'Return a single coherent image, not a collage, split screen, contact sheet or before-and-after comparison. No captions, labels or UI.',
+      ].join(' ')
+      const submitted = await api.submitGeneration({
+        ...imageParams,
+        model_type: imageModel,
+        prompt: compositePrompt,
+        image_refs: [startPath, ...referencePaths],
+        image_mode: 1,
+        generation_mode: 'image',
+        video_prompt_type: 'KI',
+        remove_background_images_ref: 0,
+        repeat_generation: 1,
+        workspace: maestro.activeWorkspace,
+        activated_loras: imageLoras?.activated_loras || [],
+        loras_multipliers: imageLoras?.loras_multipliers || '',
+      })
+      void maestro.reconnectJobs()
+
+      let outputPath = ''
+      for (let attempt = 0; attempt < 400; attempt += 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 1500))
+        const status = await api.fetchJobStatus(submitted.job_id)
+        if (status.status === 'failed' || status.status === 'cancelled') {
+          throw new Error(status.error || status.message || 'Composite image generation failed')
+        }
+        if (status.status === 'completed') {
+          outputPath = status.output_files.find(path => /\.(png|jpe?g|webp)$/i.test(path)) || ''
+          break
+        }
+      }
+      if (!outputPath) throw new Error('Composite image generation timed out or returned no image')
+      const response = await fetch(api.getFileUrl(outputPath))
+      if (!response.ok) throw new Error('The composite image could not be loaded')
+      const blob = await response.blob()
+      const filename = basename(outputPath)
+      setStartImage(new File([blob], filename, { type: blob.type || 'image/png' }))
+      setParam('h3_reference_mode', 'first_frame')
+      setCompositeNotice({
+        kind: 'ok',
+        text: 'Composite ready. It replaced the Start frame; MiniMax H3 will now preserve it with FL2VA.',
+      })
+      void maestro.loadOutputs()
+    } catch (error) {
+      setCompositeNotice({ kind: 'error', text: (error as Error).message })
+    } finally {
+      setCompositeBusy(false)
+    }
+  }
+
   // ── Inject handlers ────────────────────────────────────────────────
   const syncFrameParams = (frames: InjectedFrame[]) => {
     if (frames.length === 0) {
@@ -246,8 +439,8 @@ export function InputsPanel() {
       if (vpt.includes('KFI')) setParam('video_prompt_type', vpt.replace('KFI', ''))
       return
     }
-    setParam('image_refs', frames.map(f => f.path) as unknown as never)
-    setParam('frames_positions', frames.map(f => f.position).join(' ') as unknown as never)
+    setParam('image_refs', frames.map(f => f.path))
+    setParam('frames_positions', frames.map(f => f.position).join(' '))
     const vpt = (params.video_prompt_type as string) || ''
     if (!vpt.includes('KFI')) setParam('video_prompt_type', 'KFI')
   }
@@ -261,7 +454,7 @@ export function InputsPanel() {
       const newFrame: InjectedFrame = {
         path: p, filename: file?.name || basename(p), file: file ?? null,
         position: calcPositionToken(windowIdx, offset),
-        previewUrl: previewUrl || `/api/v1/uploads/${basename(p)}`,
+        previewUrl: previewUrl || api.getStoredAssetUrl(p),
         window: windowIdx, offset,
       }
       const updated = [...injectedFrames, newFrame]
@@ -292,6 +485,59 @@ export function InputsPanel() {
   const hasStart = !!startImage || (!isExtend && !!params.image_start)
   const hasEnd = !!endImage || (!isExtend && !!params.image_end)
 
+  useEffect(() => {
+    if (!isH3 || !hasStart || isExtend) {
+      setStartImageSize(null)
+      return
+    }
+    const stored = Array.isArray(params.image_start)
+      ? params.image_start.find(Boolean) || ''
+      : String(params.image_start || '')
+    let objectUrl = ''
+    const source = startImage
+      ? (objectUrl = URL.createObjectURL(startImage))
+      : (stored ? api.getStoredAssetUrl(stored) : '')
+    if (!source) {
+      setStartImageSize(null)
+      return
+    }
+    let disposed = false
+    const probe = new Image()
+    probe.onload = () => {
+      if (!disposed) setStartImageSize({ width: probe.naturalWidth, height: probe.naturalHeight })
+    }
+    probe.onerror = () => {
+      if (!disposed) setStartImageSize(null)
+    }
+    probe.src = source
+    return () => {
+      disposed = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [hasStart, isExtend, isH3, params.image_start, startImage])
+
+  const startAspectWarning = useMemo(() => {
+    if (!isH3 || !hasStart || !startImageSize) return null
+    const match = String(params.resolution || '960x544').match(/(\d+)\s*[x×]\s*(\d+)/i)
+    if (!match) return null
+    const target = { width: Number(match[1]), height: Number(match[2]) }
+    if (!target.width || !target.height) return null
+    const sourceRatio = startImageSize.width / startImageSize.height
+    const targetRatio = target.width / target.height
+    if (Math.abs(sourceRatio - targetRatio) / targetRatio < 0.025) return null
+    const orientation = (size: ImageSize) => (
+      Math.abs(size.width / size.height - 1) < 0.025
+        ? 'cuadrada'
+        : size.width > size.height ? 'horizontal' : 'vertical'
+    )
+    return {
+      target,
+      sourceOrientation: orientation(startImageSize),
+      targetOrientation: orientation(target),
+      bars: sourceRatio < targetRatio ? 'laterales' : 'arriba y abajo',
+    }
+  }, [hasStart, isH3, params.resolution, startImageSize])
+
   const frameRoleFor = (window: number, offset: string): 'start' | 'end' | 'inject' => {
     if (isExtend) return 'inject'
     if (window <= 0 && offset === 'start') return 'start'
@@ -310,13 +556,13 @@ export function InputsPanel() {
     const out: FrameTile[] = []
     if (!isExtend) {
       const startPreview = startImage ? URL.createObjectURL(startImage)
-        : (params.image_start ? `/api/v1/uploads/${basename(params.image_start as string)}` : null)
+        : (params.image_start ? api.getStoredAssetUrl(Array.isArray(params.image_start) ? params.image_start.find(Boolean) || '' : params.image_start) : null)
       if (startPreview) out.push({ key: 'frame-start', kind: 'start', preview: startPreview, offset: 'start', window: 0, sortKey: 0 })
     }
     injectedFrames.forEach((f, i) => out.push({ key: `frame-inj-${i}`, kind: 'inject', injectIndex: i, preview: f.previewUrl, offset: f.offset, window: f.window, sortKey: frameKey(f.window, f.offset) }))
     if (!isExtend) {
       const endPreview = endImage ? URL.createObjectURL(endImage)
-        : (params.image_end ? `/api/v1/uploads/${basename(params.image_end as string)}` : null)
+        : (params.image_end ? api.getStoredAssetUrl(Array.isArray(params.image_end) ? params.image_end.find(Boolean) || '' : params.image_end) : null)
       if (endPreview) out.push({ key: 'frame-end', kind: 'end', preview: endPreview, offset: 'end', window: 0, sortKey: frameKey(0, 'end') })
     }
     out.sort((a, b) => a.sortKey - b.sortKey)
@@ -324,7 +570,16 @@ export function InputsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startImage, endImage, injectedFrames, params.image_start, params.image_end, isExtend, supportsEndFrame, lastWindow])
 
-  const canAddFrame = isExtend ? supportsInject : (!hasStart || (supportsEndFrame && !hasEnd) || supportsInject)
+  // Whether the model takes a start frame at all. Some take none: MiniMax H3 Ref2VA allows only "T",
+  // conditioning on reference material rather than on timeline positions, so offering a Frame tile invites
+  // the user to attach an image that is then silently dropped at generation time. A backend that sends no
+  // letters is read as "everything allowed", so this can only hide a tile already known to be unusable.
+  const allowedImagePrompts = modelOptions?.image_prompt_types_allowed ?? 'TSEVL'
+  const supportsStartFrame = allowedImagePrompts.includes('S')
+  const supportsAnyFrame = supportsStartFrame || supportsEndFrame || supportsInject
+  const canAddFrame = isExtend
+    ? supportsInject
+    : ((supportsStartFrame && !hasStart) || (supportsEndFrame && !hasEnd) || supportsInject)
 
   // "+ Frame": smart default — 1st image = start, 2nd = end (where supported),
   // the rest injected keyframes that walk forward through the windows: in a
@@ -442,7 +697,9 @@ export function InputsPanel() {
   const removeSoundtrack = () => {
     setParam('audio_guide', undefined)
     setAudioGuideFilename(null)
-    setParam('audio_prompt_type', audioFlags)  // back to text mode, keep N/V flags
+    if (audioBase.includes('A')) {
+      setParam('audio_prompt_type', audioFlags)
+    }
     if (selected === 'audio') setSelected(null)
   }
   const handleAddControlVid = async (file: File) => {
@@ -450,7 +707,14 @@ export function InputsPanel() {
       const result = await api.uploadImage(file)  // full video kept (generic upload)
       setParam('video_guide', result.path)
       setVideoGuideFilename(file.name)
-      setParam('audio_prompt_type', 'K')
+      // Preserve an explicit Pose/Depth/etc. process; otherwise make a
+      // dropped LTX control video immediately usable as raw control.
+      if (!((params.video_prompt_type as string) || '').includes('V') && rawControlProcess) {
+        setParam('video_prompt_type', rawControlProcess)
+      }
+      // Source audio remains the default, with alternatives exposed in the
+      // selected control tile instead of replacing the motion input.
+      setParam('audio_prompt_type', `K${audioFlags}`)
     } catch (e) {
       console.error('Control video upload failed:', e)
     }
@@ -458,8 +722,56 @@ export function InputsPanel() {
   const removeControlVid = () => {
     setParam('video_guide', undefined)
     setVideoGuideFilename(null)
-    setParam('audio_prompt_type', '')
+    if (audioBase === 'K' || audioBase === '2') {
+      setParam('audio_prompt_type', audioFlags)
+    }
     if (selected === 'ctrlvid') setSelected(null)
+  }
+  const addH3Reference = async (kind: 'video' | 'audio', file: File) => {
+    try {
+      if (h3ReferenceCount >= 12) return
+      setParam('h3_reference_mode', 'references')
+      const result = await api.uploadImage(file)
+      if (kind === 'video') {
+        if (h3RefVideos.length < 3) setParam('h3_ref_videos', [...h3RefVideos, result.path])
+      } else if (h3RefAudios.length < 3) {
+        setParam('h3_ref_audios', [...h3RefAudios, result.path])
+      }
+    } catch (e) {
+      console.error(`MiniMax H3 ${kind} reference upload failed:`, e)
+    }
+  }
+  const removeH3Reference = (kind: 'video' | 'audio', index: number) => {
+    const current = kind === 'video' ? h3RefVideos : h3RefAudios
+    const updated = current.filter((_, i) => i !== index)
+    setParam(kind === 'video' ? 'h3_ref_videos' : 'h3_ref_audios', updated.length ? updated : undefined)
+    if (selected === `h3-${kind}-${index}`) setSelected(null)
+  }
+
+  const handleAddGuideVid = async (file: File) => {
+    try {
+      const result = await api.uploadImage(file)
+      setParam('video_guide', result.path)
+      setVideoGuideFilename(file.name)
+      // Lock in the guide process letters: defaults are not hydrated into
+      // params client-side, so without this a user who never opens
+      // Advanced Settings would submit video_prompt_type '' and the model
+      // would not receive the control video at all.
+      if (!params.video_prompt_type && guideDefault) setParam('video_prompt_type', guideDefault)
+      // Real fps of the guide, probed server-side — startGeneration uses
+      // it for the seconds→frames conversion on force_fps="control" models.
+      setGuideVideoFps(result.fps && result.fps > 0 ? result.fps : null)
+      const dur = await getMediaDuration(file)
+      if (dur && dur > 0) setDurationSeconds(Math.round(dur * 10) / 10)
+    } catch (e) {
+      console.error('Guide video upload failed:', e)
+    }
+  }
+  const removeGuideVid = () => {
+    setParam('video_guide', undefined)
+    setVideoGuideFilename(null)
+    setGuideVideoFps(null)
+    if (selected === 'guidevid') setSelected(null)
   }
   const toggleAudioFlag = (flag: 'N' | 'V') => {
     const cur = (params.audio_prompt_type as string) || ''
@@ -490,7 +802,9 @@ export function InputsPanel() {
         {/* Unified "Frame" tiles — start / end / injected keyframes, one concept,
             sorted by timeline position and draggable to reposition. The per-tile
             position strip below routes each to its pipeline. */}
-        {frameTiles.map(tile => (
+        {/* Frames carried over from a model that took them are hidden on one that does not, rather than
+            shown as attached input the generation will drop. */}
+        {(supportsAnyFrame ? frameTiles : []).map(tile => (
           <div key={tile.key} draggable
             onDragStart={e => { setFrameDragKey(tile.key); e.dataTransfer.setData('frame-key', tile.key); e.dataTransfer.effectAllowed = 'move' }}
             onDragEnd={() => { setFrameDragKey(null); setFrameDragOverKey(null) }}
@@ -525,7 +839,7 @@ export function InputsPanel() {
           <Tile role="Soundtrack" filledIcon={<Music size={20} />} filledLabel={soundtrackName ?? undefined}
             imgSrc={null} selected={selected === 'audio'} onClear={removeSoundtrack}
             onSelect={() => setSelected(selected === 'audio' ? null : 'audio')} />
-        ) : supportsSoundtrack && !hasControlVid && (
+        ) : supportsSoundtrack && (
           <AddTile label="Soundtrack" icon={<Music size={18} />} onClick={() => pickFile('.wav,.mp3,.flac,.ogg,.m4a,.mp4,.mov,.mkv,.webm', handleAddSoundtrack)} onDropFile={handleAddSoundtrack} />
         )}
 
@@ -534,8 +848,17 @@ export function InputsPanel() {
           <Tile role="Control video" filledIcon={<Film size={20} />} filledLabel={controlVidName ?? undefined}
             imgSrc={null} selected={selected === 'ctrlvid'} onClear={removeControlVid}
             onSelect={() => setSelected(selected === 'ctrlvid' ? null : 'ctrlvid')} />
-        ) : supportsControlVid && !hasSoundtrack && (
+        ) : supportsControlVid && (
           <AddTile label="Control video" icon={<Film size={18} />} onClick={() => pickFile('.mp4,.webm,.mkv,.mov', handleAddControlVid)} onDropFile={handleAddControlVid} dropAccept="video" />
+        )}
+
+        {/* Guide video (motion source) — guide_custom_choices models (SCAIL-2 etc.) */}
+        {hasGuideVid ? (
+          <Tile role="Control video" filledIcon={<Film size={20} />} filledLabel={controlVidName ?? undefined}
+            imgSrc={null} selected={selected === 'guidevid'} onClear={removeGuideVid}
+            onSelect={() => setSelected(selected === 'guidevid' ? null : 'guidevid')} />
+        ) : supportsGuideVid && (
+          <AddTile label="Control video" icon={<Film size={18} />} onClick={() => pickFile('.mp4,.webm,.mkv,.mov', handleAddGuideVid)} onDropFile={handleAddGuideVid} dropAccept="video" />
         )}
 
         {/* Voice reference (ID-LoRA) — keeps the speaker's voice consistent. */}
@@ -572,8 +895,98 @@ export function InputsPanel() {
             </div>
           </div>
         ))}
-        {supportsRefs && <AddTile label="Reference" icon={<Plus size={18} />} onClick={pickReferences} onDropFile={addImageRef} dropAccept="image" />}
+        {supportsRefs && canAddRef && (!isH3 || (imageRefs.length < 9 && h3ReferenceCount < 12)) && (
+          <AddTile
+            label={supportsRefVideo ? 'Reference\n(Image and/or Video)' : 'Reference'}
+            icon={<Plus size={18} />}
+            onClick={pickReferences}
+            onDropFile={dropOnReferenceTile}
+            dropAccept={supportsRefVideo ? ['image', 'video'] : 'image'}
+          />
+        )}
+
+        {/* MiniMax H3 Ref2VA accepts up to three reference videos (with their
+            embedded soundtrack) and three standalone audio references. */}
+        {isH3 && h3RefVideos.map((path, i) => (
+          <Tile key={`h3-video-${i}`} role={`Video ref ${i + 1}`} filledIcon={<Film size={20} />}
+            filledLabel={basename(path)} imgSrc={null} selected={selected === `h3-video-${i}`}
+            onClear={() => removeH3Reference('video', i)}
+            onSelect={() => setSelected(selected === `h3-video-${i}` ? null : `h3-video-${i}`)} />
+        ))}
+        {isH3 && h3RefVideos.length < 3 && h3ReferenceCount < 12 && (
+          <AddTile label="Video ref" icon={<Film size={18} />}
+            onClick={() => pickFile('.mp4,.mov,.mkv,.webm,.avi,.m4v', f => void addH3Reference('video', f))}
+            onDropFile={f => void addH3Reference('video', f)} dropAccept="video" />
+        )}
+        {isH3 && h3RefAudios.map((path, i) => (
+          <Tile key={`h3-audio-${i}`} role={`Audio ref ${i + 1}`} filledIcon={<Music size={20} />}
+            filledLabel={basename(path)} imgSrc={null} selected={selected === `h3-audio-${i}`}
+            onClear={() => removeH3Reference('audio', i)}
+            onSelect={() => setSelected(selected === `h3-audio-${i}` ? null : `h3-audio-${i}`)} />
+        ))}
+        {isH3 && h3RefAudios.length < 3 && h3ReferenceCount < 12 && (
+          <AddTile label="Audio ref" icon={<Music size={18} />}
+            onClick={() => pickFile('.wav,.mp3,.flac,.ogg,.m4a,.aac', f => void addH3Reference('audio', f))}
+            onDropFile={f => void addH3Reference('audio', f)} dropAccept="audio" />
+        )}
       </div>
+
+      {startAspectWarning && (
+        <div className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2.5">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-300" />
+            <div className="min-w-0 space-y-2">
+              <p className="text-[10px] leading-relaxed text-amber-100/90">
+                La Start image es {startImageSize?.width}×{startImageSize?.height} ({startAspectWarning.sourceOrientation}), pero MiniMax H3 está configurado a {startAspectWarning.target.width}×{startAspectWarning.target.height} ({startAspectWarning.targetOrientation}).{' '}
+                {params.image_fit_mode === 'crop'
+                  ? 'Se recortarán los bordes para llenar el encuadre; la imagen no se deformará.'
+                  : `Se conservará completa, centrada y sin deformar, añadiendo franjas negras ${startAspectWarning.bars}.`}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setParam('image_fit_mode', 'contain')}
+                  className={`rounded-md border px-2 py-1 text-[9px] transition-colors ${params.image_fit_mode !== 'crop' ? 'border-amber-300/45 bg-amber-400/20 text-amber-50' : 'border-border bg-bg-secondary text-text-muted hover:text-text-primary'}`}
+                >
+                  Ajustar con franjas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setParam('image_fit_mode', 'crop')}
+                  className={`rounded-md border px-2 py-1 text-[9px] transition-colors ${params.image_fit_mode === 'crop' ? 'border-amber-300/45 bg-amber-400/20 text-amber-50' : 'border-border bg-bg-secondary text-text-muted hover:text-text-primary'}`}
+                >
+                  Recortar para llenar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isH3 && hasStart && imageRefs.length > 0 && (
+        <div className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-2.5 space-y-2">
+          <div className="flex items-start gap-2">
+            <Layers size={14} className="mt-0.5 shrink-0 text-amber-300" />
+            <p className="text-[10px] leading-relaxed text-amber-100/90">
+              MiniMax H3 no puede conservar el Start frame exacto y usar referencias de identidad separadas en la misma generación. Crea primero una imagen compuesta: Maestro colocará las referencias dentro de la escena inicial y usará el resultado como primer fotograma exacto con FL2VA.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={compositeBusy}
+            onClick={() => void createCompositeStartImage()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/30 bg-amber-500/15 px-2.5 py-1.5 text-[10px] font-medium text-amber-100 hover:bg-amber-500/25 disabled:opacity-50"
+          >
+            {compositeBusy ? <Loader2 size={12} className="animate-spin" /> : <Layers size={12} />}
+            {compositeBusy ? 'Creando imagen compuesta…' : 'Crear imagen compuesta'}
+          </button>
+          {compositeNotice && (
+            <p className={`text-[9px] ${compositeNotice.kind === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>
+              {compositeNotice.text}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Option strip — Frame: position picker (routes start / end / inject
           invisibly) + role-specific strength. */}
@@ -627,10 +1040,16 @@ export function InputsPanel() {
       {/* Option strip — extend source: source video strength */}
       {selected === 'extend' && continueVideo && (
         <Strip>
-          <Row label="Source video strength" value={inputVideoStrength.toFixed(2)} />
-          <input type="range" min={0} max={1} step={0.05} value={inputVideoStrength}
-            onChange={e => setParam('input_video_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
-          <p className="text-[9px] text-text-muted">1.0 = seamless continuation; lower gives more creative freedom. New content is appended after the source.</p>
+          {isH3 ? (
+            <p className="text-[9px] text-text-muted/70">MiniMax H3 captures the source video's final frame and continues from it with FL2VA. The full video is not sent as a slower, loose Ref2VA reference.</p>
+          ) : (
+            <>
+              <Row label="Source video strength" value={inputVideoStrength.toFixed(2)} />
+              <input type="range" min={0} max={1} step={0.05} value={inputVideoStrength}
+                onChange={e => setParam('input_video_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
+              <p className="text-[9px] text-text-muted/60">1.0 = seamless continuation; lower gives more creative freedom. New content is appended after the source.</p>
+            </>
+          )}
         </Strip>
       )}
 
@@ -651,6 +1070,40 @@ export function InputsPanel() {
         </Strip>
       )}
 
+      {/* Option strip — control-video audio stays independent from motion. */}
+      {selected === 'ctrlvid' && hasControlVid && (
+        <Strip>
+          <label className="text-[10px] text-text-muted uppercase tracking-wider">
+            Audio behavior
+          </label>
+          <select
+            value={
+              audioBase === 'K' || audioBase === '2'
+                ? audioBase
+                : audioBase.includes('A') && hasSoundtrack
+                  ? 'A'
+                  : ''
+            }
+            onChange={event => {
+              setParam('audio_prompt_type', `${event.target.value}${audioFlags}`)
+            }}
+            className="w-full bg-bg-secondary border border-border rounded-lg px-2 py-1.5 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
+          >
+            <option value="K">Use control video's audio</option>
+            <option value="">Generate soundtrack from text prompt</option>
+            {audioVals.includes('2') && (
+              <option value="2">Generate new audio from control video</option>
+            )}
+            {hasSoundtrack && soundtrackVal && (
+              <option value="A">Use uploaded soundtrack</option>
+            )}
+          </select>
+          <p className="text-[9px] text-text-muted">
+            The control video remains attached as the motion guide in every mode.
+          </p>
+        </Strip>
+      )}
+
       {/* Option strip — voice reference: identity guidance scale */}
       {selected === 'voiceref' && directorVoiceRef && (
         <Strip>
@@ -664,6 +1117,17 @@ export function InputsPanel() {
       {/* Option strip — references: focus mode + background removal */}
       {selected?.startsWith('ref-') && imageRefs.length > 0 && (
         <Strip>
+          {isH3 && (
+            <>
+              <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
+                <button onClick={() => setParam('h3_ref_image_size', 'match')}
+                  className={`flex-1 text-[10px] py-1 rounded-md transition-all ${(params.h3_ref_image_size || 'match') === 'match' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>Match canvas</button>
+                <button onClick={() => setParam('h3_ref_image_size', 'max')}
+                  className={`flex-1 text-[10px] py-1 rounded-md transition-all ${params.h3_ref_image_size === 'max' ? 'bg-bg-active text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}>Max identity</button>
+              </div>
+              <p className="text-[9px] text-text-muted/60">Use &lt;Picture 1&gt;, &lt;Picture 2&gt;… in the prompt. Max identity uses more VRAM and is slower.</p>
+            </>
+          )}
           {hasLandscapeMode && hasPeopleMode && (
             <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
               <button onClick={() => setImageRefType('KI')}
@@ -683,6 +1147,13 @@ export function InputsPanel() {
           )}
         </Strip>
       )}
+
+      {isH3 && selected?.startsWith('h3-video-') && (
+        <Strip><p className="text-[9px] text-text-muted/70">Use &lt;Video 1&gt;, &lt;Video 2&gt;… in the prompt. The embedded soundtrack is paired automatically as &lt;Audio n&gt;. Each clip must be 2–15 seconds.</p></Strip>
+      )}
+      {isH3 && selected?.startsWith('h3-audio-') && (
+        <Strip><p className="text-[9px] text-text-muted/70">Use &lt;Audio 1&gt;, &lt;Audio 2&gt;… in the prompt. Audio-only Ref2VA is not supported: also add an image or video reference.</p></Strip>
+      )}
     </div>
   )
 }
@@ -701,13 +1172,16 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function AddTile({ label, icon, onClick, onDropFile, dropAccept }: {
   label: string; icon?: React.ReactNode; onClick: () => void
-  onDropFile?: (f: File) => void; dropAccept?: 'image' | 'audio' | 'video'
+  // A tile can take more than one kind: the Reference tile accepts stills and, on models that support one,
+  // a reference clip, and decides which input the file belongs to in its drop handler.
+  onDropFile?: (f: File) => void; dropAccept?: 'image' | 'audio' | 'video' | ('image' | 'audio' | 'video')[]
 }) {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const f = e.dataTransfer.files[0]
     if (!f || !onDropFile) return
-    if (dropAccept && !f.type.startsWith(`${dropAccept}/`)) return
+    const accepted = dropAccept == null ? null : (Array.isArray(dropAccept) ? dropAccept : [dropAccept])
+    if (accepted && !accepted.some(kind => f.type.startsWith(`${kind}/`))) return
     onDropFile(f)
   }
   return (
@@ -716,7 +1190,7 @@ function AddTile({ label, icon, onClick, onDropFile, dropAccept }: {
       onDragOver={onDropFile ? (e => e.preventDefault()) : undefined}
       className="w-[90px] h-[90px] shrink-0 rounded-xl border border-dashed border-border hover:border-accent-blue flex flex-col items-center justify-center gap-1 text-text-muted hover:text-text-primary transition-colors">
       {icon ?? <Plus size={18} />}
-      <span className="text-[10px] text-center px-1">{label}</span>
+      <span className="text-[10px] leading-tight text-center px-1 whitespace-pre-line">{label}</span>
     </button>
   )
 }

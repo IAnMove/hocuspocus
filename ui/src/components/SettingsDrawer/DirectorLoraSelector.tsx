@@ -3,8 +3,16 @@ import { Search, X, Loader2, FolderOpen, Globe, Sparkles, BookOpen } from 'lucid
 import { useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
 import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails } from '../../api/client'
-import { LoraGuideTooltip } from './LoraSelector'
+import { LoraGuideTooltip, LoraAgeChip, LoraSortToggle, sortLoraNames } from './LoraSelector'
+import type { LoraDates } from './LoraSelector'
 import type { LoraRecommendedWeights } from '../../types'
+
+function serializeMultipliers(loras: string[], weights: Record<string, number[]>): string {
+  return loras.map(name => {
+    const values = weights[name] || [1.0]
+    return values.map(value => value.toFixed(2)).join(';')
+  }).join(' ')
+}
 
 /**
  * Compact preset picker for Director mode LoRA sections.
@@ -67,17 +75,40 @@ export function DirectorLoraSelector({ mode, modelType }: {
   const [activatedLoras, setActivatedLoras] = useState<string[]>(savedLora?.activated_loras || [])
   const [loraWeights, setLoraWeights] = useState<Record<string, number[]>>(savedLora?.loraWeights || {})
   const [phases, setPhases] = useState(1)
-  const [loading, setLoading] = useState(false)
+  const [loadedModelType, setLoadedModelType] = useState(savedLora ? modelType : '')
+  const loading = Boolean(modelType) && loadedModelType !== modelType
   const [search, setSearch] = useState('')
   const [loraWeightRecs, setLoraWeightRecs] = useState<Record<string, LoraRecommendedWeights>>({})
   const [guideStatus, setGuideStatus] = useState<Record<string, 'none' | 'exists' | 'generating' | 'done'>>({})
   const [guideTexts, setGuideTexts] = useState<Record<string, string>>({})
+  const [loraDates, setLoraDates] = useState<Record<string, LoraDates>>({})
+  // Sticky list order shared with the Studio picker via the store.
+  const sortMode = useStore(s => s.loraPickerSort)
+  const setSortSticky = useStore(s => s.setLoraPickerSort)
+
+  const persist = useCallback((newLoras: string[], newWeights: Record<string, number[]>) => {
+    const multipliers = serializeMultipliers(newLoras, newWeights)
+    directorSetLora(mode, newLoras, multipliers, newWeights, availableLoras)
+  }, [mode, availableLoras, directorSetLora])
+
+  const updateWeight = useCallback((filename: string, phaseIndex: number, value: number) => {
+    setLoraWeights(prev => {
+      const next = { ...prev }
+      if (!next[filename]) return prev
+      next[filename] = [...next[filename]]
+      // Keep typed values aligned with the slider's supported range and
+      // avoid persisting NaN while a numeric field is temporarily empty.
+      if (!Number.isFinite(value)) return prev
+      next[filename][phaseIndex] = Math.max(0, Math.min(2, Math.round(value * 100) / 100))
+      persist(activatedLoras, next)
+      return next
+    })
+  }, [activatedLoras, persist])
 
   // Load available LoRAs when model changes
   useEffect(() => {
     if (!modelType) return
     let cancelled = false
-    setLoading(true)
     api.fetchLoras(modelType).then(data => {
       if (cancelled) return
       const newPhases = data.guidance_max_phases ?? 1
@@ -101,9 +132,12 @@ export function DirectorLoraSelector({ mode, modelType }: {
         setLoraWeights(adjustedWeights)
         return valid
       })
-      setLoading(false)
+      setLoadedModelType(modelType)
     }).catch(() => {
-      if (!cancelled) { setAvailableLoras([]); setLoading(false) }
+      if (!cancelled) {
+        setAvailableLoras([])
+        setLoadedModelType(modelType)
+      }
     })
     return () => { cancelled = true }
   }, [modelType]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -115,14 +149,19 @@ export function DirectorLoraSelector({ mode, modelType }: {
       const recs: Record<string, LoraRecommendedWeights> = {}
       const guides: Record<string, string> = {}
       const statuses: Record<string, 'exists' | 'none'> = {}
+      const dates: Record<string, LoraDates> = {}
       for (const info of r.loras) {
         if (info.recommended_weights) recs[info.filename] = info.recommended_weights
         if (info.guide) { guides[info.filename] = info.guide; statuses[info.filename] = 'exists' }
         else if (info.has_guide) statuses[info.filename] = 'exists'
+        if (info.released_at || info.downloaded_at) {
+          dates[info.filename] = { released: info.released_at, downloaded: info.downloaded_at }
+        }
       }
       setLoraWeightRecs(recs)
       setGuideTexts(prev => ({ ...prev, ...guides }))
       setGuideStatus(prev => ({ ...prev, ...statuses }))
+      setLoraDates(dates)
 
       // Auto-apply recommended defaults to newly activated LoRAs at 1.0 fill
       for (const lora of activatedLoras) {
@@ -156,24 +195,16 @@ export function DirectorLoraSelector({ mode, modelType }: {
 
   // Sync from store when savedLora changes externally
   useEffect(() => {
-    if (savedLora) {
+    if (!savedLora) return
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
       setActivatedLoras(savedLora.activated_loras || [])
       setLoraWeights(savedLora.loraWeights || {})
       if (savedLora.availableLoras?.length) setAvailableLoras(savedLora.availableLoras)
-    }
+    })
+    return () => { cancelled = true }
   }, [savedLora])
-
-  const serializeMultipliers = (loras: string[], weights: Record<string, number[]>) => {
-    return loras.map(name => {
-      const w = weights[name] || [1.0]
-      return w.map(v => v.toFixed(2)).join(';')
-    }).join(' ')
-  }
-
-  const persist = useCallback((newLoras: string[], newWeights: Record<string, number[]>) => {
-    const multipliers = serializeMultipliers(newLoras, newWeights)
-    directorSetLora(mode, newLoras, multipliers, newWeights, availableLoras)
-  }, [mode, availableLoras, directorSetLora])
 
   const toggleLora = useCallback((filename: string) => {
     setActivatedLoras(prev => {
@@ -202,17 +233,6 @@ export function DirectorLoraSelector({ mode, modelType }: {
     })
   }, [loraWeights, phases, persist, loraWeightRecs])
 
-  const updateWeight = useCallback((filename: string, phaseIndex: number, value: number) => {
-    setLoraWeights(prev => {
-      const next = { ...prev }
-      if (!next[filename]) return prev
-      next[filename] = [...next[filename]]
-      next[filename][phaseIndex] = value
-      persist(activatedLoras, next)
-      return next
-    })
-  }, [activatedLoras, persist])
-
   const handleGenerateGuide = async (filename: string) => {
     if (!modelType) return
     setGuideStatus(s => ({ ...s, [filename]: 'generating' }))
@@ -234,8 +254,12 @@ export function DirectorLoraSelector({ mode, modelType }: {
   const displayName = (filename: string) =>
     filename.replace(/\.(safetensors|sft)$/i, '')
 
-  const filtered = availableLoras.filter(name =>
-    displayName(name).toLowerCase().includes(search.toLowerCase())
+  const filtered = sortLoraNames(
+    availableLoras.filter(name =>
+      displayName(name).toLowerCase().includes(search.toLowerCase())
+    ),
+    sortMode,
+    loraDates,
   )
 
   if (loading) {
@@ -269,13 +293,16 @@ export function DirectorLoraSelector({ mode, modelType }: {
       {/* Header with Browse */}
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-[10px] text-text-muted uppercase tracking-wider">LoRAs</label>
-        <button
-          onClick={() => openBrowser(true, modelType)}
-          className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5 transition-colors"
-          title="Browse CivitAI"
-        >
-          <Globe size={10} /> Browse
-        </button>
+        <div className="flex items-center gap-2">
+          <LoraSortToggle sort={sortMode} onChange={setSortSticky} />
+          <button
+            onClick={() => openBrowser(true, modelType)}
+            className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5 transition-colors"
+            title="Browse CivitAI"
+          >
+            <Globe size={10} /> Browse
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -294,38 +321,81 @@ export function DirectorLoraSelector({ mode, modelType }: {
       <div className="max-h-[120px] overflow-y-auto border border-border rounded-lg bg-bg-tertiary">
         {filtered.map(filename => {
           const isActive = activatedLoras.includes(filename)
+          const activeWeights = loraWeights[filename] || Array(phases).fill(1.0)
           return (
-            <button
+            <div
               key={filename}
-              onClick={() => toggleLora(filename)}
-              className={`w-full text-left px-2.5 py-1.5 text-xs flex items-center gap-2 hover:bg-bg-hover transition-colors ${
+              className={`w-full px-2.5 py-1.5 text-xs flex items-center gap-1.5 hover:bg-bg-hover transition-colors ${
                 isActive ? 'text-accent-blue' : 'text-text-secondary'
               }`}
             >
-              <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
-                isActive ? 'bg-accent-blue border-accent-blue' : 'border-border'
-              }`}>
-                {isActive && (
-                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                    <path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </div>
-              <span className="truncate flex-1">{displayName(filename)}</span>
+              <button
+                type="button"
+                onClick={() => toggleLora(filename)}
+                className="min-w-0 flex-1 flex items-center gap-2 text-left"
+                aria-pressed={isActive}
+              >
+                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                  isActive ? 'bg-accent-blue border-accent-blue' : 'border-border'
+                }`}>
+                  {isActive && (
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                      <path d="M1.5 4L3 5.5L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </div>
+                <span className="truncate flex-1">{displayName(filename)}</span>
+              </button>
+              {loraDates[filename] && (
+                <LoraAgeChip
+                  released={loraDates[filename].released}
+                  downloaded={loraDates[filename].downloaded}
+                />
+              )}
               {guideTexts[filename] && (
-                <span onClick={e => e.stopPropagation()}>
+                <span>
                   <LoraGuideTooltip guide={guideTexts[filename]} />
                 </span>
               )}
               {loraWeightRecs[filename] && (
                 <span
+                  // Functional indicator tokens, not accent-green: Golden
+                  // Hour remaps accent-green to amber, which made every
+                  // CivitAI dot (and weight zone) look like the fallback
+                  // orange. Mirrors LoraSelector.
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    loraWeightRecs[filename].source === 'civitai' ? 'bg-accent-green' : 'bg-amber-400'
+                    loraWeightRecs[filename].source === 'civitai' ? 'bg-indicator-success' : 'bg-indicator-warning'
                   }`}
                   title={loraWeightRecs[filename].source === 'civitai' ? 'CivitAI recommended settings' : 'Default settings'}
                 />
               )}
-            </button>
+              {isActive && phases === 1 && (
+                <label
+                  className="flex items-center gap-1 shrink-0 text-[9px] text-text-muted"
+                  title="LoRA strength"
+                >
+                  <span>Strength</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    value={activeWeights[0] ?? 1}
+                    onChange={e => {
+                      const value = Number.parseFloat(e.target.value)
+                      if (Number.isFinite(value)) updateWeight(filename, 0, value)
+                    }}
+                    className="w-12 rounded border border-border bg-bg-secondary px-1 py-0.5 text-right text-[10px] tabular-nums text-text-primary focus:border-accent-blue focus:outline-none"
+                    aria-label={`${displayName(filename)} LoRA strength`}
+                  />
+                </label>
+              )}
+              {isActive && phases > 1 && (
+                <span className="shrink-0 text-[9px] text-text-muted" title="Adjust each phase below">
+                  {phases} phases
+                </span>
+              )}
+            </div>
           )
         })}
         {filtered.length === 0 && (
@@ -338,7 +408,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
         <div className="mt-2 space-y-1.5">
           <div className="flex items-center justify-between">
             <div className="text-[10px] text-text-muted uppercase tracking-wider">
-              Selected ({activatedLoras.length})
+              LoRA strength ({activatedLoras.length})
             </div>
             <button
               onClick={clearAll}
@@ -357,7 +427,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
                   </span>
                   <div className="flex items-center gap-0.5 shrink-0">
                     {guideStatus[filename] === 'exists' || guideStatus[filename] === 'done' ? (
-                      <span className="p-0.5 text-accent-green" title="LoRA guide available">
+                      <span className="p-0.5 text-indicator-success" title="LoRA guide available">
                         <BookOpen size={11} />
                       </span>
                     ) : guideStatus[filename] === 'generating' ? (
@@ -393,19 +463,20 @@ export function DirectorLoraSelector({ mode, modelType }: {
                   const zoneWidth = ((recMax - recMin) / sliderMax) * 100
                   const inZone = w >= recMin && w <= recMax
                   const zoneColor = isCivitai
-                    ? 'bg-accent-green/20 border-accent-green/30'
-                    : 'bg-amber-400/15 border-amber-400/25'
+                    ? 'bg-indicator-success/20 border-indicator-success/30'
+                    : 'bg-indicator-warning/15 border-indicator-warning/25'
                   const valueColor = inZone
-                    ? (isCivitai ? 'text-accent-green' : 'text-amber-400')
+                    ? (isCivitai ? 'text-indicator-success' : 'text-indicator-warning')
                     : 'text-text-muted'
 
                   return (
                     <div key={i} className="flex items-center gap-2">
-                      {phases > 1 && (
-                        <span className="text-[10px] text-text-muted w-12 shrink-0" title={phaseRec?.label || ''}>
-                          Phase {i + 1}
-                        </span>
-                      )}
+                      <span
+                        className="text-[10px] text-text-muted w-12 shrink-0"
+                        title={phaseRec?.label || ''}
+                      >
+                        {phases > 1 ? `Phase ${i + 1}` : 'Strength'}
+                      </span>
                       <div className="flex-1 relative">
                         <div
                           className={`absolute top-1/2 -translate-y-1/2 h-2 rounded-full ${zoneColor} pointer-events-none`}
@@ -420,11 +491,22 @@ export function DirectorLoraSelector({ mode, modelType }: {
                           value={w}
                           onChange={e => updateWeight(filename, i, parseFloat(e.target.value))}
                           className="w-full relative z-10"
+                          aria-label={`${displayName(filename)} ${phases > 1 ? `phase ${i + 1}` : ''} LoRA strength`.replace(/\s+/g, ' ').trim()}
                         />
                       </div>
-                      <span className={`text-[10px] w-8 text-right shrink-0 ${valueColor}`}>
-                        {w.toFixed(2)}
-                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={sliderMax}
+                        step={0.05}
+                        value={w}
+                        onChange={e => {
+                          const value = Number.parseFloat(e.target.value)
+                          if (Number.isFinite(value)) updateWeight(filename, i, value)
+                        }}
+                        className={`w-12 shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-right text-[10px] tabular-nums focus:border-accent-blue focus:outline-none ${valueColor}`}
+                        aria-label={`${displayName(filename)} ${phases > 1 ? `phase ${i + 1}` : ''} LoRA strength value`.replace(/\s+/g, ' ').trim()}
+                      />
                     </div>
                   )
                 })}

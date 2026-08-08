@@ -482,3 +482,177 @@ job.cancel()
 ```
 
 Cancellation is cooperative and forwards WanGP's normal abort signal to the active model. A cancelled run completes with `result.success == False` and a cancellation entry in `result.errors`.
+
+## Story Lab
+
+Story generation is checkpointed and asynchronous. Start with
+`POST /api/v1/stories/generate/start`, poll
+`GET /api/v1/stories/generate/status/{job_id}`, resume with
+`POST /api/v1/stories/generate/resume/{job_id}`, or cancel between stages with
+`POST /api/v1/stories/generate/cancel/{job_id}`. Supported scopes are `all`,
+`overview`, `world`, `characters`, `relationships`, and `structure`. Full
+generation runs overview, cast, world, relationships, and dramatic structure as
+separately validated stages; completed stages survive a later failure.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/stories/generate/start" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scope": "all",
+    "premise": "A cartographer discovers that her hand-drawn islands are becoming real.",
+    "language": "Español",
+    "genre": "Adventure",
+    "tone": "Mysterious",
+    "audience": "General",
+    "writingProvider": "maestro",
+    "project": {}
+  }'
+```
+
+External per-story overrides use the same isolated provider fields as Comic
+Director: `writingProvider`, `writingModel`, and `writingBaseUrl`. Credentials
+are read from Settings → Services and are never accepted in the request or
+embedded in the returned story.
+
+```javascript
+const job = await fetch(`${base}/api/v1/stories/generate/start`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    scope: 'characters',
+    premise: story.premise,
+    language: story.language,
+    genre: story.genre,
+    tone: story.tone,
+    audience: story.audience,
+    instruction: 'Make the rival sympathetic and give both leads distinct voices',
+    writingProvider: 'minimax',
+    writingModel: 'MiniMax-M3',
+    project: story,
+  }),
+}).then(r => r.json())
+
+let status
+do {
+  await new Promise(resolve => setTimeout(resolve, 1000))
+  status = await fetch(`${base}/api/v1/stories/generate/status/${job.jobId}`).then(r => r.json())
+} while (!['completed', 'failed', 'cancelled'].includes(status.status))
+if (status.status !== 'completed') throw new Error(status.error || status.message)
+const response = status.result
+```
+
+```python
+import time
+import requests
+
+job = requests.post(f"{base}/api/v1/stories/generate/start", json={
+    "scope": "world",
+    "premise": story["premise"],
+    "language": "English",
+    "genre": "Fantasy",
+    "tone": "Melancholic",
+    "audience": "General",
+    "writingProvider": "deepseek",
+    "writingModel": "deepseek-v4-pro",
+    "project": story,
+}).json()
+while True:
+    status = requests.get(
+        f"{base}/api/v1/stories/generate/status/{job['jobId']}"
+    ).json()
+    if status["status"] in {"completed", "failed", "cancelled"}:
+        break
+    time.sleep(1)
+result = status["result"]["result"]
+```
+
+For backward compatibility, `POST /api/v1/stories/generate` remains available
+for a single section only. Full `scope: "all"` requests must use the durable
+start/status workflow.
+
+## Comic preproduction and animatics
+
+Comic Director planning is asynchronous: start with `POST /api/v1/director/comic/plan/start`, then poll `GET /api/v1/director/comic/plan/status/{job_id}`. Existing plans can be story-edited without regenerating artwork through `POST /api/v1/director/comic/story/revise`, or lettered/translated one page at a time through `POST /api/v1/director/comic/text/page`.
+
+Story Lab adaptations may also supply `storyContext`, an editable plain-text
+bible containing the canonical plot, beats, relationships, character arcs and
+locations, plus `sourceStory: {id, revision, title}` for provenance. Comic
+Director treats this material as canon while still allowing the user to edit it
+before starting the plan. Character records and their reference asset IDs remain
+the source of truth when the writing LLM returns the plan.
+
+`POST /api/v1/comics/generate/minimax` follows MiniMax's official `image-01`
+image-to-image request shape. Send one optional `subject_reference` source; the
+backend resolves a Maestro output/upload to a base64 `image_file` and sends
+`subject_reference: [{"type": "character", "image_file": "..."}]`. MiniMax
+supports one identity reference per image request, so group panels use the first
+visually prioritised character with an available reference and describe the
+remaining cast from the locked character bible. `aspect_ratio` accepts `1:1`,
+`16:9`, `4:3`, `3:2`, `2:3`, `3:4`, `9:16`, or `21:9`.
+
+Director and Story Lab film adaptations can select the virtual image model ID
+`minimax:image-01` in their normal `image_model` field. This routes shot-frame
+generation through the same external Image-01 client while the independently
+selected video model (for example local `minimax_h3`) remains unchanged.
+Director maps its requested frame resolution to the nearest supported MiniMax
+aspect ratio, sends at most one prioritised character identity reference, and
+does not apply local image LoRAs. The credential is read only from
+Settings → Services; it is not accepted in pipeline payloads or persisted in
+output metadata.
+
+Comic recovery checkpoints are workspace-scoped and durable. Create one with
+`POST /api/v1/comics/history`, list versions with
+`GET /api/v1/comics/history` (optionally `?comic_id=...`), and load a version
+with `GET /api/v1/comics/history/{snapshot_id}`. Identical consecutive
+snapshots are de-duplicated and the newest 40 versions per comic are retained.
+The editor creates these checkpoints automatically after editing pauses and
+before replacing the open comic.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/comics/history" \
+  -H "Content-Type: application/json" \
+  -d '{"project": {"version": 2, "id": "comic-123", "pages": [{}], "assets": {}}, "reason": "Manual checkpoint"}'
+curl "$MAESTRO_URL/api/v1/comics/history?comic_id=comic-123"
+```
+
+All three narrative endpoints accept the optional fields `writingProvider`, `writingModel`, and `writingBaseUrl`. `writingProvider` may be `maestro`, `deepseek`, `minimax`, `openai`, or `openai-compatible`. Named DeepSeek, MiniMax, and OpenAI profiles always use their fixed official API hosts; the compatible profile uses the URL and optional key explicitly saved under Settings → Services. Credentials are never accepted from, or embedded in, comic JSON. DeepSeek supports `deepseek-v4-pro` and `deepseek-v4-flash`; translation requests are always resolved to Flash in the backend even when Pro is selected for writing. MiniMax supports `MiniMax-M3`, `MiniMax-M2.7`, and `MiniMax-M2.7-highspeed` for writing and reuses the same MiniMax credential as image generation, while keeping `writingModel` independent from the comic's `imageModel`. Older comics that stored an official DeepSeek or OpenAI host as `openai-compatible` are migrated to the matching named profile.
+
+`POST /api/v1/comics/animatic` accepts ordered, uploaded lettered-panel images and queues a 1080p MP4 render. Poll the returned job with the Video Editor status endpoint.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/comics/animatic" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "comic_id": "comic-123",
+    "comic_title": "My comic",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "transition": "crossfade",
+    "transition_duration": 0.35,
+    "panels": [
+      {"source": "/api/v1/uploads/panel.png", "page_number": 1, "panel_number": 1, "duration": 3, "motion": "push-in", "script": "[Caption] Opening"}
+    ]
+  }'
+```
+
+```python
+import requests
+
+base = "http://127.0.0.1:7860"
+job = requests.post(f"{base}/api/v1/comics/animatic", json={
+    "comic_title": "My comic", "width": 1080, "height": 1920, "fps": 30,
+    "transition": "dissolve", "transition_duration": 0.35,
+    "panels": [{"source": "/api/v1/uploads/panel.png", "duration": 3, "motion": "pan-right"}],
+}).json()
+status = requests.get(f"{base}/api/v1/video-editor/export/{job['job_id']}").json()
+```
+
+```javascript
+const job = await fetch('/api/v1/comics/animatic', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ comic_title: 'My comic', width: 1920, height: 1080, fps: 30,
+    transition: 'crossfade', transition_duration: 0.35,
+    panels: [{ source: '/api/v1/uploads/panel.png', duration: 3, motion: 'pull-out' }] }),
+}).then(response => response.json());
+```

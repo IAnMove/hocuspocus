@@ -327,7 +327,12 @@ def build_gemma_text_encoder(
     if not gemma_path or not os.path.isfile(gemma_path):
         raise FileNotFoundError(f"Gemma checkpoint not found: {gemma_root}")
     gemma_dir = os.path.dirname(gemma_path)
-    tokenizer_path = fl.locate_folder(os.path.join(_GEMMA_FOLDER))
+    # required_files: the folder must actually CONTAIN the tokenizer —
+    # a weight-only folder in the primary root would otherwise shadow the
+    # complete linked one and AutoTokenizer dies with sentencepiece's
+    # cryptic "not a string" (issue #17).
+    tokenizer_path = fl.locate_folder(os.path.join(_GEMMA_FOLDER),
+                                      required_files=["tokenizer_config.json", "tokenizer.model"])
     config_path = fl.locate_file(os.path.join(_GEMMA_FOLDER, "config_light.json"))
     from accelerate import init_empty_weights
     with init_empty_weights():
@@ -350,7 +355,9 @@ def build_gemma_text_encoder(
 def module_ops_from_gemma_root(gemma_root: str) -> tuple[ModuleOps, ...]:
     gemma_path = gemma_root
     gemma_root = os.path.dirname(gemma_root)
-    tokenizer_path =  fl.locate_folder(os.path.join(_GEMMA_FOLDER)) #, "tokenizer.model"
+    # Same sparse-folder guard as build_gemma_text_encoder (issue #17).
+    tokenizer_path =  fl.locate_folder(os.path.join(_GEMMA_FOLDER),
+                                       required_files=["tokenizer_config.json", "tokenizer.model"])
 
     def load_gemma(module: GemmaTextEncoderModelBase) -> GemmaTextEncoderModelBase:
         config_path = fl.locate_file(os.path.join(_GEMMA_FOLDER, "config.json"))
@@ -386,10 +393,36 @@ def encode_text(text_encoder: GemmaTextEncoderModelBase, prompts: list[str]) -> 
     """
     Encode prompts with the Gemma text encoder, returning raw embeddings for later post-processing.
     """
-    result = []
-    for prompt in prompts:
-        result.append(text_encoder.encode_raw(prompt))
-    return result
+    if not prompts:
+        return []
+    if len(prompts) == 1:
+        return [text_encoder.encode_raw(prompts[0])]
+
+    token_pairs = [
+        text_encoder.tokenizer.tokenize_with_weights(prompt)["gemma"]
+        for prompt in prompts
+    ]
+    input_ids = torch.tensor(
+        [[token_id for token_id, _ in pairs] for pairs in token_pairs],
+        device=text_encoder.model.device,
+    )
+    attention_mask = torch.tensor(
+        [[weight for _, weight in pairs] for pairs in token_pairs],
+        device=text_encoder.model.device,
+    )
+    outputs = text_encoder.model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        output_hidden_states=True,
+    )
+    return [
+        RawTextEmbeddings(
+            tuple(layer[index : index + 1] for layer in outputs.hidden_states),
+            attention_mask[index : index + 1],
+            "left",
+        )
+        for index in range(len(prompts))
+    ]
 
 
 def postprocess_text_embeddings(
