@@ -94,10 +94,9 @@ export function GenerateButton() {
       className={`px-4 py-2 rounded-lg flex items-center gap-1.5 font-medium text-xs transition-all whitespace-nowrap ${
         cooldown || needsScheduledPrompts
           ? 'bg-bg-active text-text-muted cursor-not-allowed'
-          // Default theme: bg-cta resolves to a flat accent-blue (both
-          // gradient stops point at --color-accent-blue). Golden Hour:
-          // resolves to a red→orange sunset gradient. shadow-accent-glow
-          // is empty in default and a warm bloom in Golden Hour.
+          // Classic theme: bg-cta resolves to a flat accent-green.
+          // Loreframe Blue resolves to the branded blue gradient, while
+          // shadow-accent-glow adds the restrained cool bloom.
           : 'bg-cta hover:brightness-110 shadow-accent-glow text-white'
       }`}
     >

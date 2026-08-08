@@ -33,6 +33,7 @@ import { ToolsPanel } from './ToolsPanel'
 import { Hunyuan3DPanel } from './Hunyuan3DPanel'
 import { HardwareStatusBar } from './HardwareStatusBar'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
+import { BrandIdentity } from '../BrandIdentity'
 
 export function Sidebar() {
   const [directorCollapsed, setDirectorCollapsed] = useState(() =>
@@ -86,10 +87,9 @@ export function Sidebar() {
       <button
         onClick={() => setSidebarMode('director')}
         className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
-          // bg-toggle-active is flat accent-blue in the default theme
-          // (preserves the original blue pill) and a red→orange sunset
-          // gradient in Golden Hour. shadow-accent-glow is empty in
-          // default and a warm bloom in Golden Hour.
+          // bg-toggle-active is flat accent-blue in the Classic theme
+          // and a blue gradient in Loreframe Blue. The glow token stays
+          // theme-aware without changing this component's layout.
           isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
         }`}
       >
@@ -100,7 +100,7 @@ export function Sidebar() {
         className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
           // Studio active intentionally uses bg-toggle-active too so the
           // currently-active mode reads with the same prominence in
-          // Golden Hour as the reference render. Default theme: flat
+          // Loreframe Blue. Classic theme: flat
           // accent-blue (was bg-bg-active dark elevation — small change
           // that brings the two buttons into visual parity).
           !isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
@@ -281,13 +281,7 @@ export function Sidebar() {
         }`}>
           {/* Header */}
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-accent-blue flex items-center justify-center text-white font-bold text-sm">
-                M
-              </div>
-              <span className="font-semibold text-sm">Maestro</span>
-              {appVersion && <span className="text-[10px] text-text-muted font-normal mt-0.5">v{appVersion}</span>}
-            </div>
+            <BrandIdentity appVersion={appVersion} />
             <div className="flex items-center gap-1.5">
               {modeToggle('sm')}
               <button
@@ -328,13 +322,7 @@ export function Sidebar() {
     <aside className="w-[420px] h-full bg-bg-secondary border-r border-border flex flex-col shrink-0">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-accent-blue flex items-center justify-center text-white font-bold text-sm">
-            M
-          </div>
-          <span className="font-semibold text-sm">Maestro</span>
-              {appVersion && <span className="text-[10px] text-text-muted font-normal mt-0.5">v{appVersion}</span>}
-        </div>
+        <BrandIdentity appVersion={appVersion} />
         <div className="flex items-center gap-2">
           {modeToggle('md')}
           {isDirector && (

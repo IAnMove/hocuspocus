@@ -476,12 +476,12 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
         // accent-blue → reads as a flat 2px blue ring (preserves
         // prior visual exactly).
         //
-        // Golden Hour: a conic-gradient override (see index.css)
-        // sweeps "spotlight stops" around the perimeter — bright
-        // orange / gold / ember at three asymmetric angles, with
-        // bg-primary in between so those sections of the border
+        // Loreframe Blue: a conic-gradient override (see index.css)
+        // sweeps spotlight stops around the perimeter — electric blue
+        // and cyan at three asymmetric angles, with deep blue in between
+        // so those sections of the border
         // blend into the surrounding panel. The effect reads as
-        // "stage lights catching the edge of the asset at random
+        // "cool stage lights catching the edge of the asset at random
         // points" rather than a uniform halo or solid line.
         //
         // shadow-active-ring is now minimal (just a 6px / 15% wash)

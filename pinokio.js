@@ -1,9 +1,9 @@
 const path = require('path')
 module.exports = {
   version: "8.0",
-  title: "Maestro",
-  description: "An all-in-one, 100% local AI video, image, music & 3D studio. Its Director mode turns a single prompt into a full music video or short film — LLM-planned, shot by shot. Includes native Hunyuan3D generation alongside WanGP models. Requires an NVIDIA GPU (6GB+ VRAM).",
-  icon: "maestro_simplified_icon_alpha.png",
+  title: "Loreframe Lab · Experimental",
+  description: "Experimental, non-commercial fork of Maestro for local story-world production, comic-to-video workflows, recoverable Director pipelines and optimized MiniMax H3 generation. Also includes image, music and 3D tools. Requires an NVIDIA GPU (6GB+ VRAM).",
+  icon: "loreframe-logo.png",
   menu: async (kernel, info) => {
     // Do not gate this menu on kernel.gpu. Pinokio can render an app menu
     // before its hardware inventory has populated that property, which would

@@ -14,6 +14,7 @@ import { ActivityFooter } from './components/ActivityFooter'
 import { WelcomeModal } from './components/WelcomeModal'
 import { QueueRecoveryDialog } from './components/QueueRecoveryDialog'
 import { RecipesOverlay } from './components/Recipes/RecipesOverlay'
+import { BrandIdentity } from './components/BrandIdentity'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
 
@@ -139,13 +140,7 @@ function App() {
           >
             <Menu size={20} />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-accent-blue flex items-center justify-center text-white font-bold text-sm">
-              M
-            </div>
-            <span className="font-semibold text-sm">Maestro</span>
-            {appVersion && <span className="text-[10px] text-text-muted font-normal mt-0.5">v{appVersion}</span>}
-          </div>
+          <BrandIdentity appVersion={appVersion} />
           <button
             onClick={() => { setSidebarOpen(false); toggleSettings() }}
             className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"

@@ -34,7 +34,7 @@ export function WelcomeModal() {
             <Sparkles size={22} className="text-accent-blue" />
           </div>
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-text-primary">Welcome to Maestro</h2>
+            <h2 className="text-base font-semibold text-text-primary">Welcome to Loreframe Lab</h2>
             <p className="text-xs text-text-muted mt-0.5">
               A local AI studio for video, images, and music — including a Director mode
               that plans a whole music video or short film from a sentence.

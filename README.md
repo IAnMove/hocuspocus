@@ -1,8 +1,10 @@
-# Maestro
+# Loreframe Lab
 
-A one-click AI **video, image, and audio studio** for creators. Maestro pairs a modern React UI with a powerful generation backend and adds a **Director mode** that uses an LLM to plan music videos and short films from a single prompt. Optimized for the latest LTX-2.3 models & LoRAs, with support for virtually all open weight models.
+> Loreframe Lab is an experimental, non-commercial fork of [Blizaine/Maestro](https://github.com/Blizaine/Maestro). Features and workflows may change while we explore persistent story worlds, comic-to-video production, episodic continuity and optimized local generation.
 
-![Maestro UI](Maestro_UI_02.jpg)
+A one-click AI **video, image, and audio studio** for creators. Loreframe Lab builds on Maestro's modern React UI and generation backend, adding a **Director mode** that uses an LLM to plan music videos and short films from a single prompt. Optimized for the latest LTX-2.3 models & LoRAs, with support for virtually all open weight models.
+
+![Loreframe Lab UI](Maestro_UI_02.jpg)
 
 ## What it does
 

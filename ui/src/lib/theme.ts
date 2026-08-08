@@ -4,7 +4,7 @@
  * Themes are CSS-variable overrides applied via `[data-theme="..."]` on
  * the <html> element. The actual variable values live in src/index.css.
  *
- * The user-facing model is THREE theme families (Golden Hour, Classic,
+ * The user-facing model is THREE theme families (Loreframe Blue, Classic,
  * Onyx), each with a dark and a light variant, plus an appearance mode:
  *   - mode: 'dark' | 'light' | 'auto' — auto follows the OS scheme
  *     (prefers-color-scheme) and live-switches when the OS changes.
@@ -51,11 +51,11 @@ export interface ThemeFamily {
 export const FAMILIES: ThemeFamily[] = [
   {
     id: 'golden-hour',
-    label: 'Golden Hour',
+    label: 'Loreframe Blue',
     description:
-      'Default. Warm cinematic palette — near-black surfaces and amber highlights at night; warm paper and burnt orange in daylight.',
-    dark: { id: 'golden-hour', swatch: { bg: '#0a0a0a', surface: '#181818', accent: '#f97316' } },
-    light: { id: 'ivory', swatch: { bg: '#f2ede2', surface: '#f9f6ee', accent: '#c2410c' } },
+      'Default. Loreframe Lab palette — near-black surfaces with electric blue and cyan accents; cool paper in daylight.',
+    dark: { id: 'golden-hour', swatch: { bg: '#050505', surface: '#121212', accent: '#2563eb' } },
+    light: { id: 'ivory', swatch: { bg: '#f1f5f9', surface: '#ffffff', accent: '#1d4ed8' } },
   },
   {
     id: 'default',

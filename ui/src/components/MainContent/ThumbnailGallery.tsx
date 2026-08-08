@@ -124,8 +124,7 @@ function VirtualizedThumbnailList({ activeIndex, onThumbnailClick, onMobileClick
                 activeIndex === idx
                   // shadow-active-ring is empty in the default theme
                   // (no bloom — the existing border+ring covers it).
-                  // In Golden Hour it adds an amber halo for the
-                  // "alive/dynamic" feel from the reference render.
+                  // In Loreframe Blue it adds a restrained cool halo.
                   ? 'border-accent-blue ring-1 ring-accent-blue shadow-active-ring'
                   : 'border-border hover:border-border-light'
               }`}

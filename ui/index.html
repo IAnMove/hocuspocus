@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/maestro.svg" />
+    <link rel="icon" type="image/png" href="/loreframe-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <!-- Hint the UA before CSS loads so native controls don't flash the
          wrong scheme; the effective scheme comes from index.css
@@ -11,7 +11,7 @@
          script below and by applyTheme() on switch. -->
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#0a0a0a" />
-    <title>Maestro</title>
+    <title>Loreframe Lab · Experimental</title>
   </head>
   <body>
     <div id="root"></div>
@@ -31,8 +31,8 @@
                           'default': 'default', 'daylight': 'default',
                           'onyx': 'onyx', 'pearl': 'onyx' };
         // Page-background hex per theme, for the browser-chrome tint.
-        var bg = { 'golden-hour': '#0a0a0a', 'default': '#0a0a0f', 'onyx': '#000000',
-                   'ivory': '#f2ede2', 'daylight': '#f4f5f7', 'pearl': '#f2f2f2' };
+        var bg = { 'golden-hour': '#050505', 'default': '#0a0a0f', 'onyx': '#000000',
+                   'ivory': '#f1f5f9', 'daylight': '#f4f5f7', 'pearl': '#f2f2f2' };
         var mode = 'dark', family = 'golden-hour';
         try {
           var legacy = localStorage.getItem('maestro-theme');
@@ -73,12 +73,12 @@
           document.body.innerHTML =
             '<div style="max-width:640px;margin:15vh auto 0;padding:0 24px;' +
             'font-family:system-ui,sans-serif;color:#e8e0d0;">' +
-            '<h1 style="font-size:20px;margin-bottom:12px;">Maestro UI failed to load</h1>' +
+            '<h1 style="font-size:20px;margin-bottom:12px;">Loreframe Lab UI failed to load</h1>' +
             '<p style="line-height:1.6;font-size:14px;color:#b8b0a0;">The page was served but the app never started. In order, try:</p>' +
             '<ol style="line-height:1.9;font-size:14px;color:#b8b0a0;padding-left:20px;">' +
             '<li>Hard refresh: <b style="color:#e8e0d0">Ctrl+F5</b> (or Cmd+Shift+R)</li>' +
             '<li>Press <b style="color:#e8e0d0">F12</b> &rarr; Console tab, and share the first red error on Discord/GitHub</li>' +
-            '<li>If the error mentions <b style="color:#e8e0d0">MIME type</b>: update Maestro (the fix shipped), or add an antivirus exclusion for the pinokio folder</li>' +
+            '<li>If the error mentions <b style="color:#e8e0d0">MIME type</b>: update Loreframe Lab, or add an antivirus exclusion for the pinokio folder</li>' +
             '<li>Re-run <b style="color:#e8e0d0">Update</b> in Pinokio to rebuild the UI</li>' +
             '</ol></div>';
         }, 10000);
