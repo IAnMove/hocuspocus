@@ -106,6 +106,12 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         }
         self.assertFalse(director_pipeline._has_visual_references(params))
 
+    def test_direct_video_default_prompt_is_style_neutral(self):
+        treatment = normalize_music_video_treatment({"generation_mode": "direct_video"})
+        master_prompt = treatment["direct_video_master_prompt"]
+        self.assertIn("coherent visual language", master_prompt)
+        self.assertNotIn("Heavy Metal", master_prompt)
+
     def test_direct_video_contract_repeats_master_and_removes_image_prompts(self):
         plans = [{
             "scene_goal": "Reveal the alien citadel",

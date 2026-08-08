@@ -1161,7 +1161,9 @@ export type MusicVideoMode = 'performance' | 'narrative' | 'hybrid' | 'abstract'
 export type MusicVideoLipSync = 'frequent' | 'occasional' | 'none'
 export type MusicVideoGenerationMode = 'image_guided' | 'direct_video'
 
-export const DEFAULT_DIRECT_VIDEO_MASTER_PROMPT = 'A scene from the 1981 adult animated science fiction anthology film Heavy Metal, professional color grading, in the exact visual style and aesthetics of the 1981 film Heavy Metal. In the distinctive painted animation style of Heavy Metal 1981: painterly textures, grainy film texture, dark saturated colors, strong contrast, rough ink contours, airbrushed highlights and the classic heavy metal fantasy / sci-fi atmosphere of the 1981 film. World vocabulary: alien warriors, industrial spacecraft, decadent neon cities, monsters and alien deserts under red or purple skies. Never anime, clean digital art, modern 3D CGI or photorealistic live action.'
+export const LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT = 'A scene from the 1981 adult animated science fiction anthology film Heavy Metal, professional color grading, in the exact visual style and aesthetics of the 1981 film Heavy Metal. In the distinctive painted animation style of Heavy Metal 1981: painterly textures, grainy film texture, dark saturated colors, strong contrast, rough ink contours, airbrushed highlights and the classic heavy metal fantasy / sci-fi atmosphere of the 1981 film. World vocabulary: alien warriors, industrial spacecraft, decadent neon cities, monsters and alien deserts under red or purple skies. Never anime, clean digital art, modern 3D CGI or photorealistic live action.'
+
+export const DEFAULT_DIRECT_VIDEO_MASTER_PROMPT = 'Maintain one coherent visual language across every clip. Keep recurring characters, materials, palette, lighting and rendering technique consistent. Do not introduce another medium or visual style unless it is explicitly requested.'
 
 export interface MusicVideoTreatment {
   generation_mode: MusicVideoGenerationMode

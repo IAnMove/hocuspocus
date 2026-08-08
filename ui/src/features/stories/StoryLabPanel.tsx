@@ -36,6 +36,7 @@ const button = 'inline-flex items-center justify-center gap-1.5 rounded-md borde
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
 const panel = 'rounded-xl border border-border bg-bg-secondary p-3 md:p-4'
 const requiredInput = 'border-violet-400/70 bg-violet-500/5 shadow-[0_0_14px_rgba(139,92,246,0.22)] focus:border-violet-300 focus:shadow-[0_0_18px_rgba(139,92,246,0.32)]'
+const requiredPreparationButton = 'border-violet-400/70 bg-violet-500/10 text-violet-200 shadow-[0_0_14px_rgba(139,92,246,0.22)] hover:border-violet-300 hover:bg-violet-500/20 hover:text-violet-100 disabled:shadow-none'
 const completeGenerationButton = 'border-emerald-400/70 bg-emerald-500/10 text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.24)] hover:border-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100 disabled:shadow-none'
 const CHARACTER_IDENTITY_REFERENCE_LOCK = [
   'CHARACTER IDENTITY REFERENCE: show exactly one character in a clear medium close-up or chest-up portrait.',
@@ -152,7 +153,9 @@ type PendingDraft = {
   result: Record<string, unknown>
   selected: string[]
   replaceCollections: boolean
+  generateImagesAfterApply: boolean
 }
+type StoryGenerationOptions = { generateImages?: boolean }
 type MusicVideoGenerationSettings = {
   imageModel: string
   videoModel: string
@@ -537,6 +540,7 @@ export function StoryLabPanel() {
   const [referenceBatchBusy, setReferenceBatchBusy] = useState(false)
   const [productionBusy, setProductionBusy] = useState<'film' | 'music' | null>(null)
   const [musicCueBusy, setMusicCueBusy] = useState('')
+  const [newSongAction, setNewSongAction] = useState<'prompts' | 'audio' | null>(null)
   const [musicQueue, setMusicQueue] = useState<{ ids: string[]; index: number } | null>(null)
   const [lyricsTranslationLanguage, setLyricsTranslationLanguage] = useState<Record<string, string>>({})
   const [musicVersionStyle, setMusicVersionStyle] = useState<Record<string, string>>({})
@@ -568,6 +572,7 @@ export function StoryLabPanel() {
         result: saved.result,
         selected: draftPaths(saved.result),
         replaceCollections: true,
+        generateImagesAfterApply: saved.generateImagesAfterApply === true,
       }
     } catch {
       return null
@@ -741,14 +746,19 @@ export function StoryLabPanel() {
     setFilmDirection(DEFAULT_SHORT_FILM_DIRECTION)
     setFilmDuration(45)
     let hasLocalResult = false
+    let savedScope: StoryGenerationScope = 'all'
+    let generateImagesAfterApply = false
     try {
       const saved = JSON.parse(window.localStorage.getItem(storyResultKey(activeWorkspace, project.id)) || 'null')
       hasLocalResult = Boolean(saved?.result)
+      savedScope = saved?.scope || 'all'
+      generateImagesAfterApply = saved?.generateImagesAfterApply === true
       setPendingDraft(saved?.result ? {
-        scope: saved.scope || 'all',
+        scope: savedScope,
         result: saved.result,
         selected: draftPaths(saved.result),
         replaceCollections: true,
+        generateImagesAfterApply,
       } : null)
     } catch {
       setPendingDraft(null)
@@ -760,18 +770,20 @@ export function StoryLabPanel() {
         if (disposed || !result) return
         const recovered = {
           jobId: savedJobId,
-          scope: 'all',
+          scope: savedScope,
           result,
+          generateImagesAfterApply,
         }
         window.localStorage.setItem(
           storyResultKey(activeWorkspace, project.id),
           JSON.stringify(recovered),
         )
         setPendingDraft({
-          scope: 'all',
+          scope: savedScope,
           result,
           selected: draftPaths(result),
           replaceCollections: true,
+          generateImagesAfterApply,
         })
         setNotice({ kind: 'ok', text: 'A Story Lab result completed on the server and was recovered automatically. Review and apply it below.' })
       }).catch(() => {
@@ -1063,9 +1075,75 @@ export function StoryLabPanel() {
     })
   }
 
+  const generateMissingImagesForScope = async (scope: StoryGenerationScope): Promise<boolean> => {
+    const current = useStoryStore.getState().project
+    const targets = storyStyledReferenceTargets(current, {
+      includeLocations: true,
+      existingOnly: false,
+    }).filter(item => {
+      const inScope = scope === 'all'
+        || (scope === 'characters' && item.target.kind === 'character')
+        || (scope === 'world' && (item.target.kind === 'world' || item.target.kind === 'location'))
+      if (!inScope) return false
+      if (item.target.kind === 'world') return current.world.referenceAssetIds.length === 0
+      if (item.target.kind === 'character') {
+        return current.characters.find(character => character.id === item.target.id)?.referenceAssetIds.length === 0
+      }
+      return current.world.locations.find(location => location.id === item.target.id)?.referenceAssetIds.length === 0
+    })
+    if (!targets.length) {
+      setNotice({ kind: 'ok', text: 'The text is ready. Every available visual target already has an image, or no visual prompt was generated.' })
+      return true
+    }
+    const creditWarning = current.provider.imageProvider === 'minimax'
+      ? ' This uses MiniMax image credits.' : ''
+    if (!window.confirm(
+      `Generate ${targets.length} concept image${targets.length === 1 ? '' : 's'} now: ${targets.map(item => item.label).join(', ')}? Existing references are preserved.${creditWarning}`,
+    )) {
+      setNotice({ kind: 'ok', text: 'The text preparation is complete. Image generation was skipped and can be started later.' })
+      return true
+    }
+    setReferenceBatchBusy(true)
+    const activity = beginStoryActivity(
+      'generating_story_images',
+      `Generating concept images: 0/${targets.length}`,
+      targets.length,
+    )
+    let completed = 0
+    let lastError = ''
+    try {
+      for (const item of targets) {
+        activity.update(
+          `Generating image ${completed + 1}/${targets.length}: ${item.label}`,
+          'generating_story_images',
+          completed,
+          targets.length,
+        )
+        const ready = await generateVisual(item.target, item.prompt, {
+          quiet: true,
+          onError: message => { lastError = message },
+        })
+        if (!ready) {
+          setNotice({
+            kind: 'error',
+            text: `Generated ${completed}/${targets.length} images. ${lastError || `Could not generate ${item.label}.`} The prepared text remains saved.`,
+          })
+          return false
+        }
+        completed += 1
+      }
+      setNotice({ kind: 'ok', text: `Text preparation and ${completed} concept image${completed === 1 ? '' : 's'} completed.` })
+      return true
+    } finally {
+      activity.finish()
+      setReferenceBatchBusy(false)
+    }
+  }
+
   const completeGeneratedDraft = async (
     scope: StoryGenerationScope,
     result: Record<string, unknown>,
+    options: StoryGenerationOptions = {},
   ) => {
     if (project.workflowMode === 'guided') {
       setPendingDraft({
@@ -1073,58 +1151,29 @@ export function StoryLabPanel() {
         result,
         selected: draftPaths(result),
         replaceCollections: true,
+        generateImagesAfterApply: options.generateImages === true,
       })
-      setNotice({ kind: 'ok', text: 'A generated draft is ready. Review the changes before applying them.' })
+      setNotice({
+        kind: 'ok',
+        text: options.generateImages
+          ? 'A generated text draft is ready. Review and apply it; its missing concept images will then be generated.'
+          : 'A generated text draft is ready. Review the changes before applying them.',
+      })
       return
     }
     applyGeneratedResult(result)
     if (scope === 'all') {
-      const generated = useStoryStore.getState().project
-      const imageCount = (generated.world.visualPrompt && !generated.world.referenceAssetIds.length ? 1 : 0)
-        + generated.characters.filter(character =>
-          character.visualPrompt && !character.referenceAssetIds.length).length
-        + generated.world.locations.filter(location =>
-          location.visualPrompt && !location.referenceAssetIds.length).length
-      if (imageCount > 0 && project.provider.imageProvider === 'minimax' && !window.confirm(
-        `Automatic mode will now generate ${imageCount} MiniMax concept image${imageCount === 1 ? '' : 's'}, which may use provider credits. Continue?`,
-      )) {
-        openStorySection('characters')
-        return
+      if (options.generateImages && !await generateMissingImagesForScope(scope)) return
+      if (!options.generateImages) {
+        setNotice({ kind: 'ok', text: 'Text preparation completed. No images were generated.' })
       }
-      if (generated.world.visualPrompt && generated.world.referenceAssetIds.length === 0) {
-        const worldReady = await generateVisual({ kind: 'world' }, generated.world.visualPrompt)
-        if (!worldReady) {
-          openStorySection('characters')
-          return
-        }
-      }
-      for (const character of generated.characters) {
-        if (character.visualPrompt && character.referenceAssetIds.length === 0) {
-          const ready = await generateVisual({ kind: 'character', id: character.id }, character.visualPrompt)
-          if (!ready) {
-            openStorySection('characters')
-            return
-          }
-        }
-      }
-      for (const location of generated.world.locations) {
-        if (location.visualPrompt && location.referenceAssetIds.length === 0) {
-          const ready = await generateVisual(
-            { kind: 'location', id: location.id },
-            location.visualPrompt,
-          )
-          if (!ready) {
-            openStorySection('world')
-            return
-          }
-        }
-      }
-      setNotice({ kind: 'ok', text: 'Automatic Story Lab pass completed: staged bible and first-look concepts are ready.' })
-      setTab('productions')
+      setTab(project.projectType === 'music_video' ? 'music' : 'productions')
+    } else if (options.generateImages) {
+      await generateMissingImagesForScope(scope)
     }
   }
 
-  const generate = async (scope: StoryGenerationScope) => {
+  const generate = async (scope: StoryGenerationScope, options: StoryGenerationOptions = {}) => {
     const generationPremise = storyProjectPremise(project)
     if (!generationPremise.trim()) {
       setNotice({ kind: 'error', text: project.projectType === 'full_story' ? 'Write a premise first.' : 'Complete the creative brief first.' })
@@ -1154,6 +1203,10 @@ export function StoryLabPanel() {
     )
     let activeJobId = ''
     const sourceProjectId = project.id
+    window.localStorage.setItem(storyResultKey(activeWorkspace, project.id), JSON.stringify({
+      scope,
+      generateImagesAfterApply: options.generateImages === true,
+    }))
     try {
       const { result } = await api.generateStorySection({
         scope,
@@ -1185,12 +1238,13 @@ export function StoryLabPanel() {
         jobId: activeJobId,
         scope,
         result,
+        generateImagesAfterApply: options.generateImages === true,
       }))
       if (useStoryStore.getState().project.id !== sourceProjectId) {
         setNotice({ kind: 'ok', text: 'Generation completed and was saved with its source story. Reopen that story to review the draft.' })
         return
       }
-      await completeGeneratedDraft(scope, result)
+      await completeGeneratedDraft(scope, result, options)
     } catch (error) {
       if ((error as Error).name !== 'AbortError') activity.fail(error)
       setNotice({
@@ -1205,6 +1259,14 @@ export function StoryLabPanel() {
       setBusy(null)
       setJobProgress('')
     }
+  }
+
+  const applyPendingGeneratedDraft = async () => {
+    if (!pendingDraft) return
+    const { scope, result, selected, replaceCollections, generateImagesAfterApply } = pendingDraft
+    applyGeneratedResult(result, selected, replaceCollections)
+    if (generateImagesAfterApply && !await generateMissingImagesForScope(scope)) return
+    if (scope === 'all') setTab(project.projectType === 'music_video' ? 'music' : 'productions')
   }
 
   const cancelGeneration = async () => {
@@ -1239,16 +1301,25 @@ export function StoryLabPanel() {
         writingBaseUrl: project.provider.writingBaseUrl,
       })
       if (useStoryStore.getState().project.id !== sourceProjectId) return
+      let generateImagesAfterApply = false
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(storyResultKey(activeWorkspace, project.id)) || 'null')
+        generateImagesAfterApply = saved?.generateImagesAfterApply === true
+      } catch {
+        // Resume remains safe as a text-only draft when legacy recovery metadata is malformed.
+      }
       setPendingDraft({
         scope: 'all',
         result,
         selected: draftPaths(result),
         replaceCollections: true,
+        generateImagesAfterApply,
       })
       window.localStorage.setItem(storyResultKey(activeWorkspace, project.id), JSON.stringify({
         jobId: recoveryJobId,
         scope: 'all',
         result,
+        generateImagesAfterApply,
       }))
       setNotice({ kind: 'ok', text: 'Recovered Story Lab draft is ready for review.' })
     } catch (error) {
@@ -2277,6 +2348,88 @@ export function StoryLabPanel() {
     }))
   }
 
+  const createNewMusicVideoSong = async (generateAudio: boolean) => {
+    const current = useStoryStore.getState().project
+    if (current.projectType !== 'music_video') return
+    if (!musicWritingReady) {
+      setNotice({ kind: 'error', text: 'Configure the selected Story Lab writing model before creating a new song.' })
+      return
+    }
+    if (generateAudio && !servicesConfig?.minimax_api_key_set) {
+      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services before generating the new song.' })
+      return
+    }
+    const existingCue = current.music.cues.find(cue => cue.kind === 'story') || current.music.cues[0]
+    const cue: StoryMusicCue = existingCue || {
+      id: storyId('music-cue'),
+      kind: 'story',
+      targetId: current.id,
+      title: current.title.trim() ? `${current.title} · canción` : 'Nueva canción',
+      purpose: current.creativeBrief.songStory || current.music.brief || 'Tell this Story as a memorable song.',
+      referenceSong: '',
+      brief: current.music.brief || storySongBrief(current, current.music.targetDurationSeconds),
+      style: '',
+      lyrics: '',
+      lyricsLanguage: current.language,
+      lyriaPrompt: '',
+      instrumental: false,
+      durationSeconds: current.music.targetDurationSeconds,
+      candidates: [],
+    }
+    const total = generateAudio ? 2 : 1
+    const activity = beginStoryActivity(
+      'writing_song',
+      generateAudio
+        ? 'Creating fresh prompts before generating the new song…'
+        : 'Creating prompts for a completely new song…',
+      total,
+    )
+    setNewSongAction(generateAudio ? 'audio' : 'prompts')
+    setMusicCueBusy(`new-song:${cue.id}`)
+    setNotice(null)
+    try {
+      const rewritten = await rewriteMusicCueDraft(cue, instruction, '')
+      if (existingCue) {
+        patchMusicCue(cue.id, rewritten)
+      } else {
+        update(latest => {
+          latest.music.cues.unshift({ ...cue, ...rewritten })
+          return latest
+        })
+      }
+      setInstruction('')
+      activity.update(
+        generateAudio
+          ? 'New prompts saved. MiniMax Music is generating the new song…'
+          : 'New song prompts saved without generating audio.',
+        generateAudio ? 'generating_music' : 'writing_song',
+        1,
+        total,
+      )
+      if (generateAudio) {
+        const ready = await generateMusicCueAudio(cue.id, true)
+        if (!ready) {
+          activity.fail(new Error('MiniMax Music did not complete the new song.'), 'generating_music')
+          return
+        }
+        activity.update('The new song and its fresh prompts are ready.', 'generating_music', 2, 2)
+        setNotice({ kind: 'ok', text: `A new version of “${cue.title}” was written and generated. Previous audio remains available.` })
+      } else {
+        setNotice({ kind: 'ok', text: `Fresh prompts and lyrics for “${cue.title}” are ready. No MiniMax music credits were used and previous audio remains available.` })
+      }
+    } catch (error) {
+      activity.fail(error, generateAudio ? 'generating_music' : 'writing_song')
+      setNotice({
+        kind: 'error',
+        text: `The new song could not be prepared: ${(error as Error).message}`,
+      })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+      setNewSongAction(null)
+    }
+  }
+
   const createMusicCueVersion = async (cueId: string) => {
     const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
     if (!cue) return
@@ -3153,7 +3306,7 @@ export function StoryLabPanel() {
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[9px]">
             <span className="inline-flex items-center gap-1.5 text-violet-200">
-              <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.8)]" /> Campo necesario
+              <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.8)]" /> Campo o preparación necesaria
             </span>
             <span className="inline-flex items-center gap-1.5 text-emerald-200">
               <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]" /> Genera el resultado completo
@@ -3192,13 +3345,22 @@ export function StoryLabPanel() {
           <option value="guided">Guided · approve stages</option>
           <option value="automatic">Automatic · one click</option>
         </select>
-        <button className={button} onClick={() => generate('all')} disabled={Boolean(busy)}
+        <button className={`${button} ${progress < foundationTotal ? requiredPreparationButton : ''}`} onClick={() => generate('all')}
+          disabled={Boolean(busy || referenceBatchBusy)}
           title="Prepara con el LLM todos los campos de texto; no genera audio, imágenes ni vídeo.">
           {busy === 'all' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {jobProgress || (
             project.projectType === 'music_video' ? 'Preparar canción e historia visual · solo texto'
               : project.projectType === 'quick_video' ? 'Preparar vídeo rápido · solo texto'
                 : 'Preparar historia completa · solo texto'
           )}
+        </button>
+        <button className={`${button} ${progress < foundationTotal ? requiredPreparationButton : ''}`} onClick={() => generate('all', { generateImages: true })}
+          disabled={Boolean(busy || referenceBatchBusy)}
+          title="Prepara todos los textos y después genera las imágenes conceptuales que todavía falten. Puede consumir créditos de imagen.">
+          {busy === 'all' || referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+          {project.projectType === 'music_video' ? 'Preparar canción e historia visual + imágenes'
+            : project.projectType === 'quick_video' ? 'Preparar vídeo rápido + imágenes'
+              : 'Preparar historia completa + imágenes'}
         </button>
         {busy && recoveryJobId && (
           <button className={`${button} border-red-500/50 text-red-300`} onClick={cancelGeneration}>
@@ -3309,11 +3471,11 @@ export function StoryLabPanel() {
                     ))}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button className={`${button} border-emerald-500/50 text-emerald-300`} disabled={!pendingDraft.selected.length} onClick={() => applyGeneratedResult(
-                      pendingDraft.result,
-                      pendingDraft.selected,
-                      pendingDraft.replaceCollections,
-                    )}><Check size={13} /> Apply selected</button>
+                    <button className={`${button} ${requiredPreparationButton}`} disabled={!pendingDraft.selected.length || referenceBatchBusy}
+                      onClick={() => void applyPendingGeneratedDraft()}>
+                      {referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                      {pendingDraft.generateImagesAfterApply ? 'Apply selected + generate images' : 'Apply selected text'}
+                    </button>
                     <button className={button} onClick={() => {
                       setPendingDraft(null)
                       window.localStorage.removeItem(storyResultKey(activeWorkspace, project.id))
@@ -3764,21 +3926,45 @@ export function StoryLabPanel() {
                         : 'LLM-authored ambience, character presentation themes and three story songs. Suggestions cost no MiniMax music credits until you generate audio.'}
                     </p>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2 xl:max-w-[760px]">
+                  <div className="flex flex-col sm:flex-row gap-2 xl:max-w-[920px]">
                     <input className={`${input} sm:w-72`} value={instruction}
                       onChange={event => setInstruction(event.target.value)}
                       placeholder="Optional music direction…" />
-                    <button className={button} disabled={Boolean(busy || musicQueue)} onClick={() => generate('music')}>
-                      {busy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate LLM suggestions
-                    </button>
-                    <button className={`${button} ${completeGenerationButton}`}
-                      disabled={Boolean(busy || musicQueue || musicCueBusy) || !project.music.cues.length || !servicesConfig?.minimax_api_key_set}
-                      onClick={() => void generateAllMusicCues()}>
-                      {musicQueue ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
-                      {musicQueue ? `Queue ${musicQueue.index + 1}/${musicQueue.ids.length}` : 'Generate all sequentially'}
-                    </button>
+                    {project.projectType === 'music_video' ? <>
+                      <button className={`${button} border-violet-400/60 bg-violet-500/10 text-violet-200`}
+                        disabled={Boolean(busy || musicQueue || musicCueBusy) || !musicWritingReady}
+                        onClick={() => void createNewMusicVideoSong(false)}>
+                        {newSongAction === 'prompts' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />}
+                        Generar prompts de una nueva canción
+                      </button>
+                      <button className={`${button} ${completeGenerationButton}`}
+                        disabled={Boolean(busy || musicQueue || musicCueBusy) || !musicWritingReady || !servicesConfig?.minimax_api_key_set}
+                        onClick={() => void createNewMusicVideoSong(true)}
+                        title={servicesConfig?.minimax_api_key_set
+                          ? 'Crea prompts y letra nuevos y genera inmediatamente una canción con MiniMax'
+                          : 'Configura la clave de MiniMax en Settings → Services'}>
+                        {newSongAction === 'audio' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
+                        Generar nueva canción
+                      </button>
+                    </> : <>
+                      <button className={button} disabled={Boolean(busy || musicQueue)} onClick={() => generate('music')}>
+                        {busy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate LLM suggestions
+                      </button>
+                      <button className={`${button} ${completeGenerationButton}`}
+                        disabled={Boolean(busy || musicQueue || musicCueBusy) || !project.music.cues.length || !servicesConfig?.minimax_api_key_set}
+                        onClick={() => void generateAllMusicCues()}>
+                        {musicQueue ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
+                        {musicQueue ? `Queue ${musicQueue.index + 1}/${musicQueue.ids.length}` : 'Generate all sequentially'}
+                      </button>
+                    </>}
                   </div>
                 </div>
+
+                {project.projectType === 'music_video' && (
+                  <p className="-mt-2 mb-4 text-right text-[9px] text-text-muted">
+                    “Prompts” no genera audio. “Nueva canción” reescribe prompt y letra y lanza una nueva versión automáticamente; las canciones anteriores se conservan.
+                  </p>
+                )}
 
                 <div className={`${panel} mb-4 grid md:grid-cols-[1fr_1fr_2fr] gap-3 items-end`}>
                   <label className="block text-[10px] text-text-muted">MiniMax model for proposed tracks
@@ -4330,22 +4516,44 @@ export function StoryLabPanel() {
                             </button>
                           </div>
                           {directMusicVideo && (
-                            <label className="block text-[10px] text-violet-200">
-                              Prompt maestro de mundo y estilo<span className="ml-1 text-violet-300" title="Required">●</span>
+                            <div className="block text-[10px] text-violet-200">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span>Prompt maestro de mundo y estilo<span className="ml-1 text-violet-300" title="Required">●</span></span>
+                                <span className={`rounded-full border px-1.5 py-0.5 text-[9px] ${project.directVideoMasterPromptMode === 'inherit'
+                                  ? 'border-violet-400/50 bg-violet-500/10 text-violet-200'
+                                  : 'border-sky-400/50 bg-sky-500/10 text-sky-200'}`}>
+                                  {project.directVideoMasterPromptMode === 'inherit' ? 'Heredado de estilos' : 'Personalizado'}
+                                </span>
+                                {project.directVideoMasterPromptMode === 'custom' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => patch({ directVideoMasterPromptMode: 'inherit' })}
+                                    className="ml-auto inline-flex items-center gap-1 rounded border border-violet-400/45 px-1.5 py-0.5 text-[9px] text-violet-200 hover:bg-violet-500/15"
+                                    title="Reemplazar el prompt personalizado por los estilos actuales del proyecto"
+                                  >
+                                    <RefreshCcw size={10} /> Usar estilos actuales
+                                  </button>
+                                )}
+                              </div>
                               <textarea
                                 className={`${input} ${requiredInput} mt-1 min-h-36 resize-y leading-relaxed`}
                                 value={project.directVideoMasterPrompt}
-                                onChange={event => patch({ directVideoMasterPrompt: event.target.value })}
+                                onChange={event => patch({
+                                  directVideoMasterPromptMode: 'custom',
+                                  directVideoMasterPrompt: event.target.value,
+                                })}
                                 placeholder="Este contrato se repetirá completo en cada clip y segmento"
                                 required
                                 aria-required="true"
                               />
                               <span className={`mt-1 block text-[9px] leading-relaxed ${directVideoMasterReady ? 'text-fuchsia-200/80' : 'text-amber-300'}`}>
                                 {directVideoMasterReady
-                                  ? 'El LLM sólo añadirá la situación concreta. Story Lab no cargará identidades, localizaciones, imágenes iniciales ni referencias H3.'
-                                  : 'Escribe el prompt maestro antes de generar.'}
+                                  ? project.directVideoMasterPromptMode === 'inherit'
+                                    ? 'Se actualiza automáticamente desde Estilo visual y Estilo visual de los personajes. Al editarlo pasa a Personalizado. No se enviarán imágenes ni referencias H3.'
+                                    : 'Prompt personalizado: el LLM sólo añadirá la situación concreta. No se enviarán imágenes ni referencias H3.'
+                                  : 'Completa Estilo visual o escribe aquí un prompt maestro antes de generar.'}
                               </span>
-                            </label>
+                            </div>
                           )}
                         </div>
                         <div className="rounded-lg border border-border bg-bg-tertiary/40 p-2.5 space-y-2">
@@ -4726,7 +4934,7 @@ function CompactVideoWorkspace({
   busy: StoryGenerationScope | null
   imageBusy: string
   referenceBatchBusy: boolean
-  generateSection: (scope: StoryGenerationScope) => void
+  generateSection: (scope: StoryGenerationScope, options?: StoryGenerationOptions) => void
   approveSection: (scope: keyof StoryProject['approvals']) => void
   isSectionApproved: (scope: keyof StoryProject['approvals']) => boolean
   generateVisual: (
@@ -4770,7 +4978,7 @@ function CompactVideoWorkspace({
               : 'Aquí sólo viven la localización, las personas que deben aparecer y la sucesión breve de acciones o diálogo. Los campos internos compatibles con Director se mantienen detrás de esta vista.'}
           </p>
           <p className="mt-2 rounded-md border border-accent-blue/20 bg-accent-blue/5 px-2.5 py-1.5 text-[9px] leading-relaxed text-text-muted">
-            <span className="font-medium text-accent-blue">Preparar = sólo texto con LLM.</span> Puede reescribir los campos del bloque, pero conserva las referencias. Únicamente los botones “Generar imagen” o “Crear identidad” renderizan imágenes.
+            <span className="font-medium text-accent-blue">“Solo texto” usa únicamente el LLM.</span> Conserva las referencias y no renderiza imágenes. Los botones “+ imágenes”, “Generar imagen” y “Crear identidad” sí ejecutan el proveedor visual y pueden consumir créditos.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -4816,9 +5024,9 @@ function CompactVideoWorkspace({
             </div>
           </details>
           <div className="flex flex-wrap gap-2">
-            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('world')}
+            <button className={`${button} ${!worldReady ? requiredPreparationButton : ''}`} disabled={Boolean(busy || referenceBatchBusy)} onClick={() => generateSection('world')}
               title="Genera o reescribe sólo los textos del entorno mediante el LLM; no renderiza imágenes.">
-              {busy === 'world' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar entorno
+              {busy === 'world' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar entorno · solo texto
             </button>
             <button className={button} disabled={Boolean(imageBusy) || referenceBatchBusy || !project.world.visualPrompt.trim()}
               onClick={() => void generateVisual({ kind: 'world' }, project.world.visualPrompt)}>
@@ -4841,9 +5049,17 @@ function CompactVideoWorkspace({
             {status(castReady, isSectionApproved('characters'))}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('characters')}
+            <button className={`${button} ${!castReady ? requiredPreparationButton : ''}`} disabled={Boolean(busy || referenceBatchBusy)} onClick={() => generateSection('characters')}
               title="Genera o reescribe sólo los textos de los sujetos mediante el LLM; conserva sus imágenes.">
-              {busy === 'characters' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar sujetos
+              {busy === 'characters' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar sujetos · solo texto
+            </button>
+            <button className={`${button} ${!castReady ? requiredPreparationButton : ''}`}
+              disabled={Boolean(busy || imageBusy || referenceBatchBusy)}
+              onClick={() => generateSection('characters', { generateImages: true })}
+              title="Prepara las fichas de los sujetos y, después de aplicarlas, genera las imágenes de identidad que falten. Puede consumir créditos de imagen.">
+              {busy === 'characters' || referenceBatchBusy
+                ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+              Preparar sujetos + imágenes
             </button>
             <button className={button} onClick={() => update(current => { current.characters.push(emptyCharacter()); return current })}>
               <Plus size={13} /> Añadir
@@ -4851,6 +5067,9 @@ function CompactVideoWorkspace({
             <button className={`${button} ${isSectionApproved('characters') ? 'border-emerald-500 text-emerald-400' : ''}`}
               onClick={() => approveSection('characters')}><Check size={13} /> {isSectionApproved('characters') ? 'Aprobados' : 'Aprobar conjunto'}</button>
           </div>
+          <p className="rounded-md border border-violet-500/25 bg-violet-500/5 px-2.5 py-1.5 text-[9px] leading-relaxed text-text-muted">
+            Para completar esta fase basta uno de los dos botones; no pulses ambos. Las imágenes no son necesarias para escribir la canción: usa “+ imágenes” sólo si prepararás el videoclip con imágenes y “solo texto” para “Vídeo directo · sin imágenes”.
+          </p>
           <div className="space-y-3">
             {project.characters.map((character, index) => (
               <CompactSubjectEditor key={character.id} character={character} index={index} total={project.characters.length}
@@ -4872,9 +5091,9 @@ function CompactVideoWorkspace({
             {status(sequenceReady, isSectionApproved('structure'))}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className={button} disabled={Boolean(busy)} onClick={() => generateSection('structure')}
+            <button className={`${button} ${!sequenceReady ? requiredPreparationButton : ''}`} disabled={Boolean(busy || referenceBatchBusy)} onClick={() => generateSection('structure')}
               title="Genera o reescribe sólo la secuencia escrita mediante el LLM; no renderiza imágenes ni vídeo.">
-              {busy === 'structure' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar secuencia
+              {busy === 'structure' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Preparar secuencia · solo texto
             </button>
             <button className={button} onClick={() => update(current => {
               current.beats.push({ id: storyId('beat'), stage: '', title: 'Nuevo momento', summary: '', goal: '', conflict: '', turn: '' })
