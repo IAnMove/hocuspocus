@@ -367,7 +367,7 @@ The first video is always the slow one: install is ~10–20 min, then the first 
 ## Install
 
 1. Install [Pinokio](https://pinokio.computer).
-2. In Pinokio, open the **Discover** tab and search for *Maestro* — or click the **Download** button on the [Maestro repo page](https://github.com/Blizaine/Maestro) and paste the URL.
+2. In Pinokio, open the **Discover** tab and paste `https://github.com/IAnMove/loreframe-studio` — or click the **Download** button on the [Loreframe Studio repo page](https://github.com/IAnMove/loreframe-studio).
 3. Click **Install**. The launcher will:
    - Create a Python virtual environment in `app/env/`
    - Install all Python dependencies (torch, xformers, transformers, fastapi, …)
@@ -426,4 +426,4 @@ Third-party models, weights, and components keep their own licenses — review t
 
 ## Issues
 
-Bug reports and feature requests: [github.com/Blizaine/Maestro/issues](https://github.com/Blizaine/Maestro/issues).
+Bug reports and feature requests: [github.com/IAnMove/loreframe-studio/issues](https://github.com/IAnMove/loreframe-studio/issues).
