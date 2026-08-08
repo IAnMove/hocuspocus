@@ -10,6 +10,7 @@ export type StoryApprovalState = 'draft' | 'approved'
 export type StoryWorkflowMode = 'guided' | 'automatic'
 export type StoryProjectType = 'full_story' | 'music_video' | 'quick_video'
 export type StoryMusicVideoGenerationMode = 'image_guided' | 'direct_video'
+export type StoryDirectVideoPromptMode = 'inherit' | 'custom'
 export type StoryQuickFormat = 'dialogue' | 'meme' | 'parody' | 'sketch' | 'viral' | 'announcement'
 export type StoryAssetKind = 'world' | 'location' | 'character' | 'prop' | 'style' | 'ignore'
 
@@ -204,6 +205,8 @@ export interface StoryProject {
   allowClipText: boolean
   /** Music-video rendering path selected in Story Lab Productions. */
   musicVideoGenerationMode: StoryMusicVideoGenerationMode
+  /** Keep the direct-video master prompt synchronized with the Story visual-style fields or edit it independently. */
+  directVideoMasterPromptMode: StoryDirectVideoPromptMode
   /** Immutable world/style contract repeated in every direct T2V request. */
   directVideoMasterPrompt: string
   premise: string

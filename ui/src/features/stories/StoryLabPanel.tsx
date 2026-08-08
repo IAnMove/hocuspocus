@@ -4409,22 +4409,44 @@ export function StoryLabPanel() {
                             </button>
                           </div>
                           {directMusicVideo && (
-                            <label className="block text-[10px] text-violet-200">
-                              Prompt maestro de mundo y estilo<span className="ml-1 text-violet-300" title="Required">●</span>
+                            <div className="block text-[10px] text-violet-200">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span>Prompt maestro de mundo y estilo<span className="ml-1 text-violet-300" title="Required">●</span></span>
+                                <span className={`rounded-full border px-1.5 py-0.5 text-[9px] ${project.directVideoMasterPromptMode === 'inherit'
+                                  ? 'border-violet-400/50 bg-violet-500/10 text-violet-200'
+                                  : 'border-sky-400/50 bg-sky-500/10 text-sky-200'}`}>
+                                  {project.directVideoMasterPromptMode === 'inherit' ? 'Heredado de estilos' : 'Personalizado'}
+                                </span>
+                                {project.directVideoMasterPromptMode === 'custom' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => patch({ directVideoMasterPromptMode: 'inherit' })}
+                                    className="ml-auto inline-flex items-center gap-1 rounded border border-violet-400/45 px-1.5 py-0.5 text-[9px] text-violet-200 hover:bg-violet-500/15"
+                                    title="Reemplazar el prompt personalizado por los estilos actuales del proyecto"
+                                  >
+                                    <RefreshCcw size={10} /> Usar estilos actuales
+                                  </button>
+                                )}
+                              </div>
                               <textarea
                                 className={`${input} ${requiredInput} mt-1 min-h-36 resize-y leading-relaxed`}
                                 value={project.directVideoMasterPrompt}
-                                onChange={event => patch({ directVideoMasterPrompt: event.target.value })}
+                                onChange={event => patch({
+                                  directVideoMasterPromptMode: 'custom',
+                                  directVideoMasterPrompt: event.target.value,
+                                })}
                                 placeholder="Este contrato se repetirá completo en cada clip y segmento"
                                 required
                                 aria-required="true"
                               />
                               <span className={`mt-1 block text-[9px] leading-relaxed ${directVideoMasterReady ? 'text-fuchsia-200/80' : 'text-amber-300'}`}>
                                 {directVideoMasterReady
-                                  ? 'El LLM sólo añadirá la situación concreta. Story Lab no cargará identidades, localizaciones, imágenes iniciales ni referencias H3.'
-                                  : 'Escribe el prompt maestro antes de generar.'}
+                                  ? project.directVideoMasterPromptMode === 'inherit'
+                                    ? 'Se actualiza automáticamente desde Estilo visual y Estilo visual de los personajes. Al editarlo pasa a Personalizado. No se enviarán imágenes ni referencias H3.'
+                                    : 'Prompt personalizado: el LLM sólo añadirá la situación concreta. No se enviarán imágenes ni referencias H3.'
+                                  : 'Completa Estilo visual o escribe aquí un prompt maestro antes de generar.'}
                               </span>
-                            </label>
+                            </div>
                           )}
                         </div>
                         <div className="rounded-lg border border-border bg-bg-tertiary/40 p-2.5 space-y-2">

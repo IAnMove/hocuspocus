@@ -2,7 +2,10 @@ import type {
   StoryBeat, StoryCharacter, StoryLocation, StoryProject, StoryRelationship,
   StoryMusicCandidate, StoryMusicCue, StoryVisualAsset,
 } from './types'
-import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../../types'
+import {
+  DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
+  LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT,
+} from '../../types'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
 
@@ -25,6 +28,22 @@ const STYLE_FAMILIES = [
   ['3d render', '3d-rendered', 'cgi'],
   ['stop motion', 'stop-motion', 'claymation'],
 ] as const
+
+export function directVideoMasterPromptFromVisualStyles(
+  visualStyle: string,
+  characterVisualStyle: string,
+): string {
+  const globalStyle = visualStyle.trim()
+  const characterStyle = characterVisualStyle.trim()
+  if (!globalStyle && !characterStyle) return ''
+  return [
+    globalStyle ? `GLOBAL VISUAL STYLE (mandatory in every clip): ${globalStyle}` : '',
+    characterStyle
+      ? `CHARACTER VISUAL STYLE (mandatory for every visible character): ${characterStyle}`
+      : '',
+    DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
+  ].filter(Boolean).join('\n\n')
+}
 
 const normalizeStyleText = (value: string): string => value
   .normalize('NFD')
@@ -286,7 +305,8 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     enforceVisualStyle: true,
     allowClipText: false,
     musicVideoGenerationMode: 'image_guided',
-    directVideoMasterPrompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
+    directVideoMasterPromptMode: 'inherit',
+    directVideoMasterPrompt: '',
     premise: '',
     logline: '',
     synopsis: '',
@@ -377,6 +397,18 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     }))
     : {}
   const now = new Date().toISOString()
+  const visualStyle = text(project.visualStyle)
+  const characterVisualStyle = text(project.characterVisualStyle)
+  const rawDirectVideoMasterPrompt = text(project.directVideoMasterPrompt)
+  const directVideoMasterPromptMode = project.directVideoMasterPromptMode === 'custom'
+    ? 'custom'
+    : project.directVideoMasterPromptMode === 'inherit'
+      ? 'inherit'
+      : rawDirectVideoMasterPrompt
+        && rawDirectVideoMasterPrompt !== DEFAULT_DIRECT_VIDEO_MASTER_PROMPT
+        && rawDirectVideoMasterPrompt !== LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT
+        ? 'custom'
+        : 'inherit'
   return {
     ...fallback,
     version: 1,
@@ -404,16 +436,16 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     genre: text(project.genre, fallback.genre),
     tone: text(project.tone, fallback.tone),
     audience: text(project.audience, fallback.audience),
-    visualStyle: text(project.visualStyle),
-    characterVisualStyle: text(project.characterVisualStyle),
+    visualStyle,
+    characterVisualStyle,
     enforceVisualStyle: project.enforceVisualStyle !== false,
     allowClipText: project.allowClipText === true,
     musicVideoGenerationMode: project.musicVideoGenerationMode === 'direct_video'
       ? 'direct_video' : 'image_guided',
-    directVideoMasterPrompt: text(
-      project.directVideoMasterPrompt,
-      DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
-    ),
+    directVideoMasterPromptMode,
+    directVideoMasterPrompt: directVideoMasterPromptMode === 'inherit'
+      ? directVideoMasterPromptFromVisualStyles(visualStyle, characterVisualStyle)
+      : rawDirectVideoMasterPrompt,
     premise: text(project.premise),
     logline: text(project.logline),
     synopsis: text(project.synopsis),
@@ -512,13 +544,13 @@ export function changedSections(before: StoryProject, after: StoryProject): Stor
   const overviewBefore = [
     before.title, before.projectType, before.creativeBrief, before.language, before.genre, before.tone, before.audience,
     before.visualStyle, before.characterVisualStyle, before.enforceVisualStyle, before.allowClipText,
-    before.musicVideoGenerationMode, before.directVideoMasterPrompt,
+    before.musicVideoGenerationMode, before.directVideoMasterPromptMode, before.directVideoMasterPrompt,
     before.premise, before.logline, before.synopsis, before.theme, before.ending,
   ]
   const overviewAfter = [
     after.title, after.projectType, after.creativeBrief, after.language, after.genre, after.tone, after.audience,
     after.visualStyle, after.characterVisualStyle, after.enforceVisualStyle, after.allowClipText,
-    after.musicVideoGenerationMode, after.directVideoMasterPrompt,
+    after.musicVideoGenerationMode, after.directVideoMasterPromptMode, after.directVideoMasterPrompt,
     after.premise, after.logline, after.synopsis, after.theme, after.ending,
   ]
   const changed: StorySection[] = []
