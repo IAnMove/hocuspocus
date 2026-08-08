@@ -540,6 +540,7 @@ export function StoryLabPanel() {
   const [referenceBatchBusy, setReferenceBatchBusy] = useState(false)
   const [productionBusy, setProductionBusy] = useState<'film' | 'music' | null>(null)
   const [musicCueBusy, setMusicCueBusy] = useState('')
+  const [newSongAction, setNewSongAction] = useState<'prompts' | 'audio' | null>(null)
   const [musicQueue, setMusicQueue] = useState<{ ids: string[]; index: number } | null>(null)
   const [lyricsTranslationLanguage, setLyricsTranslationLanguage] = useState<Record<string, string>>({})
   const [musicVersionStyle, setMusicVersionStyle] = useState<Record<string, string>>({})
@@ -2347,6 +2348,88 @@ export function StoryLabPanel() {
     }))
   }
 
+  const createNewMusicVideoSong = async (generateAudio: boolean) => {
+    const current = useStoryStore.getState().project
+    if (current.projectType !== 'music_video') return
+    if (!musicWritingReady) {
+      setNotice({ kind: 'error', text: 'Configure the selected Story Lab writing model before creating a new song.' })
+      return
+    }
+    if (generateAudio && !servicesConfig?.minimax_api_key_set) {
+      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services before generating the new song.' })
+      return
+    }
+    const existingCue = current.music.cues.find(cue => cue.kind === 'story') || current.music.cues[0]
+    const cue: StoryMusicCue = existingCue || {
+      id: storyId('music-cue'),
+      kind: 'story',
+      targetId: current.id,
+      title: current.title.trim() ? `${current.title} · canción` : 'Nueva canción',
+      purpose: current.creativeBrief.songStory || current.music.brief || 'Tell this Story as a memorable song.',
+      referenceSong: '',
+      brief: current.music.brief || storySongBrief(current, current.music.targetDurationSeconds),
+      style: '',
+      lyrics: '',
+      lyricsLanguage: current.language,
+      lyriaPrompt: '',
+      instrumental: false,
+      durationSeconds: current.music.targetDurationSeconds,
+      candidates: [],
+    }
+    const total = generateAudio ? 2 : 1
+    const activity = beginStoryActivity(
+      'writing_song',
+      generateAudio
+        ? 'Creating fresh prompts before generating the new song…'
+        : 'Creating prompts for a completely new song…',
+      total,
+    )
+    setNewSongAction(generateAudio ? 'audio' : 'prompts')
+    setMusicCueBusy(`new-song:${cue.id}`)
+    setNotice(null)
+    try {
+      const rewritten = await rewriteMusicCueDraft(cue, instruction, '')
+      if (existingCue) {
+        patchMusicCue(cue.id, rewritten)
+      } else {
+        update(latest => {
+          latest.music.cues.unshift({ ...cue, ...rewritten })
+          return latest
+        })
+      }
+      setInstruction('')
+      activity.update(
+        generateAudio
+          ? 'New prompts saved. MiniMax Music is generating the new song…'
+          : 'New song prompts saved without generating audio.',
+        generateAudio ? 'generating_music' : 'writing_song',
+        1,
+        total,
+      )
+      if (generateAudio) {
+        const ready = await generateMusicCueAudio(cue.id, true)
+        if (!ready) {
+          activity.fail(new Error('MiniMax Music did not complete the new song.'), 'generating_music')
+          return
+        }
+        activity.update('The new song and its fresh prompts are ready.', 'generating_music', 2, 2)
+        setNotice({ kind: 'ok', text: `A new version of “${cue.title}” was written and generated. Previous audio remains available.` })
+      } else {
+        setNotice({ kind: 'ok', text: `Fresh prompts and lyrics for “${cue.title}” are ready. No MiniMax music credits were used and previous audio remains available.` })
+      }
+    } catch (error) {
+      activity.fail(error, generateAudio ? 'generating_music' : 'writing_song')
+      setNotice({
+        kind: 'error',
+        text: `The new song could not be prepared: ${(error as Error).message}`,
+      })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+      setNewSongAction(null)
+    }
+  }
+
   const createMusicCueVersion = async (cueId: string) => {
     const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
     if (!cue) return
@@ -3843,21 +3926,45 @@ export function StoryLabPanel() {
                         : 'LLM-authored ambience, character presentation themes and three story songs. Suggestions cost no MiniMax music credits until you generate audio.'}
                     </p>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-2 xl:max-w-[760px]">
+                  <div className="flex flex-col sm:flex-row gap-2 xl:max-w-[920px]">
                     <input className={`${input} sm:w-72`} value={instruction}
                       onChange={event => setInstruction(event.target.value)}
                       placeholder="Optional music direction…" />
-                    <button className={button} disabled={Boolean(busy || musicQueue)} onClick={() => generate('music')}>
-                      {busy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate LLM suggestions
-                    </button>
-                    <button className={`${button} ${completeGenerationButton}`}
-                      disabled={Boolean(busy || musicQueue || musicCueBusy) || !project.music.cues.length || !servicesConfig?.minimax_api_key_set}
-                      onClick={() => void generateAllMusicCues()}>
-                      {musicQueue ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
-                      {musicQueue ? `Queue ${musicQueue.index + 1}/${musicQueue.ids.length}` : 'Generate all sequentially'}
-                    </button>
+                    {project.projectType === 'music_video' ? <>
+                      <button className={`${button} border-violet-400/60 bg-violet-500/10 text-violet-200`}
+                        disabled={Boolean(busy || musicQueue || musicCueBusy) || !musicWritingReady}
+                        onClick={() => void createNewMusicVideoSong(false)}>
+                        {newSongAction === 'prompts' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />}
+                        Generar prompts de una nueva canción
+                      </button>
+                      <button className={`${button} ${completeGenerationButton}`}
+                        disabled={Boolean(busy || musicQueue || musicCueBusy) || !musicWritingReady || !servicesConfig?.minimax_api_key_set}
+                        onClick={() => void createNewMusicVideoSong(true)}
+                        title={servicesConfig?.minimax_api_key_set
+                          ? 'Crea prompts y letra nuevos y genera inmediatamente una canción con MiniMax'
+                          : 'Configura la clave de MiniMax en Settings → Services'}>
+                        {newSongAction === 'audio' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
+                        Generar nueva canción
+                      </button>
+                    </> : <>
+                      <button className={button} disabled={Boolean(busy || musicQueue)} onClick={() => generate('music')}>
+                        {busy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate LLM suggestions
+                      </button>
+                      <button className={`${button} ${completeGenerationButton}`}
+                        disabled={Boolean(busy || musicQueue || musicCueBusy) || !project.music.cues.length || !servicesConfig?.minimax_api_key_set}
+                        onClick={() => void generateAllMusicCues()}>
+                        {musicQueue ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
+                        {musicQueue ? `Queue ${musicQueue.index + 1}/${musicQueue.ids.length}` : 'Generate all sequentially'}
+                      </button>
+                    </>}
                   </div>
                 </div>
+
+                {project.projectType === 'music_video' && (
+                  <p className="-mt-2 mb-4 text-right text-[9px] text-text-muted">
+                    “Prompts” no genera audio. “Nueva canción” reescribe prompt y letra y lanza una nueva versión automáticamente; las canciones anteriores se conservan.
+                  </p>
+                )}
 
                 <div className={`${panel} mb-4 grid md:grid-cols-[1fr_1fr_2fr] gap-3 items-end`}>
                   <label className="block text-[10px] text-text-muted">MiniMax model for proposed tracks

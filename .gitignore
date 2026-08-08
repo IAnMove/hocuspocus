@@ -21,6 +21,11 @@ ENVIRONMENT
 # Kept locally for the maintainer's reference; not shipped via git.
 docs/release_todo.md
 
+# Local implementation handoff for the future Series Lab. Intentionally kept
+# across branch switches on this workstation, but not published until its
+# prerequisite branches have been merged and the design is approved.
+/SERIES_LAB_IMPLEMENTATION_PLAN.local.md
+
 # Uploaded files
 uploads/
 

@@ -162,6 +162,61 @@ def test_fenced_json_is_accepted_and_missing_fields_are_rejected():
         normalize_generated_copy('{"overview":"Only one field"}')
 
 
+def test_common_small_model_json_mistakes_are_recovered():
+    trailing_commentary = """Here is the result:
+{"overview":"One.","youtube":{"title":"Title","description":"Line one.
+Line two.",},"x":{"post":"Post",},}
+This object is ready."""
+    recovered = normalize_generated_copy(trailing_commentary)
+    assert recovered["youtube"]["description"] == "Line one.\nLine two."
+
+    python_literal = (
+        "{'overview': 'One.', 'youtube': {'title': 'Title', "
+        "'description': 'Description'}, 'x': {'post': 'Post'}}"
+    )
+    assert normalize_generated_copy(python_literal)["x"]["post"] == "Post"
+
+
+def test_generation_repairs_one_invalid_response_without_resending_notes():
+    responses = iter([
+        "This is not JSON at all.",
+        json.dumps({
+            "overview": "Recovered overview.",
+            "youtube": {"title": "Recovered title", "description": "Recovered description."},
+            "x": {"post": "Recovered post."},
+        }),
+    ])
+    calls = []
+
+    def fake_generate(**kwargs):
+        calls.append(kwargs)
+        return next(responses)
+
+    result = generate_video_extra_info(
+        {"text": "A saved production prompt.", "source_fingerprint": "fixed"},
+        "es",
+        fake_generate,
+    )
+
+    assert result["youtube"]["title"] == "Recovered title"
+    assert len(calls) == 2
+    assert "<production_notes>" in calls[0]["prompt"]
+    assert "<production_notes>" not in calls[1]["prompt"]
+    assert "<candidate>" in calls[1]["prompt"]
+
+
+def test_generation_stops_after_one_failed_repair():
+    calls = []
+
+    def fake_generate(**kwargs):
+        calls.append(kwargs)
+        return "still invalid"
+
+    with pytest.raises(ValueError, match="invalid publishing copy twice"):
+        generate_video_extra_info({"text": "Saved prompt."}, "es", fake_generate)
+    assert len(calls) == 2
+
+
 def test_language_allowlist_rejects_unknown_codes():
     assert normalize_language("pt-BR") == ("pt", "Portuguese")
     with pytest.raises(ValueError, match="Unsupported language"):
