@@ -6,6 +6,8 @@ import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails, checkLoraUpdates }
 import { formatAge } from '../../lib/format'
 import type { LoraRecommendedWeights, LoraUpdateStatus } from '../../types'
 
+/* eslint-disable react-refresh/only-export-components -- shared picker helpers are intentionally exported. */
+
 export function LoraGuideTooltip({ guide }: { guide: string }) {
   const [show, setShow] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)

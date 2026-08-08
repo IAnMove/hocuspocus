@@ -3514,7 +3514,7 @@ export const useStore = create<AppState>((set, get) => ({
         // Restore saved generation mode
         mode = saved.generationMode || mode
         // Validate saved model for this mode still exists
-        let savedModel = saved.selectedModelPerMode?.[mode]
+        const savedModel = saved.selectedModelPerMode?.[mode]
         initialModelType = savedModel && models.some(m => m.model_type === savedModel)
           ? savedModel
           : getDefaultModelForMode(mode, families, models)

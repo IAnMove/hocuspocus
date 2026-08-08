@@ -202,13 +202,16 @@ export function Hunyuan3DPanel() {
     }
   }
 
+  const activeJobId = job?.job_id
+  const activeJobStatus = job?.status
+
   useEffect(() => {
-    if (!job || (job.status !== 'queued' && job.status !== 'running')) return
+    if (!activeJobId || (activeJobStatus !== 'queued' && activeJobStatus !== 'running')) return
     let disposed = false
     let failures = 0
     const poll = async () => {
       try {
-        const next = await fetchHunyuan3DJob(job.job_id)
+        const next = await fetchHunyuan3DJob(activeJobId)
         failures = 0
         if (!disposed) setJob(next)
       } catch (err) {
@@ -231,7 +234,7 @@ export function Hunyuan3DPanel() {
       disposed = true
       window.clearInterval(timer)
     }
-  }, [job?.job_id, job?.status])
+  }, [activeJobId, activeJobStatus])
 
   useEffect(() => {
     if (job?.status === 'completed' && completedJobRef.current !== job.job_id) {

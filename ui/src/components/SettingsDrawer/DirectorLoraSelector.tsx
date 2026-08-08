@@ -91,6 +91,20 @@ export function DirectorLoraSelector({ mode, modelType }: {
     directorSetLora(mode, newLoras, multipliers, newWeights, availableLoras)
   }, [mode, availableLoras, directorSetLora])
 
+  const updateWeight = useCallback((filename: string, phaseIndex: number, value: number) => {
+    setLoraWeights(prev => {
+      const next = { ...prev }
+      if (!next[filename]) return prev
+      next[filename] = [...next[filename]]
+      // Keep typed values aligned with the slider's supported range and
+      // avoid persisting NaN while a numeric field is temporarily empty.
+      if (!Number.isFinite(value)) return prev
+      next[filename][phaseIndex] = Math.max(0, Math.min(2, Math.round(value * 100) / 100))
+      persist(activatedLoras, next)
+      return next
+    })
+  }, [activatedLoras, persist])
+
   // Load available LoRAs when model changes
   useEffect(() => {
     if (!modelType) return
@@ -218,20 +232,6 @@ export function DirectorLoraSelector({ mode, modelType }: {
       return next
     })
   }, [loraWeights, phases, persist, loraWeightRecs])
-
-  const updateWeight = useCallback((filename: string, phaseIndex: number, value: number) => {
-    setLoraWeights(prev => {
-      const next = { ...prev }
-      if (!next[filename]) return prev
-      next[filename] = [...next[filename]]
-      // Keep typed values aligned with the slider's supported range and
-      // avoid persisting NaN while a numeric field is temporarily empty.
-      if (!Number.isFinite(value)) return prev
-      next[filename][phaseIndex] = Math.max(0, Math.min(2, Math.round(value * 100) / 100))
-      persist(activatedLoras, next)
-      return next
-    })
-  }, [activatedLoras, persist])
 
   const handleGenerateGuide = async (filename: string) => {
     if (!modelType) return

@@ -220,7 +220,8 @@ function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop
   ) || job.h3WindowPlan?.windows[0]
 
   useEffect(() => {
-    setShowH3Prompts(false)
+    const reset = window.setTimeout(() => setShowH3Prompts(false), 0)
+    return () => window.clearTimeout(reset)
   }, [job.h3WindowPlan?.signature])
 
   return (

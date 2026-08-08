@@ -3,6 +3,8 @@ import { Lock, Unlock } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import type { ModelOptions } from '../../types'
 
+/* eslint-disable react-refresh/only-export-components -- shared slider helpers are intentionally exported. */
+
 export const formatSeconds = (seconds: number) => {
   const rounded = Math.round(seconds * 10) / 10
   return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`

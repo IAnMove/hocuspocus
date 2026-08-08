@@ -25,6 +25,7 @@ docs/release_todo.md
 # across branch switches on this workstation, but not published until its
 # prerequisite branches have been merged and the design is approved.
 /SERIES_LAB_IMPLEMENTATION_PLAN.local.md
+/seriessteps.md
 
 # Uploaded files
 uploads/

@@ -58,7 +58,11 @@ export function RestyleControls() {
   const [previewError, setPreviewError] = useState('')
 
   useEffect(() => {
-    if (mappings.length > 0) setShowRegions(true)
+    if (mappings.length > 0) {
+      const open = window.setTimeout(() => setShowRegions(true), 0)
+      return () => window.clearTimeout(open)
+    }
+    return undefined
   }, [mappings.length])
 
   const resetPreview = useCallback(() => {

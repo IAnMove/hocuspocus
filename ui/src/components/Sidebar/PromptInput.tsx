@@ -260,8 +260,10 @@ export function PromptInput() {
   // newly planned storyboard once; the user can still collapse it afterward.
   useEffect(() => {
     if (usesH3WindowPlanner && h3WindowPlan?.signature) {
-      setWindowPlanOpen(true)
+      const open = window.setTimeout(() => setWindowPlanOpen(true), 0)
+      return () => window.clearTimeout(open)
     }
+    return undefined
   }, [usesH3WindowPlanner, h3WindowPlan?.signature])
 
   // grow shrink-0: fill spare vertical space when the sidebar is roomy, but

@@ -1,0 +1,448 @@
+{
+  "schema": "series-library",
+  "version": 1,
+  "workspaceId": "default",
+  "seriesOrder": ["series_signal"],
+  "seriesById": {
+    "series_signal": {
+      "version": 1,
+      "id": "series_signal",
+      "revision": 1,
+      "title": "The Last Signal",
+      "logline": "Two operators decode a warning.",
+      "premise": "A failing emergency network hides a human message.",
+      "format": "episodic",
+      "defaultEpisodeDurationSeconds": 75,
+      "language": "en",
+      "genre": "mystery",
+      "tone": "tense",
+      "audience": "adult",
+      "visualStyle": "grounded cinematic realism",
+      "characterVisualStyle": "naturalistic faces",
+      "cameraLanguage": "restrained handheld",
+      "allowClipText": false,
+      "sourceMode": "original",
+      "masterUniversePrompt": "",
+      "rightsNote": "Original series assets supplied by the user.",
+      "bestEffortLipSyncAcknowledged": false,
+      "importSource": {
+        "kind": "original",
+        "sourceWorkspaceId": null,
+        "sourceStoryId": null,
+        "importedAt": "2026-01-01T00:00:00Z",
+        "historicalProductionIds": [],
+        "migrationNotes": "Created as an original Series Lab project."
+      },
+      "canon": {
+        "worldSummary": "A city depends on a failing emergency network.",
+        "immutableRules": [
+          {
+            "id": "rule_1",
+            "description": "Network failure is progressive.",
+            "status": "approved"
+          }
+        ],
+        "currentFacts": [],
+        "forbiddenChanges": ["No unexplained resurrection"],
+        "themes": ["trust"],
+        "longArcs": [],
+        "timeline": [],
+        "revision": 1
+      },
+      "characters": [
+        {
+          "id": "char_mara",
+          "name": "Mara",
+          "aliases": [],
+          "role": "radio engineer",
+          "personality": "methodical",
+          "desire": "save the city",
+          "need": "trust others",
+          "flaw": "controlling",
+          "longArc": "learns to delegate",
+          "voiceAndDialogue": "low and precise",
+          "appearance": "dark cropped hair",
+          "identityLock": "scar over left eyebrow",
+          "wardrobeVariants": [],
+          "referenceAssetIds": ["asset_mara"],
+          "primaryReferenceAssetId": "asset_mara",
+          "voiceProfile": {
+            "provider": "native",
+            "voiceId": "mara-default",
+            "language": "en",
+            "pronunciationDictionary": {},
+            "pace": 1,
+            "pitch": 0,
+            "emotionalDefaults": "restrained",
+            "approvedSampleAssetId": "asset_mara_voice",
+            "consentSourceNote": "User-provided voice design"
+          },
+          "currentState": {},
+          "approval": "approved"
+        },
+        {
+          "id": "char_ivo",
+          "name": "Ivo",
+          "aliases": [],
+          "role": "night operator",
+          "personality": "warm",
+          "desire": "protect Mara",
+          "need": "speak plainly",
+          "flaw": "evasive",
+          "longArc": "becomes honest",
+          "voiceAndDialogue": "quiet and hesitant",
+          "appearance": "curly hair and round glasses",
+          "identityLock": "round glasses",
+          "wardrobeVariants": [],
+          "referenceAssetIds": ["asset_ivo"],
+          "primaryReferenceAssetId": "asset_ivo",
+          "currentState": {},
+          "approval": "approved"
+        }
+      ],
+      "relationships": [
+        {
+          "id": "rel_mara_ivo",
+          "fromCharacterId": "char_mara",
+          "toCharacterId": "char_ivo",
+          "label": "colleagues",
+          "dynamic": "mutual distrust",
+          "evolution": "growing trust"
+        }
+      ],
+      "locations": [
+        {
+          "id": "loc_station",
+          "name": "Radio station",
+          "purpose": "Emergency broadcast control",
+          "description": "Rainy underground control room",
+          "referenceAssetIds": ["asset_station"],
+          "variants": [
+            {
+              "id": "loc_station_night",
+              "label": "night",
+              "description": "Emergency lights and rain on the windows",
+              "referenceAssetIds": ["asset_station"]
+            }
+          ],
+          "currentState": { "power": "unstable" },
+          "approval": "approved"
+        },
+        {
+          "id": "loc_rooftop",
+          "name": "Transmitter rooftop",
+          "purpose": "Manual antenna access",
+          "description": "Windy roof above the dark city",
+          "referenceAssetIds": ["asset_rooftop"],
+          "variants": [
+            {
+              "id": "loc_rooftop_storm",
+              "label": "storm",
+              "description": "Rain, warning lights and severe wind",
+              "referenceAssetIds": ["asset_rooftop"]
+            }
+          ],
+          "currentState": { "antenna": "misaligned" },
+          "approval": "approved"
+        }
+      ],
+      "props": [
+        {
+          "id": "prop_radio",
+          "name": "Emergency radio",
+          "kind": "prop",
+          "description": "Old encrypted receiver",
+          "ownerCharacterId": "char_mara",
+          "referenceAssetIds": ["asset_radio"],
+          "variants": [],
+          "currentState": { "tunedFrequency": "unknown" },
+          "approval": "approved"
+        }
+      ],
+      "seasons": [
+        {
+          "id": "season_1",
+          "number": 1,
+          "title": "Static",
+          "premise": "Warnings arrive.",
+          "arc": "The signal is human.",
+          "episodeOrder": ["episode_1"],
+          "createdAt": "2026-01-01T00:00:00Z",
+          "updatedAt": "2026-01-01T00:00:00Z"
+        }
+      ],
+      "episodesById": {
+        "episode_1": {
+          "id": "episode_1",
+          "seasonId": "season_1",
+          "number": 1,
+          "title": "The Warning",
+          "premise": "A coded signal interrupts the night shift.",
+          "logline": "Mara and Ivo choose whether to broadcast.",
+          "targetDurationSeconds": 75,
+          "status": "shot_plan",
+          "canonRevisionAtCreation": 1,
+          "canonSnapshot": {
+            "revision": 1,
+            "worldSummary": "A city depends on a failing emergency network.",
+            "immutableRules": [
+              {
+                "id": "rule_1",
+                "description": "Network failure is progressive.",
+                "status": "approved"
+              }
+            ],
+            "currentFacts": [],
+            "characterStates": { "char_mara": {}, "char_ivo": {} },
+            "relationshipStates": { "rel_mara_ivo": "mutual distrust" },
+            "locationStates": {
+              "loc_station": { "power": "unstable" },
+              "loc_rooftop": { "antenna": "misaligned" }
+            },
+            "propStates": { "prop_radio": { "tunedFrequency": "unknown" } },
+            "sourceMode": "original",
+            "masterUniversePrompt": "",
+            "rightsNote": "Original series assets supplied by the user.",
+            "visualStyle": "grounded cinematic realism",
+            "characterVisualStyle": "naturalistic faces",
+            "cameraLanguage": "restrained handheld",
+            "allowClipText": false,
+            "provider": {
+              "writingProvider": "maestro",
+              "writingModel": "",
+              "imageProvider": "maestro",
+              "imageModel": "",
+              "videoModel": "minimax-h3",
+              "videoSettings": { "renderStrategy": "auto" }
+            },
+            "capabilitySnapshot": {
+              "model": "minimax-h3",
+              "family": "minimax_h3",
+              "version": "2026-08-08",
+              "limits": { "image": 9, "video": 3, "audio": 3, "total": 12 },
+              "supportsFirstFrame": true,
+              "supportsFirstLast": false,
+              "supportsContinuation": true,
+              "supportsNativeAudio": true
+            },
+            "approvedReferenceAssetIds": [
+              "asset_mara",
+              "asset_ivo",
+              "asset_station",
+              "asset_rooftop",
+              "asset_radio"
+            ]
+          },
+          "outline": {
+            "beats": [
+              "The coded warning interrupts the shift.",
+              "The operators climb to the transmitter.",
+              "Mara chooses to broadcast."
+            ]
+          },
+          "script": [
+            {
+              "id": "scene_station",
+              "order": 1,
+              "locationId": "loc_station",
+              "locationVariantId": "loc_station_night",
+              "time": "night",
+              "participatingCharacterIds": ["char_mara", "char_ivo"],
+              "purpose": "Decode the warning",
+              "entryState": "routine",
+              "exitState": "urgent",
+              "beats": [
+                { "id": "beat_1", "kind": "action", "summary": "Signal arrives" },
+                { "id": "beat_2", "kind": "dialogue", "summary": "Mara orders a recording" }
+              ],
+              "dialogue": [
+                {
+                  "id": "dialogue_1",
+                  "characterId": "char_mara",
+                  "text": "Record this. Do not lose the carrier signal.",
+                  "emotion": "controlled urgency",
+                  "delivery": "quiet and precise"
+                }
+              ]
+            },
+            {
+              "id": "scene_rooftop",
+              "order": 2,
+              "locationId": "loc_rooftop",
+              "locationVariantId": "loc_rooftop_storm",
+              "time": "night",
+              "participatingCharacterIds": ["char_mara", "char_ivo"],
+              "purpose": "Realign and broadcast",
+              "entryState": "urgent",
+              "exitState": "committed",
+              "beats": [
+                { "id": "beat_3", "kind": "action", "summary": "They reach the antenna" },
+                { "id": "beat_4", "kind": "action", "summary": "Mara starts the broadcast" }
+              ],
+              "dialogue": []
+            }
+          ],
+          "shots": [
+            {
+              "id": "shot_1", "sceneId": "scene_station", "order": 1, "durationSeconds": 8,
+              "framing": "medium two-shot", "camera": "slow push-in", "action": "Mara hears the signal while Ivo watches the receiver",
+              "dialogueBeats": [{ "id": "dialogue_1", "characterId": "char_mara", "text": "Record this. Do not lose the carrier signal.", "emotion": "controlled urgency", "delivery": "quiet and precise" }],
+              "visibleCharacterIds": ["char_mara", "char_ivo"], "speakingCharacterIds": ["char_mara"], "primarySpeakerId": "char_mara",
+              "locationId": "loc_station", "locationVariantId": "loc_station_night", "wardrobeByCharacterId": {}, "propIds": ["prop_radio"],
+              "emotionalStateByCharacterId": { "char_mara": "controlled urgency", "char_ivo": "alarmed" }, "renderStrategy": "references",
+              "referencePolicy": { "mode": "automatic", "manualIncludeAssetIds": [], "manualExcludeAssetIds": [] },
+              "prompt": "Mara tells Ivo to record the signal in the rainy radio control room.", "negativePrompt": "text, captions",
+              "referenceManifest": {
+                "strategy": "references",
+                "selected": [
+                  { "assetId": "asset_mara", "entityType": "character", "entityId": "char_mara", "referenceRole": "primary_speaker_identity", "mediaType": "image", "priority": 2, "reason": "Primary speaker is visible" },
+                  { "assetId": "asset_ivo", "entityType": "character", "entityId": "char_ivo", "referenceRole": "visible_character_identity", "mediaType": "image", "priority": 4, "reason": "Recurring listener is visible" },
+                  { "assetId": "asset_station", "entityType": "location", "entityId": "loc_station", "variantId": "loc_station_night", "referenceRole": "location_variant", "mediaType": "image", "priority": 5, "reason": "Selected location variant" }
+                ],
+                "omitted": [], "warnings": [], "errors": [], "firstFrameRole": "visual_reference",
+                "capabilitySnapshot": { "model": "minimax-h3", "family": "minimax_h3", "version": "2026-08-08", "limits": { "image": 9, "video": 3, "audio": 3, "total": 12 }, "supportsFirstFrame": true, "supportsFirstLast": false, "supportsContinuation": true, "supportsNativeAudio": true }
+              },
+              "attempts": [
+                {
+                  "id": "attempt_1", "status": "completed", "prompt": "Mara tells Ivo to record the signal in the rainy radio control room.", "negativePrompt": "text, captions", "model": "minimax-h3",
+                  "referenceManifest": {
+                    "strategy": "references",
+                    "selected": [
+                      { "assetId": "asset_mara", "entityType": "character", "entityId": "char_mara", "referenceRole": "primary_speaker_identity", "mediaType": "image", "priority": 2, "reason": "Primary speaker is visible" },
+                      { "assetId": "asset_ivo", "entityType": "character", "entityId": "char_ivo", "referenceRole": "visible_character_identity", "mediaType": "image", "priority": 4, "reason": "Recurring listener is visible" },
+                      { "assetId": "asset_station", "entityType": "location", "entityId": "loc_station", "variantId": "loc_station_night", "referenceRole": "location_variant", "mediaType": "image", "priority": 5, "reason": "Selected location variant" }
+                    ],
+                    "omitted": [], "warnings": [], "errors": [], "firstFrameRole": "visual_reference",
+                    "capabilitySnapshot": { "model": "minimax-h3", "family": "minimax_h3", "version": "2026-08-08", "limits": { "image": 9, "video": 3, "audio": 3, "total": 12 }, "supportsFirstFrame": true, "supportsFirstLast": false, "supportsContinuation": true, "supportsNativeAudio": true }
+                  },
+                  "seed": 42, "settings": { "durationSeconds": 8 }, "startTimeSeconds": 0, "endTimeSeconds": 8,
+                  "createdAt": "2026-01-01T00:00:00Z", "submittedAt": "2026-01-01T00:00:02Z", "completedAt": "2026-01-01T00:01:02Z", "elapsedMs": 60000,
+                  "requestPayloadHash": "sha256:demo", "providerTaskId": "provider-task-1", "outputAssetIds": ["asset_clip_1"], "retryCount": 0
+                }
+              ],
+              "approvedAttemptId": "attempt_1"
+            },
+            {
+              "id": "shot_2", "sceneId": "scene_station", "order": 2, "durationSeconds": 8,
+              "framing": "over-shoulder", "camera": "locked", "action": "Ivo traces the carrier while Mara listens",
+              "dialogueBeats": [], "visibleCharacterIds": ["char_mara", "char_ivo"], "speakingCharacterIds": [],
+              "locationId": "loc_station", "locationVariantId": "loc_station_night", "wardrobeByCharacterId": {}, "propIds": ["prop_radio"],
+              "emotionalStateByCharacterId": { "char_mara": "focused", "char_ivo": "anxious" }, "renderStrategy": "references",
+              "referencePolicy": { "mode": "automatic", "manualIncludeAssetIds": [], "manualExcludeAssetIds": [], "maxReferencesOverride": 2 },
+              "prompt": "Ivo traces the carrier as Mara listens.", "negativePrompt": "text, captions",
+              "referenceManifest": {
+                "strategy": "references",
+                "selected": [
+                  { "assetId": "asset_mara", "entityType": "character", "entityId": "char_mara", "referenceRole": "visible_character_identity", "mediaType": "image", "priority": 4, "reason": "Recurring character is visible" },
+                  { "assetId": "asset_ivo", "entityType": "character", "entityId": "char_ivo", "referenceRole": "visible_character_identity", "mediaType": "image", "priority": 4, "reason": "Recurring character is visible" }
+                ],
+                "omitted": [
+                  { "assetId": "asset_station", "entityType": "location", "entityId": "loc_station", "variantId": "loc_station_night", "referenceRole": "location_variant", "mediaType": "image", "reason": "Manual reference budget is exhausted" },
+                  { "assetId": "asset_radio", "entityType": "prop", "entityId": "prop_radio", "referenceRole": "plot_critical_prop", "mediaType": "image", "reason": "Manual reference budget is exhausted" }
+                ],
+                "warnings": ["Two references were omitted because the user override reduced the image budget to 2."], "errors": [], "firstFrameRole": "none",
+                "capabilitySnapshot": { "model": "minimax-h3", "family": "minimax_h3", "version": "2026-08-08", "limits": { "image": 9, "video": 3, "audio": 3, "total": 12 }, "supportsFirstFrame": true, "supportsFirstLast": false, "supportsContinuation": true, "supportsNativeAudio": true }
+              },
+              "attempts": []
+            },
+            {
+              "id": "shot_3", "sceneId": "scene_station", "order": 3, "durationSeconds": 8,
+              "framing": "insert", "camera": "macro drift", "action": "The emergency radio pulses with the coded warning", "dialogueBeats": [],
+              "visibleCharacterIds": [], "speakingCharacterIds": [], "locationId": "loc_station", "locationVariantId": "loc_station_night",
+              "wardrobeByCharacterId": {}, "propIds": ["prop_radio"], "emotionalStateByCharacterId": {}, "renderStrategy": "references",
+              "referencePolicy": { "mode": "automatic", "manualIncludeAssetIds": [], "manualExcludeAssetIds": [] },
+              "prompt": "Macro view of an emergency receiver pulsing in a dark control room.", "negativePrompt": "text, captions", "attempts": []
+            },
+            {
+              "id": "shot_4", "sceneId": "scene_station", "order": 4, "durationSeconds": 8,
+              "framing": "wide", "camera": "handheld follow", "action": "Mara and Ivo leave for the rooftop", "dialogueBeats": [],
+              "visibleCharacterIds": ["char_mara", "char_ivo"], "speakingCharacterIds": [], "locationId": "loc_station", "locationVariantId": "loc_station_night",
+              "wardrobeByCharacterId": {}, "propIds": [], "emotionalStateByCharacterId": { "char_mara": "resolved", "char_ivo": "fearful" }, "renderStrategy": "auto",
+              "referencePolicy": { "mode": "automatic", "manualIncludeAssetIds": [], "manualExcludeAssetIds": [] },
+              "prompt": "Mara and Ivo hurry out of the failing radio station.", "negativePrompt": "text, captions", "attempts": []
+            },
+            {
+              "id": "shot_5", "sceneId": "scene_rooftop", "order": 5, "durationSeconds": 8,
+              "framing": "establishing wide", "camera": "slow crane", "action": "The rooftop antenna bends in the storm", "dialogueBeats": [],
+              "visibleCharacterIds": [], "speakingCharacterIds": [], "locationId": "loc_rooftop", "locationVariantId": "loc_rooftop_storm",
+              "wardrobeByCharacterId": {}, "propIds": [], "emotionalStateByCharacterId": {}, "renderStrategy": "first_frame",
+              "referencePolicy": { "mode": "automatic", "manualIncludeAssetIds": [], "manualExcludeAssetIds": [] },
+              "prompt": "Storm over a transmitter rooftop above a dark city.", "negativePrompt": "text, captions", "attempts": []
+            },
+            {
+              "id": "shot_6", "sceneId": "scene_rooftop", "order": 6, "durationSeconds": 8,
+              "framing": "medium", "camera": "handheld", "action": "Ivo braces the antenna while Mara reaches the control box", "dialogueBeats": [],
+              "visibleCharacterIds": ["char_mara", "char_ivo"], "speakingCharacterIds": [], "locationId": "loc_rooftop", "locationVariantId": "loc_rooftop_storm",
+              "wardrobeByCharacterId": {}, "propIds": [], "emotionalStateByCharacterId": { "char_mara": "determined", "char_ivo": "strained" }, "renderStrategy": "auto",
+              "referencePolicy": { "mode": "automatic", "manualIncludeAssetIds": [], "manualExcludeAssetIds": [] },
+              "prompt": "Two radio operators realign an antenna in severe wind.", "negativePrompt": "text, captions", "attempts": []
+            },
+            {
+              "id": "shot_7", "sceneId": "scene_rooftop", "order": 7, "durationSeconds": 8,
+              "framing": "close-up", "camera": "slow push-in", "action": "Mara activates the transmitter", "dialogueBeats": [],
+              "visibleCharacterIds": ["char_mara"], "speakingCharacterIds": [], "locationId": "loc_rooftop", "locationVariantId": "loc_rooftop_storm",
+              "wardrobeByCharacterId": {}, "propIds": [], "emotionalStateByCharacterId": { "char_mara": "committed" }, "renderStrategy": "first_frame",
+              "referencePolicy": { "mode": "automatic", "manualIncludeAssetIds": [], "manualExcludeAssetIds": [] },
+              "prompt": "Mara activates the rooftop transmitter under red warning lights.", "negativePrompt": "text, captions", "attempts": []
+            },
+            {
+              "id": "shot_8", "sceneId": "scene_rooftop", "order": 8, "durationSeconds": 8,
+              "framing": "city wide", "camera": "static", "action": "Emergency lights answer across the city", "dialogueBeats": [],
+              "visibleCharacterIds": [], "speakingCharacterIds": [], "locationId": "loc_rooftop", "locationVariantId": "loc_rooftop_storm",
+              "wardrobeByCharacterId": {}, "propIds": [], "emotionalStateByCharacterId": {}, "renderStrategy": "direct",
+              "referencePolicy": { "mode": "automatic", "manualIncludeAssetIds": [], "manualExcludeAssetIds": [] },
+              "prompt": "Emergency lights answer across the rain-covered city skyline.", "negativePrompt": "text, captions", "attempts": []
+            }
+          ],
+          "proposedCanonDelta": {
+            "baseRevision": 1,
+            "sourceEpisodeId": "episode_1",
+            "add": [
+              {
+                "id": "fact_signal_human",
+                "description": "The warning signal was transmitted by a human survivor.",
+                "sourceEpisodeId": "episode_1",
+                "status": "proposed",
+                "decision": "pending"
+              }
+            ],
+            "change": [],
+            "retire": []
+          },
+          "productionIds": ["pipeline_demo"],
+          "createdAt": "2026-01-01T00:00:00Z",
+          "updatedAt": "2026-01-01T00:00:00Z"
+        }
+      },
+      "assets": {
+        "asset_mara": { "id": "asset_mara", "workspaceId": "default", "kind": "character", "uri": "assets/mara.png", "ownerType": "character", "ownerId": "char_mara", "isDerivedThumbnail": false, "metadata": { "referenceRole": "primary_portrait" } },
+        "asset_ivo": { "id": "asset_ivo", "workspaceId": "default", "kind": "character", "uri": "assets/ivo.png", "ownerType": "character", "ownerId": "char_ivo", "isDerivedThumbnail": false, "metadata": { "referenceRole": "primary_portrait" } },
+        "asset_station": { "id": "asset_station", "workspaceId": "default", "kind": "location", "uri": "assets/station.png", "ownerType": "location", "ownerId": "loc_station", "isDerivedThumbnail": false, "metadata": { "variantId": "loc_station_night" } },
+        "asset_rooftop": { "id": "asset_rooftop", "workspaceId": "default", "kind": "location", "uri": "assets/rooftop.png", "ownerType": "location", "ownerId": "loc_rooftop", "isDerivedThumbnail": false, "metadata": { "variantId": "loc_rooftop_storm" } },
+        "asset_radio": { "id": "asset_radio", "workspaceId": "default", "kind": "prop", "uri": "assets/radio.png", "ownerType": "prop", "ownerId": "prop_radio", "isDerivedThumbnail": false, "metadata": {} },
+        "asset_mara_voice": { "id": "asset_mara_voice", "workspaceId": "default", "kind": "audio", "uri": "assets/mara-voice.wav", "ownerType": "character", "ownerId": "char_mara", "isDerivedThumbnail": false, "metadata": { "approved": true } },
+        "asset_clip_1": { "id": "asset_clip_1", "workspaceId": "default", "kind": "video", "uri": "outputs/episode-1/shot-1.mp4", "ownerType": "attempt", "ownerId": "attempt_1", "isDerivedThumbnail": false, "metadata": { "durationSeconds": 8 } }
+      },
+      "provider": {
+        "writingProvider": "maestro",
+        "writingModel": "",
+        "imageProvider": "maestro",
+        "imageModel": "",
+        "videoModel": "minimax-h3",
+        "videoSettings": { "renderStrategy": "auto" },
+        "videoCapabilities": {
+          "model": "minimax-h3",
+          "family": "minimax_h3",
+          "version": "2026-08-08",
+          "limits": { "image": 9, "video": 3, "audio": 3, "total": 12 },
+          "supportsFirstFrame": true,
+          "supportsFirstLast": false,
+          "supportsContinuation": true,
+          "supportsNativeAudio": true
+        }
+      },
+      "createdAt": "2026-01-01T00:00:00Z",
+      "updatedAt": "2026-01-01T00:00:00Z"
+    }
+  }
+}

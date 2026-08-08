@@ -7,6 +7,7 @@ import { LoraSelector } from '../SettingsDrawer/LoraSelector'
 import { ResolutionPresets } from './ResolutionPresets'
 import { AspectRatioGrid } from './AspectRatioGrid'
 import { WindowSettings } from './DurationSlider'
+import type { GenerateParams } from '../../types'
 
 function PresetManager() {
   const presets = useStore(s => s.presets)
@@ -304,7 +305,7 @@ export function AdvancedSettings() {
                   </label>
                   <select
                     value={params.minimax_h3_text_encoder || modelOptions.minimax_h3_text_encoder_default || modelOptions.minimax_h3_text_encoder_choices[0]?.value}
-                    onChange={e => setParam('minimax_h3_text_encoder', e.target.value as any)}
+                    onChange={e => setParam('minimax_h3_text_encoder', e.target.value as GenerateParams['minimax_h3_text_encoder'])}
                     className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
                   >
                     {modelOptions.minimax_h3_text_encoder_choices.map(choice => (
@@ -577,7 +578,7 @@ export function AdvancedSettings() {
                   placeholder="-1 for random"
                 />
               </div>
-              ) as any}
+              ) as any /* eslint-disable-line @typescript-eslint/no-explicit-any -- preserves the legacy JSX child inference boundary. */}
 
               {/* Self Refiner */}
               {!isScailEdit && modelOptions?.self_refiner === true ? (

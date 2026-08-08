@@ -45,7 +45,7 @@ export function OmniReferenceSection() {
   const [error, setError] = useState('')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
 
-  const references = params.minimax_h3_references ?? []
+  const references = useMemo(() => params.minimax_h3_references ?? [], [params.minimax_h3_references])
   const limits = modelOptions?.omni_reference_limits ?? {
     image: 9, video: 3, audio: 3, total: 12,
   }
