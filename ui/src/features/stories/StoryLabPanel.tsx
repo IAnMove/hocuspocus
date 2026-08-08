@@ -35,6 +35,8 @@ import type {
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
 const panel = 'rounded-xl border border-border bg-bg-secondary p-3 md:p-4'
+const requiredInput = 'border-violet-400/70 bg-violet-500/5 shadow-[0_0_14px_rgba(139,92,246,0.22)] focus:border-violet-300 focus:shadow-[0_0_18px_rgba(139,92,246,0.32)]'
+const completeGenerationButton = 'border-emerald-400/70 bg-emerald-500/10 text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.24)] hover:border-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-100 disabled:shadow-none'
 const CHARACTER_IDENTITY_REFERENCE_LOCK = [
   'CHARACTER IDENTITY REFERENCE: show exactly one character in a clear medium close-up or chest-up portrait.',
   'The face must be large in frame, sharply readable, unobstructed and well lit, with both eyes and defining facial features clearly visible.',
@@ -287,40 +289,45 @@ function draftPaths(result: Record<string, unknown>): string[] {
 }
 
 function Field({
-  label, value, onChange, rows = 1, placeholder = '',
+  label, value, onChange, rows = 1, placeholder = '', required = false,
 }: {
   label: string
   value: string
   onChange: (value: string) => void
   rows?: number
   placeholder?: string
+  required?: boolean
 }) {
+  const requiredClass = required ? requiredInput : ''
   return (
-    <label className="block text-[10px] text-text-muted">
-      {label}
+    <label className={`block text-[10px] ${required ? 'text-violet-200' : 'text-text-muted'}`}>
+      {label}{required && <span className="ml-1 text-violet-300" title="Required">●</span>}
       {rows > 1
-        ? <textarea className={`${input} mt-1`} rows={rows} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} />
-        : <input className={`${input} mt-1`} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} />}
+        ? <textarea className={`${input} ${requiredClass} mt-1`} rows={rows} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} required={required} aria-required={required} />
+        : <input className={`${input} ${requiredClass} mt-1`} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} required={required} aria-required={required} />}
     </label>
   )
 }
 
 function Choice({
-  label, value, options, onChange,
+  label, value, options, onChange, required = false,
 }: {
   label: string
   value: string
   options: string[]
   onChange: (value: string) => void
+  required?: boolean
 }) {
   const custom = !options.includes(value)
   return (
-    <label className="block text-[10px] text-text-muted">
-      {label}
+    <label className={`block text-[10px] ${required ? 'text-violet-200' : 'text-text-muted'}`}>
+      {label}{required && <span className="ml-1 text-violet-300" title="Required">●</span>}
       <select
-        className={`${input} mt-1`}
+        className={`${input} ${required ? requiredInput : ''} mt-1`}
         value={custom ? '__other__' : value}
         onChange={event => onChange(event.target.value === '__other__' ? '' : event.target.value)}
+        required={required}
+        aria-required={required}
       >
         {options.map(option => <option key={option}>{option}</option>)}
         <option value="__other__">Other…</option>
@@ -3144,6 +3151,14 @@ export function StoryLabPanel() {
           <p className="text-[9px] text-text-muted mt-0.5">
             {STORY_PROJECT_TYPES.find(item => item.id === project.projectType)?.description}
           </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[9px]">
+            <span className="inline-flex items-center gap-1.5 text-violet-200">
+              <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.8)]" /> Campo necesario
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-emerald-200">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]" /> Genera el resultado completo
+            </span>
+          </div>
         </div>
         <select
           className={`${input} w-44`}
@@ -3177,11 +3192,12 @@ export function StoryLabPanel() {
           <option value="guided">Guided · approve stages</option>
           <option value="automatic">Automatic · one click</option>
         </select>
-        <button className={button} onClick={() => generate('all')} disabled={Boolean(busy)}>
+        <button className={button} onClick={() => generate('all')} disabled={Boolean(busy)}
+          title="Prepara con el LLM todos los campos de texto; no genera audio, imágenes ni vídeo.">
           {busy === 'all' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {jobProgress || (
-            project.projectType === 'music_video' ? 'Crear canción e historia visual'
-              : project.projectType === 'quick_video' ? 'Crear vídeo rápido'
-                : 'Generar historia completa'
+            project.projectType === 'music_video' ? 'Preparar canción e historia visual · solo texto'
+              : project.projectType === 'quick_video' ? 'Preparar vídeo rápido · solo texto'
+                : 'Preparar historia completa · solo texto'
           )}
         </button>
         {busy && recoveryJobId && (
@@ -3329,10 +3345,10 @@ export function StoryLabPanel() {
                 </div>
                 {project.projectType === 'music_video' && (
                   <div className={`${panel} mb-4 grid md:grid-cols-2 gap-3 border-pink-500/20`}>
-                    <div className="md:col-span-2"><Field label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={4} placeholder="Dónde nace la canción, situación, época, atmósfera y cualquier dato imprescindible." /></div>
-                    <Field label="Artista / quién canta, graba o produce" value={project.creativeBrief.performer} onChange={performer => patch({ creativeBrief: { ...project.creativeBrief, performer } })} rows={3} placeholder="Voz, personalidad artística, presencia escénica o productor." />
-                    <Field label="Estilo musical" value={project.creativeBrief.musicStyle} onChange={musicStyle => patch({ creativeBrief: { ...project.creativeBrief, musicStyle }, music: { ...project.music, style: musicStyle } })} rows={3} placeholder="Género, instrumentación, voz, energía y producción." />
-                    <div className="md:col-span-2"><Field label="Qué queremos que cuente la canción" value={project.creativeBrief.songStory} onChange={songStory => patch({ creativeBrief: { ...project.creativeBrief, songStory }, music: { ...project.music, brief: songStory } })} rows={5} placeholder="Historia, punto de vista, emoción inicial, cambio y recuerdo final." /></div>
+                    <div className="md:col-span-2"><Field required label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={4} placeholder="Dónde nace la canción, situación, época, atmósfera y cualquier dato imprescindible." /></div>
+                    <Field required label="Artista / quién canta, graba o produce" value={project.creativeBrief.performer} onChange={performer => patch({ creativeBrief: { ...project.creativeBrief, performer } })} rows={3} placeholder="Voz, personalidad artística, presencia escénica o productor." />
+                    <Field required label="Estilo musical" value={project.creativeBrief.musicStyle} onChange={musicStyle => patch({ creativeBrief: { ...project.creativeBrief, musicStyle }, music: { ...project.music, style: musicStyle } })} rows={3} placeholder="Género, instrumentación, voz, energía y producción." />
+                    <div className="md:col-span-2"><Field required label="Qué queremos que cuente la canción" value={project.creativeBrief.songStory} onChange={songStory => patch({ creativeBrief: { ...project.creativeBrief, songStory }, music: { ...project.music, brief: songStory } })} rows={5} placeholder="Historia, punto de vista, emoción inicial, cambio y recuerdo final." /></div>
                     <label className="block text-[10px] text-text-muted">
                       Duración objetivo · {project.creativeBrief.durationSeconds}s
                       <input type="range" min={30} max={360} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
@@ -3346,10 +3362,10 @@ export function StoryLabPanel() {
                 )}
                 {project.projectType === 'quick_video' && (
                   <div className={`${panel} mb-4 grid md:grid-cols-2 gap-3 border-cyan-500/20`}>
-                    <div className="md:col-span-2"><Field label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={3} placeholder="Qué está pasando y qué debe entender el espectador sin explicación adicional." /></div>
-                    <Field label="Protagonistas" value={project.creativeBrief.subjects} onChange={subjects => patch({ creativeBrief: { ...project.creativeBrief, subjects } })} rows={3} placeholder="Por ejemplo: Trump y Marco Rubio." />
-                    <Field label="Lugar" value={project.creativeBrief.setting} onChange={setting => patch({ creativeBrief: { ...project.creativeBrief, setting } })} rows={3} placeholder="Por ejemplo: despacho de la Casa Blanca, de día." />
-                    <div className="md:col-span-2"><Field label="Qué ocurre / diálogo" value={project.creativeBrief.action} onChange={action => patch({ creativeBrief: { ...project.creativeBrief, action } })} rows={5} placeholder="Acción, conversación, remate o mensaje que debe aparecer." /></div>
+                    <div className="md:col-span-2"><Field required label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={3} placeholder="Qué está pasando y qué debe entender el espectador sin explicación adicional." /></div>
+                    <Field required label="Protagonistas" value={project.creativeBrief.subjects} onChange={subjects => patch({ creativeBrief: { ...project.creativeBrief, subjects } })} rows={3} placeholder="Por ejemplo: Trump y Marco Rubio." />
+                    <Field required label="Lugar" value={project.creativeBrief.setting} onChange={setting => patch({ creativeBrief: { ...project.creativeBrief, setting } })} rows={3} placeholder="Por ejemplo: despacho de la Casa Blanca, de día." />
+                    <div className="md:col-span-2"><Field required label="Qué ocurre / diálogo" value={project.creativeBrief.action} onChange={action => patch({ creativeBrief: { ...project.creativeBrief, action } })} rows={5} placeholder="Acción, conversación, remate o mensaje que debe aparecer." /></div>
                     <label className="block text-[10px] text-text-muted">Formato
                       <select className={`${input} mt-1`} value={project.creativeBrief.quickFormat}
                         onChange={event => patch({ creativeBrief: { ...project.creativeBrief, quickFormat: event.target.value as StoryProject['creativeBrief']['quickFormat'] } })}>
@@ -3366,27 +3382,29 @@ export function StoryLabPanel() {
                 )}
                 <div className="grid xl:grid-cols-[1fr_360px] gap-4">
                   <div className={`${panel} grid md:grid-cols-2 gap-3`}>
-                    <Field label="Title" value={project.title} onChange={title => patch({ title })} />
-                    <label className="block text-[10px] text-text-muted">
-                      Language
+                    <Field required label="Title" value={project.title} onChange={title => patch({ title })} />
+                    <label className="block text-[10px] text-violet-200">
+                      Language<span className="ml-1 text-violet-300" title="Required">●</span>
                       <EditableLanguageInput
-                        className={`${input} mt-1`}
+                        className={`${input} ${requiredInput} mt-1`}
                         value={project.language}
                         onChange={language => patch({ language })}
+                        required
                       />
                     </label>
                     {project.projectType === 'full_story' && (
                       <>
-                        <Choice label="Genre" value={project.genre} options={GENRES} onChange={genre => patch({ genre })} />
-                        <Choice label="Tone" value={project.tone} options={TONES} onChange={tone => patch({ tone })} />
+                        <Choice required label="Genre" value={project.genre} options={GENRES} onChange={genre => patch({ genre })} />
+                        <Choice required label="Tone" value={project.tone} options={TONES} onChange={tone => patch({ tone })} />
                         <Field label="Audience" value={project.audience} onChange={audience => patch({ audience })} />
                         <Field label="Theme" value={project.theme} onChange={theme => patch({ theme })} />
-                        <Field label="What the story is about / premise" value={project.premise} onChange={premise => patch({ premise })} rows={5} placeholder="Who wants what, what stops them, and what happens if they fail?" />
+                        <Field required label="What the story is about / premise" value={project.premise} onChange={premise => patch({ premise })} rows={5} placeholder="Who wants what, what stops them, and what happens if they fail?" />
                       </>
                     )}
-                    <Field label="Visual style / independent art direction" value={project.visualStyle} onChange={visualStyle => patch({ visualStyle })} rows={5} placeholder="For example: hand-painted 2D animation, watercolor backgrounds, clean ink contours, warm muted palette…" />
+                    <Field required label="Visual style / independent art direction" value={project.visualStyle} onChange={visualStyle => patch({ visualStyle })} rows={5} placeholder="For example: hand-painted 2D animation, watercolor backgrounds, clean ink contours, warm muted palette…" />
                     <div className="space-y-1.5">
                       <Field
+                        required
                         label="Estilo visual de los personajes"
                         value={project.characterVisualStyle}
                         onChange={characterVisualStyle => patch({ characterVisualStyle })}
@@ -3753,7 +3771,7 @@ export function StoryLabPanel() {
                     <button className={button} disabled={Boolean(busy || musicQueue)} onClick={() => generate('music')}>
                       {busy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate LLM suggestions
                     </button>
-                    <button className={`${button} border-pink-500/60 text-pink-300`}
+                    <button className={`${button} ${completeGenerationButton}`}
                       disabled={Boolean(busy || musicQueue || musicCueBusy) || !project.music.cues.length || !servicesConfig?.minimax_api_key_set}
                       onClick={() => void generateAllMusicCues()}>
                       {musicQueue ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
@@ -3889,10 +3907,10 @@ export function StoryLabPanel() {
                                     </div>
                                     <span className="shrink-0 rounded border border-pink-500/30 px-2 py-1 text-[9px] text-pink-200">{project.music.model}</span>
                                   </div>
-                                  <Field label={`prompt · ${cue.style.trim().length}/300 characters`} value={cue.style}
+                                  <Field required label={`prompt · ${cue.style.trim().length}/300 characters`} value={cue.style}
                                     onChange={style => patchMusicCue(cue.id, { style })} rows={3} />
                                   <p className="text-[9px] text-text-muted">Genre, mood, instruments, voice, tempo and production. Anything after character 300 is not sent.</p>
-                                  {!cue.instrumental && <Field label="lyrics · structured separately" value={cue.lyrics}
+                                  {!cue.instrumental && <Field required label="lyrics · structured separately" value={cue.lyrics}
                                     onChange={lyrics => patchMusicCue(cue.id, { lyrics })} rows={10} />}
                                   {!cue.instrumental && (
                                     <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
@@ -3922,7 +3940,7 @@ export function StoryLabPanel() {
                                       void navigator.clipboard.writeText(miniMaxCuePayload(cue, project.music.model))
                                       setNotice({ kind: 'ok', text: `MiniMax payload for “${cue.title}” copied.` })
                                     }}><Copy size={12} /> Copy exact payload</button>
-                                    <button className={`${button} border-pink-500/60 text-pink-300`}
+                                    <button className={`${button} ${completeGenerationButton}`}
                                       disabled={Boolean(musicCueBusy || musicQueue) || !servicesConfig?.minimax_api_key_set || !cue.style.trim() || (!cue.instrumental && (!cue.lyrics.trim() || !MINIMAX_LYRIC_SECTION.test(cue.lyrics)))}
                                       onClick={() => void generateMusicCueAudio(cue.id)}>
                                       {generatingAudio ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />} Generate this track
@@ -4042,9 +4060,9 @@ export function StoryLabPanel() {
                         onClick={() => void adaptStoryLyrics()}><Sparkles size={13} /> Adapt lyrics to this Story</button>
                     </div>
                     <div className="space-y-2">
-                      <Field label="Final MiniMax prompt · English · max 300 characters" value={project.music.style}
+                      <Field required label="Final MiniMax prompt · English · max 300 characters" value={project.music.style}
                         onChange={style => patch({ music: { ...project.music, style } })} rows={3} />
-                      <Field label="Editable lyrics" value={project.music.lyrics}
+                      <Field required label="Editable lyrics" value={project.music.lyrics}
                         onChange={lyrics => patch({ music: { ...project.music, lyrics } })} rows={8} />
                       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                         <label className="block text-[10px] text-text-muted">Translate lyrics to
@@ -4077,7 +4095,7 @@ export function StoryLabPanel() {
                           onChange={event => patch({ music: { ...project.music, targetDurationSeconds: Math.max(20, Math.min(360, Number(event.target.value) || 90)) } })} />
                       </label>
                       <p className="text-[9px] text-text-muted">MiniMax Music does not expose an exact duration parameter; the target guides lyric writing and the render can vary.</p>
-                      <button className={`${button} w-full border-pink-500/60 text-pink-300`}
+                      <button className={`${button} ${completeGenerationButton} w-full`}
                         disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
                         onClick={() => void generateMinimaxSongs()}><Music size={13} /> Generate manual candidates</button>
                       {project.music.candidates.map(candidate => (
@@ -4148,7 +4166,7 @@ export function StoryLabPanel() {
                     <p className="text-[9px] text-text-muted">
                       Planned size: {comicPageCount * comicPanelsPerPage} panels. Longer chapters take proportionally more planning time and image credits.
                     </p>
-                    <button className={`${button} w-full border-accent-blue text-accent-blue`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={() => stageComic(true)}><Sparkles size={13} /> Generate complete comic chapter</button>
+                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={() => stageComic(true)}><Sparkles size={13} /> Generate complete comic chapter</button>
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length)} onClick={() => stageComic(false)}><ChevronRight size={13} /> Open in Comic Director</button>
                     <p className="text-[9px] text-text-muted">Complete generation creates the plan and artwork and may consume provider credits. Director mode lets you review every field first.</p>
                   </div>
@@ -4235,7 +4253,7 @@ export function StoryLabPanel() {
                         </span>
                       </span>
                     </label>
-                    <button className={`${button} w-full border-purple-500/60 text-purple-300`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmImageReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
+                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmImageReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> {project.projectType === 'quick_video' ? 'Abrir en Director' : 'Open in Short Film Director'}</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
                   </div>
@@ -4312,12 +4330,15 @@ export function StoryLabPanel() {
                             </button>
                           </div>
                           {directMusicVideo && (
-                            <label className="block text-[10px] text-text-muted">Prompt maestro de mundo y estilo
+                            <label className="block text-[10px] text-violet-200">
+                              Prompt maestro de mundo y estilo<span className="ml-1 text-violet-300" title="Required">●</span>
                               <textarea
-                                className={`${input} mt-1 min-h-36 resize-y leading-relaxed`}
+                                className={`${input} ${requiredInput} mt-1 min-h-36 resize-y leading-relaxed`}
                                 value={project.directVideoMasterPrompt}
                                 onChange={event => patch({ directVideoMasterPrompt: event.target.value })}
                                 placeholder="Este contrato se repetirá completo en cada clip y segmento"
+                                required
+                                aria-required="true"
                               />
                               <span className={`mt-1 block text-[9px] leading-relaxed ${directVideoMasterReady ? 'text-fuchsia-200/80' : 'text-amber-300'}`}>
                                 {directVideoMasterReady
@@ -4478,7 +4499,7 @@ export function StoryLabPanel() {
                         </label>
                         <div className="grid gap-2 sm:grid-cols-2">
                           <button
-                            className={`${button} w-full border-pink-500/60 text-pink-300`}
+                            className={`${button} ${completeGenerationButton} w-full`}
                             disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady}
                             onClick={() => void stageMusicVideo(true)}
                           >
@@ -4590,7 +4611,7 @@ export function StoryLabPanel() {
                         onChange={event => patch({ music: { ...project.music, lyrics: event.target.value } })}
                         aria-label="Song lyrics" />
                     )}
-                    <button className={`${button} w-full border-pink-500/60 text-pink-300`}
+                    <button className={`${button} ${completeGenerationButton} w-full`}
                       disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
                       onClick={() => void generateMinimaxSongs()}>
                       {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}

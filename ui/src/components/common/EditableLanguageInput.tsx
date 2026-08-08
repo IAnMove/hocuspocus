@@ -21,11 +21,13 @@ export function EditableLanguageInput({
   onChange,
   className = '',
   placeholder = 'Choose or type any language',
+  required = false,
 }: {
   value: string
   onChange: (value: string) => void
   className?: string
   placeholder?: string
+  required?: boolean
 }) {
   const listId = useId()
   return (
@@ -37,6 +39,8 @@ export function EditableLanguageInput({
         onChange={event => onChange(event.target.value)}
         placeholder={placeholder}
         autoComplete="off"
+        required={required}
+        aria-required={required}
       />
       <datalist id={listId}>
         {COMMON_LANGUAGES.map(language => (
