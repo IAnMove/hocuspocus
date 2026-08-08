@@ -202,3 +202,10 @@ def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Pa
     assert saved["total_time_sec"] == round(saved["assembled_at"] - saved["created_at"], 2)
     assert rejoined["assembly_time_sec"] == saved["assembly_time_sec"]
     assert rejoined["total_time_sec"] == saved["total_time_sec"]
+    rejoin_sidecar = json.loads(
+        (tmp_path / Path(rejoined["filename"]).with_suffix(".meta.json")).read_text(
+            encoding="utf-8",
+        )
+    )
+    assert rejoin_sidecar["generation_time"] == saved["total_time_sec"]
+    assert rejoin_sidecar["generation_timings"]["assembly_time_sec"] == saved["assembly_time_sec"]

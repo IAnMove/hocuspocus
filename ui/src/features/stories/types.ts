@@ -9,6 +9,7 @@ export type StoryImageProvider = 'maestro' | 'minimax'
 export type StoryApprovalState = 'draft' | 'approved'
 export type StoryWorkflowMode = 'guided' | 'automatic'
 export type StoryProjectType = 'full_story' | 'music_video' | 'quick_video'
+export type StoryMusicVideoGenerationMode = 'image_guided' | 'direct_video'
 export type StoryQuickFormat = 'dialogue' | 'meme' | 'parody' | 'sketch' | 'viral' | 'announcement'
 export type StoryAssetKind = 'world' | 'location' | 'character' | 'prop' | 'style' | 'ignore'
 
@@ -195,8 +196,16 @@ export interface StoryProject {
   audience: string
   /** Global art direction, kept separate from narrative and subject prompts. */
   visualStyle: string
+  /** Rendering/material contract applied consistently to every visible person. */
+  characterVisualStyle: string
   /** Compose visualStyle as a highest-priority lock whenever Story renders an image. */
   enforceVisualStyle: boolean
+  /** Permit intentional readable lettering inside generated video clips. */
+  allowClipText: boolean
+  /** Music-video rendering path selected in Story Lab Productions. */
+  musicVideoGenerationMode: StoryMusicVideoGenerationMode
+  /** Immutable world/style contract repeated in every direct T2V request. */
+  directVideoMasterPrompt: string
   premise: string
   logline: string
   synopsis: string

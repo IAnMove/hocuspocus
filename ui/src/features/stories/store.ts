@@ -214,7 +214,13 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   }),
   newProject: projectType => set(state => {
-    const project = createStoryProject(projectType)
+    const fresh = createStoryProject(projectType)
+    // Provider choices are user preferences in practice. Keep them when a
+    // new Story is created instead of silently returning to Maestro internal.
+    const project = {
+      ...fresh,
+      provider: { ...fresh.provider, ...state.project.provider },
+    }
     return {
       project,
       projects: { ...state.projects, [project.id]: project },

@@ -6,7 +6,7 @@ import type {
   ComicProject,
 } from '../comics/types'
 import type { ShortFilmCharacter } from '../../types'
-import { storyNegativePromptForStyle, stripStoryVisualStyle } from './model'
+import { storyNegativePromptForStyle, storyRenderStyle, stripStoryVisualStyle } from './model'
 import type { StoryCharacter, StoryMusicCue, StoryProject } from './types'
 
 export const DEFAULT_COMIC_CHAPTER_DIRECTION =
@@ -88,6 +88,10 @@ export function storyAdaptationContext(project: StoryProject): string {
     line('Theme', project.theme),
     line('Required ending', project.ending),
     line('Global visual style', project.enforceVisualStyle ? project.visualStyle : ''),
+    line('Character rendering style', project.enforceVisualStyle ? project.characterVisualStyle : ''),
+    project.allowClipText
+      ? 'Visible text in generated clips: allowed when explicitly authored.'
+      : 'Visible text in generated clips: forbidden. Dialogue and lyrics are audio/performance only; never render them as captions, subtitles, signs, UI or other readable lettering.',
     '',
     'DRAMATIC BEATS',
     ...project.beats.map((beat, index) => [
@@ -151,7 +155,7 @@ export function buildComicAdaptation(
   const pageCount = Math.max(1, Math.min(100, Math.round(options.pageCount || 4)))
   const panelsPerPage = Math.max(1, Math.min(12, Math.round(options.panelsPerPage || 4)))
   const enforcedVisualStyle = project.enforceVisualStyle
-    ? project.visualStyle.trim()
+    ? storyRenderStyle(project)
     : ''
   const hasStyleLock = Boolean(enforcedVisualStyle)
   const compatibleNegative = (value: string) => storyNegativePromptForStyle(
@@ -267,11 +271,17 @@ export interface MusicVideoAdaptation {
   locationReferences: Array<{ assetId: string; label: string }>
 }
 
+export interface MusicVideoAdaptationOptions {
+  generationMode?: StoryProject['musicVideoGenerationMode']
+}
+
 /** Build a song-led visual brief whose subject follows the authored music cue. */
 export function buildMusicVideoAdaptation(
   project: StoryProject,
   cue?: StoryMusicCue,
+  options: MusicVideoAdaptationOptions = {},
 ): MusicVideoAdaptation {
+  const directVideo = options.generationMode === 'direct_video'
   const focusKind = cue?.kind || 'story'
   const targetCharacter = focusKind === 'character'
     ? project.characters.find(character => character.id === cue?.targetId)
@@ -299,15 +309,59 @@ export function buildMusicVideoAdaptation(
   ]
   const focusLabel = targetCharacter?.name
     || (focusKind === 'world' ? `${project.title} · world` : project.title)
+  const directCharacterCanon = (character: StoryCharacter) => [
+    `${character.name} (${character.role || 'character'})`,
+    character.age ? `Age: ${character.age}.` : '',
+    character.pronouns ? `Pronouns: ${character.pronouns}.` : '',
+    character.appearance,
+    character.wardrobe ? `Canonical wardrobe: ${character.wardrobe}.` : '',
+    canonicalCharacterPsychology(character),
+  ].filter(Boolean).join('\n')
+  const directWorldCanon = [
+    line('World', project.world.summary),
+    line('Period', project.world.period),
+    line('Geography', project.world.geography),
+    line('Society', project.world.society),
+    line('Technology', project.world.technology),
+    line('World rules', project.world.rules.join('; ')),
+    ...project.world.locations.map(location => [
+      location.name,
+      location.purpose,
+      location.description,
+    ].filter(Boolean).join(' · ')),
+  ].filter(Boolean).join('\n')
+  const directStoryCanon = [
+    line('Source title', project.title),
+    line('Premise', project.premise),
+    line('Synopsis', project.synopsis),
+    line('Theme', project.theme),
+    line('Required ending', project.ending),
+    '',
+    'NARRATIVE CHARACTERS',
+    ...project.characters.map(directCharacterCanon),
+    '',
+    'DRAMATIC BEATS',
+    ...project.beats.map((beat, index) => [
+      `${index + 1}. ${beat.stage}${beat.title ? ` — ${beat.title}` : ''}`,
+      line('Action', beat.summary),
+      line('Conflict', beat.conflict),
+      line('Turn', beat.turn),
+    ].filter(Boolean).join(' · ')),
+    '',
+    'NARRATIVE WORLD FACTS',
+    directWorldCanon,
+  ].filter(Boolean).join('\n')
   const focusCanon = targetCharacter
-    ? [
+    ? directVideo ? directCharacterCanon(targetCharacter) : [
         `${targetCharacter.name} (${targetCharacter.role || 'character'})`,
         canonicalCharacterDescription(targetCharacter),
         canonicalCharacterPsychology(targetCharacter),
       ].join('\n')
     : focusKind === 'world'
-      ? [project.world.summary, project.world.visualPrompt, ...project.world.rules].filter(Boolean).join('\n')
-      : storyAdaptationContext(project)
+      ? directVideo
+        ? directWorldCanon
+        : [project.world.summary, project.world.visualPrompt, ...project.world.rules].filter(Boolean).join('\n')
+      : directVideo ? directStoryCanon : storyAdaptationContext(project)
 
   return {
     focusKind,
@@ -326,20 +380,29 @@ export function buildMusicVideoAdaptation(
       line('Song purpose', cue?.purpose),
       line('Music-video brief', cue?.brief),
       line('Musical style', cue?.style),
+      project.allowClipText
+        ? 'VISIBLE TEXT POLICY: Intentional readable text is allowed only when a shot explicitly needs it.'
+        : 'VISIBLE TEXT POLICY — STRICT: Do not show lyrics, dialogue, captions, subtitles, title cards, labels, signs, UI lettering or any other readable words in any generated image or video. Treat the lyrics below only as audio timing and semantic inspiration. Never quote, copy or materialize lyric lines visually; express their meaning through characters, action, setting, light and symbolism instead. Any screens, code or signage must remain abstract and unreadable.',
       cue?.lyrics ? `AUTHORITATIVE LYRICS\n${cue.lyrics}` : '',
       '',
       'FOCUS CANON',
       focusCanon,
       '',
-      'VISUAL WORLD BIBLE',
-      line('Global visual style', project.enforceVisualStyle ? project.visualStyle : ''),
-      line('Visual language', project.world.visualLanguage),
-      line('Forbidden imagery', project.world.negativePrompt),
+      directVideo ? 'DIRECT VIDEO NARRATIVE CONTRACT' : 'VISUAL WORLD BIBLE',
+      directVideo
+        ? 'The immutable visual world/style prompt is supplied separately and is the only aesthetic authority. Use this Story material only for concrete subjects, places and actions; do not infer or repeat an alternate rendering style.'
+        : line('Global visual style', project.enforceVisualStyle ? project.visualStyle : ''),
+      directVideo ? line('Narrative world', project.world.summary) : line('Character rendering style', project.enforceVisualStyle ? project.characterVisualStyle : ''),
+      directVideo ? '' : line('Visual language', project.world.visualLanguage),
+      directVideo ? '' : line('Forbidden imagery', project.world.negativePrompt),
+      project.allowClipText
+        ? ''
+        : 'FINAL VISIBLE-TEXT OVERRIDE: If any lyric, beat, location note or visual-language sentence above mentions words, code text, dialogue on screen or floating lettering, reinterpret that idea as nonverbal imagery. Do not include the quoted words or any text-rendering instruction in image_prompt, video_prompt, keyframes or window prompts.',
     ].filter(Boolean).join('\n'),
-    characterReferences: Array.from(
+    characterReferences: directVideo ? [] : Array.from(
       new Map(characterReferences.map(reference => [reference.assetId, reference])).values(),
     ),
-    locationReferences: Array.from(
+    locationReferences: directVideo ? [] : Array.from(
       new Map(locationReferences.map(reference => [reference.assetId, reference])).values(),
     ),
   }
@@ -356,10 +419,11 @@ export function buildShortFilmAdaptation(
   const enforcedVisualStyle = project.enforceVisualStyle
     ? project.visualStyle.trim()
     : ''
-  const hasStyleLock = Boolean(enforcedVisualStyle)
+  const renderStyleLock = project.enforceVisualStyle ? storyRenderStyle(project) : ''
+  const hasStyleLock = Boolean(renderStyleLock)
   const compatibleNegative = (value: string) => storyNegativePromptForStyle(
     value,
-    enforcedVisualStyle,
+    renderStyleLock,
     hasStyleLock,
   )
   const visualStyle = enforcedVisualStyle || project.world.visualLanguage.trim()

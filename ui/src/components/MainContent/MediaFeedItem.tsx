@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties } from 'react'
-import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, BookOpen, Box, Film } from 'lucide-react'
+import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, BookOpen, Box, Film, BadgeInfo } from 'lucide-react'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
+import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { useStore } from '../../stores/useStore'
 import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
 import { modelDisplayName } from '../../lib/modelDisplay'
 import { getOutputReference } from '../../lib/outputReference'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
+import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
 import { useComicStore } from '../../features/comics/store'
 
 interface Props {
@@ -104,6 +106,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const [metaLoaded, setMetaLoaded] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showSaveRecipe, setShowSaveRecipe] = useState(false)
+  const [showExtraInfo, setShowExtraInfo] = useState(false)
+  const [videoReady, setVideoReady] = useState(false)
   const confirmRef = useRef(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [copied, setCopied] = useState(false)
@@ -115,6 +119,14 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const moveRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  const releaseVideo = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
+  }, [])
 
   // Measure actual height and report to parent
   useEffect(() => {
@@ -164,11 +176,21 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
 
   // Pause video when scrolled out of view (but don't auto-play when scrolled in)
   useEffect(() => {
-    if (!videoRef.current) return
     if (!isActive) {
-      videoRef.current.pause()
+      releaseVideo()
     }
+  }, [isActive, releaseVideo])
+
+  // A scrolled-away clip releases its MP4 source. Returning to it shows the
+  // cheap server thumbnail again until the user explicitly presses Play.
+  useEffect(() => {
+    if (!isActive) setVideoReady(false)
   }, [isActive])
+
+  useEffect(() => {
+    setVideoReady(false)
+    return releaseVideo
+  }, [file.url, releaseVideo])
 
   const params = meta?.params as Record<string, unknown> | null
   const uploadFilenames = meta?.upload_filenames as Record<string, string> | undefined
@@ -195,7 +217,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
 
   const resolution = isAudio ? '' : ((params?.resolution as string) || '')
   const seed = params?.seed as number | undefined
-  const generationTime = meta?.generation_time
+  const generationTime = meta?.generation_timings?.total_time_sec ?? meta?.generation_time
+  const generationBreakdown = formatGenerationBreakdown(meta?.generation_timings)
   const outputReference = getOutputReference(file)
 
   const multiClipInfo = params?.multi_clip_info as { group_id: string; index: number; total: number } | undefined
@@ -482,16 +505,46 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
           {referenceCopied ? <Check size={11} className="text-accent-green" /> : <Copy size={11} />}
           {outputReference}
         </button>
-        {file.type === 'video' ? (
+        {file.type === 'video' && videoReady ? (
           <video
             ref={videoRef}
             key={file.url}
             src={file.url}
             controls
             loop
+            autoPlay
+            preload="metadata"
+            poster={file.thumbnail_url || undefined}
             className="w-full h-full object-contain"
             muted={!isActive}
           />
+        ) : file.type === 'video' ? (
+          <div className="relative h-full w-full bg-black">
+            {file.thumbnail_url ? (
+              <img
+                src={file.thumbnail_url}
+                alt={file.name}
+                className="h-full w-full object-contain"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-text-muted"><Film size={32} /></div>
+            )}
+            <button
+              type="button"
+              onClick={event => {
+                event.stopPropagation()
+                setSelectedOutput(index)
+                setVideoReady(true)
+              }}
+              className="absolute left-1/2 top-1/2 z-10 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/70 text-white shadow-xl transition-transform hover:scale-105 hover:bg-black/85"
+              aria-label={`Play ${file.name}`}
+              title="Load and play video"
+            >
+              <Play size={24} className="ml-1" />
+            </button>
+          </div>
         ) : file.type === 'audio' ? (
           <div className="flex flex-col items-center gap-4">
             <div className="w-16 h-16 rounded-2xl bg-bg-active flex items-center justify-center">
@@ -537,7 +590,11 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             )}
           </div>
         ) : (
-          <RetryImage url={file.url} alt={file.name} />
+          <RetryImage
+            key={isActive ? file.url : (file.thumbnail_url || file.url)}
+            url={isActive ? file.url : (file.thumbnail_url || file.url)}
+            alt={file.name}
+          />
         )}
       </div>
 
@@ -567,11 +624,18 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
                 {modelLabel && <span className="font-medium" title={modelType}>{modelLabel}</span>}
                 {resolution && <span className="text-text-muted"> &middot; {resolution}</span>}
                 {seed != null && seed >= 0 && <span className="text-text-muted"> &middot; seed {seed}</span>}
-                {generationTime != null && <span className="text-text-muted"> &middot; {generationTime}s</span>}
+                {generationTime != null && (
+                  <span className="text-text-muted"> &middot; total {formatGenerationDuration(generationTime)}</span>
+                )}
                 {clipIndex != null && clipTotal != null && (
                   <span className="text-accent-blue"> &middot; clip {clipIndex + 1}/{clipTotal}</span>
                 )}
               </div>
+              {generationBreakdown && (
+                <div className="text-[10px] text-text-muted truncate mt-0.5" title={generationBreakdown}>
+                  {generationBreakdown}
+                </div>
+              )}
               {prompt && (
                 <div className="text-[11px] text-text-muted truncate mt-0.5" title={prompt}>
                   {prompt}
@@ -661,17 +725,27 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             </button>
           )}
           {file.type === 'video' && (
-            <button
-              onClick={(e) => { e.stopPropagation(); handleSendFrameToRefs() }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                sentToInput
-                  ? 'text-accent-green'
-                  : 'hover:bg-bg-hover text-text-secondary hover:text-accent-blue'
-              }`}
-              title="Use current frame as reference image"
-            >
-              {sentToInput ? <Check size={13} /> : <ArrowLeftToLine size={13} />}
-            </button>
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleSendFrameToRefs() }}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  sentToInput
+                    ? 'text-accent-green'
+                    : 'hover:bg-bg-hover text-text-secondary hover:text-accent-blue'
+                }`}
+                title="Use current frame as reference image"
+              >
+                {sentToInput ? <Check size={13} /> : <ArrowLeftToLine size={13} />}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowExtraInfo(true) }}
+                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] text-text-secondary transition-colors hover:bg-bg-hover hover:text-accent-blue"
+                title="Generate descriptions and social copy from saved prompts"
+              >
+                <BadgeInfo size={13} />
+                Extra info
+              </button>
+            </>
           )}
           <button
             onClick={(e) => {
@@ -761,6 +835,12 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             await saveRecipeFromOutput(file.name, name, description, nsfw)
             setShowSaveRecipe(false)
           }}
+        />
+      )}
+      {showExtraInfo && (
+        <VideoExtraInfoDialog
+          name={file.name}
+          onClose={() => setShowExtraInfo(false)}
         />
       )}
     </div>

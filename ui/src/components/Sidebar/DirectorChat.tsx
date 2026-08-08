@@ -454,6 +454,10 @@ export function DirectorChat() {
   const shortFilmSetVisualStyle = useStore(s => s.shortFilmSetVisualStyle)
   const shortFilmPreserveVisualStyle = useStore(s => s.shortFilmPreserveVisualStyle)
   const shortFilmSetPreserveVisualStyle = useStore(s => s.shortFilmSetPreserveVisualStyle)
+  const directorCharacterVisualStyle = useStore(s => s.directorCharacterVisualStyle)
+  const setDirectorCharacterVisualStyle = useStore(s => s.setDirectorCharacterVisualStyle)
+  const directorAllowClipText = useStore(s => s.directorAllowClipText)
+  const setDirectorAllowClipText = useStore(s => s.setDirectorAllowClipText)
   const startDirectorPipeline = useStore(s => s.startDirectorPipeline)
   const pipelineStatus = useStore(s => s.pipelineStatus)
   const pipelinePhase = pipelineStatus?.phase
@@ -467,6 +471,7 @@ export function DirectorChat() {
   const isShortFilm = skill === 'short_film'
   const isStoryPath = isShortFilm && shortFilmPath === 'story'
   const isMusicVideo = !!skill && !isShortFilm
+  const isDirectVideo = isMusicVideo && musicVideoTreatment.generation_mode === 'direct_video'
   // Music Video "Generate a track" setup: the bottom chat IS the song
   // description, and Send kicks off the whole write-song → render → video chain.
   const isMvGenerate = isMusicVideo && musicSource === 'generate'
@@ -973,6 +978,34 @@ export function DirectorChat() {
                       Loaded from the Story world bible. You can edit it for this film without changing the master Story.
                     </p>
                   </label>
+                  <label className="block">
+                    <span className="text-[10px] text-text-muted">Character rendering style</span>
+                    <AutoResizeTextarea
+                      value={directorCharacterVisualStyle}
+                      onChange={e => setDirectorCharacterVisualStyle(e.target.value)}
+                      disabled={!shortFilmPreserveVisualStyle}
+                      rows={3}
+                      className="mt-1 w-full resize-none rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] leading-relaxed text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
+                      placeholder="e.g. realistic people, handmade claymation, or clean 2D anime cel shading"
+                    />
+                    <p className="mt-1 text-[9px] text-text-muted">
+                      Applied to every visible person independently from the world art direction.
+                    </p>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={directorAllowClipText}
+                      onChange={e => setDirectorAllowClipText(e.target.checked)}
+                      className="mt-0.5 accent-accent-blue"
+                    />
+                    <div>
+                      <span className="text-[10px] text-text-primary">Permitir generar clips con textos</span>
+                      <p className="text-[9px] text-text-muted leading-tight">
+                        Off by default. Dialogue and lyrics remain audio-only and are not rendered as visible lettering.
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </SystemBubble>
             )}
@@ -995,7 +1028,7 @@ export function DirectorChat() {
             {isMusicVideo && pastStep('style') && (
               <UserBubble>
                 <p className="text-[10px] text-text-secondary">
-                  {musicVideoTreatment.mode} · {musicVideoTreatment.performer_presence}% performance · {musicVideoTreatment.recurring_sets.length} recurring sets
+                  {isDirectVideo ? 'Vídeo directo · T2V puro · sin imágenes' : `${musicVideoTreatment.mode} · ${musicVideoTreatment.performer_presence}% performance · ${musicVideoTreatment.recurring_sets.length} recurring sets`}
                 </p>
               </UserBubble>
             )}
@@ -1144,11 +1177,11 @@ export function DirectorChat() {
                 <input
                   type="checkbox"
                   checked={seamless}
-                  disabled={!selectedVideoSupportsSeamless}
+                  disabled={!selectedVideoSupportsSeamless || isDirectVideo}
                   onChange={e => setSeamless(e.target.checked)}
                   className="accent-accent-blue w-3 h-3"
                 />
-                <span className="text-[10px] text-text-secondary">Seamless</span>
+                <span className={`text-[10px] ${isDirectVideo ? 'text-text-muted/50' : 'text-text-secondary'}`}>Seamless</span>
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Skip all review steps and generate automatically">
                 <input
@@ -1236,6 +1269,41 @@ function MusicVideoTreatmentEditor({
         <p className="mt-1 text-[9px] leading-relaxed text-text-muted">
           Defines the visual grammar before shot planning. Choruses deliberately return to a signature setup instead of turning every lyric into an unrelated scene.
         </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-bg-tertiary/60 p-2 space-y-2">
+        <label className="block text-[9px] text-text-muted">Video generation mode
+          <select
+            value={treatment.generation_mode}
+            onChange={event => onChange({ generation_mode: event.target.value as MusicVideoTreatment['generation_mode'] })}
+            className={`${inputClass} mt-1`}
+          >
+            <option value="image_guided">Image-guided · create a start frame</option>
+            <option value="direct_video">Vídeo directo · text only, no images</option>
+          </select>
+        </label>
+        {treatment.generation_mode === 'direct_video' && (
+          <div className="space-y-2 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 p-2">
+            <div>
+              <p className="text-[10px] font-medium text-fuchsia-200">T2V puro · sin contaminación de imágenes</p>
+              <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
+                Maestro repetirá este prompt maestro completo en cada clip. El LLM solo escribirá la situación concreta. No se generarán primeros fotogramas ni se enviarán referencias visuales a H3; los campos de estilo antiguos tampoco se mezclarán con este mundo.
+              </p>
+            </div>
+            <label className="block text-[9px] text-text-muted">Prompt maestro inmutable
+              <textarea
+                value={treatment.direct_video_master_prompt}
+                rows={8}
+                onChange={event => onChange({ direct_video_master_prompt: event.target.value })}
+                className={`${inputClass} mt-1 resize-y leading-relaxed`}
+                placeholder="Define aquí el mundo y el estilo que debe repetirse en todos los vídeos"
+              />
+            </label>
+            <p className="text-[9px] leading-relaxed text-amber-200/80">
+              Las imágenes y referencias que ya estuvieran cargadas se conservarán en la sesión, pero este modo las ignorará por completo.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -1807,6 +1875,9 @@ function AdditionalRefsSection() {
   const identityScale = useStore(s => s.directorIdentityGuidanceScale)
   const setIdentityScale = useStore(s => s.setDirectorIdentityGuidanceScale)
   const clipPlans = useStore(s => s.directorClipPlans)
+  const isDirectVideo = useStore(
+    s => s.directorMusicVideoTreatment.generation_mode === 'direct_video'
+  )
   const h3ReferenceMode = useStore(s => s.savedParamsPerMode.video?.h3_reference_mode || 'first_frame')
   const isH3 = videoModel.startsWith('minimax_h3')
   const h3UserRefCount = (referenceImage ? 1 : 0) + charRefs.length + (locRefs.length ? 1 : 0) + h3VideoRefs.length + h3AudioRefs.length
@@ -1936,7 +2007,7 @@ function AdditionalRefsSection() {
               </p>
             )}
           </div>}
-          {isH3 && <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-2 space-y-2">
+          {isH3 && !isDirectVideo && <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-2 space-y-2">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-medium text-cyan-200">
@@ -3258,6 +3329,7 @@ function VideoPromptsReview({
    *  status control that previously said "Auto Generating...". */
   generationError?: string | null
 }) {
+  const directVideo = useStore(s => s.directorMusicVideoTreatment.generation_mode === 'direct_video')
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -3270,6 +3342,12 @@ function VideoPromptsReview({
           <RotateCcw size={10} /> Regenerate
         </button>
       </div>
+
+      {directVideo && (
+        <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-1.5 text-[9px] leading-relaxed text-fuchsia-100">
+          Vídeo directo: cada prompt incluye el mundo maestro y la situación de este clip. La generación será T2V pura, sin fotograma inicial ni referencias.
+        </div>
+      )}
 
       {clipImages.length > 0 && (
         <div className="grid grid-cols-5 gap-1 mb-1">

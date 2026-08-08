@@ -428,10 +428,11 @@ export function MainContent() {
   const stopGeneration = useStore(s => s.stopGeneration)
   const dismissJob = useStore(s => s.dismissJob)
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
+  const selectedOutput = useStore(s => s.selectedOutput)
   const setMediaFilter = useStore(s => s.setMediaFilter)
 
   const feedRef = useRef<HTMLDivElement>(null)
-  const [activeIndex, setActiveIndex] = useState(0)
+  const activeIndex = selectedOutput
   const isUserScrolling = useRef(false)
   const scrollTargetIndex = useRef<number | null>(null)
 
@@ -515,7 +516,6 @@ export function MainContent() {
 
   const handleItemVisible = useCallback((index: number) => {
     if (scrollTargetIndex.current !== null) return
-    setActiveIndex(index)
     if (isUserScrolling.current) {
       setSelectedOutput(index)
     }
@@ -530,7 +530,6 @@ export function MainContent() {
       return
     }
     setSelectedOutput(index)
-    setActiveIndex(index)
     scrollTargetIndex.current = index
     isUserScrolling.current = false
     const feedEl = feedRef.current

@@ -260,6 +260,15 @@ export function InputsPanel() {
     }
   }
 
+  // Ref2VA is only meaningful while it has reference media. Returning to an
+  // empty reference strip must also return H3 to its normal FL2VA/T2V mode so
+  // the saved selector cannot poison the next generation.
+  useEffect(() => {
+    if (isH3 && h3ReferenceCount === 0 && params.h3_reference_mode === 'references') {
+      setParam('h3_reference_mode', 'first_frame')
+    }
+  }, [h3ReferenceCount, isH3, params.h3_reference_mode, setParam])
+
   const pickReferences = () => {
     const input = document.createElement('input')
     input.type = 'file'

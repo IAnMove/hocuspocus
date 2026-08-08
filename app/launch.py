@@ -43,6 +43,7 @@ import threading
 import traceback
 import requests
 from pathlib import Path, PureWindowsPath
+from urllib.parse import quote
 
 # --- Bootstrap: CWD must be app/ and sys.argv must be patched before importing wgp ---
 _app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -104,8 +105,9 @@ if _hf_token_path:
 # Now safe to import wgp - all module-level code will run with patched argv
 print("[Maestro] Importing WanGP engine...")
 import wgp
-from services import model3d_service, minimax_h3_service, minimax_image_service
+from services import model3d_service, minimax_image_service
 from services import debug_trace
+from services.durable_generation_queue import DurableGenerationQueue
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 from models.minimax_h3.turbo import (
@@ -191,7 +193,7 @@ if _services.get("auto_performance") and not _services.get("auto_performance_app
 sys.argv = _original_argv
 
 # --- FastAPI setup ---
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -332,8 +334,75 @@ from services.job_lifecycle import (
 _jobs: dict = {}
 _gen_lock = threading.Lock()
 _active_gen_states: dict = {}  # job_id -> wgp gen state dict (for abort signaling)
+_queue_recovery_lock = threading.Lock()
+_durable_generation_queue = DurableGenerationQueue(
+    os.path.join(
+        os.path.realpath(wgp.server_config.get("save_path", "outputs")),
+        ".maestro_generation_queue.json",
+    )
+)
 _audio_analysis_execution_lock = threading.Lock()
-_H3_IDLE_SHUTDOWN_SECONDS = minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS
+_H3_IDLE_RELEASE_SECONDS = 10.0
+_h3_idle_release_timer: threading.Timer | None = None
+_h3_idle_release_lock = threading.RLock()
+
+
+def _is_durable_generation_job(job: dict) -> bool:
+    """Only persist ordinary Studio generations, not Director sub-jobs."""
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    return bool(params.get("model_type")) and not params.get("_director_pipeline_id")
+
+
+def _persist_generation_job(job: dict) -> None:
+    if not _is_durable_generation_job(job):
+        return
+    try:
+        _durable_generation_queue.upsert({
+            "id": job["id"],
+            "status": job.get("status", "queued"),
+            "created_at": job.get("created_at", time.time()),
+            "params": copy.deepcopy(job.get("params") or {}),
+            "workspace": job.get("workspace") or "default",
+        })
+    except Exception as exc:
+        # Persistence should protect a generation, never prevent it from
+        # starting if the disk is temporarily read-only or full.
+        print(f"[Queue recovery] Could not persist job {job.get('id')}: {exc}")
+
+
+def _remove_persisted_generation_job(job: dict) -> None:
+    if not _is_durable_generation_job(job):
+        return
+    try:
+        _durable_generation_queue.remove(str(job.get("id") or ""))
+    except Exception as exc:
+        print(f"[Queue recovery] Could not remove job {job.get('id')}: {exc}")
+
+
+def _new_generation_job(
+    params: dict,
+    workspace: str,
+    *,
+    job_id: str | None = None,
+    created_at: float | None = None,
+    recovered: bool = False,
+) -> dict:
+    return {
+        "id": job_id or uuid.uuid4().hex[:8],
+        "status": "queued",
+        "progress": 0,
+        "step": 0,
+        "total_steps": 0,
+        "phase": "",
+        "message": "Recovered · queued" if recovered else "Queued",
+        "created_at": created_at or time.time(),
+        "params": copy.deepcopy(params),
+        "output_files": [],
+        "error": None,
+        "workspace": workspace,
+        "out_dir": _workspace_dir(workspace),
+        "recovered": recovered,
+    }
 
 
 def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
@@ -352,34 +421,71 @@ def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
     return pending
 
 
+def _is_minimax_h3_model(model_type: str | None) -> bool:
+    """Recognize every native H3 variant from the v1.6.5 model registry."""
+    candidate = str(model_type or "").strip()
+    if not candidate:
+        return False
+    try:
+        model_def = wgp.get_model_def(candidate) or {}
+    except Exception:
+        model_def = {}
+    return (
+        candidate.lower().startswith("minimax_h3")
+        or str(model_def.get("architecture") or "").lower().startswith("minimax_h3")
+    )
+
+
+def _cancel_h3_idle_release() -> None:
+    """Prevent a delayed native-model release from racing newly queued work."""
+    global _h3_idle_release_timer
+    with _h3_idle_release_lock:
+        timer = _h3_idle_release_timer
+        _h3_idle_release_timer = None
+        if timer is not None:
+            timer.cancel()
+
+
 def _release_h3_when_queue_allows(job_id: str) -> None:
-    """Keep H3 warm for its own queue, but promptly yield VRAM to other models."""
+    """Keep native H3 warm for its queue, then release WGP-owned memory."""
+    global _h3_idle_release_timer
     pending = _pending_gpu_jobs(exclude_job_id=job_id)
     h3_pending = any(
-        candidate.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
+        _is_minimax_h3_model(candidate.get("params", {}).get("model_type"))
         for candidate in pending
     )
     if h3_pending:
-        minimax_h3_service.cancel_idle_shutdown()
+        _cancel_h3_idle_release()
         print("[MiniMax H3] Keeping runtime warm for a queued H3 job.")
         return
 
+    _cancel_h3_idle_release()
     if pending:
-        print("[MiniMax H3] Releasing runtime for a queued non-H3 GPU job.")
-        minimax_h3_service.stop_runtime()
+        print("[MiniMax H3] Releasing native runtime for a queued non-H3 GPU job.")
+        wgp.release_model()
         return
 
     print(
-        f"[MiniMax H3] Queue idle; releasing runtime in "
-        f"{int(_H3_IDLE_SHUTDOWN_SECONDS)}s unless another H3 job arrives."
+        f"[MiniMax H3] Queue idle; releasing native runtime in "
+        f"{int(_H3_IDLE_RELEASE_SECONDS)}s unless another job arrives."
     )
-    minimax_h3_service.schedule_idle_shutdown(
-        _H3_IDLE_SHUTDOWN_SECONDS,
-        lambda: any(
-            candidate.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
-            for candidate in _pending_gpu_jobs(exclude_job_id=job_id)
-        ),
-    )
+
+    def _release_if_still_idle() -> None:
+        global _h3_idle_release_timer
+        with _h3_idle_release_lock:
+            _h3_idle_release_timer = None
+            if _pending_gpu_jobs(exclude_job_id=job_id) or _active_gen_states:
+                return
+            if not _is_minimax_h3_model(getattr(wgp, "transformer_type", None)):
+                return
+            wgp.release_model()
+            print("[MiniMax H3] Native WGP runtime released after idle grace period.")
+
+    with _h3_idle_release_lock:
+        timer = threading.Timer(_H3_IDLE_RELEASE_SECONDS, _release_if_still_idle)
+        timer.daemon = True
+        _h3_idle_release_timer = timer
+        timer.start()
 
 
 def _interrupt_wan_model() -> None:
@@ -464,6 +570,8 @@ def _request_generation_cancel(job_id: str) -> dict:
     )
     if result.abort_signalled:
         print(f"[Cancel] Signalling abort for job {job_id}")
+    if not result.was_running and job.get("status") == "cancelled":
+        _remove_persisted_generation_job(job)
     return {"status": job.get("status"), "was_running": result.was_running}
 
 
@@ -554,9 +662,6 @@ def _check_model_downloaded(model_type: str) -> bool:
     weight group; ONE variant per group is enough. Every group (main
     transformer + each weight module) must be present.
     """
-    h3_service = globals().get("minimax_h3_service")
-    if h3_service is not None and model_type == h3_service.MODEL_ID:
-        return h3_service.is_model_downloaded()
     try:
         model_def = wgp.get_model_def(model_type)
         if model_def is None:
@@ -601,7 +706,6 @@ def list_models():
             continue
         families.append({"id": fid, "label": label, "order": order})
     families.append({"id": "hunyuan3d", "label": "Hunyuan3D", "order": 350})
-    families.append({"id": "minimax_h3", "label": "MiniMax H3", "order": 65})
     families.sort(key=lambda f: f["order"])
 
     # Models
@@ -668,22 +772,6 @@ def list_models():
             # the cache is deleted; the UI warns using this list.
             "shared_cache_group": [item["id"] for item in model3d_service.models_sharing_repo(model["id"])],
         })
-
-    models.append({
-        "model_type": minimax_h3_service.MODEL_ID,
-        "name": minimax_h3_service.MODEL_NAME,
-        "family": "minimax_h3",
-        "architecture": minimax_h3_service.MODEL_ID,
-        "is_i2v": True,
-        "is_t2v": True,
-        "guidance_max_phases": 1,
-        "fps": 24,
-        "supports_end_frame": True,
-        "supports_audio": True,
-        "supports_ref_images": True,
-        "is_downloaded": minimax_h3_service.is_model_downloaded(),
-        "nsfw_only": False,
-    })
 
     # UniRig is a generative ML model too (autoregressive skeleton + learned
     # skinning), so its weights are managed from the same catalog. tool_only
@@ -837,13 +925,6 @@ async def update_model_visibility(request: Request):
 @api.get("/api/v1/models/{model_type}/debug")
 def debug_model(model_type: str):
     """Debug: show raw model definition and download check."""
-    if model_type == minimax_h3_service.MODEL_ID:
-        return {
-            "model_type": model_type,
-            "runtime_installed": minimax_h3_service.is_runtime_installed(),
-            "is_downloaded": minimax_h3_service.is_model_downloaded(),
-            "runtime_dir": str(minimax_h3_service.COMFY_DIR),
-        }
     if model_type in model3d_service.MODEL_BY_ID:
         model = model3d_service.MODEL_BY_ID[model_type]
         return {
@@ -877,9 +958,6 @@ def debug_model(model_type: str):
 @api.delete("/api/v1/models/{model_type}")
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
-    if model_type == minimax_h3_service.MODEL_ID:
-        deleted = minimax_h3_service.delete_model_cache()
-        return {"deleted": deleted, "model_type": model_type, "affected_models": []}
     if model_type == "unirig":
         from services import rig_service
         deleted = rig_service.delete_unirig_cache()
@@ -1029,8 +1107,6 @@ def list_resolutions():
 @api.get("/api/v1/defaults/{model_type}")
 def get_defaults(model_type: str):
     """Get default settings for a model type."""
-    if model_type == minimax_h3_service.MODEL_ID:
-        return minimax_h3_service.DEFAULTS
     if wgp.get_model_def(model_type) is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
     defaults = wgp.get_default_settings(model_type)
@@ -1795,8 +1871,6 @@ def _minimax_h3_turbo_option(model_def: dict) -> dict | None:
 @api.get("/api/v1/loras/{model_type}")
 def list_loras(model_type: str):
     """List available LoRA files for a model type."""
-    if model_type == minimax_h3_service.MODEL_ID:
-        return {"loras": [], "guidance_max_phases": 1}
     if model_type in model3d_service.MODEL_BY_ID:
         return {"loras": [], "guidance_max_phases": 1}
     md = wgp.get_model_def(model_type)
@@ -1839,8 +1913,6 @@ def list_loras(model_type: str):
 @api.get("/api/v1/loras/{model_type}/details")
 def list_loras_details(model_type: str):
     """List LoRAs with metadata from .civitai.json sidecars."""
-    if model_type == minimax_h3_service.MODEL_ID:
-        return {"loras": [], "guidance_max_phases": 1}
     if model_type in model3d_service.MODEL_BY_ID:
         return {"loras": [], "guidance_max_phases": 1}
     md = wgp.get_model_def(model_type)
@@ -5400,8 +5472,6 @@ def _minimax_h3_runtime_advisory(model_def: dict) -> dict | None:
 @api.get("/api/v1/model-options/{model_type}")
 def get_model_options(model_type: str):
     """Return UI-relevant model options for dynamic rendering."""
-    if model_type == minimax_h3_service.MODEL_ID:
-        return minimax_h3_service.MODEL_OPTIONS
     if model_type in model3d_service.MODEL_BY_ID:
         return {
             "model_type": model_type,
@@ -6015,7 +6085,7 @@ def get_system_stats_live():
     """
     from services.live_stats import get_live_stats
 
-    stats = get_live_stats()
+    stats = get_live_stats(os.path.join(os.path.dirname(_app_dir), "ui", "dist"))
 
     # Currently-loaded generation model. WGP/mmgp keeps it resident
     # between jobs. `transformer_type` tracks the live load (set at the
@@ -8756,7 +8826,7 @@ async def director_plan_prompts_and_images(request: Request):
             video_model=body.get("video_model", ""),
             music_video_treatment=body.get("music_video_treatment"),
         )
-        if body.get("video_model") == minimax_h3_service.MODEL_ID:
+        if _is_minimax_h3_model(body.get("video_model")):
             from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
             clip_plans = adapt_clip_plans_for_h3(
                 clip_plans,
@@ -8827,7 +8897,7 @@ async def director_plan_short_film_prompts(request: Request):
             prompt_type=body.get("prompt_type", "both"),
             existing_image_prompts=body.get("existing_image_prompts"),
         )
-        if body.get("video_model") == minimax_h3_service.MODEL_ID:
+        if _is_minimax_h3_model(body.get("video_model")):
             from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
             clip_plans = adapt_clip_plans_for_h3(
                 clip_plans,
@@ -8873,6 +8943,8 @@ async def director_plan_short_film_script(request: Request):
             frames_minimum=body.get("frames_minimum", 5),
             visual_style=body.get("visual_style", ""),
             preserve_visual_style=body.get("preserve_visual_style", False),
+            character_visual_style=body.get("character_visual_style", ""),
+            allow_clip_text=body.get("allow_clip_text") is True,
         )
         return result
     except Exception as e:
@@ -9295,7 +9367,7 @@ _DIRECTOR_V2_PLANNER_KEYS = (
     "location_ref_paths", "location_ref_labels", "speaker_mappings", "characters",
     "audio_path", "target_duration", "target_scenes", "narrative_mode",
     "fps", "frames_steps", "frames_minimum", "concept", "visual_style",
-    "preserve_visual_style",
+    "preserve_visual_style", "character_visual_style", "allow_clip_text",
     "platform", "style", "transcript", "prompt_type", "image_model",
     "video_model", "seamless", "multishot_lora_mode",
     "music_video_treatment",
@@ -9349,6 +9421,16 @@ async def director_v2_plan(request: Request):
         )
 
         # Build planner kwargs from request body
+        from services.director.planners.music_video import normalize_music_video_treatment
+        normalized_treatment = normalize_music_video_treatment(
+            body.get("music_video_treatment")
+        )
+        direct_video = (
+            skill_type == "music_video"
+            and normalized_treatment.get("generation_mode") == "direct_video"
+        )
+        if skill_type == "music_video":
+            body["music_video_treatment"] = normalized_treatment
         planner_kwargs = _director_v2_planner_kwargs(body)
 
         # NSFW from server config (enforced: never with public providers)
@@ -9394,17 +9476,17 @@ async def director_v2_plan(request: Request):
             total=planned_shots,
             detail=f"Turning {planned_shots} scenes into image and video prompts…",
         )
-        has_reference = bool(
+        has_reference = not direct_video and bool(
             body.get("reference_image_path")
             or body.get("character_ref_paths")
             or body.get("location_ref_paths")
         )
-        prompt_type = body.get("prompt_type", "both")
+        prompt_type = "video" if direct_video else body.get("prompt_type", "both")
         rendered = director.render_plan(plan, prompt_type=prompt_type, has_reference=has_reference)
         clip_plans = director.plan_to_clip_plans(rendered)
 
         # Third-pass polish: run each prompt through the enhance pipeline
-        if polish_mode == "third_pass" and clip_plans:
+        if polish_mode == "third_pass" and clip_plans and not direct_video:
             from services.director.prompt_polish import polish_prompts_third_pass
             nsfw = planner_kwargs.get("nsfw", False)
             # Forward character profiles so polish can map names → correct
@@ -9446,11 +9528,28 @@ async def director_v2_plan(request: Request):
         from services.director.policies import enforce_visual_style_on_clip_plans
         clip_plans = enforce_visual_style_on_clip_plans(
             clip_plans,
-            body.get("visual_style", ""),
-            preserve=bool(body.get("preserve_visual_style", False)),
+            "" if direct_video else body.get("visual_style", ""),
+            preserve=(
+                False if direct_video
+                else bool(body.get("preserve_visual_style", False))
+            ),
             has_reference=has_reference,
+            character_visual_style=(
+                "" if direct_video else body.get("character_visual_style", "")
+            ),
+            allow_clip_text=(
+                True if direct_video else body.get("allow_clip_text") is True
+            ),
         )
-        if video_model == minimax_h3_service.MODEL_ID:
+        if direct_video:
+            from services.director.policies import enforce_direct_video_on_clip_plans
+            clip_plans = enforce_direct_video_on_clip_plans(
+                clip_plans,
+                normalized_treatment.get("direct_video_master_prompt"),
+                audio_direction=body.get("h3_audio_prompt", ""),
+                allow_clip_text=body.get("allow_clip_text") is True,
+            )
+        elif _is_minimax_h3_model(video_model):
             from services.director.minimax_h3_prompting import adapt_clip_plans_for_h3
             serialized_plan = plan.to_dict()
             clip_plans = adapt_clip_plans_for_h3(
@@ -9458,6 +9557,14 @@ async def director_v2_plan(request: Request):
                 serialized_plan.get("shots") or [],
                 reference_mode=body.get("h3_reference_mode", "first_frame"),
                 audio_direction=body.get("h3_audio_prompt", ""),
+            )
+            clip_plans = enforce_visual_style_on_clip_plans(
+                clip_plans,
+                body.get("visual_style", ""),
+                preserve=bool(body.get("preserve_visual_style", False)),
+                has_reference=has_reference,
+                character_visual_style=body.get("character_visual_style", ""),
+                allow_clip_text=body.get("allow_clip_text") is True,
             )
         llm_service.update_activity_tracking(
             tracking_id,
@@ -9504,8 +9611,7 @@ async def generate(request: Request):
     if not is_sfx and not body.get("prompt"):
         raise HTTPException(status_code=400, detail="prompt is required")
     # SFX virtual models (mmaudio_*) are frontend-only; skip backend model validation
-    if (not is_sfx and body["model_type"] != minimax_h3_service.MODEL_ID
-            and wgp.get_model_def(body["model_type"]) is None):
+    if not is_sfx and wgp.get_model_def(body["model_type"]) is None:
         raise HTTPException(status_code=400, detail=f"Unknown model: {body['model_type']}")
 
     try:
@@ -9893,28 +9999,17 @@ async def generate(request: Request):
     workspace = body.pop("workspace", None) or _get_active_workspace()
     job_out_dir = _workspace_dir(workspace)
 
-    job_id = uuid.uuid4().hex[:8]
-    job = {
-        "id": job_id,
-        "status": "queued",
-        "progress": 0,
-        "step": 0,
-        "total_steps": 0,
-        "phase": "",
-        "message": "Queued",
-        "created_at": time.time(),
-        "params": body,
-        "output_files": [],
-        "error": None,
-        "workspace": workspace,
-        "out_dir": job_out_dir,
-    }
+    job = _new_generation_job(body, workspace)
+    job_id = job["id"]
+    job["out_dir"] = job_out_dir
     _jobs[job_id] = job
+    # Persist before the worker starts so a power loss in the tiny gap between
+    # API acknowledgement and thread scheduling cannot lose the request.
+    _persist_generation_job(job)
 
-    if body.get("model_type") == minimax_h3_service.MODEL_ID:
-        # Cancel any idle-release race as soon as the new H3 work enters the
-        # queue, not only once its thread acquires the GPU lock.
-        minimax_h3_service.cancel_idle_shutdown()
+    # Cancel any delayed H3 release as soon as new GPU work enters the queue.
+    # The queued job may reuse H3 or replace it with another native WGP model.
+    _cancel_h3_idle_release()
 
     # Non-daemon so generation survives browser disconnect during overnight runs
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
@@ -21792,12 +21887,16 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
         if not acquired:
             return False
         try:
-            if not try_start(job, message="Preparing..."):
+            if not try_start(
+                job,
+                message=(
+                    "Restarting recovered job from the beginning…"
+                    if job.get("recovered") else "Preparing..."
+                ),
+            ):
                 return False
-            # A Comfy sidecar owns the GPU while H3 runs. Stop it before any
-            # normal WanGP job so the two runtimes never retain VRAM together.
-            if job.get("params", {}).get("model_type") != minimax_h3_service.MODEL_ID:
-                minimax_h3_service.stop_runtime()
+            _persist_generation_job(job)
+            _cancel_h3_idle_release()
 
             # Per-job VRAM coefficient adjustment — accounts for active
             # LoRAs and pipeline stage count beyond what the auto-tuned
@@ -21833,15 +21932,11 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
             # Build task manifest from user params
             raw_params = job["params"].copy()
 
-            # Register the exact state before any model work. SFX uses the
-            # same queue but does not own a model interrupt; H3 owns its
-            # isolated sidecar cancellation callback instead of Wan's.
+            # Register the exact state before any model work. Every native H3
+            # variant is now owned by WGP and uses the same interrupt contract.
             abort_state = state["gen"]
-            model_type = raw_params.get("model_type")
             interrupt_model = (
-                minimax_h3_service.cancel
-                if model_type == minimax_h3_service.MODEL_ID
-                else (None if raw_params.get("sfx_mode") else _interrupt_wan_model)
+                None if raw_params.get("sfx_mode") else _interrupt_wan_model
             )
             if not register_abort_state(
                 job,
@@ -21851,81 +21946,6 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 interrupt_model=interrupt_model,
             ):
                 return False
-
-            # MiniMax H3 runs through the isolated, quantized Comfy runtime.
-            # It still uses Maestro's normal queue/status/cancel contract.
-            if raw_params.get("model_type") == minimax_h3_service.MODEL_ID:
-                if raw_params.get("video_source"):
-                    job["message"] = "Capturing the source video's final frame…"
-                    source_path = _resolve_video_editor_source(raw_params["video_source"])
-                    anchor = minimax_h3_service.prepare_extend_anchor(
-                        raw_params,
-                        job_id,
-                        source_path,
-                        os.path.join(os.getcwd(), "uploads"),
-                    )
-                    # Replace the stored snapshot as well: update() would leave
-                    # removed Ref2VA keys behind and misreport the actual run.
-                    job["params"] = raw_params.copy()
-                    ignored = anchor["ignored_references"]
-                    ignored_note = f"; ignored {ignored} other reference(s)" if ignored else ""
-                    print(
-                        f"[MiniMax H3] Extend from video: captured final frame at "
-                        f"{anchor['time']:.3f}s as {anchor['path']}{ignored_note}. "
-                        "Continuing with FL2VA."
-                    )
-                # A queued H3 job can arrive while the previous one is inside
-                # its idle grace period. Cancel that pending release before
-                # acquiring/loading the sidecar.
-                minimax_h3_service.cancel_idle_shutdown()
-                wgp.release_model()
-                gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-
-                def _h3_progress(message: str, value: int, step: int = 0, total: int = 0) -> None:
-                    update_job(
-                        job,
-                        message=message,
-                        progress=max(0, min(100, int(value))),
-                        step=max(0, int(step)),
-                        total_steps=max(0, int(total)),
-                        phase="MiniMax H3 sampling" if total > 0 else "",
-                    )
-
-                generated = minimax_h3_service.generate(
-                    raw_params,
-                    job_id,
-                    job["out_dir"],
-                    _h3_progress,
-                    lambda: is_cancel_requested(job),
-                    # Queue-aware release happens in this worker's finally
-                    # block, after it has inspected following jobs. Keep the
-                    # sidecar alive until that decision instead of stopping
-                    # it unconditionally inside the service.
-                    keep_runtime=True,
-                )
-                output_names = [os.path.basename(path) for path in generated]
-                record_job_outputs(job, output_names)
-                sidecar = {
-                    "params": raw_params,
-                    "upload_filenames": {},
-                    "generation_mode": "video",
-                    "job_id": job_id,
-                    "generation_time": round(time.time() - start_time),
-                    "created_at": time.time(),
-                }
-                for path in generated:
-                    meta_path = os.path.splitext(path)[0] + ".meta.json"
-                    with open(meta_path, "w", encoding="utf-8") as handle:
-                        json.dump(sidecar, handle, indent=2)
-                return finish_job(
-                    job,
-                    "completed",
-                    progress=100,
-                    message="Done",
-                    phase="",
-                )
 
             # Inject progressive pipeline setting from services config (applies to all paths)
             _services_cfg = wgp.server_config.get("services", {})
@@ -23477,8 +23497,12 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 # considered active and a second PRE launch remains blocked.
                 job["status"] = "cancelled"
                 job["message"] = "Cancelled"
+            # The generation itself is terminal now. Remove its request before
+            # optional model-idle cleanup so a shutdown during cleanup cannot
+            # offer a duplicate completed job for recovery.
+            _remove_persisted_generation_job(job)
             if (
-                job.get("params", {}).get("model_type") == minimax_h3_service.MODEL_ID
+                _is_minimax_h3_model(job.get("params", {}).get("model_type"))
                 # Story Director deliberately keeps H3 alive between its
                 # sequential segments. Its wrapper schedules the same
                 # queue-aware idle release after final assembly.
@@ -24329,6 +24353,79 @@ def list_jobs():
             })
     active.sort(key=lambda x: x["created_at"])
     return {"jobs": active}
+
+
+def _recovery_job_summary(record: dict) -> dict:
+    params = record.get("params") if isinstance(record.get("params"), dict) else {}
+    prompt = str(params.get("prompt") or params.get("lyrics") or "").strip()
+    return {
+        "job_id": str(record.get("id") or ""),
+        "previous_status": str(record.get("status") or "queued"),
+        "created_at": float(record.get("created_at") or 0),
+        "workspace": str(record.get("workspace") or "default"),
+        "model_type": str(params.get("model_type") or ""),
+        "generation_mode": str(params.get("generation_mode") or ""),
+        "prompt_preview": prompt[:240],
+    }
+
+
+@api.get("/api/v1/jobs/recovery")
+def get_generation_queue_recovery():
+    """Return crash leftovers that are not active in this server process."""
+    candidates = _durable_generation_queue.list(exclude_ids=_jobs.keys())
+    return {"jobs": [_recovery_job_summary(record) for record in candidates]}
+
+
+@api.post("/api/v1/jobs/recovery/resume")
+def resume_generation_queue():
+    """Requeue persisted requests in their original submission order.
+
+    An interrupted running request restarts from its beginning: model runtimes
+    do not expose a portable mid-diffusion checkpoint.
+    """
+    resumed: list[dict] = []
+    threads: list[threading.Thread] = []
+    with _queue_recovery_lock:
+        candidates = _durable_generation_queue.list(exclude_ids=_jobs.keys())
+        for record in candidates:
+            job_id = str(record.get("id") or "").strip()
+            params = record.get("params")
+            if not job_id or not isinstance(params, dict) or not params.get("model_type"):
+                if job_id:
+                    _durable_generation_queue.remove(job_id)
+                continue
+            workspace = str(record.get("workspace") or "default")
+            job = _new_generation_job(
+                params,
+                workspace,
+                job_id=job_id,
+                created_at=float(record.get("created_at") or time.time()),
+                recovered=True,
+            )
+            _jobs[job_id] = job
+            _persist_generation_job(job)
+            _cancel_h3_idle_release()
+            threads.append(threading.Thread(
+                target=_run_generation,
+                args=(job_id,),
+                name=f"recovered-generation-{job_id}",
+                daemon=False,
+            ))
+            resumed.append(_recovery_job_summary(record))
+
+        # Populate the complete in-memory queue before any worker can finish,
+        # then start in saved order so the existing GPU mutex serialises it.
+        for thread in threads:
+            thread.start()
+    return {"resumed": resumed, "count": len(resumed)}
+
+
+@api.post("/api/v1/jobs/recovery/discard")
+def discard_generation_queue():
+    """Clear only inactive recovery candidates; never cancel live work."""
+    with _queue_recovery_lock:
+        removed = _durable_generation_queue.discard(exclude_ids=_jobs.keys())
+    return {"discarded": removed}
 
 
 # ============================================================================
@@ -25541,6 +25638,103 @@ def _normalize_story_stage_ids(
 ) -> dict:
     """Repair harmless LLM omissions and ID drift before validation."""
     normalized = copy.deepcopy(result)
+    if scope == "structure" and isinstance(normalized, dict):
+        # Smaller/local providers occasionally ignore the top-level JSON
+        # schema while still returning a useful visual sequence. Preserve
+        # that work instead of spending another full call asking for the same
+        # story under the literal ``beats`` key.
+        raw_beats = normalized.get("beats")
+        if isinstance(raw_beats, dict):
+            raw_beats = next((
+                raw_beats.get(key)
+                for key in ("items", "beats", "moments", "scenes", "sequences")
+                if isinstance(raw_beats.get(key), list)
+            ), raw_beats)
+
+        visual_sequence = normalized.get("visual_sequence_outline")
+        visual_sequence = visual_sequence if isinstance(visual_sequence, list) else []
+        plot_points = normalized.get("plot_points")
+        plot_points = plot_points if isinstance(plot_points, list) else []
+        if not isinstance(raw_beats, list):
+            raw_beats = next((
+                normalized.get(key)
+                for key in ("structure", "moments", "scenes", "sequences")
+                if isinstance(normalized.get(key), list)
+            ), None)
+        if not isinstance(raw_beats, list):
+            raw_beats = visual_sequence or plot_points
+
+        if isinstance(raw_beats, list):
+            def field(item, *keys):
+                if not isinstance(item, dict):
+                    return str(item or "").strip()
+                return next((
+                    str(item.get(key) or "").strip()
+                    for key in keys if str(item.get(key) or "").strip()
+                ), "")
+
+            beats = []
+            used_ids: set[str] = set()
+            total = len(raw_beats)
+            for index, item in enumerate(raw_beats):
+                visual = visual_sequence[index] if index < len(visual_sequence) else {}
+                plot = plot_points[index] if index < len(plot_points) else {}
+                source = item if isinstance(item, dict) else {"description": item}
+                title = (
+                    field(source, "title", "name", "focus")
+                    or field(plot, "title", "name", "focus")
+                    or field(visual, "title", "name", "focus")
+                    or f"Moment {index + 1}"
+                )
+                summary = (
+                    field(visual, "summary", "description", "action", "visual")
+                    or field(source, "summary", "description", "action", "visual")
+                    or field(plot, "summary", "description", "action")
+                    or title
+                )
+                goal = (
+                    field(source, "goal", "objective", "purpose", "focus")
+                    or field(plot, "goal", "objective", "purpose", "focus")
+                    or title
+                )
+                conflict = (
+                    field(source, "conflict", "obstacle", "tension", "problem")
+                    or field(plot, "conflict", "obstacle", "tension", "description")
+                    or summary
+                )
+                turn = (
+                    field(source, "turn", "change", "outcome", "result", "reversal")
+                    or field(plot, "turn", "change", "outcome", "result", "description")
+                    or field(visual, "turn", "change", "outcome", "description")
+                    or summary
+                )
+                stage = field(source, "stage", "section", "phase")
+                if not stage:
+                    stage = (
+                        "setup" if index == 0 else
+                        "resolution" if index == total - 1 else
+                        "climax" if total > 2 and index == total - 2 else
+                        "rising action"
+                    )
+                candidate = _story_id_token(field(source, "id") or title) or f"beat-{index + 1}"
+                base = candidate
+                suffix = 2
+                while candidate in used_ids:
+                    candidate = f"{base}-{suffix}"
+                    suffix += 1
+                used_ids.add(candidate)
+                beats.append({
+                    "id": candidate,
+                    "stage": stage,
+                    "title": title,
+                    "summary": summary,
+                    "goal": goal,
+                    "conflict": conflict,
+                    "turn": turn,
+                })
+            normalized["beats"] = beats
+        return normalized
+
     if scope == "world" and isinstance(normalized.get("world"), dict):
         locations = normalized["world"].get("locations")
         if not isinstance(locations, list):
@@ -25585,10 +25779,94 @@ def _normalize_story_stage_ids(
             used.add(candidate)
         return normalized
 
-    if scope == "music" and isinstance(normalized.get("music"), dict):
-        cues = normalized["music"].get("cues")
+    if scope == "music" and isinstance(normalized, dict):
+        # Keep a useful song when a provider returns the right content under
+        # a harmless wrapper alias (or returns the single music-video cue as
+        # the music object itself).  This also lets us repair small internal
+        # contradictions before a schema-repair call can discard the song.
+        raw_music = normalized.get("music")
+        if isinstance(raw_music, list):
+            music = {"cues": raw_music}
+        elif isinstance(raw_music, dict):
+            music = raw_music
+        else:
+            music = {}
+
+        cues = music.get("cues")
+        if not isinstance(cues, list):
+            cues = next((
+                music.get(key)
+                for key in ("songs", "tracks", "proposals", "items")
+                if isinstance(music.get(key), list)
+            ), None)
+        if not isinstance(cues, list):
+            single = next((
+                music.get(key)
+                for key in ("song", "track", "cue")
+                if isinstance(music.get(key), dict)
+            ), None)
+            if single is None and any(
+                key in music
+                for key in ("lyrics", "songLyrics", "song_lyrics", "style", "musicStyle")
+            ):
+                single = music
+            if isinstance(single, dict):
+                cues = [single]
+        if not isinstance(cues, list):
+            cues = next((
+                normalized.get(key)
+                for key in ("cues", "songs", "tracks", "proposals")
+                if isinstance(normalized.get(key), list)
+            ), None)
         if not isinstance(cues, list):
             return normalized
+        normalized["music"] = {"cues": cues}
+
+        project_type = str(project.get("projectType") or "full_story").strip().lower()
+        creative_brief = (
+            project.get("creativeBrief")
+            if isinstance(project.get("creativeBrief"), dict)
+            else {}
+        )
+        project_music = (
+            project.get("music") if isinstance(project.get("music"), dict) else {}
+        )
+
+        def cue_text(cue: dict, *keys: str) -> str:
+            for key in keys:
+                value = cue.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            return ""
+
+        def cue_lyrics(cue: dict) -> str:
+            value = next((
+                cue.get(key)
+                for key in ("lyrics", "songLyrics", "song_lyrics", "text")
+                if cue.get(key) not in (None, "")
+            ), "")
+            if isinstance(value, list):
+                return "\n".join(str(line).strip() for line in value if str(line).strip())
+            if isinstance(value, dict):
+                tags = {
+                    "intro": "Intro", "verse": "Verse", "verse1": "Verse",
+                    "verse2": "Verse", "prechorus": "Pre Chorus",
+                    "chorus": "Chorus", "hook": "Hook", "bridge": "Bridge",
+                    "outro": "Outro",
+                }
+                sections = []
+                for key, lines in value.items():
+                    text = (
+                        "\n".join(str(line).strip() for line in lines if str(line).strip())
+                        if isinstance(lines, list) else str(lines or "").strip()
+                    )
+                    if not text:
+                        continue
+                    token = re.sub(r"[^a-z0-9]+", "", str(key).casefold())
+                    sections.append(f"[{tags.get(token, 'Verse')}]\n\n{text}")
+                return "\n\n".join(sections)
+            return str(value or "").strip()
+
         characters = [
             character for character in project.get("characters", [])
             if isinstance(character, dict) and str(character.get("id") or "").strip()
@@ -25606,7 +25884,71 @@ def _normalize_story_stage_ids(
                 continue
             kind = str(cue.get("kind") or "").strip().lower()
             target = str(cue.get("targetId") or "").strip()
-            if kind == "character":
+            if project_type == "music_video":
+                # A non-empty lyrics field is authoritative for a vocal song;
+                # providers sometimes copy an instrumental default despite
+                # the explicit music-video contract.
+                kind = "story"
+                target = "story"
+                cue["kind"] = kind
+                cue["targetId"] = target
+                cue["title"] = cue_text(cue, "title", "name", "songTitle", "song_title") or (
+                    str(project.get("title") or "Main story song").strip()
+                )
+                story_direction = str(
+                    creative_brief.get("songStory")
+                    or project_music.get("brief")
+                    or project.get("premise")
+                    or "This song drives the visual story."
+                ).strip()
+                cue["purpose"] = cue_text(
+                    cue, "purpose", "goal", "concept", "description"
+                ) or story_direction
+                cue["brief"] = cue_text(
+                    cue, "brief", "description", "prompt", "songBrief", "song_brief"
+                ) or story_direction
+                cue["referenceSong"] = cue_text(
+                    cue, "referenceSong", "reference_song", "reference", "inspiration"
+                ) or "Original composition — No direct reference"
+                style = cue_text(
+                    cue, "style", "musicStyle", "music_style", "stylePrompt", "style_prompt"
+                ) or str(
+                    creative_brief.get("musicStyle")
+                    or project_music.get("style")
+                    or "cinematic story song, expressive lead vocal, dynamic original production"
+                ).strip()
+                cue["style"] = style[:300]
+                lyrics = cue_lyrics(cue)[:3500].strip()
+                if lyrics and not re.search(
+                    r"^\[(Verse|Chorus|Hook)\]\s*$", lyrics, re.MULTILINE
+                ):
+                    if "\n" not in lyrics and "/" in lyrics:
+                        lyrics = re.sub(r"\s*/\s*", "\n", lyrics)
+                    lyrics = f"[Verse]\n\n{lyrics}"[:3500].rstrip()
+                cue["lyrics"] = lyrics
+                cue["instrumental"] = False
+                requested_duration = creative_brief.get(
+                    "durationSeconds", project_music.get("targetDurationSeconds")
+                )
+                duration = (
+                    requested_duration
+                    if requested_duration not in (None, "")
+                    else cue.get("durationSeconds", cue.get("duration_seconds"))
+                )
+                if isinstance(duration, bool):
+                    duration = None
+                try:
+                    duration = int(float(duration))
+                except (TypeError, ValueError):
+                    duration = creative_brief.get(
+                        "durationSeconds", project_music.get("targetDurationSeconds", 90)
+                    )
+                    try:
+                        duration = int(float(duration))
+                    except (TypeError, ValueError):
+                        duration = 90
+                cue["durationSeconds"] = max(20, min(360, duration))
+            elif kind == "character":
                 target = character_lookup.get(_story_id_token(target), target)
             elif kind == "world":
                 target = "world"
@@ -25855,7 +26197,7 @@ def _story_project_prompt_context(project: dict, scope: str) -> str:
     overview_keys = (
         "title", "projectType", "creativeBrief", "language", "genre", "tone", "audience", "premise",
         "logline", "synopsis", "theme", "ending", "visualStyle",
-        "enforceVisualStyle",
+        "characterVisualStyle", "enforceVisualStyle", "allowClipText",
     )
     compact = {key: project.get(key) for key in overview_keys if key in project}
     # Characters are useful grounding for every downstream phase and are
@@ -25937,6 +26279,29 @@ def _story_checkpoint_request(body: dict) -> dict:
                     cue.pop("candidates", None)
                     cue.pop("selectedCandidateId", None)
     return request
+
+
+def _story_resume_request(request: dict, override: dict | None) -> dict:
+    """Apply an explicit current writing profile to a durable resume request."""
+    updated = copy.deepcopy(request)
+    if not isinstance(override, dict):
+        return updated
+    provider = str(override.get("writingProvider") or "").strip()
+    if not provider:
+        return updated
+    updated["writingProvider"] = provider
+    updated["writingModel"] = str(override.get("writingModel") or "").strip()
+    updated["writingBaseUrl"] = str(override.get("writingBaseUrl") or "").strip()
+    project = updated.get("project")
+    if isinstance(project, dict):
+        profile = project.get("provider") if isinstance(project.get("provider"), dict) else {}
+        project["provider"] = {
+            **profile,
+            "writingProvider": updated["writingProvider"],
+            "writingModel": updated["writingModel"],
+            "writingBaseUrl": updated["writingBaseUrl"],
+        }
+    return updated
 
 
 _story_library_lock = threading.Lock()
@@ -26119,7 +26484,9 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     tone = str(body.get("tone") or project.get("tone") or "Cinematic").strip()
     audience = str(body.get("audience") or project.get("audience") or "General").strip()
     visual_style = str(project.get("visualStyle") or "").strip()[:4000]
+    character_visual_style = str(project.get("characterVisualStyle") or "").strip()[:2000]
     enforce_visual_style = project.get("enforceVisualStyle") is not False
+    allow_clip_text = project.get("allowClipText") is True
     llm_override = _comic_writing_llm(body)
     if not llm_override:
         _ensure_llm_loaded()
@@ -26201,7 +26568,9 @@ Genre: {genre}
 Tone: {tone}
 Audience: {audience}
 Global visual style (separate from story content): {visual_style or 'not set'}
+Character rendering style (mandatory for every visible person): {character_visual_style or 'not set'}
 Apply that style as a mandatory render-time constraint: {'yes' if enforce_visual_style else 'no'}
+Readable text inside future generated clips: {'allowed when explicitly requested' if allow_clip_text else 'forbidden; lyrics and dialogue are audio/performance only, and visual fields must not request captions, subtitles, signs, UI, floating words or quoted text'}
 Optional user instruction: {instruction or 'none'}
 Current manually edited project (preserve useful established facts and stable IDs):
 {current}
@@ -26644,7 +27013,7 @@ def get_story_lab_generation(job_id: str):
 
 
 @api.post("/api/v1/stories/generate/resume/{job_id}")
-def resume_story_lab_generation(job_id: str):
+def resume_story_lab_generation(job_id: str, body: dict | None = None):
     job = _load_story_plan_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Story generation job not found")
@@ -26658,8 +27027,14 @@ def resume_story_lab_generation(job_id: str):
             "status": job.get("status"),
             "message": "Story generation is already running.",
         }
+    request = _story_resume_request(job.get("request") or {}, body)
+    # Resolve the profile before mutating the durable checkpoint so invalid
+    # model names or missing credentials fail without damaging recovery.
+    if isinstance(body, dict) and str(body.get("writingProvider") or "").strip():
+        _comic_writing_llm(request)
     _story_job_update(
         job_id,
+        request=request,
         status="queued",
         message="Resuming from the last completed Story Lab stage…",
         error=None,
@@ -27779,10 +28154,35 @@ def get_latest_completed_director_comic_plan():
 _output_scan_cache_lock = threading.Lock()
 _output_scan_cache: dict[str, dict] = {}
 _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
+_MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
+    os.path.dirname(_app_dir), "cache", "media-thumbnails"
+)
+
+
+def _resolve_output_file(filename: str) -> str | None:
+    """Resolve an output in the active, default, or another workspace."""
+    save_root = wgp.server_config.get("save_path", "outputs")
+    roots = [_workspace_dir(), save_root]
+    if os.path.isdir(save_root):
+        roots.extend(
+            os.path.join(save_root, name)
+            for name in os.listdir(save_root)
+            if os.path.isdir(os.path.join(save_root, name))
+        )
+    seen: set[str] = set()
+    for root in roots:
+        root_real = os.path.realpath(root)
+        if root_real in seen:
+            continue
+        seen.add(root_real)
+        candidate = _safe_join(root_real, filename)
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    return None
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = "", workspace: str = ""):
+def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = "", workspace: str = "", media_type: str = ""):
     """List generated output files (newest first) from the active workspace.
 
     Supports pagination via limit/offset query params.
@@ -27795,6 +28195,7 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
     generations never save here. Uploads have no sidecars, so the metadata
     passes below fall through naturally.
     """
+    response.headers["Cache-Control"] = "no-store"
     if workspace == "__uploads__":
         out_dir = os.path.join(os.getcwd(), "uploads")
     else:
@@ -27979,9 +28380,14 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
                 if is_comic and os.path.isfile(os.path.join(out_dir, name[:-len(".comic.json")] + ".comic.preview.png"))
                 else (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png"
                       if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png"))
-                      else cached.get("thumbnail_url"))
+                      else (f"/api/v1/outputs/thumbnail/{quote(name, safe='')}?v={int(mtime * 1_000_000)}-{size}"
+                            if ftype in {"image", "video"}
+                            else cached.get("thumbnail_url")))
             ),
         })
+
+    if media_type:
+        files = [item for item in files if item["type"] == media_type]
 
     # Special filters: return ALL matches, bypass pagination
     if favorites_only:
@@ -28043,6 +28449,34 @@ def list_outputs(limit: int = 0, offset: int = 0, favorites_only: bool = False, 
     return {"outputs": files, "total": total}
 
 
+@api.get("/api/v1/outputs/thumbnail/{filename:path}")
+def serve_output_thumbnail(filename: str):
+    """Lazily create one small static preview for an image or video output."""
+    from services.media_thumbnails import ensure_media_thumbnail
+
+    source = _resolve_output_file(filename)
+    if not source:
+        raise HTTPException(status_code=404, detail="Output not found")
+    extension = os.path.splitext(source)[1].lower()
+    image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
+    video_extensions = {".mp4", ".webm", ".gif", ".mov", ".mkv", ".avi", ".m4v"}
+    if extension not in image_extensions | video_extensions:
+        raise HTTPException(status_code=400, detail="This output has no media thumbnail")
+    try:
+        thumbnail = ensure_media_thumbnail(
+            source,
+            _MEDIA_THUMBNAIL_CACHE_DIR,
+            is_video=extension in video_extensions,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not create thumbnail: {exc}") from exc
+    return FileResponse(
+        thumbnail,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
 @api.get("/api/v1/file/{filename:path}")
 def serve_file(filename: str):
     """Serve an output file. Checks active workspace first, then all workspaces.
@@ -28054,23 +28488,10 @@ def serve_file(filename: str):
     user has to close the entire app to clean up.
     """
     from services.win_safe_files import share_delete_file_response
-    save_root = wgp.server_config.get("save_path", "outputs")
-    # 1. Check active workspace
-    filepath = _safe_join(_workspace_dir(), filename)
-    if filepath and os.path.isfile(filepath):
+    filepath = _resolve_output_file(filename)
+    if filepath:
         return share_delete_file_response(filepath)
-    # 2. Check base save_path (pre-workspace files)
-    filepath = _safe_join(save_root, filename)
-    if filepath and os.path.isfile(filepath):
-        return share_delete_file_response(filepath)
-    # 3. Search all workspace subdirectories (Director pipeline may have saved
-    #    to a different workspace than the one currently active in the browser)
-    if os.path.isdir(save_root):
-        for d in os.listdir(save_root):
-            candidate = _safe_join(save_root, d, filename)
-            if candidate and os.path.isfile(candidate):
-                return share_delete_file_response(candidate)
-    # 4. Uploads folder — the gallery's virtual "Uploads" view lists these
+    # Uploads folder — the gallery's virtual "Uploads" view lists these
     #    files with the same /api/v1/file/ URLs every other gallery flow
     #    builds (thumbnails, playback, send-to-input). Upload names are
     #    hash-uniquified at upload time, and outputs are checked first, so
@@ -28122,6 +28543,27 @@ def get_output_metadata(name: str):
                     resolved_seed = _extract_output_seed(name)
                     if resolved_seed is not None:
                         params["seed"] = resolved_seed
+            # Director finals created before timing was added to their
+            # sidecars can still recover the durable production statistics
+            # from the matching pipeline checkpoint. New finals already carry
+            # this payload, so they avoid the extra checkpoint read.
+            if not sidecar.get("generation_timings"):
+                pipeline_id = (
+                    sidecar.get("director_pipeline_id")
+                    or params.get("director_pipeline_id")
+                    or params.get("_director_pipeline_id")
+                )
+                if pipeline_id:
+                    from services.director_pipeline import (
+                        enrich_output_metadata_with_pipeline_timing,
+                        load_pipeline_state,
+                    )
+                    pipeline = load_pipeline_state(out_dir, str(pipeline_id))
+                    if pipeline:
+                        sidecar = enrich_output_metadata_with_pipeline_timing(
+                            sidecar,
+                            pipeline,
+                        )
             return {"source": "sidecar", **sidecar}
         except Exception:
             pass
@@ -28132,6 +28574,166 @@ def get_output_metadata(name: str):
         return {"source": "embedded", "params": embedded}
 
     return {"source": "none", "params": None}
+
+
+def _saved_video_context_for_extra_info(name: str):
+    """Load sidecar/pipeline context without reading the media itself."""
+    out_dir = _workspace_dir()
+    filepath = _safe_join(out_dir, name)
+    if filepath is None or not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="Output video not found")
+    if os.path.splitext(filepath)[1].lower() not in {".mp4", ".mkv", ".webm", ".mov", ".gif"}:
+        raise HTTPException(status_code=400, detail="Extra info is available for videos only")
+
+    meta_path = os.path.splitext(filepath)[0] + ".meta.json"
+    if not os.path.isfile(meta_path):
+        raise HTTPException(
+            status_code=400,
+            detail="This video has no saved prompt metadata; media re-analysis is disabled",
+        )
+    try:
+        with open(meta_path, "r", encoding="utf-8") as handle:
+            metadata = json.load(handle)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=500, detail="Could not read the video's saved metadata") from error
+    if not isinstance(metadata, dict):
+        raise HTTPException(status_code=500, detail="The video's saved metadata is invalid")
+
+    params = metadata.get("params") if isinstance(metadata.get("params"), dict) else {}
+    pipeline_id = (
+        metadata.get("director_pipeline_id")
+        or params.get("director_pipeline_id")
+        or params.get("_director_pipeline_id")
+    )
+    pipeline = None
+    # Pipeline IDs are generated as short hex strings. Validate before asking
+    # for its checkpoint filename. Read that JSON directly: the Extra info
+    # feature must not invoke media recovery/reconciliation or analyse frames.
+    if pipeline_id and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(pipeline_id)):
+        pipeline_path = _safe_join(out_dir, f"_director_pipeline_{pipeline_id}.json")
+        if pipeline_path and os.path.isfile(pipeline_path):
+            try:
+                with open(pipeline_path, "r", encoding="utf-8") as handle:
+                    candidate = json.load(handle)
+                if isinstance(candidate, dict):
+                    pipeline = candidate
+            except (OSError, ValueError, json.JSONDecodeError):
+                pipeline = None
+
+    if pipeline and not metadata.get("generation_timings"):
+        from services.director_pipeline import enrich_output_metadata_with_pipeline_timing
+        metadata = enrich_output_metadata_with_pipeline_timing(metadata, pipeline)
+
+    from services.video_extra_info import build_saved_clip_info, build_saved_video_context
+    context = build_saved_video_context(metadata, pipeline)
+    try:
+        file_stat = os.stat(filepath)
+        file_size_bytes = file_stat.st_size
+        file_modified_at = file_stat.st_mtime
+    except OSError:
+        file_size_bytes = 0
+        file_modified_at = None
+    clip = build_saved_clip_info(
+        name,
+        metadata,
+        file_size_bytes=file_size_bytes,
+        file_modified_at=file_modified_at,
+    )
+    return meta_path, metadata, context, clip
+
+
+@api.get("/api/v1/outputs/{name}/extra-info")
+def get_video_extra_info(name: str, language: str = "es"):
+    """Return cached publishing copy for one language, if it exists."""
+    from services.video_extra_info import normalize_language
+
+    try:
+        code, label = normalize_language(language)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    _, metadata, context, clip = _saved_video_context_for_extra_info(name)
+    stored = metadata.get("video_extra_info")
+    cached = stored.get(code) if isinstance(stored, dict) else None
+    # Ignore stale copy if a sidecar/pipeline prompt was edited after it was
+    # generated. The next explicit Generate click refreshes and persists it.
+    available = bool(
+        isinstance(cached, dict)
+        and cached.get("source_fingerprint") == context.get("source_fingerprint")
+    )
+    return {
+        "available": available,
+        "language": code,
+        "language_label": label,
+        "data": cached if available else None,
+        "prompt_count": context.get("prompt_count", 0),
+        "director_context": context.get("director_context", False),
+        "clip": clip,
+    }
+
+
+@api.post("/api/v1/outputs/{name}/extra-info")
+async def generate_output_extra_info(name: str, request: Request):
+    """Generate and persist platform copy from saved prompts only."""
+    from services import llm_service
+    from services.video_extra_info import (
+        generate_video_extra_info,
+        normalize_language,
+    )
+
+    body = await request.json()
+    try:
+        code, _ = normalize_language(body.get("language", "es"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    meta_path, metadata, context, _ = _saved_video_context_for_extra_info(name)
+    stored = metadata.get("video_extra_info")
+    cached = stored.get(code) if isinstance(stored, dict) else None
+    if (
+        not body.get("regenerate")
+        and isinstance(cached, dict)
+        and cached.get("source_fingerprint") == context.get("source_fingerprint")
+    ):
+        return {"cached": True, "data": cached}
+
+    try:
+        _ensure_llm_loaded()
+        generated = generate_video_extra_info(context, code, llm_service.generate)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+    generated["generated_at"] = time.time()
+    latest = metadata
+    try:
+        # Re-read before the atomic update so another metadata writer cannot
+        # be accidentally discarded while the LLM is working.
+        with open(meta_path, "r", encoding="utf-8") as handle:
+            candidate = json.load(handle)
+        if isinstance(candidate, dict):
+            latest = candidate
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    saved = latest.get("video_extra_info")
+    if not isinstance(saved, dict):
+        saved = {}
+        latest["video_extra_info"] = saved
+    saved[code] = generated
+    temp_path = f"{meta_path}.{uuid.uuid4().hex[:8]}.tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(latest, handle, indent=2, ensure_ascii=False, default=str)
+        os.replace(temp_path, meta_path)
+    except OSError as error:
+        try:
+            if os.path.isfile(temp_path):
+                os.remove(temp_path)
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail="Could not save generated extra info") from error
+    return {"cached": False, "data": generated}
 
 
 @api.post("/api/v1/outputs/rejoin")
@@ -28315,6 +28917,29 @@ def probe_video_editor_source(body: dict):
         raise HTTPException(status_code=500, detail=f"Could not inspect video: {exc}") from exc
 
 
+@api.get("/api/v1/video-editor/thumbnail")
+def serve_video_editor_thumbnail(source: str):
+    """Return a static preview for an uploaded or workspace editor source."""
+    from services.media_thumbnails import ensure_media_thumbnail
+
+    try:
+        resolved = _resolve_video_editor_source(source)
+        thumbnail = ensure_media_thumbnail(
+            resolved,
+            _MEDIA_THUMBNAIL_CACHE_DIR,
+            is_video=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not create thumbnail: {exc}") from exc
+    return FileResponse(
+        thumbnail,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
 @api.post("/api/v1/video-editor/screenshot")
 def capture_video_editor_frame(body: dict):
     """Save the current source-video frame as a reusable Maestro image output."""
@@ -28435,6 +29060,8 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                                 "fit",
                                 "transition",
                                 "transition_duration",
+                                "transition_text",
+                                "transition_text_size",
                             }
                         }
                         for clip in body["clips"]
@@ -28481,6 +29108,8 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
 @api.post("/api/v1/video-editor/export")
 def start_video_editor_export(body: dict):
     """Queue a non-blocking FFmpeg export for uploaded and/or Maestro clips."""
+    from services.video_editor import normalise_time_card_text
+
     clips = body.get("clips")
     if not isinstance(clips, list) or not clips:
         raise HTTPException(status_code=400, detail="Add at least one video clip")
@@ -28510,7 +29139,11 @@ def start_video_editor_export(body: dict):
         "pixelize",
         "blur",
         "zoom-in",
+        "later-clock",
+        "later-tropical",
+        "later-cinematic",
     }
+    clean_clips = []
     for index, clip in enumerate(clips):
         if not isinstance(clip, dict):
             raise HTTPException(status_code=400, detail=f"Clip {index + 1} is invalid")
@@ -28519,10 +29152,22 @@ def start_video_editor_export(body: dict):
             raise HTTPException(status_code=400, detail=f"Clip {index + 1} has an unsupported transition")
         try:
             transition_duration = float(clip.get("transition_duration") or 0.4)
+            transition_text_size = float(clip.get("transition_text_size") or 100)
         except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail=f"Clip {index + 1} has an invalid transition duration") from exc
+            raise HTTPException(status_code=400, detail=f"Clip {index + 1} has invalid transition settings") from exc
         if transition_duration < 0.05 or transition_duration > 5:
             raise HTTPException(status_code=400, detail="Transition duration must be between 0.05 and 5 seconds")
+        if transition_text_size < 50 or transition_text_size > 160:
+            raise HTTPException(status_code=400, detail="Transition text size must be between 50% and 160%")
+        transition_text = normalise_time_card_text(clip.get("transition_text"))
+        clean_clip = dict(clip)
+        clean_clip.update({
+            "transition": transition,
+            "transition_duration": transition_duration,
+            "transition_text": transition_text,
+            "transition_text_size": transition_text_size,
+        })
+        clean_clips.append(clean_clip)
 
     safe_project_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("name") or "edited_video")).strip("_")
     safe_project_name = safe_project_name[:60] or "edited_video"
@@ -28538,7 +29183,7 @@ def start_video_editor_export(body: dict):
         suffix += 1
 
     clean_body = dict(body)
-    clean_body.update({"width": width, "height": height, "fps": fps})
+    clean_body.update({"width": width, "height": height, "fps": fps, "clips": clean_clips})
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     _video_editor_jobs[job_id] = {
         "job_id": job_id,

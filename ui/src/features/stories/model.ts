@@ -2,6 +2,7 @@ import type {
   StoryBeat, StoryCharacter, StoryLocation, StoryProject, StoryRelationship,
   StoryMusicCandidate, StoryMusicCue, StoryVisualAsset,
 } from './types'
+import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../../types'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
 
@@ -84,6 +85,18 @@ export function applyStoryVisualStyle(
   const style = visualStyle.trim()
   if (!enforce || !style) return content
   return `${STYLE_LOCK_PREFIX} ${style} ${STYLE_LOCK_SUFFIX}${content ? ` ${content}` : ''}`
+}
+
+/** Keep character rendering separate in the editor while enforcing it with the global lock. */
+export function storyRenderStyle(project: Pick<StoryProject, 'visualStyle' | 'characterVisualStyle'>): string {
+  const globalStyle = project.visualStyle.trim()
+  const characterStyle = project.characterVisualStyle.trim()
+  return [
+    globalStyle,
+    characterStyle
+      ? `CHARACTER RENDERING STYLE: ${characterStyle}. Every visible person or character must use this exact rendering, material and design language consistently.`
+      : '',
+  ].filter(Boolean).join(' ')
 }
 
 export function storyId(prefix: string): string {
@@ -269,7 +282,11 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     tone: 'Cinematic',
     audience: 'General',
     visualStyle: '',
+    characterVisualStyle: '',
     enforceVisualStyle: true,
+    allowClipText: false,
+    musicVideoGenerationMode: 'image_guided',
+    directVideoMasterPrompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
     premise: '',
     logline: '',
     synopsis: '',
@@ -388,7 +405,15 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     tone: text(project.tone, fallback.tone),
     audience: text(project.audience, fallback.audience),
     visualStyle: text(project.visualStyle),
+    characterVisualStyle: text(project.characterVisualStyle),
     enforceVisualStyle: project.enforceVisualStyle !== false,
+    allowClipText: project.allowClipText === true,
+    musicVideoGenerationMode: project.musicVideoGenerationMode === 'direct_video'
+      ? 'direct_video' : 'image_guided',
+    directVideoMasterPrompt: text(
+      project.directVideoMasterPrompt,
+      DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
+    ),
     premise: text(project.premise),
     logline: text(project.logline),
     synopsis: text(project.synopsis),
@@ -486,12 +511,14 @@ export function normalizeStoryProject(value: unknown): StoryProject {
 export function changedSections(before: StoryProject, after: StoryProject): StorySection[] {
   const overviewBefore = [
     before.title, before.projectType, before.creativeBrief, before.language, before.genre, before.tone, before.audience,
-    before.visualStyle, before.enforceVisualStyle,
+    before.visualStyle, before.characterVisualStyle, before.enforceVisualStyle, before.allowClipText,
+    before.musicVideoGenerationMode, before.directVideoMasterPrompt,
     before.premise, before.logline, before.synopsis, before.theme, before.ending,
   ]
   const overviewAfter = [
     after.title, after.projectType, after.creativeBrief, after.language, after.genre, after.tone, after.audience,
-    after.visualStyle, after.enforceVisualStyle,
+    after.visualStyle, after.characterVisualStyle, after.enforceVisualStyle, after.allowClipText,
+    after.musicVideoGenerationMode, after.directVideoMasterPrompt,
     after.premise, after.logline, after.synopsis, after.theme, after.ending,
   ]
   const changed: StorySection[] = []

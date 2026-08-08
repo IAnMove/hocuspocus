@@ -15,6 +15,7 @@ from app.services.director.planners.music_video import (
     build_music_video_coverage,
     normalize_music_video_treatment,
 )
+from app.services.director.policies import enforce_direct_video_on_clip_plans
 from app.services.director.planners.short_film import ShortFilmPlanner
 from app.services.director.schema import CharacterProfile
 from app.services import director_pipeline
@@ -85,6 +86,49 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(treatment["performer_presence"], 100)
         self.assertEqual(treatment["recurring_sets"], ["stage", "rooftop"])
         self.assertEqual(treatment["lip_sync"], "occasional")
+
+    def test_direct_video_treatment_keeps_master_prompt_and_ignores_visual_refs(self):
+        treatment = normalize_music_video_treatment({
+            "generation_mode": "direct_video",
+            "direct_video_master_prompt": "Immutable painted science-fiction world.",
+        })
+        self.assertEqual(treatment["generation_mode"], "direct_video")
+        self.assertEqual(
+            treatment["direct_video_master_prompt"],
+            "Immutable painted science-fiction world.",
+        )
+        params = {
+            "pipeline_type": "music_video",
+            "music_video_treatment": treatment,
+            "reference_image_path": "/tmp/portrait.png",
+            "character_ref_paths": ["/tmp/character.png"],
+            "location_ref_paths": ["/tmp/location.png"],
+        }
+        self.assertFalse(director_pipeline._has_visual_references(params))
+
+    def test_direct_video_contract_repeats_master_and_removes_image_prompts(self):
+        plans = [{
+            "scene_goal": "Reveal the alien citadel",
+            "environment": "a red desert beneath two moons",
+            "video_prompt": "A lone warrior raises a black sword as the camera pushes in.",
+            "image_prompt": "This must never reach an image model.",
+            "keyframe_prompts": ["Nor this keyframe."],
+        }]
+        enforce_direct_video_on_clip_plans(
+            plans,
+            "IMMUTABLE PAINTED WORLD.",
+            allow_clip_text=False,
+        )
+        prompt = plans[0]["video_prompt"]
+        self.assertTrue(prompt.startswith("IMMUTABLE PAINTED WORLD."))
+        self.assertIn("Scene overview: Reveal the alien citadel", prompt)
+        self.assertIn("A lone warrior raises", prompt)
+        self.assertIn("non_diegetic_music: none", prompt)
+        self.assertEqual(plans[0]["image_prompt"], "")
+        self.assertEqual(plans[0]["image_source"], "none")
+        self.assertEqual(plans[0]["keyframe_prompts"], [])
+        self.assertEqual(plans[0]["h3_segment_prompts"], [])
+        self.assertIn("VISIBLE TEXT LOCK", prompt)
 
     def test_choruses_reuse_signature_set_with_controlled_coverage(self):
         clips = [
@@ -178,6 +222,28 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(len(serialized["alternative_shots"]), 1)
         self.assertEqual(serialized["alternative_shots"][0]["clip_index"], 3)
 
+    def test_music_video_prompt_contract_separates_lyrics_from_visible_text(self):
+        calls = []
+
+        def generate(**kwargs):
+            calls.append(kwargs)
+            return json.dumps([_music_shot(1)])
+
+        MusicVideoPlanner(llm_generate=generate).plan(
+            clips=[{"start": 0, "end": 4, "label": "verse", "beat_count": 8}],
+            scene_description="A singer wakes inside a digital archive.",
+            lyrics=[{"start": 0, "end": 4, "text": "Despierta dentro de mí"}],
+            bpm=90,
+            preserve_visual_style=True,
+            character_visual_style="handmade plasticine claymation figures",
+            allow_clip_text=False,
+        )
+
+        self.assertIn("CHARACTER RENDERING CONTRACT — STRICT", calls[0]["system_prompt"])
+        self.assertIn("No readable text may appear", calls[0]["system_prompt"])
+        self.assertIn("never render as visible text", calls[0]["prompt"])
+        self.assertNotIn('lyrics: "Despierta dentro de mí"', calls[0]["prompt"])
+
     def test_character_and_location_references_are_preserved(self):
         body = {
             "story_description": "A compact episode.",
@@ -189,6 +255,8 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             "video_model": "ltx2_22B_distilled_1_1",
             "visual_style": "2D anime, clean cel shading",
             "preserve_visual_style": True,
+            "character_visual_style": "2D anime characters",
+            "allow_clip_text": False,
             "music_video_treatment": {"mode": "hybrid"},
         }
         self.assertEqual(_director_v2_planner_kwargs(body), body)

@@ -150,6 +150,73 @@ def test_h3_story_renders_each_shot_and_assembles_native_audio(tmp_path: Path):
     assert (tmp_path / "minimax_h3_h3story_multiclip.mp4").is_file()
 
 
+def test_h3_direct_video_repeats_master_and_never_sends_images(tmp_path: Path):
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        name = f"direct_{len(submitted)}.mp4"
+        (tmp_path / name).write_bytes(b"video")
+        return [name]
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(paths, destination, audio_path):
+            assert len(paths) == 2
+            assert audio_path == "/music/song.wav"
+            Path(destination).write_bytes(b"assembled")
+            return True
+
+    params = {
+        "pipeline_type": "music_video",
+        "audio_path": "/music/song.wav",
+        "reference_image_path": "/ignored/portrait.png",
+        "character_ref_paths": ["/ignored/character.png"],
+        "music_video_treatment": {
+            "generation_mode": "direct_video",
+            "direct_video_master_prompt": "IMMUTABLE HEAVY METAL WORLD.",
+        },
+    }
+    plan = {
+        "scene_goal": "A duel above an alien city",
+        "environment": "a rusted bridge under a purple sky",
+        "video_prompt": (
+            "The armored warrior advances. The creature spreads its wings. "
+            "The camera circles once. Both freeze before the strike."
+        ),
+    }
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch.object(director_pipeline, "_save_pipeline_state"), \
+            patch.object(director_pipeline, "_wgp", FakeWgp()):
+        outputs = director_pipeline._run_minimax_h3_story_video(
+            "h3direct",
+            params,
+            [plan],
+            [{"duration_sec": 10}],
+            [""],
+            {
+                "num_inference_steps": 20,
+                "h3_reference_mode": "references",
+                "h3_ref_videos": ["/ignored/motion.mp4"],
+                "h3_ref_audios": ["/ignored/voice.wav"],
+            },
+            "960x544",
+            str(tmp_path),
+        )
+
+    assert len(submitted) == 2
+    assert all(item["prompt"].startswith("IMMUTABLE HEAVY METAL WORLD.") for item in submitted)
+    assert all("Scene overview: A duel above an alien city" in item["prompt"] for item in submitted)
+    assert all("overall_soundscape:" in item["prompt"] for item in submitted)
+    assert all("non_diegetic_music: none" in item["prompt"] for item in submitted)
+    assert all("VISIBLE TEXT LOCK" in item["prompt"] for item in submitted)
+    assert all("Picture 1" not in item["prompt"] for item in submitted)
+    assert all(item["image_prompt_type"] == "" for item in submitted)
+    assert all("image_start" not in item and "image_refs" not in item for item in submitted)
+    assert all("h3_ref_videos" not in item and "h3_ref_audios" not in item for item in submitted)
+    assert outputs[-1] == "minimax_h3_h3direct_multiclip.mp4"
+
+
 def test_h3_story_wrapper_releases_runtime_after_failure(tmp_path: Path):
     params = {
         "video_model": "minimax_h3",
@@ -178,7 +245,24 @@ def test_h3_story_wrapper_releases_runtime_after_failure(tmp_path: Path):
     stop_runtime.assert_called_once()
 
 
-def test_h3_music_video_uses_the_sequential_renderer(tmp_path: Path):
+def test_current_h3_registry_uses_native_bounded_renderer():
+    assert not director_pipeline._uses_legacy_h3_renderer(
+        "minimax_h3",
+        {
+            "architecture": "minimax_h3",
+            "director_video_strategy": "bounded_start_end",
+        },
+    )
+    assert not director_pipeline._uses_legacy_h3_renderer(
+        "minimax_h3_ref2va",
+        {
+            "architecture": "minimax_h3_ref2va",
+            "director_video_strategy": "omni_reference",
+        },
+    )
+
+
+def test_registryless_h3_music_video_keeps_legacy_sequential_compatibility(tmp_path: Path):
     params = {
         "video_model": "minimax_h3",
         "pipeline_type": "music_video",

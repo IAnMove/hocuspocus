@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan } from '../types'
+import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
+import { splitPromptSchedule } from '../lib/promptScheduler'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -941,6 +943,12 @@ export interface ForegroundActivity {
   updatedAt?: number
 }
 
+interface ScheduledPromptSubmission {
+  prompt: string
+  position: number
+  total: number
+}
+
 interface AppState {
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1422,7 +1430,9 @@ interface AppState {
   // Generation state (queue)
   jobs: GenerationJob[]
   isGenerating: boolean
-  startGeneration: () => Promise<void>
+  promptSchedulerEnabled: boolean
+  setPromptSchedulerEnabled: (enabled: boolean) => void
+  startGeneration: (scheduledPrompt?: ScheduledPromptSubmission) => Promise<void>
   stopGeneration: (jobId?: string) => void
   dismissJob: (jobId: string) => void
   reconnectJobs: () => Promise<void>
@@ -1703,12 +1713,16 @@ interface AppState {
   shortFilmNarrative: boolean
   shortFilmVisualStyle: string
   shortFilmPreserveVisualStyle: boolean
+  directorCharacterVisualStyle: string
+  directorAllowClipText: boolean
   shortFilmSetCharacters: (characters: ShortFilmCharacter[]) => void
   shortFilmSetPath: (path: ShortFilmPath) => void
   shortFilmSetTargetDuration: (duration: number) => void
   shortFilmSetNarrative: (v: boolean) => void
   shortFilmSetVisualStyle: (style: string) => void
   shortFilmSetPreserveVisualStyle: (v: boolean) => void
+  setDirectorCharacterVisualStyle: (style: string) => void
+  setDirectorAllowClipText: (v: boolean) => void
   shortFilmUploadAndAnalyze: (file: File) => Promise<void>
   shortFilmSetPacingBias: (bias: number) => Promise<void>
   shortFilmPlanPrompts: () => Promise<void>
@@ -1729,7 +1743,7 @@ interface AppState {
   pipelineStatus: import('../api/client').PipelineStatus | null
   activeDirectorPipelines: import('../api/client').ActiveDirectorPipeline[]
   pipelinePolling: boolean
-  startDirectorPipeline: () => Promise<void>
+  startDirectorPipeline: (useCurrentPlans?: boolean) => Promise<void>
   continuePipeline: (updates?: { clip_plans?: Array<{ video_prompt: string; image_prompt: string }> }) => Promise<void>
   stopPipeline: () => Promise<void>
   pollPipelineStatus: () => void
@@ -4112,8 +4126,35 @@ export const useStore = create<AppState>((set, get) => ({
 
   jobs: [],
   isGenerating: false,
+  promptSchedulerEnabled: false,
+  setPromptSchedulerEnabled: (enabled) => set({ promptSchedulerEnabled: enabled }),
 
-  startGeneration: async () => {
+  startGeneration: async (scheduledPrompt) => {
+    const initialState = get()
+
+    // Studio Prompt Scheduler: each non-empty line becomes its own normal
+    // generation request. Submitting the requests one at a time preserves the
+    // prompt order while the backend's existing generation lock keeps them in
+    // the shared GPU queue. This client-side split is intentional: WanGP has a
+    // native multi-line queue mode, but MiniMax H3 bypasses that parser and
+    // would otherwise receive the whole textarea as one prompt.
+    if (
+      !scheduledPrompt
+      && initialState.promptSchedulerEnabled
+      && initialState.generationMode === 'video'
+      && (initialState.params.image_mode as number) === 0
+    ) {
+      const scheduledPrompts = splitPromptSchedule(String(initialState.params.prompt || ''))
+      for (let index = 0; index < scheduledPrompts.length; index += 1) {
+        await get().startGeneration({
+          prompt: scheduledPrompts[index],
+          position: index + 1,
+          total: scheduledPrompts.length,
+        })
+      }
+      return
+    }
+
     // Auto-unload LLM before GPU-heavy generation to free VRAM
     if (get().llmStatus?.loaded) {
       try {
@@ -4745,6 +4786,14 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     const params: Record<string, unknown> = { ...state.params, generation_mode: state.generationMode, workspace: state.activeWorkspace }
+    if (scheduledPrompt) {
+      params.prompt = scheduledPrompt.prompt
+      params.repeat_generation = 1
+      // Every scheduler request contains exactly one prompt. Prevent any
+      // persisted sliding-window or multi-clip line policy from reinterpreting
+      // it after submission.
+      params.multi_prompts_gen_type = 2
+    }
 
     if (state.generationMode === 'video') {
       const fps = state.modelOptions?.fps ?? 16
@@ -4878,18 +4927,34 @@ export const useStore = create<AppState>((set, get) => ({
     // explicit FL2VA request and discard stale reference paths from the
     // previous run. If live reference tiles are still present, keep Ref2VA so
     // users can intentionally combine them.
+    const hasH3References = (
+      state.imageRefs.length > 0
+      || (Array.isArray(params.image_refs) && params.image_refs.some(Boolean))
+      || (Array.isArray(params.h3_ref_videos) && params.h3_ref_videos.some(Boolean))
+      || (Array.isArray(params.h3_ref_audios) && params.h3_ref_audios.some(Boolean))
+    )
     if (
       params.model_type === 'minimax_h3'
-      && (state.startImage || params.image_start)
-      && (params.h3_reference_mode === 'references' || !params.h3_reference_mode)
-      && state.imageRefs.length === 0
-      && !(Array.isArray(params.h3_ref_videos) && params.h3_ref_videos.length > 0)
-      && !(Array.isArray(params.h3_ref_audios) && params.h3_ref_audios.length > 0)
+      && params.h3_reference_mode === 'references'
+      && !hasH3References
     ) {
       params.h3_reference_mode = 'first_frame'
       delete params.image_refs
       delete params.h3_ref_videos
       delete params.h3_ref_audios
+      set(s => ({
+        params: { ...s.params, h3_reference_mode: 'first_frame' },
+        savedParamsPerMode: {
+          ...s.savedParamsPerMode,
+          video: {
+            ...(s.savedParamsPerMode.video || {}),
+            h3_reference_mode: 'first_frame',
+            image_refs: undefined,
+            h3_ref_videos: undefined,
+            h3_ref_audios: undefined,
+          },
+        },
+      }))
     }
 
     // Tag avatar/edit-mode generations with their sub-mode so the gallery's
@@ -5442,7 +5507,9 @@ export const useStore = create<AppState>((set, get) => ({
       step: 0,
       totalSteps: 0,
       phase: '',
-      message: h3WindowStoryboardActive ? 'Planning H3 windows...' : 'Submitting...',
+      message: scheduledPrompt
+        ? `Submitting ${scheduledPrompt.position}/${scheduledPrompt.total}...`
+        : h3WindowStoryboardActive ? 'Planning H3 windows...' : 'Submitting...',
       outputFiles: [],
       error: null,
       createdAt: Date.now(),
@@ -6691,6 +6758,8 @@ export const useStore = create<AppState>((set, get) => ({
   directorEnergyBias: 0,
   directorPacingProfile: 'balanced',
   directorMusicVideoTreatment: {
+    generation_mode: 'image_guided',
+    direct_video_master_prompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
     mode: 'hybrid',
     performer_presence: 60,
     lip_sync: 'frequent',
@@ -6705,6 +6774,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setDirectorMusicVideoTreatment: (partial) => set(state => ({
     directorMusicVideoTreatment: { ...state.directorMusicVideoTreatment, ...partial },
+    ...(partial.generation_mode === 'direct_video' ? { directorSeamless: false } : {}),
   })),
   directorClipPlans: [],
   directorSceneDescription: '',
@@ -6773,6 +6843,8 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmNarrative: false,
   shortFilmVisualStyle: '',
   shortFilmPreserveVisualStyle: true,
+  directorCharacterVisualStyle: '',
+  directorAllowClipText: false,
   llmStreamText: '',
   llmStreamDone: true,
   foregroundActivity: null,
@@ -7554,6 +7626,7 @@ export const useStore = create<AppState>((set, get) => ({
   directorPlanPrompts: async () => {
     const { directorPlannedClips, directorSceneDescription, directorAnalysis } = get()
     if (!directorPlannedClips.length || !directorSceneDescription.trim()) return
+    const directVideo = get().directorMusicVideoTreatment.generation_mode === 'direct_video'
     const activity = beginAppActivity(get, {
       kind: 'director_planning',
       title: 'Music Video Director',
@@ -7564,7 +7637,9 @@ export const useStore = create<AppState>((set, get) => ({
     set({ directorLoading: true, directorError: null, directorStep: 'plan' })
     try {
       // Upload all reference images
-      const { refImagePath, charPaths, locPaths } = await get()._uploadDirectorRefs()
+      const { refImagePath, charPaths, locPaths } = directVideo
+        ? { refImagePath: null, charPaths: [] as string[], locPaths: [] as string[] }
+        : await get()._uploadDirectorRefs()
       activity.report('planning', `Planning ${directorPlannedClips.length} shots with the LLM…`, 1, 3)
       const { directorCharacterRefLabels: charLabels, directorLocationRefLabels: locLabels } = get()
       const extraRefs = {
@@ -7584,7 +7659,7 @@ export const useStore = create<AppState>((set, get) => ({
       // ?? not || — an explicit user-toggled `false` must be respected
       // (legacy v1 path); only fall back to true when servicesConfig
       // hasn't loaded yet or the field is undefined.
-      const useV2 = get().servicesConfig?.use_director_v2 ?? true
+      const useV2 = directVideo || (get().servicesConfig?.use_director_v2 ?? true)
       let plans: Array<{ video_prompt: string; image_prompt: string }>
 
       if (useV2) {
@@ -7674,7 +7749,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
       set({
         directorClipPlans: plans,
-        directorStep: 'review',
+        directorStep: directVideo ? 'review_video' : 'review',
         directorLoading: false,
       })
       activity.finish(`${plans.length} visual shot plans ready for review`)
@@ -7684,7 +7759,8 @@ export const useStore = create<AppState>((set, get) => ({
       // provided, so every clip shares a consistent look (instead of skipping
       // images entirely as it used to).
       if (get().directorAutoMode) {
-        get().directorGenerateStartImages()
+        if (directVideo) get().directorGenerate()
+        else get().directorGenerateStartImages()
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Planning failed'
@@ -7695,6 +7771,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   directorPlanVideoPrompts: async () => {
+    if (get().directorMusicVideoTreatment.generation_mode === 'direct_video') {
+      await get().directorPlanPrompts()
+      return
+    }
     const { directorPlannedClips, directorSceneDescription, directorAnalysis, directorClipPlans, directorReferenceImagePath } = get()
     if (!directorPlannedClips.length || !directorClipPlans.length) return
     const activity = beginAppActivity(get, {
@@ -7768,6 +7848,16 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   directorGenerateStartImages: async () => {
+    if (get().directorMusicVideoTreatment.generation_mode === 'direct_video') {
+      set({
+        directorClipImages: [],
+        directorImageGenProgress: null,
+        directorStep: 'review_video',
+        directorLoading: false,
+      })
+      if (get().directorAutoMode) get().directorGenerate()
+      return
+    }
     const { directorClipPlans, directorPlannedClips, params, selectedModelPerMode, savedParamsPerMode, savedLoraPerMode, directorResolution, directorAspectRatio, directorSceneDescription } = get()
     if (!directorClipPlans.length) return
     const needsAnchor = !get().directorReferenceImage && !get().directorReferenceImagePath
@@ -7946,6 +8036,7 @@ export const useStore = create<AppState>((set, get) => ({
             directorAudioPath, directorAudioFile, directorSeamless,
             selectedModelPerMode, savedParamsPerMode, savedLoraPerMode } = get()
     if (!directorClipPlans.length) return
+    const directVideo = get().directorMusicVideoTreatment.generation_mode === 'direct_video'
 
     // Use saved video-mode settings if available
     const videoModel = selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
@@ -7963,11 +8054,11 @@ export const useStore = create<AppState>((set, get) => ({
     // Build clips with per-clip durations and images
     const clips: MultiClip[] = directorClipPlans.map((plan, i) => {
       const plannedClip = directorPlannedClips[i]
-      const clipImage = directorClipImages.find(img => img.clipIndex === i)
+      const clipImage = directVideo ? undefined : directorClipImages.find(img => img.clipIndex === i)
 
       // Seamless mode: use next clip's start image as this clip's end image
       let endImage: File | null = null
-      if (directorSeamless && i < directorClipPlans.length - 1) {
+      if (!directVideo && directorSeamless && i < directorClipPlans.length - 1) {
         const nextClipImage = directorClipImages.find(img => img.clipIndex === i + 1)
         endImage = nextClipImage?.file ?? null
       }
@@ -8022,6 +8113,14 @@ export const useStore = create<AppState>((set, get) => ({
             directorSeamless, directorResolution, directorAspectRatio,
             selectedModelPerMode, savedParamsPerMode, savedLoraPerMode } = get()
     if (!directorClipPlans.length) return
+    const directVideo = get().directorMusicVideoTreatment.generation_mode === 'direct_video'
+    if (directVideo) {
+      // H3's generic Studio endpoint treats a multi-shot request as one H3
+      // generation.  Keep reviewed direct prompts in Director's sequential,
+      // resumable server pipeline and do not ask the LLM to plan them again.
+      void get().startDirectorPipeline(true)
+      return
+    }
 
     // Use saved video-mode settings if available, override resolution with director's choice
     const videoModel = selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
@@ -8044,11 +8143,11 @@ export const useStore = create<AppState>((set, get) => ({
 
     const clips: MultiClip[] = directorClipPlans.map((plan, i) => {
       const plannedClip = directorPlannedClips[i]
-      const clipImage = directorClipImages.find(img => img.clipIndex === i)
+      const clipImage = directVideo ? undefined : directorClipImages.find(img => img.clipIndex === i)
 
       // Seamless mode: use next clip's start image as this clip's end image
       let endImage: File | null = null
-      if (directorSeamless && i < directorClipPlans.length - 1) {
+      if (!directVideo && directorSeamless && i < directorClipPlans.length - 1) {
         const nextClipImage = directorClipImages.find(img => img.clipIndex === i + 1)
         endImage = nextClipImage?.file ?? null
       }
@@ -8118,6 +8217,8 @@ export const useStore = create<AppState>((set, get) => ({
       directorEnergyBias: 0,
       directorPacingProfile: 'balanced',
       directorMusicVideoTreatment: {
+        generation_mode: 'image_guided',
+        direct_video_master_prompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
         mode: 'hybrid',
         performer_presence: 60,
         lip_sync: 'frequent',
@@ -8173,6 +8274,8 @@ export const useStore = create<AppState>((set, get) => ({
       shortFilmNarrative: false,
       shortFilmVisualStyle: '',
       shortFilmPreserveVisualStyle: true,
+      directorCharacterVisualStyle: '',
+      directorAllowClipText: false,
       // Detach this editor session from any prior recoverable pipeline. The
       // backend job is intentionally not cancelled and remains in Dashboard,
       // but its poller must not overwrite the next story loaded into Director.
@@ -8190,6 +8293,8 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmSetNarrative: (v) => set({ shortFilmNarrative: v }),
   shortFilmSetVisualStyle: (style) => set({ shortFilmVisualStyle: style }),
   shortFilmSetPreserveVisualStyle: (v) => set({ shortFilmPreserveVisualStyle: v }),
+  setDirectorCharacterVisualStyle: (style) => set({ directorCharacterVisualStyle: style }),
+  setDirectorAllowClipText: (v) => set({ directorAllowClipText: v }),
 
   shortFilmUploadAndAnalyze: async (file) => {
     const activity = beginAppActivity(get, {
@@ -8466,7 +8571,8 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmPlanFromStory: async () => {
     const { directorSceneDescription,
             shortFilmCharacters, shortFilmTargetDuration, shortFilmNarrative,
-            shortFilmVisualStyle, shortFilmPreserveVisualStyle } = get()
+            shortFilmVisualStyle, shortFilmPreserveVisualStyle,
+            directorCharacterVisualStyle, directorAllowClipText } = get()
     if (!directorSceneDescription.trim()) return
     const activity = beginAppActivity(get, {
       kind: 'story_film_planning',
@@ -8504,6 +8610,8 @@ export const useStore = create<AppState>((set, get) => ({
           narrative_mode: shortFilmNarrative,
           visual_style: shortFilmVisualStyle || undefined,
           preserve_visual_style: shortFilmPreserveVisualStyle,
+          character_visual_style: directorCharacterVisualStyle || undefined,
+          allow_clip_text: directorAllowClipText,
           fps: get().modelOptions?.fps ?? 24,
           frames_steps: get().modelOptions?.frames_steps ?? 4,
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
@@ -8552,6 +8660,8 @@ export const useStore = create<AppState>((set, get) => ({
           frames_minimum: get().modelOptions?.frames_minimum ?? 5,
           visual_style: shortFilmVisualStyle || undefined,
           preserve_visual_style: shortFilmPreserveVisualStyle,
+          character_visual_style: directorCharacterVisualStyle || undefined,
+          allow_clip_text: directorAllowClipText,
         })
         storyClips = result.clips
         plans = result.clip_plans.map(p => ({
@@ -8820,9 +8930,26 @@ export const useStore = create<AppState>((set, get) => ({
       const current = get().outputs
       const currentNames = new Set(current.map(o => o.name))
       const newItems = fresh.filter(o => !currentNames.has(o.name))
-      if (newItems.length > 0) {
-        // Prepend new items (newest first) and shift selectedOutput to keep the same item active
-        const merged = [...newItems, ...current]
+      const freshByName = new Map(fresh.map(output => [output.name, output]))
+      const updatedCurrent = current.map(output => {
+        const latest = freshByName.get(output.name)
+        if (!latest) return output
+        const unchanged = latest.url === output.url
+          && latest.type === output.type
+          && latest.mode === output.mode
+          && latest.edit_sub_mode === output.edit_sub_mode
+          && latest.favorite === output.favorite
+          && latest.size === output.size
+          && latest.created_at === output.created_at
+          && latest.thumbnail_url === output.thumbnail_url
+        return unchanged ? output : latest
+      })
+      const existingChanged = updatedCurrent.some((output, index) => output !== current[index])
+      if (newItems.length > 0 || existingChanged || total !== get().outputsTotal) {
+        // Prepend new items (newest first), update files that were first seen
+        // while still being written, and shift selection to keep the same
+        // logical item active.
+        const merged = [...newItems, ...updatedCurrent]
         const sel = get().selectedOutput
         set({ outputs: merged, outputsTotal: total, selectedOutput: sel + newItems.length })
       }
@@ -9647,8 +9774,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // ── Director Pipeline (server-side) ──────────────────────────────
-  startDirectorPipeline: async () => {
+  startDirectorPipeline: async (useCurrentPlans = false) => {
     const state = get()
+    const directVideo = (
+      state.directorSkill === 'music_video'
+      && state.directorMusicVideoTreatment.generation_mode === 'direct_video'
+    )
     const { directorPlannedClips, directorSceneDescription,
             directorAudioPath, directorAnalysis, directorReferenceImagePath,
             directorAutoMode, directorSeamless, directorShotImageGuidance,
@@ -9661,7 +9792,8 @@ export const useStore = create<AppState>((set, get) => ({
             directorVideoFilmGrainSaturation, directorVideoSelfRefiner,
             shortFilmPath, shortFilmCharacters, shortFilmTargetDuration,
             shortFilmNarrative, shortFilmVisualStyle,
-            shortFilmPreserveVisualStyle } = state
+            shortFilmPreserveVisualStyle, directorCharacterVisualStyle,
+            directorAllowClipText } = state
 
     const selectedImageModel = selectedModelPerMode.image || 'flux2_klein_9b'
     const selectedVideoModel = selectedModelPerMode.video || 'ltx2_22B_distilled_1_1'
@@ -9727,8 +9859,8 @@ export const useStore = create<AppState>((set, get) => ({
     const directorMaxShotFrames = directorVideoMaxShotFramesByModel[selectedVideoModel]
 
     // Upload all reference images (main + character + location) if not already uploaded
-    let refImagePath = directorReferenceImagePath
-    if (!refImagePath && state.directorReferenceImage) {
+    let refImagePath = directVideo ? null : directorReferenceImagePath
+    if (!directVideo && !refImagePath && state.directorReferenceImage) {
       try {
         const uploaded = await api.uploadImage(state.directorReferenceImage)
         refImagePath = uploaded.path
@@ -9738,8 +9870,8 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
     // Upload character refs that haven't been uploaded yet
-    const charPaths = [...state.directorCharacterRefPaths]
-    for (let i = charPaths.length; i < state.directorCharacterRefs.length; i++) {
+    const charPaths = directVideo ? [] : [...state.directorCharacterRefPaths]
+    for (let i = charPaths.length; !directVideo && i < state.directorCharacterRefs.length; i++) {
       try {
         const uploaded = await api.uploadImage(state.directorCharacterRefs[i])
         charPaths.push(uploaded.path)
@@ -9755,8 +9887,8 @@ export const useStore = create<AppState>((set, get) => ({
       set({ directorCharacterRefPaths: charPaths })
     }
     // Upload location refs that haven't been uploaded yet
-    const locPaths = [...state.directorLocationRefPaths]
-    for (let i = locPaths.length; i < state.directorLocationRefs.length; i++) {
+    const locPaths = directVideo ? [] : [...state.directorLocationRefPaths]
+    for (let i = locPaths.length; !directVideo && i < state.directorLocationRefs.length; i++) {
       try {
         const uploaded = await api.uploadImage(state.directorLocationRefs[i])
         locPaths.push(uploaded.path)
@@ -9780,12 +9912,14 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Preserve pre-release arbitrary H3 media references while routing the
     // official Omni model through the same lazy upload path.
-    const h3ReferenceMode = savedParamsPerMode.video?.h3_reference_mode || 'first_frame'
+    const h3ReferenceMode = directVideo
+      ? 'first_frame'
+      : savedParamsPerMode.video?.h3_reference_mode || 'first_frame'
     const isH3Omni = selectedVideoModel.startsWith('minimax_h3_ref2va')
       || (selectedVideoModel === 'minimax_h3' && h3ReferenceMode === 'references')
     const h3VideoRefPaths = [...state.directorH3VideoRefPaths]
     const h3AudioRefPaths = [...state.directorH3AudioRefPaths]
-    if (isH3Omni) {
+    if (!directVideo && isH3Omni) {
       for (let i = h3VideoRefPaths.length; i < state.directorH3VideoRefs.length; i++) {
         try {
           const uploaded = await api.uploadImage(state.directorH3VideoRefs[i])
@@ -9826,7 +9960,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     const pipelineParams: Record<string, unknown> = {
       pipeline_type: pipelineType,
-      auto_mode: directorAutoMode,
+      auto_mode: useCurrentPlans ? true : directorAutoMode,
       workspace: get().activeWorkspace,
       scene_description: directorSceneDescription,
       audio_path: directorAudioPath,
@@ -9836,7 +9970,8 @@ export const useStore = create<AppState>((set, get) => ({
       location_ref_paths: locPaths.length > 0 ? locPaths : undefined,
       location_ref_labels: state.directorLocationRefLabels.length > 0 ? state.directorLocationRefLabels : undefined,
       planned_clips: directorPlannedClips,
-      seamless: directorSeamless,
+      provided_clip_plans: useCurrentPlans ? state.directorClipPlans : undefined,
+      seamless: directVideo ? false : directorSeamless,
       shot_image_guidance: directorShotImageGuidance,
       director_resolution_preset: directorResolution,
       director_aspect_ratio: directorAspectRatio,
@@ -9865,6 +10000,8 @@ export const useStore = create<AppState>((set, get) => ({
       narrative_mode: shortFilmNarrative,
       visual_style: shortFilmVisualStyle || undefined,
       preserve_visual_style: shortFilmPreserveVisualStyle,
+      character_visual_style: directorCharacterVisualStyle || undefined,
+      allow_clip_text: directorAllowClipText,
       music_video_treatment: pipelineType === 'music_video'
         ? state.directorMusicVideoTreatment
         : undefined,
@@ -9979,7 +10116,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (status.clip_plans?.length && !get().directorClipPlans.length) {
           set({
             directorClipPlans: status.clip_plans,
-            directorStep: 'review',
+            directorStep: status.generation_mode === 'direct_video' ? 'review_video' : 'review',
           })
         }
 
@@ -10013,6 +10150,8 @@ export const useStore = create<AppState>((set, get) => ({
               status: 'generating',
             },
           })
+        } else if (status.phase === 'preparing_direct_video') {
+          set({ directorStep: 'review_video', directorClipImages: [], directorImageGenProgress: null })
         } else if (status.phase === 'generating_images') {
           set({
             directorStep: 'generate_images',
@@ -10049,6 +10188,8 @@ export const useStore = create<AppState>((set, get) => ({
           set({ directorLoading: false })
           if (status.pause_reason === 'review_prompts') {
             set({ directorStep: 'review' })
+          } else if (status.pause_reason === 'review_video_prompts') {
+            set({ directorStep: 'review_video' })
           } else if (status.pause_reason === 'review_images') {
             set({ directorStep: 'review_video' })
           }

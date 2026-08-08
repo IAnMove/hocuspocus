@@ -35,6 +35,16 @@ class PromptPolicy:
 DEFAULT_POLICY = PromptPolicy()
 
 
+# Direct-video prompts intentionally use the compact grammar that has proved
+# reliable for text-only MiniMax H3 generations.  These labels are also stable
+# parsing boundaries: long music-video shots can be split into several H3
+# requests while repeating the complete world/style contract in every request.
+DIRECT_VIDEO_SCENE_MARKER = "Scene overview:"
+DIRECT_VIDEO_SHOT_MARKER = "Shot 1:"
+DIRECT_VIDEO_SOUND_MARKER = "overall_soundscape:"
+DIRECT_VIDEO_MUSIC_MARKER = "non_diegetic_music:"
+
+
 # ── Anti-Pattern Definitions ─────────────────────────────────────────
 
 # Words/phrases that should never appear in single-shot video prompts
@@ -451,6 +461,126 @@ def build_visual_style_contract(
     return "\n".join(lines)
 
 
+def build_character_visual_style_contract(
+    character_visual_style: str,
+    *,
+    preserve: bool = True,
+) -> str:
+    """Build the planner instruction for a dedicated character medium."""
+    style = compact_visual_style(character_visual_style)
+    if not preserve or not style:
+        return ""
+    return "\n".join((
+        "CHARACTER RENDERING CONTRACT — STRICT:",
+        f"- Canonical character rendering/material: {style}.",
+        "- Repeat this contract in every image and video prompt. Every visible person or "
+        "character must use this exact material, proportions, surface treatment and design language.",
+        "- Lighting, pose, wardrobe and camera may change; the character rendering medium may not.",
+    ))
+
+
+def build_visible_text_contract(allow_clip_text: bool = False) -> str:
+    """Tell planners whether readable lettering may exist inside generated shots."""
+    if allow_clip_text:
+        return (
+            "VISIBLE TEXT POLICY: Readable lettering is allowed only when the user explicitly "
+            "authors it for a shot. Never add unrequested captions or subtitles."
+        )
+    return (
+        "VISIBLE TEXT POLICY — STRICT: No readable text may appear in any generated image or "
+        "video. Lyrics and dialogue are audio/performance context only. Never quote, copy, "
+        "display or materialize them as captions, subtitles, title cards, signs, labels, UI, "
+        "logos or floating words. Express meaning through action and imagery. Screens, code "
+        "and signage must remain abstract and unreadable."
+    )
+
+
+_VISIBLE_TEXT_MARKER = "NO VISIBLE TEXT LOCK:"
+_VISIBLE_TEXT_DIRECTIVE = re.compile(
+    r"\b(?:"
+    r"text.{0,100}(?::|appears?|materializ\w*|overlay\w*|display\w*|form\w*|float\w*)|"
+    r"(?:captions?|subtitles?|lettering|title\s+cards?)\s*(?::|appears?|materializ\w*|overlay\w*|display\w*)|"
+    r"readable\s+(?:words?|letters?|code)|processing\s+text|floating\s+words?|"
+    r"(?:question|lyrics?|words?|lines?\s+of\s+code).{0,100}(?:appear|materializ|overlay|display|form|float)"
+    r")",
+    flags=re.I,
+)
+
+
+def strip_visible_text_directions(prompt: str) -> str:
+    """Remove explicit visual-lettering instructions while preserving shot action.
+
+    Spoken dialogue is intentionally not removed. This targets directions such as
+    ``Text overlays: 'lyric'`` or ``the question materializes as corrupted text``.
+    """
+    text = str(prompt or "").strip()
+    if not text or _VISIBLE_TEXT_MARKER.casefold() in text.casefold():
+        return text
+    pieces = re.split(r"(?<=[.;])\s+|\n+", text)
+    kept: list[str] = []
+    for piece in pieces:
+        segment = piece.strip()
+        if not segment:
+            continue
+        match = _VISIBLE_TEXT_DIRECTIVE.search(segment)
+        if not match:
+            kept.append(segment)
+            continue
+        prefix = re.sub(
+            r"(?:\b(?:and|then|while|as)\b\s*)?$",
+            "",
+            segment[:match.start()].rstrip(" ,;:-"),
+            flags=re.I,
+        ).strip()
+        # Keep meaningful action that precedes a trailing lettering request.
+        if len(prefix) >= 12 and not prefix.endswith(":"):
+            kept.append(prefix.rstrip(" .") + ".")
+    return " ".join(kept).strip()
+
+
+def apply_character_visual_style_lock(
+    prompt: str,
+    character_visual_style: str,
+    *,
+    mode: str,
+    preserve: bool = True,
+) -> str:
+    """Prepend a dedicated, idempotent character-rendering lock."""
+    text = str(prompt or "").strip()
+    style = compact_visual_style(character_visual_style)
+    if not preserve or not style or "character style lock:" in text.casefold():
+        return text
+    lock = (
+        f"CHARACTER STYLE LOCK: {style}. Every visible person or character must keep this "
+        "exact rendering medium, material, proportions and surface treatment throughout."
+    )
+    combined = f"{lock} {text}".strip()
+    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
+        remaining = max(0, 1449 - len(lock))
+        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
+        combined = f"{lock} {shortened}".strip()
+    return combined
+
+
+def apply_no_visible_text_lock(prompt: str, *, mode: str) -> str:
+    """Strip visible-lettering directions and prepend the final render guard."""
+    text = str(prompt or "").strip()
+    if not text or _VISIBLE_TEXT_MARKER.casefold() in text.casefold():
+        return text
+    text = strip_visible_text_directions(text)
+    lock = (
+        f"{_VISIBLE_TEXT_MARKER} Render no readable words, letters, numbers, captions, "
+        "subtitles, title cards, labels, signs, UI, logos or watermarks. Lyrics and dialogue "
+        "remain audio/performance only; any screens or code are abstract and unreadable."
+    )
+    combined = f"{lock} {text}".strip()
+    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
+        remaining = max(0, 1449 - len(lock))
+        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
+        combined = f"{lock} {shortened}".strip()
+    return combined
+
+
 def apply_visual_style_lock(
     prompt: str,
     visual_style: str,
@@ -501,10 +631,38 @@ def enforce_visual_style_on_clip_plans(
     *,
     preserve: bool = True,
     has_reference: bool = False,
+    character_visual_style: str = "",
+    allow_clip_text: bool = True,
 ) -> list[dict]:
-    """Apply the final style lock to all still and moving prompt fields."""
-    if not preserve or not compact_visual_style(visual_style):
+    """Apply final style, character-medium and visible-text locks."""
+    has_global_style = preserve and bool(compact_visual_style(visual_style))
+    has_character_style = preserve and bool(compact_visual_style(character_visual_style))
+    if not has_global_style and not has_character_style and allow_clip_text:
         return clip_plans
+
+    def enforce(value: object, mode: str) -> str:
+        prompt = str(value or "").strip()
+        if not prompt:
+            return prompt
+        if has_global_style:
+            prompt = apply_visual_style_lock(
+                prompt,
+                visual_style,
+                mode=mode,
+                preserve=True,
+                has_reference=has_reference,
+            )
+        if has_character_style:
+            prompt = apply_character_visual_style_lock(
+                prompt,
+                character_visual_style,
+                mode=mode,
+                preserve=True,
+            )
+        if not allow_clip_text:
+            prompt = apply_no_visible_text_lock(prompt, mode=mode)
+        return prompt
+
     for plan in clip_plans or []:
         if not isinstance(plan, dict):
             continue
@@ -514,27 +672,16 @@ def enforce_visual_style_on_clip_plans(
             and metadata.get("motion_only_prompt")
         )
         if str(plan.get("image_prompt") or "").strip():
-            plan["image_prompt"] = apply_visual_style_lock(
-                plan["image_prompt"],
-                visual_style,
-                mode="image",
-                preserve=preserve,
-                has_reference=has_reference,
-            )
+            plan["image_prompt"] = enforce(plan["image_prompt"], "image")
         if (
             not motion_only_prompt
             and str(plan.get("video_prompt") or "").strip()
         ):
-            plan["video_prompt"] = apply_visual_style_lock(
-                plan["video_prompt"],
-                visual_style,
-                mode="video",
-                preserve=preserve,
-                has_reference=has_reference,
-            )
+            plan["video_prompt"] = enforce(plan["video_prompt"], "video")
         for field, mode in (
             ("window_prompts", "video"),
             ("keyframe_prompts", "image"),
+            ("h3_segment_prompts", "video"),
         ):
             if motion_only_prompt and mode == "video":
                 continue
@@ -542,14 +689,180 @@ def enforce_visual_style_on_clip_plans(
             if not isinstance(values, list):
                 continue
             plan[field] = [
-                apply_visual_style_lock(
+                enforce(
                     value.get("prompt", value.get("text", ""))
                     if isinstance(value, dict) else value,
-                    visual_style,
-                    mode=mode,
-                    preserve=preserve,
-                    has_reference=has_reference,
+                    mode,
                 )
                 for value in values
             ]
+    return clip_plans
+
+
+def direct_video_situation(prompt: object) -> str:
+    """Extract only the variable shot situation from a composed direct prompt.
+
+    The operation is deliberately tolerant of a prompt that has already passed
+    through the FL2VA/Ref2VA adapter.  Direct mode must never retain those
+    image-reference claims when it is converted back to pure text-to-video.
+    """
+    text = str(prompt or "").strip()
+    if not text:
+        return ""
+    if DIRECT_VIDEO_SHOT_MARKER.casefold() in text.casefold():
+        text = re.split(
+            re.escape(DIRECT_VIDEO_SHOT_MARKER),
+            text,
+            maxsplit=1,
+            flags=re.I,
+        )[1]
+    elif "integrated_multimodal_description:" in text.casefold():
+        text = re.split(
+            r"integrated_multimodal_description:",
+            text,
+            maxsplit=1,
+            flags=re.I,
+        )[1]
+    elif "detailed_description:" in text.casefold():
+        text = re.split(
+            r"detailed_description:",
+            text,
+            maxsplit=1,
+            flags=re.I,
+        )[1]
+    text = re.split(
+        rf"{re.escape(DIRECT_VIDEO_SOUND_MARKER)}|{re.escape(DIRECT_VIDEO_MUSIC_MARKER)}",
+        text,
+        maxsplit=1,
+        flags=re.I,
+    )[0]
+    text = re.sub(
+        r"^The referenced picture is the exact opening frame\.[^.]*"
+        r"authoritative[^.]*\.\s*",
+        "",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"^For the target video, at 0\.00 seconds[^.]*fully referenced\.\s*",
+        "",
+        text,
+        flags=re.I,
+    )
+    return " ".join(text.split()).strip(" .")
+
+
+def compose_direct_video_prompt(
+    master_prompt: object,
+    situation_prompt: object,
+    *,
+    plan: Optional[dict] = None,
+    audio_direction: object = "",
+    allow_clip_text: bool = True,
+) -> str:
+    """Compose one self-contained text-only video prompt.
+
+    ``master_prompt`` is copied verbatim at the front of every generated clip.
+    The LLM is only responsible for ``situation_prompt``.  No first-frame or
+    reference terminology is introduced here because direct mode has no image
+    conditioning at any stage.
+    """
+    master = " ".join(str(master_prompt or "").split()).strip()
+    situation = direct_video_situation(situation_prompt)
+    shot = plan if isinstance(plan, dict) else {}
+
+    # A previously composed prompt contains its master before Scene overview.
+    # Remove that prefix before rebuilding so retries and manual edits remain
+    # idempotent even when the user changes the master prompt.
+    if DIRECT_VIDEO_SCENE_MARKER.casefold() in situation.casefold():
+        situation = re.split(
+            re.escape(DIRECT_VIDEO_SCENE_MARKER),
+            situation,
+            maxsplit=1,
+            flags=re.I,
+        )[-1]
+
+    overview_parts: list[str] = []
+    for value in (shot.get("scene_goal"), shot.get("environment")):
+        clean = " ".join(str(value or "").split()).strip(" .")
+        if clean and clean.casefold() not in {item.casefold() for item in overview_parts}:
+            overview_parts.append(clean)
+    overview = ". ".join(overview_parts) or "One concrete continuous moment in the established world"
+    situation = situation or "The scene unfolds as one concrete, visually executable continuous shot"
+    if not allow_clip_text:
+        situation = apply_no_visible_text_lock(situation, mode="video")
+
+    audio = shot.get("audio_plan") if isinstance(shot.get("audio_plan"), dict) else {}
+    sound_parts: list[str] = []
+    ambience = " ".join(str(audio.get("ambience") or "").split()).strip(" .")
+    if ambience:
+        sound_parts.append(ambience)
+    effects = audio.get("effects")
+    if isinstance(effects, list):
+        clean_effects = [" ".join(str(item).split()).strip(" .") for item in effects]
+        clean_effects = [item for item in clean_effects if item]
+        if clean_effects:
+            sound_parts.append("Synchronized effects: " + ", ".join(clean_effects))
+    direction = " ".join(str(audio_direction or "").split()).strip(" .")
+    if direction:
+        sound_parts.append(direction)
+    if not sound_parts:
+        sound_parts.append("Natural synchronized ambience and effects matching the visible action")
+
+    return "\n".join((
+        master,
+        f"{DIRECT_VIDEO_SCENE_MARKER} {overview}.",
+        f"{DIRECT_VIDEO_SHOT_MARKER} {situation}.",
+        f"{DIRECT_VIDEO_SOUND_MARKER} {'; '.join(sound_parts)}.",
+        f"{DIRECT_VIDEO_MUSIC_MARKER} none",
+    )).strip()
+
+
+def enforce_direct_video_on_clip_plans(
+    clip_plans: list[dict],
+    master_prompt: object,
+    *,
+    audio_direction: object = "",
+    allow_clip_text: bool = True,
+) -> list[dict]:
+    """Make every video prompt self-contained and remove all image stages."""
+    master = " ".join(str(master_prompt or "").split()).strip()
+    if not master:
+        raise ValueError("Direct video mode requires a master video prompt.")
+
+    for plan in clip_plans or []:
+        if not isinstance(plan, dict):
+            continue
+        plan["video_prompt"] = compose_direct_video_prompt(
+            master,
+            plan.get("video_prompt"),
+            plan=plan,
+            audio_direction=audio_direction,
+            allow_clip_text=allow_clip_text,
+        )
+        windows = plan.get("window_prompts")
+        if isinstance(windows, list):
+            plan["window_prompts"] = [
+                compose_direct_video_prompt(
+                    master,
+                    value.get("prompt", value.get("text", ""))
+                    if isinstance(value, dict) else value,
+                    plan=plan,
+                    audio_direction=audio_direction,
+                    allow_clip_text=allow_clip_text,
+                )
+                for value in windows
+                if str(
+                    value.get("prompt", value.get("text", ""))
+                    if isinstance(value, dict) else value
+                ).strip()
+            ]
+        plan["image_prompt"] = ""
+        plan["image_source"] = "none"
+        plan["keyframe_prompts"] = []
+        plan["h3_segment_prompts"] = []
+        metadata = plan.setdefault("metadata", {})
+        if isinstance(metadata, dict):
+            metadata["generation_mode"] = "direct_video"
+            metadata["direct_video_master_prompt"] = master
     return clip_plans

@@ -161,6 +161,26 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         self.assertEqual(workflow["27"]["inputs"]["audio"], ["26", 0])
         self.assertEqual(workflow["28"]["inputs"]["codec"], "auto")
 
+    def test_stale_ref2va_mode_without_media_recovers_to_text_to_video(self):
+        params = {
+            **h3.DEFAULTS,
+            "prompt": "sunrise over an empty ocean; audio: quiet surf",
+            "h3_reference_mode": "references",
+            "image_refs": [],
+            "h3_ref_videos": [],
+            "h3_ref_audios": [],
+        }
+
+        workflow, pipeline = h3.build_workflow(params, "job-stale-ref-mode")
+
+        self.assertEqual(pipeline, "fl2va")
+        self.assertEqual(params["h3_reference_mode"], "first_frame")
+        self.assertNotIn("image_refs", params)
+        self.assertNotIn("h3_ref_videos", params)
+        self.assertNotIn("h3_ref_audios", params)
+        self.assertEqual(workflow["10"]["class_type"], "MiniMaxH3ImageToVideo")
+        self.assertNotIn("first_frame", workflow["10"]["inputs"])
+
     def test_profile_selects_matching_convrot_pair(self):
         workflow, _ = h3.build_workflow({
             **h3.DEFAULTS,
@@ -425,6 +445,9 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
             stop_runtime.assert_called_once()
 
         h3.cancel_idle_shutdown()
+
+    def test_idle_shutdown_default_releases_host_memory_promptly(self):
+        self.assertEqual(h3.DEFAULT_IDLE_SHUTDOWN_SECONDS, 10.0)
 
 
 if __name__ == "__main__":

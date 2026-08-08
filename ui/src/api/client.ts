@@ -55,7 +55,7 @@ export interface ApiOutput {
   size: number
   created_at: number
   url: string
-  /** Static source image for a 3D output's history-card preview. */
+  /** Small static preview for image/video cards and saved 3D/scene assets. */
   thumbnail_url?: string | null
   /** Edit-mode sub-classification (retake / inpaint / outpaint / restyle /
    *  edit_anything). Field added as a recovery stub after a git
@@ -435,6 +435,40 @@ export async function fetchActiveJobs(): Promise<{ jobs: Array<{
   return res.json()
 }
 
+export interface RecoverableGenerationJob {
+  job_id: string
+  previous_status: 'queued' | 'running' | string
+  created_at: number
+  workspace: string
+  model_type: string
+  generation_mode: string
+  prompt_preview: string
+}
+
+export async function fetchGenerationQueueRecovery(): Promise<{ jobs: RecoverableGenerationJob[] }> {
+  const res = await fetch(`${BASE}/api/v1/jobs/recovery`)
+  if (!res.ok) throw new Error('Could not inspect the saved generation queue')
+  return res.json()
+}
+
+export async function resumeGenerationQueue(): Promise<{ resumed: RecoverableGenerationJob[]; count: number }> {
+  const res = await fetch(`${BASE}/api/v1/jobs/recovery/resume`, { method: 'POST' })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not resume the saved queue' }))
+    throw new Error(error.detail || 'Could not resume the saved queue')
+  }
+  return res.json()
+}
+
+export async function discardGenerationQueue(): Promise<{ discarded: number }> {
+  const res = await fetch(`${BASE}/api/v1/jobs/recovery/discard`, { method: 'POST' })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not discard the saved queue' }))
+    throw new Error(error.detail || 'Could not discard the saved queue')
+  }
+  return res.json()
+}
+
 // --- Move to Workspace ---
 
 export async function moveOutput(name: string, workspace: string): Promise<void> {
@@ -459,7 +493,7 @@ export async function toggleFavorite(name: string): Promise<{ name: string; favo
 
 // --- Outputs ---
 
-export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string; workspace?: string }): Promise<{ outputs: ApiOutput[]; total: number }> {
+export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type'] }): Promise<{ outputs: ApiOutput[]; total: number }> {
   const params = new URLSearchParams()
   if (limit > 0) params.set('limit', String(limit))
   if (offset > 0) params.set('offset', String(offset))
@@ -468,8 +502,9 @@ export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly
   if (opts?.search) params.set('search', opts.search)
   // "__uploads__" browses the uploads folder (virtual Uploads view)
   if (opts?.workspace) params.set('workspace', opts.workspace)
+  if (opts?.mediaType) params.set('media_type', opts.mediaType)
   const qs = params.toString()
-  const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`)
+  const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`, { cache: 'no-store' })
   if (!res.ok) throw new Error('Failed to fetch outputs')
   const data = await res.json()
   return { outputs: data.outputs, total: data.total ?? data.outputs.length }
@@ -490,6 +525,10 @@ export async function saveScene(scene: import('../types').Scene, preview: string
 
 export function getFileUrl(filename: string): string {
   return `${BASE}/api/v1/file/${encodeURIComponent(filename)}`
+}
+
+export function getOutputThumbnailUrl(filename: string): string {
+  return `${BASE}/api/v1/outputs/thumbnail/${encodeURIComponent(filename)}`
 }
 
 export function getUploadUrl(filename: string): string {
@@ -571,6 +610,38 @@ export async function fetchOutputMetadata(name: string): Promise<import('../type
   throw lastErr  // all attempts failed — loadOutputMetadata's catch sets meta null
 }
 
+export async function fetchVideoExtraInfo(
+  name: string,
+  language: string,
+): Promise<import('../types').VideoExtraInfoStatus> {
+  const res = await fetch(
+    `${BASE}/api/v1/outputs/${encodeURIComponent(name)}/extra-info?language=${encodeURIComponent(language)}`,
+    { cache: 'no-store' },
+  )
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to load extra info' }))
+    throw new Error(error.detail || 'Failed to load extra info')
+  }
+  return res.json()
+}
+
+export async function generateVideoExtraInfo(
+  name: string,
+  language: string,
+  regenerate = false,
+): Promise<{ cached: boolean; data: import('../types').VideoExtraInfo }> {
+  const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}/extra-info`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language, regenerate }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to generate extra info' }))
+    throw new Error(error.detail || 'Failed to generate extra info')
+  }
+  return res.json()
+}
+
 export async function deleteOutput(name: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/outputs/${encodeURIComponent(name)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete output')
@@ -618,6 +689,11 @@ export async function probeVideoEditorClip(source: string): Promise<VideoEditorP
     throw new Error(error.detail || 'Could not inspect video')
   }
   return res.json()
+}
+
+export function getVideoEditorThumbnailUrl(source: string): string {
+  const params = new URLSearchParams({ source })
+  return `${BASE}/api/v1/video-editor/thumbnail?${params.toString()}`
 }
 
 export interface VideoEditorScreenshot {
@@ -670,7 +746,12 @@ export async function startVideoEditorExport(payload: {
       | 'pixelize'
       | 'blur'
       | 'zoom-in'
+      | 'later-clock'
+      | 'later-tropical'
+      | 'later-cinematic'
     transition_duration: number
+    transition_text: string
+    transition_text_size: number
   }>
 }): Promise<{ job_id: string }> {
   const res = await fetch(`${BASE}/api/v1/video-editor/export`, {
@@ -823,7 +904,8 @@ export interface PipelineResourceSchedule {
 export interface PipelineStatus {
   id: string
   status: 'running' | 'paused' | 'preview_ready' | 'completed' | 'failed' | 'cancelled'
-  phase: 'planning' | 'polishing_prompts' | 'generating_images' | 'preview_ready' | 'preparing_video' | 'generating_video' | 'post_processing' | 'completed' | 'failed' | 'cancelled'
+  phase: 'planning' | 'polishing_prompts' | 'preparing_direct_video' | 'generating_images' | 'preview_ready' | 'preparing_video' | 'generating_video' | 'post_processing' | 'completed' | 'failed' | 'cancelled'
+  generation_mode?: 'image_guided' | 'direct_video'
   auto_mode: boolean
   progress: { current: number; total: number; message: string; step: number; total_steps: number }
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
@@ -1242,6 +1324,8 @@ export interface DirectorV2PlanRequest {
   concept?: string
   visual_style?: string
   preserve_visual_style?: boolean
+  character_visual_style?: string
+  allow_clip_text?: boolean
   platform?: string
   style?: string
   prompt_type?: string
@@ -2094,6 +2178,28 @@ export async function cancelStoryGeneration(jobId: string): Promise<void> {
   }
 }
 
+export interface StoryGenerationStatus {
+  jobId: string
+  status: string
+  message: string
+  stage: string
+  current: number
+  total: number
+  error?: string | null
+  result?: { result?: Record<string, unknown> } | null
+}
+
+export async function getStoryGenerationStatus(jobId: string): Promise<StoryGenerationStatus> {
+  const response = await fetch(
+    `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(jobId)}`,
+  )
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not read Story Lab job' }))
+    throw new Error(error.detail || 'Could not read Story Lab job')
+  }
+  return response.json()
+}
+
 export async function resumeStoryGeneration(
   jobId: string,
   onProgress?: (progress: {
@@ -2104,10 +2210,19 @@ export async function resumeStoryGeneration(
     current: number
     total: number
   }) => void,
+  writing?: {
+    writingProvider: import('../features/stories/types').StoryWritingProvider
+    writingModel?: string
+    writingBaseUrl?: string
+  },
 ): Promise<{ result: Record<string, unknown> }> {
   const resumed = await fetch(
     `${BASE}/api/v1/stories/generate/resume/${encodeURIComponent(jobId)}`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(writing || {}),
+    },
   )
   if (!resumed.ok) {
     const err = await resumed.json().catch(() => ({ detail: 'Could not resume Story Lab job' }))
@@ -2115,11 +2230,7 @@ export async function resumeStoryGeneration(
   }
   for (;;) {
     await new Promise(resolve => window.setTimeout(resolve, 1000))
-    const response = await fetch(
-      `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(jobId)}`,
-    )
-    if (!response.ok) throw new Error('Could not read resumed Story Lab job')
-    const status = await response.json()
+    const status = await getStoryGenerationStatus(jobId)
     onProgress?.(status)
     if (status.status === 'failed' || status.status === 'cancelled') {
       throw new Error(status.error || status.message)
@@ -2130,7 +2241,7 @@ export async function resumeStoryGeneration(
         jobId,
         result: status.result.result,
       }))
-      return status.result
+      return { result: status.result.result }
     }
   }
 }
@@ -3029,6 +3140,8 @@ export async function planShortFilmScript(params: {
   frames_minimum?: number
   visual_style?: string
   preserve_visual_style?: boolean
+  character_visual_style?: string
+  allow_clip_text?: boolean
 }): Promise<{ clips: import('../types').PlannedClip[]; clip_plans: import('../types').ClipPlan[] }> {
   const res = await fetch(`${BASE}/api/v1/director/plan-short-film-script`, {
     method: 'POST',
