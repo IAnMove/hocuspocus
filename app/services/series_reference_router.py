@@ -139,7 +139,9 @@ def _auto_strategy(
     if source_mode == "known_universe_experimental" and visible_count == 0:
         return "direct"
     if shot.get("continuityFromShotId") and capabilities.get("supportsContinuation"):
-        return "first_frame" if has_exact_start else "references"
+        if has_exact_start:
+            return "first_frame"
+        return "references" if candidates else "direct"
     if has_exact_start and capabilities.get("supportsFirstFrame"):
         return "first_frame"
     if candidates:
@@ -342,12 +344,18 @@ def route_shot_references(
         deduplicated = []
 
     if len(visible) >= 3 and not exact_start_ids:
-        warnings.append(
-            "This crowd cannot be blocked reliably with loose portraits; approve a composed start frame."
-        )
-        errors.append("Approve a composed start frame before rendering this crowd shot.")
-        if capabilities.get("supportsFirstFrame"):
-            strategy = "first_frame"
+        if strategy == "direct":
+            warnings.append(
+                "Direct text-to-video will improvise this crowd composition because no approved "
+                "composed start frame is available."
+            )
+        else:
+            warnings.append(
+                "This crowd cannot be blocked reliably with loose portraits; approve a composed start frame."
+            )
+            errors.append("Approve a composed start frame before rendering this crowd shot.")
+            if capabilities.get("supportsFirstFrame"):
+                strategy = "first_frame"
     elif len(visible) == 2 and not exact_start_ids:
         warnings.append(
             "Two-character blocking from loose portraits is approximate; use an approved composed start frame when composition matters."
@@ -383,7 +391,12 @@ def route_shot_references(
     if omitted:
         warnings.append(f"{len(omitted)} reference(s) were omitted by model or manual limits.")
     if strategy in {"references", "first_frame", "first_last"} and not selected:
-        errors.append("The selected render strategy has no usable routed references.")
+        if requested_strategy == "auto":
+            warnings.append(
+                "Auto routing found no usable reference file; using direct text-to-video generation."
+            )
+        else:
+            errors.append("The selected render strategy has no usable routed references.")
         strategy = "direct"
         warnings.append("Falling back to direct generation because no usable reference remains.")
     if strategy in {"first_frame", "first_last"} and not any(

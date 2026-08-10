@@ -21,6 +21,23 @@ The scheduler must answer, at all times:
 This is both a scheduler and an observability layer. The footer is a client of
 the task manager, not the owner of task state.
 
+## Implemented architecture note (2026-08-10)
+
+The canonical registry is stored per output workspace in
+`.maestro-tasks-v1.sqlite3`. Domain checkpoints remain authoritative for
+editing/resume semantics; compatibility adapters publish their observable
+state into the registry and task controls dispatch back to the owning engine.
+The React footer reads only canonical tasks through SSE with polling fallback.
+Frontend-only foreground operations are mirrored to the backend registry so
+synchronous uploads and remote calls cannot disappear from activity history.
+
+Series Lab planning and rendering are first-class adapters. Series planning
+also propagates task context into provider threads, allowing each compatible
+LLM request to appear as a child operation with provider, model, server,
+attempt, elapsed time, and aggregated token usage. The same context boundary
+is the required integration pattern for the remaining specialized workflows;
+adapters must never recreate task ownership in the footer.
+
 ## Current problems
 
 ### Fragmented task ownership

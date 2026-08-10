@@ -761,6 +761,9 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
         "CanonSnapshot is immutable evidence, never rewrite it. Use entity IDs exactly as supplied. "
         "Every speaking character must also be visible. Never invent a reference asset or entity ID. "
         "Keep at most two speakers per shot and write short dialogue suitable for best-effort native lip sync. "
+        "For shots, speakingCharacterIds must be exactly the unique characterId values used by dialogueBeats; "
+        "never copy every visible character into speakingCharacterIds. If a scene needs three people to speak, "
+        "cover them across separate shots with no more than two actual speakers in each shot. "
         "Do not mutate canon; canon changes are proposals for later human review."
     )
     requirements = {
@@ -874,8 +877,12 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
         return {"script": scenes}
     if stage == "shots":
         shots = normalized.get("shots")
-        if not isinstance(shots, list) or not 8 <= len(shots) <= 12:
-            raise ValueError("Complete Series Lab shot plans require 8–12 shots")
+        if not isinstance(shots, list):
+            raise ValueError("Complete Series Lab shot plans require a shots array")
+        if not 8 <= len(shots) <= 12:
+            raise ValueError(
+                f"Complete Series Lab shot plans require 8–12 shots; received {len(shots)}"
+            )
         scene_ids = {
             str(item.get("id")) for item in episode.get("script", [])
             if isinstance(item, dict) and item.get("id")
@@ -900,15 +907,51 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
                     raise ValueError(f"Shot {shot_id} uses unknown visible character {resolved}")
                 if resolved not in visible:
                     visible.append(resolved)
-            speakers = []
+            dialogue = shot.get("dialogueBeats") if isinstance(shot.get("dialogueBeats"), list) else []
+            dialogue_speakers = []
+            for dialogue_index, beat in enumerate(dialogue):
+                if not isinstance(beat, dict):
+                    raise ValueError(f"Shot {shot_id} has invalid dialogue")
+                resolved = _resolve(beat.get("characterId"), character_ids, character_lookup)
+                if resolved not in character_ids:
+                    raise ValueError(f"Shot {shot_id} dialogue uses unknown character {resolved}")
+                if resolved not in visible:
+                    raise ValueError(f"Shot {shot_id} speaker {resolved} is not visible")
+                # Shot dialogue IDs are runtime-local identifiers. Providers
+                # often copy the source scene beat ID into a later shot, which
+                # makes canon validation report a false cross-shot reference.
+                # Re-key them deterministically to the owning shot while
+                # preserving the actual line, speaker and delivery.
+                beat["id"] = f"{shot_id}_d{dialogue_index + 1}"
+                beat["characterId"] = resolved
+                if resolved not in dialogue_speakers:
+                    dialogue_speakers.append(resolved)
+            if len(dialogue_speakers) > 2:
+                raise ValueError(
+                    f"Shot {shot_id} contains dialogue from {len(dialogue_speakers)} speakers; "
+                    "split the dialogue across separate shots"
+                )
+            shot["dialogueBeats"] = dialogue
+
+            # Providers occasionally populate speakingCharacterIds with every
+            # visible participant. Dialogue beats are the authoritative proof
+            # of who actually speaks, so repair that harmless schema drift
+            # without dropping any spoken line. Explicit speakers only fill an
+            # otherwise silent/underspecified shot, and never exceed the model
+            # capability of two voices.
+            declared_speakers = []
             for raw in shot.get("speakingCharacterIds", []):
                 resolved = _resolve(raw, character_ids, character_lookup)
                 if resolved not in visible:
                     raise ValueError(f"Shot {shot_id} speaker {resolved} is not visible")
+                if resolved not in declared_speakers:
+                    declared_speakers.append(resolved)
+            speakers = list(dialogue_speakers)
+            for resolved in declared_speakers:
+                if len(speakers) >= 2:
+                    break
                 if resolved not in speakers:
                     speakers.append(resolved)
-            if len(speakers) > 2:
-                raise ValueError(f"Shot {shot_id} exceeds the two-speaker MVP limit")
             shot["visibleCharacterIds"] = visible
             shot["speakingCharacterIds"] = speakers
             primary = _resolve(shot.get("primarySpeakerId"), character_ids, character_lookup)

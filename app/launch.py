@@ -196,7 +196,7 @@ sys.argv = _original_argv
 # --- FastAPI setup ---
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from services.access_log_filter import install_quiet_access_filter
@@ -412,6 +412,15 @@ def _new_generation_job(
     # still useful for cancellation/recovery, but thread scheduling no longer
     # decides which submitted generation reaches the GPU first.
     register_generation_job(_gen_lock, job)
+    publisher = globals().get("_publish_generation_task")
+    if callable(publisher):
+        try:
+            task = publisher(job)
+            if isinstance(task, dict):
+                job["task_id"] = task.get("id")
+                job["root_task_id"] = task.get("root_id")
+        except Exception as exc:
+            print(f"[Task registry] Could not publish generation {job['id']}: {exc}")
     return job
 
 
@@ -22553,6 +22562,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                     "upload_filenames": upload_filenames,
                     "generation_mode": "video",
                     "job_id": job_id,
+                    "task_id": job.get("task_id"),
+                    "root_task_id": job.get("root_task_id") or job.get("task_id"),
                     "generation_time": round(time.time() - start_time),
                     "created_at": time.time(),
                 }
@@ -23159,6 +23170,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                     "upload_filenames": upload_filenames,
                     "generation_mode": job["params"].get("generation_mode"),
                     "job_id": job_id,
+                    "task_id": job.get("task_id"),
+                    "root_task_id": job.get("root_task_id") or job.get("task_id"),
                     "generation_time": round(time.time() - start_time),
                     "created_at": time.time(),
                 }
@@ -24937,6 +24950,8 @@ def get_status(job_id: str):
     )
     return {
         "job_id": j["id"],
+        "task_id": j.get("task_id"),
+        "root_task_id": j.get("root_task_id") or j.get("task_id"),
         "status": j["status"],
         "progress": j["progress"],
         "step": j.get("step", 0),
@@ -25002,6 +25017,8 @@ def list_jobs():
         if j["status"] in ("queued", "running"):
             active.append({
                 "job_id": j["id"],
+                "task_id": j.get("task_id"),
+                "root_task_id": j.get("root_task_id") or j.get("task_id"),
                 "status": j["status"],
                 "progress": j["progress"],
                 "step": j.get("step", 0),
@@ -27592,6 +27609,12 @@ def _series_plan_update(job_id: str, **patch) -> dict | None:
         job["updatedAt"] = time.time()
         snapshot = copy.deepcopy(job)
         _series_plan_store(str(job["workspace"])).save(snapshot)
+        publisher = globals().get("_publish_series_task")
+        if callable(publisher):
+            try:
+                publisher(snapshot, "series-plan")
+            except Exception as exc:
+                print(f"[Task registry] Could not publish Series plan {job_id}: {exc}")
         return snapshot
 
 
@@ -27683,11 +27706,77 @@ def _run_series_plan_job_inner(job_id: str) -> None:
                     prompt=prompt,
                     system_prompt=system_prompt,
                     schema=planning_schema(stage),
-                    max_new_tokens=5000 if stage in {"script", "shots"} else 2400,
+                    # Eight fully described shots can exceed 5k tokens in
+                    # Spanish. A low cap makes otherwise compliant providers
+                    # stop after 6–7 shots; json_repair then turns truncation
+                    # into a deceptively valid but incomplete object.
+                    max_new_tokens=(9000 if stage == "shots" else 6000 if stage == "script" else 2400),
                     stage=f"Series Lab {stage}",
                     llm_override=llm_override,
                 )
-                result = normalize_planning_result(stage, raw, series, episode)
+                # JSON-schema support differs between providers. A response can
+                # be valid JSON yet still violate a cross-field production rule
+                # such as "every speaker is visible" or the two-speaker model
+                # limit. Give the writing model two bounded, evidence-rich
+                # semantic repair passes instead of throwing away all earlier
+                # durable stages after the first invalid response.
+                semantic_error = None
+                for repair_attempt in range(3):
+                    try:
+                        result = normalize_planning_result(stage, raw, series, episode)
+                        semantic_error = None
+                        break
+                    except ValueError as exc:
+                        semantic_error = exc
+                        if repair_attempt >= 2:
+                            raise
+                        previous_response = json.dumps(
+                            raw, ensure_ascii=False, separators=(",", ":"), default=str,
+                        )
+                        previous_limit = 20000
+                        if len(previous_response) > previous_limit:
+                            previous_response = (
+                                previous_response[:previous_limit]
+                                + "\n[previous response truncated for bounded Series Lab repair]"
+                            )
+                        _series_plan_update(
+                            job_id,
+                            status="running",
+                            stage=stage,
+                            current=index,
+                            total=len(stages),
+                            validationAttempt=repair_attempt + 1,
+                            validationError=str(exc),
+                            message=(
+                                f"Repairing Series Lab {stage.replace('_', ' ')} "
+                                f"({repair_attempt + 1}/2): {exc}"
+                            ),
+                        )
+                        repair_prompt = (
+                            f"{prompt}\n\nSERIES STAGE VALIDATION REPAIR: The previous response "
+                            f"failed this production rule: {exc}. Preserve all valid story facts and "
+                            "dialogue, but correct the smallest necessary structure. For a shot with "
+                            "more than two actual dialogue speakers, distribute those lines across "
+                            "separate shots while keeping 8–12 shots total. speakingCharacterIds must "
+                            "equal the unique characterId values in dialogueBeats, not every visible "
+                            "participant. Return exactly one complete JSON object matching the schema.\n"
+                            f"PREVIOUS RESPONSE TO REPAIR:\n{previous_response}"
+                        )
+                        raw = _generate_comic_director_json(
+                            prompt=repair_prompt,
+                            system_prompt=system_prompt,
+                            schema=planning_schema(stage),
+                            max_new_tokens=(
+                                9000 if stage == "shots" else 6000 if stage == "script" else 2400
+                            ),
+                            stage=f"Series Lab {stage} validation repair {repair_attempt + 1}",
+                            llm_override=llm_override,
+                        )
+                        latest = _load_series_plan_job(job_id)
+                        if latest and latest.get("status") == "cancelled":
+                            return
+                if semantic_error is not None:  # pragma: no cover - loop raises first
+                    raise semantic_error
                 latest = _load_series_plan_job(job_id)
                 if latest and latest.get("status") == "cancelled":
                     return
@@ -27695,7 +27784,7 @@ def _run_series_plan_job_inner(job_id: str) -> None:
             episode = apply_planning_stage(episode, stage, result)
             _series_plan_update(
                 job_id, completedStages=completed, episodeResult=episode,
-                current=index + 1, stage=stage,
+                current=index + 1, stage=stage, validationAttempt=0, validationError=None,
             )
         _series_plan_update(
             job_id, status="completed", stage="completed", current=len(stages), total=len(stages),
@@ -27840,10 +27929,22 @@ def _run_series_plan_job(job_id: str) -> None:
         _series_plan_active_jobs.add(job_id)
     try:
         job = _load_series_plan_job(job_id)
-        if job and job.get("jobType") == "canon":
-            _run_series_canon_plan_job_inner(job_id)
+        task = _publish_series_task(job, "series-plan") if job else None
+        if task:
+            from services.task_manager import task_context_scope
+            scope = task_context_scope(
+                task_id=task["id"], root_id=task["root_id"],
+                workspace=str(job.get("workspace") or "default"),
+                workspace_dir=_workspace_dir(str(job.get("workspace") or "default")),
+            )
         else:
-            _run_series_plan_job_inner(job_id)
+            from contextlib import nullcontext
+            scope = nullcontext()
+        with scope:
+            if job and job.get("jobType") == "canon":
+                _run_series_canon_plan_job_inner(job_id)
+            else:
+                _run_series_plan_job_inner(job_id)
     finally:
         with _series_plan_jobs_lock:
             _series_plan_active_jobs.discard(job_id)
@@ -27958,6 +28059,7 @@ def get_series_episode_plan(job_id: str):
     return {key: job.get(key) for key in (
         "jobId", "jobType", "workspace", "seriesId", "episodeId", "status", "stage", "current", "total",
         "message", "completedStages", "episodeResult", "seriesResult", "generateImages",
+        "validationAttempt", "validationError",
         "bootstrapKnownSeries", "autoApply", "autoApplied", "appliedSeriesRevision", "applyError",
         "result", "error", "createdAt", "updatedAt", "finishedAt", "appliedAt",
     )}
@@ -28123,6 +28225,12 @@ def _series_render_update(job_id: str, **patch) -> dict | None:
         job["updatedAt"] = time.time()
         snapshot = copy.deepcopy(job)
         _series_render_store(str(job["workspace"])).save(snapshot)
+        publisher = globals().get("_publish_series_task")
+        if callable(publisher):
+            try:
+                publisher(snapshot, "series-render")
+            except Exception as exc:
+                print(f"[Task registry] Could not publish Series render {job_id}: {exc}")
         return snapshot
 
 
@@ -29220,6 +29328,12 @@ def _story_job_update(job_id: str, **patch) -> None:
         # cancel/resume checkpoint even when both writes were individually
         # atomic.
         _persist_story_plan_job(snapshot)
+        publisher = globals().get("_publish_generic_legacy_task")
+        if callable(publisher):
+            try:
+                publisher(snapshot, "story-plan")
+            except Exception as exc:
+                print(f"[Task registry] Could not publish Story plan {job_id}: {exc}")
 
 
 def _load_story_plan_job(job_id: str) -> dict | None:
@@ -30461,6 +30575,12 @@ def _comic_plan_job_update(job_id: str, **patch) -> None:
             snapshot = copy.deepcopy(job)
     if snapshot is not None:
         _persist_comic_plan_job(snapshot)
+        publisher = globals().get("_publish_generic_legacy_task")
+        if callable(publisher):
+            try:
+                publisher(snapshot, "comic-plan")
+            except Exception as exc:
+                print(f"[Task registry] Could not publish comic plan {job_id}: {exc}")
 
 
 def _run_comic_plan_job(job_id: str, body: dict) -> None:
@@ -32061,6 +32181,430 @@ def serve_upload(filename: str):
     if filepath is not None and os.path.isfile(filepath):
         return share_delete_file_response(filepath)
     return serve_file(filename)
+
+
+# ============================================================================
+# Canonical task registry and compatibility adapters
+# ============================================================================
+
+def _task_registry(workspace: str | None = None):
+    from services.task_manager import get_task_registry
+
+    return get_task_registry(_workspace_dir(workspace or _get_active_workspace()))
+
+
+def _task_legacy_id(record: dict) -> str:
+    return str(record.get("jobId") or record.get("job_id") or record.get("id") or "")
+
+
+def _task_status(value: object) -> str:
+    raw = str(value or "queued").lower()
+    if raw in {"completed", "failed", "cancelled", "interrupted"}:
+        return raw
+    if raw in {"created", "queued"}:
+        return raw
+    if raw in {"paused", "waiting", "waiting_resource"}:
+        return "waiting_resource"
+    return "running"
+
+
+def _task_timestamp(record: dict, *keys: str) -> float | None:
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return float(value)
+        if isinstance(value, str) and value:
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                continue
+    return None
+
+
+def _upsert_canonical_task(workspace: str, task_id: str, **fields) -> dict:
+    registry = _task_registry(workspace)
+    existing = registry.get(task_id)
+    if existing is None:
+        return registry.create(id=task_id, workspace=workspace, **fields)
+    mutable = {
+        key: value for key, value in fields.items()
+        if key not in {"id", "root_id", "parent_id", "created_at"}
+        and existing.get(key) != value
+    }
+    if mutable:
+        return registry.update(task_id, force=True, event_type="adapter.synced", **mutable)
+    return existing
+
+
+def _publish_generation_task(job: dict) -> dict:
+    legacy_id = str(job.get("id") or "")
+    workspace = str(job.get("workspace") or "default")
+    details = _public_generation_details(job.get("params"))
+    mode = str(details.get("generation_mode") or "generation")
+    model_type = str(details.get("model_type") or "")
+    is_remote = model_type.startswith("minimax:")
+    task_id = f"task-generation-{legacy_id}"
+    status = _task_status(job.get("status"))
+    current = int(job.get("step") or 0)
+    total = int(job.get("total_steps") or 0)
+    error = job.get("error")
+    return _upsert_canonical_task(
+        workspace,
+        task_id,
+        root_id=task_id,
+        kind=mode,
+        workflow="generation",
+        title={
+            "image": "Image generation", "video": "Video generation",
+            "audio": "Audio generation", "music": "Music generation",
+            "model3d": "3D generation", "avatar": "Video edit",
+        }.get(mode, "Generation job"),
+        status=status,
+        phase=str(job.get("phase") or status),
+        message=str(job.get("message") or status.replace("_", " ").title()),
+        current=current,
+        total=total,
+        progress=float(job.get("progress") or 0),
+        created_at=_task_timestamp(job, "created_at") or time.time(),
+        started_at=_task_timestamp(job, "started_at"),
+        completed_at=_task_timestamp(job, "finished_at"),
+        provider="minimax" if is_remote else "local",
+        model=str(details.get("model_name") or model_type),
+        server_origin="https://api.minimax.io" if is_remote else "local",
+        resource_requirements=["remote:https://api.minimax.io" if is_remote else "local_gpu:0"],
+        acquired_resources=([] if status in {"created", "queued", "waiting_resource"}
+                            else ["remote:https://api.minimax.io" if is_remote else "local_gpu:0"]),
+        backend_job_id=legacy_id,
+        cancelable=status in {"created", "queued", "waiting_resource", "running"},
+        recoverable=_is_durable_generation_job(job),
+        error=({"message": str(error), "retryable": True} if error else None),
+        result_refs=list(job.get("output_files") or []),
+        metadata={"adapter": "generation", "generation_details": details},
+    )
+
+
+def _publish_series_task(job: dict, adapter: str) -> dict:
+    legacy_id = _task_legacy_id(job)
+    workspace = str(job.get("workspace") or "default")
+    is_render = adapter == "series-render"
+    is_known = job.get("bootstrapKnownSeries") is True
+    status = _task_status(job.get("status"))
+    provider = job.get("provider") if isinstance(job.get("provider"), dict) else {}
+    request_body = job.get("request") if isinstance(job.get("request"), dict) else {}
+    model = str(job.get("model") or request_body.get("writingModel") or provider.get("videoModel") or "")
+    server = "local" if is_render else str(request_body.get("writingBaseUrl") or "")
+    task_id = f"task-{adapter}-{legacy_id}"
+    return _upsert_canonical_task(
+        workspace,
+        task_id,
+        root_id=task_id,
+        kind="video" if is_render else "llm-planning",
+        workflow=adapter,
+        title=("Series Lab · Video generation" if is_render else
+               "Series Lab · Known-series bible" if is_known else
+               "Series Lab · Canon" if job.get("jobType") == "canon" else
+               "Series Lab · Episode planning"),
+        status=status,
+        phase=str(job.get("stage") or status),
+        message=str(job.get("message") or "Series Lab is working…"),
+        detail=str(job.get("validationError") or ""),
+        current=int(job.get("current") or 0),
+        total=int(job.get("total") or 0),
+        created_at=_task_timestamp(job, "createdAt") or time.time(),
+        completed_at=_task_timestamp(job, "finishedAt"),
+        provider="local" if is_render else str(request_body.get("writingProvider") or ""),
+        model=model,
+        server_origin=server,
+        resource_requirements=["local_gpu:0" if is_render else f"remote:{server or 'llm'}"],
+        acquired_resources=[] if status in {"created", "queued", "waiting_resource"} else [
+            "local_gpu:0" if is_render else f"remote:{server or 'llm'}"
+        ],
+        attempt=max(1, int(job.get("retryCount") or job.get("validationAttempt") or 0) + 1),
+        project_id=str(job.get("seriesId") or ""),
+        entity_type="episode",
+        entity_id=str(job.get("episodeId") or ""),
+        backend_job_id=legacy_id,
+        cancelable=status in {"created", "queued", "waiting_resource", "running"},
+        resumable=True,
+        recoverable=True,
+        error=({"message": str(job.get("error")), "retryable": True} if job.get("error") else None),
+        result_refs=list(job.get("outputAssetIds") or []),
+        metadata={"adapter": adapter, "settings": job.get("settings") or {}},
+    )
+
+
+_GENERIC_TASK_CONFIG = {
+    "story-plan": ("Story Lab planning", "llm-planning", True),
+    "comic-plan": ("Comic planning", "llm-planning", True),
+    "video-editor": ("Video editor", "ffmpeg", False),
+    "model3d": ("3D generation", "model3d", False),
+    "rig": ("Character rigging", "rig", False),
+}
+
+
+def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
+    legacy_id = _task_legacy_id(record)
+    if not legacy_id:
+        return None
+    workspace = str(record.get("workspace") or "default")
+    title, kind, resumable = _GENERIC_TASK_CONFIG.get(adapter, (adapter.replace("-", " ").title(), adapter, False))
+    status = _task_status(record.get("status"))
+    phase = str(record.get("stage") or record.get("phase") or record.get("status") or status)
+    task_id = f"task-{adapter}-{legacy_id}"
+    provider = str(record.get("provider") or "local")
+    model = str(record.get("model") or record.get("model_id") or record.get("modelId") or "")
+    is_gpu = adapter in {"model3d", "rig"}
+    return _upsert_canonical_task(
+        workspace, task_id,
+        root_id=task_id, kind=kind, workflow=adapter, title=title,
+        status=status, phase=phase,
+        message=str(record.get("message") or phase.replace("_", " ").title()),
+        current=int(record.get("current") or record.get("step") or 0),
+        total=int(record.get("total") or record.get("total_steps") or 0),
+        progress=float(record.get("progress") or 0),
+        detail_current=int(record.get("detailCurrent") or 0),
+        detail_total=int(record.get("detailTotal") or 0),
+        created_at=_task_timestamp(record, "createdAt", "created_at") or time.time(),
+        started_at=_task_timestamp(record, "startedAt", "started_at"),
+        completed_at=_task_timestamp(record, "finishedAt", "finished_at"),
+        provider=provider, model=model,
+        server_origin=str(record.get("server_origin") or record.get("writingBaseUrl") or "local"),
+        resource_requirements=["local_gpu:0" if is_gpu else "local_cpu"],
+        backend_job_id=legacy_id,
+        cancelable=(status in {"created", "queued", "waiting_resource", "running"}
+                    and adapter not in {"comic-plan", "video-editor"}),
+        resumable=resumable, recoverable=resumable,
+        error=({"message": str(record.get("error")), "retryable": resumable} if record.get("error") else None),
+        result_refs=list(record.get("output_files") or ([record["output"]] if record.get("output") else [])),
+        metadata={"adapter": adapter},
+    )
+
+
+def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
+    pipeline_id = str(pipeline.get("id") or pipeline.get("pipeline_id") or "")
+    if not pipeline_id:
+        return None
+    progress = pipeline.get("progress") if isinstance(pipeline.get("progress"), dict) else {}
+    details = pipeline.get("generation_details") if isinstance(pipeline.get("generation_details"), dict) else {}
+    schedule = pipeline.get("resource_schedule") if isinstance(pipeline.get("resource_schedule"), dict) else {}
+    status = _task_status(pipeline.get("status"))
+    task_id = f"task-director-{pipeline_id}"
+    return _upsert_canonical_task(
+        workspace, task_id,
+        root_id=task_id, kind="director", workflow="director",
+        title="Music video" if pipeline.get("pipeline_type") == "music_video" else "Director pipeline",
+        status=status, phase=str(pipeline.get("phase") or status),
+        message=str(pipeline.get("error") or progress.get("message") or "Director is working…"),
+        current=int(progress.get("current") or progress.get("step") or 0),
+        total=int(progress.get("total") or progress.get("total_steps") or 0),
+        detail_current=int(progress.get("detail_current") or 0),
+        detail_total=int(progress.get("detail_total") or 0),
+        created_at=_task_timestamp(pipeline, "created_at") or time.time(),
+        started_at=_task_timestamp(pipeline, "phase_started_at", "created_at"),
+        completed_at=_task_timestamp(pipeline, "finished_at"),
+        provider=str(details.get("text_provider") or ""),
+        model=str(details.get("text_model") or details.get("video_model_name") or ""),
+        server_origin=str(details.get("text_server") or ""),
+        resource_requirements=list((schedule.get("lanes") or {}).keys()),
+        pipeline_id=pipeline_id, backend_job_id=pipeline_id,
+        cancelable=status in {"created", "queued", "waiting_resource", "running"},
+        resumable=True, recoverable=True,
+        error=({"message": str(pipeline.get("error")), "retryable": True} if pipeline.get("error") else None),
+        metadata={"adapter": "director", "generation_details": details, "resource_schedule": schedule},
+    )
+
+
+def _sync_canonical_tasks(workspace: str) -> None:
+    for job in list(_jobs.values()):
+        if str(job.get("workspace") or "default") == workspace:
+            _publish_generation_task(snapshot_job(job))
+    try:
+        from services.director_pipeline import list_active_pipelines
+        for pipeline in list_active_pipelines(workspace):
+            _publish_director_task(pipeline, workspace)
+    except Exception:
+        pass
+    with _series_plan_jobs_lock:
+        series_plans = [copy.deepcopy(job) for job in _series_plan_jobs.values()]
+    with _series_render_jobs_lock:
+        series_renders = [copy.deepcopy(job) for job in _series_render_jobs.values()]
+    for job in series_plans:
+        if str(job.get("workspace") or "default") == workspace:
+            _publish_series_task(job, "series-plan")
+    for job in series_renders:
+        if str(job.get("workspace") or "default") == workspace:
+            _publish_series_task(job, "series-render")
+    with _story_plan_jobs_lock:
+        story_jobs = [copy.deepcopy(job) for job in _story_plan_jobs.values()]
+    with _comic_plan_jobs_lock:
+        comic_jobs = [copy.deepcopy(job) for job in _comic_plan_jobs.values()]
+    for job in story_jobs:
+        if str(job.get("workspace") or "default") == workspace:
+            _publish_generic_legacy_task(job, "story-plan")
+    for job in comic_jobs:
+        if str(job.get("workspace") or "default") == workspace:
+            _publish_generic_legacy_task(job, "comic-plan")
+    for job in list(_video_editor_jobs.values()):
+        if str(job.get("workspace") or "default") == workspace:
+            _publish_generic_legacy_task(job, "video-editor")
+    try:
+        with model3d_service._lock:
+            model3d_jobs = [copy.deepcopy(job) for job in model3d_service._jobs.values()]
+        for job in model3d_jobs:
+            _publish_generic_legacy_task({**job, "workspace": workspace}, "model3d")
+    except Exception:
+        pass
+    try:
+        from services import rig_service
+        with rig_service._lock:
+            rig_jobs = [copy.deepcopy(job) for job in rig_service._jobs.values()]
+        for job in rig_jobs:
+            _publish_generic_legacy_task({**job, "workspace": workspace}, "rig")
+    except Exception:
+        pass
+
+
+@api.get("/api/v1/tasks")
+def list_canonical_tasks(
+    workspace: str | None = None,
+    status: str = "active",
+    root_id: str = "",
+    limit: int = 200,
+):
+    target = str(workspace or _get_active_workspace())
+    _sync_canonical_tasks(target)
+    from services.task_manager import ACTIVE_STATUSES, ALL_STATUSES
+    statuses = set(ACTIVE_STATUSES) if status == "active" else (
+        set(ALL_STATUSES) if status in {"", "all"} else {item.strip() for item in status.split(",")}
+    )
+    return {"workspace": target, "tasks": _task_registry(target).list(
+        statuses=statuses, root_id=root_id, limit=limit,
+    )}
+
+
+@api.post("/api/v1/tasks/upsert")
+def upsert_client_task(body: dict):
+    raw = body.get("task") if isinstance(body.get("task"), dict) else body
+    workspace = str(raw.get("workspace") or _get_active_workspace())
+    client_id = re.sub(r"[^A-Za-z0-9_-]+", "-", str(raw.get("id") or uuid.uuid4().hex))[:160]
+    task_id = client_id if client_id.startswith("task-") else f"task-client-{client_id}"
+    status = _task_status(raw.get("status"))
+    task = _upsert_canonical_task(
+        workspace, task_id, root_id=task_id,
+        kind=str(raw.get("kind") or "foreground"), workflow="frontend",
+        title=str(raw.get("title") or "Maestro activity"), status=status,
+        phase=str(raw.get("phase") or status),
+        message=str(raw.get("error") or raw.get("message") or "Working…"),
+        detail=str(raw.get("detailMessage") or ""),
+        current=int(raw.get("current") or 0), total=int(raw.get("total") or 0),
+        detail_current=int(raw.get("detailCurrent") or 0), detail_total=int(raw.get("detailTotal") or 0),
+        created_at=(float(raw.get("startedAt")) / 1000 if float(raw.get("startedAt") or 0) > 1e12 else
+                    float(raw.get("startedAt") or time.time())),
+        cancelable=False,
+        error=({"message": str(raw.get("error")), "retryable": False} if raw.get("error") else None),
+        metadata={"adapter": "frontend", "client_activity_id": client_id,
+                  "generation_details": raw.get("generationDetails") or {},
+                  "token_usage": raw.get("tokenUsage") or {}},
+    )
+    return task
+
+
+@api.get("/api/v1/tasks/events")
+async def stream_canonical_task_events(workspace: str | None = None, after: int = 0):
+    target = str(workspace or _get_active_workspace())
+    registry = _task_registry(target)
+
+    async def event_stream():
+        cursor = max(0, int(after or 0))
+        while True:
+            events = await asyncio.to_thread(registry.wait_for_events, cursor, 15.0)
+            if not events:
+                yield ": keepalive\n\n"
+                continue
+            for event in events:
+                cursor = max(cursor, int(event["event_id"]))
+                yield f"id: {cursor}\nevent: task\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+    })
+
+
+@api.get("/api/v1/tasks/{task_id}/events")
+def get_canonical_task_events(task_id: str, workspace: str | None = None, after: int = 0):
+    target = str(workspace or _get_active_workspace())
+    return {"events": _task_registry(target).events(task_id, after=after)}
+
+
+@api.get("/api/v1/tasks/{task_id}")
+def get_canonical_task(task_id: str, workspace: str | None = None):
+    target = str(workspace or _get_active_workspace())
+    _sync_canonical_tasks(target)
+    task = _task_registry(target).get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    children = [item for item in _task_registry(target).list(root_id=task["root_id"], limit=500)
+                if item.get("parent_id") == task_id]
+    return {"task": task, "children": children}
+
+
+def _control_canonical_task(task: dict, action: str):
+    adapter = str((task.get("metadata") or {}).get("adapter") or "")
+    legacy_id = str(task.get("backend_job_id") or task.get("pipeline_id") or "")
+    if action == "cancel":
+        if adapter == "generation": return cancel_job(legacy_id)
+        if adapter == "director": return director_pipeline_stop(legacy_id)
+        if adapter == "series-plan": return cancel_series_episode_plan(legacy_id)
+        if adapter == "series-render": return cancel_series_render_job(legacy_id)
+        if adapter == "story-plan": return cancel_story_lab_generation(legacy_id)
+        if adapter == "model3d": return cancel_model3d_job(legacy_id)
+        if adapter == "rig": return cancel_rig_job(legacy_id)
+    if action in {"retry", "resume"}:
+        if adapter == "director": return director_pipeline_resume(legacy_id)
+        if adapter == "series-plan": return resume_series_episode_plan(legacy_id)
+        if adapter == "series-render": return resume_series_render_job(legacy_id)
+        if adapter == "story-plan": return resume_story_lab_generation(legacy_id)
+        if adapter == "comic-plan": return resume_director_comic_plan(legacy_id)
+    raise HTTPException(status_code=409, detail=f"Task does not support {action}")
+
+
+@api.post("/api/v1/tasks/{task_id}/cancel")
+def cancel_canonical_task(task_id: str, workspace: str | None = None):
+    target = str(workspace or _get_active_workspace())
+    task = _task_registry(target).get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    result = _control_canonical_task(task, "cancel")
+    _sync_canonical_tasks(target)
+    return {"task": _task_registry(target).get(task_id), "result": result}
+
+
+@api.post("/api/v1/tasks/{task_id}/retry")
+def retry_canonical_task(task_id: str, workspace: str | None = None):
+    target = str(workspace or _get_active_workspace())
+    task = _task_registry(target).get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    result = _control_canonical_task(task, "retry")
+    _sync_canonical_tasks(target)
+    return {"task": _task_registry(target).get(task_id), "result": result}
+
+
+@api.post("/api/v1/tasks/{task_id}/resume")
+def resume_canonical_task(task_id: str, workspace: str | None = None):
+    return retry_canonical_task(task_id, workspace)
+
+
+@api.delete("/api/v1/tasks/{task_id}")
+def dismiss_canonical_task(task_id: str, workspace: str | None = None):
+    target = str(workspace or _get_active_workspace())
+    try:
+        deleted = _task_registry(target).delete(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"deleted": True, "task_id": task_id}
 
 
 # ============================================================================

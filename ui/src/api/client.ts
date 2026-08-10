@@ -96,6 +96,103 @@ export interface ApiTaskTiming {
   phase_timings: Array<{ phase: string; seconds: number }>
 }
 
+export type CanonicalTaskStatus =
+  | 'created' | 'queued' | 'waiting_resource' | 'running'
+  | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+
+export interface CanonicalTask {
+  id: string
+  root_id: string
+  parent_id?: string | null
+  kind: string
+  title: string
+  workflow: string
+  status: CanonicalTaskStatus
+  phase: string
+  message: string
+  detail?: string
+  current: number
+  total: number
+  progress: number
+  detail_current: number
+  detail_total: number
+  created_at: number
+  queued_at?: number | null
+  started_at?: number | null
+  updated_at: number
+  completed_at?: number | null
+  provider?: string
+  model?: string
+  server_origin?: string
+  resource_requirements?: string[]
+  acquired_resources?: string[]
+  attempt: number
+  max_attempts: number
+  token_usage?: { prompt?: number; completion?: number; total?: number; calls?: number }
+  backend_job_id?: string
+  pipeline_id?: string
+  cancelable: boolean
+  resumable: boolean
+  recoverable: boolean
+  error?: { message?: string; retryable?: boolean } | null
+  result_refs?: string[]
+  metadata?: Record<string, unknown>
+}
+
+export async function fetchCanonicalTasks(
+  workspace: string,
+  status: 'active' | 'all' = 'all',
+): Promise<{ workspace: string; tasks: CanonicalTask[] }> {
+  const query = new URLSearchParams({ workspace, status, limit: '300' })
+  const res = await fetch(`${BASE}/api/v1/tasks?${query}`)
+  if (!res.ok) throw new Error('Failed to fetch Maestro tasks')
+  return res.json()
+}
+
+export function subscribeCanonicalTaskEvents(
+  workspace: string,
+  onEvent: () => void,
+  onError?: () => void,
+): () => void {
+  const source = new EventSource(`${BASE}/api/v1/tasks/events?workspace=${encodeURIComponent(workspace)}`)
+  source.addEventListener('task', onEvent)
+  source.onerror = () => onError?.()
+  return () => source.close()
+}
+
+export async function upsertCanonicalClientTask(task: Record<string, unknown>): Promise<CanonicalTask> {
+  const res = await fetch(`${BASE}/api/v1/tasks/upsert`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }),
+  })
+  if (!res.ok) throw new Error('Failed to publish Maestro activity')
+  return res.json()
+}
+
+export async function cancelCanonicalTask(taskId: string, workspace: string): Promise<CanonicalTask> {
+  const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}/cancel?workspace=${encodeURIComponent(workspace)}`, { method: 'POST' })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Task cancellation failed' }))
+    throw new Error(error.detail || 'Task cancellation failed')
+  }
+  const payload = await res.json()
+  return payload.task
+}
+
+export async function resumeCanonicalTask(taskId: string, workspace: string): Promise<CanonicalTask> {
+  const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}/resume?workspace=${encodeURIComponent(workspace)}`, { method: 'POST' })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Task resume failed' }))
+    throw new Error(error.detail || 'Task resume failed')
+  }
+  const payload = await res.json()
+  return payload.task
+}
+
+export async function dismissCanonicalTask(taskId: string, workspace: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}?workspace=${encodeURIComponent(workspace)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to dismiss Maestro task')
+}
+
 // --- Models & Families ---
 
 export async function fetchModels(): Promise<{ families: ApiFamily[]; models: ApiModel[] }> {

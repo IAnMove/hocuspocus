@@ -2013,6 +2013,64 @@ def generate_openai_compatible(
     attempts = 2 if is_minimax or (json_schema is not None and is_deepseek) else 1
     from . import resource_scheduler
     request_lane = resource_scheduler.remote_lane(model_id, base_url)
+    operation_registry = None
+    operation_id = ""
+    parent_task_id = ""
+    try:
+        from .task_manager import current_task_context, get_task_registry, new_task_id
+        task_context = current_task_context()
+        parent_task_id = task_context.get("task_id", "")
+        workspace_dir = task_context.get("workspace_dir", "")
+        if parent_task_id and workspace_dir:
+            operation_registry = get_task_registry(workspace_dir)
+            parent_task = operation_registry.get(parent_task_id)
+            if parent_task:
+                operation_id = new_task_id("llm-call")
+                operation_registry.create(
+                    id=operation_id, root_id=parent_task["root_id"], parent_id=parent_task_id,
+                    workspace=parent_task.get("workspace") or "default",
+                    kind="llm-call", workflow=parent_task.get("workflow") or "llm",
+                    title=f"{model_id} completion", status="waiting_resource",
+                    phase="waiting_resource", message=f"Waiting to call {provider_name}",
+                    provider=provider_name, model=model_id, server_origin=base_url,
+                    resource_requirements=[str(request_lane)], attempt=1, max_attempts=attempts,
+                    cancelable=False, recoverable=False,
+                    metadata={"operation": "generate_openai_compatible"},
+                )
+    except Exception as exc:
+        logger.debug("Could not publish LLM child operation: %s", exc)
+
+    def finish_operation(status: str, message: str, usage: Optional[dict] = None, error: str = "") -> None:
+        if not operation_registry or not operation_id:
+            return
+        normalized = usage or {}
+        prompt_count = int(normalized.get("prompt_tokens", normalized.get("input_tokens", 0)) or 0)
+        completion_count = int(normalized.get("completion_tokens", normalized.get("output_tokens", 0)) or 0)
+        total_count = int(normalized.get("total_tokens") or prompt_count + completion_count)
+        try:
+            operation_registry.update(
+                operation_id, status=status, phase=status, message=message,
+                token_usage={"prompt": prompt_count, "completion": completion_count,
+                             "total": total_count, "calls": 1},
+                error=({"message": error, "retryable": True} if error else None),
+                event_type=f"operation.{status}", force=True,
+            )
+            parent = operation_registry.get(parent_task_id)
+            if parent and total_count:
+                previous = parent.get("token_usage") or {}
+                operation_registry.update(
+                    parent_task_id,
+                    token_usage={
+                        "prompt": int(previous.get("prompt") or 0) + prompt_count,
+                        "completion": int(previous.get("completion") or 0) + completion_count,
+                        "total": int(previous.get("total") or 0) + total_count,
+                        "calls": int(previous.get("calls") or 0) + 1,
+                    },
+                    event_type="task.tokens",
+                )
+        except Exception as exc:
+            logger.debug("Could not finish LLM child operation: %s", exc)
+
     for content_attempt in range(attempts):
         request_payload = dict(payload)
         if is_minimax and content_attempt > 0:
@@ -2022,6 +2080,13 @@ def generate_openai_compatible(
             )
         try:
             task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
+            if operation_registry and operation_id:
+                operation_registry.update(
+                    operation_id, status="running", phase="requesting",
+                    message=f"Calling {provider_name} · attempt {content_attempt + 1}/{attempts}",
+                    attempt=content_attempt + 1, acquired_resources=[str(request_lane)],
+                    event_type="operation.started", force=True,
+                )
             with resource_scheduler.coordinator.acquire(
                 request_lane,
                 task_id=task_id,
@@ -2045,6 +2110,7 @@ def generate_openai_compatible(
             if getattr(exc, "response", None) is not None:
                 detail = str(exc.response.text or "")[:500]
             suffix = f": {detail}" if detail else ""
+            finish_operation("failed", "Provider request failed", error=f"OpenAI-compatible request failed{suffix}")
             raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
 
         try:
@@ -2052,14 +2118,18 @@ def generate_openai_compatible(
             base_response = response_data.get("base_resp") or {}
             if base_response.get("status_code") not in (None, 0):
                 detail = str(base_response.get("status_msg") or "MiniMax returned an error")
+                finish_operation("failed", "Provider returned an error", error=detail)
                 raise RuntimeError(detail)
             choice = response_data["choices"][0]
             message = choice["message"]
             content = _strip_thinking_tags(str(message.get("content") or "")).strip()
         except (KeyError, IndexError, TypeError, ValueError) as exc:
+            finish_operation("failed", "Provider response was invalid", error="OpenAI-compatible provider returned an invalid response")
             raise RuntimeError("OpenAI-compatible provider returned an invalid response") from exc
         if content:
-            _record_activity_usage(response_data.get("usage") or {})
+            response_usage = response_data.get("usage") or {}
+            _record_activity_usage(response_usage)
+            finish_operation("completed", "Provider response received and parsed", response_usage)
             return content
         usage = response_data.get("usage") or {}
         token_details = usage.get("completion_tokens_details") or {}
@@ -2075,6 +2145,7 @@ def generate_openai_compatible(
         )
         if content_attempt + 1 < attempts:
             time.sleep(0.4)
+    finish_operation("failed", "Provider returned empty content", error=f"{provider_name} returned empty content")
     raise RuntimeError(
         f"{provider_name} returned empty content after {attempts} "
         f"{'attempts' if attempts != 1 else 'attempt'}"

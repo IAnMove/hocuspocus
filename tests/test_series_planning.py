@@ -112,10 +112,62 @@ def test_shots_require_visible_speaker_ids_and_keep_attempts_empty():
         normalize_planning_result("shots", invalid, series, episode)
 
 
+def test_shots_repair_inflated_declared_speakers_without_dropping_dialogue():
+    series, episode = prepared()
+    series["characters"].append({
+        "id": "char_c", "name": "Cy", "aliases": [], "referenceAssetIds": [],
+    })
+    episode = apply_planning_stage(episode, "script", normalize_planning_result(
+        "script", script_result(), series, episode,
+    ))
+    raw = shot_result()
+    first = raw["shots"][0]
+    first["visibleCharacterIds"] = ["Ada", "Bo", "Cy"]
+    first["speakingCharacterIds"] = ["Ada", "Bo", "Cy"]
+    first["dialogueBeats"] = [{
+        "id": "line_a", "characterId": "Ada", "text": "Ready?",
+        "emotion": "focused", "delivery": "quiet",
+    }, {
+        "id": "line_b", "characterId": "Bo", "text": "Ready.",
+        "emotion": "calm", "delivery": "dry",
+    }]
+
+    normalized = normalize_planning_result("shots", raw, series, episode)["shots"][0]
+
+    assert normalized["visibleCharacterIds"] == ["char_a", "char_b", "char_c"]
+    assert normalized["speakingCharacterIds"] == ["char_a", "char_b"]
+    assert [line["id"] for line in normalized["dialogueBeats"]] == ["shot_1_d1", "shot_1_d2"]
+    assert [line["characterId"] for line in normalized["dialogueBeats"]] == ["char_a", "char_b"]
+
+
+def test_shots_require_semantic_repair_for_three_actual_dialogue_speakers():
+    series, episode = prepared()
+    series["characters"].append({
+        "id": "char_c", "name": "Cy", "aliases": [], "referenceAssetIds": [],
+    })
+    episode = apply_planning_stage(episode, "script", normalize_planning_result(
+        "script", script_result(), series, episode,
+    ))
+    raw = shot_result()
+    first = raw["shots"][0]
+    first["visibleCharacterIds"] = ["Ada", "Bo", "Cy"]
+    first["speakingCharacterIds"] = ["Ada", "Bo", "Cy"]
+    first["dialogueBeats"] = [
+        {
+            "id": f"line_{character}", "characterId": character, "text": "Line",
+            "emotion": "calm", "delivery": "dry",
+        }
+        for character in ("Ada", "Bo", "Cy")
+    ]
+
+    with pytest.raises(ValueError, match="dialogue from 3 speakers"):
+        normalize_planning_result("shots", raw, series, episode)
+
+
 def test_shot_count_mvp_limit_is_enforced():
     series, episode = prepared()
     episode["script"] = script_result()["script"]
-    with pytest.raises(ValueError, match="8–12"):
+    with pytest.raises(ValueError, match="8–12 shots; received 7"):
         normalize_planning_result("shots", shot_result(7), series, episode)
 
 

@@ -106,6 +106,52 @@ def test_crowd_requires_composed_start_frame_warning():
     assert result["errors"]
 
 
+def test_auto_crowd_without_references_uses_direct_generation_with_warning():
+    series, episode = fixtures()
+    third = copy.deepcopy(series["characters"][0])
+    third.update({"id": "char_third", "name": "Third", "referenceAssetIds": []})
+    series["characters"].append(third)
+    for character in series["characters"]:
+        character["referenceAssetIds"] = []
+        character.pop("primaryReferenceAssetId", None)
+    series["locations"] = []
+    series["props"] = []
+    series["assets"] = {}
+    shot = copy.deepcopy(episode["shots"][0])
+    shot["visibleCharacterIds"].append("char_third")
+    shot.pop("locationId", None)
+    shot["propIds"] = []
+    shot["renderStrategy"] = "auto"
+
+    result = route_shot_references(series, episode, shot)
+
+    assert result["strategy"] == "direct"
+    assert result["selected"] == []
+    assert result["errors"] == []
+    assert any("improvise this crowd composition" in warning for warning in result["warnings"])
+
+
+def test_auto_continuity_without_previous_output_uses_direct_generation():
+    series, episode = fixtures()
+    for character in series["characters"]:
+        character["referenceAssetIds"] = []
+        character.pop("primaryReferenceAssetId", None)
+    series["locations"] = []
+    series["props"] = []
+    series["assets"] = {}
+    shot = copy.deepcopy(episode["shots"][1])
+    shot["continuityFromShotId"] = episode["shots"][0]["id"]
+    shot.pop("locationId", None)
+    shot["propIds"] = []
+    shot["renderStrategy"] = "auto"
+
+    result = route_shot_references(series, episode, shot)
+
+    assert result["strategy"] == "direct"
+    assert result["selected"] == []
+    assert result["errors"] == []
+
+
 def test_previous_video_routes_as_reference_not_fake_first_frame():
     series, episode = fixtures()
     previous = episode["shots"][0]

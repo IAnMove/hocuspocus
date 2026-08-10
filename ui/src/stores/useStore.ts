@@ -7086,27 +7086,34 @@ export const useStore = create<AppState>((set, get) => ({
   pipelineStatus: null,
   activeDirectorPipelines: [],
   pipelinePolling: false,
-  upsertActivity: (activity) => set(state => {
-    const previous = state.activities[activity.id]
+  upsertActivity: (activity) => {
+    const previous = get().activities[activity.id]
     const now = Date.now()
-    return {
-      activities: {
-        ...state.activities,
-        [activity.id]: {
-          ...previous,
-          ...activity,
-          startedAt: previous?.startedAt || activity.startedAt || now,
-          updatedAt: activity.updatedAt || now,
-        },
-      },
+    const published = {
+      ...previous,
+      ...activity,
+      workspace: get().activeWorkspace,
+      startedAt: previous?.startedAt || activity.startedAt || now,
+      updatedAt: activity.updatedAt || now,
     }
-  }),
-  removeActivity: (activityId) => set(state => {
-    if (!state.activities[activityId]) return {}
-    const activities = { ...state.activities }
-    delete activities[activityId]
-    return { activities }
-  }),
+    // Frontend-only wrappers (uploads and synchronous remote requests) must
+    // enter the same durable registry as backend jobs. This call is deliberately
+    // fire-and-forget so a transient observability failure never blocks work.
+    void api.upsertCanonicalClientTask(published as unknown as Record<string, unknown>).catch(() => undefined)
+    set(state => ({
+      activities: { ...state.activities, [activity.id]: published },
+    }))
+  },
+  removeActivity: (activityId) => {
+    const clientId = activityId.replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 160)
+    void api.dismissCanonicalTask(`task-client-${clientId}`, get().activeWorkspace).catch(() => undefined)
+    set(state => {
+      if (!state.activities[activityId]) return {}
+      const activities = { ...state.activities }
+      delete activities[activityId]
+      return { activities }
+    })
+  },
   // Compatibility bridge for older feature panels. New workflows should use
   // the registry directly so concurrent activities cannot overwrite one another.
   setForegroundActivity: (activity) => set(state => {
