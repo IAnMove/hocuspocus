@@ -50,6 +50,23 @@ def test_resolution_and_h3_frame_lattice():
     assert quantize_h3_frames(30, reference_mode=True) <= 345
 
 
+def test_legacy_resolution_tiers_are_distinct_and_idempotent():
+    expected = {
+        "480p": "864x480",
+        "540p": "960x544",
+        "720p": "1280x704",
+        "768p": "1344x768",
+    }
+    for preset, canvas in expected.items():
+        normalized = normalize_series_resolution(
+            preset, "landscape", "minimax_h3_legacy",
+        )
+        assert normalized == (canvas, "landscape")
+        assert normalize_series_resolution(
+            canvas, "landscape", "minimax_h3_legacy",
+        ) == normalized
+
+
 def test_prompt_preserves_exact_dialogue_and_text_policy():
     series, shot, _ = inputs()
     prompt = shot_generation_prompt(series, shot)
@@ -127,7 +144,7 @@ def test_legacy_reference_strategy_uses_legacy_media_inputs_and_fixed_recipe():
     assert params["h3_reference_mode"] == "references"
     assert params["image_refs"] == ["/safe/ada.png"]
     assert "minimax_h3_references" not in params
-    assert params["resolution"] == "768x1344"
+    assert params["resolution"] == "704x1280"
     assert params["video_length"] >= 124
     assert params["num_inference_steps"] == 20
     assert params["flow_shift"] == 12.0

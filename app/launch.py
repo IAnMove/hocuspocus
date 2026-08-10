@@ -28547,6 +28547,7 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         )}
         resolution, orientation = normalize_series_resolution(
             settings.get("resolution"), settings.get("orientation"),
+            provider.get("videoModel") or "minimax_h3",
         )
         settings["resolution"] = resolution
         settings["orientation"] = orientation

@@ -28,9 +28,18 @@ def normalize_series_resolution(
     legacy = str(requested_model or "") == "minimax_h3_legacy"
     raw = str(value or ("540p" if legacy else "480p")).strip().lower()
     if legacy:
-        quality = "768p" if raw in {
-            "720", "720p", "768", "768p", "1280x704", "1344x768", "768x1344",
-        } else "540p"
+        # Keep all four H3 Legacy tiers distinct.  This function is called when
+        # an attempt is frozen and again when its generation payload is built,
+        # so exact model-aligned canvases must be idempotent: 1280x704 is the
+        # 720p tier, not a signal to promote the job to the 1344x768 maximum.
+        if raw in {"480", "480p", "864x480", "480x864"}:
+            quality = "480p"
+        elif raw in {"720", "720p", "1280x704", "704x1280"}:
+            quality = "720p"
+        elif raw in {"768", "768p", "1344x768", "768x1344"}:
+            quality = "768p"
+        else:
+            quality = "540p"
     else:
         quality = "720p" if raw in {
             "540", "540p", "720", "720p", "768", "768p", "1280x720",
