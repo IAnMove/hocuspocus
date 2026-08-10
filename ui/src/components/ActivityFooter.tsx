@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ListVideo, Loader2 } from 'lucide-react'
+import * as api from '../api/client'
 import { useStore } from '../stores/useStore'
 import type { GenerationDetails } from '../types'
+import type { SeriesJobStatus } from '../features/series/types'
 
 const PHASE_LABELS: Record<string, string> = {
   planning: 'Planning',
@@ -40,6 +42,9 @@ const PHASE_LABELS: Record<string, string> = {
   planning_clips: 'Planning clips',
   ready_for_visual_brief: 'Ready for visual brief',
   preparing_music_video: 'Preparing music video',
+  known_series_research: 'Building series bible',
+  applying_draft: 'Applying series draft',
+  canon: 'Preparing series canon',
 }
 
 type ActivityStatus = 'queued' | 'running' | 'completed' | 'failed'
@@ -69,7 +74,12 @@ interface ActivityView {
   phaseCurrent?: number
   phaseTotal?: number
   updatedAt: number
-  dismissible?: 'activity' | 'job'
+  dismissible?: 'activity' | 'job' | 'series-plan' | 'series-render'
+}
+
+interface SeriesActivityJob {
+  kind: 'plan' | 'render'
+  job: SeriesJobStatus
 }
 
 function exactModelLabel(name?: string, modelType?: string): string {
@@ -230,6 +240,7 @@ export function ActivityFooter() {
   const jobs = useStore(s => s.jobs)
   const pipelineStatus = useStore(s => s.pipelineStatus)
   const activeDirectorPipelines = useStore(s => s.activeDirectorPipelines)
+  const activeWorkspace = useStore(s => s.activeWorkspace)
   const activities = useStore(s => s.activities)
   const stopGeneration = useStore(s => s.stopGeneration)
   const stopPipeline = useStore(s => s.stopPipeline)
@@ -238,7 +249,31 @@ export function ActivityFooter() {
   const setVideoWorkflowsOpen = useStore(s => s.setDashboardOpen)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(() => new Set())
+  const [seriesJobs, setSeriesJobs] = useState<SeriesActivityJob[]>([])
   const [clock, setClock] = useState(() => Date.now())
+
+  useEffect(() => {
+    let mounted = true
+    const refresh = async () => {
+      try {
+        const [plans, renders] = await Promise.all([
+          api.fetchSeriesPlanRecovery(activeWorkspace),
+          api.fetchSeriesRenderRecovery(activeWorkspace),
+        ])
+        if (!mounted) return
+        setSeriesJobs([
+          ...plans.jobs.map(job => ({ kind: 'plan' as const, job })),
+          ...renders.jobs.map(job => ({ kind: 'render' as const, job })),
+        ])
+      } catch {
+        // Series Lab may be unavailable during a rolling backend update. Other
+        // footer sources must remain visible instead of turning this into a UI error.
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => { void refresh() }, 2000)
+    return () => { mounted = false; window.clearInterval(timer) }
+  }, [activeWorkspace])
 
   const rows = useMemo<ActivityView[]>(() => {
     const registered = Object.values(activities).map(activity => ({
@@ -341,9 +376,32 @@ export function ActivityFooter() {
         dismissible: job.status === 'failed' ? 'job' as const : undefined,
       }))
 
-    return [...registered, ...recoveredPipelines, ...pipeline, ...visibleJobs]
+    const visibleSeriesJobs: ActivityView[] = seriesJobs.map(({ job, kind }) => {
+      const failed = job.status === 'failed'
+      const terminal = failed || job.status === 'cancelled'
+      return {
+        id: `${kind === 'plan' ? 'series-plan' : 'series-render'}:${job.jobId}`,
+        title: kind === 'render'
+          ? 'Series Lab · Video generation'
+          : job.bootstrapKnownSeries
+            ? 'Series Lab · Known-series bible'
+            : job.jobType === 'canon' ? 'Series Lab · Canon' : 'Series Lab · Episode planning',
+        status: failed ? 'failed' : job.status === 'cancelled' ? 'completed'
+          : job.status === 'queued' ? 'queued' : 'running',
+        phase: job.stage,
+        message: job.error || job.message || (job.status === 'queued' ? 'Queued' : 'Series Lab is working…'),
+        current: job.current || 0,
+        total: job.total || 0,
+        percent: activityProgress(job.current || 0, job.total || 0),
+        startedAt: epochMilliseconds(job.createdAt),
+        updatedAt: epochMilliseconds(job.updatedAt || job.createdAt) || 1,
+        dismissible: terminal ? (kind === 'plan' ? 'series-plan' : 'series-render') : undefined,
+      }
+    })
+
+    return [...registered, ...recoveredPipelines, ...pipeline, ...visibleJobs, ...visibleSeriesJobs]
       .sort((left, right) => right.updatedAt - left.updatedAt)
-  }, [activities, jobs, pipelineStatus, activeDirectorPipelines])
+  }, [activities, jobs, pipelineStatus, activeDirectorPipelines, seriesJobs])
 
   const activeRows = rows
     .filter(row => row.status === 'running' || row.status === 'queued')
@@ -381,14 +439,22 @@ export function ActivityFooter() {
     : ''
   const canCancel = (row: ActivityView) => (
     (row.status === 'running' || row.status === 'queued')
-    && (row.id.startsWith('job:') || row.id.startsWith('audio-analysis-') || row.id.startsWith('pipeline:'))
+    && (
+      row.id.startsWith('job:') || row.id.startsWith('audio-analysis-')
+      || row.id.startsWith('pipeline:') || row.id.startsWith('series-plan:')
+      || row.id.startsWith('series-render:')
+    )
   )
   const cancelRow = (row: ActivityView) => {
     if (!canCancel(row) || cancellingIds.has(row.id)) return
     setCancellingIds(current => new Set(current).add(row.id))
     const operation = row.id.startsWith('pipeline:')
       ? stopPipeline(row.id.slice('pipeline:'.length))
-      : Promise.resolve(stopGeneration(row.id.startsWith('job:') ? row.id.slice(4) : row.id))
+      : row.id.startsWith('series-plan:')
+        ? api.cancelSeriesPlanJob(row.id.slice('series-plan:'.length))
+        : row.id.startsWith('series-render:')
+          ? api.cancelSeriesRenderJob(row.id.slice('series-render:'.length))
+          : Promise.resolve(stopGeneration(row.id.startsWith('job:') ? row.id.slice(4) : row.id))
     void operation.catch(error => {
       console.error('Failed to cancel activity:', error)
     }).finally(() => {
@@ -398,6 +464,25 @@ export function ActivityFooter() {
         return next
       })
     })
+  }
+  const dismissRow = (row: ActivityView) => {
+    if (row.dismissible === 'job') {
+      dismissJob(row.id.slice(4))
+      return
+    }
+    if (row.dismissible === 'activity') {
+      removeActivity(row.id)
+      return
+    }
+    const operation = row.dismissible === 'series-plan'
+      ? api.discardSeriesPlanJob(row.id.slice('series-plan:'.length))
+      : row.dismissible === 'series-render'
+        ? api.discardSeriesRenderJob(row.id.slice('series-render:'.length))
+        : null
+    if (!operation) return
+    void operation.then(() => {
+      setSeriesJobs(current => current.filter(item => item.job.jobId !== row.id.split(':').slice(1).join(':')))
+    }).catch(error => console.error('Failed to dismiss Series Lab activity:', error))
   }
 
   return (
@@ -446,13 +531,11 @@ export function ActivityFooter() {
                             {cancellingIds.has(row.id) ? 'Cancelling…' : 'Cancel'}
                           </button>
                         )}
-                        {row.status === 'failed' && row.dismissible && (
+                        {(row.status === 'failed' || row.status === 'completed') && row.dismissible && (
                           <button
                             type="button"
                             className="rounded border border-border px-1.5 py-0.5 text-[9px] text-text-muted hover:text-text-primary"
-                            onClick={() => row.dismissible === 'job'
-                              ? dismissJob(row.id.slice(4))
-                              : removeActivity(row.id)}
+                            onClick={() => dismissRow(row)}
                           >
                             Dismiss
                           </button>

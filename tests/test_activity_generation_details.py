@@ -43,3 +43,16 @@ def test_activity_footer_hides_cancelled_ltx_jobs_and_explains_planning():
     assert "image and video generation have not started" in source
     assert "job.status === 'completed' || job.status === 'failed'" in source
     assert "job.status === 'completed' || job.status === 'cancelled'" in source
+
+
+def test_activity_footer_recovers_and_cancels_series_lab_jobs():
+    source = ACTIVITY.read_text(encoding="utf-8")
+
+    assert "fetchSeriesPlanRecovery(activeWorkspace)" in source
+    assert "fetchSeriesRenderRecovery(activeWorkspace)" in source
+    assert "Series Lab · Known-series bible" in source
+    assert "'series-plan' : 'series-render'" in source and "${job.jobId}" in source
+    assert "api.cancelSeriesPlanJob" in source
+    assert "api.cancelSeriesRenderJob" in source
+    assert "api.discardSeriesPlanJob" in source
+    assert "known_series_research: 'Building series bible'" in source
