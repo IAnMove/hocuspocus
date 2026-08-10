@@ -58,3 +58,20 @@ def test_active_tasks_cannot_be_dismissed(tmp_path):
         assert "cancelled" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("active task was deleted")
+
+
+def test_compatibility_adapter_can_attach_an_existing_task_to_its_parent(tmp_path):
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    registry.create(id="task-parent", kind="series", title="Episode", status="running")
+    registry.create(id="task-child", kind="video", title="Shot", status="running")
+
+    child = registry.update(
+        "task-child", root_id="task-parent", parent_id="task-parent",
+        event_type="adapter.synced", force=True,
+    )
+
+    assert child["root_id"] == "task-parent"
+    assert child["parent_id"] == "task-parent"
+    assert [task["id"] for task in registry.list(root_id="task-parent")] == [
+        "task-child", "task-parent",
+    ]

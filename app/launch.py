@@ -32228,7 +32228,7 @@ def _upsert_canonical_task(workspace: str, task_id: str, **fields) -> dict:
         return registry.create(id=task_id, workspace=workspace, **fields)
     mutable = {
         key: value for key, value in fields.items()
-        if key not in {"id", "root_id", "parent_id", "created_at"}
+        if key not in {"id", "created_at"}
         and existing.get(key) != value
     }
     if mutable:
@@ -32244,6 +32244,16 @@ def _publish_generation_task(job: dict) -> dict:
     model_type = str(details.get("model_type") or "")
     is_remote = model_type.startswith("minimax:")
     task_id = f"task-generation-{legacy_id}"
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    owner_id = str(params.get("_director_pipeline_id") or "")
+    if owner_id.startswith("series:"):
+        series_job_id = owner_id.split(":", 1)[1]
+        parent_task_id = f"task-series-render-{series_job_id}"
+    elif owner_id:
+        parent_task_id = f"task-director-{owner_id}"
+    else:
+        parent_task_id = None
+    root_task_id = parent_task_id or task_id
     status = _task_status(job.get("status"))
     current = int(job.get("step") or 0)
     total = int(job.get("total_steps") or 0)
@@ -32251,7 +32261,8 @@ def _publish_generation_task(job: dict) -> dict:
     return _upsert_canonical_task(
         workspace,
         task_id,
-        root_id=task_id,
+        root_id=root_task_id,
+        parent_id=parent_task_id,
         kind=mode,
         workflow="generation",
         title={
@@ -32279,7 +32290,10 @@ def _publish_generation_task(job: dict) -> dict:
         recoverable=_is_durable_generation_job(job),
         error=({"message": str(error), "retryable": True} if error else None),
         result_refs=list(job.get("output_files") or []),
-        metadata={"adapter": "generation", "generation_details": details},
+        metadata={
+            "adapter": "generation", "generation_details": details,
+            "owner_pipeline_id": owner_id,
+        },
     )
 
 
