@@ -7,7 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -21,8 +21,10 @@ from services.job_lifecycle import (  # noqa: E402
     call_with_sticky_interrupt,
     collect_job_outputs,
     finish_job,
+    generation_queue_position,
     record_job_outputs,
     register_abort_state,
+    register_generation_job,
     request_cancel,
     snapshot_job,
     try_requeue,
@@ -167,6 +169,18 @@ class TestJobLifecycle(unittest.TestCase):
         self.assertFalse(try_start(job))
         self.assertEqual(job["status"], "cancelled")
 
+    def test_active_timestamps_exclude_time_spent_queued(self):
+        job = {**_job(), "created_at": 10.0, "started_at": None, "finished_at": None}
+        with patch("services.job_lifecycle.time.time", side_effect=[25.0, 40.0]):
+            self.assertTrue(try_start(job))
+            self.assertTrue(finish_job(job, "completed", message="Done"))
+
+        self.assertEqual(job["created_at"], 10.0)
+        self.assertEqual(job["started_at"], 25.0)
+        self.assertEqual(job["finished_at"], 40.0)
+        self.assertEqual(job["finished_at"] - job["started_at"], 15.0)
+        self.assertNotEqual(job["finished_at"] - job["created_at"], 15.0)
+
     def test_cancel_running_signals_abort_and_model_once(self):
         job = _job()
         states: dict = {}
@@ -224,6 +238,27 @@ class TestJobLifecycle(unittest.TestCase):
             job["output_files"], ["clip-1.mp4", "clip-2.mp4"],
         )
         self.assertEqual(job["clip_output_files"], {"0": "clip-2.mp4"})
+
+    def test_outputs_normalize_live_positional_multiclip_progress(self):
+        job = _job()
+        job["output_files"] = ["clip-0.mp4"]
+        job["clip_output_files"] = [
+            "clip-0.mp4", None, "clip-2-old.mp4",
+        ]
+
+        merged = record_job_outputs(
+            job,
+            ["clip-2.mp4", "joined.mp4"],
+            clip_output_files={2: "clip-2.mp4"},
+            join_output_file="joined.mp4",
+        )
+
+        self.assertEqual(merged, ["clip-0.mp4", "clip-2.mp4", "joined.mp4"])
+        self.assertEqual(
+            job["clip_output_files"],
+            {"0": "clip-0.mp4", "2": "clip-2.mp4"},
+        )
+        self.assertEqual(job["join_output_file"], "joined.mp4")
 
     def test_completion_wins_before_late_cancel(self):
         job = _job()
@@ -339,6 +374,51 @@ class TestJobLifecycle(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual(result, [False])
         generation_lock.release()
+
+    def test_generation_slot_is_fifo_by_registration_not_thread_schedule(self):
+        generation_lock = threading.Lock()
+        generation_lock.acquire()
+        jobs = [
+            {"id": f"job-{index}", "status": "queued", "message": "Queued"}
+            for index in range(1, 4)
+        ]
+        for expected_position, job in enumerate(jobs, start=1):
+            self.assertEqual(
+                register_generation_job(generation_lock, job),
+                expected_position,
+            )
+            self.assertEqual(
+                generation_queue_position(generation_lock, job),
+                expected_position,
+            )
+
+        acquisition_order: list[str] = []
+
+        def acquire_and_release(job):
+            acquired = acquire_generation_slot(
+                generation_lock,
+                job,
+                poll_interval=0.005,
+            )
+            if acquired:
+                acquisition_order.append(job["id"])
+                generation_lock.release()
+
+        # Start in reverse to prove OS thread scheduling cannot change the
+        # synchronous API registration order.
+        threads = [
+            threading.Thread(target=acquire_and_release, args=(job,))
+            for job in reversed(jobs)
+        ]
+        for thread in threads:
+            thread.start()
+        time.sleep(0.03)
+        generation_lock.release()
+        for thread in threads:
+            thread.join(timeout=1)
+
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(acquisition_order, ["job-1", "job-2", "job-3"])
 
     def test_finish_cancel_race_has_only_valid_outcomes(self):
         for _ in range(50):

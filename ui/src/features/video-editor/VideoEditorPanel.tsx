@@ -22,7 +22,7 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react'
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 
@@ -93,8 +93,10 @@ interface SequenceInterstitial {
 }
 
 const RESOLUTIONS: ResolutionOption[] = [
+  { label: 'Landscape 480p', width: 864, height: 480 },
   { label: 'Landscape 720p', width: 1280, height: 720 },
   { label: 'Landscape 1080p', width: 1920, height: 1080 },
+  { label: 'Portrait 480p', width: 480, height: 864 },
   { label: 'Portrait 720p', width: 720, height: 1280 },
   { label: 'Portrait 1080p', width: 1080, height: 1920 },
   { label: 'Square 1080p', width: 1080, height: 1080 },
@@ -326,6 +328,95 @@ function formatTime(value: number): string {
   return `${minutes}:${seconds.toFixed(1).padStart(4, '0')}`
 }
 
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(Math.round(left))
+  let b = Math.abs(Math.round(right))
+  while (b) {
+    const next = a % b
+    a = b
+    b = next
+  }
+  return a || 1
+}
+
+function exportAspectLabel(width: number, height: number): string {
+  const divisor = greatestCommonDivisor(width, height)
+  return `${width / divisor}:${height / divisor}`
+}
+
+function ExportPreviewCanvas({
+  width,
+  height,
+  children,
+  overlay,
+}: {
+  width: number
+  height: number
+  children?: ReactNode
+  overlay?: ReactNode
+}) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(0)
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+
+    const fit = () => {
+      const bounds = viewport.getBoundingClientRect()
+      // Keep the readout outside the image so every output pixel remains visible.
+      const availableHeight = Math.max(1, bounds.height - 24)
+      const fitted = Math.min(bounds.width / width, availableHeight / height)
+      setScale(Number.isFinite(fitted) && fitted > 0 ? fitted : 0)
+    }
+
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(viewport)
+    return () => observer.disconnect()
+  }, [height, width])
+
+  const displayWidth = width * scale
+  const displayHeight = height * scale
+  const aspect = exportAspectLabel(width, height)
+
+  return (
+    <div ref={viewportRef} className="absolute inset-4 flex items-center justify-center overflow-hidden">
+      {scale > 0 && (
+        <div
+          className="flex shrink-0 flex-col"
+          style={{ width: `${displayWidth}px`, height: `${displayHeight + 24}px` }}
+          aria-label={`Export preview ${width} by ${height} pixels, ${aspect}`}
+        >
+          <div className="flex h-6 shrink-0 items-center justify-between gap-2 px-1 text-[10px] text-text-muted tabular-nums">
+            <span className="truncate uppercase tracking-[.12em]">Export preview</span>
+            <span className="shrink-0 text-text-secondary">{width}×{height} · {aspect} · {Math.round(scale * 100)}%</span>
+          </div>
+          <div
+            className="relative min-h-0 flex-1 overflow-hidden bg-black shadow-2xl ring-1 ring-white/20"
+            data-export-preview-canvas
+            data-export-width={width}
+            data-export-height={height}
+          >
+            <div
+              className="absolute left-0 top-0 overflow-hidden bg-black"
+              style={{
+                width: `${width}px`,
+                height: `${height}px`,
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+              }}
+            >
+              {children}
+            </div>
+            {overlay && <div className="absolute inset-0">{overlay}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function effectiveDuration(clip: EditorClip): number {
   return Math.max(0, clip.trimEnd - clip.trimStart)
 }
@@ -528,11 +619,47 @@ export function VideoEditorPanel() {
 
   useEffect(() => {
     let pending: { name?: string; url?: string } | null = null
+    let pendingSequence: {
+      projectName?: string
+      resolution?: ResolutionOption
+      clips?: Array<{ name?: string; url?: string }>
+    } | null = null
     try {
       pending = JSON.parse(window.localStorage.getItem('maestro-video-editor-pending-source') || 'null')
       if (pending?.url) window.localStorage.removeItem('maestro-video-editor-pending-source')
+      pendingSequence = JSON.parse(
+        window.localStorage.getItem('maestro-video-editor-pending-sequence') || 'null',
+      )
+      if (pendingSequence?.clips?.length) {
+        window.localStorage.removeItem('maestro-video-editor-pending-sequence')
+      }
     } catch {
       pending = null
+      pendingSequence = null
+    }
+    if (pendingSequence?.clips?.length) {
+      const sources = pendingSequence.clips.filter(
+        (item): item is { name?: string; url: string } => Boolean(item?.url),
+      )
+      if (!sources.length) return
+      const requestedResolution = RESOLUTIONS.find(option =>
+        option.width === pendingSequence?.resolution?.width
+        && option.height === pendingSequence?.resolution?.height)
+      setClips([])
+      if (pendingSequence.projectName) setProjectName(pendingSequence.projectName)
+      if (requestedResolution) setResolution(requestedResolution)
+      setAdding(true)
+      void (async () => {
+        for (let index = 0; index < sources.length; index++) {
+          const item = sources[index]
+          setAddProgress(`Opening Series shot ${index + 1}/${sources.length}`)
+          await addSource(item.url, item.url, item.name || `Series shot ${index + 1}`)
+        }
+      })().catch(reason => setError((reason as Error).message)).finally(() => {
+        setAdding(false)
+        setAddProgress('')
+      })
+      return
     }
     if (!pending?.url) return
     setAdding(true)
@@ -1267,12 +1394,7 @@ export function VideoEditorPanel() {
         <section className="min-w-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border">
           <div className="flex-1 min-h-[280px] flex items-center justify-center p-4 bg-black/70 relative">
             {sequenceMode ? (
-              <div
-                className={`relative max-w-full max-h-full bg-black shadow-2xl ${
-                  resolution.width >= resolution.height ? 'w-full' : 'h-full'
-                }`}
-                style={{ aspectRatio: `${resolution.width}/${resolution.height}` }}
-              >
+              <ExportPreviewCanvas width={resolution.width} height={resolution.height}>
                 {sequenceSlotIndices.map((clipIndex, slot) => {
                   if (clipIndex === null) return null
                   const clip = clips[clipIndex]
@@ -1305,14 +1427,9 @@ export function VideoEditorPanel() {
                     progress={sequenceInterstitial.progress}
                   />
                 )}
-              </div>
+              </ExportPreviewCanvas>
             ) : selected ? (
-              <div
-                className={`relative max-w-full max-h-full bg-black shadow-2xl ${
-                  resolution.width >= resolution.height ? 'w-full' : 'h-full'
-                }`}
-                style={{ aspectRatio: `${resolution.width}/${resolution.height}` }}
-              >
+              <ExportPreviewCanvas width={resolution.width} height={resolution.height}>
                 <video
                   key={selected.id}
                   ref={videoRef}
@@ -1339,16 +1456,22 @@ export function VideoEditorPanel() {
                     }
                   }}
                 />
-              </div>
+              </ExportPreviewCanvas>
             ) : (
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full max-w-xl aspect-video rounded-xl border-2 border-dashed border-border-light flex flex-col items-center justify-center gap-3 text-text-muted hover:text-text-secondary hover:border-accent-blue/60 transition-colors"
-              >
-                <Upload size={36} />
-                <span className="text-sm">Drop videos here or click to import</span>
-                <span className="text-[10px]">MP4, WebM, MOV, MKV, AVI · up to 500 MB each</span>
-              </button>
+              <ExportPreviewCanvas
+                width={resolution.width}
+                height={resolution.height}
+                overlay={(
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-full w-full border-2 border-dashed border-border-light flex flex-col items-center justify-center gap-3 text-text-muted hover:text-text-secondary hover:border-accent-blue/60 transition-colors"
+                  >
+                    <Upload size={36} />
+                    <span className="text-sm">Drop videos here or click to import</span>
+                    <span className="text-[10px]">MP4, WebM, MOV, MKV, AVI · up to 500 MB each</span>
+                  </button>
+                )}
+              />
             )}
           </div>
 

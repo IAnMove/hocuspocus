@@ -28,6 +28,7 @@ from typing import Callable, Optional
 
 from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
+    register_generation_job,
     request_cancel,
     snapshot_job,
 )
@@ -366,6 +367,9 @@ def _director_has_visual_references(
 def _director_effective_shot_image_policy(params: dict) -> str:
     """Return a resolved policy, retaining generated images as legacy default."""
 
+    if _direct_video_settings(params)[0]:
+        return SHOT_IMAGE_PROMPT_ONLY
+
     saved = str(params.get("_director_shot_image_policy") or "").strip()
     if saved in SHOT_IMAGE_POLICIES:
         return saved
@@ -394,10 +398,19 @@ def _resolve_fresh_shot_image_policy(params: dict) -> str:
 def _saved_pipeline_shot_image_policy(state: dict) -> str:
     """Read a persisted policy; pre-feature projects required start images."""
 
+    snapshot = state.get("_params_snapshot") or {}
+    if (
+        (
+            state.get("pipeline_type") == "music_video"
+            and state.get("generation_mode") == "direct_video"
+        )
+        or _direct_video_settings(snapshot)[0]
+    ):
+        return SHOT_IMAGE_PROMPT_ONLY
+
     saved = str(state.get("shot_image_policy") or "").strip()
     if saved in SHOT_IMAGE_POLICIES:
         return saved
-    snapshot = state.get("_params_snapshot") or {}
     saved = str(snapshot.get("_director_shot_image_policy") or "").strip()
     if saved in SHOT_IMAGE_POLICIES:
         return saved
@@ -1005,7 +1018,14 @@ def _clip_video_slots(
 
 
 def pipeline_timing_metadata(pipeline: dict) -> dict:
-    """Normalize persisted or live Director timing fields for output metadata."""
+    """Normalize active Director timing fields for output metadata.
+
+    ``created_at`` to completion is useful operational wall-clock data, but it
+    also includes review pauses, an overnight stop, and time spent waiting for
+    the user to continue.  Gallery ``total`` must describe generation work, so
+    prefer the accumulated active stage timers whenever they are available.
+    Legacy checkpoints without stage timers retain the wall-clock fallback.
+    """
 
     def _duration(saved_key: str, live_key: str):
         value = pipeline.get(saved_key)
@@ -1018,7 +1038,40 @@ def pipeline_timing_metadata(pipeline: dict) -> dict:
         except (TypeError, ValueError):
             return None
 
-    total_time_sec = _duration("total_time_sec", "_total_time_sec")
+    prompt_time_sec = _duration(
+        "prompt_generation_time_sec",
+        "_prompt_generation_time_sec",
+    )
+    image_time_sec = _duration(
+        "image_generation_time_sec",
+        "_image_generation_time_sec",
+    )
+    video_time_sec = _duration(
+        "video_generation_time_sec",
+        "_video_generation_time_sec",
+    )
+    assembly_time_sec = _duration(
+        "assembly_time_sec",
+        "_assembly_time_sec",
+    )
+    stage_times = (
+        prompt_time_sec,
+        image_time_sec,
+        video_time_sec,
+        assembly_time_sec,
+    )
+    has_generation_stage_times = any(
+        value is not None
+        for value in (prompt_time_sec, image_time_sec, video_time_sec)
+    )
+    if has_generation_stage_times:
+        total_time_sec = round(
+            sum(value for value in stage_times if value is not None),
+            2,
+        )
+    else:
+        total_time_sec = _duration("total_time_sec", "_total_time_sec")
+
     if total_time_sec is None:
         created_at = pipeline.get("created_at")
         completed_at = pipeline.get("completed_at")
@@ -1035,22 +1088,10 @@ def pipeline_timing_metadata(pipeline: dict) -> dict:
 
     return {
         "total_time_sec": total_time_sec,
-        "prompt_generation_time_sec": _duration(
-            "prompt_generation_time_sec",
-            "_prompt_generation_time_sec",
-        ),
-        "image_generation_time_sec": _duration(
-            "image_generation_time_sec",
-            "_image_generation_time_sec",
-        ),
-        "video_generation_time_sec": _duration(
-            "video_generation_time_sec",
-            "_video_generation_time_sec",
-        ),
-        "assembly_time_sec": _duration(
-            "assembly_time_sec",
-            "_assembly_time_sec",
-        ),
+        "prompt_generation_time_sec": prompt_time_sec,
+        "image_generation_time_sec": image_time_sec,
+        "video_generation_time_sec": video_time_sec,
+        "assembly_time_sec": assembly_time_sec,
     }
 
 
@@ -1058,18 +1099,49 @@ def enrich_output_metadata_with_pipeline_timing(
     metadata: dict,
     pipeline: dict,
 ) -> dict:
-    """Return output metadata with durable Director timing statistics."""
+    """Return output metadata with durable Director timing and render context."""
     enriched = dict(metadata or {})
-    timings = pipeline_timing_metadata(pipeline or {})
-    if not any(value is not None for value in timings.values()):
-        return enriched
+    params = enriched.get("params")
+    if not isinstance(params, dict):
+        params = {}
+        enriched["params"] = params
 
-    enriched["generation_timings"] = timings
-    if timings["total_time_sec"] is not None:
-        # ``generation_time`` is the existing gallery contract for ordinary
-        # jobs. Keeping it populated makes Director finals use the same total
-        # duration readout while ``generation_timings`` supplies the detail.
-        enriched["generation_time"] = timings["total_time_sec"]
+    snapshot = pipeline.get("_params_snapshot")
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    video_model = pipeline.get("video_model") or snapshot.get("video_model")
+    if video_model:
+        params.setdefault("model_type", str(video_model))
+
+    video_params = pipeline.get("video_params")
+    if not isinstance(video_params, dict):
+        video_params = snapshot.get("video_params")
+    if not isinstance(video_params, dict):
+        video_params = {}
+    resolution = video_params.get("resolution")
+    if resolution:
+        params.setdefault("resolution", str(resolution))
+
+    for key in ("director_resolution_preset", "director_aspect_ratio"):
+        value = pipeline.get(key)
+        if value is None:
+            value = snapshot.get(key)
+        if value is not None:
+            params.setdefault(key, value)
+
+    generation_mode = pipeline.get("generation_mode")
+    if generation_mode:
+        enriched.setdefault("generation_mode", generation_mode)
+
+    timings = pipeline_timing_metadata(pipeline or {})
+    if any(value is not None for value in timings.values()):
+        enriched["generation_timings"] = timings
+        enriched["generation_timing_basis"] = "active_stages"
+        if timings["total_time_sec"] is not None:
+            # ``generation_time`` is the existing gallery contract for
+            # ordinary jobs. Director totals deliberately exclude review and
+            # stopped time while the phase fields retain the full breakdown.
+            enriched["generation_time"] = timings["total_time_sec"]
 
     pipeline_id = pipeline.get("pipeline_id") or pipeline.get("id")
     if pipeline_id:
@@ -1082,7 +1154,7 @@ def persist_pipeline_output_timing(
     output_name: str,
     pipeline: dict,
 ) -> bool:
-    """Attach Director wall-clock and phase timings to a final media sidecar."""
+    """Attach active Director timings and render context to a media sidecar."""
     filename = os.path.basename(str(output_name or ""))
     if not filename:
         return False
@@ -1498,9 +1570,17 @@ def _legacy_h3_multiclip_output(filename: str, out_dir: str = "") -> bool:
         return False
 
 
+def _is_sequential_h3_model(model_type: object) -> bool:
+    """Recognize saved pre-v1.6 H3 jobs and the explicit ConvRot sidecar."""
+    return str(model_type or "").strip().lower() in {
+        "minimax_h3",
+        "minimax_h3_legacy",
+    }
+
+
 def _ensure_h3_segment_state(data: dict, out_dir: str = "") -> dict:
     """Backfill editable H3 segment records for legacy saved productions."""
-    if data.get("video_model") != "minimax_h3":
+    if not _is_sequential_h3_model(data.get("video_model")):
         return data
     clips = data.get("clips") if isinstance(data.get("clips"), list) else []
     if not clips or all(isinstance(clip.get("h3_segments"), list) and clip["h3_segments"] for clip in clips):
@@ -1555,7 +1635,7 @@ def _ensure_h3_segment_state(data: dict, out_dir: str = "") -> dict:
 
 def _h3_checkpoint_is_complete(data: dict, out_dir: str) -> bool:
     """Return whether every planned H3 segment has a usable checkpoint."""
-    if data.get("video_model") != "minimax_h3":
+    if not _is_sequential_h3_model(data.get("video_model")):
         return True
     clips = data.get("clips") if isinstance(data.get("clips"), list) else []
     if not clips:
@@ -2662,7 +2742,7 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     video_loras = state.get("video_loras") or {}
     video_params = state.get("video_params") or {}
     legacy_h3_edit_state = (
-        video_model == "minimax_h3"
+        _is_sequential_h3_model(video_model)
         and (
             bool(clip.get("h3_segments"))
             or (
@@ -3281,7 +3361,7 @@ def rerun_h3_segment(
 ) -> dict:
     """Regenerate one H3 segment and, by default, every dependent continuation."""
     state = load_pipeline_state(out_dir, pid)
-    if not state or state.get("video_model") != "minimax_h3":
+    if not state or not _is_sequential_h3_model(state.get("video_model")):
         raise ValueError("This operation requires a saved MiniMax H3 production")
     state = _ensure_h3_segment_state(state)
     clips = state.get("clips") or []
@@ -3385,7 +3465,7 @@ def rerun_h3_segment(
                 )
             prompt = _saved_prompt_contract(state, prompt, "video")
             gen_params = {
-                "model_type": "minimax_h3",
+                "model_type": str(state.get("video_model") or "minimax_h3"),
                 "prompt": prompt,
                 "image_mode": 0,
                 "image_prompt_type": "" if direct_video else "S",
@@ -3473,7 +3553,7 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
     clips = state.get("clips", [])
     video_files = []
     legacy_h3_segments = (
-        state.get("video_model") == "minimax_h3"
+        _is_sequential_h3_model(state.get("video_model"))
         and any(clip.get("h3_segments") for clip in clips)
     )
     if legacy_h3_segments:
@@ -3590,9 +3670,15 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
             s["assembly_time_sec"] = assembly_time_sec
             s["assembly_count"] = int(s.get("assembly_count") or 0) + 1
             s["assembled_at"] = assembled_at
-            created_at = s.get("created_at")
-            if created_at:
-                s["total_time_sec"] = round(assembled_at - float(created_at), 2)
+            # Modern checkpoints expose active stage timers; legacy ones only
+            # have wall-clock timestamps. Keep the same compatibility rule as
+            # gallery metadata so the checkpoint, response and sidecar agree.
+            s["completed_at"] = max(
+                float(s.get("completed_at") or 0),
+                assembled_at,
+            )
+            s.pop("total_time_sec", None)
+            s["total_time_sec"] = pipeline_timing_metadata(s)["total_time_sec"]
         updated_state = _update_saved_pipeline(out_dir, pid, _update) or {}
         persist_pipeline_output_timing(
             clip_out_dir,
@@ -4313,9 +4399,12 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
                     )
                     if pipeline_cancelled:
                         request_cancel(job)
+                if not _skip_generation:
+                    register_generation_job(_gen_lock, job)
                 thread.start()
         else:
             _jobs[job_id] = job
+            register_generation_job(_gen_lock, job)
             thread.start()
     except BaseException:
         if _dir_pid:
@@ -4469,7 +4558,14 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
                 if p and "progress" in p:
                     p["progress"]["step"] = j.get("step", 0)
                     p["progress"]["total_steps"] = j.get("total_steps", 0)
-                    p["progress"]["message"] = j.get("phase") or j.get("message") or "Generating..."
+                    message = j.get("message") or j.get("phase") or "Generating..."
+                    progress_label = str(
+                        params.get("_director_progress_label") or ""
+                    ).strip()
+                    p["progress"]["message"] = (
+                        f"{progress_label} · {message}"
+                        if progress_label else message
+                    )
         if time.time() - last_activity_at >= timeout_s:
             request_cancel(
                 job,
@@ -4597,7 +4693,9 @@ def start_pipeline(params: dict) -> str:
     params.pop("_director_shot_image_policy", None)
     params.pop("_director_video_execution_profile", None)
     params["_director_shot_image_policy"] = (
-        _resolve_fresh_shot_image_policy(params)
+        SHOT_IMAGE_PROMPT_ONLY
+        if direct_video
+        else _resolve_fresh_shot_image_policy(params)
     )
     _validate_director_models(params)
     execution_profile = _create_director_video_execution_profile(params)
@@ -4667,7 +4765,83 @@ def start_pipeline(params: dict) -> str:
 def get_pipeline(pid: str) -> Optional[dict]:
     with _pipeline_lock:
         p = _pipelines.get(pid)
-        return dict(p) if p else None
+        snapshot = dict(p) if p else None
+    if snapshot:
+        details = _public_pipeline_generation_details(
+            snapshot.get("params"),
+            len(snapshot.get("clip_plans") or []),
+        )
+        if details:
+            snapshot["generation_details"] = details
+    return snapshot
+
+
+def _public_pipeline_model_name(model_type: str) -> str:
+    if not model_type:
+        return ""
+    fallback = {
+        "minimax:image-01": "MiniMax Image-01",
+        "minimax_h3_legacy": "MiniMax H3 Legacy Quality — ConvRot",
+    }.get(model_type, model_type)
+    try:
+        model_def = _wgp.get_model_def(model_type) or {} if _wgp else {}
+    except Exception:
+        model_def = {}
+    return str(model_def.get("name") or fallback)
+
+
+def _public_pipeline_generation_details(
+    params: dict | None,
+    clip_count: int = 0,
+) -> dict:
+    """Expose only the frozen, non-sensitive production recipe to the UI."""
+    if not isinstance(params, dict):
+        return {}
+    image_params = (
+        params.get("image_params")
+        if isinstance(params.get("image_params"), dict) else {}
+    )
+    video_params = (
+        params.get("video_params")
+        if isinstance(params.get("video_params"), dict) else {}
+    )
+    image_model = str(params.get("image_model") or "").strip()
+    video_model = str(params.get("video_model") or "").strip()
+    details = {
+        "generation_mode": params.get("pipeline_type"),
+        "text_provider": (
+            params.get("writing_provider") or params.get("llm_provider")
+        ),
+        "text_model": (
+            params.get("writing_model") or params.get("llm_model_id")
+        ),
+        "image_model_type": image_model,
+        "image_model_name": _public_pipeline_model_name(image_model),
+        "image_resolution": image_params.get("resolution"),
+        "image_steps": image_params.get("num_inference_steps"),
+        "video_model_type": video_model,
+        "video_model_name": _public_pipeline_model_name(video_model),
+        "video_resolution": video_params.get("resolution"),
+        "video_steps": video_params.get("num_inference_steps"),
+        "guidance": video_params.get("guidance_scale"),
+        "seed": video_params.get("seed", params.get("seed")),
+        "frames": video_params.get("video_length"),
+        "profile": video_params.get("h3_model_profile"),
+        "flow_shift": video_params.get("flow_shift"),
+        "audio_shift": video_params.get("h3_audio_shift"),
+        "turbo": video_params.get("minimax_h3_turbo_mode"),
+        "clip_count": (
+            clip_count
+            or len(params.get("provided_clip_plans") or [])
+            or len(params.get("planned_clips") or [])
+        ),
+    }
+    return {
+        key: value for key, value in details.items()
+        if value is not None
+        and value != ""
+        and not (key == "clip_count" and value == 0)
+    }
 
 
 def list_active_pipelines(workspace: Optional[str] = None) -> list[dict]:
@@ -4692,9 +4866,15 @@ def list_active_pipelines(workspace: Optional[str] = None) -> list[dict]:
         pipeline_type = pipeline.get("pipeline_type") or (
             pipeline.get("params") or {}
         ).get("pipeline_type", "")
+        details = _public_pipeline_generation_details(
+            pipeline.get("params"),
+            len(pipeline.get("clip_plans") or []),
+        )
         pipeline.pop("params", None)
         pipeline.pop("_llm_passes", None)
         pipeline["pipeline_type"] = pipeline_type
+        if details:
+            pipeline["generation_details"] = details
         results.append(pipeline)
 
     results.sort(key=lambda item: item.get("created_at") or 0, reverse=True)
@@ -4759,6 +4939,10 @@ def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
         "pause_reason": None,
         "llm_streaming": False,
         "recovered_from_disk": True,
+        "generation_details": _public_pipeline_generation_details(
+            _director_params_from_saved_state(saved),
+            len(clips),
+        ),
     }
 
 
@@ -6324,7 +6508,12 @@ def _run_pipeline(pid: str, resume: bool = False):
         params = p["params"]
         pipeline_out_dir = p.get("out_dir") or _wgp.save_path
         pipeline_workspace = p.get("workspace")
-        shot_image_policy = _director_effective_shot_image_policy(params)
+        direct_video, direct_video_master_prompt = _direct_video_settings(params)
+        shot_image_policy = (
+            SHOT_IMAGE_PROMPT_ONLY
+            if direct_video
+            else _director_effective_shot_image_policy(params)
+        )
         requires_shot_images = shot_images_required(shot_image_policy)
 
         # Work already completed before a crash, or prompts explicitly
@@ -6344,7 +6533,6 @@ def _run_pipeline(pid: str, resume: bool = False):
 
         pipeline_type = params.get("pipeline_type", "music_video")  # music_video | short_film_audio | short_film_story
         auto_mode = params.get("auto_mode", True)
-        direct_video, direct_video_master_prompt = _direct_video_settings(params)
 
         # ── Disk preflight ─────────────────────────────────────────────
         # A Director run writes gigabytes (per-clip images + video + the
@@ -6389,8 +6577,23 @@ def _run_pipeline(pid: str, resume: bool = False):
             )
 
         # ── Phase 1: LLM Planning ──────────────────────────────────────
-        _update_pipeline(pid, phase="planning", llm_streaming=True,
-                         progress={"current": 0, "total": 1, "message": "Planning with LLM...", "step": 0, "total_steps": 0})
+        initial_planning_count = len(params.get("planned_clips") or [])
+        _update_pipeline(
+            pid,
+            phase="planning",
+            llm_streaming=True,
+            progress={
+                "current": 0,
+                "total": 1,
+                "message": _director_planning_progress_message(
+                    params,
+                    pipeline_type,
+                    initial_planning_count,
+                ),
+                "step": 0,
+                "total_steps": 0,
+            },
+        )
 
         planning_start = time.time()
         if resume_plans:
@@ -6420,13 +6623,17 @@ def _run_pipeline(pid: str, resume: bool = False):
         # plan before prompt polish and image generation so every downstream
         # artifact (start images, source-audio slices, repair metadata, and
         # generated clips) shares the same native 17n+5 timing lattice.
+        video_model = params.get("video_model") or "ltx2_22B_distilled_1_1"
+        try:
+            selected_video_def = _wgp.get_model_def(video_model) or {}
+        except Exception:
+            selected_video_def = {}
+        selected_strategy = video_strategy(selected_video_def)
+        sequential_h3_renderer = _uses_legacy_h3_renderer(
+            video_model,
+            selected_video_def,
+        )
         if not resume_plans:
-            video_model = params.get("video_model") or "ltx2_22B_distilled_1_1"
-            try:
-                selected_video_def = _wgp.get_model_def(video_model) or {}
-            except Exception:
-                selected_video_def = {}
-            selected_strategy = video_strategy(selected_video_def)
             if selected_strategy in {BOUNDED_START_END, OMNI_REFERENCE}:
                 model_fps = float(selected_video_def.get("fps") or 24)
                 minimum_frames = int(selected_video_def.get("frames_minimum") or 124)
@@ -6717,14 +6924,14 @@ def _run_pipeline(pid: str, resume: bool = False):
             _update_pipeline(pid, clip_plans=clip_plans)
 
         # H3 consumes shorter temporal segments than the Story planner writes.
-        # Keep the pre-v1.6 segment optimizer exclusively for registry-less
-        # rolling-window projects. Current H3 definitions use the official
-        # bounded/Omni execution path and must not invoke a second planner.
+        # Keep the segment optimizer for the recovered sequential renderer:
+        # registry-less pre-v1.6 projects and the explicit ConvRot sidecar.
+        # Current native H3 definitions use their bounded/Omni execution path
+        # and must not invoke this second planner.
         if (
             not resume_plans
-            and params.get("video_model") == "minimax_h3"
+            and sequential_h3_renderer
             and not direct_video
-            and selected_strategy == ROLLING_WINDOW
         ):
             _update_pipeline(
                 pid,
@@ -6779,7 +6986,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                     },
                 )
             _save_pipeline_state(pid)
-        elif params.get("video_model") == "minimax_h3" and direct_video:
+        elif sequential_h3_renderer and direct_video:
             # Direct prompts are already in the proven plain H3 T2V grammar.
             # An FL2VA validator would reintroduce a fictional Picture 1, so
             # record the deterministic contract instead of invoking it.
@@ -6905,7 +7112,7 @@ def _run_pipeline(pid: str, resume: bool = False):
             and not direct_video
             and not resume_images
             and not provided_clip_image_paths
-            and params.get("video_model") == "minimax_h3"
+            and sequential_h3_renderer
             and resource_lanes["images"].location == "remote"
             and resource_lanes["video"].location == "local"
             and resource_lanes["images"].key != resource_lanes["video"].key
@@ -7130,9 +7337,6 @@ def _run_pipeline(pid: str, resume: bool = False):
             _save_pipeline_state(pid)
             return
 
-        _require_video_start_images(
-            clip_images, len(clip_plans), pipeline_out_dir,
-        )
         if requires_shot_images:
             _require_video_start_images(
                 clip_images, len(clip_plans), pipeline_out_dir,
@@ -7351,9 +7555,9 @@ def _run_pipeline(pid: str, resume: bool = False):
             )
         _save_pipeline_state(pid)  # Save on failure too
     finally:
-        # Native MiniMax H3 is owned by WGP. Director child jobs deliberately
-        # keep it resident between shots; release it once the whole production
-        # has ended unless another H3 job is already queued to reuse it.
+        # H3 has two mutually exclusive owners: WGP for native variants and
+        # isolated ComfyUI for Legacy ConvRot. Keep only a queued job that can
+        # reuse the same owner; otherwise release before the next FIFO item.
         with _pipeline_lock:
             finished_pipeline = _pipelines.get(pid) or {}
             finished_params = finished_pipeline.get("params") or {}
@@ -7362,13 +7566,14 @@ def _run_pipeline(pid: str, resume: bool = False):
             finished_model_def = _wgp.get_model_def(finished_video_model) or {}
         except Exception:
             finished_model_def = {}
+        finished_is_legacy_h3 = finished_video_model == "minimax_h3_legacy"
         finished_is_h3 = (
             finished_video_model.lower().startswith("minimax_h3")
             or str(finished_model_def.get("architecture") or "")
             .lower()
             .startswith("minimax_h3")
         )
-        queued_h3 = False
+        queued_compatible_h3 = False
         if finished_is_h3:
             for queued_job in (_jobs or {}).values():
                 if queued_job.get("status") not in {"queued", "running"}:
@@ -7380,19 +7585,32 @@ def _run_pipeline(pid: str, resume: bool = False):
                     queued_def = _wgp.get_model_def(queued_model) or {}
                 except Exception:
                     queued_def = {}
-                if (
+                queued_is_legacy_h3 = queued_model == "minimax_h3_legacy"
+                queued_is_h3 = (
                     queued_model.lower().startswith("minimax_h3")
                     or str(queued_def.get("architecture") or "")
                     .lower()
                     .startswith("minimax_h3")
+                )
+                if (
+                    queued_is_legacy_h3
+                    if finished_is_legacy_h3
+                    else queued_is_h3 and not queued_is_legacy_h3
                 ):
-                    queued_h3 = True
+                    queued_compatible_h3 = True
                     break
-        if finished_is_h3 and not queued_h3 and _gen_lock is not None:
+        if finished_is_h3 and not queued_compatible_h3 and _gen_lock is not None:
             acquired_release_lock = _gen_lock.acquire(blocking=False)
             if acquired_release_lock:
                 try:
-                    if getattr(_wgp, "wan_model", None) is not None:
+                    if finished_is_legacy_h3:
+                        from services import minimax_h3_service
+                        minimax_h3_service.stop_runtime()
+                        print(
+                            f"[Pipeline {pid}] Released H3 Legacy ConvRot "
+                            "runtime after Director completion."
+                        )
+                    elif getattr(_wgp, "wan_model", None) is not None:
                         _wgp.release_model()
                         print(
                             f"[Pipeline {pid}] Released native MiniMax H3 "
@@ -7497,6 +7715,35 @@ def _resource_schedule_payload(lanes: dict, mode: str = "sequential") -> dict:
 
 
 # ── Planning Phase ──────────────────────────────────────────────────────
+
+def _director_planning_progress_message(
+    params: dict,
+    pipeline_type: str,
+    clip_count: int = 0,
+) -> str:
+    """Describe the planning artifact without implying GPU generation."""
+    provider = str(
+        params.get("writing_provider") or params.get("llm_provider") or ""
+    ).strip()
+    model = str(
+        params.get("writing_model") or params.get("llm_model_id") or ""
+    ).strip()
+    planner = " / ".join(value for value in (provider, model) if value)
+    if pipeline_type == "music_video":
+        target = (
+            f"{clip_count} timed song segments"
+            if clip_count else "the song's timed shot plan"
+        )
+    else:
+        target = (
+            f"{clip_count} timed shots"
+            if clip_count else "the timed shot plan"
+        )
+    return (
+        f"{planner or 'The planning LLM'} is writing {target}: scene, action, "
+        "camera, and final generation prompt. Waiting for the remote response; "
+        "image and video generation have not started."
+    )
 
 def _ensure_llm_loaded(params: dict):
     """Load/reload LLM if needed. Shared between legacy and new planning."""
@@ -8137,6 +8384,20 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     planner_kwargs["location_ref_labels"] = params.get("location_ref_labels", [])
 
     # Plan
+    _update_pipeline(
+        pid,
+        progress={
+            "current": 0,
+            "total": 1,
+            "message": _director_planning_progress_message(
+                params,
+                pipeline_type,
+                len(planned_clips),
+            ),
+            "step": 0,
+            "total_steps": 0,
+        },
+    )
     print(f"[Pipeline {pid}] Planning with DirectorOrchestrator (skill={skill_type})...")
     plan = director.plan(skill_type, **planner_kwargs)
 
@@ -11300,7 +11561,7 @@ def _optimize_minimax_h3_story_prompts(
     planned_clips: list[dict],
 ) -> list[dict]:
     """Run one guarded LLM pass over the exact segment prompts H3 will receive."""
-    if params.get("video_model") != "minimax_h3" or not clip_plans:
+    if not _is_sequential_h3_model(params.get("video_model")) or not clip_plans:
         return clip_plans
 
     video_params = params.get("video_params") or {}
@@ -11454,6 +11715,7 @@ def _run_minimax_h3_story_video(
 ) -> list[str]:
     """Render a complete Story short film as sequential native-audio H3 clips."""
     fps = 24
+    video_model = str(params.get("video_model") or "minimax_h3")
     direct_video, direct_video_master_prompt = _direct_video_settings(params)
     reference_mode = str(
         video_params.get("h3_reference_mode") or "first_frame"
@@ -11719,7 +11981,7 @@ def _run_minimax_h3_story_video(
             reuse_prefix = False
 
             gen_params: dict = {
-                "model_type": "minimax_h3",
+                "model_type": video_model,
                 "prompt": prompt if direct_video else _h3_apply_identity_contract(prompt),
                 "image_mode": 0,
                 "image_prompt_type": "" if direct_video else "S" if segment_start else "",
@@ -11763,6 +12025,24 @@ def _run_minimax_h3_story_video(
             print(
                 f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1}, "
                 f"segment {segment_index + 1}/{segment_count}: {frames} frames"
+            )
+            progress_label = (
+                f"H3 Legacy · clip {shot_index + 1}/{len(clip_plans)}"
+                + (
+                    f" · segment {segment_index + 1}/{segment_count}"
+                    if segment_count > 1 else ""
+                )
+            )
+            gen_params["_director_progress_label"] = progress_label
+            _update_pipeline(
+                pid,
+                progress={
+                    "current": job_index,
+                    "total": len(jobs),
+                    "message": f"{progress_label} · starting model pass",
+                    "step": 0,
+                    "total_steps": 0,
+                },
             )
             generated = _submit_and_wait(
                 gen_params,
@@ -11825,20 +12105,21 @@ def _run_minimax_h3_story_video(
             except OSError:
                 pass
 
-    if len(outputs) == 1:
+    # Audio-driven productions use H3's native sound while rendering, but the
+    # selected source track is authoritative in the finished timeline. This
+    # also handles the one-shot case, which previously returned early with
+    # H3's generated audio instead of the uploaded soundtrack.
+    assembly_audio = (
+        params.get("audio_path")
+        if params.get("pipeline_type") in {"music_video", "short_film_audio"}
+        else None
+    )
+    if len(outputs) == 1 and not assembly_audio:
         return outputs
 
     final_name = f"minimax_h3_{pid}_multiclip.mp4"
     final_path = os.path.join(out_dir, final_name)
     clip_paths = [name if os.path.isabs(name) else os.path.join(out_dir, name) for name in outputs]
-    # Musical productions retain the chosen song as the final soundtrack;
-    # H3's native per-segment ambience remains useful while rendering but is
-    # not a replacement for the selected music track.
-    assembly_audio = (
-        params.get("audio_path")
-        if params.get("pipeline_type") == "music_video"
-        else None
-    )
     if not _wgp.concatenate_multi_clip_videos(clip_paths, final_path, assembly_audio):
         raise RuntimeError(
             "MiniMax H3 rendered every segment, but final short-film assembly failed. "
@@ -11846,7 +12127,7 @@ def _run_minimax_h3_story_video(
         )
     sidecar = {
         "params": {
-            "model_type": "minimax_h3",
+            "model_type": video_model,
             "resolution": resolution,
             "source_clips": [os.path.basename(path) for path in clip_paths],
             "director_pipeline_id": pid,
@@ -11913,9 +12194,10 @@ def _preflight_h3_director_prompts(
 
 
 def _uses_legacy_h3_renderer(video_model: str, model_def: dict) -> bool:
-    """Limit the pre-v1.6 sidecar adapter to registry-less legacy projects."""
-    return (
-        str(video_model or "").lower() == "minimax_h3"
+    """Route the isolated ConvRot sidecar and old H3 projects consistently."""
+    candidate = str(video_model or "").lower()
+    return candidate == "minimax_h3_legacy" or (
+        candidate == "minimax_h3"
         and video_strategy(model_def) == ROLLING_WINDOW
     )
 

@@ -261,6 +261,8 @@ export interface ComicSourceStory {
 }
 
 export interface ComicDirectorRequest {
+  /** New comics follow the credential-free global production profile. */
+  useGlobalProfile?: boolean
   premise: string
   /** Comic keeps printable lettering/layout; storyboard creates one clean,
    *  video-ready first frame and motion prompt per shot. */

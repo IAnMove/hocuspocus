@@ -858,6 +858,25 @@ class TestDirectorModelAssessment(unittest.TestCase):
         self.assertFalse(result["supports_audio_input"])
         self.assertTrue(result["generates_audio"])
 
+    def test_timeline_remux_accepts_audio_workflows_without_claiming_model_input(self):
+        result = assess_director_model(
+            "minimax_h3_legacy",
+            {
+                "image_prompt_types_allowed": "TSE",
+                "sliding_window": False,
+                "returns_audio": True,
+                "director_video_strategy": "bounded_start_end",
+                "director_audio_input_mode": "timeline_remux",
+            },
+        )
+
+        self.assertTrue(result["video"]["music_video"]["compatible"])
+        self.assertTrue(result["video"]["short_film_audio"]["compatible"])
+        self.assertTrue(result["video"]["short_film_story"]["compatible"])
+        self.assertFalse(result["supports_audio_input"])
+        self.assertEqual(result["audio_input_mode"], "timeline_remux")
+        self.assertTrue(result["generates_audio"])
+
     def test_fixed_length_model_is_rejected(self):
         result = assess_director_model(
             "fixed",
@@ -1779,6 +1798,9 @@ class TestDirectorUICatalogContract(unittest.TestCase):
         self.assertIn("Shot image guidance", chat)
         self.assertIn("Maximum planned shot", chat)
         self.assertIn("H3 Turbo", chat)
+        self.assertIn('id="director-h3-reference-mode"', chat)
+        self.assertIn("Ref2VA · character, location and media refs", chat)
+        self.assertIn("['minimax_h3', 'minimax_h3_legacy'].includes(selectedVideoModel)", store)
         self.assertIn("director_memory_policy", chat)
         self.assertIn("LoRA strength", lora_selector)
         self.assertIn('type="number"', lora_selector)

@@ -271,6 +271,13 @@ function normalizeAsset(value: unknown, id: string): StoryVisualAsset | null {
       ? Math.max(0, Math.min(1, Number(item.confidence))) : undefined,
     originalName: text(item.originalName) || undefined,
     importBatchId: text(item.importBatchId) || undefined,
+    // Existing Story projects predate per-image approval and were already
+    // used in productions. Preserve that behavior; newly imported/generated
+    // assets are created explicitly as drafts in StoryLabPanel.
+    approval: item.approval === 'draft' ? 'draft' : 'approved',
+    variantKind: item.variantKind === 'styled' ? 'styled' : 'original',
+    derivedFromAssetId: text(item.derivedFromAssetId) || undefined,
+    stylePrompt: text(item.stylePrompt) || undefined,
   }
 }
 
@@ -286,6 +293,7 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     title: 'Untitled story',
     projectType,
     creativeBrief: {
+      generalIdea: '',
       context: '',
       performer: '',
       musicStyle: '',
@@ -314,6 +322,7 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     ending: '',
     workflowMode: 'guided',
     provider: {
+      useGlobalProfile: true,
       writingProvider: 'maestro',
       writingModel: 'deepseek-v4-pro',
       writingBaseUrl: 'https://api.deepseek.com',
@@ -419,6 +428,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     projectType: project.projectType === 'music_video'
       ? 'music_video' : project.projectType === 'quick_video' ? 'quick_video' : 'full_story',
     creativeBrief: {
+      generalIdea: text(creativeBrief.generalIdea),
       context: text(creativeBrief.context),
       performer: text(creativeBrief.performer),
       musicStyle: text(creativeBrief.musicStyle),
@@ -441,7 +451,10 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     enforceVisualStyle: project.enforceVisualStyle !== false,
     allowClipText: project.allowClipText === true,
     musicVideoGenerationMode: project.musicVideoGenerationMode === 'direct_video'
-      ? 'direct_video' : 'image_guided',
+      ? 'direct_video'
+      : project.musicVideoGenerationMode === 'direct_references'
+        ? 'direct_references'
+        : 'image_guided',
     directVideoMasterPromptMode,
     directVideoMasterPrompt: directVideoMasterPromptMode === 'inherit'
       ? directVideoMasterPromptFromVisualStyles(visualStyle, characterVisualStyle)
@@ -455,6 +468,9 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     provider: {
       ...fallback.provider,
       ...(project.provider && typeof project.provider === 'object' ? project.provider : {}),
+      useGlobalProfile: project.provider && typeof project.provider === 'object'
+        ? project.provider.useGlobalProfile === true
+        : false,
       writingProvider: ['maestro', 'deepseek', 'minimax', 'openai', 'openai-compatible']
         .includes(text(project.provider?.writingProvider))
         ? project.provider!.writingProvider

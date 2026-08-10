@@ -16,6 +16,9 @@ from app.services import minimax_h3_service as h3
 
 
 class TestMiniMaxH3Workflow(unittest.TestCase):
+    def test_legacy_options_publish_ref2va_image_limit(self):
+        self.assertEqual(h3.MODEL_OPTIONS["max_image_refs"], 9)
+
     def test_portrait_start_frame_is_letterboxed_to_landscape_without_stretching(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -191,11 +194,49 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         profile = h3.MODEL_PROFILES["quality"]
         self.assertEqual(workflow["1"]["inputs"]["unet_name"], profile["fl2va"])
         self.assertEqual(workflow["3"]["inputs"]["clip_name"], profile["text_encoder"])
+        self.assertEqual(h3.MODEL_ID, "minimax_h3_legacy")
+        self.assertEqual(h3.MODEL_OPTIONS["architecture"], "minimax_h3")
+        self.assertEqual(
+            h3.MODEL_OPTIONS["director_audio_input_mode"],
+            "timeline_remux",
+        )
+        self.assertIsNotNone(h3.MODEL_OPTIONS["image_ref_choices"])
         self.assertEqual(h3.DEFAULTS["resolution"], "960x544")
         self.assertEqual(h3.DEFAULTS["video_length"], 124)
         self.assertEqual(h3.DEFAULTS["num_inference_steps"], 20)
         self.assertEqual(h3.DEFAULTS["h3_model_profile"], "quality")
         self.assertEqual(h3.DEFAULTS["h3_reference_mode"], "first_frame")
+        self.assertEqual(
+            h3.MODEL_OPTIONS["resolution_preset_order"],
+            ["480p", "540p", "720p", "768p"],
+        )
+        self.assertEqual(
+            h3.MODEL_OPTIONS["resolution_presets"]["480p"]["values"]["16:9"],
+            "864x480",
+        )
+        self.assertEqual(
+            h3.MODEL_OPTIONS["resolution_presets"]["720p"]["values"]["9:16"],
+            "704x1280",
+        )
+        self.assertEqual(
+            h3.MODEL_OPTIONS["resolution_presets"]["768p"]["values"]["16:9"],
+            "1344x768",
+        )
+
+    def test_story_lab_presets_are_native_base_canvases_without_rescaling(self):
+        for preset, orientation in (("480p", "16:9"), ("540p", "9:16"),
+                                    ("720p", "16:9"), ("768p", "9:16")):
+            resolution = h3.MODEL_OPTIONS["resolution_presets"][preset]["values"][orientation]
+            params = {**h3.DEFAULTS, "prompt": "resolution test", "resolution": resolution}
+
+            workflow, _ = h3.build_workflow(params, f"job-{preset}-{orientation}")
+
+            width, height = (int(value) for value in resolution.split("x", 1))
+            self.assertEqual(
+                (workflow["10"]["inputs"]["width"], workflow["10"]["inputs"]["height"]),
+                (width, height),
+            )
+            self.assertEqual(params["effective_resolution"], resolution)
 
     def test_legacy_balanced_profile_no_longer_silently_uses_int4(self):
         self.assertEqual(
@@ -328,6 +369,13 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         self.assertGreaterEqual(length, 107)
         self.assertLessEqual(length, 362)
 
+        near_default = {**h3.DEFAULTS, "prompt": "test", "video_length": 125}
+        near_workflow, _ = h3.build_workflow(near_default, "jobduration-nearest")
+        self.assertEqual(near_workflow["10"]["inputs"]["length"], 124)
+        self.assertEqual(near_default["requested_video_length"], 125)
+        self.assertEqual(near_default["effective_video_length"], 124)
+        self.assertEqual(h3.MODEL_OPTIONS["frame_alignment_mode"], "nearest")
+
     def test_oversized_resolution_is_reduced_to_open_base_canvas(self):
         workflow, _ = h3.build_workflow({
             **h3.DEFAULTS,
@@ -366,7 +414,11 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
                 }, "jobmixed")
 
     def test_quality_profile_retries_int4_only_after_an_oom(self):
-        params = {**h3.DEFAULTS, "prompt": "test"}
+        params = {
+            **h3.DEFAULTS,
+            "prompt": "test",
+            "h3_allow_low_memory_fallback": True,
+        }
         updates = []
         with patch.object(
             h3,
@@ -387,6 +439,26 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         self.assertEqual(params["h3_model_profile"], "low_memory")
         self.assertEqual(params["h3_model_fallback_from"], "quality")
         self.assertTrue(any("INT4 fallback" in update[0] for update in updates))
+
+    def test_legacy_quality_never_silently_falls_back_to_int4(self):
+        params = {**h3.DEFAULTS, "prompt": "test"}
+        with patch.object(
+            h3,
+            "_generate_impl",
+            side_effect=RuntimeError("CUDA out of memory"),
+        ) as generate_impl, patch.object(h3, "stop_runtime") as stop_runtime:
+            with self.assertRaisesRegex(RuntimeError, "out of memory"):
+                h3.generate(
+                    params,
+                    "jobquality",
+                    "/tmp",
+                    lambda *_args: None,
+                    lambda: False,
+                    keep_runtime=True,
+                )
+
+        generate_impl.assert_called_once()
+        stop_runtime.assert_not_called()
 
     def test_standalone_generation_always_releases_runtime(self):
         with patch.object(h3, "_generate_impl", return_value=["clip.mp4"]), \

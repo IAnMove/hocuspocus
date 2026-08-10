@@ -17,6 +17,8 @@ const VideoEditorPanel = lazy(() => import('../../features/video-editor/VideoEdi
   .then(module => ({ default: module.VideoEditorPanel })))
 const StoryLabPanel = lazy(() => import('../../features/stories/StoryLabPanel')
   .then(module => ({ default: module.StoryLabPanel })))
+const SeriesLabPanel = lazy(() => import('../../features/series/SeriesLabPanel')
+  .then(module => ({ default: module.SeriesLabPanel })))
 
 function PanelLoadingFallback() {
   return (
@@ -665,6 +667,7 @@ export function MainContent() {
               : mediaFilter === 'animate3d' ? 'Rig & Animate'
               : mediaFilter === 'comics' ? 'Comic Studio'
               : mediaFilter === 'stories' ? 'Story Lab'
+              : mediaFilter === 'series' ? 'Series Lab'
               : mediaFilter === 'videoeditor' ? 'Video Editor'
               : outputsTotal > outputs.length
               ? `${outputs.length} / ${outputsTotal} items`
@@ -693,6 +696,12 @@ export function MainContent() {
           <div className="flex-1 overflow-hidden p-2 md:p-4">
             <div className="max-w-[1900px] mx-auto h-full">
               <StoryLabPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'series' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <SeriesLabPanel />
             </div>
           </div>
         ) : mediaFilter === 'comics' ? (

@@ -47,7 +47,9 @@
         "themes": ["trust"],
         "longArcs": [],
         "timeline": [],
-        "revision": 1
+        "revision": 1,
+        "approval": "approved",
+        "approvedAt": "2026-01-01T00:00:00Z"
       },
       "characters": [
         {

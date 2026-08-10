@@ -21,7 +21,7 @@ export interface DirectorModelCompatibility {
   supports_voice_reference: boolean
   voice_reference_mode?: 'none' | 'id_lora' | 'native_reference'
   video_strategy?: 'rolling_window' | 'bounded_start_end' | 'omni_reference'
-  audio_input_mode?: 'none' | 'generic_audio_guide' | 'reference_manifest'
+  audio_input_mode?: 'none' | 'generic_audio_guide' | 'reference_manifest' | 'timeline_remux'
   reference_mode?: 'none' | 'start_frame' | 'start_end' | 'omni_manifest'
   shot_image_support?: 'required' | 'optional' | 'direct_references'
   supports_endpoint_continuity?: boolean
@@ -258,6 +258,36 @@ export interface OomInfo {
   message: string
 }
 
+/** Frozen, non-sensitive recipe reported by the backend for an active job.
+ * It intentionally excludes prompts and local media paths. */
+export interface GenerationDetails {
+  model_type?: string
+  model_name?: string
+  generation_mode?: string
+  resolution?: string
+  seed?: number | string
+  steps?: number
+  guidance?: number
+  frames?: number
+  duration_seconds?: number
+  repeat?: number
+  profile?: string
+  flow_shift?: number
+  audio_shift?: number
+  turbo?: boolean
+  clip_count?: number
+  text_provider?: string
+  text_model?: string
+  image_model_type?: string
+  image_model_name?: string
+  image_resolution?: string
+  image_steps?: number
+  video_model_type?: string
+  video_model_name?: string
+  video_resolution?: string
+  video_steps?: number
+}
+
 export interface GenerationJob {
   id: string
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
@@ -269,11 +299,17 @@ export interface GenerationJob {
   outputFiles: string[]
   error: string | null
   createdAt?: number
+  /** Active processing start; intentionally absent while only queued. */
+  startedAt?: number
+  finishedAt?: number
+  queuePosition?: number | null
   taskTimings?: GenerationTaskTiming[]
   /** Present only on failed jobs that look like CUDA OOMs (see OomInfo). */
   oomInfo?: OomInfo | null
   /** Exact prompts assigned to an in-flight H3 sliding-window generation. */
   h3WindowPlan?: H3WindowPlan | null
+  /** Exact submitted model/settings summary, safe to show in activity UI. */
+  generationDetails?: GenerationDetails
 }
 
 export interface GenerationTaskTiming {
@@ -490,7 +526,7 @@ export interface Scene {
   }
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
 export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
 export type ScailResolutionProfile = '480p' | '512p' | '704p'
@@ -789,6 +825,37 @@ export interface MultiClip {
 }
 
 export type SettingsTab = 'performance' | 'integrations'
+
+export interface ProductionProfile {
+  version: 1
+  text: {
+    provider: 'local' | 'remote' | 'openai' | 'anthropic' | 'deepseek' | 'minimax' | 'openai-compatible'
+    model: string
+  }
+  image: {
+    provider: 'maestro' | 'local' | 'minimax'
+    model: string
+  }
+  music: {
+    provider: 'maestro' | 'local' | 'minimax'
+    model: string
+  }
+  video: {
+    provider: 'maestro' | 'local'
+    model: string
+    settings: {
+      profile: string
+      steps: number
+      flowShift: number
+      audioShift: number
+      turbo: boolean
+      cache: boolean
+      loras: string[]
+      resolution: ResolutionPreset
+      aspectRatio: AspectRatio
+    }
+  }
+}
 
 export interface ServicesConfig {
   llm_model_id: string

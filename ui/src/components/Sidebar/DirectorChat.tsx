@@ -1879,6 +1879,7 @@ function AdditionalRefsSection() {
     s => s.directorMusicVideoTreatment.generation_mode === 'direct_video'
   )
   const h3ReferenceMode = useStore(s => s.savedParamsPerMode.video?.h3_reference_mode || 'first_frame')
+  const setH3ReferenceMode = useStore(s => s.setDirectorH3ReferenceMode)
   const isH3 = videoModel.startsWith('minimax_h3')
   const h3UserRefCount = (referenceImage ? 1 : 0) + charRefs.length + (locRefs.length ? 1 : 0) + h3VideoRefs.length + h3AudioRefs.length
   const voiceReferenceEnabled = useStore(s => s.servicesConfig?.voice_reference_enabled ?? false)
@@ -2010,11 +2011,20 @@ function AdditionalRefsSection() {
           {isH3 && !isDirectVideo && <div className="rounded-md border border-cyan-500/25 bg-cyan-500/5 p-2 space-y-2">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-medium text-cyan-200">
-                  {h3ReferenceMode === 'first_frame' ? 'H3 FL2VA exact frame' : 'H3 Ref2VA omni references'}
-                </span>
+                <label className="text-[10px] font-medium text-cyan-200" htmlFor="director-h3-reference-mode">
+                  H3 conditioning
+                </label>
                 {h3ReferenceMode === 'references' && <span className="text-[9px] text-text-muted">{h3UserRefCount}/11 per shot</span>}
               </div>
+              <select
+                id="director-h3-reference-mode"
+                value={h3ReferenceMode}
+                onChange={event => setH3ReferenceMode(event.target.value as 'first_frame' | 'references')}
+                className="mt-1 w-full rounded border border-cyan-500/25 bg-bg-tertiary px-1.5 py-1 text-[10px] text-text-primary focus:outline-none focus:border-cyan-400"
+              >
+                <option value="first_frame">FL2VA · exact generated frame</option>
+                <option value="references">Ref2VA · character, location and media refs</option>
+              </select>
               <p className="text-[9px] text-text-muted leading-tight mt-0.5">
                 {h3ReferenceMode === 'first_frame'
                   ? 'Only the approved generated frame is sent to H3. Character and location images above still guide frame creation, but cannot conflict with the video model.'

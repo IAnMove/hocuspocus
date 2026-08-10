@@ -77,10 +77,88 @@ class TestJobLifecycleWiring(unittest.TestCase):
     def test_cancel_endpoint_routes_through_shared_helper(self):
         cancel = _function(self.launch, "cancel_job")
         self.assertIn("request_cancel", _called_names(cancel))
+        self.assertIn("_remove_persisted_generation_job", _called_names(cancel))
         self.assertFalse(any(
             isinstance(node, ast.Attribute) and node.attr == "_interrupt"
             for node in ast.walk(cancel)
         ))
+
+    def test_generation_jobs_reserve_fifo_position_before_worker_start(self):
+        new_job = _function(self.launch, "_new_generation_job")
+        self.assertIn("register_generation_job", _called_names(new_job))
+        for endpoint_name in (
+            "retake_video_endpoint",
+            "edit_anything_endpoint",
+            "repaint_endpoint",
+            "recast_endpoint",
+            "outpaint_endpoint",
+            "blend_endpoint",
+            "inpaint_endpoint",
+            "tools_upscale",
+            "tools_revoice",
+        ):
+            with self.subTest(endpoint=endpoint_name):
+                self.assertIn(
+                    "register_generation_job",
+                    _called_names(_function(self.launch, endpoint_name)),
+                )
+
+        director = _parse("app/services/director_pipeline.py")
+        self.assertIn(
+            "register_generation_job",
+            _called_names(_function(director, "_submit_and_wait")),
+        )
+
+    def test_generation_timer_starts_from_lifecycle_active_timestamp(self):
+        generation = _function(self.launch, "_run_generation")
+        with open(
+            os.path.join(_ROOT, "app", "launch.py"), "r", encoding="utf-8",
+        ) as handle:
+            source = ast.get_source_segment(handle.read(), generation)
+        self.assertIsNotNone(source)
+        transition_at = source.index("if not try_start(")
+        timer_at = source.index('start_time = float(job.get("started_at")', transition_at)
+        self.assertGreater(timer_at, transition_at)
+        self.assertIn("Generation completed:", source)
+
+    def test_direct_video_does_not_require_start_images(self):
+        director = _parse("app/services/director_pipeline.py")
+        run_pipeline = _function(director, "_run_pipeline")
+        parents = {
+            child: parent
+            for parent in ast.walk(run_pipeline)
+            for child in ast.iter_child_nodes(parent)
+        }
+        validation_calls = [
+            node for node in ast.walk(run_pipeline)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_require_video_start_images"
+        ]
+
+        # Direct-video plans deliberately leave every clip image empty. Both
+        # validations in the orchestration path must therefore stay inside a
+        # requires_shot_images guard; I2V still validates before generation
+        # and once more after a potentially long manual review pause.
+        self.assertEqual(len(validation_calls), 2)
+        for call in validation_calls:
+            ancestor = parents.get(call)
+            while ancestor is not None and ancestor is not run_pipeline:
+                if (
+                    isinstance(ancestor, ast.If)
+                    and any(
+                        isinstance(node, ast.Name)
+                        and node.id == "requires_shot_images"
+                        for node in ast.walk(ancestor.test)
+                    )
+                ):
+                    break
+                ancestor = parents.get(ancestor)
+            else:
+                self.fail(
+                    "Start-image validation escaped its "
+                    "requires_shot_images guard"
+                )
 
     def test_director_dashboard_mutations_run_off_the_event_loop(self):
         expected = {

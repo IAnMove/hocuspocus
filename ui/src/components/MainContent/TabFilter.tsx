@@ -12,6 +12,7 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
   { value: 'model3d', label: '3D', shortLabel: '3D', icon: 'box' },
   { value: 'scenes', label: 'Scenes', shortLabel: 'Scn', icon: 'film' },
   { value: 'stories', label: 'Story Lab', shortLabel: 'Lab', icon: 'library' },
+  { value: 'series', label: 'Series Lab', shortLabel: 'Series', icon: 'library' },
   { value: 'comics', label: 'Comics', shortLabel: 'Comic', icon: 'book' },
   { value: 'videoeditor', label: 'Video Editor', shortLabel: 'Edit', icon: 'film' },
   { value: 'scene3d', label: '3D Video', shortLabel: '3DV', icon: 'film' },

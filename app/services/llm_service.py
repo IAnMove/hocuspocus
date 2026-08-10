@@ -38,7 +38,7 @@ import collections as _collections
 _server_log: "_collections.deque[str]" = _collections.deque(maxlen=200)
 _log_reader: Optional[threading.Thread] = None
 
-# Provider state: "local" | "remote" | "openai" | "anthropic"
+# Provider state: "local" | "remote" | "openai" | "anthropic" | "minimax"
 _provider: str = "local"
 _remote_url: str = ""       # Base URL for remote/OpenAI-compatible servers
 _api_key: str = ""           # API key for OpenAI/Anthropic
@@ -629,7 +629,7 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
 
     For local provider, returns the curated built-in catalog
     (_PUBLIC_MODEL_ORDER). For remote/openai, queries the server's
-    /v1/models endpoint. For anthropic, returns a curated Claude list.
+    /v1/models endpoint. Anthropic and MiniMax use curated API catalogs.
     """
     local_models = [
         {
@@ -673,6 +673,12 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
             {"id": "claude-haiku-4-5-20251001", "label": "Claude Haiku 4.5", "size_hint": "anthropic", "provider": "anthropic"},
         ])
 
+    if provider == "minimax":
+        remote_models.extend([
+            {"id": "MiniMax-M3", "label": "MiniMax M3", "size_hint": "MiniMax API", "provider": "minimax"},
+            {"id": "MiniMax-M2.7", "label": "MiniMax M2.7", "size_hint": "MiniMax API", "provider": "minimax"},
+        ])
+
     return local_models + remote_models
 
 
@@ -690,8 +696,10 @@ def get_model_dir() -> str:
 
 
 def _server_url() -> str:
-    if _provider in ("remote", "openai") and _remote_url:
+    if _provider in ("remote", "openai", "minimax") and _remote_url:
         return _remote_url.rstrip("/")
+    if _provider == "minimax":
+        return "https://api.minimax.io"
     return f"http://127.0.0.1:{_server_port}"
 
 
@@ -713,7 +721,7 @@ def _is_deepseek_remote() -> bool:
 def _api_headers() -> dict:
     """Build headers for API calls (adds auth for remote providers)."""
     headers = {"Content-Type": "application/json"}
-    if _provider in ("remote", "openai", "anthropic") and _api_key:
+    if _provider in ("remote", "openai", "anthropic", "minimax") and _api_key:
         if _provider == "anthropic":
             headers["x-api-key"] = _api_key
             headers["anthropic-version"] = "2023-06-01"
@@ -930,7 +938,7 @@ def _prepare_thinking(system_prompt: str, enable_thinking: Optional[bool], think
 
 
 def is_loaded() -> bool:
-    if _provider in ("remote", "openai", "anthropic"):
+    if _provider in ("remote", "openai", "anthropic", "minimax"):
         return bool(_model_id)
     return _process is not None and _process.poll() is None
 
@@ -941,7 +949,7 @@ def get_status() -> dict:
         "model_id": _model_id or None,
         "device": _device if is_loaded() else None,
         "provider": _provider,
-        "remote_url": _remote_url if _provider in ("remote", "openai") else "",
+        "remote_url": _remote_url if _provider in ("remote", "openai", "minimax") else "",
     }
 
 
@@ -1287,21 +1295,21 @@ def load_model(
     api_key: str = "",
 ) -> None:
     """Load an LLM model. Supports local (llama-server), remote (OpenAI-compatible),
-    OpenAI API, and Anthropic API providers.
+    OpenAI API, Anthropic API, and MiniMax API providers.
 
     Args:
         model_id: Model ID (HF repo for local, model name for remote/API)
         device: "cpu" or "cuda" (local only)
         force_reload: If True, restart even if already running
-        provider: "local" | "remote" | "openai" | "anthropic"
+        provider: "local" | "remote" | "openai" | "anthropic" | "minimax"
         remote_url: Base URL for remote/openai servers (e.g. http://192.168.1.100:1234)
-        api_key: API key for openai/anthropic providers
+        api_key: API key for public API providers
     """
     global _process, _model_id, _device, _server_port, _vision_available
     global _provider, _remote_url, _api_key
 
     # Handle remote/API providers — no subprocess needed
-    if provider in ("remote", "openai", "anthropic"):
+    if provider in ("remote", "openai", "anthropic", "minimax"):
         with _lock:
             if is_loaded() and _model_id == model_id and _provider == provider and not force_reload:
                 return
@@ -1783,7 +1791,7 @@ def generate(
     # llama-server hosts one model and does not require this field, while
     # OpenAI-compatible remote servers such as Ollama require the selected
     # model name on every chat completion request.
-    if _provider in ("remote", "openai"):
+    if _provider in ("remote", "openai", "minimax"):
         payload["model"] = _model_id
     # Per-model sampling defaults (e.g. Gemma 4 wants temp=1.0, top_k=64)
     temperature, top_p = _apply_model_defaults(temperature, top_p, payload)
@@ -2165,7 +2173,7 @@ def generate_streaming(
         "stream": True,
         "cache_prompt": False,  # Disable prompt caching — system prompt changes between calls
     }
-    if _provider in ("remote", "openai"):
+    if _provider in ("remote", "openai", "minimax"):
         payload["model"] = _model_id
     # Apply caller's penalty values FIRST so they're in the payload
     # before _apply_model_defaults runs. The registry-defaults pass below

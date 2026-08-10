@@ -183,7 +183,10 @@ def _audio_video_capability(
 ) -> dict[str, Any]:
     if not base.get("compatible"):
         return dict(base)
-    if model_def.get("director_audio_input_mode") == "reference_manifest":
+    if model_def.get("director_audio_input_mode") in {
+        "reference_manifest",
+        "timeline_remux",
+    }:
         return _result(True)
     if not model_def.get("any_audio_prompt"):
         return _result(

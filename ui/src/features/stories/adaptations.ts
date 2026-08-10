@@ -22,6 +22,23 @@ function characterName(project: StoryProject, id: string): string {
   return project.characters.find(character => character.id === id)?.name || id
 }
 
+function approvedReferenceIds(project: StoryProject, ids: string[]): string[] {
+  return Array.from(new Set(ids)).filter(id => project.assets[id]?.approval === 'approved')
+}
+
+function approvedCharacterReferenceIds(
+  project: StoryProject,
+  character: StoryCharacter,
+  maximum = 3,
+): string[] {
+  const approved = approvedReferenceIds(project, character.referenceAssetIds)
+  const primary = character.primaryReferenceAssetId
+  const ordered = primary && approved.includes(primary)
+    ? [primary, ...approved.filter(id => id !== primary)]
+    : approved
+  return ordered.slice(0, maximum)
+}
+
 function canonicalCharacterDescription(character: StoryCharacter): string {
   return [
     character.age ? `Age: ${character.age}.` : '',
@@ -45,10 +62,12 @@ function canonicalCharacterPsychology(character: StoryCharacter): string {
 }
 
 function comicCharacter(
+  project: StoryProject,
   character: StoryCharacter,
   visualStyle: string,
   enforceVisualStyle: boolean,
 ): ComicCharacter {
+  const referenceAssetIds = approvedCharacterReferenceIds(project, character)
   return {
     id: character.id,
     name: character.name,
@@ -72,8 +91,8 @@ function comicCharacter(
       visualStyle,
       enforceVisualStyle,
     ),
-    referenceAssetIds: Array.from(new Set(character.referenceAssetIds)),
-    referenceAssetId: character.primaryReferenceAssetId,
+    referenceAssetIds,
+    referenceAssetId: referenceAssetIds[0],
     locked: true,
   }
 }
@@ -167,7 +186,9 @@ export function buildComicAdaptation(
   comic.title = project.title
   comic.synopsis = project.synopsis
   comic.language = project.language
-  comic.assets = Object.fromEntries(Object.values(project.assets).map(asset => [asset.id, {
+  comic.assets = Object.fromEntries(Object.values(project.assets)
+    .filter(asset => asset.approval === 'approved')
+    .map(asset => [asset.id, {
     id: asset.id,
     name: asset.name,
     kind: asset.provider === 'minimax'
@@ -180,6 +201,7 @@ export function buildComicAdaptation(
     createdAt: asset.createdAt,
   } satisfies ComicAsset]))
   comic.characters = project.characters.map(character => comicCharacter(
+    project,
     character,
     enforcedVisualStyle,
     hasStyleLock,
@@ -230,8 +252,8 @@ export function buildComicAdaptation(
       ...project.world.locations.map(location => compatibleNegative(location.negativePrompt)),
     ].filter(Boolean).join('; '),
     worldReferenceAssetIds: Array.from(new Set([
-      ...project.world.referenceAssetIds,
-      ...project.world.locations.flatMap(location => location.referenceAssetIds),
+      ...approvedReferenceIds(project, project.world.referenceAssetIds),
+      ...project.world.locations.flatMap(location => approvedReferenceIds(project, location.referenceAssetIds)),
     ])),
     dialogueDensity: 'medium',
     writingProvider: project.provider.writingProvider,
@@ -295,17 +317,19 @@ export function buildMusicVideoAdaptation(
           .filter(Boolean)
           .map(character => [character!.id, character!])).values())
       : mentionedCharacters
-  const characterReferences = focusedCharacters.flatMap(character => {
-    const assetId = character.primaryReferenceAssetId || character.referenceAssetIds[0]
-    return assetId ? [{ assetId, label: character.name }] : []
-  })
+  const characterReferences = focusedCharacters.flatMap(character =>
+    approvedCharacterReferenceIds(project, character).map((assetId, index) => ({
+      assetId,
+      label: index === 0 ? `${character.name} · primary` : `${character.name} · view ${index + 1}`,
+    })))
   const locationReferences = [
-    ...project.world.referenceAssetIds.map(assetId => ({
+    ...approvedReferenceIds(project, project.world.referenceAssetIds).map(assetId => ({
       assetId,
       label: project.world.summary ? `${project.title} · world` : 'World',
     })),
     ...project.world.locations.flatMap(location =>
-      location.referenceAssetIds.map(assetId => ({ assetId, label: location.name }))),
+      approvedReferenceIds(project, location.referenceAssetIds)
+        .map(assetId => ({ assetId, label: location.name }))),
   ]
   const focusLabel = targetCharacter?.name
     || (focusKind === 'world' ? `${project.title} · world` : project.title)
@@ -428,17 +452,19 @@ export function buildShortFilmAdaptation(
   )
   const visualStyle = enforcedVisualStyle || project.world.visualLanguage.trim()
     || 'Match the approved Story reference artwork exactly, preserving its authored visual medium and character design; if it is anime, comic or illustration, keep it illustrated and never reinterpret it as live action.'
-  const characterReferences = project.characters.flatMap(character => {
-    const assetId = character.primaryReferenceAssetId || character.referenceAssetIds[0]
-    return assetId ? [{ assetId, label: character.name }] : []
-  })
+  const characterReferences = project.characters.flatMap(character =>
+    approvedCharacterReferenceIds(project, character).map((assetId, index) => ({
+      assetId,
+      label: index === 0 ? `${character.name} · primary` : `${character.name} · view ${index + 1}`,
+    })))
   const locationReferences = [
-    ...project.world.referenceAssetIds.map(assetId => ({
+    ...approvedReferenceIds(project, project.world.referenceAssetIds).map(assetId => ({
       assetId,
       label: project.world.summary ? `${project.title} · world` : 'World',
     })),
     ...project.world.locations.flatMap(location =>
-      location.referenceAssetIds.map(assetId => ({ assetId, label: location.name }))),
+      approvedReferenceIds(project, location.referenceAssetIds)
+        .map(assetId => ({ assetId, label: location.name }))),
   ]
 
   return {

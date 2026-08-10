@@ -146,6 +146,10 @@ def test_h3_story_renders_each_shot_and_assembles_native_audio(tmp_path: Path):
     assert all("overall_soundscape:" in item["prompt"] for item in submitted)
     assert all(item["model_type"] == "minimax_h3" for item in submitted)
     assert all(item["image_start"].endswith(f"shot_{index}.png") for index, item in enumerate(submitted))
+    assert [item["_director_progress_label"] for item in submitted] == [
+        "H3 Legacy · clip 1/2",
+        "H3 Legacy · clip 2/2",
+    ]
     assert outputs == ["clip_1.mp4", "clip_2.mp4", "minimax_h3_h3story_multiclip.mp4"]
     assert (tmp_path / "minimax_h3_h3story_multiclip.mp4").is_file()
 
@@ -258,6 +262,13 @@ def test_current_h3_registry_uses_native_bounded_renderer():
         {
             "architecture": "minimax_h3_ref2va",
             "director_video_strategy": "omni_reference",
+        },
+    )
+    assert director_pipeline._uses_legacy_h3_renderer(
+        "minimax_h3_legacy",
+        {
+            "architecture": "minimax_h3_legacy",
+            "director_video_strategy": "bounded_start_end",
         },
     )
 
@@ -421,6 +432,7 @@ def test_h3_story_routes_director_omni_references_to_ref2va(tmp_path: Path):
         outputs = director_pipeline._run_minimax_h3_story_video(
             "h3refs",
             {
+                "video_model": "minimax_h3_legacy",
                 "reference_image_path": str(portrait),
                 "location_ref_paths": [str(location)],
             },
@@ -443,7 +455,56 @@ def test_h3_story_routes_director_omni_references_to_ref2va(tmp_path: Path):
     assert submitted[0]["h3_ref_videos"] == ["/refs/motion.mp4"]
     assert submitted[0]["h3_ref_audios"] == ["/refs/voice.wav"]
     assert submitted[0]["h3_model_profile"] == "balanced"
+    assert submitted[0]["model_type"] == "minimax_h3_legacy"
     assert "image_start" not in submitted[0]
+
+
+def test_h3_single_shot_music_video_restores_uploaded_soundtrack(tmp_path: Path):
+    shot = tmp_path / "shot.png"
+    shot.write_bytes(b"frame")
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        (tmp_path / "clip.mp4").write_bytes(b"video")
+        return ["clip.mp4"]
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(paths, destination, audio_path):
+            assert [Path(path).name for path in paths] == ["clip.mp4"]
+            assert audio_path == "/music/song.mp3"
+            Path(destination).write_bytes(b"assembled")
+            return True
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch.object(director_pipeline, "_save_pipeline_state"), \
+            patch.object(director_pipeline, "_wgp", FakeWgp()):
+        outputs = director_pipeline._run_minimax_h3_story_video(
+            "h3singlemusic",
+            {
+                "video_model": "minimax_h3_legacy",
+                "pipeline_type": "music_video",
+                "audio_path": "/music/song.mp3",
+            },
+            [{"video_prompt": "A single continuous performance shot."}],
+            [{"start": 0, "end": 5}],
+            [shot.name],
+            {"num_inference_steps": 20, "h3_reference_mode": "first_frame"},
+            "960x544",
+            str(tmp_path),
+        )
+
+    assert submitted[0]["model_type"] == "minimax_h3_legacy"
+    assert outputs == [
+        "clip.mp4",
+        "minimax_h3_h3singlemusic_multiclip.mp4",
+    ]
+    sidecar = json.loads(
+        (tmp_path / "minimax_h3_h3singlemusic_multiclip.meta.json")
+        .read_text(encoding="utf-8")
+    )
+    assert sidecar["params"]["model_type"] == "minimax_h3_legacy"
 
 
 def test_h3_story_routes_only_the_location_selected_for_the_shot(tmp_path: Path):

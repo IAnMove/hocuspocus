@@ -42,6 +42,7 @@ import asyncio
 import threading
 import traceback
 import requests
+from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from urllib.parse import quote
 
@@ -105,7 +106,7 @@ if _hf_token_path:
 # Now safe to import wgp - all module-level code will run with patched argv
 print("[Maestro] Importing WanGP engine...")
 import wgp
-from services import model3d_service, minimax_image_service
+from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import debug_trace
 from services.durable_generation_queue import DurableGenerationQueue
 from shared.utils.generation_timing import GenerationTaskTimer
@@ -319,10 +320,12 @@ from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
     collect_job_outputs,
     finish_job,
+    generation_queue_position,
     generation_slot,
     is_cancel_requested,
     record_job_outputs,
     register_abort_state,
+    register_generation_job,
     request_cancel,
     snapshot_job,
     try_requeue,
@@ -387,7 +390,7 @@ def _new_generation_job(
     created_at: float | None = None,
     recovered: bool = False,
 ) -> dict:
-    return {
+    job = {
         "id": job_id or uuid.uuid4().hex[:8],
         "status": "queued",
         "progress": 0,
@@ -396,6 +399,8 @@ def _new_generation_job(
         "phase": "",
         "message": "Recovered · queued" if recovered else "Queued",
         "created_at": created_at or time.time(),
+        "started_at": None,
+        "finished_at": None,
         "params": copy.deepcopy(params),
         "output_files": [],
         "error": None,
@@ -403,6 +408,64 @@ def _new_generation_job(
         "out_dir": _workspace_dir(workspace),
         "recovered": recovered,
     }
+    # Reserve FIFO order synchronously. Starting one thread per request is
+    # still useful for cancellation/recovery, but thread scheduling no longer
+    # decides which submitted generation reaches the GPU first.
+    register_generation_job(_gen_lock, job)
+    return job
+
+
+_PUBLIC_MODEL_LABELS = {
+    "minimax:image-01": "MiniMax Image-01",
+    "minimax_h3_legacy": "MiniMax H3 Legacy Quality — ConvRot",
+    "post_processing": "Post-processing",
+}
+
+
+def _public_generation_details(params: dict | None) -> dict:
+    """Return non-sensitive frozen settings suitable for job status UIs.
+
+    Prompts, local paths and reference media are deliberately excluded.  This
+    summary comes from the submitted job params, so it keeps describing the
+    real run even if the user changes the current Studio selection afterward.
+    """
+    if not isinstance(params, dict):
+        return {}
+
+    model_type = str(params.get("model_type") or "").strip()
+    if not model_type:
+        return {}
+    try:
+        model_def = wgp.get_model_def(model_type) or {}
+    except Exception:
+        model_def = {}
+    details = {
+        "model_type": model_type,
+        "model_name": str(
+            model_def.get("name")
+            or _PUBLIC_MODEL_LABELS.get(model_type)
+            or model_type
+        ),
+    }
+
+    public_values = {
+        "generation_mode": params.get("generation_mode"),
+        "resolution": params.get("resolution"),
+        "seed": params.get("seed"),
+        "steps": params.get("num_inference_steps"),
+        "guidance": params.get("guidance_scale"),
+        "frames": params.get("video_length") or params.get("total_frames"),
+        "duration_seconds": params.get("duration_seconds"),
+        "repeat": params.get("repeat_generation"),
+        "profile": params.get("h3_model_profile"),
+        "flow_shift": params.get("flow_shift"),
+        "audio_shift": params.get("h3_audio_shift"),
+        "turbo": params.get("minimax_h3_turbo_mode"),
+    }
+    for key, value in public_values.items():
+        if value is not None and value != "":
+            details[key] = value
+    return details
 
 
 def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
@@ -419,6 +482,10 @@ def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
             continue
         pending.append(candidate)
     return pending
+
+
+def _is_legacy_h3_model(model_type: str | None) -> bool:
+    return str(model_type or "").strip() == minimax_h3_service.MODEL_ID
 
 
 def _is_minimax_h3_model(model_type: str | None) -> bool:
@@ -452,6 +519,7 @@ def _release_h3_when_queue_allows(job_id: str) -> None:
     pending = _pending_gpu_jobs(exclude_job_id=job_id)
     h3_pending = any(
         _is_minimax_h3_model(candidate.get("params", {}).get("model_type"))
+        and not _is_legacy_h3_model(candidate.get("params", {}).get("model_type"))
         for candidate in pending
     )
     if h3_pending:
@@ -486,6 +554,36 @@ def _release_h3_when_queue_allows(job_id: str) -> None:
         timer.daemon = True
         _h3_idle_release_timer = timer
         timer.start()
+
+
+def _release_legacy_h3_when_queue_allows(job_id: str) -> None:
+    """Keep the isolated ConvRot runtime only for adjacent Legacy jobs."""
+    pending = _pending_gpu_jobs(exclude_job_id=job_id)
+    legacy_pending = any(
+        _is_legacy_h3_model(candidate.get("params", {}).get("model_type"))
+        for candidate in pending
+    )
+    if legacy_pending:
+        minimax_h3_service.cancel_idle_shutdown()
+        print("[H3 Legacy] Keeping ConvRot runtime warm for a queued Legacy job.")
+        return
+
+    if pending:
+        print("[H3 Legacy] Releasing ConvRot runtime for a queued non-Legacy GPU job.")
+        minimax_h3_service.stop_runtime()
+        return
+
+    print(
+        f"[H3 Legacy] Queue idle; releasing ConvRot runtime in "
+        f"{int(minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS)}s."
+    )
+    minimax_h3_service.schedule_idle_shutdown(
+        minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS,
+        lambda: any(
+            _is_legacy_h3_model(candidate.get("params", {}).get("model_type"))
+            for candidate in _pending_gpu_jobs(exclude_job_id=job_id)
+        ),
+    )
 
 
 def _interrupt_wan_model() -> None:
@@ -568,6 +666,10 @@ def _request_generation_cancel(job_id: str) -> dict:
         job_id=job_id,
         active_states=_active_gen_states,
     )
+    if result.was_running and _is_legacy_h3_model(
+        job.get("params", {}).get("model_type")
+    ):
+        minimax_h3_service.cancel()
     if result.abort_signalled:
         print(f"[Cancel] Signalling abort for job {job_id}")
     if not result.was_running and job.get("status") == "cancelled":
@@ -662,6 +764,11 @@ def _check_model_downloaded(model_type: str) -> bool:
     weight group; ONE variant per group is enough. Every group (main
     transformer + each weight module) must be present.
     """
+    # Keep this first branch self-contained: the readiness function is also
+    # used in isolated model-definition checks where launcher-only helpers are
+    # intentionally not imported.
+    if str(model_type or "").strip() == "minimax_h3_legacy":
+        return minimax_h3_service.is_model_downloaded()
     try:
         model_def = wgp.get_model_def(model_type)
         if model_def is None:
@@ -922,9 +1029,319 @@ async def update_model_visibility(request: Request):
         return _model_visibility_response()
 
 
+_MODEL_SELECTION_CONFIG_KEY = "maestro_model_selections"
+_MODEL_SELECTION_MODES = frozenset({
+    "image", "video", "audio", "model3d", "avatar",
+})
+
+_PRODUCTION_PROFILE_CONFIG_KEY = "maestro_production_profile"
+_PRODUCTION_PROFILE_VERSION = 1
+_DEFAULT_PRODUCTION_PROFILE = {
+    "version": _PRODUCTION_PROFILE_VERSION,
+    "text": {"provider": "minimax", "model": "MiniMax-M3"},
+    "image": {"provider": "minimax", "model": "image-01"},
+    "music": {"provider": "minimax", "model": "music-3.0"},
+    "video": {
+        "provider": "local",
+        "model": "minimax_h3_legacy",
+        "settings": {
+            "profile": "quality",
+            "steps": 20,
+            "flowShift": 12.0,
+            "audioShift": 3.0,
+            "turbo": False,
+            "cache": False,
+            "loras": [],
+            "resolution": "540p",
+            "aspectRatio": "16:9",
+        },
+    },
+}
+
+
+def _bounded_profile_text(value, label: str, *, maximum: int = 200) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a string.")
+    result = value.strip()
+    if not result:
+        raise ValueError(f"{label} cannot be empty.")
+    if len(result) > maximum:
+        raise ValueError(f"{label} is too long.")
+    return result
+
+
+def _normalize_production_profile(value) -> dict:
+    """Validate the credential-free defaults shared by every production UI."""
+    if not isinstance(value, dict):
+        raise ValueError("Production profile must be an object.")
+    text_profile = value.get("text")
+    image_profile = value.get("image")
+    music_profile = value.get("music")
+    video_profile = value.get("video")
+    if not all(isinstance(item, dict) for item in (
+        text_profile, image_profile, music_profile, video_profile,
+    )):
+        raise ValueError("Production profile needs text, image, music and video sections.")
+
+    text_provider = _bounded_profile_text(
+        text_profile.get("provider"), "Text provider",
+    ).lower()
+    if text_provider not in {
+        "local", "remote", "openai", "anthropic", "deepseek", "minimax",
+        "openai-compatible",
+    }:
+        raise ValueError("Unsupported production text provider.")
+    image_provider = _bounded_profile_text(
+        image_profile.get("provider"), "Image provider",
+    ).lower()
+    if image_provider not in {"maestro", "local", "minimax"}:
+        raise ValueError("Unsupported production image provider.")
+    music_provider = _bounded_profile_text(
+        music_profile.get("provider"), "Music provider",
+    ).lower()
+    if music_provider not in {"maestro", "local", "minimax"}:
+        raise ValueError("Unsupported production music provider.")
+    video_provider = _bounded_profile_text(
+        video_profile.get("provider"), "Video provider",
+    ).lower()
+    if video_provider not in {"maestro", "local"}:
+        raise ValueError("Unsupported production video provider.")
+
+    settings = video_profile.get("settings")
+    if not isinstance(settings, dict):
+        raise ValueError("Production video settings must be an object.")
+    try:
+        steps = int(settings.get("steps", 20))
+        flow_shift = float(settings.get("flowShift", 12.0))
+        audio_shift = float(settings.get("audioShift", 3.0))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Production video steps and shifts must be numeric.") from exc
+    if not 1 <= steps <= 50:
+        raise ValueError("Production video steps must be between 1 and 50.")
+    if not -100 <= flow_shift <= 100 or not -100 <= audio_shift <= 100:
+        raise ValueError("Production video shifts must be between -100 and 100.")
+    loras = settings.get("loras", [])
+    if not isinstance(loras, list) or len(loras) > 32:
+        raise ValueError("Production video LoRAs must be a list of at most 32 entries.")
+    normalized_loras = [
+        _bounded_profile_text(item, "Production video LoRA", maximum=500)
+        for item in loras
+    ]
+    resolution = _bounded_profile_text(
+        settings.get("resolution", "540p"), "Production video resolution",
+        maximum=40,
+    ).lower()
+    if resolution not in {"auto", "480p", "540p", "720p", "768p", "1080p"}:
+        raise ValueError("Unsupported production video resolution preset.")
+    aspect_ratio = _bounded_profile_text(
+        settings.get("aspectRatio", "16:9"), "Production video aspect ratio",
+        maximum=20,
+    ).lower()
+    if aspect_ratio not in {"auto", "21:9", "16:9", "9:16", "1:1", "4:3", "3:4"}:
+        raise ValueError("Unsupported production video aspect ratio.")
+
+    return {
+        "version": _PRODUCTION_PROFILE_VERSION,
+        "text": {
+            "provider": text_provider,
+            "model": _bounded_profile_text(text_profile.get("model"), "Text model"),
+        },
+        "image": {
+            "provider": image_provider,
+            "model": _bounded_profile_text(image_profile.get("model"), "Image model"),
+        },
+        "music": {
+            "provider": music_provider,
+            "model": _bounded_profile_text(music_profile.get("model"), "Music model"),
+        },
+        "video": {
+            "provider": video_provider,
+            "model": _bounded_profile_text(video_profile.get("model"), "Video model"),
+            "settings": {
+                "profile": _bounded_profile_text(
+                    settings.get("profile", "quality"), "Video profile", maximum=40,
+                ).lower(),
+                "steps": steps,
+                "flowShift": flow_shift,
+                "audioShift": audio_shift,
+                "turbo": bool(settings.get("turbo", False)),
+                "cache": bool(settings.get("cache", False)),
+                "loras": normalized_loras,
+                "resolution": resolution,
+                "aspectRatio": aspect_ratio,
+            },
+        },
+    }
+
+
+def _active_production_profile() -> dict:
+    raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
+    try:
+        return _normalize_production_profile(raw)
+    except ValueError:
+        return copy.deepcopy(_DEFAULT_PRODUCTION_PROFILE)
+
+
+def _effective_llm_routing(services: dict | None = None) -> tuple[str, str, str]:
+    """Resolve generic LLM work from the production profile, not stale UI keys.
+
+    API keys and device preferences remain in ``services``.  This separation is
+    what prevents Director/prompt tools from downloading a local model while a
+    new or migrated install already advertises MiniMax in its global profile.
+    """
+    service_values = services if isinstance(services, dict) else {}
+    text_profile = _active_production_profile().get("text", {})
+    provider = str(text_profile.get("provider") or "local").strip().lower()
+    model = str(text_profile.get("model") or "").strip()
+    remote_url = str(service_values.get("llm_remote_url") or "").strip()
+    if provider == "minimax":
+        remote_url = "https://api.minimax.io"
+    elif provider == "openai" and not remote_url:
+        remote_url = "https://api.openai.com"
+    return provider, model, remote_url
+
+
+def _production_profile_response() -> dict:
+    raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
+    try:
+        profile = _normalize_production_profile(raw)
+        configured = True
+    except ValueError:
+        profile = copy.deepcopy(_DEFAULT_PRODUCTION_PROFILE)
+        configured = False
+    return {"configured": configured, "profile": profile}
+
+
+def _profile_image_model_type(profile: dict | None = None) -> str:
+    image = (profile or _active_production_profile()).get("image", {})
+    provider = str(image.get("provider") or "").lower()
+    model = str(image.get("model") or "").strip()
+    if provider == "minimax" and not model.startswith("minimax:"):
+        return f"minimax:{model or 'image-01'}"
+    return model
+
+
+@api.get("/api/v1/production-profile")
+def get_production_profile():
+    """Return credential-free defaults shared by Studio and every Lab."""
+    return _production_profile_response()
+
+
+@api.put("/api/v1/production-profile")
+async def update_production_profile(request: Request):
+    body = await request.json()
+    try:
+        profile = _normalize_production_profile(
+            body.get("profile") if isinstance(body, dict) else None,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    with _MODEL_VISIBILITY_WRITE_LOCK:
+        wgp.server_config[_PRODUCTION_PROFILE_CONFIG_KEY] = profile
+        # Generic tools (Director, prompt enhancement, planning) consume the
+        # text section of this same profile. Mirror only provider/model/base
+        # URL into the legacy services keys; credentials stay independent.
+        services = wgp.server_config.setdefault("services", {})
+        services["llm_provider"] = profile["text"]["provider"]
+        services["llm_model_id"] = profile["text"]["model"]
+        if profile["text"]["provider"] == "minimax":
+            services["llm_remote_url"] = "https://api.minimax.io"
+        # Saving the global profile is an explicit request to make Studio and
+        # Director inherit it. Later manual model choices are persisted again
+        # as ordinary per-mode overrides.
+        selections = wgp.server_config.get(_MODEL_SELECTION_CONFIG_KEY)
+        if isinstance(selections, dict):
+            selections.pop("image", None)
+            selections.pop("video", None)
+        _persist_model_visibility_config()
+    return {"configured": True, "profile": profile}
+
+
+def _normalize_model_selections(values):
+    """Validate the small per-mode model preference map persisted by the UI."""
+    if not isinstance(values, dict):
+        raise ValueError("Model selections must be an object.")
+    if len(values) > len(_MODEL_SELECTION_MODES):
+        raise ValueError("Too many model selection entries.")
+    normalized = {}
+    for raw_mode, raw_model in values.items():
+        mode = str(raw_mode or "").strip()
+        if mode not in _MODEL_SELECTION_MODES:
+            raise ValueError(f"Unknown generation mode: {mode or '(empty)'}.")
+        if not isinstance(raw_model, str):
+            raise ValueError("Every model selection must be a string.")
+        model_type = raw_model.strip()
+        if not model_type:
+            continue
+        if len(model_type) > 200:
+            raise ValueError("A model identifier is too long.")
+        normalized[mode] = model_type
+    return normalized
+
+
+def _model_selections_response():
+    raw = wgp.server_config.get(_MODEL_SELECTION_CONFIG_KEY)
+    profile = _active_production_profile()
+    profile_defaults = {
+        "image": _profile_image_model_type(profile),
+        "video": str(profile.get("video", {}).get("model") or "").strip(),
+    }
+    try:
+        explicit_models = _normalize_model_selections(raw)
+    except ValueError:
+        explicit_models = {}
+    selected_models = {
+        **{key: value for key, value in profile_defaults.items() if value},
+        **explicit_models,
+    }
+    return {
+        "configured": isinstance(raw, dict),
+        "selected_models": selected_models,
+        "sources": {
+            key: "override" if key in explicit_models else "global"
+            for key in selected_models
+        },
+    }
+
+
+@api.get("/api/v1/model-selections")
+def get_model_selections():
+    """Return model choices independently of Pinokio's changing UI port."""
+    return _model_selections_response()
+
+
+@api.put("/api/v1/model-selections")
+async def update_model_selections(request: Request):
+    """Persist the user's last model for each generation mode."""
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Model selection payload must be an object.",
+        )
+    try:
+        selected_models = _normalize_model_selections(
+            body.get("selected_models"),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    with _MODEL_VISIBILITY_WRITE_LOCK:
+        wgp.server_config[_MODEL_SELECTION_CONFIG_KEY] = selected_models
+        _persist_model_visibility_config()
+        return _model_selections_response()
+
+
 @api.get("/api/v1/models/{model_type}/debug")
 def debug_model(model_type: str):
     """Debug: show raw model definition and download check."""
+    if _is_legacy_h3_model(model_type):
+        return {
+            "model_type": model_type,
+            "runtime_installed": minimax_h3_service.is_runtime_installed(),
+            "is_downloaded": minimax_h3_service.is_model_downloaded(),
+            "runtime_dir": str(minimax_h3_service.COMFY_DIR),
+        }
     if model_type in model3d_service.MODEL_BY_ID:
         model = model3d_service.MODEL_BY_ID[model_type]
         return {
@@ -958,6 +1375,9 @@ def debug_model(model_type: str):
 @api.delete("/api/v1/models/{model_type}")
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
+    if _is_legacy_h3_model(model_type):
+        deleted = minimax_h3_service.delete_model_cache()
+        return {"deleted": deleted, "model_type": model_type}
     if model_type == "unirig":
         from services import rig_service
         deleted = rig_service.delete_unirig_cache()
@@ -1016,6 +1436,16 @@ def _download_model_files(model_type: str):
     Mirrors the file-resolution block at the top of wgp.load_models()
     (wgp.py:4041-4143) — keep the two in sync.
     """
+    if _is_legacy_h3_model(model_type):
+        minimax_h3_service.ensure_quality_assets(
+            lambda message: print(f"[H3 Legacy] {message}")
+        )
+        if not minimax_h3_service.is_model_downloaded():
+            raise RuntimeError(
+                "Legacy download finished but the exact ConvRot files are still missing."
+            )
+        return
+
     model_def = wgp.get_model_def(model_type)
     quantization = wgp.transformer_quantization
     dtype_policy = wgp.transformer_dtype_policy
@@ -1107,6 +1537,8 @@ def list_resolutions():
 @api.get("/api/v1/defaults/{model_type}")
 def get_defaults(model_type: str):
     """Get default settings for a model type."""
+    if _is_legacy_h3_model(model_type):
+        return dict(minimax_h3_service.DEFAULTS)
     if wgp.get_model_def(model_type) is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
     defaults = wgp.get_default_settings(model_type)
@@ -1862,7 +2294,9 @@ def _minimax_h3_turbo_option(model_def: dict) -> dict | None:
             "Experimental MiniMax H3 accelerator for Full and Pruned "
             "checkpoints. Maestro's one-click preset uses 6 steps and starts "
             "at strength 0.50. Adjust its active LoRA strength in Advanced; "
-            "the managed adapter and small compatibility data download "
+            "this speed preset can reduce prompt and style fidelity versus "
+            "the normal 20-step recipe. Disable Turbo for maximum quality. "
+            "The managed adapter and small compatibility data download "
             "automatically on first use. Pruned is recommended on 16 GB GPUs."
         ),
     }
@@ -1871,6 +2305,8 @@ def _minimax_h3_turbo_option(model_def: dict) -> dict | None:
 @api.get("/api/v1/loras/{model_type}")
 def list_loras(model_type: str):
     """List available LoRA files for a model type."""
+    if _is_legacy_h3_model(model_type):
+        return {"loras": [], "guidance_max_phases": 1}
     if model_type in model3d_service.MODEL_BY_ID:
         return {"loras": [], "guidance_max_phases": 1}
     md = wgp.get_model_def(model_type)
@@ -1913,6 +2349,8 @@ def list_loras(model_type: str):
 @api.get("/api/v1/loras/{model_type}/details")
 def list_loras_details(model_type: str):
     """List LoRAs with metadata from .civitai.json sidecars."""
+    if _is_legacy_h3_model(model_type):
+        return {"loras": [], "guidance_max_phases": 1}
     if model_type in model3d_service.MODEL_BY_ID:
         return {"loras": [], "guidance_max_phases": 1}
     md = wgp.get_model_def(model_type)
@@ -5472,6 +5910,8 @@ def _minimax_h3_runtime_advisory(model_def: dict) -> dict | None:
 @api.get("/api/v1/model-options/{model_type}")
 def get_model_options(model_type: str):
     """Return UI-relevant model options for dynamic rendering."""
+    if _is_legacy_h3_model(model_type):
+        return dict(minimax_h3_service.MODEL_OPTIONS)
     if model_type in model3d_service.MODEL_BY_ID:
         return {
             "model_type": model_type,
@@ -6387,7 +6827,7 @@ def _mask_key(key: str) -> str:
     return key[:4] + "..." + key[-4:]
 
 
-_PUBLIC_LLM_PROVIDERS = {"openai", "anthropic"}
+_PUBLIC_LLM_PROVIDERS = {"openai", "anthropic", "minimax"}
 
 
 def _llm_default_device() -> str:
@@ -6420,14 +6860,14 @@ _DEFAULT_LLM_REPO = "Abhiray/gemma-4-E4B-it-heretic-GGUF"
 def get_services_config():
     """Return services settings with API keys masked."""
     services = wgp.server_config.get("services", {})
-    provider = services.get("llm_provider", "local")
+    provider, profile_model, profile_remote_url = _effective_llm_routing(services)
     # Enforce: NSFW must be off when using a public provider
     nsfw = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
     return {
-        "llm_model_id": services.get("llm_model_id", _DEFAULT_LLM_REPO),
+        "llm_model_id": profile_model or services.get("llm_model_id", _DEFAULT_LLM_REPO),
         "llm_device": services.get("llm_device", _llm_default_device()),
         "llm_provider": provider,
-        "llm_remote_url": services.get("llm_remote_url", ""),
+        "llm_remote_url": profile_remote_url,
         "enhance_llm_model_id": services.get("enhance_llm_model_id", ""),
         "enhance_llm_device": services.get("enhance_llm_device", "cuda"),
         "google_api_key": _mask_key(services.get("google_api_key", "")),
@@ -6552,7 +6992,7 @@ async def update_services_config(request: Request):
             updated[f"{key}_set"] = bool(value)
 
     # Enforce: cannot enable NSFW with a public LLM provider
-    provider = services.get("llm_provider", "local")
+    provider = _effective_llm_routing(services)[0]
     if services.get("nsfw_mode") and provider in _PUBLIC_LLM_PROVIDERS:
         services["nsfw_mode"] = False
         updated["nsfw_mode"] = False
@@ -6567,6 +7007,21 @@ async def update_services_config(request: Request):
         raise HTTPException(status_code=400, detail="No valid fields to update")
 
     wgp.server_config["services"] = services
+
+    # Keep the global text profile and the legacy LLM controls coherent. API
+    # keys remain solely in services; only credential-free routing is mirrored.
+    if "llm_provider" in body or "llm_model_id" in body:
+        try:
+            profile = _active_production_profile()
+            profile["text"]["provider"] = str(
+                services.get("llm_provider") or profile["text"]["provider"]
+            )
+            profile["text"]["model"] = str(
+                services.get("llm_model_id") or profile["text"]["model"]
+            )
+            wgp.server_config[_PRODUCTION_PROFILE_CONFIG_KEY] = _normalize_production_profile(profile)
+        except ValueError:
+            pass
 
     with open(wgp.server_config_filename, "w", encoding="utf-8") as f:
         f.write(json.dumps(wgp.server_config, indent=4))
@@ -7282,15 +7737,19 @@ async def llm_load(request: Request):
         body = await request.json()
 
     services = wgp.server_config.get("services", {})
-    model_id = body.get("model_id", services.get("llm_model_id", _DEFAULT_LLM_REPO))
+    profile_provider, profile_model, profile_remote_url = _effective_llm_routing(services)
+    model_id = body.get("model_id", profile_model or _DEFAULT_LLM_REPO)
     device = body.get("device", services.get("llm_device", _llm_default_device()))
-    provider = body.get("provider", services.get("llm_provider", "local"))
-    remote_url = body.get("remote_url", services.get("llm_remote_url", ""))
+    provider = body.get("provider", profile_provider)
+    remote_url = body.get("remote_url", profile_remote_url)
     api_key = ""
     if provider == "openai":
         api_key = services.get("openai_api_key", "")
     elif provider == "anthropic":
         api_key = services.get("anthropic_api_key", "")
+    elif provider == "minimax":
+        api_key = services.get("minimax_api_key", "")
+        remote_url = remote_url or "https://api.minimax.io"
 
     try:
         llm_service.load_model(model_id=model_id, device=device, provider=provider, remote_url=remote_url, api_key=api_key)
@@ -7313,13 +7772,17 @@ def list_llm_models(provider: str = ""):
     """Return available LLM model options. Pass provider to include remote models."""
     from services import llm_service
     services = wgp.server_config.get("services", {})
-    p = provider or services.get("llm_provider", "local")
-    remote_url = services.get("llm_remote_url", "")
+    profile_provider, _profile_model, profile_remote_url = _effective_llm_routing(services)
+    p = provider or profile_provider
+    remote_url = profile_remote_url
     api_key = ""
     if p == "openai":
         api_key = services.get("openai_api_key", "")
     elif p == "anthropic":
         api_key = services.get("anthropic_api_key", "")
+    elif p == "minimax":
+        api_key = services.get("minimax_api_key", "")
+        remote_url = remote_url or "https://api.minimax.io"
     return {"models": llm_service.get_available_models(provider=p, remote_url=remote_url, api_key=api_key)}
 
 
@@ -7334,20 +7797,22 @@ def _ensure_llm_loaded():
     """Auto-load LLM if not already loaded. Reloads if configured model changed."""
     from services import llm_service
     services = wgp.server_config.get("services", {})
-    desired = services.get("llm_model_id", _DEFAULT_LLM_REPO)
+    desired_provider, profile_model, desired_remote_url = _effective_llm_routing(services)
+    desired = profile_model or _DEFAULT_LLM_REPO
     desired_device = services.get("llm_device", _llm_default_device())
-    desired_provider = services.get("llm_provider", "local")
-    desired_remote_url = services.get("llm_remote_url", "")
     desired_api_key = ""
     if desired_provider == "openai":
         desired_api_key = services.get("openai_api_key", "")
     elif desired_provider == "anthropic":
         desired_api_key = services.get("anthropic_api_key", "")
+    elif desired_provider == "minimax":
+        desired_api_key = services.get("minimax_api_key", "")
+        desired_remote_url = desired_remote_url or "https://api.minimax.io"
 
     if llm_service.is_loaded():
         status = llm_service.get_status()
         remote_changed = (
-            desired_provider in ("remote", "openai")
+            desired_provider in ("remote", "openai", "minimax")
             and status.get("remote_url", "") != desired_remote_url
         )
         if (
@@ -7396,8 +7861,9 @@ async def llm_test():
     try:
         # Remote providers are cheap to reconnect. Recreate their client state
         # so a just-edited URL or API key is what this explicit test validates.
-        provider = wgp.server_config.get("services", {}).get("llm_provider", "local")
-        if provider in ("remote", "openai", "anthropic") and llm_service.is_loaded():
+        services = wgp.server_config.get("services", {})
+        provider = _effective_llm_routing(services)[0]
+        if provider in ("remote", "openai", "anthropic", "minimax") and llm_service.is_loaded():
             llm_service.unload_model()
         _ensure_llm_loaded()
         response = llm_service.generate(
@@ -7783,7 +8249,7 @@ async def llm_plan_h3_windows(request: Request):
         # been downloaded yet, and surface that state in planned_by.
         print(f"[MiniMax H3] Planner LLM unavailable; using fallback: {load_error}")
     services = wgp.server_config.get("services", {})
-    provider = services.get("llm_provider", "local")
+    provider = _effective_llm_routing(services)[0]
     nsfw = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
     image_paths = [
         path for path in (body.get("image_paths") or [])
@@ -7854,7 +8320,7 @@ async def llm_enhance_prompt(request: Request):
     from services import llm_service
 
     services = wgp.server_config.get("services", {})
-    provider = services.get("llm_provider", "local")
+    provider = _effective_llm_routing(services)[0]
     nsfw = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
 
     # Check if a separate enhance LLM is configured
@@ -9435,7 +9901,7 @@ async def director_v2_plan(request: Request):
 
         # NSFW from server config (enforced: never with public providers)
         services = wgp.server_config.get("services", {})
-        provider = services.get("llm_provider", "local")
+        provider = _effective_llm_routing(services)[0]
         planner_kwargs["nsfw"] = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
 
         # Prompt polish mode: off | full_guide | light_guide | third_pass.
@@ -9614,11 +10080,45 @@ async def generate(request: Request):
     if not is_sfx and wgp.get_model_def(body["model_type"]) is None:
         raise HTTPException(status_code=400, detail=f"Unknown model: {body['model_type']}")
 
+    legacy_h3 = _is_legacy_h3_model(body["model_type"])
     try:
         _base_model_type = wgp.get_base_model_type(body["model_type"])
     except Exception:
         _base_model_type = body.get("model_type")
     _generation_model_def = wgp.get_model_def(body["model_type"]) or {}
+    if legacy_h3:
+        body.setdefault("resolution", minimax_h3_service.DEFAULTS["resolution"])
+        body.setdefault("video_length", minimax_h3_service.DEFAULTS["video_length"])
+        body.setdefault(
+            "h3_audio_prompt",
+            minimax_h3_service.DEFAULTS["h3_audio_prompt"],
+        )
+        body.update({
+            "h3_model_profile": "quality",
+            "h3_allow_low_memory_fallback": False,
+            "num_inference_steps": 20,
+            "flow_shift": 12.0,
+            "h3_audio_shift": 3.0,
+            "guidance_scale": 1.0,
+            "minimax_h3_turbo_mode": False,
+            "activated_loras": [],
+            "loras_multipliers": "",
+            "skip_steps_cache_type": "",
+        })
+        for key in (
+            "minimax_h3_text_encoder",
+            "skip_steps_multiplier",
+            "skip_steps_start_step_perc",
+            "minimax_h3_window_storyboard",
+            "h3_window_prompts",
+            "h3_window_plan_signature",
+            "h3_window_plan",
+            "minimax_h3_references",
+            "per_clip_minimax_h3_references",
+            "minimax_h3_reference_detail",
+        ):
+            body.pop(key, None)
+
     if _generation_model_def.get("omni_reference"):
         from models.minimax_h3.ref2va import validate_reference_manifest
 
@@ -9644,7 +10144,10 @@ async def generate(request: Request):
             body["minimax_h3_reference_detail"] = detail
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
-    if str(_generation_model_def.get("architecture") or "").startswith("minimax_h3"):
+    if (
+        not legacy_h3
+        and str(_generation_model_def.get("architecture") or "").startswith("minimax_h3")
+    ):
         variants = _generation_model_def.get("minimax_h3_text_encoder_variants") or {}
         selected_encoder = str(
             body.get("minimax_h3_text_encoder")
@@ -9789,7 +10292,7 @@ async def generate(request: Request):
                 except Exception as load_error:
                     print(f"[MiniMax H3] Planner LLM unavailable; using fallback: {load_error}")
                 services = wgp.server_config.get("services", {})
-                provider = services.get("llm_provider", "local")
+                provider = _effective_llm_routing(services)[0]
                 nsfw = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
                 h3_images = []
                 for value in (h3_start_value, h3_end_value):
@@ -10007,8 +10510,9 @@ async def generate(request: Request):
     # API acknowledgement and thread scheduling cannot lose the request.
     _persist_generation_job(job)
 
-    # Cancel any delayed H3 release as soon as new GPU work enters the queue.
-    # The queued job may reuse H3 or replace it with another native WGP model.
+    # Cancel the matching runtime release as soon as work enters FIFO.
+    if legacy_h3:
+        minimax_h3_service.cancel_idle_shutdown()
     _cancel_h3_idle_release()
 
     # Non-daemon so generation survives browser disconnect during overnight runs
@@ -10113,6 +10617,7 @@ async def retake_video_endpoint(request: Request):
         "workspace": workspace, "out_dir": job_out_dir,
     }
     _jobs[job_id] = job
+    register_generation_job(_gen_lock, job)
 
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
     thread.start()
@@ -10677,6 +11182,7 @@ async def edit_anything_endpoint(request: Request):
         "workspace": workspace, "out_dir": job_out_dir,
     }
     _jobs[job_id] = job
+    register_generation_job(_gen_lock, job)
 
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
     thread.start()
@@ -16372,6 +16878,7 @@ async def repaint_endpoint(request: Request):
         "out_dir": _workspace_dir(workspace_name),
     }
     _jobs[job_id] = job
+    register_generation_job(_gen_lock, job)
 
     if not mappings:
         threading.Thread(
@@ -17330,6 +17837,7 @@ async def recast_endpoint(request: Request):
         "workspace": workspace_name, "out_dir": job_out_dir,
     }
     _jobs[job_id] = job
+    register_generation_job(_gen_lock, job)
     initial_probe_frame = probe_frame
 
     def _run_recast():
@@ -19401,6 +19909,7 @@ async def outpaint_endpoint(request: Request):
         "workspace": workspace, "out_dir": job_out_dir,
     }
     _jobs[job_id] = job
+    register_generation_job(_gen_lock, job)
 
     worker = (
         _prepare_and_run_outpaint
@@ -19862,6 +20371,7 @@ async def blend_endpoint(request: Request):
             "workspace": workspace, "out_dir": job_out_dir,
         }
         _jobs[job_id] = job
+        register_generation_job(_gen_lock, job)
 
         thread = threading.Thread(target=_run_blend_generation, args=(job_id,), daemon=False)
         thread.start()
@@ -20492,6 +21002,7 @@ async def inpaint_endpoint(request: Request):
         "workspace": workspace, "out_dir": job_out_dir,
     }
     _jobs[job_id] = job
+    register_generation_job(_gen_lock, job)
 
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
     thread.start()
@@ -21513,7 +22024,7 @@ def _run_tool_upscale(job_id: str):
     upsampler (FlashVSR / Lanczos), preserving the original audio. Thin extract
     of edit_video's postprocessing path — no model generation/Gradio state."""
     job = _jobs[job_id]
-    start_time = time.time()
+    start_time = None
     abort_state = {"abort": False}
     audio_tracks = []
     with generation_slot(_gen_lock, job) as acquired:
@@ -21524,6 +22035,7 @@ def _run_tool_upscale(job_id: str):
                 job, message="Preparing upscale...", phase="Preparing",
             ):
                 return False
+            start_time = float(job.get("started_at") or time.time())
             if not register_abort_state(
                 job, job_id, _active_gen_states, abort_state,
             ):
@@ -21676,7 +22188,7 @@ def _run_tool_revoice(job_id: str):
     is never mutated."""
     import shutil
     job = _jobs[job_id]
-    start_time = time.time()
+    start_time = None
     abort_state = {"abort": False}
     final_path = None
     with generation_slot(_gen_lock, job) as acquired:
@@ -21687,6 +22199,7 @@ def _run_tool_revoice(job_id: str):
                 job, message="Preparing revoice...", phase="Preparing",
             ):
                 return False
+            start_time = float(job.get("started_at") or time.time())
             if not register_abort_state(
                 job, job_id, _active_gen_states, abort_state,
             ):
@@ -21824,6 +22337,7 @@ async def tools_upscale(request: Request):
         "output_files": [], "error": None,
         "workspace": workspace, "out_dir": _workspace_dir(workspace),
     }
+    register_generation_job(_gen_lock, _jobs[job_id])
     threading.Thread(target=_run_tool_upscale, args=(job_id,), daemon=False).start()
     return {"job_id": job_id, "status": "queued"}
 
@@ -21869,6 +22383,7 @@ async def tools_revoice(request: Request):
         "output_files": [], "error": None,
         "workspace": workspace, "out_dir": _workspace_dir(workspace),
     }
+    register_generation_job(_gen_lock, _jobs[job_id])
     threading.Thread(target=_run_tool_revoice, args=(job_id,), daemon=False).start()
     return {"job_id": job_id, "status": "queued"}
 
@@ -21879,7 +22394,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
     import inspect
 
     job = _jobs[job_id]
-    start_time = time.time()
+    start_time = None
     active_task_timer = None
     abort_state = None
 
@@ -21895,14 +22410,25 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 ),
             ):
                 return False
+            # Active generation timing begins only after this job owns the GPU
+            # slot. Time spent waiting in the submission queue is deliberately
+            # excluded from gallery metadata and completion logs.
+            start_time = float(job.get("started_at") or time.time())
             _persist_generation_job(job)
             _cancel_h3_idle_release()
+            legacy_h3_job = _is_legacy_h3_model(
+                job.get("params", {}).get("model_type")
+            )
+            # Never retain the isolated Comfy runtime beside a native WGP
+            # model. Adjacent Legacy jobs still reuse it through FIFO.
+            if legacy_h3_job:
+                minimax_h3_service.cancel_idle_shutdown()
+            else:
+                minimax_h3_service.stop_runtime()
 
-            # Per-job VRAM coefficient adjustment — accounts for active
-            # LoRAs and pipeline stage count beyond what the auto-tuned
-            # base captures. Mutates wgp.args.vram_safety_coefficient
-            # in place; restored in the finally block below.
-            _apply_per_job_coefficient(job)
+            # Per-job VRAM coefficient adjustment applies only to WGP jobs.
+            if not legacy_h3_job:
+                _apply_per_job_coefficient(job)
 
             # Build minimal state (same structure as CLI mode, line 11935 of wgp.py)
             state = {
@@ -21932,12 +22458,15 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
             # Build task manifest from user params
             raw_params = job["params"].copy()
 
-            # Register the exact state before any model work. Every native H3
-            # variant is now owned by WGP and uses the same interrupt contract.
+            # Register the exact state before any model work. Legacy owns a
+            # Comfy prompt interrupt; native models use WGP's interrupt flag.
             abort_state = state["gen"]
-            interrupt_model = (
-                None if raw_params.get("sfx_mode") else _interrupt_wan_model
-            )
+            if legacy_h3_job:
+                interrupt_model = minimax_h3_service.cancel
+            else:
+                interrupt_model = (
+                    None if raw_params.get("sfx_mode") else _interrupt_wan_model
+                )
             if not register_abort_state(
                 job,
                 job_id,
@@ -21946,6 +22475,115 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 interrupt_model=interrupt_model,
             ):
                 return False
+
+            # The quality route is the proven previous-Maestro implementation:
+            # fixed INT8 ConvRot pair, isolated ComfyUI, 20 steps, no Turbo/cache.
+            if legacy_h3_job:
+                if raw_params.get("video_source"):
+                    if not update_job(
+                        job,
+                        message="Capturing the source video's final frame…",
+                        phase="Preparing",
+                    ):
+                        return False
+                    source_path = _resolve_video_editor_source(
+                        raw_params["video_source"]
+                    )
+                    anchor = minimax_h3_service.prepare_extend_anchor(
+                        raw_params,
+                        job_id,
+                        source_path,
+                        os.path.join(os.getcwd(), "uploads"),
+                    )
+                    job["params"] = raw_params.copy()
+                    ignored = anchor["ignored_references"]
+                    ignored_note = (
+                        f"; ignored {ignored} other reference(s)"
+                        if ignored else ""
+                    )
+                    print(
+                        f"[H3 Legacy] Extend anchor at {anchor['time']:.3f}s "
+                        f"({anchor['path']}){ignored_note}."
+                    )
+
+                minimax_h3_service.cancel_idle_shutdown()
+                wgp.release_model()
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+                def _legacy_h3_progress(
+                    message: str,
+                    value: int,
+                    step: int = 0,
+                    total: int = 0,
+                ) -> None:
+                    update_job(
+                        job,
+                        message=message,
+                        progress=max(0, min(100, int(value))),
+                        step=max(0, int(step)),
+                        total_steps=max(0, int(total)),
+                        phase="H3 Legacy sampling" if total > 0 else "",
+                    )
+
+                with safe_download.cancellable_downloads(
+                    lambda: is_cancel_requested(job),
+                ):
+                    generated = minimax_h3_service.generate(
+                        raw_params,
+                        job_id,
+                        job["out_dir"],
+                        _legacy_h3_progress,
+                        lambda: is_cancel_requested(job),
+                        keep_runtime=True,
+                    )
+                if is_cancel_requested(job):
+                    return False
+
+                output_names = [os.path.basename(path) for path in generated]
+                record_job_outputs(job, output_names)
+                upload_filenames = {}
+                for key in ("image_start", "image_end", "video_source"):
+                    value = raw_params.get(key)
+                    if isinstance(value, str) and value:
+                        upload_filenames[key] = os.path.basename(value)
+                sidecar = {
+                    "params": raw_params,
+                    "upload_filenames": upload_filenames,
+                    "generation_mode": "video",
+                    "job_id": job_id,
+                    "generation_time": round(time.time() - start_time),
+                    "created_at": time.time(),
+                }
+                director_pipeline_id = raw_params.get("_director_pipeline_id")
+                if director_pipeline_id:
+                    sidecar["director_pipeline_id"] = director_pipeline_id
+                for path in generated:
+                    file_sidecar = dict(sidecar)
+                    file_sidecar["output_filename"] = os.path.basename(path)
+                    meta_path = os.path.splitext(path)[0] + ".meta.json"
+                    with open(meta_path, "w", encoding="utf-8") as handle:
+                        json.dump(file_sidecar, handle, indent=2)
+
+                if not finalize:
+                    return update_job(
+                        job,
+                        progress=99,
+                        step=0,
+                        total_steps=0,
+                        phase="Finalizing",
+                        message="Finalizing...",
+                    )
+                return finish_job(
+                    job,
+                    "completed",
+                    progress=100,
+                    step=0,
+                    total_steps=0,
+                    phase="",
+                    message="Done",
+                )
 
             # Inject progressive pipeline setting from services config (applies to all paths)
             _services_cfg = wgp.server_config.get("services", {})
@@ -22617,11 +23255,22 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                             expected_args = set(inspect.signature(wgp.generate_video).parameters.keys())
                             filtered_params = {k: v for k, v in params.items() if k in expected_args}
                             plugin_data = task.get('plugin_data', {})
-                            wgp.generate_video(task, send_cmd, plugin_data=plugin_data, **filtered_params)
+                            # Model downloads are blocking inside hf-hub. Bind
+                            # their byte-progress loop to this exact job's
+                            # durable abort state so Cancel works before the
+                            # model has finished downloading or loading.
+                            with safe_download.cancellable_downloads(
+                                lambda: is_cancel_requested(job)
+                                or bool(gen.get("abort")),
+                            ):
+                                wgp.generate_video(task, send_cmd, plugin_data=plugin_data, **filtered_params)
                         except Exception as e:
-                            print(f"\n  [ERROR] {e}")
-                            traceback.print_exc()
-                            send_cmd("error", str(e))
+                            if is_cancel_requested(job) or gen.get("abort"):
+                                print(f"\n  [Cancel] Generation worker acknowledged job {job_id}")
+                            else:
+                                print(f"\n  [ERROR] {e}")
+                                traceback.print_exc()
+                                send_cmd("error", str(e))
                         finally:
                             send_cmd("exit", None)
                     return error_handler
@@ -22865,7 +23514,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
 
             elapsed = time.time() - start_time
             print(f"\n{'='*50}")
-            summary = f"Queue completed: {completed}/{total_tasks} tasks in {wgp.format_time(elapsed)}"
+            summary = f"Generation completed: {completed}/{total_tasks} tasks in {wgp.format_time(elapsed)}"
             if skipped > 0:
                 summary += f" ({skipped} skipped)"
             print(summary)
@@ -23501,11 +24150,15 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
             # optional model-idle cleanup so a shutdown during cleanup cannot
             # offer a duplicate completed job for recovery.
             _remove_persisted_generation_job(job)
+            finished_model_type = job.get("params", {}).get("model_type")
             if (
-                _is_minimax_h3_model(job.get("params", {}).get("model_type"))
-                # Story Director deliberately keeps H3 alive between its
-                # sequential segments. Its wrapper schedules the same
-                # queue-aware idle release after final assembly.
+                _is_legacy_h3_model(finished_model_type)
+                and not job.get("params", {}).get("_director_pipeline_id")
+            ):
+                _release_legacy_h3_when_queue_allows(job_id)
+            elif (
+                _is_minimax_h3_model(finished_model_type)
+                and not _is_legacy_h3_model(finished_model_type)
                 and not job.get("params", {}).get("_director_pipeline_id")
             ):
                 _release_h3_when_queue_allows(job_id)
@@ -24276,6 +24929,12 @@ def get_status(job_id: str):
     if job_id not in _jobs:
         raise HTTPException(status_code=404, detail="Job not found")
     j = snapshot_job(_jobs[job_id])
+    started_at = j.get("started_at")
+    finished_at = j.get("finished_at")
+    processing_time = (
+        max(0.0, float(finished_at or time.time()) - float(started_at))
+        if started_at else None
+    )
     return {
         "job_id": j["id"],
         "status": j["status"],
@@ -24287,6 +24946,17 @@ def get_status(job_id: str):
         "output_files": j["output_files"],
         "error": j["error"],
         "task_timings": j.get("task_timings", []),
+        "created_at": j.get("created_at"),
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "processing_time_sec": (
+            round(processing_time, 2) if processing_time is not None else None
+        ),
+        "queue_position": (
+            generation_queue_position(_gen_lock, _jobs[job_id])
+            if j.get("status") == "queued" else None
+        ),
+        "generation_details": _public_generation_details(j.get("params")),
         # Present only on failed jobs that look like CUDA OOMs. UI
         # renders the OOM recovery banner when this is non-null.
         "oom_info": j.get("oom_info"),
@@ -24314,6 +24984,8 @@ def cancel_job(job_id: str):
     )
     if result.abort_signalled:
         print(f"[Cancel] Signalling abort for job {job_id}")
+    if not result.was_running and job.get("status") == "cancelled":
+        _remove_persisted_generation_job(job)
     return {
         "job_id": job_id,
         "status": job.get("status"),
@@ -24341,6 +25013,15 @@ def list_jobs():
                 "oom_info": j.get("oom_info"),
                 "task_timings": j.get("task_timings", []),
                 "created_at": j.get("created_at", 0),
+                "started_at": j.get("started_at"),
+                "finished_at": j.get("finished_at"),
+                "queue_position": (
+                    generation_queue_position(_gen_lock, job)
+                    if j.get("status") == "queued" else None
+                ),
+                "generation_details": _public_generation_details(
+                    j.get("params")
+                ),
                 # Lets a refreshed browser restore the exact H3 prompts that
                 # are already driving an in-flight sliding-window job. This is
                 # planning metadata only; model paths and unrelated params stay
@@ -25593,14 +26274,43 @@ def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
     beat_maximum = 8 if project_type == "quick_video" else 10 if project_type == "music_video" else 14
     music_minimum = 1 if project_type == "music_video" else 4
     music_maximum = 1 if project_type == "music_video" else 16
+    creative_brief = {
+        "type": "object",
+        "properties": {
+            "generalIdea": string, "context": string, "performer": string,
+            "musicStyle": string, "songStory": string, "subjects": string,
+            "setting": string, "action": string,
+            "quickFormat": {"type": "string", "enum": [
+                "dialogue", "meme", "parody", "sketch", "viral", "announcement",
+            ]},
+            "durationSeconds": {"type": "integer", "minimum": 5, "maximum": 360},
+        },
+        "required": [
+            "generalIdea", "context", "performer", "musicStyle", "songStory",
+            "subjects", "setting", "action", "quickFormat", "durationSeconds",
+        ],
+        "additionalProperties": False,
+    }
     properties = {
         "overview": {
             "type": "object",
             "properties": {
-                "title": string, "logline": string, "synopsis": string,
+                "title": string, "creativeBrief": creative_brief,
+                "language": string, "genre": string, "tone": string,
+                "audience": string, "visualStyle": string,
+                "characterVisualStyle": string,
+                "enforceVisualStyle": {"type": "boolean"},
+                "allowClipText": {"type": "boolean"},
+                "musicVideoGenerationMode": {"type": "string", "enum": ["image_guided", "direct_video"]},
+                "premise": string, "logline": string, "synopsis": string,
                 "theme": string, "ending": string,
             },
-            "required": ["title", "logline", "synopsis", "theme", "ending"],
+            "required": [
+                "title", "creativeBrief", "language", "genre", "tone", "audience",
+                "visualStyle", "characterVisualStyle", "enforceVisualStyle",
+                "allowClipText", "musicVideoGenerationMode", "premise", "logline",
+                "synopsis", "theme", "ending",
+            ],
             "additionalProperties": False,
         },
         "world": world,
@@ -26027,7 +26737,12 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
     if scope in {"characters", "relationships", "structure"} and not isinstance(value, list):
         return f"{key} is not an array"
     required = {
-        "overview": {"title", "logline", "synopsis", "theme", "ending"},
+        "overview": {
+            "title", "creativeBrief", "language", "genre", "tone", "audience",
+            "visualStyle", "characterVisualStyle", "enforceVisualStyle",
+            "allowClipText", "musicVideoGenerationMode", "premise", "logline",
+            "synopsis", "theme", "ending",
+        },
         "world": {
             "summary", "period", "geography", "society", "technology", "rules",
             "visualLanguage", "visualPrompt", "negativePrompt", "locations",
@@ -26046,9 +26761,29 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
         missing = required["overview"] - set(value)
         if missing:
             return f"overview is missing {', '.join(sorted(missing))}"
-        for field in required["overview"]:
+        string_fields = required["overview"] - {
+            "creativeBrief", "enforceVisualStyle", "allowClipText",
+        }
+        for field in string_fields:
             if not isinstance(value.get(field), str):
                 return f"overview field {field} is not a string"
+        if not isinstance(value.get("enforceVisualStyle"), bool) or not isinstance(value.get("allowClipText"), bool):
+            return "overview style/text flags must be boolean"
+        generated_brief = value.get("creativeBrief")
+        if not isinstance(generated_brief, dict):
+            return "overview creativeBrief is not an object"
+        brief_fields = {
+            "generalIdea", "context", "performer", "musicStyle", "songStory",
+            "subjects", "setting", "action", "quickFormat", "durationSeconds",
+        }
+        brief_missing = brief_fields - set(generated_brief)
+        if brief_missing:
+            return f"overview creativeBrief is missing {', '.join(sorted(brief_missing))}"
+        if any(not isinstance(generated_brief.get(field), str) for field in brief_fields - {"durationSeconds"}):
+            return "overview creativeBrief contains a non-string field"
+        duration = generated_brief.get("durationSeconds")
+        if not isinstance(duration, int) or isinstance(duration, bool) or not 5 <= duration <= 360:
+            return "overview creativeBrief durationSeconds is outside 5–360"
         return None
     if scope == "world":
         missing = required["world"] - set(value)
@@ -26304,6 +27039,1737 @@ def _story_resume_request(request: dict, override: dict | None) -> dict:
     return updated
 
 
+_series_library_lock = threading.RLock()
+
+
+def _series_library_workspace(value) -> str:
+    from services.series_library import validate_workspace_id
+
+    try:
+        return validate_workspace_id(value or _get_active_workspace())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _read_series_workspace(workspace: str) -> dict:
+    from services.series_library import read_series_library
+
+    return read_series_library(_workspace_dir(workspace), workspace)
+
+
+def _write_series_workspace(workspace: str, library: dict) -> dict:
+    from services.series_library import write_series_library
+
+    return write_series_library(_workspace_dir(workspace), library, workspace)
+
+
+def _series_project_or_404(library: dict, series_id: str) -> dict:
+    series = library.get("seriesById", {}).get(series_id)
+    if not isinstance(series, dict):
+        raise HTTPException(status_code=404, detail="Series Lab project not found")
+    return series
+
+
+@api.get("/api/v1/series/library")
+def get_series_library(workspace: str | None = None):
+    """Load the authoritative Series Lab library for one workspace."""
+    target_workspace = _series_library_workspace(workspace)
+    try:
+        with _series_library_lock:
+            return _read_series_workspace(target_workspace)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read the Series Lab library: {exc}") from exc
+
+
+@api.put("/api/v1/series/library")
+def put_series_library(body: dict):
+    """Atomically replace a Series library; resource endpoints are preferred."""
+    target_workspace = _series_library_workspace(body.get("workspace"))
+    try:
+        with _series_library_lock:
+            return _write_series_workspace(target_workspace, body.get("library"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not save the Series Lab library: {exc}") from exc
+
+
+@api.get("/api/v1/series")
+def list_series_projects(workspace: str | None = None):
+    target_workspace = _series_library_workspace(workspace)
+    with _series_library_lock:
+        library = _read_series_workspace(target_workspace)
+    return {
+        "workspaceId": target_workspace,
+        "seriesOrder": library["seriesOrder"],
+        "series": [library["seriesById"][item] for item in library["seriesOrder"]],
+    }
+
+
+@api.post("/api/v1/series")
+def create_series_project_endpoint(body: dict):
+    from services.series_library import create_series_project, normalize_series_project
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    try:
+        with _series_library_lock:
+            library = _read_series_workspace(workspace)
+            raw_series = body.get("series")
+            series = (
+                normalize_series_project(raw_series, str(raw_series.get("id") or ""), workspace)
+                if isinstance(raw_series, dict)
+                else create_series_project(workspace, title=str(body.get("title") or "Untitled series"))
+            )
+            if series["id"] in library["seriesById"]:
+                raise HTTPException(status_code=409, detail="A Series Lab project with this id already exists")
+            library["seriesById"][series["id"]] = series
+            library["seriesOrder"].append(series["id"])
+            stored = _write_series_workspace(workspace, library)
+            return stored["seriesById"][series["id"]]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.get("/api/v1/series/{series_id}")
+def get_series_project_endpoint(series_id: str, workspace: str | None = None):
+    target_workspace = _series_library_workspace(workspace)
+    with _series_library_lock:
+        return _series_project_or_404(_read_series_workspace(target_workspace), series_id)
+
+
+@api.put("/api/v1/series/{series_id}")
+def put_series_project_endpoint(series_id: str, body: dict):
+    from services.series_library import normalize_series_project
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    raw_series = body.get("series")
+    if not isinstance(raw_series, dict):
+        raise HTTPException(status_code=400, detail="Series project is required")
+    if raw_series.get("id") not in {None, "", series_id}:
+        raise HTTPException(status_code=400, detail="Series project id does not match the route")
+    try:
+        with _series_library_lock:
+            library = _read_series_workspace(workspace)
+            current = _series_project_or_404(library, series_id)
+            base_revision = body.get("baseRevision")
+            if base_revision is not None and int(base_revision) != int(current.get("revision") or 1):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Series revision changed to {current.get('revision')}; reload before saving",
+                )
+            updated = normalize_series_project({**raw_series, "id": series_id}, series_id, workspace)
+            canon_inputs = (
+                "title", "premise", "logline", "format", "language", "genre", "tone", "audience",
+                "visualStyle", "characterVisualStyle", "cameraLanguage", "sourceMode",
+                "masterUniversePrompt", "characters", "relationships", "locations", "props",
+            )
+            current_canon = copy.deepcopy(current.get("canon") or {})
+            updated_canon = copy.deepcopy(updated.get("canon") or {})
+            for value in (current_canon, updated_canon):
+                value.pop("approval", None); value.pop("approvedAt", None)
+            if current_canon != updated_canon or any(
+                current.get(key) != updated.get(key) for key in canon_inputs
+            ):
+                updated["canon"]["approval"] = "draft"
+                updated["canon"]["approvedAt"] = ""
+            updated["revision"] = int(current.get("revision") or 1) + 1
+            updated["createdAt"] = current.get("createdAt") or updated["createdAt"]
+            updated["updatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            library["seriesById"][series_id] = updated
+            stored = _write_series_workspace(workspace, library)
+            return stored["seriesById"][series_id]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.delete("/api/v1/series/{series_id}")
+def delete_series_project_endpoint(series_id: str, workspace: str | None = None):
+    target_workspace = _series_library_workspace(workspace)
+    with _series_library_lock:
+        library = _read_series_workspace(target_workspace)
+        _series_project_or_404(library, series_id)
+        del library["seriesById"][series_id]
+        library["seriesOrder"] = [item for item in library["seriesOrder"] if item != series_id]
+        _write_series_workspace(target_workspace, library)
+    return {"deleted": True, "seriesId": series_id, "outputsPreserved": True}
+
+
+@api.post("/api/v1/series/{series_id}/duplicate")
+def duplicate_series_project_endpoint(series_id: str, body: dict | None = None):
+    from services.series_library import duplicate_series_project, normalize_series_project
+
+    body = body if isinstance(body, dict) else {}
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        source = _series_project_or_404(library, series_id)
+        duplicate = duplicate_series_project(source)
+        duplicate = normalize_series_project(duplicate, duplicate["id"], workspace)
+        library["seriesById"][duplicate["id"]] = duplicate
+        source_index = library["seriesOrder"].index(series_id)
+        library["seriesOrder"].insert(source_index + 1, duplicate["id"])
+        stored = _write_series_workspace(workspace, library)
+    return stored["seriesById"][duplicate["id"]]
+
+
+@api.post("/api/v1/series/import-story")
+def import_story_as_series_endpoint(body: dict):
+    from services.series_library import import_story_project
+    from services.story_library import read_story_library
+    import shutil
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    story = body.get("story") if isinstance(body.get("story"), dict) else None
+    if story is None:
+        story_id = str(body.get("storyId") or "").strip()
+        if not story_id:
+            raise HTTPException(status_code=400, detail="Choose a Story Lab project to import")
+        story_library = read_story_library(_workspace_dir(workspace))
+        story = story_library.get("projects", {}).get(story_id)
+        if not isinstance(story, dict):
+            raise HTTPException(status_code=404, detail="Story Lab source project not found")
+    try:
+        story_for_import = copy.deepcopy(story)
+        upload_sources: dict[str, str] = {}
+        for asset_key, asset in (
+            story_for_import.get("assets", {}).items()
+            if isinstance(story_for_import.get("assets"), dict) else []
+        ):
+            if not isinstance(asset, dict):
+                continue
+            source = str(asset.get("source") or "")
+            if source.startswith("/api/v1/uploads/"):
+                from urllib.parse import unquote
+                upload_name = unquote(source.split("/api/v1/uploads/", 1)[1])
+                local_candidate = _safe_join(os.path.join(os.getcwd(), "uploads"), upload_name)
+                local_source = _story_import_upload_path(local_candidate or "")
+                asset_id = str(asset.get("id") or asset_key)
+                upload_sources[asset_id] = local_source
+                # A valid workspace placeholder lets the pure importer retain
+                # entity links. It is replaced with the copied destination
+                # before the authoritative library is written.
+                asset["source"] = f"assets/story-import/{uuid.uuid4().hex}.bin"
+            elif os.path.isabs(source):
+                try:
+                    local_source = _story_import_upload_path(source)
+                except HTTPException:
+                    continue
+                asset_id = str(asset.get("id") or asset_key)
+                upload_sources[asset_id] = local_source
+                # A valid workspace placeholder lets the pure importer retain
+                # entity links. It is replaced with the copied destination
+                # before the authoritative library is written.
+                asset["source"] = f"assets/story-import/{uuid.uuid4().hex}.bin"
+        imported = import_story_project(story_for_import, workspace)
+        for asset_id, local_source in upload_sources.items():
+            imported_asset = imported.get("assets", {}).get(asset_id)
+            if not isinstance(imported_asset, dict):
+                continue
+            extension = os.path.splitext(local_source)[1].lower()[:12]
+            relative = f"assets/{imported['id']}/{uuid.uuid4().hex[:16]}{extension}"
+            destination = _safe_join(_workspace_dir(workspace), relative)
+            if not destination:
+                raise ValueError("Invalid imported Story asset destination")
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            shutil.copy2(local_source, destination)
+            imported_asset["uri"] = relative
+        with _series_library_lock:
+            library = _read_series_workspace(workspace)
+            library["seriesById"][imported["id"]] = imported
+            library["seriesOrder"].append(imported["id"])
+            stored = _write_series_workspace(workspace, library)
+        return stored["seriesById"][imported["id"]]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.post("/api/v1/series/{series_id}/episodes")
+def create_series_episode_endpoint(series_id: str, body: dict):
+    from services.series_library import create_series_episode
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        if series.get("canon", {}).get("approval") != "approved":
+            raise HTTPException(status_code=400, detail="Approve the reviewed Series canon before creating an episode")
+        episode = create_series_episode(
+            series, str(body.get("seasonId") or "") or None,
+            **(body.get("episode") if isinstance(body.get("episode"), dict) else {}),
+        )
+        series["episodesById"][episode["id"]] = episode
+        season = next(item for item in series["seasons"] if item["id"] == episode["seasonId"])
+        season["episodeOrder"].append(episode["id"])
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = episode["updatedAt"]
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    return stored["seriesById"][series_id]["episodesById"][episode["id"]]
+
+
+@api.get("/api/v1/series/{series_id}/episodes")
+def list_series_episodes_endpoint(series_id: str, workspace: str | None = None):
+    target_workspace = _series_library_workspace(workspace)
+    with _series_library_lock:
+        series = _series_project_or_404(_read_series_workspace(target_workspace), series_id)
+        ordered = []
+        seen: set[str] = set()
+        for season in series.get("seasons", []):
+            if not isinstance(season, dict):
+                continue
+            for episode_id in season.get("episodeOrder", []):
+                episode = series.get("episodesById", {}).get(episode_id)
+                if isinstance(episode, dict) and episode_id not in seen:
+                    ordered.append(copy.deepcopy(episode)); seen.add(episode_id)
+        ordered.extend(
+            copy.deepcopy(episode) for episode_id, episode in series.get("episodesById", {}).items()
+            if isinstance(episode, dict) and episode_id not in seen
+        )
+    return {"episodes": ordered}
+
+
+@api.get("/api/v1/series/{series_id}/episodes/{episode_id}")
+def get_series_episode_endpoint(series_id: str, episode_id: str, workspace: str | None = None):
+    target_workspace = _series_library_workspace(workspace)
+    with _series_library_lock:
+        series = _series_project_or_404(_read_series_workspace(target_workspace), series_id)
+        episode = series.get("episodesById", {}).get(episode_id)
+        if not isinstance(episode, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        return copy.deepcopy(episode)
+
+
+@api.delete("/api/v1/series/{series_id}/episodes/{episode_id}")
+def delete_series_episode_endpoint(series_id: str, episode_id: str, workspace: str | None = None):
+    target_workspace = _series_library_workspace(workspace)
+    for active_job_id in list(_series_plan_active_jobs) + list(_series_render_active_jobs):
+        job = _load_series_plan_job(active_job_id) if active_job_id in _series_plan_active_jobs else _load_series_render_job(active_job_id)
+        if job and job.get("seriesId") == series_id and job.get("episodeId") == episode_id:
+            raise HTTPException(status_code=409, detail="Cancel the active episode job before deleting this episode")
+    with _series_library_lock:
+        library = _read_series_workspace(target_workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        if episode_id not in series.get("episodesById", {}):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        del series["episodesById"][episode_id]
+        for season in series.get("seasons", []):
+            if isinstance(season, dict):
+                season["episodeOrder"] = [item for item in season.get("episodeOrder", []) if item != episode_id]
+        now = _series_iso_now()
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = now
+        library["seriesById"][series_id] = series
+        _write_series_workspace(target_workspace, library)
+    return {"deleted": True, "episodeId": episode_id, "outputsPreserved": True}
+
+
+@api.post("/api/v1/series/{series_id}/assets/import")
+def import_series_asset_endpoint(series_id: str, body: dict):
+    """Copy a Maestro upload into the authoritative workspace asset tree."""
+    import shutil
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    source = _story_import_upload_path(str(body.get("uploadPath") or ""))
+    owner_type = str(body.get("ownerType") or "series")
+    owner_id = str(body.get("ownerId") or series_id).strip()
+    if owner_type not in {"series", "character", "location", "prop", "episode", "shot"}:
+        raise HTTPException(status_code=400, detail="Unsupported Series asset owner")
+    kind = str(body.get("kind") or "image")
+    if kind not in {"image", "audio", "video", "character", "location", "prop", "other"}:
+        kind = "other"
+    extension = os.path.splitext(source)[1].lower()[:12]
+    extra_metadata = copy.deepcopy(body.get("metadata")) if isinstance(body.get("metadata"), dict) else {}
+    if len(json.dumps(extra_metadata, ensure_ascii=False, default=str).encode("utf-8")) > 32 * 1024:
+        raise HTTPException(status_code=413, detail="Series asset metadata is too large")
+    asset_id = f"asset_{uuid.uuid4().hex[:12]}"
+    relative = os.path.join("assets", series_id, f"{asset_id}{extension}").replace(os.sep, "/")
+    destination = _safe_join(_workspace_dir(workspace), relative)
+    if not destination:
+        raise HTTPException(status_code=400, detail="Invalid Series asset destination")
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        entity = None
+        collection_name = {
+            "character": "characters", "location": "locations", "prop": "props",
+        }.get(owner_type)
+        if collection_name:
+            entity = next((
+                item for item in series.get(collection_name, []) if item.get("id") == owner_id
+            ), None)
+            if not isinstance(entity, dict):
+                raise HTTPException(status_code=404, detail=f"Series {owner_type} not found")
+        elif owner_type == "episode" and owner_id not in series.get("episodesById", {}):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        elif owner_type == "shot" and not any(
+            shot.get("id") == owner_id
+            for episode in series.get("episodesById", {}).values() if isinstance(episode, dict)
+            for shot in episode.get("shots", []) if isinstance(shot, dict)
+        ):
+            raise HTTPException(status_code=404, detail="Series shot not found")
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        shutil.copy2(source, destination)
+        asset = {
+            "id": asset_id, "workspaceId": workspace, "kind": kind,
+            "uri": relative, "ownerType": owner_type, "ownerId": owner_id,
+            "isDerivedThumbnail": False,
+            "metadata": {
+                "name": str(body.get("name") or os.path.basename(source))[:300],
+                "referenceRole": str(body.get("referenceRole") or "reference")[:100],
+                "importedAt": _series_iso_now(),
+                **({
+                    str(key)[:100]: copy.deepcopy(value)
+                    for key, value in extra_metadata.items()
+                    if isinstance(key, str) and key not in {"referenceRole", "importedAt"}
+                }),
+            },
+        }
+        series.setdefault("assets", {})[asset_id] = asset
+        if entity is not None:
+            refs = entity.get("referenceAssetIds") if isinstance(entity.get("referenceAssetIds"), list) else []
+            entity["referenceAssetIds"] = [*refs, asset_id]
+            if owner_type == "character" and not entity.get("primaryReferenceAssetId"):
+                entity["primaryReferenceAssetId"] = asset_id
+            entity["approval"] = "draft"
+            series.setdefault("canon", {})["approval"] = "draft"
+            series["canon"]["approvedAt"] = ""
+        now = _series_iso_now()
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = now
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    return {"asset": stored["seriesById"][series_id]["assets"][asset_id], "series": stored["seriesById"][series_id]}
+
+
+@api.put("/api/v1/series/{series_id}/episodes/{episode_id}")
+def put_series_episode_endpoint(series_id: str, episode_id: str, body: dict):
+    workspace = _series_library_workspace(body.get("workspace"))
+    raw_episode = body.get("episode")
+    if not isinstance(raw_episode, dict):
+        raise HTTPException(status_code=400, detail="Episode is required")
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        current = series.get("episodesById", {}).get(episode_id)
+        if not isinstance(current, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        if raw_episode.get("id") not in {None, "", episode_id}:
+            raise HTTPException(status_code=400, detail="Episode id does not match the route")
+        # Canon snapshots are immutable after episode creation.
+        updated = {**copy.deepcopy(raw_episode), "id": episode_id}
+        updated["canonSnapshot"] = copy.deepcopy(current.get("canonSnapshot"))
+        updated["canonRevisionAtCreation"] = current.get("canonRevisionAtCreation")
+        updated["createdAt"] = current.get("createdAt")
+        updated["updatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        series["episodesById"][episode_id] = updated
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = updated["updatedAt"]
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    return stored["seriesById"][series_id]["episodesById"][episode_id]
+
+
+@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/canon/commit")
+def commit_series_canon_endpoint(series_id: str, episode_id: str, body: dict):
+    from services.series_library import SeriesConflictError, commit_canon_delta
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    decisions = body.get("decisions") if isinstance(body.get("decisions"), dict) else {}
+    try:
+        base_revision = int(body.get("baseRevision"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="baseRevision is required") from exc
+    try:
+        with _series_library_lock:
+            library = _read_series_workspace(workspace)
+            series = _series_project_or_404(library, series_id)
+            updated = commit_canon_delta(series, episode_id, decisions, base_revision)
+            library["seriesById"][series_id] = updated
+            stored = _write_series_workspace(workspace, library)
+        return stored["seriesById"][series_id]
+    except SeriesConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.post("/api/v1/series/{series_id}/canon/approve")
+def approve_series_canon_endpoint(series_id: str, body: dict):
+    workspace = _series_library_workspace(body.get("workspace"))
+    try:
+        base_revision = int(body.get("baseRevision"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="baseRevision is required") from exc
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        canon = series.get("canon") if isinstance(series.get("canon"), dict) else {}
+        if int(canon.get("revision") or 1) != base_revision:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Canon revision changed to {canon.get('revision')}; reload before approval",
+            )
+        if not str(canon.get("worldSummary") or "").strip():
+            raise HTTPException(status_code=400, detail="Complete the World summary before approving canon")
+        if not series.get("characters"):
+            raise HTTPException(status_code=400, detail="Add at least one principal character before approving canon")
+        if not series.get("locations"):
+            raise HTTPException(status_code=400, detail="Add at least one canonical location before approving canon")
+        now = _series_iso_now()
+        if canon.get("approval") != "approved":
+            canon["revision"] = base_revision + 1
+        canon["approval"] = "approved"
+        canon["approvedAt"] = now
+        series["canon"] = canon
+        for collection in ("characters", "locations", "props"):
+            for item in series.get(collection, []):
+                if isinstance(item, dict):
+                    item["approval"] = "approved"
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = now
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    return stored["seriesById"][series_id]
+
+
+@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/references/route")
+def route_series_episode_references_endpoint(series_id: str, episode_id: str, body: dict):
+    from services.series_library import series_for_episode_snapshot
+    from services.series_reference_router import route_episode_references, route_shot_references
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = _series_project_or_404(library, series_id)
+        episode = series.get("episodesById", {}).get(episode_id)
+        if not isinstance(episode, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        routing_series = series_for_episode_snapshot(series, episode)
+        shot_id = str(body.get("shotId") or "").strip()
+        capabilities = body.get("capabilities") if isinstance(body.get("capabilities"), dict) else None
+        if shot_id:
+            shot = next((item for item in episode.get("shots", []) if item.get("id") == shot_id), None)
+            if not isinstance(shot, dict):
+                raise HTTPException(status_code=404, detail="Series shot not found")
+            return {"shotId": shot_id, "manifest": route_shot_references(routing_series, episode, shot, capabilities)}
+        return {"manifests": route_episode_references(routing_series, episode, capabilities)}
+
+
+_series_plan_jobs: dict[str, dict] = {}
+_series_plan_jobs_lock = threading.RLock()
+_series_plan_active_jobs: set[str] = set()
+
+
+def _series_plan_store(workspace: str):
+    from services.series_jobs import SeriesJobStore
+
+    return SeriesJobStore(_workspace_dir(workspace), "planning")
+
+
+def _load_series_plan_job(job_id: str) -> dict | None:
+    with _series_plan_jobs_lock:
+        cached = _series_plan_jobs.get(job_id)
+        if cached:
+            return copy.deepcopy(cached)
+    for item in _list_workspaces():
+        try:
+            job = _series_plan_store(item["name"]).load(job_id)
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if job:
+            with _series_plan_jobs_lock:
+                _series_plan_jobs[job_id] = job
+            return copy.deepcopy(job)
+    return None
+
+
+def _series_plan_update(job_id: str, **patch) -> dict | None:
+    with _series_plan_jobs_lock:
+        job = _series_plan_jobs.get(job_id)
+        if not job:
+            return None
+        job.update(copy.deepcopy(patch))
+        job["updatedAt"] = time.time()
+        snapshot = copy.deepcopy(job)
+        _series_plan_store(str(job["workspace"])).save(snapshot)
+        return snapshot
+
+
+def _series_plan_request(body: dict, series: dict, episode: dict) -> dict:
+    """Freeze planning inputs while excluding media and render history."""
+    from services.series_library import series_for_episode_snapshot
+
+    series_snapshot = series_for_episode_snapshot(series, episode)
+    series_snapshot.pop("assets", None)
+    prior_episode_summaries = []
+    current_number = int(episode.get("number") or 0)
+    for previous in sorted(
+        (
+            item for item in series.get("episodesById", {}).values()
+            if isinstance(item, dict)
+            and item.get("id") != episode.get("id")
+            and int(item.get("number") or 0) < current_number
+        ),
+        key=lambda item: int(item.get("number") or 0),
+    )[-12:]:
+        outline = previous.get("outline") if isinstance(previous.get("outline"), dict) else {}
+        prior_episode_summaries.append({
+            "id": previous.get("id"),
+            "number": previous.get("number"),
+            "title": previous.get("title"),
+            "logline": previous.get("logline"),
+            "status": previous.get("status"),
+            "outlineBeats": [
+                str(value)[:500] for value in outline.get("beats", [])[:8]
+                if isinstance(value, str) and value.strip()
+            ],
+        })
+    series_snapshot["episodesById"] = {}
+    series_snapshot["priorEpisodeSummaries"] = prior_episode_summaries
+    episode_snapshot = copy.deepcopy(episode)
+    for shot in episode_snapshot.get("shots", []):
+        if isinstance(shot, dict):
+            shot.pop("attempts", None)
+            shot.pop("referenceManifest", None)
+    return {
+        "scope": str(body.get("scope") or "complete"),
+        "instruction": str(body.get("instruction") or "")[:8000],
+        "writingProvider": str(body.get("writingProvider") or series.get("provider", {}).get("writingProvider") or "maestro"),
+        "writingModel": str(body.get("writingModel") or series.get("provider", {}).get("writingModel") or ""),
+        "writingBaseUrl": str(body.get("writingBaseUrl") or series.get("provider", {}).get("writingBaseUrl") or ""),
+        "seriesSnapshot": series_snapshot,
+        "episodeSnapshot": episode_snapshot,
+    }
+
+
+def _run_series_plan_job_inner(job_id: str) -> None:
+    from services.series_planning import (
+        apply_planning_stage,
+        normalize_planning_result,
+        planning_prompt,
+        planning_schema,
+        planning_stages,
+    )
+
+    job = _load_series_plan_job(job_id)
+    if not job:
+        return
+    if job.get("status") == "cancelled":
+        return
+    request = copy.deepcopy(job.get("request") or {})
+    series = request.get("seriesSnapshot") if isinstance(request.get("seriesSnapshot"), dict) else {}
+    episode = request.get("episodeSnapshot") if isinstance(request.get("episodeSnapshot"), dict) else {}
+    completed = job.get("completedStages") if isinstance(job.get("completedStages"), dict) else {}
+    try:
+        stages = planning_stages(str(request.get("scope") or "complete"))
+        llm_override = _comic_writing_llm(request)
+        if not llm_override:
+            _ensure_llm_loaded()
+        for index, stage in enumerate(stages):
+            latest = _load_series_plan_job(job_id)
+            if latest and latest.get("status") == "cancelled":
+                return
+            if stage in completed:
+                result = normalize_planning_result(stage, completed[stage], series, episode)
+            else:
+                _series_plan_update(
+                    job_id, status="running", stage=stage, current=index, total=len(stages),
+                    message=f"Generating Series Lab {stage.replace('_', ' ')}…",
+                )
+                prompt, system_prompt = planning_prompt(
+                    stage, series, episode, str(request.get("instruction") or ""),
+                )
+                raw = _generate_comic_director_json(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    schema=planning_schema(stage),
+                    max_new_tokens=5000 if stage in {"script", "shots"} else 2400,
+                    stage=f"Series Lab {stage}",
+                    llm_override=llm_override,
+                )
+                result = normalize_planning_result(stage, raw, series, episode)
+                latest = _load_series_plan_job(job_id)
+                if latest and latest.get("status") == "cancelled":
+                    return
+                completed[stage] = result
+            episode = apply_planning_stage(episode, stage, result)
+            _series_plan_update(
+                job_id, completedStages=completed, episodeResult=episode,
+                current=index + 1, stage=stage,
+            )
+        _series_plan_update(
+            job_id, status="completed", stage="completed", current=len(stages), total=len(stages),
+            message="Episode proposal generated. Review and apply it when ready.",
+            result={"episode": episode}, error=None, finishedAt=time.time(),
+        )
+    except Exception as exc:
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        _series_plan_update(
+            job_id, status="failed", error=str(detail), finishedAt=time.time(),
+            message="Episode planning stopped. Completed stages remain recoverable.",
+        )
+
+
+def _apply_series_canon_proposal(job: dict, proposal: dict) -> dict:
+    """Apply a durable canon proposal while preserving user-owned assets and runtime state."""
+    from services.series_planning import merge_series_canon_proposal
+
+    workspace = str(job["workspace"])
+    series_id = str(job["seriesId"])
+    bootstrap_known_series = job.get("bootstrapKnownSeries") is True
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        if int(series.get("revision") or 1) != int(job.get("sourceSeriesRevision") or 1):
+            raise HTTPException(
+                status_code=409,
+                detail="The series was edited after canon preparation started. Review the saved proposal instead of overwriting it.",
+            )
+        series = merge_series_canon_proposal(
+            series, proposal, bootstrap_known_series=bootstrap_known_series,
+        )
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = now
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    return stored["seriesById"][series_id]
+
+
+def _run_series_canon_plan_job_inner(job_id: str) -> None:
+    from services.series_planning import (
+        canon_preparation_prompt,
+        canon_preparation_schema,
+        known_series_bootstrap_prompt,
+        known_series_bootstrap_schema,
+        normalize_canon_preparation,
+        normalize_known_series_bootstrap,
+    )
+
+    job = _load_series_plan_job(job_id)
+    if not job:
+        return
+    if job.get("status") == "cancelled":
+        return
+    request = copy.deepcopy(job.get("request") or {})
+    series = request.get("seriesSnapshot") if isinstance(request.get("seriesSnapshot"), dict) else {}
+    try:
+        llm_override = _comic_writing_llm(request)
+        if not llm_override:
+            _ensure_llm_loaded()
+        bootstrap_known_series = job.get("bootstrapKnownSeries") is True
+        _series_plan_update(
+            job_id, status="running", stage="known_series_research" if bootstrap_known_series else "canon",
+            current=0, total=1,
+            message=(
+                "Building an editable known-series bible from the writing model's general knowledge…"
+                if bootstrap_known_series else "Preparing a reviewable Series canon proposal…"
+            ),
+        )
+        if bootstrap_known_series:
+            prompt, system_prompt = known_series_bootstrap_prompt(
+                series, str(request.get("instruction") or ""),
+            )
+            schema = known_series_bootstrap_schema()
+            max_new_tokens = 14000
+            stage_label = "Series Lab known-series bootstrap"
+        else:
+            prompt, system_prompt = canon_preparation_prompt(
+                series, str(request.get("instruction") or ""),
+            )
+            schema = canon_preparation_schema()
+            max_new_tokens = 6000
+            stage_label = "Series Lab canon preparation"
+        raw = _generate_comic_director_json(
+            prompt=prompt, system_prompt=system_prompt,
+            schema=schema, max_new_tokens=max_new_tokens,
+            stage=stage_label, llm_override=llm_override,
+        )
+        latest = _load_series_plan_job(job_id)
+        if latest and latest.get("status") == "cancelled":
+            return
+        proposal = (
+            normalize_known_series_bootstrap(raw, series)
+            if bootstrap_known_series else normalize_canon_preparation(raw, series)
+        )
+        if bootstrap_known_series and job.get("autoApply") is True:
+            _series_plan_update(
+                job_id, stage="applying_draft", seriesResult=proposal,
+                result={"seriesProposal": proposal},
+                message="Known-series bible generated; applying it as an editable draft…",
+            )
+            latest = _load_series_plan_job(job_id)
+            if latest and latest.get("status") == "cancelled":
+                return
+            try:
+                applied = _apply_series_canon_proposal(job, proposal)
+            except HTTPException as exc:
+                _series_plan_update(
+                    job_id, status="completed", stage="completed", current=1, total=1,
+                    autoApplied=False, applyError=str(exc.detail), error=None,
+                    message="Known-series proposal generated, but the project changed before it could be applied.",
+                    finishedAt=time.time(),
+                )
+                return
+            _series_plan_update(
+                job_id, status="completed", stage="completed", current=1, total=1,
+                autoApplied=True, appliedSeriesRevision=int(applied.get("revision") or 1),
+                appliedAt=time.time(), error=None,
+                message="Known-series bible filled as a draft. Verify facts and approve canon when ready.",
+                finishedAt=time.time(),
+            )
+            return
+        _series_plan_update(
+            job_id, status="completed", stage="completed", current=1, total=1,
+            seriesResult=proposal, result={"seriesProposal": proposal}, error=None,
+            message="Canon proposal generated. Review it before applying.",
+            finishedAt=time.time(),
+        )
+    except Exception as exc:
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        _series_plan_update(
+            job_id, status="failed", error=str(detail), finishedAt=time.time(),
+            message="Canon preparation stopped. Its checkpoint remains recoverable.",
+        )
+
+
+def _run_series_plan_job(job_id: str) -> None:
+    with _series_plan_jobs_lock:
+        if job_id in _series_plan_active_jobs:
+            return
+        _series_plan_active_jobs.add(job_id)
+    try:
+        job = _load_series_plan_job(job_id)
+        if job and job.get("jobType") == "canon":
+            _run_series_canon_plan_job_inner(job_id)
+        else:
+            _run_series_plan_job_inner(job_id)
+    finally:
+        with _series_plan_jobs_lock:
+            _series_plan_active_jobs.discard(job_id)
+
+
+@api.post("/api/v1/series/{series_id}/canon/prepare/start")
+def start_series_canon_preparation(series_id: str, body: dict):
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+    bootstrap_known_series = body.get("bootstrapKnownSeries") is True
+    instruction = str(body.get("instruction") or "")[:8000].strip()
+    if bootstrap_known_series and len(instruction) < 3:
+        raise HTTPException(status_code=400, detail="Describe the known series you want to continue")
+    missing = [
+        label for label, value in (
+            ("title", series.get("title")), ("premise", series.get("premise")),
+            ("visual style", series.get("visualStyle")),
+        ) if not str(value or "").strip()
+    ]
+    if missing and not bootstrap_known_series:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Complete Series setup before preparing canon: {', '.join(missing)}",
+        )
+    snapshot = copy.deepcopy(series)
+    snapshot.pop("assets", None)
+    snapshot["episodesById"] = {}
+    request = {
+        "instruction": instruction,
+        "writingProvider": str(body.get("writingProvider") or series.get("provider", {}).get("writingProvider") or "maestro"),
+        "writingModel": str(body.get("writingModel") or series.get("provider", {}).get("writingModel") or ""),
+        "writingBaseUrl": str(body.get("writingBaseUrl") or series.get("provider", {}).get("writingBaseUrl") or ""),
+        "seriesSnapshot": snapshot,
+        "bootstrapKnownSeries": bootstrap_known_series,
+        "autoApply": bootstrap_known_series and body.get("autoApply") is not False,
+    }
+    _comic_writing_llm(request)
+    job_id = f"series-canon-{uuid.uuid4().hex[:12]}"
+    now = time.time()
+    job = {
+        "jobId": job_id, "jobType": "canon", "kind": "planning",
+        "workspace": workspace, "seriesId": series_id, "episodeId": "",
+        "status": "queued", "stage": "queued", "current": 0, "total": 1,
+        "message": "Canon preparation queued.", "request": request,
+        "sourceSeriesRevision": int(series.get("revision") or 1),
+        "seriesResult": None, "result": None, "error": None,
+        "generateImages": body.get("generateImages") is True,
+        "bootstrapKnownSeries": bootstrap_known_series,
+        "autoApply": request["autoApply"], "autoApplied": False,
+        "createdAt": now, "updatedAt": now,
+    }
+    with _series_plan_jobs_lock:
+        _series_plan_jobs[job_id] = job
+        _series_plan_store(workspace).save(job)
+    threading.Thread(target=_run_series_plan_job, args=(job_id,), daemon=True).start()
+    return {key: job[key] for key in (
+        "jobId", "jobType", "status", "stage", "current", "total", "message", "generateImages",
+        "bootstrapKnownSeries", "autoApply", "autoApplied", "createdAt",
+    )}
+
+
+@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/plan/start")
+def start_series_episode_plan(series_id: str, episode_id: str, body: dict):
+    from services.series_planning import planning_stages
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    scope = str(body.get("scope") or "complete")
+    try:
+        stages = planning_stages(scope)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = _series_project_or_404(library, series_id)
+        episode = series.get("episodesById", {}).get(episode_id)
+        if not isinstance(episode, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        if not str(episode.get("premise") or body.get("instruction") or "").strip():
+            raise HTTPException(status_code=400, detail="Write an episode premise or instruction first")
+        request = _series_plan_request(body, series, episode)
+    # Resolve provider credentials before creating a durable job so a missing
+    # key does not leave a permanently queued phantom checkpoint.
+    _comic_writing_llm(request)
+    job_id = f"series-plan-{uuid.uuid4().hex[:12]}"
+    now = time.time()
+    job = {
+        "jobId": job_id, "kind": "planning", "workspace": workspace,
+        "seriesId": series_id, "episodeId": episode_id,
+        "status": "queued", "stage": "queued", "current": 0, "total": len(stages),
+        "message": "Episode planning queued.", "request": request,
+        "sourceSeriesRevision": int(series.get("revision") or 1),
+        "sourceEpisodeUpdatedAt": episode.get("updatedAt"),
+        "completedStages": {}, "episodeResult": None, "result": None, "error": None,
+        "createdAt": now, "updatedAt": now,
+    }
+    with _series_plan_jobs_lock:
+        _series_plan_jobs[job_id] = job
+        _series_plan_store(workspace).save(job)
+    threading.Thread(target=_run_series_plan_job, args=(job_id,), daemon=True).start()
+    return {key: job[key] for key in (
+        "jobId", "status", "stage", "current", "total", "message", "createdAt",
+    )}
+
+
+@api.get("/api/v1/series/plan/jobs/{job_id}")
+def get_series_episode_plan(job_id: str):
+    job = _load_series_plan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series planning job not found")
+    return {key: job.get(key) for key in (
+        "jobId", "jobType", "workspace", "seriesId", "episodeId", "status", "stage", "current", "total",
+        "message", "completedStages", "episodeResult", "seriesResult", "generateImages",
+        "bootstrapKnownSeries", "autoApply", "autoApplied", "appliedSeriesRevision", "applyError",
+        "result", "error", "createdAt", "updatedAt", "finishedAt", "appliedAt",
+    )}
+
+
+@api.post("/api/v1/series/plan/jobs/{job_id}/cancel")
+def cancel_series_episode_plan(job_id: str):
+    job = _load_series_plan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series planning job not found")
+    if job.get("status") == "completed":
+        return {"jobId": job_id, "status": "completed", "message": job.get("message")}
+    updated = _series_plan_update(
+        job_id, status="cancelled", finishedAt=time.time(),
+        message="Episode planning cancelled. Completed stages remain recoverable.",
+    )
+    return {"jobId": job_id, "status": "cancelled", "message": updated.get("message")}
+
+
+@api.post("/api/v1/series/plan/jobs/{job_id}/resume")
+def resume_series_episode_plan(job_id: str, body: dict | None = None):
+    job = _load_series_plan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series planning job not found")
+    if job.get("status") == "completed":
+        return {"jobId": job_id, "status": "completed", "message": job.get("message")}
+    with _series_plan_jobs_lock:
+        if job_id in _series_plan_active_jobs:
+            return {"jobId": job_id, "status": job.get("status"), "message": "Planning is already running."}
+    request = copy.deepcopy(job.get("request") or {})
+    if isinstance(body, dict) and str(body.get("writingProvider") or "").strip():
+        for key in ("writingProvider", "writingModel", "writingBaseUrl"):
+            if key in body:
+                request[key] = body[key]
+        _comic_writing_llm(request)
+    _series_plan_update(
+        job_id, request=request, status="queued", error=None, finishedAt=None,
+        message="Resuming episode planning from the last completed stage…",
+    )
+    threading.Thread(target=_run_series_plan_job, args=(job_id,), daemon=True).start()
+    return {"jobId": job_id, "status": "queued", "message": "Episode planning resumed."}
+
+
+@api.post("/api/v1/series/plan/jobs/{job_id}/apply")
+def apply_series_episode_plan(job_id: str):
+    job = _load_series_plan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series planning job not found")
+    if job.get("jobType") == "canon":
+        raise HTTPException(status_code=400, detail="Use the canon proposal apply endpoint for this job")
+    if job.get("status") != "completed" or not isinstance(job.get("episodeResult"), dict):
+        raise HTTPException(status_code=400, detail="Complete the planning job before applying it")
+    workspace = str(job["workspace"])
+    series_id = str(job["seriesId"])
+    episode_id = str(job["episodeId"])
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        current = series.get("episodesById", {}).get(episode_id)
+        if not isinstance(current, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        if current.get("updatedAt") != job.get("sourceEpisodeUpdatedAt"):
+            raise HTTPException(
+                status_code=409,
+                detail="The episode was edited after planning started. Review the saved proposal instead of overwriting it.",
+            )
+        proposed = copy.deepcopy(job["episodeResult"])
+        proposed["canonSnapshot"] = copy.deepcopy(current.get("canonSnapshot"))
+        proposed["canonRevisionAtCreation"] = current.get("canonRevisionAtCreation")
+        proposed["createdAt"] = current.get("createdAt")
+        proposed["updatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        # Route exact manifests now so review shows what generation will send.
+        from services.series_library import series_for_episode_snapshot
+        from services.series_reference_router import route_shot_references
+        routing_series = series_for_episode_snapshot(series, proposed)
+        for shot in proposed.get("shots", []):
+            if isinstance(shot, dict):
+                shot["referenceManifest"] = route_shot_references(routing_series, proposed, shot)
+        series["episodesById"][episode_id] = proposed
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = proposed["updatedAt"]
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    _series_plan_update(job_id, appliedAt=time.time(), message="Episode proposal applied for review.")
+    return stored["seriesById"][series_id]["episodesById"][episode_id]
+
+
+@api.post("/api/v1/series/plan/jobs/{job_id}/apply-canon")
+def apply_series_canon_plan(job_id: str):
+    job = _load_series_plan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series canon planning job not found")
+    proposal = job.get("seriesResult")
+    if job.get("jobType") != "canon" or job.get("status") != "completed" or not isinstance(proposal, dict):
+        raise HTTPException(status_code=400, detail="Complete the canon preparation job before applying it")
+    applied = _apply_series_canon_proposal(job, proposal)
+    _series_plan_update(job_id, appliedAt=time.time(), message="Canon proposal applied as a draft for review.")
+    return applied
+
+
+@api.get("/api/v1/series/plan/recovery")
+def list_series_plan_recovery(workspace: str | None = None):
+    target_workspace = _series_library_workspace(workspace)
+    jobs = _series_plan_store(target_workspace).recoverable()
+    return {"jobs": [{key: job.get(key) for key in (
+        "jobId", "jobType", "seriesId", "episodeId", "status", "stage", "current", "total", "generateImages",
+        "bootstrapKnownSeries", "autoApply", "autoApplied",
+        "message", "error", "createdAt", "updatedAt",
+    )} for job in jobs]}
+
+
+@api.delete("/api/v1/series/plan/jobs/{job_id}")
+def discard_series_plan_job(job_id: str):
+    job = _load_series_plan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series planning job not found")
+    with _series_plan_jobs_lock:
+        if job_id in _series_plan_active_jobs:
+            raise HTTPException(status_code=409, detail="Cancel the active planning job before discarding it")
+        _series_plan_store(str(job["workspace"])).discard(job_id)
+        _series_plan_jobs.pop(job_id, None)
+    return {"discarded": True, "jobId": job_id, "outputsPreserved": True}
+
+
+_series_render_jobs: dict[str, dict] = {}
+_series_render_jobs_lock = threading.RLock()
+_series_render_active_jobs: set[str] = set()
+
+
+def _series_iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _series_render_store(workspace: str):
+    from services.series_jobs import SeriesJobStore
+
+    return SeriesJobStore(_workspace_dir(workspace), "render")
+
+
+def _load_series_render_job(job_id: str) -> dict | None:
+    with _series_render_jobs_lock:
+        cached = _series_render_jobs.get(job_id)
+        if cached:
+            return copy.deepcopy(cached)
+    for item in _list_workspaces():
+        try:
+            job = _series_render_store(item["name"]).load(job_id)
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if job:
+            with _series_render_jobs_lock:
+                _series_render_jobs[job_id] = job
+            return copy.deepcopy(job)
+    return None
+
+
+def _series_render_update(job_id: str, **patch) -> dict | None:
+    with _series_render_jobs_lock:
+        job = _series_render_jobs.get(job_id)
+        if not job:
+            return None
+        job.update(copy.deepcopy(patch))
+        job["updatedAt"] = time.time()
+        snapshot = copy.deepcopy(job)
+        _series_render_store(str(job["workspace"])).save(snapshot)
+        return snapshot
+
+
+def _series_render_update_item(job_id: str, item_index: int, **patch) -> dict | None:
+    with _series_render_jobs_lock:
+        job = _series_render_jobs.get(job_id)
+        if not job:
+            return None
+        items = job.get("items") if isinstance(job.get("items"), list) else []
+        if item_index < 0 or item_index >= len(items):
+            return None
+        items[item_index].update(copy.deepcopy(patch))
+        job["items"] = items
+        job["current"] = sum(1 for item in items if item.get("status") == "completed")
+        job["updatedAt"] = time.time()
+        snapshot = copy.deepcopy(job)
+        _series_render_store(str(job["workspace"])).save(snapshot)
+        return snapshot
+
+
+def _series_asset_local_path(workspace: str, asset: dict) -> str:
+    uri = str(asset.get("uri") or "")
+    if uri.startswith("https://"):
+        raise ValueError(
+            f"Remote Series asset {asset.get('id')} must be imported into the workspace before local H3 rendering"
+        )
+    workspace_dir = os.path.realpath(_workspace_dir(workspace))
+    relative = uri[len("outputs/"):] if uri.startswith("outputs/") else uri
+    candidate = os.path.realpath(os.path.join(workspace_dir, relative))
+    if candidate != workspace_dir and not candidate.startswith(workspace_dir + os.sep):
+        raise ValueError(f"Series asset {asset.get('id')} leaves its workspace")
+    if not os.path.isfile(candidate):
+        raise ValueError(f"Series reference file is missing: {uri}")
+    return candidate
+
+
+def _series_render_context(job: dict, item: dict) -> tuple[dict, dict, dict, dict]:
+    from services.series_library import series_for_episode_snapshot
+    workspace = str(job["workspace"])
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = _series_project_or_404(library, str(job["seriesId"]))
+        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
+        if not isinstance(episode, dict):
+            raise ValueError("Series episode no longer exists")
+        shot = next((
+            value for value in episode.get("shots", [])
+            if isinstance(value, dict) and value.get("id") == item.get("shotId")
+        ), None)
+        if not isinstance(shot, dict):
+            raise ValueError("Series shot no longer exists")
+        attempt = next((
+            value for value in shot.get("attempts", [])
+            if isinstance(value, dict) and value.get("id") == item.get("attemptId")
+        ), None)
+        if not isinstance(attempt, dict):
+            raise ValueError("Series render attempt no longer exists")
+        frozen_series = series_for_episode_snapshot(series, episode)
+        return frozen_series, copy.deepcopy(episode), copy.deepcopy(shot), copy.deepcopy(attempt)
+
+
+def _series_patch_attempt(
+    job: dict,
+    item: dict,
+    patch: dict,
+    *,
+    output_assets: list[dict] | None = None,
+) -> dict:
+    from services.series_library import update_shot_render_attempt
+
+    workspace = str(job["workspace"])
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, str(job["seriesId"])))
+        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
+        if not isinstance(episode, dict):
+            raise ValueError("Series episode no longer exists")
+        shot_index = next((
+            index for index, value in enumerate(episode.get("shots", []))
+            if isinstance(value, dict) and value.get("id") == item.get("shotId")
+        ), None)
+        if shot_index is None:
+            raise ValueError("Series shot no longer exists")
+        episode["shots"][shot_index] = update_shot_render_attempt(
+            episode["shots"][shot_index], str(item["attemptId"]), **patch,
+        )
+        for asset in output_assets or []:
+            series.setdefault("assets", {})[asset["id"]] = copy.deepcopy(asset)
+        now = _series_iso_now()
+        episode["updatedAt"] = now
+        series["updatedAt"] = now
+        series["revision"] = int(series.get("revision") or 1) + 1
+        library["seriesById"][series["id"]] = series
+        stored = _write_series_workspace(workspace, library)
+        return stored["seriesById"][series["id"]]["episodesById"][episode["id"]]["shots"][shot_index]
+
+
+def _run_series_render_job_inner(job_id: str) -> None:
+    from services.series_render import build_h3_generation_params
+
+    job = _load_series_render_job(job_id)
+    if not job:
+        return
+    items = job.get("items") if isinstance(job.get("items"), list) else []
+    any_failed = False
+    try:
+        for item_index, item in enumerate(items):
+            latest = _load_series_render_job(job_id)
+            if not latest or latest.get("status") == "cancelled":
+                return
+            current_item = latest.get("items", [])[item_index]
+            if current_item.get("status") == "completed":
+                continue
+            series, _episode, shot, attempt = _series_render_context(latest, current_item)
+            submitted_at = _series_iso_now()
+            _series_patch_attempt(
+                latest, current_item,
+                {"status": "running", "submittedAt": submitted_at, "error": ""},
+            )
+            _series_render_update_item(
+                job_id, item_index, status="running", submittedAt=submitted_at, error=None,
+            )
+            _series_render_update(
+                job_id, status="running", stage="rendering", activeShotId=current_item["shotId"],
+                message=f"Rendering shot {item_index + 1}/{len(items)}…",
+            )
+            started = time.time()
+            child_job_id = ""
+            try:
+                assets = series.get("assets") if isinstance(series.get("assets"), dict) else {}
+                resolved = {}
+                for reference in attempt.get("referenceManifest", {}).get("selected", []):
+                    if not isinstance(reference, dict):
+                        continue
+                    asset_id = str(reference.get("assetId") or "")
+                    asset = assets.get(asset_id)
+                    if not isinstance(asset, dict):
+                        raise ValueError(f"Routed Series asset no longer exists: {asset_id}")
+                    resolved[asset_id] = _series_asset_local_path(str(latest["workspace"]), asset)
+                params = build_h3_generation_params(series, shot, attempt, resolved)
+                params["_director_pipeline_id"] = f"series:{job_id}"
+                request_hash = "sha256:" + hashlib.sha256(
+                    json.dumps(params, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+                ).hexdigest()
+                child_job_id = f"sr{uuid.uuid4().hex[:10]}"
+                child = _new_generation_job(
+                    params, str(latest["workspace"]), job_id=child_job_id,
+                )
+                _jobs[child_job_id] = child
+                _series_render_update_item(
+                    job_id, item_index, childJobId=child_job_id,
+                    requestPayloadHash=request_hash,
+                )
+                _series_patch_attempt(
+                    latest, current_item,
+                    {"providerTaskId": child_job_id, "requestPayloadHash": request_hash},
+                )
+                _run_generation(child_job_id)
+                child_result = snapshot_job(_jobs[child_job_id])
+                if child_result.get("status") != "completed" or not child_result.get("output_files"):
+                    raise RuntimeError(child_result.get("error") or "H3 returned no video output")
+                completed_at = _series_iso_now()
+                elapsed_ms = max(0, round((time.time() - started) * 1000))
+                output_asset_ids = []
+                output_assets = []
+                for output_index, filename in enumerate(child_result["output_files"]):
+                    basename = os.path.basename(str(filename))
+                    asset_id = f"asset_{attempt['id']}_{output_index + 1}"
+                    output_asset_ids.append(asset_id)
+                    output_assets.append({
+                        "id": asset_id, "workspaceId": latest["workspace"], "kind": "video",
+                        "uri": f"outputs/{basename}", "ownerType": "attempt", "ownerId": attempt["id"],
+                        "isDerivedThumbnail": False,
+                        "metadata": {
+                            "seriesId": latest["seriesId"], "episodeId": latest["episodeId"],
+                            "shotId": current_item["shotId"], "attemptId": attempt["id"],
+                            "prompt": attempt.get("prompt"), "negativePrompt": attempt.get("negativePrompt"),
+                            "model": params["model_type"], "seed": params["seed"],
+                            "settings": attempt.get("settings"),
+                            "referenceManifest": attempt.get("referenceManifest"),
+                            "createdAt": attempt.get("createdAt"), "submittedAt": submitted_at,
+                            "completedAt": completed_at, "elapsedMs": elapsed_ms,
+                            "generationJobId": child_job_id, "requestPayloadHash": request_hash,
+                        },
+                    })
+                _series_patch_attempt(
+                    latest, current_item,
+                    {
+                        "status": "completed", "completedAt": completed_at,
+                        "elapsedMs": elapsed_ms, "outputAssetIds": output_asset_ids,
+                        "providerTaskId": child_job_id, "requestPayloadHash": request_hash, "error": "",
+                    },
+                    output_assets=output_assets,
+                )
+                _series_render_update_item(
+                    job_id, item_index, status="completed", completedAt=completed_at,
+                    elapsedMs=elapsed_ms, outputAssetIds=output_asset_ids, error=None,
+                )
+            except Exception as exc:
+                any_failed = True
+                error = str(exc)
+                completed_at = _series_iso_now()
+                elapsed_ms = max(0, round((time.time() - started) * 1000))
+                current = _load_series_render_job(job_id)
+                if current and current.get("status") == "cancelled":
+                    try:
+                        _series_patch_attempt(
+                            current, current["items"][item_index],
+                            {"status": "cancelled", "completedAt": completed_at, "elapsedMs": elapsed_ms, "error": "Cancelled"},
+                        )
+                    except Exception:
+                        pass
+                    return
+                try:
+                    _series_patch_attempt(
+                        current or latest, (current or latest)["items"][item_index],
+                        {"status": "failed", "completedAt": completed_at, "elapsedMs": elapsed_ms, "error": error},
+                    )
+                except Exception as patch_exc:
+                    error = f"{error}; could not persist attempt state: {patch_exc}"
+                _series_render_update_item(
+                    job_id, item_index, status="failed", completedAt=completed_at,
+                    elapsedMs=elapsed_ms, error=error, childJobId=child_job_id,
+                )
+        finished = time.time()
+        latest = _load_series_render_job(job_id) or job
+        failures = [item for item in latest.get("items", []) if item.get("status") == "failed"]
+        _series_render_update(
+            job_id,
+            status="failed" if failures or any_failed else "completed",
+            stage="completed", activeShotId=None, finishedAt=finished,
+            error=(f"{len(failures)} shot(s) failed; completed attempts were preserved." if failures else None),
+            message=(
+                "Render finished with failures. Retry only failed shots when ready."
+                if failures else "All requested Series shots completed."
+            ),
+        )
+    except Exception as exc:
+        _series_render_update(
+            job_id, status="failed", error=str(exc), finishedAt=time.time(),
+            message="Series render stopped. Completed attempts were preserved.",
+        )
+
+
+def _run_series_render_job(job_id: str) -> None:
+    with _series_render_jobs_lock:
+        if job_id in _series_render_active_jobs:
+            return
+        _series_render_active_jobs.add(job_id)
+    try:
+        _run_series_render_job_inner(job_id)
+    finally:
+        with _series_render_jobs_lock:
+            _series_render_active_jobs.discard(job_id)
+
+
+def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
+    shots = [item for item in episode.get("shots", []) if isinstance(item, dict)]
+    mode = str(body.get("mode") or "missing")
+    selected_ids = {str(item) for item in body.get("shotIds", []) if isinstance(item, str)}
+    if mode == "selected":
+        shots = [item for item in shots if item.get("id") in selected_ids]
+    elif mode == "failed":
+        shots = [
+            item for item in shots
+            if item.get("attempts") and item["attempts"][-1].get("status") == "failed"
+        ]
+    elif mode == "all":
+        pass
+    elif mode == "missing":
+        shots = [item for item in shots if not item.get("approvedAttemptId")]
+    else:
+        raise ValueError("Render mode must be selected, failed, missing, or all")
+    # Approved shots are authoritative in every bulk mode. The user can
+    # explicitly unapprove first, but bulk generation never overwrites them.
+    return [item for item in shots if not item.get("approvedAttemptId")]
+
+
+@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
+def start_series_episode_render(series_id: str, episode_id: str, body: dict):
+    from services.series_library import append_shot_render_attempt, series_for_episode_snapshot
+    from services.series_reference_router import route_shot_references
+    from services.series_render import (
+        model_for_manifest, normalize_series_resolution, quantize_h3_frames,
+        shot_generation_prompt,
+    )
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        episode = series.get("episodesById", {}).get(episode_id)
+        if not isinstance(episode, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        if any(
+            isinstance(shot, dict) and bool(shot.get("dialogueBeats"))
+            for shot in episode.get("shots", [])
+        ) and not series.get("bestEffortLipSyncAcknowledged"):
+            raise HTTPException(
+                status_code=400,
+                detail="Acknowledge best-effort native lip sync in Series setup before rendering dialogue shots",
+            )
+        routing_series = series_for_episode_snapshot(series, episode)
+        try:
+            candidates = _series_render_candidates(episode, body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not candidates:
+            raise HTTPException(status_code=400, detail="No unapproved Series shots match this render request")
+        provider = routing_series.get("provider") if isinstance(routing_series.get("provider"), dict) else {}
+        provider_settings = provider.get("videoSettings") if isinstance(provider.get("videoSettings"), dict) else {}
+        settings = {**copy.deepcopy(provider_settings), **(
+            copy.deepcopy(body.get("settings")) if isinstance(body.get("settings"), dict) else {}
+        )}
+        resolution, orientation = normalize_series_resolution(
+            settings.get("resolution"), settings.get("orientation"),
+        )
+        settings["resolution"] = resolution
+        settings["orientation"] = orientation
+        settings["numInferenceSteps"] = max(1, min(50, int(settings.get("numInferenceSteps") or 20)))
+        settings["guidanceScale"] = float(settings.get("guidanceScale") or 1)
+        settings["flowShift"] = float(settings.get("flowShift") or 12)
+        settings["audioShift"] = float(settings.get("audioShift") or 3)
+        settings["modelProfile"] = str(settings.get("modelProfile") or "quality")
+        settings["fps"] = 24
+        try:
+            base_seed = int(body.get("seed")) if body.get("seed") is not None else int(uuid.uuid4().hex[:8], 16)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Seed must be an integer") from exc
+        items = []
+        candidate_ids = {item["id"] for item in candidates}
+        for shot_index, shot in enumerate(episode.get("shots", [])):
+            if not isinstance(shot, dict) or shot.get("id") not in candidate_ids:
+                continue
+            manifest = route_shot_references(routing_series, episode, shot, body.get("capabilities"))
+            if manifest.get("errors"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Shot {shot.get('order')} reference routing must be fixed: {'; '.join(manifest['errors'])}",
+                )
+            model = model_for_manifest(str(provider.get("videoModel") or "minimax_h3"), manifest)
+            retry_count = len(shot.get("attempts", []))
+            shot_settings = {
+                **settings,
+                "requestedDurationSeconds": float(shot.get("durationSeconds") or 0),
+                "videoLengthFrames": quantize_h3_frames(
+                    shot.get("durationSeconds"), reference_mode=manifest.get("strategy") == "references",
+                ),
+            }
+            updated_shot, attempt = append_shot_render_attempt(
+                shot, manifest=manifest, model=model, settings=shot_settings,
+                seed=(base_seed + int(shot.get("order") or shot_index)) & 0x7FFFFFFF,
+                retry_count=retry_count, prompt=shot_generation_prompt(routing_series, shot),
+            )
+            episode["shots"][shot_index] = updated_shot
+            items.append({
+                "shotId": shot["id"], "attemptId": attempt["id"], "status": "queued",
+                "childJobId": None, "providerTaskId": None,
+                "requestPayloadHash": None, "outputAssetIds": [], "retryCount": retry_count,
+                "createdAt": time.time(), "updatedAt": time.time(), "error": None,
+            })
+        now_iso = _series_iso_now()
+        episode["status"] = "rendering"
+        episode["updatedAt"] = now_iso
+        series["episodesById"][episode_id] = episode
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = now_iso
+        library["seriesById"][series_id] = series
+        _write_series_workspace(workspace, library)
+    job_id = f"series-render-{uuid.uuid4().hex[:12]}"
+    now = time.time()
+    job = {
+        "jobId": job_id, "kind": "render", "workspace": workspace,
+        "seriesId": series_id, "episodeId": episode_id, "status": "queued",
+        "stage": "queued", "current": 0, "total": len(items), "items": items,
+        "activeShotId": None, "message": "Series shot render queued.",
+        "settings": settings, "model": str(provider.get("videoModel") or "minimax_h3"),
+        "seed": base_seed, "outputAssetIds": [], "retryCount": 0,
+        "createdAt": now, "updatedAt": now, "error": None,
+    }
+    with _series_render_jobs_lock:
+        _series_render_jobs[job_id] = job
+        _series_render_store(workspace).save(job)
+    threading.Thread(
+        target=_run_series_render_job, args=(job_id,),
+        name=f"series-render-{job_id[-6:]}", daemon=False,
+    ).start()
+    return {key: job[key] for key in (
+        "jobId", "status", "stage", "current", "total", "message", "settings", "seed", "createdAt",
+    )}
+
+
+@api.get("/api/v1/series/render/jobs/{job_id}")
+def get_series_render_job(job_id: str):
+    job = _load_series_render_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series render job not found")
+    return {key: job.get(key) for key in (
+        "jobId", "workspace", "seriesId", "episodeId", "status", "stage", "current", "total",
+        "items", "activeShotId", "message", "settings", "model", "seed", "error",
+        "createdAt", "updatedAt", "finishedAt",
+    )}
+
+
+@api.post("/api/v1/series/render/jobs/{job_id}/cancel")
+def cancel_series_render_job(job_id: str):
+    job = _load_series_render_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series render job not found")
+    if job.get("status") in {"completed", "failed", "cancelled"}:
+        return {"jobId": job_id, "status": job.get("status"), "message": job.get("message")}
+    cancelled_at = _series_iso_now()
+    items = copy.deepcopy(job.get("items") or [])
+    cancellable = {"queued", "running"}
+    for item in items:
+        if item.get("status") in cancellable:
+            item.update({
+                "status": "cancelled", "completedAt": cancelled_at,
+                "error": "Cancelled by user", "updatedAt": time.time(),
+            })
+    updated_job = _series_render_update(
+        job_id, items=items, status="cancelled", stage="cancelled",
+        activeShotId=None, finishedAt=time.time(),
+        message="Series render cancellation requested. Completed attempts remain available.",
+    ) or job
+    # Persist cancellation for every queued/running attempt too. This keeps
+    # recovery honest and guarantees resume appends a fresh attempt instead
+    # of rewriting the immutable request metadata of an interrupted one.
+    from services.series_library import update_shot_render_attempt
+    with _series_library_lock:
+        library = _read_series_workspace(str(job["workspace"]))
+        series = copy.deepcopy(_series_project_or_404(library, str(job["seriesId"])))
+        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
+        if isinstance(episode, dict):
+            changed = False
+            for item in items:
+                if item.get("status") != "cancelled":
+                    continue
+                shot_index = next((
+                    index for index, shot in enumerate(episode.get("shots", []))
+                    if isinstance(shot, dict) and shot.get("id") == item.get("shotId")
+                ), None)
+                if shot_index is None:
+                    continue
+                try:
+                    episode["shots"][shot_index] = update_shot_render_attempt(
+                        episode["shots"][shot_index], str(item.get("attemptId")),
+                        status="cancelled", completedAt=cancelled_at,
+                        error="Cancelled by user",
+                    )
+                    changed = True
+                except ValueError:
+                    continue
+            if changed:
+                episode["updatedAt"] = cancelled_at
+                series["episodesById"][episode["id"]] = episode
+                series["revision"] = int(series.get("revision") or 1) + 1
+                series["updatedAt"] = cancelled_at
+                library["seriesById"][series["id"]] = series
+                _write_series_workspace(str(job["workspace"]), library)
+    active_child = next((
+        str(item.get("childJobId")) for item in job.get("items", [])
+        if item.get("status") == "running" and item.get("childJobId")
+    ), "")
+    if active_child and active_child in _jobs:
+        _request_generation_cancel(active_child)
+    return {
+        "jobId": job_id, "status": "cancelled",
+        "message": updated_job.get("message") or "Cancellation requested; the active model thread may take a moment to release.",
+    }
+
+
+@api.get("/api/v1/series/render/recovery")
+def list_series_render_recovery(workspace: str | None = None):
+    target_workspace = _series_library_workspace(workspace)
+    jobs = _series_render_store(target_workspace).recoverable()
+    return {"jobs": [{key: job.get(key) for key in (
+        "jobId", "seriesId", "episodeId", "status", "stage", "current", "total",
+        "activeShotId", "message", "error", "createdAt", "updatedAt",
+    )} for job in jobs]}
+
+
+@api.post("/api/v1/series/render/jobs/{job_id}/resume")
+def resume_series_render_job(job_id: str):
+    from services.series_library import append_shot_render_attempt, update_shot_render_attempt
+
+    job = _load_series_render_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series render job not found")
+    with _series_render_jobs_lock:
+        if job_id in _series_render_active_jobs:
+            return {"jobId": job_id, "status": job.get("status"), "message": "Series render is already running."}
+    items = copy.deepcopy(job.get("items") or [])
+    # A local diffusion process cannot resume mid-step. On explicit recovery,
+    # Interrupted/failed/cancelled items get a new append-only attempt;
+    # completed items remain untouched and truly queued items retain theirs.
+    with _series_library_lock:
+        library = _read_series_workspace(str(job["workspace"]))
+        series = copy.deepcopy(_series_project_or_404(library, str(job["seriesId"])))
+        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
+        if not isinstance(episode, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        changed = False
+        for item_index, item in enumerate(items):
+            if item.get("status") in {"completed", "queued"}:
+                continue
+            shot_index = next((
+                index for index, shot in enumerate(episode.get("shots", []))
+                if isinstance(shot, dict) and shot.get("id") == item.get("shotId")
+            ), None)
+            if shot_index is None:
+                continue
+            shot = episode["shots"][shot_index]
+            previous = next((
+                value for value in shot.get("attempts", []) if value.get("id") == item.get("attemptId")
+            ), None)
+            if not isinstance(previous, dict):
+                continue
+            if previous.get("status") in {"queued", "running"}:
+                shot = update_shot_render_attempt(
+                    shot, str(previous["id"]), status="cancelled",
+                    completedAt=_series_iso_now(), error="Interrupted before recovery",
+                )
+            resumed_shot, attempt = append_shot_render_attempt(
+                shot, manifest=previous.get("referenceManifest") or {},
+                model=str(previous.get("model") or job.get("model") or "minimax_h3"),
+                settings=previous.get("settings") or job.get("settings") or {},
+                seed=previous.get("seed"), retry_count=int(previous.get("retryCount") or 0) + 1,
+                prompt=str(previous.get("prompt") or shot.get("prompt") or ""),
+            )
+            episode["shots"][shot_index] = resumed_shot
+            items[item_index] = {
+                **item, "attemptId": attempt["id"], "status": "queued", "childJobId": None,
+                "providerTaskId": None, "requestPayloadHash": None, "outputAssetIds": [],
+                "retryCount": attempt["retryCount"], "error": None, "updatedAt": time.time(),
+            }
+            changed = True
+        if changed:
+            now_iso = _series_iso_now()
+            episode["updatedAt"] = now_iso
+            series["episodesById"][episode["id"]] = episode
+            series["revision"] = int(series.get("revision") or 1) + 1
+            series["updatedAt"] = now_iso
+            library["seriesById"][series["id"]] = series
+            _write_series_workspace(str(job["workspace"]), library)
+    _series_render_update(
+        job_id, items=items, status="queued", stage="queued", error=None, finishedAt=None,
+        message="Resuming Series render; completed shots will be reused.",
+    )
+    threading.Thread(
+        target=_run_series_render_job, args=(job_id,),
+        name=f"series-render-{job_id[-6:]}", daemon=False,
+    ).start()
+    return {"jobId": job_id, "status": "queued", "message": "Series render resumed."}
+
+
+@api.delete("/api/v1/series/render/jobs/{job_id}")
+def discard_series_render_job(job_id: str):
+    job = _load_series_render_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Series render job not found")
+    with _series_render_jobs_lock:
+        if job_id in _series_render_active_jobs:
+            raise HTTPException(status_code=409, detail="Cancel the active render before discarding its checkpoint")
+        _series_render_store(str(job["workspace"])).discard(job_id)
+        _series_render_jobs.pop(job_id, None)
+    return {"discarded": True, "jobId": job_id, "outputsPreserved": True}
+
+
+@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot_id}/attempts/{attempt_id}/approve")
+def approve_series_shot_attempt_endpoint(
+    series_id: str, episode_id: str, shot_id: str, attempt_id: str, body: dict | None = None,
+):
+    from services.series_library import approve_shot_render_attempt
+
+    body = body if isinstance(body, dict) else {}
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        episode = series.get("episodesById", {}).get(episode_id)
+        if not isinstance(episode, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        shot_index = next((
+            index for index, shot in enumerate(episode.get("shots", []))
+            if isinstance(shot, dict) and shot.get("id") == shot_id
+        ), None)
+        if shot_index is None:
+            raise HTTPException(status_code=404, detail="Series shot not found")
+        try:
+            episode["shots"][shot_index] = approve_shot_render_attempt(
+                episode["shots"][shot_index], attempt_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        now = _series_iso_now()
+        if episode.get("shots") and all(
+            isinstance(shot, dict) and bool(shot.get("approvedAttemptId"))
+            for shot in episode.get("shots", [])
+        ):
+            episode["status"] = "completed"
+        episode["updatedAt"] = now
+        series["episodesById"][episode_id] = episode
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = now
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    return stored["seriesById"][series_id]["episodesById"][episode_id]["shots"][shot_index]
+
+
+@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot_id}/attempts/{attempt_id}/reject")
+def reject_series_shot_attempt_endpoint(
+    series_id: str, episode_id: str, shot_id: str, attempt_id: str, body: dict | None = None,
+):
+    from services.series_library import reject_shot_render_attempt
+
+    body = body if isinstance(body, dict) else {}
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        episode = series.get("episodesById", {}).get(episode_id)
+        if not isinstance(episode, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        shot_index = next((
+            index for index, shot in enumerate(episode.get("shots", []))
+            if isinstance(shot, dict) and shot.get("id") == shot_id
+        ), None)
+        if shot_index is None:
+            raise HTTPException(status_code=404, detail="Series shot not found")
+        try:
+            episode["shots"][shot_index] = reject_shot_render_attempt(
+                episode["shots"][shot_index], attempt_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        now = _series_iso_now()
+        episode["status"] = "rendering"
+        episode["updatedAt"] = now
+        series["episodesById"][episode_id] = episode
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = now
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    return stored["seriesById"][series_id]["episodesById"][episode_id]["shots"][shot_index]
+
+
 _story_library_lock = threading.Lock()
 
 
@@ -26470,6 +28936,7 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     if project_type not in {"full_story", "music_video", "quick_video"}:
         project_type = "full_story"
     creative_brief = project.get("creativeBrief") if isinstance(project.get("creativeBrief"), dict) else {}
+    general_idea = str(creative_brief.get("generalIdea") or "").strip()[:12000]
     try:
         brief_duration = int(float(creative_brief.get("durationSeconds") or 0))
     except (TypeError, ValueError):
@@ -26560,6 +29027,21 @@ feature-film mythology; preserve the direct joke, dialogue, announcement or vira
 Build one causal dramatic arc with setup, inciting incident, rising complications,
 midpoint/reversal, crisis, climax and resolution.
 """
+    brief_interpretation = f"""
+SOURCE BRIEF INTERPRETATION CONTRACT:
+- The source brief below is the user's highest-priority intent. Preserve explicit requirements.
+- Distinguish avatar/character identity from reusable global art direction and from shot action.
+- A pasted successful generation prompt is evidence and inspiration, not a clip to repeat.
+  Extract its useful identity/style/camera vocabulary, but do not repeat its exact dialogue,
+  action or composition in every beat.
+- Durations mentioned inside prompt examples (for example, "3 second clip") describe that
+  example only. They do not replace the project's requested duration unless the user clearly
+  states a duration for the whole production.
+- In overview, copy generalIdea verbatim and fill every other editable foundation field
+  coherently. Use empty strings only where a field genuinely does not apply to this project type.
+SOURCE BRIEF:
+{general_idea or 'No separate free-form source brief; use the structured premise.'}
+"""
     base_prompt = f"""Create the requested editable Story Lab material.
 Generation scope: {scope}
 Premise: {premise}
@@ -26574,6 +29056,7 @@ Readable text inside future generated clips: {'allowed when explicitly requested
 Optional user instruction: {instruction or 'none'}
 Current manually edited project (preserve useful established facts and stable IDs):
 {current}
+{brief_interpretation}
 {music_direction}
 {narrative_direction}
 
@@ -27984,7 +30467,8 @@ def _run_comic_plan_job(job_id: str, body: dict) -> None:
     services = wgp.server_config.get("services", {})
     requested_provider = str(body.get("writingProvider") or "maestro").strip().lower()
     external = requested_provider not in ("", "maestro", "internal", "local")
-    provider = requested_provider if external else str(services.get("llm_provider") or "local")
+    global_provider, global_model, _global_remote_url = _effective_llm_routing(services)
+    provider = requested_provider if external else global_provider
     model = (
         str(body.get("writingModel") or (
             "deepseek-v4-pro" if provider == "deepseek"
@@ -27992,7 +30476,7 @@ def _run_comic_plan_job(job_id: str, body: dict) -> None:
             else "default"
         ))
         if external
-        else str(services.get("llm_model_id") or "default")
+        else global_model or "default"
     )
     try:
         print(f"[Comic Director {job_id}] Starting plan with provider={provider}, model={model}")
@@ -28543,27 +31027,35 @@ def get_output_metadata(name: str):
                     resolved_seed = _extract_output_seed(name)
                     if resolved_seed is not None:
                         params["seed"] = resolved_seed
-            # Director finals created before timing was added to their
-            # sidecars can still recover the durable production statistics
-            # from the matching pipeline checkpoint. New finals already carry
-            # this payload, so they avoid the extra checkpoint read.
-            if not sidecar.get("generation_timings"):
-                pipeline_id = (
-                    sidecar.get("director_pipeline_id")
-                    or params.get("director_pipeline_id")
-                    or params.get("_director_pipeline_id")
+            # Legacy Director finals may contain a wall-clock total (including
+            # review/stopped time) and only a pipeline ID in params. Recover
+            # active timings plus the exact model and resolution from the
+            # checkpoint. New sidecars carry the basis and render context, so
+            # they avoid the extra checkpoint read.
+            pipeline_id = (
+                sidecar.get("director_pipeline_id")
+                or params.get("director_pipeline_id")
+                or params.get("_director_pipeline_id")
+            )
+            needs_pipeline_context = bool(
+                pipeline_id
+                and (
+                    sidecar.get("generation_timing_basis") != "active_stages"
+                    or not params.get("model_type")
+                    or not params.get("resolution")
                 )
-                if pipeline_id:
-                    from services.director_pipeline import (
-                        enrich_output_metadata_with_pipeline_timing,
-                        load_pipeline_state,
+            )
+            if needs_pipeline_context:
+                from services.director_pipeline import (
+                    enrich_output_metadata_with_pipeline_timing,
+                    load_pipeline_state,
+                )
+                pipeline = load_pipeline_state(out_dir, str(pipeline_id))
+                if pipeline:
+                    sidecar = enrich_output_metadata_with_pipeline_timing(
+                        sidecar,
+                        pipeline,
                     )
-                    pipeline = load_pipeline_state(out_dir, str(pipeline_id))
-                    if pipeline:
-                        sidecar = enrich_output_metadata_with_pipeline_timing(
-                            sidecar,
-                            pipeline,
-                        )
             return {"source": "sidecar", **sidecar}
         except Exception:
             pass
@@ -28620,7 +31112,11 @@ def _saved_video_context_for_extra_info(name: str):
             except (OSError, ValueError, json.JSONDecodeError):
                 pipeline = None
 
-    if pipeline and not metadata.get("generation_timings"):
+    if pipeline and (
+        metadata.get("generation_timing_basis") != "active_stages"
+        or not params.get("model_type")
+        or not params.get("resolution")
+    ):
         from services.director_pipeline import enrich_output_metadata_with_pipeline_timing
         metadata = enrich_output_metadata_with_pipeline_timing(metadata, pipeline)
 

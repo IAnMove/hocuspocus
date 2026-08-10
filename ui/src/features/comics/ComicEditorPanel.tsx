@@ -809,6 +809,7 @@ function InspectorPanel() {
 }
 
 const initialDirector = (): ComicDirectorRequest => ({
+  useGlobalProfile: true,
   premise: '',
   productionMode: 'comic',
   storyboardAspect: 'landscape',
@@ -824,11 +825,11 @@ const initialDirector = (): ComicDirectorRequest => ({
   worldContext: '',
   forbiddenElements: '',
   dialogueDensity: 'medium',
-  writingProvider: 'maestro',
-  writingModel: 'deepseek-v4-pro',
-  writingBaseUrl: 'https://api.deepseek.com',
-  provider: 'maestro',
-  imageModel: useStore.getState().selectedModelPerMode.image || 'flux2_klein_9b',
+  writingProvider: useStore.getState().productionProfile.text.provider === 'minimax' ? 'minimax' : 'maestro',
+  writingModel: useStore.getState().productionProfile.text.model,
+  writingBaseUrl: useStore.getState().productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '',
+  provider: useStore.getState().productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
+  imageModel: useStore.getState().productionProfile.image.model || useStore.getState().selectedModelPerMode.image || 'flux2_klein_9b',
   characters: [],
 })
 
@@ -932,6 +933,7 @@ export function ComicDirectorPanel({
   const previousProjectId = useRef(project.id)
   const maestroModels = useStore(state => state.models)
   const servicesConfig = useStore(state => state.servicesConfig)
+  const productionProfile = useStore(state => state.productionProfile)
   const llmStatus = useStore(state => state.llmStatus)
   const maestroImageModels = useMemo(
     () => maestroModels.filter(model =>
@@ -967,6 +969,37 @@ export function ComicDirectorPanel({
     && (!llmStatus.provider || llmStatus.provider === planningLlmProvider),
   )
   const externalWritingLlm = Boolean(request.writingProvider && request.writingProvider !== 'maestro')
+  useEffect(() => {
+    if (!request.useGlobalProfile) return
+    const next: ComicDirectorRequest = {
+      ...request,
+      writingProvider: productionProfile.text.provider === 'minimax' ? 'minimax' : 'maestro',
+      writingModel: productionProfile.text.model,
+      writingBaseUrl: productionProfile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '',
+      provider: productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
+      imageModel: productionProfile.image.model,
+    }
+    if (
+      next.writingProvider === request.writingProvider
+      && next.writingModel === request.writingModel
+      && next.writingBaseUrl === request.writingBaseUrl
+      && next.provider === request.provider
+      && next.imageModel === request.imageModel
+    ) return
+    setRequest(next)
+    const state = useComicStore.getState()
+    if (state.project.director) {
+      state.patchProject({
+        director: {
+          ...state.project.director,
+          provider: next.provider,
+          imageModel: next.imageModel,
+          input: next,
+          panelJobs: {},
+        },
+      })
+    }
+  }, [productionProfile, request])
   useEffect(() => {
     const changedProject = previousProjectId.current !== project.id
     previousProjectId.current = project.id

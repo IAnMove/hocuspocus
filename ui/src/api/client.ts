@@ -1,5 +1,5 @@
 import { rememberPrompt } from '../lib/promptHistory'
-import type { DirectorModelCompatibility, H3WindowPlan, ProductionPlan, ScailResolutionProfile } from '../types'
+import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ProductionPlan, ScailResolutionProfile } from '../types'
 
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
 
@@ -75,10 +75,16 @@ export interface ApiJobStatus {
   message: string
   output_files: string[]
   error: string | null
+  created_at?: number | null
+  started_at?: number | null
+  finished_at?: number | null
+  processing_time_sec?: number | null
+  queue_position?: number | null
   task_timings?: ApiTaskTiming[]
   /** Present only on failed jobs that look like CUDA OOMs.
    *  See `OomInfo` in types/index.ts. */
   oom_info?: import('../types').OomInfo | null
+  generation_details?: GenerationDetails
 }
 
 export interface ApiTaskTiming {
@@ -122,6 +128,56 @@ export async function updateModelVisibility(params: {
     body: JSON.stringify(params),
   })
   if (!res.ok) throw new Error('Failed to save model visibility')
+  return res.json()
+}
+
+export interface ModelSelectionSettings {
+  configured: boolean
+  selected_models: Record<string, string>
+  sources?: Record<string, 'global' | 'override'>
+}
+
+export async function fetchModelSelections(): Promise<ModelSelectionSettings> {
+  const res = await fetch(`${BASE}/api/v1/model-selections`)
+  if (!res.ok) throw new Error('Failed to fetch model selections')
+  return res.json()
+}
+
+export async function updateModelSelections(
+  selectedModels: Record<string, string>,
+): Promise<ModelSelectionSettings> {
+  const res = await fetch(`${BASE}/api/v1/model-selections`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selected_models: selectedModels }),
+  })
+  if (!res.ok) throw new Error('Failed to save model selections')
+  return res.json()
+}
+
+export interface ProductionProfileSettings {
+  configured: boolean
+  profile: import('../types').ProductionProfile
+}
+
+export async function fetchProductionProfile(): Promise<ProductionProfileSettings> {
+  const res = await fetch(`${BASE}/api/v1/production-profile`)
+  if (!res.ok) throw new Error('Failed to fetch the production profile')
+  return res.json()
+}
+
+export async function updateProductionProfile(
+  profile: import('../types').ProductionProfile,
+): Promise<ProductionProfileSettings> {
+  const res = await fetch(`${BASE}/api/v1/production-profile`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to save the production profile' }))
+    throw new Error(error.detail || 'Failed to save the production profile')
+  }
   return res.json()
 }
 
@@ -427,8 +483,11 @@ export async function cancelJob(jobId: string): Promise<void> {
 export async function fetchActiveJobs(): Promise<{ jobs: Array<{
   job_id: string; status: string; progress: number; step: number;
   total_steps: number; phase: string; message: string; output_files: string[];
-  error: string | null; created_at: number; task_timings?: ApiTaskTiming[];
+  error: string | null; created_at: number; started_at?: number | null;
+  finished_at?: number | null; queue_position?: number | null;
+  task_timings?: ApiTaskTiming[];
   h3_window_plan?: H3WindowPlan | null;
+  generation_details?: GenerationDetails;
 }> }> {
   const res = await fetch(`${BASE}/api/v1/jobs`)
   if (!res.ok) throw new Error('Failed to fetch jobs')
@@ -935,6 +994,7 @@ export interface PipelineStatus {
   created_at?: number
   updated_at?: number
   phase_started_at?: number
+  generation_details?: GenerationDetails
 }
 
 export interface ActiveDirectorPipeline {
@@ -951,6 +1011,7 @@ export interface ActiveDirectorPipeline {
   updated_at?: number
   phase_started_at?: number
   resource_schedule?: PipelineResourceSchedule
+  generation_details?: GenerationDetails
 }
 
 export async function startPipeline(params: Record<string, unknown>): Promise<{ pipeline_id: string }> {
@@ -2165,6 +2226,354 @@ export async function saveStoryLibrary(
     throw new Error(error.detail || 'Could not save Story Lab library')
   }
   return response.json()
+}
+
+async function seriesResponse<T>(responsePromise: Response | Promise<Response>, fallback: string): Promise<T> {
+  const response = await responsePromise
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: fallback }))
+    throw new Error(error.detail || error.error || fallback)
+  }
+  return response.json() as Promise<T>
+}
+
+export async function fetchSeriesLibrary(workspace: string): Promise<import('../features/series/types').SeriesLibrary> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/library?workspace=${encodeURIComponent(workspace)}`,
+  ), 'Could not load Series Lab library')
+}
+
+export async function fetchSeriesProject(
+  workspace: string,
+  seriesId: string,
+): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}?workspace=${encodeURIComponent(workspace)}`,
+  ), 'Could not load Series Lab project')
+}
+
+export async function createSeriesProject(
+  workspace: string,
+  title = 'Untitled series',
+): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, title }),
+  }), 'Could not create Series Lab project')
+}
+
+export async function saveSeriesProject(
+  workspace: string,
+  project: import('../features/series/types').SeriesProject,
+  baseRevision: number,
+): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(project.id)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, series: project, baseRevision }),
+  }), 'Could not save Series Lab project')
+}
+
+export async function deleteSeriesProject(workspace: string, seriesId: string): Promise<void> {
+  await seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}?workspace=${encodeURIComponent(workspace)}`,
+    { method: 'DELETE' },
+  ), 'Could not delete Series Lab project')
+}
+
+export async function duplicateSeriesProject(
+  workspace: string,
+  seriesId: string,
+): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/duplicate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+  }), 'Could not duplicate Series Lab project')
+}
+
+export async function importStoryAsSeries(
+  workspace: string,
+  storyId: string,
+): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/import-story`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, storyId }),
+  }), 'Could not import Story Lab project')
+}
+
+export async function createSeriesEpisode(
+  workspace: string,
+  seriesId: string,
+  seasonId?: string,
+): Promise<import('../features/series/types').SeriesEpisode> {
+  return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, seasonId }),
+  }), 'Could not create Series episode')
+}
+
+export async function fetchSeriesEpisodes(
+  workspace: string, seriesId: string,
+): Promise<{ episodes: import('../features/series/types').SeriesEpisode[] }> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes?workspace=${encodeURIComponent(workspace)}`,
+  ), 'Could not list Series episodes')
+}
+
+export async function fetchSeriesEpisode(
+  workspace: string, seriesId: string, episodeId: string,
+): Promise<import('../features/series/types').SeriesEpisode> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}?workspace=${encodeURIComponent(workspace)}`,
+  ), 'Could not load Series episode')
+}
+
+export async function deleteSeriesEpisode(
+  workspace: string, seriesId: string, episodeId: string,
+): Promise<void> {
+  await seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}?workspace=${encodeURIComponent(workspace)}`,
+    { method: 'DELETE' },
+  ), 'Could not delete Series episode')
+}
+
+export async function importSeriesAsset(
+  workspace: string,
+  seriesId: string,
+  input: {
+    uploadPath: string
+    name: string
+    ownerType: 'series' | 'character' | 'location' | 'prop' | 'episode' | 'shot'
+    ownerId: string
+    kind?: import('../features/series/types').SeriesAsset['kind']
+    referenceRole?: string
+    metadata?: Record<string, unknown>
+  },
+): Promise<{
+  asset: import('../features/series/types').SeriesAsset
+  series: import('../features/series/types').SeriesProject
+}> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/assets/import`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, ...input }),
+    },
+  ), 'Could not import Series reference')
+}
+
+export async function saveSeriesEpisode(
+  workspace: string,
+  seriesId: string,
+  episode: import('../features/series/types').SeriesEpisode,
+): Promise<import('../features/series/types').SeriesEpisode> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episode.id)}`,
+    {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, episode }),
+    },
+  ), 'Could not save Series episode')
+}
+
+export async function startSeriesPlan(
+  workspace: string,
+  seriesId: string,
+  episodeId: string,
+  options: {
+    scope: 'outline' | 'script' | 'shots' | 'complete'
+    instruction?: string
+    writingProvider?: string
+    writingModel?: string
+    writingBaseUrl?: string
+  },
+): Promise<import('../features/series/types').SeriesJobStatus> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/plan/start`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, ...options }),
+    },
+  ), 'Could not start Series episode planning')
+}
+
+export async function startSeriesCanonPreparation(
+  workspace: string,
+  seriesId: string,
+  options: {
+    instruction?: string
+    writingProvider?: string
+    writingModel?: string
+    writingBaseUrl?: string
+    generateImages?: boolean
+    bootstrapKnownSeries?: boolean
+    autoApply?: boolean
+  },
+): Promise<import('../features/series/types').SeriesJobStatus> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/canon/prepare/start`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, ...options }),
+    },
+  ), 'Could not prepare Series canon')
+}
+
+export async function fetchSeriesPlanJob(jobId: string): Promise<import('../features/series/types').SeriesJobStatus> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/plan/jobs/${encodeURIComponent(jobId)}`,
+  ), 'Could not read Series planning job')
+}
+
+export async function cancelSeriesPlanJob(jobId: string): Promise<import('../features/series/types').SeriesJobStatus> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/plan/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' },
+  ), 'Could not cancel Series planning job')
+}
+
+export async function resumeSeriesPlanJob(jobId: string): Promise<import('../features/series/types').SeriesJobStatus> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/plan/jobs/${encodeURIComponent(jobId)}/resume`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    },
+  ), 'Could not resume Series planning job')
+}
+
+export async function applySeriesPlanJob(jobId: string): Promise<import('../features/series/types').SeriesEpisode> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/plan/jobs/${encodeURIComponent(jobId)}/apply`, { method: 'POST' },
+  ), 'Could not apply Series planning proposal')
+}
+
+export async function applySeriesCanonPlanJob(jobId: string): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/plan/jobs/${encodeURIComponent(jobId)}/apply-canon`, { method: 'POST' },
+  ), 'Could not apply Series canon proposal')
+}
+
+export async function approveSeriesCanon(
+  workspace: string, seriesId: string, baseRevision: number,
+): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/canon/approve`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, baseRevision }),
+    },
+  ), 'Could not approve Series canon')
+}
+
+export async function fetchSeriesPlanRecovery(workspace: string): Promise<{ jobs: import('../features/series/types').SeriesJobStatus[] }> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/plan/recovery?workspace=${encodeURIComponent(workspace)}`,
+  ), 'Could not read Series planning recovery')
+}
+
+export async function discardSeriesPlanJob(jobId: string): Promise<void> {
+  await seriesResponse(fetch(
+    `${BASE}/api/v1/series/plan/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' },
+  ), 'Could not discard Series planning job')
+}
+
+export async function routeSeriesReferences(
+  workspace: string,
+  seriesId: string,
+  episodeId: string,
+  shotId?: string,
+): Promise<{ shotId?: string; manifest?: import('../features/series/types').SeriesReferenceManifest; manifests?: Record<string, import('../features/series/types').SeriesReferenceManifest> }> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/references/route`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, shotId }),
+    },
+  ), 'Could not route Series references')
+}
+
+export async function startSeriesRender(
+  workspace: string,
+  seriesId: string,
+  episodeId: string,
+  options: {
+    mode: 'selected' | 'failed' | 'missing' | 'all'
+    shotIds?: string[]
+    seed?: number
+    settings?: Record<string, unknown>
+  },
+): Promise<import('../features/series/types').SeriesJobStatus> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/render/start`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, ...options }),
+    },
+  ), 'Could not start Series render')
+}
+
+export async function fetchSeriesRenderJob(jobId: string): Promise<import('../features/series/types').SeriesJobStatus> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/render/jobs/${encodeURIComponent(jobId)}`,
+  ), 'Could not read Series render job')
+}
+
+export async function cancelSeriesRenderJob(jobId: string): Promise<import('../features/series/types').SeriesJobStatus> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/render/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' },
+  ), 'Could not cancel Series render job')
+}
+
+export async function resumeSeriesRenderJob(jobId: string): Promise<import('../features/series/types').SeriesJobStatus> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/render/jobs/${encodeURIComponent(jobId)}/resume`, { method: 'POST' },
+  ), 'Could not resume Series render job')
+}
+
+export async function fetchSeriesRenderRecovery(workspace: string): Promise<{ jobs: import('../features/series/types').SeriesJobStatus[] }> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/render/recovery?workspace=${encodeURIComponent(workspace)}`,
+  ), 'Could not read Series render recovery')
+}
+
+export async function discardSeriesRenderJob(jobId: string): Promise<void> {
+  await seriesResponse(fetch(
+    `${BASE}/api/v1/series/render/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' },
+  ), 'Could not discard Series render job')
+}
+
+export async function approveSeriesAttempt(
+  workspace: string, seriesId: string, episodeId: string, shotId: string, attemptId: string,
+): Promise<import('../features/series/types').SeriesShot> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/attempts/${encodeURIComponent(attemptId)}/approve`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+    },
+  ), 'Could not approve Series shot attempt')
+}
+
+export async function rejectSeriesAttempt(
+  workspace: string, seriesId: string, episodeId: string, shotId: string, attemptId: string,
+): Promise<import('../features/series/types').SeriesShot> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/attempts/${encodeURIComponent(attemptId)}/reject`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+    },
+  ), 'Could not reject Series shot attempt')
+}
+
+export async function commitSeriesCanon(
+  workspace: string,
+  seriesId: string,
+  episodeId: string,
+  baseRevision: number,
+  decisions: Record<string, 'pending' | 'accepted' | 'rejected'>,
+): Promise<import('../features/series/types').SeriesProject> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/canon/commit`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, baseRevision, decisions }),
+    },
+  ), 'Could not commit Series canon')
 }
 
 export async function cancelStoryGeneration(jobId: string): Promise<void> {

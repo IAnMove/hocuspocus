@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ListVideo, Loader2 } from 'lucide-react'
 import { useStore } from '../stores/useStore'
+import type { GenerationDetails } from '../types'
 
 const PHASE_LABELS: Record<string, string> = {
   planning: 'Planning',
@@ -56,6 +57,7 @@ interface ActivityView {
   detailCurrent?: number
   detailTotal?: number
   resourceMessage?: string
+  generationDetails?: GenerationDetails
   tokenUsage?: {
     promptTokens?: number
     completionTokens?: number
@@ -68,6 +70,95 @@ interface ActivityView {
   phaseTotal?: number
   updatedAt: number
   dismissible?: 'activity' | 'job'
+}
+
+function exactModelLabel(name?: string, modelType?: string): string {
+  const cleanName = name?.trim()
+  const cleanType = modelType?.trim()
+  if (cleanName && cleanType && cleanName !== cleanType) return `${cleanName} (${cleanType})`
+  return cleanName || cleanType || ''
+}
+
+function currentModelLabel(details?: GenerationDetails, phase = ''): string {
+  if (!details) return ''
+  if (phase.includes('image')) {
+    return exactModelLabel(details.image_model_name, details.image_model_type)
+      || exactModelLabel(details.model_name, details.model_type)
+  }
+  if (phase.includes('video') || phase.includes('render') || phase.includes('post_process')) {
+    return exactModelLabel(details.video_model_name, details.video_model_type)
+      || exactModelLabel(details.model_name, details.model_type)
+  }
+  if (phase.includes('planning') || phase.includes('writing') || phase.includes('prompt')) {
+    return [details.text_provider, details.text_model].filter(Boolean).join(' / ')
+      || exactModelLabel(details.model_name, details.model_type)
+  }
+  return exactModelLabel(details.model_name, details.model_type)
+    || exactModelLabel(details.video_model_name, details.video_model_type)
+    || exactModelLabel(details.image_model_name, details.image_model_type)
+    || [details.text_provider, details.text_model].filter(Boolean).join(' / ')
+}
+
+function humanReadableActivityMessage(row: ActivityView): string {
+  if (row.status === 'running' && row.id.startsWith('pipeline:') && row.phase === 'planning') {
+    const planner = [row.generationDetails?.text_provider, row.generationDetails?.text_model]
+      .filter(Boolean)
+      .join(' / ')
+    const clipCount = row.generationDetails?.clip_count
+    const target = clipCount ? `${clipCount} timed shot${clipCount === 1 ? '' : 's'}` : 'the timed shot plan'
+    return `${planner || 'The planning LLM'} is writing ${target}: scene, action, camera and final generation prompt. Waiting for the remote response; image and video generation have not started.`
+  }
+  return row.detailMessage || row.message
+}
+
+function generationRecipe(details?: GenerationDetails, phase = ''): string {
+  if (!details) return ''
+  const parts: string[] = []
+  const currentModel = currentModelLabel(details, phase)
+  if (currentModel) parts.push(`Using: ${currentModel}`)
+
+  const imageModel = exactModelLabel(details.image_model_name, details.image_model_type)
+  const videoModel = exactModelLabel(details.video_model_name, details.video_model_type)
+  const textModel = [details.text_provider, details.text_model].filter(Boolean).join(' / ')
+  if (textModel && textModel !== currentModel) parts.push(`text ${textModel}`)
+  if (imageModel && imageModel !== currentModel) parts.push(`image ${imageModel}`)
+  if (videoModel && videoModel !== currentModel) parts.push(`video ${videoModel}`)
+
+  const resolution = phase.includes('image')
+    ? details.image_resolution || details.resolution
+    : phase.includes('video') || videoModel
+      ? details.video_resolution || details.resolution
+      : details.resolution || details.image_resolution
+  const steps = phase.includes('image')
+    ? details.image_steps || details.steps
+    : phase.includes('video') || videoModel
+      ? details.video_steps || details.steps
+      : details.steps || details.image_steps
+  if (resolution) parts.push(String(resolution))
+  if (details.seed !== undefined) parts.push(`seed ${details.seed}`)
+  if (steps !== undefined) parts.push(`${steps} steps`)
+  if (details.guidance !== undefined) parts.push(`guidance ${details.guidance}`)
+  if (details.frames !== undefined) parts.push(`${details.frames} frames`)
+  if (details.duration_seconds !== undefined) parts.push(`${details.duration_seconds}s`)
+  if (details.repeat !== undefined && details.repeat > 1) parts.push(`${details.repeat} outputs`)
+  if (details.clip_count !== undefined) parts.push(`${details.clip_count} clips`)
+  if (details.profile) parts.push(`profile ${details.profile}`)
+  if (details.flow_shift !== undefined) parts.push(`flow shift ${details.flow_shift}`)
+  if (details.audio_shift !== undefined) parts.push(`audio shift ${details.audio_shift}`)
+  if (details.turbo !== undefined) parts.push(`Turbo ${details.turbo ? 'on' : 'off'}`)
+  return parts.join(' · ')
+}
+
+function generationTitle(details?: GenerationDetails): string {
+  switch (details?.generation_mode) {
+    case 'image': return 'Image generation'
+    case 'video': return 'Video generation'
+    case 'audio':
+    case 'music': return 'Music generation'
+    case 'model3d': return '3D generation'
+    case 'avatar': return 'Video edit'
+    default: return 'Generation job'
+  }
 }
 
 function resourceMessage(schedule?: import('../api/client').PipelineResourceSchedule): string | undefined {
@@ -141,10 +232,12 @@ export function ActivityFooter() {
   const activeDirectorPipelines = useStore(s => s.activeDirectorPipelines)
   const activities = useStore(s => s.activities)
   const stopGeneration = useStore(s => s.stopGeneration)
+  const stopPipeline = useStore(s => s.stopPipeline)
   const removeActivity = useStore(s => s.removeActivity)
   const dismissJob = useStore(s => s.dismissJob)
   const setVideoWorkflowsOpen = useStore(s => s.setDashboardOpen)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(() => new Set())
   const [clock, setClock] = useState(() => Date.now())
 
   const rows = useMemo<ActivityView[]>(() => {
@@ -160,6 +253,7 @@ export function ActivityFooter() {
       detailMessage: activity.detailMessage,
       detailCurrent: activity.detailCurrent,
       detailTotal: activity.detailTotal,
+      generationDetails: activity.generationDetails,
       tokenUsage: activity.tokenUsage,
       startedAt: activity.startedAt,
       updatedAt: activity.updatedAt || activity.startedAt || 3,
@@ -179,6 +273,7 @@ export function ActivityFooter() {
         pipeline.progress?.total_steps || pipeline.progress?.total || 0,
       ),
       resourceMessage: resourceMessage(pipeline.resource_schedule),
+      generationDetails: pipeline.generation_details,
       startedAt: epochMilliseconds(pipeline.created_at),
       phaseStartedAt: epochMilliseconds(pipeline.phase_started_at),
       phaseCurrent: pipeline.progress?.current || 0,
@@ -206,6 +301,7 @@ export function ActivityFooter() {
             pipelineStatus.progress?.total_steps || pipelineStatus.progress?.total || 0,
           ),
           resourceMessage: resourceMessage(pipelineStatus.resource_schedule),
+          generationDetails: pipelineStatus.generation_details,
           startedAt: epochMilliseconds(pipelineStatus.created_at),
           phaseStartedAt: epochMilliseconds(pipelineStatus.phase_started_at),
           phaseCurrent: pipelineStatus.progress?.current || 0,
@@ -216,20 +312,32 @@ export function ActivityFooter() {
 
     const visibleJobs = jobs
       .filter((job, index) => !activities[job.id]
-        && (job.status === 'running' || job.status === 'queued' || index === 0))
+        && (job.status === 'running'
+          || job.status === 'queued'
+          || (index === 0 && (job.status === 'completed' || job.status === 'failed'))))
       .map((job): ActivityView => ({
         id: `job:${job.id}`,
-        title: 'Generation job',
+        title: generationTitle(job.generationDetails),
         status: job.status === 'failed'
           ? 'failed'
-          : job.status === 'completed' ? 'completed' : 'running',
+          : job.status === 'completed' || job.status === 'cancelled'
+            ? 'completed'
+            : job.status === 'queued' ? 'queued' : 'running',
         phase: job.phase,
-        message: job.error || job.message || 'Generation is running…',
+        message: job.error
+          || (job.status === 'queued' && job.queuePosition
+            ? `Queued · position ${job.queuePosition}`
+            : job.message)
+          || (job.status === 'queued' ? 'Queued' : 'Generation is running…'),
         current: job.totalSteps ? job.step : 0,
         total: job.totalSteps || 0,
         percent: activityProgress(job.step, job.totalSteps, job.progress),
-        startedAt: job.createdAt,
-        updatedAt: 1,
+        generationDetails: job.generationDetails,
+        // Ordinary jobs deliberately omit queue wait from their timer. A
+        // Director/music-video pipeline above keeps created_at as its total
+        // workflow clock, including planning, generation and assembly.
+        startedAt: job.startedAt,
+        updatedAt: job.finishedAt || job.startedAt || job.createdAt || 1,
         dismissible: job.status === 'failed' ? 'job' as const : undefined,
       }))
 
@@ -237,16 +345,29 @@ export function ActivityFooter() {
       .sort((left, right) => right.updatedAt - left.updatedAt)
   }, [activities, jobs, pipelineStatus, activeDirectorPipelines])
 
-  const activeRows = rows.filter(row => row.status === 'running' || row.status === 'queued')
+  const activeRows = rows
+    .filter(row => row.status === 'running' || row.status === 'queued')
+    .sort((left, right) => {
+      if (left.status !== right.status) return left.status === 'running' ? -1 : 1
+      return right.updatedAt - left.updatedAt
+    })
   const failedRows = rows.filter(row => row.status === 'failed')
   const completedRows = rows.filter(row => row.status === 'completed')
-  const primary = activeRows[0] || failedRows[0] || completedRows[0] || null
+  // Prefer a cancellable backend job/pipeline over a foreground wrapper. A
+  // wrapper may be newer because it mirrors the same child progress, but it
+  // cannot stop the GPU worker itself and used to hide the useful Cancel.
+  const primary = activeRows.find(row => (
+    row.id.startsWith('job:')
+    || row.id.startsWith('audio-analysis-')
+    || row.id.startsWith('pipeline:')
+  )) || activeRows[0] || failedRows[0] || completedRows[0] || null
   const isActive = activeRows.length > 0
   const hasError = !isActive && failedRows.length > 0
   const phase = primary
     ? PHASE_LABELS[primary.phase] || primary.phase?.replaceAll('_', ' ')
     : ''
-  const message = primary?.detailMessage || primary?.message || 'Ready — no active jobs'
+  const message = primary ? humanReadableActivityMessage(primary) : 'Ready — no active jobs'
+  const primaryModel = primary ? currentModelLabel(primary.generationDetails, primary.phase) : ''
   useEffect(() => {
     if (!activeRows.length) return
     const interval = window.setInterval(() => setClock(Date.now()), 1000)
@@ -258,11 +379,31 @@ export function ActivityFooter() {
   const phaseElapsed = (row: ActivityView) => row.phaseStartedAt
     ? formatElapsed((row.status === 'running' || row.status === 'queued' ? clock : row.updatedAt) - row.phaseStartedAt)
     : ''
+  const canCancel = (row: ActivityView) => (
+    (row.status === 'running' || row.status === 'queued')
+    && (row.id.startsWith('job:') || row.id.startsWith('audio-analysis-') || row.id.startsWith('pipeline:'))
+  )
+  const cancelRow = (row: ActivityView) => {
+    if (!canCancel(row) || cancellingIds.has(row.id)) return
+    setCancellingIds(current => new Set(current).add(row.id))
+    const operation = row.id.startsWith('pipeline:')
+      ? stopPipeline(row.id.slice('pipeline:'.length))
+      : Promise.resolve(stopGeneration(row.id.startsWith('job:') ? row.id.slice(4) : row.id))
+    void operation.catch(error => {
+      console.error('Failed to cancel activity:', error)
+    }).finally(() => {
+      setCancellingIds(current => {
+        const next = new Set(current)
+        next.delete(row.id)
+        return next
+      })
+    })
+  }
 
   return (
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
       {detailsOpen && rows.length > 0 && (
-        <div className="absolute bottom-full left-3 mb-2 w-[min(34rem,calc(100vw-1.5rem))] max-h-72 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
+        <div className="absolute bottom-full left-3 mb-2 w-[min(44rem,calc(100vw-1.5rem))] max-h-72 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
           <div className="mb-1.5 flex items-center justify-between px-1">
             <span className="font-semibold text-text-primary">{activeRows.length ? 'Current activity' : 'Recent activity'}</span>
             <span className="text-text-muted">{activeRows.length} active</span>
@@ -295,14 +436,14 @@ export function ActivityFooter() {
                           </span>
                         )}
                         <span className="shrink-0 capitalize text-text-muted">{PHASE_LABELS[row.phase] || row.phase?.replaceAll('_', ' ')}</span>
-                        {(row.status === 'running' || row.status === 'queued')
-                          && (row.id.startsWith('job:') || row.id.startsWith('audio-analysis-')) && (
+                        {canCancel(row) && (
                           <button
                             type="button"
                             className="rounded border border-border px-1.5 py-0.5 text-[9px] text-text-muted hover:border-red-400/50 hover:text-red-400"
-                            onClick={() => stopGeneration(row.id.startsWith('job:') ? row.id.slice(4) : row.id)}
+                            disabled={cancellingIds.has(row.id)}
+                            onClick={() => cancelRow(row)}
                           >
-                            Cancel
+                            {cancellingIds.has(row.id) ? 'Cancelling…' : 'Cancel'}
                           </button>
                         )}
                         {row.status === 'failed' && row.dismissible && (
@@ -318,9 +459,17 @@ export function ActivityFooter() {
                         )}
                       </div>
                     </div>
-                    <p className={row.status === 'failed' ? 'text-red-400' : 'text-text-secondary'}>{row.message}</p>
+                    <p className={row.status === 'failed' ? 'text-red-400' : 'text-text-secondary'}>{humanReadableActivityMessage(row)}</p>
                     {row.detailMessage && (
                       <p className="truncate text-text-muted" title={row.detailMessage}>{row.detailMessage}</p>
+                    )}
+                    {generationRecipe(row.generationDetails, row.phase) && (
+                      <p
+                        className="mt-0.5 break-words text-[9px] text-amber-300"
+                        title={generationRecipe(row.generationDetails, row.phase)}
+                      >
+                        {generationRecipe(row.generationDetails, row.phase)}
+                      </p>
                     )}
                     {row.resourceMessage && (
                       <p className="truncate text-[9px] text-accent-blue" title={row.resourceMessage}>{row.resourceMessage}</p>
@@ -401,6 +550,14 @@ export function ActivityFooter() {
             {estimatedRemaining(primary, clock)}
           </span>
         )}
+        {primaryModel && (
+          <span
+            className="hidden md:inline max-w-64 shrink-0 truncate rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-amber-300"
+            title={generationRecipe(primary?.generationDetails, primary?.phase)}
+          >
+            {primaryModel}
+          </span>
+        )}
         <span
           className={`truncate ${hasError ? 'text-red-400' : isActive ? 'text-text-secondary' : 'text-text-muted'}`}
           title={message}
@@ -426,6 +583,19 @@ export function ActivityFooter() {
             {primary.total > 0 ? `${primary.current}/${primary.total}` : `${Math.round(primary.percent)}%`}
           </span>
         </div>
+      )}
+
+      {primary && canCancel(primary) && (
+        <button
+          type="button"
+          disabled={cancellingIds.has(primary.id)}
+          onClick={() => cancelRow(primary)}
+          className="flex shrink-0 items-center gap-1 rounded-md border border-red-400/40 px-2 py-1 text-red-300 transition-colors hover:border-red-300 hover:text-red-200 disabled:opacity-50"
+          title="Cancel this complete generation workflow"
+        >
+          {cancellingIds.has(primary.id) && <Loader2 size={11} className="animate-spin" />}
+          <span>{cancellingIds.has(primary.id) ? 'Cancelling…' : 'Cancel'}</span>
+        </button>
       )}
 
       <button

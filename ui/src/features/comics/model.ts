@@ -829,6 +829,7 @@ export function normalizeComicProject(raw: unknown): ComicProject {
         project.director.input?.dialogueDensity || 'medium',
       )
       project.director.input.writingProvider = project.director.input.writingProvider || 'maestro'
+      project.director.input.useGlobalProfile = project.director.input.useGlobalProfile === true
       if (project.director.input.writingProvider === 'openai-compatible') {
         const legacyUrl = project.director.input.writingBaseUrl || ''
         if (/api\.deepseek\.com/i.test(legacyUrl)) project.director.input.writingProvider = 'deepseek'

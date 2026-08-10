@@ -112,6 +112,11 @@ export function MiniMaxH3TurboToggle() {
             </label>
             <InfoTooltip label="About H3 Turbo mode" text={option.guide} />
           </div>
+          {enabled && (
+            <p className="mt-1.5 text-[9px] leading-relaxed text-indicator-warning">
+              Speed preset: prompt/style fidelity can drop. Disable Turbo and use the normal 20 steps for maximum quality.
+            </p>
+          )}
         </div>
       )}
     </div>

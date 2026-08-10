@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import os
 import threading
+import time
+from collections import deque
 from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import count
 from typing import Any
 
 
@@ -26,6 +29,13 @@ _registrations: dict[
         Callable[[], None] | None,
     ],
 ] = {}
+_generation_queue_condition = threading.Condition(threading.RLock())
+_generation_queue_sequence = count()
+_generation_queues: dict[
+    int,
+    deque[tuple[int, object, MutableMapping[str, Any]]],
+] = {}
+_generation_queue_locks: dict[int, Any] = {}
 
 
 @dataclass(frozen=True)
@@ -212,7 +222,22 @@ def record_job_outputs(
                 merged.append(filename)
         job["output_files"] = merged
         if clip_output_files:
-            clip_outputs = dict(job.get("clip_output_files") or {})
+            current_clip_outputs = job.get("clip_output_files") or {}
+            if isinstance(current_clip_outputs, Mapping):
+                clip_outputs = dict(current_clip_outputs)
+            elif isinstance(current_clip_outputs, (list, tuple)):
+                # While a multiclip render is live, launch.py keeps sparse
+                # positional progress in a list. Its durable representation
+                # is a mapping. Calling dict(list_of_filenames) raised after
+                # all clips had already rendered because a filename is not a
+                # key/value pair.
+                clip_outputs = {
+                    str(index): filename
+                    for index, filename in enumerate(current_clip_outputs)
+                    if filename
+                }
+            else:
+                clip_outputs = {}
             for index, filename in clip_output_files.items():
                 try:
                     key = str(int(index))
@@ -234,10 +259,12 @@ def try_start(job: MutableMapping[str, Any], **updates: Any) -> bool:
         if is_cancel_requested(job):
             job["status"] = "cancelled"
             job["message"] = "Cancelled"
+            job["finished_at"] = job.get("finished_at") or time.time()
             return False
         if job.get("status") != "queued":
             return False
         job.update(updates)
+        job["started_at"] = job.get("started_at") or time.time()
         job["status"] = "running"
         return True
 
@@ -345,6 +372,7 @@ def request_cancel(
                     pass
 
         job["status"] = "cancelled"
+        job["finished_at"] = job.get("finished_at") or time.time()
 
         return CancelResult(True, was_running, abort_signalled)
 
@@ -363,12 +391,88 @@ def finish_job(
         if is_cancel_requested(job):
             job["status"] = "cancelled"
             job["message"] = "Cancelled"
+            job["finished_at"] = job.get("finished_at") or time.time()
             return False
         if job.get("status") != "running":
             return False
         job.update(updates)
+        job["finished_at"] = job.get("finished_at") or time.time()
         job["status"] = status
         return True
+
+
+def register_generation_job(
+    generation_lock: threading.Lock,
+    job: MutableMapping[str, Any],
+) -> int:
+    """Register ``job`` in the fair queue for one GPU lock.
+
+    Registration is intentionally separate from worker startup. API handlers
+    can therefore reserve the FIFO position synchronously, before thread
+    scheduling has a chance to reorder a burst of submissions.
+    """
+    lock_key = id(generation_lock)
+    with _generation_queue_condition:
+        queue = _generation_queues.setdefault(lock_key, deque())
+        token = job.get("_generation_queue_token")
+        if (
+            job.get("_generation_queue_lock_key") == lock_key
+            and token is not None
+        ):
+            for position, (_, queued_token, _) in enumerate(queue, start=1):
+                if queued_token is token:
+                    return position
+
+        token = object()
+        sequence = next(_generation_queue_sequence)
+        queue.append((sequence, token, job))
+        # Keep a strong reference while waiters exist so a recycled object id
+        # can never inherit another lock's queue.
+        _generation_queue_locks[lock_key] = generation_lock
+        job["_generation_queue_lock_key"] = lock_key
+        job["_generation_queue_token"] = token
+        job["_generation_queue_sequence"] = sequence
+        _generation_queue_condition.notify_all()
+        return len(queue)
+
+
+def generation_queue_position(
+    generation_lock: threading.Lock,
+    job: MutableMapping[str, Any],
+) -> int | None:
+    """Return the 1-based waiting position, or ``None`` once active/terminal."""
+    lock_key = id(generation_lock)
+    token = job.get("_generation_queue_token")
+    if token is None or job.get("_generation_queue_lock_key") != lock_key:
+        return None
+    with _generation_queue_condition:
+        for position, (_, queued_token, _) in enumerate(
+            _generation_queues.get(lock_key, ()),
+            start=1,
+        ):
+            if queued_token is token:
+                return position
+    return None
+
+
+def _remove_generation_waiter(
+    lock_key: int,
+    token: object,
+    job: MutableMapping[str, Any],
+) -> None:
+    queue = _generation_queues.get(lock_key)
+    if queue is not None:
+        for index, (_, queued_token, _) in enumerate(queue):
+            if queued_token is token:
+                del queue[index]
+                break
+        if not queue:
+            _generation_queues.pop(lock_key, None)
+            _generation_queue_locks.pop(lock_key, None)
+    if job.get("_generation_queue_token") is token:
+        job.pop("_generation_queue_token", None)
+        job.pop("_generation_queue_lock_key", None)
+    _generation_queue_condition.notify_all()
 
 
 def acquire_generation_slot(
@@ -377,14 +481,39 @@ def acquire_generation_slot(
     *,
     poll_interval: float = 0.1,
 ) -> bool:
-    """Wait for the GPU lock while allowing a queued cancellation to exit."""
-    while not is_cancel_requested(job):
-        if generation_lock.acquire(timeout=poll_interval):
+    """Acquire the GPU lock in registration order, with cancellable waiting."""
+    register_generation_job(generation_lock, job)
+    lock_key = id(generation_lock)
+    token = job.get("_generation_queue_token")
+
+    while True:
+        with _generation_queue_condition:
+            if is_cancel_requested(job):
+                _remove_generation_waiter(lock_key, token, job)
+                return False
+            queue = _generation_queues.get(lock_key)
+            is_head = bool(queue and queue[0][1] is token)
+            if not is_head:
+                _generation_queue_condition.wait(timeout=poll_interval)
+                continue
+
+        # Only the FIFO head is allowed to compete for the underlying mutex.
+        if not generation_lock.acquire(timeout=poll_interval):
+            continue
+
+        with _generation_queue_condition:
             if is_cancel_requested(job):
                 generation_lock.release()
+                _remove_generation_waiter(lock_key, token, job)
                 return False
-            return True
-    return False
+            queue = _generation_queues.get(lock_key)
+            if not queue or queue[0][1] is not token:
+                # Defensive only: the head cannot normally change while this
+                # non-cancelled waiter is acquiring the generation mutex.
+                generation_lock.release()
+                continue
+            _remove_generation_waiter(lock_key, token, job)
+        return True
 
 
 @contextmanager
@@ -403,3 +532,5 @@ def generation_slot(
     finally:
         if acquired:
             generation_lock.release()
+            with _generation_queue_condition:
+                _generation_queue_condition.notify_all()

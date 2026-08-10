@@ -26,8 +26,11 @@ import requests
 import websocket as websocket_client
 
 
-MODEL_ID = "minimax_h3"
-MODEL_NAME = "MiniMax H3 (native audio, 768p)"
+# The native WanGP H3 family owns ``minimax_h3`` in Maestro Next. Keep the
+# original isolated ComfyUI implementation available under an explicit model
+# id so a saved/native job can never silently cross the two inference stacks.
+MODEL_ID = "minimax_h3_legacy"
+MODEL_NAME = "H3 Legacy Quality — ConvRot"
 HF_REPO = "Comfy-Org/MiniMax-H3"
 COMMUNITY_HF_REPO = "Abiray/Minimax-H3-nvfp4-INT4-INT8-Convrot"
 
@@ -109,6 +112,7 @@ DEFAULTS = {
     "h3_model_profile": "quality",
     "h3_reference_mode": "first_frame",
     "image_fit_mode": "contain",
+    "h3_allow_low_memory_fallback": False,
 }
 
 
@@ -158,7 +162,9 @@ def prepare_extend_anchor(
 
 MODEL_OPTIONS = {
     "model_type": MODEL_ID,
-    "architecture": MODEL_ID,
+    # Studio uses the shared H3 First/Last inputs for this route. The distinct
+    # model_type still selects the isolated legacy worker server-side.
+    "architecture": "minimax_h3",
     "guidance_max_phases": 1,
     "lock_guidance_phases": True,
     "sliding_window": False,
@@ -167,8 +173,12 @@ MODEL_OPTIONS = {
     "tea_cache": False,
     "returns_audio": True,
     "any_audio_prompt": False,
+    # Director analyses the source soundtrack for shot timing and restores
+    # the exact uploaded track during final assembly. It is deliberately not
+    # forwarded as a long Ref2VA audio reference.
+    "director_audio_input_mode": "timeline_remux",
     "audio_scale_name": "",
-    "lock_inference_steps": False,
+    "lock_inference_steps": True,
     "lock_guidance_scale": True,
     "no_negative_prompt": True,
     "i2v_class": True,
@@ -178,6 +188,7 @@ MODEL_OPTIONS = {
     "guide_preprocessing": None,
     "guide_custom_choices": None,
     "image_ref_choices": {"choices": [["References", "I"]], "default": "I"},
+    "max_image_refs": 9,
     "audio_prompt_type_sources": None,
     "background_removal_label": None,
     "sample_solvers": [["RES Multistep", "res_multistep"]],
@@ -185,9 +196,16 @@ MODEL_OPTIONS = {
     "self_refiner_max_plans": 1,
     "sliding_window_defaults": None,
     "fps": 24,
-    "frames_minimum": 107,
+    # The validated quality recipe starts at 124 frames. H3's temporal grid is
+    # 17n+5; publishing it lets every UI show the exact effective duration.
+    "frames_minimum": 124,
     "frames_steps": 17,
+    "frames_maximum": 362,
+    "frame_alignment_modulus": 17,
+    "frame_alignment_remainder": 5,
+    "frame_alignment_mode": "nearest",
     "default_num_inference_steps": 20,
+    "default_flow_shift": 12.0,
     "default_guidance_scale": 1.0,
     "hide_resolution_presets": False,
     "input_video_strength_label": "",
@@ -198,6 +216,45 @@ MODEL_OPTIONS = {
     "temperature_enabled": False,
     "custom_settings_def": None,
     "h3_reference_inputs": True,
+    "supports_auto_aspect": False,
+    # Keep this list limited to canvases the isolated Base workflow can render
+    # without silently shrinking the request.  H3 requires multiples of 32,
+    # hence the model-aligned 864x480 and 1280x704 consumer tiers.
+    "resolution_preset_order": ["480p", "540p", "720p", "768p"],
+    "resolution_presets": {
+        "480p": {
+            "label": "480p · fastest",
+            "hint": "Model-aligned low-resolution canvas for faster H3 Legacy tests.",
+            "values": {
+                "16:9": "864x480", "9:16": "480x864", "1:1": "640x640",
+                "4:3": "640x480", "3:4": "480x640",
+            },
+        },
+        "540p": {
+            "label": "540p · validated",
+            "hint": "The original validated H3 Legacy quality canvas.",
+            "values": {
+                "16:9": "960x544", "9:16": "544x960", "1:1": "736x736",
+                "4:3": "736x544", "3:4": "544x736",
+            },
+        },
+        "720p": {
+            "label": "720p · aligned",
+            "hint": "Uses H3's model-aligned 1280x704 canvas instead of unsupported 1280x720.",
+            "values": {
+                "16:9": "1280x704", "9:16": "704x1280", "1:1": "704x704",
+                "4:3": "928x704", "3:4": "704x928",
+            },
+        },
+        "768p": {
+            "label": "768p · maximum Base canvas",
+            "hint": "H3's released high canvas; slower and heavier than aligned 720p.",
+            "values": {
+                "16:9": "1344x768", "9:16": "768x1344", "1:1": "768x768",
+                "4:3": "1024x768", "3:4": "768x1024",
+            },
+        },
+    },
 }
 
 _process: subprocess.Popen | None = None
@@ -330,6 +387,12 @@ def _ensure_models(pipeline: str, profile: str, progress: Callable[[str], None])
         )
 
 
+def ensure_quality_assets(progress: Callable[[str], None]) -> None:
+    """Provision only the fixed Legacy Quality First/Last asset set."""
+
+    _ensure_models("fl2va", "quality", progress)
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -362,7 +425,11 @@ def _runtime_command(port: int, profile: str = "quality") -> list[str]:
     return command
 
 
-def ensure_runtime(progress: Callable[[str], None], profile: str = "quality") -> str:
+def ensure_runtime(
+    progress: Callable[[str], None],
+    profile: str = "quality",
+    cancelled: Callable[[], bool] | None = None,
+) -> str:
     global _process, _port, _runtime_profile
     with _runtime_lock:
         _cancel_idle_shutdown_locked()
@@ -389,6 +456,9 @@ def ensure_runtime(progress: Callable[[str], None], profile: str = "quality") ->
         base_url = f"http://127.0.0.1:{_port}"
         deadline = time.time() + 180
         while time.time() < deadline:
+            if cancelled is not None and cancelled():
+                _stop_runtime_locked()
+                raise InterruptedError("MiniMax H3 runtime startup cancelled")
             if _process.poll() is not None:
                 raise RuntimeError(f"MiniMax H3 runtime exited with code {_process.returncode}")
             try:
@@ -573,15 +643,15 @@ def _validate_timed_references(sources: list[str], label: str) -> None:
 
 
 def _base_sampling_graph(params: dict, model_name: str, text_encoder: str) -> dict:
-    steps = max(1, min(100, int(params.get("num_inference_steps", 20))))
+    # Legacy Quality is a reproducible recipe, not an expert-tuning surface.
+    steps = 20
     seed = int(params.get("seed", -1))
     if seed < 0:
         seed = uuid.uuid4().int % (2**63 - 1)
     return {
         "1": _node("UNETLoader", unet_name=model_name, weight_dtype="default"),
         "2": _node("MiniMaxH3SigmaShift", model=["1", 0],
-                   shift_video=float(params.get("flow_shift", 12.0)),
-                   shift_audio=float(params.get("h3_audio_shift", 3.0))),
+                   shift_video=12.0, shift_audio=3.0),
         "3": _node("CLIPLoader", clip_name=text_encoder, type="minimax", device="default"),
         "4": _node("VAELoader", vae_name=VIDEO_VAE),
         "5": _node("VAELoader", vae_name=AUDIO_VAE),
@@ -603,7 +673,8 @@ def _base_sampling_graph(params: dict, model_name: str, text_encoder: str) -> di
 
 def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
     """Build a Comfy API workflow and return it with the selected H3 pipeline."""
-    width, height = (int(v) for v in str(params.get("resolution", "960x544")).lower().split("x", 1))
+    requested_resolution = str(params.get("resolution", "960x544"))
+    width, height = (int(v) for v in requested_resolution.lower().split("x", 1))
     width = max(32, round(width / 32) * 32)
     height = max(32, round(height / 32) * 32)
     # The open Base canvas is capped at 768*1344 pixels. Preserve the user's
@@ -613,10 +684,19 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
         scale = math.sqrt(max_pixels / (width * height))
         width = max(32, round(width * scale / 32) * 32)
         height = max(32, round(height * scale / 32) * 32)
-    length = int(params.get("video_length", 124))
-    length = max(107, min(362, length))
-    while length % 17 != 5:
-        length += 1
+    requested_length = int(params.get("video_length", 124))
+    length = max(124, min(362, requested_length))
+    length = 5 + round((length - 5) / 17) * 17
+    length = max(124, min(362, length))
+    # Keep both values in the frozen job/sidecar. This makes a rerun explain
+    # why an unsupported canvas or off-grid duration was adjusted.
+    params["requested_resolution"] = requested_resolution
+    params["requested_video_length"] = requested_length
+    params["effective_resolution"] = f"{width}x{height}"
+    params["effective_video_length"] = length
+    params["num_inference_steps"] = 20
+    params["flow_shift"] = 12.0
+    params["h3_audio_shift"] = 3.0
 
     image_refs = [p for p in (params.get("image_refs") or []) if p]
     video_refs = [p for p in (params.get("h3_ref_videos") or []) if p]
@@ -776,7 +856,11 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
             "MiniMax H3 support is not installed. Run Update (or Install) from the Pinokio menu first."
         )
     _ensure_models(pipeline, profile, lambda message: progress(message, 3, 0, 0))
-    base_url = ensure_runtime(lambda message: progress(message, 8, 0, 0), profile)
+    base_url = ensure_runtime(
+        lambda message: progress(message, 8, 0, 0),
+        profile,
+        cancelled,
+    )
     progress("Loading MiniMax H3 and generating native video + stereo audio…", 10, 0, 0)
     client_id = f"maestro-{job_id}"
     response = requests.post(
@@ -884,7 +968,12 @@ def generate(params: dict, job_id: str, out_dir: str, progress: Callable[[str, i
                 "allocation on device",
                 "failed to allocate",
             ))
-            if profile not in {"quality", "balanced"} or not is_oom or cancelled():
+            if (
+                not params.get("h3_allow_low_memory_fallback", True)
+                or profile not in {"quality", "balanced"}
+                or not is_oom
+                or cancelled()
+            ):
                 raise
             stop_runtime()
             params["h3_model_fallback_from"] = profile

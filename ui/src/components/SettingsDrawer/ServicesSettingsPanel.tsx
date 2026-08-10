@@ -57,7 +57,7 @@ function ApiKeyField({ label, maskedValue, isSet, onSave }: {
   )
 }
 
-const PUBLIC_PROVIDERS = new Set(['openai', 'anthropic'])
+const PUBLIC_PROVIDERS = new Set(['openai', 'anthropic', 'minimax'])
 
 function NsfwDisclaimerModal({
   onAccept,
@@ -260,6 +260,10 @@ export function ServicesSettingsPanel() {
   const servicesConfig = useStore(s => s.servicesConfig)
   const servicesConfigLoading = useStore(s => s.servicesConfigLoading)
   const updateConfig = useStore(s => s.updateServicesConfig)
+  const savedProductionProfile = useStore(s => s.productionProfile)
+  const productionProfileConfigured = useStore(s => s.productionProfileConfigured)
+  const productionProfileLoading = useStore(s => s.productionProfileLoading)
+  const updateProductionProfile = useStore(s => s.updateProductionProfile)
   const systemConfig = useStore(s => s.systemConfig)
   const updateSystemConfig = useStore(s => s.updateSystemConfig)
   const llmStatus = useStore(s => s.llmStatus)
@@ -272,6 +276,8 @@ export function ServicesSettingsPanel() {
   })
   const pendingLlmConfig = useRef<Promise<void>>(Promise.resolve())
   const [llmConfigSaving, setLlmConfigSaving] = useState(false)
+  const [productionProfileDraft, setProductionProfile] = useState<typeof savedProductionProfile | null>(null)
+  const productionProfile = productionProfileDraft ?? savedProductionProfile
   if (servicesConfigLoading && !servicesConfig) {
     return <div className="text-xs text-text-muted py-4 text-center">Loading...</div>
   }
@@ -282,6 +288,7 @@ export function ServicesSettingsPanel() {
   const provider = servicesConfig.llm_provider || 'local'
   const isRemote = provider === 'remote'
   const isOpenAI = provider === 'openai'
+  const isMiniMax = provider === 'minimax'
   const isLocal = provider === 'local'
 
   const handleRefreshModels = async () => {
@@ -334,6 +341,197 @@ export function ServicesSettingsPanel() {
 
       {/* LLM Provider */}
       <div className="space-y-4">
+        <div className="space-y-3 rounded-xl border border-border bg-bg-secondary/40 p-3">
+          <div>
+            <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">
+              Global production profile
+            </h3>
+            <p className="text-[10px] text-text-muted mt-1">
+              Credential-free defaults for Studio, Story Lab, Series Lab, Comics and Director.
+              Projects can inherit these values or keep an explicit override.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[10px] text-text-muted">
+              Text provider
+              <select
+                value={productionProfile.text.provider}
+                onChange={e => setProductionProfile({
+                  ...productionProfile,
+                  text: { ...productionProfile.text, provider: e.target.value as typeof productionProfile.text.provider },
+                })}
+                disabled={productionProfileLoading}
+                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+              >
+                <option value="minimax">MiniMax API</option>
+                <option value="local">Local</option>
+                <option value="remote">Remote compatible</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </label>
+            <label className="text-[10px] text-text-muted">
+              Text model
+              <input
+                value={productionProfile.text.model}
+                onChange={e => setProductionProfile({
+                  ...productionProfile,
+                  text: { ...productionProfile.text, model: e.target.value },
+                })}
+                disabled={productionProfileLoading}
+                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+              />
+            </label>
+            <label className="text-[10px] text-text-muted">
+              Image provider / model
+              <div className="mt-1 flex gap-1">
+                <select
+                  value={productionProfile.image.provider}
+                  onChange={e => setProductionProfile({
+                    ...productionProfile,
+                    image: { ...productionProfile.image, provider: e.target.value as typeof productionProfile.image.provider },
+                  })}
+                  disabled={productionProfileLoading}
+                  className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                >
+                  <option value="minimax">MiniMax</option>
+                  <option value="local">Local</option>
+                  <option value="maestro">Maestro</option>
+                </select>
+                <input
+                  value={productionProfile.image.model}
+                  onChange={e => setProductionProfile({
+                    ...productionProfile,
+                    image: { ...productionProfile.image, model: e.target.value },
+                  })}
+                  disabled={productionProfileLoading}
+                  className="min-w-0 flex-1 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                />
+              </div>
+            </label>
+            <label className="text-[10px] text-text-muted">
+              Music provider / model
+              <div className="mt-1 flex gap-1">
+                <select
+                  value={productionProfile.music.provider}
+                  onChange={e => setProductionProfile({
+                    ...productionProfile,
+                    music: { ...productionProfile.music, provider: e.target.value as typeof productionProfile.music.provider },
+                  })}
+                  disabled={productionProfileLoading}
+                  className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                >
+                  <option value="minimax">MiniMax</option>
+                  <option value="local">Local</option>
+                  <option value="maestro">Maestro</option>
+                </select>
+                <input
+                  value={productionProfile.music.model}
+                  onChange={e => setProductionProfile({
+                    ...productionProfile,
+                    music: { ...productionProfile.music, model: e.target.value },
+                  })}
+                  disabled={productionProfileLoading}
+                  className="min-w-0 flex-1 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                />
+              </div>
+            </label>
+          </div>
+          <label className="text-[10px] text-text-muted block">
+            Video model
+            <input
+              value={productionProfile.video.model}
+              onChange={e => setProductionProfile({
+                ...productionProfile,
+                video: { ...productionProfile.video, model: e.target.value },
+              })}
+              disabled={productionProfileLoading}
+              className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+            />
+          </label>
+          <div className="grid grid-cols-4 gap-2">
+            <label className="text-[10px] text-text-muted">
+              Resolution
+              <select
+                value={productionProfile.video.settings.resolution}
+                onChange={e => setProductionProfile({
+                  ...productionProfile,
+                  video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, resolution: e.target.value as typeof productionProfile.video.settings.resolution } },
+                })}
+                disabled={productionProfileLoading}
+                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+              >
+                {['480p', '540p', '720p', '768p', '1080p'].map(value => <option key={value}>{value}</option>)}
+              </select>
+            </label>
+            <label className="text-[10px] text-text-muted">
+              Canvas
+              <select
+                value={productionProfile.video.settings.aspectRatio}
+                onChange={e => setProductionProfile({
+                  ...productionProfile,
+                  video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, aspectRatio: e.target.value as typeof productionProfile.video.settings.aspectRatio } },
+                })}
+                disabled={productionProfileLoading}
+                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+              >
+                {['16:9', '9:16', '1:1', '4:3', '3:4'].map(value => <option key={value}>{value}</option>)}
+              </select>
+            </label>
+            <label className="text-[10px] text-text-muted">
+              Steps
+              <input
+                type="number"
+                value={productionProfile.video.settings.steps}
+                onChange={e => setProductionProfile({
+                  ...productionProfile,
+                  video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, steps: Number(e.target.value) } },
+                })}
+                disabled={productionProfileLoading}
+                className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+              />
+            </label>
+            <label className="text-[10px] text-text-muted">
+              Flow / audio shift
+              <div className="mt-1 flex gap-1">
+                <input
+                  type="number"
+                  value={productionProfile.video.settings.flowShift}
+                  onChange={e => setProductionProfile({
+                    ...productionProfile,
+                    video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, flowShift: Number(e.target.value) } },
+                  })}
+                  disabled={productionProfileLoading}
+                  className="min-w-0 w-1/2 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                />
+                <input
+                  type="number"
+                  value={productionProfile.video.settings.audioShift}
+                  onChange={e => setProductionProfile({
+                    ...productionProfile,
+                    video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, audioShift: Number(e.target.value) } },
+                  })}
+                  disabled={productionProfileLoading}
+                  className="min-w-0 w-1/2 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                />
+              </div>
+            </label>
+          </div>
+          <p className="text-[10px] text-text-muted">
+            {productionProfileConfigured ? 'Saved globally.' : 'Using built-in defaults until the first change.'}
+            {' '}Unsupported video sizes are resolved to the closest model-supported size without flipping orientation.
+          </p>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              disabled={productionProfileLoading || JSON.stringify(productionProfile) === JSON.stringify(savedProductionProfile)}
+              onClick={() => void updateProductionProfile(productionProfile).then(() => setProductionProfile(null))}
+              className="rounded-lg bg-accent-blue px-3 py-1.5 text-xs text-white disabled:opacity-40"
+            >
+              {productionProfileLoading ? 'Saving…' : 'Save and apply global profile'}
+            </button>
+          </div>
+        </div>
         <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">LLM Configuration</h3>
 
         <div className="flex items-center justify-between">
@@ -373,11 +571,12 @@ export function ServicesSettingsPanel() {
             <option value="remote">Remote OpenAI-Compatible (LM Studio, etc.)</option>
             <option value="openai">OpenAI API</option>
             <option value="anthropic">Anthropic API</option>
+            <option value="minimax">MiniMax API</option>
           </select>
         </div>
 
         {/* Remote URL (for remote/openai providers) */}
-        {(isRemote || isOpenAI) && (
+        {(isRemote || isOpenAI || isMiniMax) && (
           <div>
             <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
               {isRemote ? 'Server URL' : 'API Base URL'}
@@ -389,13 +588,15 @@ export function ServicesSettingsPanel() {
                 void saveLlmConfig({ llm_remote_url: e.target.value })
                 resetLlmTest()
               }}
-              placeholder={isRemote ? 'http://192.168.1.100:1234' : 'https://api.openai.com'}
+              placeholder={isRemote ? 'http://192.168.1.100:1234' : isMiniMax ? 'https://api.minimax.io' : 'https://api.openai.com'}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
             />
             <p className="text-[10px] text-text-muted mt-1">
               {isRemote
                 ? 'URL of your LM Studio, Ollama, or other OpenAI-compatible server'
-                : 'OpenAI API base URL; leave blank to use the default.'}
+                : isMiniMax
+                  ? 'MiniMax OpenAI-compatible API base; leave blank to use https://api.minimax.io.'
+                  : 'OpenAI API base URL; leave blank to use the default.'}
             </p>
           </div>
         )}

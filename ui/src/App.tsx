@@ -27,6 +27,7 @@ function App() {
   const reconnectDirectorPipelines = useStore(s => s.reconnectDirectorPipelines)
   const loadSystemConfig = useStore(s => s.loadSystemConfig)
   const loadServicesConfig = useStore(s => s.loadServicesConfig)
+  const loadProductionProfile = useStore(s => s.loadProductionProfile)
   const loadLlmStatus = useStore(s => s.loadLlmStatus)
   const loadLlmModels = useStore(s => s.loadLlmModels)
   const loadPipelineList = useStore(s => s.loadPipelineList)
@@ -44,12 +45,13 @@ function App() {
     loadOutputs()
     loadSystemConfig()
     loadServicesConfig()
+    loadProductionProfile()
     loadLlmStatus()
     loadLlmModels()
     loadPipelineList()
     reconnectJobs()
     reconnectDirectorPipelines()
-  }, [loadModels, loadWorkspaces, loadOutputs, loadSystemConfig, loadServicesConfig, loadLlmStatus, loadLlmModels, loadPipelineList, reconnectJobs, reconnectDirectorPipelines])
+  }, [loadModels, loadWorkspaces, loadOutputs, loadSystemConfig, loadServicesConfig, loadProductionProfile, loadLlmStatus, loadLlmModels, loadPipelineList, reconnectJobs, reconnectDirectorPipelines])
 
   // Keep the output library live even when a job was submitted by another
   // tab, restored after a browser restart, or its terminal poll was missed.

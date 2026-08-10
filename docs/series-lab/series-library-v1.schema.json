@@ -105,7 +105,9 @@
           "type": "array",
           "items": { "$ref": "#/$defs/canonEvent" }
         },
-        "revision": { "type": "integer", "minimum": 0 }
+        "revision": { "type": "integer", "minimum": 0 },
+        "approval": { "enum": ["draft", "approved"] },
+        "approvedAt": { "type": "string" }
       },
       "additionalProperties": true
     },
@@ -410,6 +412,11 @@
         "provider": { "$ref": "#/$defs/seriesProviderSettings" },
         "capabilitySnapshot": { "$ref": "#/$defs/capabilitySnapshot" },
         "approvedReferenceAssetIds": { "$ref": "#/$defs/idArray" }
+        ,"characters": { "type": "array", "items": { "$ref": "#/$defs/seriesCharacter" } }
+        ,"relationships": { "type": "array", "items": { "$ref": "#/$defs/seriesRelationship" } }
+        ,"locations": { "type": "array", "items": { "$ref": "#/$defs/seriesLocation" } }
+        ,"props": { "type": "array", "items": { "$ref": "#/$defs/seriesProp" } }
+        ,"assets": { "type": "object", "additionalProperties": { "$ref": "#/$defs/seriesAsset" } }
       },
       "additionalProperties": true
     },

@@ -65,7 +65,7 @@ def test_legacy_h3_outputs_are_grouped_back_into_editable_segments(tmp_path: Pat
     (tmp_path / "minimax_h3_legacy_multiclip.mp4").write_bytes(b"joined")
     state = {
         "pipeline_id": "legacy",
-        "video_model": "minimax_h3",
+        "video_model": "minimax_h3_legacy",
         "video_params": {"h3_reference_mode": "first_frame"},
         "clips": [
             {"index": 0, "planned_clip": {"duration_sec": 10}, "seed": 10, "h3_segment_prompts": ["a", "b"]},
@@ -142,6 +142,7 @@ def test_rerun_h3_video_initializes_a_missing_saved_shot(tmp_path: Path):
 
 def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Path):
     state = _saved_state(tmp_path)
+    state["video_model"] = "minimax_h3_legacy"
     _write_pipeline(tmp_path, state)
     submitted = []
 
@@ -186,6 +187,7 @@ def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Pa
 
     assert result["filenames"] == ["new_1.mp4", "new_2.mp4"]
     assert len(submitted) == 2
+    assert all(item["model_type"] == "minimax_h3_legacy" for item in submitted)
     assert submitted[0]["h3_reference_mode"] == "references"
     assert submitted[0]["image_refs"][1].endswith("portrait.png")
     assert "IDENTITY CONTINUITY LOCK" in submitted[0]["prompt"]

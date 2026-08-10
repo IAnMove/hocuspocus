@@ -10,6 +10,10 @@ export type LocalImageOptions = {
   onPollRetry?: (attempt: number, error: string) => void
   onProviderRetry?: (attempt: number, error: string) => void
   strictReference?: boolean
+  /** Identity references may influence a new composition; edit references are the source canvas itself. */
+  referenceMode?: 'identity' | 'edit'
+  /** Freeze an explicit local output canvas instead of inheriting another image model's saved value. */
+  resolution?: string
   aspectRatio?: '1:1' | '16:9' | '4:3' | '3:2' | '2:3' | '3:4' | '9:16' | '21:9'
 }
 
@@ -91,7 +95,9 @@ async function runLocalImage(
     if (!supportsReferences) {
       if (options.strictReference) {
         throw new Error(
-          'This Maestro model does not support identity references. Choose a reference-capable local model or MiniMax Image.',
+          options.referenceMode === 'edit'
+            ? 'This Maestro model cannot edit a source image. Choose Qwen Image Edit or another reference-capable image editor.'
+            : 'This Maestro model does not support identity references. Choose a reference-capable local model or MiniMax Image.',
         )
       }
     } else {
@@ -106,14 +112,40 @@ async function runLocalImage(
       const currentType = typeof imageParams.video_prompt_type === 'string'
         ? imageParams.video_prompt_type : ''
       referenceParams.image_refs = [uploaded.path]
-      referenceParams.video_prompt_type = currentType.includes('I') ? currentType : `${currentType}I`
+      // Qwen's KI contract makes the first conditional image the main
+      // subject/landscape. Plain I treats it as a supplemental person/object
+      // reference and is exactly the wrong semantic for scene style transfer.
+      referenceParams.video_prompt_type = options.referenceMode === 'edit'
+        ? 'KI'
+        : currentType.includes('I') ? currentType : `${currentType}I`
       referenceParams.remove_background_images_ref = 0
+      if (options.referenceMode === 'edit' && selected.startsWith('qwen_image_edit')) {
+        // Do not inherit inpainting/denoise state from whatever image model
+        // happened to be selected in Studio. This is a full-canvas Qwen edit.
+        referenceParams.model_mode = 0
+        referenceParams.denoising_strength = 1
+        referenceParams.masking_strength = 1
+        referenceParams.sample_solver = 'default'
+      }
+      if (options.referenceMode === 'edit' && selected === 'flux2_klein_9b') {
+        // Flux 2 Klein is a distilled four-step image editor. Freeze its own
+        // recipe so this dedicated edit cannot inherit Qwen/Studio settings.
+        referenceParams.num_inference_steps = 4
+        referenceParams.guidance_scale = 1
+        referenceParams.embedded_guidance_scale = 1
+        referenceParams.flow_shift = 5
+        referenceParams.model_mode = 0
+        referenceParams.denoising_strength = 1
+        referenceParams.masking_strength = 0.25
+        referenceParams.image_prompt_type = ''
+      }
     }
   }
   const jobId = options.existingJobId || (await api.submitGeneration({
     ...maestro.params,
     ...imageParams,
     ...referenceParams,
+    ...(options.resolution ? { resolution: options.resolution } : {}),
     prompt,
     negative_prompt: negativePrompt,
     model_type: selected,

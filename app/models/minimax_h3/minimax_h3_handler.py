@@ -8,6 +8,7 @@ import torch
 
 
 _MODEL_TYPE = "minimax_h3"
+_LEGACY_MODEL_TYPE = "minimax_h3_legacy"
 _REF2VA_MODEL_TYPE = "minimax_h3_ref2va"
 _FULL_MODEL_TYPE = "minimax_h3_full"
 _REF2VA_FULL_MODEL_TYPE = "minimax_h3_ref2va_full"
@@ -913,6 +914,7 @@ class family_handler:
     def query_supported_types():
         return [
             _MODEL_TYPE,
+            _LEGACY_MODEL_TYPE,
             _FULL_MODEL_TYPE,
             _REF2VA_MODEL_TYPE,
             _REF2VA_FULL_MODEL_TYPE,
@@ -956,6 +958,7 @@ class family_handler:
 
     @staticmethod
     def query_model_def(base_model_type, model_def):
+        legacy_sidecar = base_model_type == _LEGACY_MODEL_TYPE
         omni_reference = base_model_type in {
             _REF2VA_MODEL_TYPE,
             _REF2VA_FULL_MODEL_TYPE,
@@ -1085,7 +1088,43 @@ class family_handler:
                 "H3 LoRAs are supported; Maestro converts Full adapters when needed."
             ),
         }
-        if omni_reference:
+        if legacy_sidecar:
+            result.update(
+                {
+                    "minimax_h3_legacy_sidecar": True,
+                    # Director uses the uploaded soundtrack to analyse and
+                    # time the shot list, then remuxes that exact track over
+                    # the finished clips. The isolated FL2VA/Ref2VA model
+                    # still generates its own per-shot audio and does not
+                    # pretend to consume a multi-minute song as conditioning.
+                    "director_audio_input_mode": "timeline_remux",
+                    # Ref2VA accepts up to nine still-image references. Tell
+                    # Director explicitly so a large approved Story library
+                    # is reduced deterministically instead of overflowing the
+                    # isolated workflow.
+                    "max_image_refs": 9,
+                    "sliding_window": False,
+                    "video_continuation": False,
+                    "sliding_window_exact_total_frames": False,
+                    "sliding_window_trim_to_requested": False,
+                    "sliding_window_end_image_at_final": False,
+                    "sliding_window_auto_prompt_pacing": False,
+                    "frame_alignment_mode": "nearest",
+                    "first_block_cache": False,
+                    "minimax_h3_text_encoder_variants": {},
+                    "text_encoder_URLs": [],
+                    "selector_help": (
+                        "LEGACY QUALITY — FIRST / LAST\n"
+                        "Reproduces Maestro's proven isolated ComfyUI route "
+                        "with the pruned INT8 ConvRot transformer and matching "
+                        "Qwen3-VL INT8 ConvRot encoder. Resolution and "
+                        "grid-aligned duration remain selectable; the proven "
+                        "20-step, flow 12/audio 3 recipe is fixed."
+                    ),
+                    "lora_compatibility_note": "LoRAs are disabled on the fixed legacy route.",
+                }
+            )
+        elif omni_reference:
             result.update(
                 {
                     "omni_reference": True,
@@ -1171,6 +1210,12 @@ class family_handler:
         text_encoder_filename=None,
         **kwargs,
     ):
+        if base_model_type == _LEGACY_MODEL_TYPE or (model_def or {}).get(
+            "minimax_h3_legacy_sidecar"
+        ):
+            raise RuntimeError(
+                "H3 Legacy Quality must run through Maestro's isolated ComfyUI service."
+            )
         from .minimax_h3_main import MiniMaxH3Model
 
         model = MiniMaxH3Model(

@@ -20,6 +20,7 @@ from app.services.director.planners.short_film import ShortFilmPlanner
 from app.services.director.schema import CharacterProfile
 from app.services import director_pipeline
 from app.services.director_pipeline import _has_visual_references
+from app.services.director_video_strategy import SHOT_IMAGE_PROMPT_ONLY
 
 
 def _load_planner_kwargs():
@@ -105,6 +106,31 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             "location_ref_paths": ["/tmp/location.png"],
         }
         self.assertFalse(director_pipeline._has_visual_references(params))
+
+    def test_direct_video_overrides_stale_saved_image_policy(self):
+        params = {
+            "pipeline_type": "music_video",
+            "music_video_treatment": {
+                "generation_mode": "direct_video",
+                "direct_video_master_prompt": "Immutable painted world.",
+            },
+            "_director_shot_image_policy": "generate",
+        }
+        state = {
+            "pipeline_type": "music_video",
+            "generation_mode": "direct_video",
+            "shot_image_policy": "generate",
+            "_params_snapshot": params,
+        }
+
+        self.assertEqual(
+            director_pipeline._director_effective_shot_image_policy(params),
+            SHOT_IMAGE_PROMPT_ONLY,
+        )
+        self.assertEqual(
+            director_pipeline._saved_pipeline_shot_image_policy(state),
+            SHOT_IMAGE_PROMPT_ONLY,
+        )
 
     def test_direct_video_default_prompt_is_style_neutral(self):
         treatment = normalize_music_video_treatment({"generation_mode": "direct_video"})

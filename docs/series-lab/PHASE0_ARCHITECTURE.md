@@ -1,8 +1,9 @@
 # Series Lab — Phase 0 architecture
 
-Status: design only. This document and the companion JSON files define the
-wire contract; Phase 1 is the library/canon editor only and does not generate
-text, images, audio or video.
+Status: approved architecture, implemented through the reviewed MVP described
+in `IMPLEMENTATION.md`. This file remains the original phase/contract record;
+where a historical phase boundary below says "do not add generation", it
+describes that phase's former delivery gate rather than the current product.
 
 ## Product boundary
 
@@ -112,9 +113,12 @@ Import is explicit and produces a new Series draft: Story overview/style/provide
 fields map to Series; world/rules/locations to canon and locations; characters,
 relationships and visual assets retain their IDs where safe; existing
 productions remain in `historicalProductionIds`, with `sourceStoryId` and
-import provenance retained. Show a review diff and never silently reclassify or
-set a copyrighted-universe prompt. A known-universe series stores the user's
-editable `masterUniversePrompt`; no franchise prompt is seeded automatically.
+import provenance retained. Show a review diff and never silently reclassify an
+imported original project. A separate explicit one-click known-series action may
+seed an editable `masterUniversePrompt`, setup and broad canon bible from the
+selected writing model's general knowledge. It is labelled experimental, does
+not perform live research or copy scripts/dialogue, preserves user assets, and
+applies only as an unapproved draft for human fact and rights review.
 
 ## MVP limits
 

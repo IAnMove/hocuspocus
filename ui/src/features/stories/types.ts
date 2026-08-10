@@ -9,7 +9,7 @@ export type StoryImageProvider = 'maestro' | 'minimax'
 export type StoryApprovalState = 'draft' | 'approved'
 export type StoryWorkflowMode = 'guided' | 'automatic'
 export type StoryProjectType = 'full_story' | 'music_video' | 'quick_video'
-export type StoryMusicVideoGenerationMode = 'image_guided' | 'direct_video'
+export type StoryMusicVideoGenerationMode = 'image_guided' | 'direct_references' | 'direct_video'
 export type StoryDirectVideoPromptMode = 'inherit' | 'custom'
 export type StoryQuickFormat = 'dialogue' | 'meme' | 'parody' | 'sketch' | 'viral' | 'announcement'
 export type StoryAssetKind = 'world' | 'location' | 'character' | 'prop' | 'style' | 'ignore'
@@ -29,6 +29,14 @@ export interface StoryVisualAsset {
   confidence?: number
   originalName?: string
   importBatchId?: string
+  /** Only approved assets are sent to downstream productions. */
+  approval: StoryApprovalState
+  /** Original upload or a non-destructive style variant derived from it. */
+  variantKind?: 'original' | 'styled'
+  /** Stable lineage keeps the real source beside every generated treatment. */
+  derivedFromAssetId?: string
+  /** Exact style instruction used to create a styled variant. */
+  stylePrompt?: string
 }
 
 export interface StoryLocation {
@@ -166,6 +174,8 @@ export interface StoryMusicDraft {
 }
 
 export interface StoryProviderSettings {
+  /** New projects inherit the global production profile; legacy projects default to an explicit override. */
+  useGlobalProfile: boolean
   writingProvider: StoryWritingProvider
   writingModel: string
   writingBaseUrl: string
@@ -181,6 +191,8 @@ export interface StoryProject {
   title: string
   projectType: StoryProjectType
   creativeBrief: {
+    /** One free-form source brief: idea, style, avatar requirements and successful prompt examples. */
+    generalIdea: string
     context: string
     performer: string
     musicStyle: string

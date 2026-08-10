@@ -5,7 +5,7 @@ import {
   Languages, Music, Network, Palette, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
-import { getModelMode, useStore } from '../../stores/useStore'
+import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
@@ -29,8 +29,10 @@ import {
 } from './model'
 import type {
   StoryAssetKind, StoryBeat, StoryCharacter, StoryGenerationScope, StoryLocation, StoryProject,
-  StoryMusicCandidate, StoryMusicCue, StoryProjectType, StoryRelationship, StoryVisualAsset, StoryWritingProvider,
+  StoryImageProvider, StoryMusicCandidate, StoryMusicCue, StoryProjectType, StoryRelationship, StoryVisualAsset,
+  StoryWritingProvider,
 } from './types'
+import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
@@ -75,6 +77,87 @@ function stableTextKey(value: string): string {
     hash = Math.imul(hash, 16777619)
   }
   return (hash >>> 0).toString(36)
+}
+
+const STYLE_CONVERSION_ASPECTS = [
+  '1:1', '16:9', '4:3', '3:2', '2:3', '3:4', '9:16', '21:9',
+] as const
+const QWEN_STYLE_EDIT_MODEL = 'qwen_image_edit_20B_gguf_q4_k_m'
+const FLUX_STYLE_EDIT_MODEL = 'flux2_klein_9b'
+const STYLE_RESOLUTION_BY_ASPECT: Record<(typeof STYLE_CONVERSION_ASPECTS)[number], string> = {
+  '1:1': '1024x1024',
+  '16:9': '1280x720',
+  '4:3': '1152x864',
+  '3:2': '1248x832',
+  '2:3': '832x1248',
+  '3:4': '864x1152',
+  '9:16': '720x1280',
+  '21:9': '1344x576',
+}
+
+async function sourceAspectRatio(source: string): Promise<(typeof STYLE_CONVERSION_ASPECTS)[number]> {
+  const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight })
+    image.onerror = () => reject(new Error('The source image could not be inspected'))
+    image.src = source
+  }).catch(() => ({ width: 1, height: 1 }))
+  const target = dimensions.width / Math.max(1, dimensions.height)
+  return STYLE_CONVERSION_ASPECTS.reduce((best, candidate) => {
+    const [width, height] = candidate.split(':').map(Number)
+    const [bestWidth, bestHeight] = best.split(':').map(Number)
+    return Math.abs(Math.log(target / (width / height)))
+      < Math.abs(Math.log(target / (bestWidth / bestHeight)))
+      ? candidate : best
+  }, '1:1' as (typeof STYLE_CONVERSION_ASPECTS)[number])
+}
+
+function styleConversionPrompt(
+  asset: StoryVisualAsset,
+  style: string,
+  engine: 'minimax' | 'qwen' | 'flux',
+): string {
+  const normalizedStyle = style.trim()
+    .replace(/^\s*(?:>|•|\*|-|\d+[.)])\s+/gm, '')
+    .replace(/\s+/g, ' ')
+  const requestsVisibleText = /\b(text|wording|lettering|caption|sign|logo|title|write|rewrite|reads?|says?|texto|palabras?|letras?|cartel|r[oó]tulo|t[ií]tulo|escrib\w*)\b/i.test(normalizedStyle)
+  if (engine === 'flux') {
+    const directInstruction = /^(apply|change|convert|replace|remove|add|transform)\b/i.test(normalizedStyle)
+      ? normalizedStyle.replace(/[.\s]+$/, '')
+      : `Apply ${normalizedStyle.replace(/[.\s]+$/, '')} to the entire input image`
+    const fluxPreservation = asset.assetKind === 'character'
+      ? 'Keep the same person, face, expression, facial hair, body proportions, hairstyle, clothing, accessories, pose, crop, and background unchanged.'
+      : asset.assetKind === 'location'
+        ? 'Keep the exact place, landmark architecture, street layout, camera position, perspective, crop, spatial relationships, people, vehicles, signs, and object placement unchanged.'
+        : 'Keep the original subject, composition, camera position, perspective, crop, silhouettes, proportions, background, and object placement unchanged.'
+    return [
+      `${directInstruction}.`,
+      fluxPreservation,
+      requestsVisibleText
+        ? 'Render only the visible wording explicitly requested, keeping all other visible text unchanged.'
+        : 'Keep all existing visible text unchanged.',
+    ].join(' ')
+  }
+  const preservation = asset.assetKind === 'character'
+    ? 'Preserve the exact same person, face, facial hair, body proportions, hairstyle, clothing, accessories and pose.'
+    : asset.assetKind === 'location'
+      ? 'Preserve the exact place, landmark architecture, street layout, camera viewpoint, spatial relationships and recognizable local details.'
+      : 'Preserve the original subject, composition, camera viewpoint, silhouettes, proportions and recognizable details.'
+  const sourceIdentity = engine === 'minimax' && asset.description?.trim()
+    ? `The input depicts ${asset.description.trim().replace(/[.\s]+$/, '')}.` : ''
+  return [
+    engine === 'qwen'
+      ? `Edit this exact input image. Apply only this visual style: ${normalizedStyle}.`
+      : `Generate a new portrait of the supplied character in this visual style: ${normalizedStyle}.`,
+    preservation,
+    sourceIdentity,
+    engine === 'qwen'
+      ? 'Keep the same crop, framing, perspective, geometry, spatial layout and object positions. Change only rendering medium, surface treatment, palette and lighting. Do not add, remove, move or redesign content.'
+      : 'Keep the character identity and recognizable wardrobe. Do not introduce additional people.',
+    requestsVisibleText
+      ? 'Produce one finished image. Render only the visible wording explicitly requested; do not add any other text, labels, grids, borders or contact sheets.'
+      : 'Produce one finished image. No text, labels, grids, borders or contact sheets.',
+  ].filter(Boolean).join(' ')
 }
 
 function storySongBrief(
@@ -159,11 +242,103 @@ type StoryGenerationOptions = { generateImages?: boolean }
 type MusicVideoGenerationSettings = {
   imageModel: string
   videoModel: string
+  resolution: ResolutionPreset
+  aspectRatio: AspectRatio
   generationMode: StoryProject['musicVideoGenerationMode']
   directVideoMasterPrompt: string
   writingProvider: StoryWritingProvider
   writingModel: string
   writingBaseUrl: string
+}
+
+const STORY_VIDEO_RESOLUTIONS: ResolutionPreset[] = ['480p', '540p', '720p', '1080p']
+const STORY_VIDEO_SAVED_RESOLUTIONS: ResolutionPreset[] = [...STORY_VIDEO_RESOLUTIONS, '768p']
+const STORY_VIDEO_ASPECTS: Array<{ value: AspectRatio; label: string; detail: string }> = [
+  { value: '16:9', label: 'Landscape', detail: '16:9 · standard video' },
+  { value: '9:16', label: 'Portrait / Shorts', detail: '9:16 · vertical video' },
+]
+
+function savedStoryVideoResolution(value: unknown, fallback: ResolutionPreset): ResolutionPreset {
+  return STORY_VIDEO_SAVED_RESOLUTIONS.includes(value as ResolutionPreset)
+    ? value as ResolutionPreset
+    : fallback
+}
+
+function savedStoryVideoAspect(value: unknown, fallback: AspectRatio): AspectRatio {
+  return STORY_VIDEO_ASPECTS.some(option => option.value === value)
+    ? value as AspectRatio
+    : fallback
+}
+
+function StoryVideoFormatControls({ videoModel }: { videoModel: string }) {
+  const resolution = useStore(state => state.directorResolution)
+  const aspectRatio = useStore(state => state.directorAspectRatio)
+  const setResolution = useStore(state => state.setDirectorResolution)
+  const setAspectRatio = useStore(state => state.setDirectorAspectRatio)
+  const [options, setOptions] = useState<ModelOptions | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api.fetchModelOptions(videoModel)
+      .then(value => { if (!cancelled) setOptions(value) })
+      .catch(() => { if (!cancelled) setOptions(null) })
+    return () => { cancelled = true }
+  }, [videoModel])
+
+  const modelOrder = (options?.resolution_preset_order || [])
+    .filter(preset => preset !== 'auto' && (preset !== '768p' || videoModel === 'minimax_h3_legacy'))
+  const availablePresets = modelOrder.length > 0
+    ? modelOrder
+    : STORY_VIDEO_RESOLUTIONS
+  const visiblePresets = availablePresets.includes(resolution)
+    ? availablePresets
+    : [resolution, ...availablePresets].filter(preset => preset !== 'auto')
+  const outputSize = resolveResolution(options, resolution, aspectRatio)
+  const selectedConfig = options?.resolution_presets?.[resolution]
+
+  return (
+    <div className="rounded-lg border border-border bg-bg-tertiary/35 p-2.5 space-y-2 sm:col-span-2">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="block text-[10px] text-text-muted">Resolution
+          <select
+            className={`${input} mt-1`}
+            value={resolution}
+            onChange={event => setResolution(event.target.value as ResolutionPreset)}
+          >
+            {visiblePresets.map(preset => (
+              <option key={preset} value={preset}>
+                {options?.resolution_presets?.[preset]?.label || preset}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div>
+          <span className="block text-[10px] text-text-muted">Screen format</span>
+          <div className="mt-1 grid grid-cols-2 gap-1.5">
+            {STORY_VIDEO_ASPECTS.map(option => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setAspectRatio(option.value)}
+                className={`${button} min-h-12 flex-col ${aspectRatio === option.value ? 'border-accent-blue/70 bg-accent-blue/10 text-text-primary' : ''}`}
+              >
+                <span>{option.label}</span>
+                <span className="text-[9px] text-text-muted">{option.detail}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="text-[9px] leading-relaxed text-text-muted">
+        Output canvas: <span className="font-medium text-text-secondary">{outputSize}</span>. Landscape is the default; Portrait / Shorts keeps the complete production vertical.
+      </p>
+      {selectedConfig?.hint && (
+        <p className={`text-[9px] leading-relaxed ${selectedConfig.experimental ? 'text-amber-300' : 'text-text-muted'}`}>
+          {selectedConfig.hint}
+        </p>
+      )}
+    </div>
+  )
 }
 const storyJobKey = (workspace: string, projectId: string) =>
   `maestro-story-plan-job:${workspace}:${projectId}`
@@ -220,8 +395,10 @@ function storyStyledReferenceTargets(
 }
 
 function storyProjectPremise(project: StoryProject): string {
+  const sourceBrief = project.creativeBrief.generalIdea.trim()
   if (project.projectType === 'music_video') {
     return [
+      sourceBrief,
       project.creativeBrief.context,
       project.creativeBrief.performer && `Artista o creador: ${project.creativeBrief.performer}`,
       project.creativeBrief.musicStyle && `Estilo musical: ${project.creativeBrief.musicStyle}`,
@@ -230,6 +407,7 @@ function storyProjectPremise(project: StoryProject): string {
   }
   if (project.projectType === 'quick_video') {
     return [
+      sourceBrief,
       project.creativeBrief.context,
       project.creativeBrief.subjects && `Protagonistas: ${project.creativeBrief.subjects}`,
       project.creativeBrief.setting && `Lugar: ${project.creativeBrief.setting}`,
@@ -237,13 +415,19 @@ function storyProjectPremise(project: StoryProject): string {
       `Formato: ${project.creativeBrief.quickFormat}`,
     ].filter(Boolean).join('\n')
   }
-  return project.premise
+  return [sourceBrief, project.premise].filter(Boolean).join('\n')
 }
 
 function draftPaths(result: Record<string, unknown>): string[] {
   const paths: string[] = []
   if (result.overview && typeof result.overview === 'object') {
-    Object.keys(result.overview).forEach(key => paths.push(`overview.${key}`))
+    Object.entries(result.overview as Record<string, unknown>).forEach(([key, value]) => {
+      if (key === 'creativeBrief' && value && typeof value === 'object') {
+        Object.keys(value).forEach(field => paths.push(`overview.creativeBrief.${field}`))
+      } else {
+        paths.push(`overview.${key}`)
+      }
+    })
   }
   if (result.world && typeof result.world === 'object') {
     Object.keys(result.world).forEach(key => paths.push(`world.${key}`))
@@ -348,7 +532,15 @@ function ProviderPanel({
 }) {
   const services = useStore(state => state.servicesConfig)
   const models = useStore(state => state.models)
-  const provider = project.provider.writingProvider
+  const profile = useStore(state => state.productionProfile)
+  const globalWritingProvider: StoryWritingProvider = profile.text.provider === 'minimax'
+    ? 'minimax' : profile.text.provider === 'openai' ? 'openai' : 'maestro'
+  const provider = project.provider.useGlobalProfile
+    ? globalWritingProvider : project.provider.writingProvider
+  const effectiveImageProvider = project.provider.useGlobalProfile && profile.image.provider === 'minimax'
+    ? 'minimax' : project.provider.imageProvider
+  const effectiveImageModel = project.provider.useGlobalProfile
+    ? profile.image.model : project.provider.imageModel
   const installedImageModels = models.filter(model =>
     model.is_downloaded !== false
     && getModelMode(model.model_type, model.family) === 'image')
@@ -358,8 +550,8 @@ function ProviderPanel({
     || (provider === 'openai' && Boolean(services?.openai_api_key_set))
     || (provider === 'openai-compatible'
       && Boolean(services?.compatible_api_key_set && services?.compatible_base_url))
-  const imageReady = project.provider.imageProvider === 'maestro'
-    ? installedImageModels.some(model => model.model_type === project.provider.imageModel)
+  const imageReady = effectiveImageProvider === 'maestro'
+    ? installedImageModels.some(model => model.model_type === effectiveImageModel)
     : Boolean(services?.minimax_api_key_set)
   const setProvider = (next: StoryWritingProvider) => {
     const defaults = next === 'deepseek'
@@ -379,8 +571,20 @@ function ProviderPanel({
     <div className={`${panel} space-y-3`}>
       <div>
         <h3 className="text-sm font-semibold text-text-primary">Generation agents</h3>
-        <p className="text-[10px] text-text-muted mt-1">These choices belong only to this story. Writing and concept art remain independent.</p>
+        <p className="text-[10px] text-text-muted mt-1">Choose global inheritance or freeze explicit writing and concept-art overrides in this story.</p>
       </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className={`${button} ${project.provider.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`}
+          onClick={() => patchProvider({ useGlobalProfile: true })}>Use global profile</button>
+        <button type="button" className={`${button} ${!project.provider.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`}
+          onClick={() => patchProvider({ useGlobalProfile: false })}>Override in this project</button>
+      </div>
+      {project.provider.useGlobalProfile && (
+        <p className="text-[10px] text-emerald-300">
+          Global: {profile.text.provider} / {profile.text.model} · {profile.image.provider} / {profile.image.model}
+        </p>
+      )}
+      <fieldset disabled={project.provider.useGlobalProfile} className="space-y-3 disabled:opacity-50">
       <label className="block text-[10px] text-text-muted">Writing LLM
         <select className={`${input} mt-1`} value={provider} onChange={event => setProvider(event.target.value as StoryWritingProvider)}>
           <option value="maestro">Maestro internal · default</option>
@@ -440,6 +644,7 @@ function ProviderPanel({
             ? 'Add the MiniMax API key in Settings → Services.'
             : 'Choose an installed Maestro image model.'}
       </p>
+      </fieldset>
     </div>
   )
 }
@@ -461,8 +666,13 @@ function ReferenceGallery({
         return (
           <div key={id} className={`relative rounded-lg overflow-hidden border ${id === primaryId ? 'border-emerald-400' : 'border-border'} bg-bg-tertiary`}>
             <img src={asset.source} alt={asset.name} className="w-full aspect-square object-cover" />
+            <span className={`absolute right-1 top-1 rounded border px-1 py-0.5 text-[8px] ${asset.approval === 'approved'
+              ? 'border-emerald-400/70 bg-emerald-950/80 text-emerald-200'
+              : 'border-amber-400/60 bg-amber-950/80 text-amber-200'}`}>
+              {asset.approval === 'approved' ? 'Approved' : 'Draft'}
+            </span>
             <div className="absolute inset-x-0 bottom-0 flex justify-between bg-black/65 p-1">
-              {onPrimary && <button className="text-[9px] text-white" onClick={() => onPrimary(id)}>{id === primaryId ? 'Primary' : 'Use'}</button>}
+              {onPrimary && <button className="text-[9px] text-white" onClick={() => onPrimary(id)}>{id === primaryId ? 'Primary' : 'Use as primary'}</button>}
               <button className="text-red-300 ml-auto" onClick={() => onRemove(id)}><Trash2 size={11} /></button>
             </div>
           </div>
@@ -513,6 +723,7 @@ function SectionHeader({
 
 export function StoryLabPanel() {
   const project = useStoryStore(state => state.project)
+  const productionProfile = useStore(state => state.productionProfile)
   const projects = useStoryStore(state => state.projects)
   const dirty = useStoryStore(state => state.dirty)
   const storyHydrated = useStoryStore(state => state.hydrated)
@@ -532,6 +743,8 @@ export function StoryLabPanel() {
   const servicesConfig = useStore(state => state.servicesConfig)
   const filmImageModel = useStore(state => state.selectedModelPerMode.image) || 'flux2_klein_9b'
   const filmVideoModel = useStore(state => state.selectedModelPerMode.video) || 'ltx2_22B_distilled_1_1'
+  const storyVideoResolution = useStore(state => state.directorResolution)
+  const storyVideoAspectRatio = useStore(state => state.directorAspectRatio)
   const selectDirectorImageModel = useStore(state => state.selectDirectorImageModel)
   const selectDirectorVideoModel = useStore(state => state.selectDirectorVideoModel)
   const [tab, setTab] = useState<StoryTab>('overview')
@@ -541,7 +754,7 @@ export function StoryLabPanel() {
   const [productionBusy, setProductionBusy] = useState<'film' | 'music' | null>(null)
   const [musicCueBusy, setMusicCueBusy] = useState('')
   const [newSongAction, setNewSongAction] = useState<'prompts' | 'audio' | null>(null)
-  const [musicQueue, setMusicQueue] = useState<{ ids: string[]; index: number } | null>(null)
+  const [musicQueue, setMusicQueue] = useState<{ ids: string[]; index: number; cancelling?: boolean } | null>(null)
   const [lyricsTranslationLanguage, setLyricsTranslationLanguage] = useState<Record<string, string>>({})
   const [musicVersionStyle, setMusicVersionStyle] = useState<Record<string, string>>({})
   const [musicVersionLanguage, setMusicVersionLanguage] = useState<Record<string, string>>({})
@@ -582,12 +795,22 @@ export function StoryLabPanel() {
   const [smartAssetBusy, setSmartAssetBusy] = useState(false)
   const [smartAssetDescription, setSmartAssetDescription] = useState('')
   const [pendingSmartAssets, setPendingSmartAssets] = useState<PendingSmartAsset[]>([])
+  const [styleConversion, setStyleConversion] = useState('')
+  const [styleAssetIds, setStyleAssetIds] = useState<string[]>([])
+  const [styleConversionBusy, setStyleConversionBusy] = useState(false)
+  const [styleConversionModel, setStyleConversionModel] = useState(QWEN_STYLE_EDIT_MODEL)
+  const [styleModelDownloading, setStyleModelDownloading] = useState('')
+  const [styleModelDownloadError, setStyleModelDownloadError] = useState('')
   const importRef = useRef<HTMLInputElement>(null)
   const smartAssetRef = useRef<HTMLInputElement>(null)
   const uploadRef = useRef<HTMLInputElement>(null)
   const musicCoverRef = useRef<HTMLInputElement>(null)
   const lyriaUploadRef = useRef<HTMLInputElement>(null)
   const lyriaUploadCueId = useRef('')
+  const customMusicUploadRef = useRef<HTMLInputElement>(null)
+  const customMusicUploadCueId = useRef('')
+  const musicQueueCancelRequested = useRef(false)
+  const styleConversionCancelRequested = useRef(false)
   const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
   const musicCandidateOptions = useMemo(() => {
@@ -622,9 +845,65 @@ export function StoryLabPanel() {
   }, [musicCandidateOptions, selectedMusicOption])
 
   useEffect(() => {
+    setStyleAssetIds([])
+    setStyleConversion('')
+  }, [project.id])
+
+  useEffect(() => {
     const duration = selectedMusicOption?.candidate.durationSeconds || 0
     setMusicTrailerRange({ start: 0, end: duration, duration })
   }, [selectedMusicOption?.candidate.id, selectedMusicOption?.candidate.durationSeconds])
+
+  useEffect(() => {
+    if (!project.provider.useGlobalProfile) return
+    const writingProvider: StoryWritingProvider = productionProfile.text.provider === 'minimax'
+      ? 'minimax'
+      : productionProfile.text.provider === 'openai'
+        ? 'openai'
+        : productionProfile.text.provider === 'deepseek'
+          ? 'deepseek'
+          : productionProfile.text.provider === 'openai-compatible'
+            ? 'openai-compatible'
+            : 'maestro'
+    const writingBaseUrl = writingProvider === 'minimax'
+      ? 'https://api.minimax.io/v1'
+      : writingProvider === 'openai'
+        ? 'https://api.openai.com'
+        : writingProvider === 'deepseek'
+          ? 'https://api.deepseek.com'
+          : project.provider.writingBaseUrl
+    const imageProvider: StoryImageProvider = productionProfile.image.provider === 'minimax'
+      ? 'minimax' : 'maestro'
+    const musicModel = productionProfile.music.model === 'music-2.6' ? 'music-2.6' : 'music-3.0'
+    if (
+      project.provider.writingProvider === writingProvider
+      && project.provider.writingModel === productionProfile.text.model
+      && project.provider.writingBaseUrl === writingBaseUrl
+      && project.provider.imageProvider === imageProvider
+      && project.provider.imageModel === productionProfile.image.model
+      && project.music.model === musicModel
+    ) return
+    patch({
+      provider: {
+        ...project.provider,
+        writingProvider,
+        writingModel: productionProfile.text.model,
+        writingBaseUrl,
+        imageProvider,
+        imageModel: productionProfile.image.model,
+      },
+      music: { ...project.music, model: musicModel },
+    })
+  }, [
+    patch,
+    productionProfile.image.model,
+    productionProfile.image.provider,
+    productionProfile.music.model,
+    productionProfile.text.model,
+    productionProfile.text.provider,
+    project.music,
+    project.provider,
+  ])
   const beginStoryActivity = (phase: string, message: string, total = 0) => {
     const prefix = `story-lab:${project.id}:`
     const activityStore = useStore.getState()
@@ -705,7 +984,19 @@ export function StoryLabPanel() {
   const selectedFilmVideoModel = videoModels.find(model => model.model_type === filmVideoModel)
   const filmImageReady = filmImageModel !== MINIMAX_IMAGE_API_MODEL || Boolean(servicesConfig?.minimax_api_key_set)
   const directMusicVideo = project.musicVideoGenerationMode === 'direct_video'
-  const musicVideoImageReady = directMusicVideo || filmImageReady
+  const directReferenceVideo = project.musicVideoGenerationMode === 'direct_references'
+  const attachedVisualReferenceIds = new Set([
+    ...project.world.referenceAssetIds,
+    ...project.world.locations.flatMap(location => location.referenceAssetIds),
+    ...project.characters.flatMap(character => character.referenceAssetIds),
+  ])
+  const approvedVisualReferenceCount = [...attachedVisualReferenceIds]
+    .filter(id => project.assets[id]?.approval === 'approved').length
+  const directReferenceVideoSupported = filmVideoModel.startsWith('minimax_h3')
+  const directReferenceVideoReady = !directReferenceVideo
+    || (directReferenceVideoSupported && approvedVisualReferenceCount > 0)
+  const musicVideoImageReady = directMusicVideo || directReferenceVideo || filmImageReady
+  const filmGenerationImageReady = directReferenceVideo || filmImageReady
   const directVideoMasterReady = !directMusicVideo || Boolean(project.directVideoMasterPrompt.trim())
   const musicWritingReady = project.provider.writingProvider === 'maestro'
     || (project.provider.writingProvider === 'deepseek' && Boolean(servicesConfig?.deepseek_api_key_set))
@@ -832,8 +1123,9 @@ export function StoryLabPanel() {
           character.approval !== 'approved' ? 'still marked draft' : '',
           requiresVisualIdentities && !character.primaryReferenceAssetId
             ? 'has no primary identity selected'
-            : requiresVisualIdentities && character.primaryReferenceAssetId && !project.assets[character.primaryReferenceAssetId]
-              ? 'has a missing primary identity asset'
+            : requiresVisualIdentities && character.primaryReferenceAssetId
+              && project.assets[character.primaryReferenceAssetId]?.approval !== 'approved'
+              ? 'has a missing or unapproved primary identity asset'
               : '',
         ].filter(Boolean)
         return reasons.length ? [`${character.name || 'Unnamed character'} (${reasons.join(', ')})`] : []
@@ -904,10 +1196,22 @@ export function StoryLabPanel() {
       const overview = result.overview as Record<string, unknown> | undefined
       if (overview) {
         Object.entries(overview).forEach(([key, value]) => {
-          if (chosen.has(`overview.${key}`) && typeof value === 'string') {
+          if (key === 'creativeBrief' && value && typeof value === 'object') {
+            Object.entries(value as Record<string, unknown>).forEach(([field, fieldValue]) => {
+              if (!chosen.has(`overview.creativeBrief.${field}`)) return
+              if (typeof fieldValue === 'string' || typeof fieldValue === 'number') {
+                ;(next.creativeBrief as unknown as Record<string, unknown>)[field] = fieldValue
+              }
+            })
+          } else if (chosen.has(`overview.${key}`) && (
+            typeof value === 'string' || typeof value === 'boolean'
+          )) {
             ;(next as unknown as Record<string, unknown>)[key] = value
           }
         })
+        next.music.brief = next.creativeBrief.songStory || next.music.brief
+        next.music.style = next.creativeBrief.musicStyle || next.music.style
+        next.music.targetDurationSeconds = next.creativeBrief.durationSeconds
       }
       if (result.world && typeof result.world === 'object') {
         const generated = result.world as Record<string, unknown>
@@ -1208,6 +1512,19 @@ export function StoryLabPanel() {
       generateImagesAfterApply: options.generateImages === true,
     }))
     try {
+      const effectiveProvider: StoryProject['provider'] = project.provider.useGlobalProfile
+        ? {
+            ...project.provider,
+            writingProvider: productionProfile.text.provider === 'minimax'
+              ? 'minimax' : productionProfile.text.provider === 'openai' ? 'openai' : 'maestro',
+            writingModel: productionProfile.text.model,
+            writingBaseUrl: productionProfile.text.provider === 'minimax'
+              ? 'https://api.minimax.io/v1' : project.provider.writingBaseUrl,
+            imageProvider: productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
+            imageModel: productionProfile.image.model,
+          }
+        : project.provider
+      const generationProject = { ...project, provider: effectiveProvider }
       const { result } = await api.generateStorySection({
         scope,
         premise: generationPremise,
@@ -1216,10 +1533,10 @@ export function StoryLabPanel() {
         tone: project.tone,
         audience: project.audience,
         instruction,
-        project,
-        writingProvider: project.provider.writingProvider,
-        writingModel: project.provider.writingModel,
-        writingBaseUrl: project.provider.writingBaseUrl,
+        project: generationProject,
+        writingProvider: effectiveProvider.writingProvider,
+        writingModel: effectiveProvider.writingModel,
+        writingBaseUrl: effectiveProvider.writingBaseUrl,
         workspace: activeWorkspace,
       }, progress => {
         activeJobId = progress.jobId
@@ -1385,6 +1702,11 @@ export function StoryLabPanel() {
     if (!prompt.trim()) return
     const key = `${target.kind}:${target.id || 'world'}`
     const current = useStoryStore.getState().project
+    const globalProfile = useStore.getState().productionProfile
+    const effectiveImageProvider = current.provider.useGlobalProfile && globalProfile.image.provider === 'minimax'
+      ? 'minimax' : current.provider.imageProvider
+    const effectiveImageModel = current.provider.useGlobalProfile
+      ? globalProfile.image.model : current.provider.imageModel
     const sourceProjectId = current.id
     const character = target.kind === 'character'
       ? current.characters.find(item => item.id === target.id) : undefined
@@ -1413,9 +1735,9 @@ export function StoryLabPanel() {
     if (!options.quiet) setNotice(null)
     try {
       const generated = await generateImageAsset(
-        current.provider.imageProvider,
+        effectiveImageProvider,
         effectivePrompt,
-        current.provider.imageModel,
+        effectiveImageModel,
         primaryReference,
         negativePrompt.trim(),
         {
@@ -1445,9 +1767,11 @@ export function StoryLabPanel() {
         source: generated.source,
         prompt: effectivePrompt,
         negativePrompt,
-        provider: current.provider.imageProvider,
+        provider: effectiveImageProvider,
         model: generated.model,
         createdAt: new Date().toISOString(),
+        approval: 'draft',
+        variantKind: 'original',
       }, target, options.replaceReferences)
       update(latest => {
         if (latest.id !== sourceProjectId) return latest
@@ -1508,105 +1832,32 @@ export function StoryLabPanel() {
     })
   }
 
-  const regenerateStyledReferences = async () => {
+  const regenerateStyledReferences = () => {
     const current = useStoryStore.getState().project
     if (!storyRenderStyle(current)) {
-      setNotice({ kind: 'error', text: 'Write a global or character visual style before regenerating references.' })
+      setNotice({ kind: 'error', text: 'Write a global or character visual style before preparing reference conversion.' })
       return
     }
-    const compactMode = current.projectType !== 'full_story'
-    const targets = storyStyledReferenceTargets(current, {
-      includeLocations: !compactMode,
-      existingOnly: true,
-    })
-    const allowedPromptTargets = storyStyledReferenceTargets(current, {
-      includeLocations: !compactMode,
-      existingOnly: false,
-    })
-    const skippedPromptOnly = allowedPromptTargets.length - targets.length
-    const skippedLocations = compactMode
-      ? current.world.locations.filter(location => location.visualPrompt.trim()).length
-      : 0
-    if (!targets.length) {
-      setNotice({
-        kind: 'error',
-        text: compactMode
-          ? 'There are no existing world or subject reference images to restyle. Generate the first image explicitly from its own card.'
-          : 'There are no existing world, character or location reference images to restyle. Generate the first image explicitly from its own card.',
-      })
+    const ids = [...new Set([
+      ...current.world.referenceAssetIds,
+      ...current.world.locations.flatMap(location => location.referenceAssetIds),
+      ...current.characters.flatMap(character => character.referenceAssetIds),
+    ])].filter(id => Boolean(current.assets[id]))
+    if (!ids.length) {
+      setNotice({ kind: 'error', text: 'There are no attached reference images to convert yet.' })
       return
     }
-    const creditWarning = current.provider.imageProvider === 'minimax'
-      ? ' This may use MiniMax provider credits.' : ''
-    const omissions = [
-      skippedPromptOnly ? `${skippedPromptOnly} prompt-only target${skippedPromptOnly === 1 ? '' : 's'} without an existing image will be skipped.` : '',
-      skippedLocations ? `${skippedLocations} additional folded location${skippedLocations === 1 ? '' : 's'} will be skipped in this compact mode.` : '',
-    ].filter(Boolean).join(' ')
-    if (!window.confirm(
-      `Restyle ${targets.length} existing reference set${targets.length === 1 ? '' : 's'}: ${targets.map(item => item.label).join(', ')}. Each successful result replaces only that target's old references; failed targets keep them. ${omissions}${creditWarning}`,
-    )) return
-
     update(latest => {
       latest.enforceVisualStyle = true
       return latest
     })
-    setReferenceBatchBusy(true)
-    setNotice(null)
-    const activity = beginStoryActivity(
-      'regenerating_styled_references',
-      `Regenerating styled references: 0/${targets.length}`,
-      targets.length,
-    )
-    let completed = 0
-    let lastError = ''
-    try {
-      for (const item of targets) {
-        activity.update(
-          `Generating styled reference ${completed + 1}/${targets.length}: ${item.label}`,
-          'regenerating_styled_references',
-          completed,
-          targets.length,
-        )
-        setNotice({
-          kind: 'ok',
-          text: `Regenerating styled references ${completed + 1}/${targets.length}: ${item.label}`,
-        })
-        const ready = await generateVisual(item.target, item.prompt, {
-          replaceReferences: true,
-          usePrimaryReference: false,
-          quiet: true,
-          onError: message => { lastError = message },
-        })
-        if (!ready) break
-        completed += 1
-        activity.update(
-          `Styled reference completed ${completed}/${targets.length}: ${item.label}`,
-          'regenerating_styled_references',
-          completed,
-          targets.length,
-        )
-      }
-      setNotice(completed === targets.length
-        ? {
-            kind: 'ok',
-            text: `Regenerated ${completed} visual reference${completed === 1 ? '' : 's'} with the current style. Old detached assets were removed from the Story Lab library.`,
-          }
-        : {
-            kind: 'error',
-            text: `Stopped after ${completed}/${targets.length} references. Completed replacements were kept; the failed target kept its old reference. ${lastError}`.trim(),
-          })
-      if (completed === targets.length) {
-        activity.finish()
-      } else {
-        activity.fail(new Error(lastError || `Stopped after ${completed}/${targets.length} styled references.`), 'regenerating_styled_references')
-      }
-    } catch (error) {
-      const message = (error as Error).message
-      activity.fail(error, 'regenerating_styled_references')
-      setNotice({ kind: 'error', text: `Styled reference generation stopped after ${completed}/${targets.length}: ${message}` })
-    } finally {
-      setReferenceBatchBusy(false)
-    }
+    setStyleConversion(storyRenderStyle(current))
+    setStyleAssetIds(ids)
+    setTab('assets')
+    setNotice({
+      kind: 'ok',
+      text: `${ids.length} attached reference${ids.length === 1 ? ' is' : 's are'} selected. Review the style and start the non-destructive MiniMax conversion from Images.`,
+    })
   }
 
   const uploadVisual = async (files: FileList | null) => {
@@ -1618,6 +1869,7 @@ export function StoryLabPanel() {
         addAsset({
           id: storyId('asset'), name: file.name, source: uploaded.url, prompt: '',
           provider: 'upload', createdAt: new Date().toISOString(),
+          approval: 'draft', variantKind: 'original',
         }, uploadTarget)
       }
     } catch (error) {
@@ -1700,6 +1952,8 @@ export function StoryLabPanel() {
           confidence: item.confidence,
           originalName: item.nameOriginal,
           importBatchId: batchId,
+          approval: 'draft',
+          variantKind: 'original',
         }
         current.assets[assetId] = asset
 
@@ -1757,6 +2011,260 @@ export function StoryLabPanel() {
     })
     setPendingSmartAssets([])
     setNotice({ kind: 'ok', text: `${selected.length} assets applied to Story Lab. New entities remain editable drafts.` })
+  }
+
+  const patchVisualAsset = (assetId: string, patchValue: Partial<StoryVisualAsset>) => {
+    update(current => {
+      const asset = current.assets[assetId]
+      if (asset) current.assets[assetId] = { ...asset, ...patchValue }
+      return current
+    })
+  }
+
+  const toggleStyleAsset = (assetId: string) => {
+    setStyleAssetIds(current => current.includes(assetId)
+      ? current.filter(id => id !== assetId)
+      : [...current, assetId])
+  }
+
+  const selectedDraftAssetIds = styleAssetIds.filter(id => project.assets[id]?.approval === 'draft')
+  const visualAssetsNewestFirst = Object.values(project.assets).sort((left, right) =>
+    Date.parse(right.createdAt || '') - Date.parse(left.createdAt || ''))
+
+  const deleteSelectedDraftAssets = () => {
+    const snapshot = useStoryStore.getState().project
+    const draftIds = styleAssetIds.filter(id => snapshot.assets[id]?.approval === 'draft')
+    const approvedCount = styleAssetIds.filter(id => snapshot.assets[id]?.approval === 'approved').length
+    if (!draftIds.length) {
+      setNotice({ kind: 'error', text: 'Select one or more Draft images to remove from the Story library.' })
+      return
+    }
+    if (!window.confirm(
+      `Remove ${draftIds.length} selected Draft image${draftIds.length === 1 ? '' : 's'} from this Story?${approvedCount ? ` ${approvedCount} approved selection${approvedCount === 1 ? ' is' : 's are'} protected and will be kept.` : ''} Generated files remain available in Gallery.`,
+    )) return
+
+    update(current => {
+      const deleting = new Set(draftIds.filter(id => current.assets[id]?.approval === 'draft'))
+      current.world.referenceAssetIds = current.world.referenceAssetIds.filter(id => !deleting.has(id))
+      current.world.locations.forEach(location => {
+        location.referenceAssetIds = location.referenceAssetIds.filter(id => !deleting.has(id))
+      })
+      current.characters.forEach(character => {
+        character.referenceAssetIds = character.referenceAssetIds.filter(id => !deleting.has(id))
+        if (character.primaryReferenceAssetId && deleting.has(character.primaryReferenceAssetId)) {
+          character.primaryReferenceAssetId = character.referenceAssetIds.find(id => current.assets[id]?.approval === 'approved')
+            || character.referenceAssetIds[0]
+          character.approval = 'draft'
+        }
+      })
+      Object.values(current.assets).forEach(asset => {
+        if (asset.derivedFromAssetId && deleting.has(asset.derivedFromAssetId)) {
+          delete asset.derivedFromAssetId
+        }
+      })
+      deleting.forEach(id => delete current.assets[id])
+      return current
+    })
+    const removed = new Set(draftIds)
+    setStyleAssetIds(current => current.filter(id => !removed.has(id)))
+    setNotice({
+      kind: 'ok',
+      text: `${draftIds.length} Draft image${draftIds.length === 1 ? '' : 's'} removed from the Story library. Generated files remain in Gallery.${approvedCount ? ` ${approvedCount} approved image${approvedCount === 1 ? ' was' : 's were'} kept.` : ''}`,
+    })
+  }
+
+  const styleUsesMiniMax = styleConversionModel === MINIMAX_IMAGE_API_MODEL
+  const styleUsesFlux = styleConversionModel === FLUX_STYLE_EDIT_MODEL
+  const localStyleModels = videoModels.filter(model =>
+    (model.model_type.startsWith('qwen_image_edit') || model.model_type === FLUX_STYLE_EDIT_MODEL)
+    && getModelMode(model.model_type, model.family) === 'image')
+  const selectedStyleModel = styleUsesMiniMax
+    ? undefined : videoModels.find(model => model.model_type === styleConversionModel)
+  const styleModelReady = styleUsesMiniMax
+    ? Boolean(servicesConfig?.minimax_api_key_set)
+    : Boolean(selectedStyleModel?.is_downloaded)
+  const miniMaxIncompatibleSelection = styleUsesMiniMax && styleAssetIds.some(id =>
+    useStoryStore.getState().project.assets[id]?.assetKind !== 'character')
+
+  useEffect(() => {
+    if (!styleModelDownloading) return
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const { downloads } = await api.fetchModelDownloads()
+        if (cancelled) return
+        const current = downloads[styleModelDownloading]
+        if (current?.status === 'completed') {
+          await useStore.getState().loadModels()
+          if (cancelled) return
+          const installedName = useStore.getState().models.find(model => model.model_type === styleModelDownloading)?.name
+            || styleModelDownloading
+          setStyleModelDownloading('')
+          setStyleModelDownloadError('')
+          setNotice({ kind: 'ok', text: `${installedName} is installed and ready for local style conversion.` })
+        } else if (current?.status === 'failed') {
+          setStyleModelDownloading('')
+          setStyleModelDownloadError(current.error || 'Model download failed. Check Activity for details.')
+        }
+      } catch {
+        // Maestro may be restarting while a background download continues.
+      }
+    }
+    void poll()
+    const interval = window.setInterval(() => void poll(), 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [styleModelDownloading])
+
+  const installStyleConversionModel = async () => {
+    if (styleUsesMiniMax || !selectedStyleModel || selectedStyleModel.is_downloaded) return
+    if (!window.confirm(
+      `Install ${selectedStyleModel.name}? Model files download once and may require tens of GB; progress remains visible in Activity.`,
+    )) return
+    setStyleModelDownloadError('')
+    setStyleModelDownloading(selectedStyleModel.model_type)
+    try {
+      await api.downloadModel(selectedStyleModel.model_type)
+      setNotice({ kind: 'ok', text: `Downloading ${selectedStyleModel.name}. You can keep using Maestro while it installs.` })
+    } catch (error) {
+      setStyleModelDownloading('')
+      setStyleModelDownloadError((error as Error).message)
+    }
+  }
+
+  const convertSelectedAssetsToStyle = async () => {
+    const style = styleConversion.trim()
+    const selected = styleAssetIds
+      .map(id => useStoryStore.getState().project.assets[id])
+      .filter((asset): asset is StoryVisualAsset => Boolean(asset))
+    if (!style) {
+      setNotice({ kind: 'error', text: 'Describe the destination style before converting images.' })
+      return
+    }
+    if (!selected.length) {
+      setNotice({ kind: 'error', text: 'Select one or more images from the library first.' })
+      return
+    }
+    if (styleUsesMiniMax && !servicesConfig?.minimax_api_key_set) {
+      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first, or choose local Qwen or Flux image editing.' })
+      return
+    }
+    if (miniMaxIncompatibleSelection) {
+      setNotice({ kind: 'error', text: 'MiniMax Image-01 references are documented for character identity only. Choose Qwen Image Edit or Flux 2 Klein for locations, worlds, props or style references.' })
+      return
+    }
+    if (!styleUsesMiniMax && !selectedStyleModel?.is_downloaded) {
+      setNotice({ kind: 'error', text: 'Install the selected local image editor before starting the batch.' })
+      return
+    }
+    const modelLabel = styleUsesMiniMax
+      ? 'MiniMax Image-01 API' : `${selectedStyleModel?.name || styleConversionModel} · local`
+    if (!window.confirm(
+      `Create ${selected.length} non-destructive style variant${selected.length === 1 ? '' : 's'} with ${modelLabel}? The originals remain available.${styleUsesMiniMax ? ' Each API request may consume credits.' : ' Generation runs locally on the GPU.'}`,
+    )) return
+
+    styleConversionCancelRequested.current = false
+    setStyleConversionBusy(true)
+    setNotice(null)
+    const activity = beginStoryActivity(
+      'converting_reference_style',
+      `Converting references to “${style}”: 0/${selected.length}`,
+      selected.length,
+    )
+    let completed = 0
+    try {
+      for (const sourceAsset of selected) {
+        if (styleConversionCancelRequested.current) break
+        activity.update(
+          `${modelLabel} · ${completed + 1}/${selected.length} · ${sourceAsset.name}`,
+          'converting_reference_style',
+          completed,
+          selected.length,
+        )
+        const prompt = styleConversionPrompt(sourceAsset, style, styleUsesMiniMax ? 'minimax' : styleUsesFlux ? 'flux' : 'qwen')
+        const aspectRatio = await sourceAspectRatio(sourceAsset.source)
+        const generated = await generateImageAsset(
+          styleUsesMiniMax ? 'minimax' : 'maestro',
+          prompt,
+          styleUsesMiniMax ? 'image-01' : styleConversionModel,
+          sourceAsset.source,
+          '',
+          {
+            aspectRatio,
+            panelId: `story-style-${sourceAsset.id}-${stableTextKey(`${styleConversionModel}:${style}`)}`,
+            referenceMode: 'edit',
+            resolution: STYLE_RESOLUTION_BY_ASPECT[aspectRatio],
+            strictReference: true,
+          },
+        )
+        const derivedId = storyId('asset')
+        update(current => {
+          if (!current.assets[sourceAsset.id]) return current
+          const shortStyle = style.replace(/\s+/g, ' ').slice(0, 48)
+          current.assets[derivedId] = {
+            id: derivedId,
+            name: `${sourceAsset.name} · ${shortStyle}`,
+            source: generated.source,
+            prompt,
+            provider: styleUsesMiniMax ? 'minimax' : 'maestro',
+            model: generated.model || (styleUsesMiniMax ? 'image-01' : styleConversionModel),
+            createdAt: new Date().toISOString(),
+            assetKind: sourceAsset.assetKind,
+            description: sourceAsset.description,
+            originalName: sourceAsset.originalName || sourceAsset.name,
+            approval: 'draft',
+            variantKind: 'styled',
+            derivedFromAssetId: sourceAsset.id,
+            stylePrompt: style,
+          }
+          let attached = false
+          if (current.world.referenceAssetIds.includes(sourceAsset.id)) {
+            current.world.referenceAssetIds = [...new Set([...current.world.referenceAssetIds, derivedId])]
+            attached = true
+          }
+          current.world.locations.forEach(location => {
+            if (!location.referenceAssetIds.includes(sourceAsset.id)) return
+            location.referenceAssetIds = [...new Set([...location.referenceAssetIds, derivedId])]
+            attached = true
+          })
+          current.characters.forEach(character => {
+            if (!character.referenceAssetIds.includes(sourceAsset.id)) return
+            character.referenceAssetIds = [...new Set([...character.referenceAssetIds, derivedId])]
+            character.approval = 'draft'
+            attached = true
+          })
+          if (!attached) current.world.referenceAssetIds.push(derivedId)
+          return current
+        })
+        completed += 1
+        activity.update(
+          `Styled variant ready ${completed}/${selected.length} · awaiting approval`,
+          'converting_reference_style',
+          completed,
+          selected.length,
+        )
+      }
+      if (styleConversionCancelRequested.current) {
+        setNotice({ kind: 'ok', text: `Style conversion stopped after ${completed}/${selected.length}. Completed variants were preserved as drafts.` })
+      } else {
+        setNotice({ kind: 'ok', text: `${completed} styled variant${completed === 1 ? '' : 's'} created. Review and approve only the images Director should use.` })
+      }
+    } catch (error) {
+      activity.fail(error, 'converting_reference_style')
+      setNotice({ kind: 'error', text: `Style conversion stopped after ${completed}/${selected.length}: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      styleConversionCancelRequested.current = false
+      setStyleConversionBusy(false)
+      setStyleAssetIds([])
+    }
+  }
+
+  const cancelStyleConversion = () => {
+    styleConversionCancelRequested.current = true
+    setNotice({ kind: 'ok', text: 'Stopping after the current image finishes…' })
   }
 
   const removeReference = (target: 'world' | 'character' | 'location', targetId: string | undefined, assetId: string) => {
@@ -1901,19 +2409,34 @@ export function StoryLabPanel() {
     preserveVisualStyle = filmPreserveVisualStyle,
     videoModel = filmVideoModel,
     imageModel = filmImageModel,
+    resolution = storyVideoResolution,
+    aspectRatio = storyVideoAspectRatio,
   ) => {
+    const directReferences = source.musicVideoGenerationMode === 'direct_references'
+    if (directReferences && !videoModel.startsWith('minimax_h3')) {
+      throw new Error('Direct references currently require a MiniMax H3 video model with Ref2VA support.')
+    }
     const adaptation = buildShortFilmAdaptation(source, direction, targetDuration, {
       preserveVisualStyle,
     })
+    if (directReferences && !adaptation.characterReferences.length && !adaptation.locationReferences.length) {
+      throw new Error('Direct references need at least one approved image attached to the Story world, a location or a character.')
+    }
     const director = useStore.getState()
     director.directorReset()
     const store = useStore.getState()
     store.setGenerationMode('video')
-    if (imageModel) {
+    if (!directReferences && imageModel) {
       useStore.getState().selectDirectorImageModel(imageModel)
     }
     if (videoModel) {
       await useStore.getState().selectDirectorVideoModel(videoModel)
+    }
+    store.setDirectorResolution(resolution)
+    store.setDirectorAspectRatio(aspectRatio)
+    store.setDirectorShotImageGuidance(directReferences ? 'prompt_only' : 'auto')
+    if (videoModel.startsWith('minimax_h3')) {
+      store.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
     }
     // setSidebarMode normally sends a fresh Director session to its route
     // chooser. Open it before restoring the Story Lab payload, otherwise it
@@ -1985,9 +2508,20 @@ export function StoryLabPanel() {
       || director.directorCharacterRefs.length
       || director.directorLocationRefs.length,
     )
+    if (!directReferenceVideoReady) {
+      setNotice({
+        kind: 'error',
+        text: directReferenceVideoSupported
+          ? 'Approve at least one visual asset before using direct references.'
+          : 'Choose a MiniMax H3 video model before using direct references.',
+      })
+      return
+    }
     const confirmed = autoStart
       ? window.confirm(
-        'Generate a complete short-film episode from this story? The current Director draft will be replaced and image/video generation may use provider credits.',
+        directReferenceVideo
+          ? `Generate this video with ${approvedVisualReferenceCount} approved references sent directly to H3 Ref2VA? No start images will be generated.`
+          : 'Generate a complete short-film episode from this story? The current Director draft will be replaced and image/video generation may use provider credits.',
       )
       : !hasDirectorWork || window.confirm(
         'Open a clean short-film episode in Director? The current Director draft will be replaced.',
@@ -2018,6 +2552,9 @@ export function StoryLabPanel() {
             preserveVisualStyle: adaptation.preserveVisualStyle,
             imageModel: filmImageModel,
             videoModel: filmVideoModel,
+            generationMode: project.musicVideoGenerationMode,
+            resolution: storyVideoResolution,
+            aspectRatio: storyVideoAspectRatio,
           },
           status: 'staged',
         }],
@@ -2545,10 +3082,6 @@ export function StoryLabPanel() {
   const adaptMusicCueWithLlm = async (cueId: string, includeLyria = false) => {
     const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
     if (!cue) return
-    if (!cue.referenceSong.trim()) {
-      setNotice({ kind: 'error', text: 'Add an example reference song before adapting this proposal.' })
-      return
-    }
     const activity = beginStoryActivity('music_planning', `Story Lab is adapting “${cue.title}”…`, 1)
     setMusicCueBusy(`llm:${cueId}`)
     try {
@@ -2638,6 +3171,58 @@ export function StoryLabPanel() {
       setMusicCueBusy('')
       lyriaUploadCueId.current = ''
       if (lyriaUploadRef.current) lyriaUploadRef.current.value = ''
+    }
+  }
+
+  const uploadCustomMusic = async (file?: File) => {
+    if (!file) return
+    const cueId = customMusicUploadCueId.current
+    const current = useStoryStore.getState().project
+    const cue = current.music.cues.find(item => item.id === cueId)
+    const destination = cue?.title || current.title || 'Story music'
+    const activity = beginStoryActivity('uploading_music', `Importing custom audio “${file.name}”…`, 1)
+    setMusicCueBusy(`custom-upload:${cueId || 'story'}`)
+    try {
+      const uploaded = await api.uploadAudio(file)
+      const language = cue?.lyricsLanguage || current.music.lyricsLanguage || current.language
+      const existing = cue?.candidates || current.music.candidates
+      const version = nextMusicCandidateVersion(existing, language, current.language)
+      const candidate: StoryMusicCandidate = {
+        id: storyId('song'),
+        displayName: `${destination} · custom MP3 · v${version}`,
+        title: destination,
+        language,
+        version,
+        name: file.name || uploaded.filename,
+        source: uploaded.url,
+        prompt: cue?.style || current.music.style,
+        lyrics: cue?.lyrics || current.music.lyrics,
+        provider: 'local',
+        model: 'custom-audio-upload',
+        durationSeconds: 0,
+        createdAt: new Date().toISOString(),
+      }
+      update(latest => {
+        const target = latest.music.cues.find(item => item.id === cueId)
+        if (target) {
+          target.candidates.push(candidate)
+          target.selectedCandidateId = candidate.id
+        } else {
+          latest.music.candidates.push(candidate)
+          latest.music.selectedCandidateId = candidate.id
+        }
+        return latest
+      })
+      setMusicProductionCandidateId(candidate.id)
+      setNotice({ kind: 'ok', text: `Custom audio imported and selected under “${destination}”.` })
+    } catch (error) {
+      activity.fail(error, 'uploading_music')
+      setNotice({ kind: 'error', text: `The custom audio could not be imported: ${(error as Error).message}` })
+    } finally {
+      activity.finish()
+      setMusicCueBusy('')
+      customMusicUploadCueId.current = ''
+      if (customMusicUploadRef.current) customMusicUploadRef.current.value = ''
     }
   }
 
@@ -2738,10 +3323,12 @@ export function StoryLabPanel() {
       `MiniMax Music queue ready: 0/${ids.length} tracks generated`,
       ids.length,
     )
+    musicQueueCancelRequested.current = false
     setMusicQueue({ ids, index: 0 })
     let completed = 0
     try {
       for (let index = 0; index < ids.length; index += 1) {
+        if (musicQueueCancelRequested.current) break
         setMusicQueue({ ids, index })
         const cue = useStoryStore.getState().project.music.cues.find(item => item.id === ids[index])
         activity.update(
@@ -2759,8 +3346,11 @@ export function StoryLabPanel() {
           completed,
           ids.length,
         )
+        if (musicQueueCancelRequested.current) break
       }
-      if (completed === ids.length) {
+      if (musicQueueCancelRequested.current) {
+        setNotice({ kind: 'ok', text: `Music queue cancelled after ${completed}/${ids.length}; completed tracks were preserved.` })
+      } else if (completed === ids.length) {
         setNotice({ kind: 'ok', text: `Music queue completed: ${completed} tracks generated one after another.` })
       } else {
         activity.fail(new Error(`Music queue stopped after ${completed}/${ids.length}`), 'music_queue')
@@ -2770,9 +3360,16 @@ export function StoryLabPanel() {
       }
     } finally {
       activity.finish()
+      musicQueueCancelRequested.current = false
       setMusicCueBusy('')
       setMusicQueue(null)
     }
+  }
+
+  const cancelMusicQueue = () => {
+    musicQueueCancelRequested.current = true
+    setMusicQueue(current => current ? { ...current, cancelling: true } : current)
+    setNotice({ kind: 'ok', text: 'Cancelling the music queue after the current provider request finishes…' })
   }
 
   const musicCueForCandidate = (source: StoryProject, candidateId?: string) =>
@@ -2815,6 +3412,8 @@ export function StoryLabPanel() {
     generationSettings: MusicVideoGenerationSettings = {
       imageModel: filmImageModel,
       videoModel: filmVideoModel,
+      resolution: storyVideoResolution,
+      aspectRatio: storyVideoAspectRatio,
       generationMode: source.musicVideoGenerationMode,
       directVideoMasterPrompt: source.directVideoMasterPrompt,
       writingProvider: source.provider.writingProvider,
@@ -2824,24 +3423,46 @@ export function StoryLabPanel() {
   ) => {
     const resolvedCue = effectiveMusicCue(source, cue, candidate)
     const directVideo = generationSettings.generationMode === 'direct_video'
+    const directReferences = generationSettings.generationMode === 'direct_references'
+    if (directReferences && !generationSettings.videoModel.startsWith('minimax_h3')) {
+      throw new Error('Direct references currently require a MiniMax H3 video model with Ref2VA support.')
+    }
     const adaptation = buildMusicVideoAdaptation(source, resolvedCue, {
       generationMode: generationSettings.generationMode,
     })
+    if (directReferences && !adaptation.characterReferences.length && !adaptation.locationReferences.length) {
+      throw new Error('No approved references match this song focus. Approve an attached world/location image or a reference for the focused character.')
+    }
     const director = useStore.getState()
     director.directorReset()
     const store = useStore.getState()
     store.setGenerationMode('video')
-    if (!directVideo && generationSettings.imageModel) {
+    if (!directVideo && !directReferences && generationSettings.imageModel) {
       store.selectDirectorImageModel(generationSettings.imageModel)
     }
     if (generationSettings.videoModel) {
       await store.selectDirectorVideoModel(generationSettings.videoModel)
+      const selected = useStore.getState().selectedModelPerMode.video
+      if (selected !== generationSettings.videoModel) {
+        throw new Error(
+          `Video model selection did not settle: requested ${generationSettings.videoModel}, effective ${selected || 'none'}.`,
+        )
+      }
     }
+    store.setDirectorResolution(generationSettings.resolution)
+    store.setDirectorAspectRatio(generationSettings.aspectRatio)
     store.setSidebarMode('director')
     store.setDirectorSkill('music_video')
     store.setDirectorAutoMode(autoStart)
+    store.setDirectorShotImageGuidance(directReferences ? 'prompt_only' : 'auto')
+    if (generationSettings.videoModel.startsWith('minimax_h3')) {
+      store.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
+    }
     store.setDirectorMusicVideoTreatment({
-      generation_mode: generationSettings.generationMode,
+      // Director already has a model-aware direct-reference policy. Keep its
+      // normal visual planner but skip generated shot images and feed the
+      // approved Story references straight into H3 Ref2VA.
+      generation_mode: directVideo ? 'direct_video' : 'image_guided',
       direct_video_master_prompt: generationSettings.directVideoMasterPrompt,
     })
     store.directorSetSceneDescription(adaptation.sceneDescription)
@@ -2908,6 +3529,9 @@ export function StoryLabPanel() {
     if (autoStart && useStore.getState().directorStep === 'structure') {
       useStore.getState().directorConfirmStructure()
       await useStore.getState().startDirectorPipeline()
+      if (!useStore.getState().pipelineId) {
+        throw new Error('Director did not return a pipeline ID; video generation was not started.')
+      }
     }
     return { adaptation, resolvedCue, pipelineId: useStore.getState().pipelineId, generationSettings }
   }
@@ -2931,8 +3555,12 @@ export function StoryLabPanel() {
       director.setSidebarMode('director')
       director.setDirectorSkill('music_video')
       director.setDirectorAutoMode(false)
+      director.setDirectorShotImageGuidance(project.musicVideoGenerationMode === 'direct_references' ? 'prompt_only' : 'auto')
+      if (filmVideoModel.startsWith('minimax_h3')) {
+        director.setDirectorH3ReferenceMode(project.musicVideoGenerationMode === 'direct_references' ? 'references' : 'first_frame')
+      }
       director.setDirectorMusicVideoTreatment({
-        generation_mode: project.musicVideoGenerationMode,
+        generation_mode: project.musicVideoGenerationMode === 'direct_video' ? 'direct_video' : 'image_guided',
         direct_video_master_prompt: project.directVideoMasterPrompt,
       })
       useStore.setState({ directorMusicSource: 'generate', directorStep: 'upload' })
@@ -2944,6 +3572,8 @@ export function StoryLabPanel() {
       'preparing_music_video',
       directMusicVideo
         ? `Loading “${candidate.displayName || candidate.title || candidate.name}” for direct text-to-video…`
+        : directReferenceVideo
+          ? `Loading “${candidate.displayName || candidate.title || candidate.name}” with approved references for H3 Ref2VA…`
         : `Loading “${candidate.displayName || candidate.title || candidate.name}” and its Story references…`,
       3,
     )
@@ -2951,12 +3581,16 @@ export function StoryLabPanel() {
       activity.update(
         directMusicVideo
           ? 'Preparing the immutable master prompt; visual references remain unused…'
+          : directReferenceVideo
+            ? `Loading ${approvedVisualReferenceCount} approved visual reference${approvedVisualReferenceCount === 1 ? '' : 's'}; no start images will be generated…`
           : 'Loading character and world references…',
         'preparing_music_video', 1, 3,
       )
       const generationSettings: MusicVideoGenerationSettings = {
         imageModel: filmImageModel,
         videoModel: filmVideoModel,
+        resolution: storyVideoResolution,
+        aspectRatio: storyVideoAspectRatio,
         generationMode: project.musicVideoGenerationMode,
         directVideoMasterPrompt: project.directVideoMasterPrompt,
         writingProvider: project.provider.writingProvider,
@@ -3001,6 +3635,8 @@ export function StoryLabPanel() {
               trimEnd: options.mode === 'trailer' ? options.excerpt?.end : undefined,
               imageModel: loaded.generationSettings.imageModel,
               videoModel: loaded.generationSettings.videoModel,
+              resolution: loaded.generationSettings.resolution,
+              aspectRatio: loaded.generationSettings.aspectRatio,
               generationMode: loaded.generationSettings.generationMode,
               directVideoMasterPrompt: loaded.generationSettings.directVideoMasterPrompt,
               writingProvider: loaded.generationSettings.writingProvider,
@@ -3018,6 +3654,8 @@ export function StoryLabPanel() {
           ? `The ${options.mode === 'trailer' ? 'musical trailer' : 'music video'} for “${loaded.adaptation.focusLabel}” is running in Director.`
           : loaded.generationSettings.generationMode === 'direct_video'
             ? `The song, lyrics and direct T2V master prompt for “${loaded.adaptation.focusLabel}” are loaded in Director; no images were transferred.`
+            : loaded.generationSettings.generationMode === 'direct_references'
+              ? `The song, lyrics and approved references for “${loaded.adaptation.focusLabel}” are loaded for H3 Ref2VA; no start-image generation is needed.`
             : `The song, lyrics and visual references for “${loaded.adaptation.focusLabel}” are loaded in Director.`,
       })
     } catch (error) {
@@ -3038,10 +3676,22 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'Choose and preview a trailer excerpt of at least one second.' })
       return
     }
+    if (!directReferenceVideoReady) {
+      setNotice({
+        kind: 'error',
+        text: directReferenceVideoSupported
+          ? 'Approve at least one visual asset before using direct references.'
+          : 'Choose a MiniMax H3 video model before using direct references.',
+      })
+      return
+    }
     if (autoStart && !window.confirm(
       `Generate the ${musicProductionMode === 'trailer' ? 'musical trailer' : 'complete music video'} for “${selectedMusicOption.label}”? `
+      + `Video model: ${selectedFilmVideoModel?.name || filmVideoModel} (${filmVideoModel}) · ${storyVideoResolution} ${storyVideoAspectRatio}. `
       + (directMusicVideo
         ? 'This sends one pure text-to-video request per planned clip, without creating or uploading images, and may consume video-generation credits.'
+        : directReferenceVideo
+          ? `This sends ${approvedVisualReferenceCount} approved reference${approvedVisualReferenceCount === 1 ? '' : 's'} directly to H3 Ref2VA and skips start-image generation.`
         : 'This creates one start image and one video render per planned clip and may consume provider credits.'),
     )) return
     await openMusicalTrailer(selectedMusicOption.candidate.id, {
@@ -3082,8 +3732,19 @@ export function StoryLabPanel() {
           ? production.targetSnapshot.imageModel : filmImageModel,
         videoModel: typeof production.targetSnapshot?.videoModel === 'string'
           ? production.targetSnapshot.videoModel : filmVideoModel,
+        resolution: savedStoryVideoResolution(
+          production.targetSnapshot?.resolution,
+          storyVideoResolution,
+        ),
+        aspectRatio: savedStoryVideoAspect(
+          production.targetSnapshot?.aspectRatio,
+          storyVideoAspectRatio,
+        ),
         generationMode: production.targetSnapshot?.generationMode === 'direct_video'
-          ? 'direct_video' : source.musicVideoGenerationMode,
+          ? 'direct_video'
+          : production.targetSnapshot?.generationMode === 'direct_references'
+            ? 'direct_references'
+            : source.musicVideoGenerationMode,
         directVideoMasterPrompt: typeof production.targetSnapshot?.directVideoMasterPrompt === 'string'
           ? production.targetSnapshot.directVideoMasterPrompt : source.directVideoMasterPrompt,
         writingProvider: savedWritingProvider === 'deepseek'
@@ -3158,7 +3819,25 @@ export function StoryLabPanel() {
     const imageModel = typeof production.targetSnapshot?.imageModel === 'string'
       ? production.targetSnapshot.imageModel
       : filmImageModel
-    await loadFilmProduction(source, direction, false, targetDuration, preserveVisualStyle, videoModel, imageModel)
+    const resolution = savedStoryVideoResolution(
+      production.targetSnapshot?.resolution,
+      storyVideoResolution,
+    )
+    const aspectRatio = savedStoryVideoAspect(
+      production.targetSnapshot?.aspectRatio,
+      storyVideoAspectRatio,
+    )
+    await loadFilmProduction(
+      source,
+      direction,
+      false,
+      targetDuration,
+      preserveVisualStyle,
+      videoModel,
+      imageModel,
+      resolution,
+      aspectRatio,
+    )
   }
 
   const restoreProductionSource = (productionId: string) => {
@@ -3216,13 +3895,11 @@ export function StoryLabPanel() {
     ]
   const progress = foundationChecks.filter(Boolean).length
   const foundationTotal = foundationChecks.length
-  const styledReferenceTargetCount = storyStyledReferenceTargets(project, {
-    includeLocations: project.projectType === 'full_story',
-    existingOnly: true,
-  }).length
-  const foldedStyledLocationCount = project.projectType === 'full_story'
-    ? 0
-    : project.world.locations.filter(location => location.visualPrompt.trim()).length
+  const styledReferenceTargetCount = new Set([
+    ...project.world.referenceAssetIds,
+    ...project.world.locations.flatMap(location => location.referenceAssetIds),
+    ...project.characters.flatMap(character => character.referenceAssetIds),
+  ].filter(id => Boolean(project.assets[id]))).size
   useEffect(() => {
     if (!visibleTabIds.includes(tab)) setTab('overview')
   }, [project.projectType, tab]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -3252,7 +3929,7 @@ export function StoryLabPanel() {
       character.approval !== 'approved'
       || (requiresVisualIdentities && (
         !character.primaryReferenceAssetId
-        || !project.assets[character.primaryReferenceAssetId]
+        || project.assets[character.primaryReferenceAssetId]?.approval !== 'approved'
       )))
     if (incompleteCharacters.length) {
       const names = incompleteCharacters.map(character => character.name || 'Sin nombre').join(', ')
@@ -3262,7 +3939,7 @@ export function StoryLabPanel() {
           ? `Revisar identidades: ${names}`
           : `Aprobar descripciones: ${names}`,
         detail: requiresVisualIdentities
-          ? 'Cada personaje necesita una imagen principal y su identidad aprobada.'
+          ? 'Cada personaje necesita una imagen principal aprobada y su identidad confirmada.'
           : 'En vídeo directo no hacen falta imágenes; Aprobar conjunto confirma todas las descripciones de una vez.',
         tab: 'characters',
         anchorId: `story-review-character-${incompleteCharacters[0].id}`,
@@ -3505,6 +4182,22 @@ export function StoryLabPanel() {
                     scope="overview" busy={busy} approved={isApproved('overview')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('overview')}
                   />
                 </div>
+                <div className={`${panel} mb-4 border-accent-blue/30 bg-accent-blue/5`}>
+                  <Field
+                    required
+                    label="Idea general, estilo, avatar y prompts de referencia"
+                    value={project.creativeBrief.generalIdea}
+                    onChange={generalIdea => patch({ creativeBrief: { ...project.creativeBrief, generalIdea } })}
+                    rows={9}
+                    placeholder="Describe libremente el proyecto. Puedes indicar protagonista/avatar, época, estilo, propósito y pegar un prompt que ya te funcionó como guía. Story Lab separará identidad, dirección artística, canción y acciones sin repetir literalmente el ejemplo en cada plano."
+                  />
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <p className="text-[10px] text-text-muted">El LLM interpreta este texto y propone cada campo; en modo Guided puedes aprobarlos uno a uno.</p>
+                    <button type="button" className={`${button} ${requiredPreparationButton}`} disabled={Boolean(busy)} onClick={() => generate('all')}>
+                      <Sparkles size={13} /> Interpretar y rellenar todo
+                    </button>
+                  </div>
+                </div>
                 {project.projectType === 'music_video' && (
                   <div className={`${panel} mb-4 grid md:grid-cols-2 gap-3 border-pink-500/20`}>
                     <div className="md:col-span-2"><Field required label="Contexto" value={project.creativeBrief.context} onChange={context => patch({ creativeBrief: { ...project.creativeBrief, context } })} rows={4} placeholder="Dónde nace la canción, situación, época, atmósfera y cualquier dato imprescindible." /></div>
@@ -3616,14 +4309,12 @@ export function StoryLabPanel() {
                           <Palette size={13} /> Write/replace style lock in existing prompts
                         </button>
                         <button className={button} disabled={!storyRenderStyle(project) || !styledReferenceTargetCount || Boolean(imageBusy) || referenceBatchBusy} onClick={regenerateStyledReferences}>
-                          {referenceBatchBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />} Restyle {styledReferenceTargetCount} existing reference{styledReferenceTargetCount === 1 ? '' : 's'}
+                          <RefreshCcw size={13} /> Prepare {styledReferenceTargetCount} reference{styledReferenceTargetCount === 1 ? '' : 's'} for style conversion
                         </button>
                       </div>
-                      {project.projectType !== 'full_story' && (
-                        <p className="text-[9px] leading-relaxed text-text-muted">
-                          Compact scope: only existing world and subject images are replaced. Prompt-only targets are not created automatically{foldedStyledLocationCount ? `, and ${foldedStyledLocationCount} additional folded location${foldedStyledLocationCount === 1 ? ' is' : 's are'} excluded` : ''}.
-                        </p>
-                      )}
+                      <p className="text-[9px] leading-relaxed text-text-muted">
+                        Opens all attached references in Images with the current art direction prefilled. Originals are preserved; new variants remain drafts until you approve them.
+                      </p>
                     </div>
                     <div className="md:col-span-2 border-t border-border pt-3">
                       <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-text-muted">
@@ -3804,16 +4495,161 @@ export function StoryLabPanel() {
                   </section>
                 )}
 
+                <section className={`${panel} mb-5 border-violet-500/30 bg-violet-500/5`}>
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+                    <div>
+                      <h3 className="text-sm font-semibold text-violet-100">Convert selected images to a style</h3>
+                      <p className="mt-1 text-[10px] leading-relaxed text-text-muted">
+                        Choose the editing engine for this batch. Qwen prioritizes strict source preservation; Flux 2 Klein
+                        performs fast four-step prompt-driven image editing; MiniMax preserves character identity but is not a scene editor.
+                        Originals remain intact and every generated variant stays in Draft until you approve it.
+                      </p>
+                      <textarea
+                        className={`${input} mt-3 min-h-24 resize-y`}
+                        value={styleConversion}
+                        onChange={event => setStyleConversion(event.target.value)}
+                        placeholder="For example: GTA V promotional artwork, grounded proportions, saturated cinematic color grading, crisp painted edges…"
+                        aria-label="Destination style for selected images"
+                      />
+                      {/photoreal|photo-real|fotorreal/i.test(styleConversion) && (
+                        <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[9px] leading-relaxed text-amber-200">
+                          If the inputs are already photographs, a photorealistic remake will look almost unchanged. For a GTA conversion, describe the target as a stylized game screenshot or painted promotional key art and avoid “photorealistic remake”.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col justify-end gap-2">
+                      <label className="block text-[10px] text-text-muted">Style conversion model
+                        <select
+                          className={`${input} mt-1`}
+                          value={styleConversionModel}
+                          disabled={styleConversionBusy || Boolean(styleModelDownloading)}
+                          onChange={event => {
+                            setStyleConversionModel(event.target.value)
+                            setStyleModelDownloadError('')
+                          }}
+                        >
+                          <optgroup label="External API">
+                            <option value={MINIMAX_IMAGE_API_MODEL}>MiniMax Image-01 · characters only</option>
+                          </optgroup>
+                          <optgroup label="Maestro local · true image editing">
+                            {localStyleModels.map(model => (
+                              <option key={model.model_type} value={model.model_type}>
+                                {model.name}{model.model_type === QWEN_STYLE_EDIT_MODEL ? ' · strict preservation' : model.model_type === FLUX_STYLE_EDIT_MODEL ? ' · fast 4-step edit' : ''}{model.is_downloaded ? ' · installed' : ' · not installed'}
+                              </option>
+                            ))}
+                          </optgroup>
+                        </select>
+                      </label>
+                      <div className="rounded-md border border-border bg-bg-primary/40 p-2 text-[10px] text-text-muted">
+                        {styleAssetIds.length} image{styleAssetIds.length === 1 ? '' : 's'} selected · {styleUsesMiniMax
+                          ? 'MiniMax Image-01 API · paid subject reference'
+                          : `${selectedStyleModel?.name || styleConversionModel} · local · ${selectedStyleModel?.is_downloaded ? 'ready' : 'installation required'}`}
+                      </div>
+                      {!styleUsesMiniMax && !styleModelReady && !styleModelDownloading && (
+                        <button className={`${button} border-sky-500/60 text-sky-200`} onClick={() => void installStyleConversionModel()}>
+                          <Download size={13} /> Install selected local editor
+                        </button>
+                      )}
+                      {styleModelDownloading && (
+                        <div className="rounded-md border border-sky-500/40 bg-sky-500/5 p-2 text-[10px] text-sky-200">
+                          <Loader2 size={12} className="mr-1 inline animate-spin" /> Downloading model files… progress is also shown in Activity.
+                        </div>
+                      )}
+                      {styleModelDownloadError && <p className="text-[9px] text-red-300">{styleModelDownloadError}</p>}
+                      {miniMaxIncompatibleSelection && (
+                        <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[9px] leading-relaxed text-amber-200">
+                          This selection contains non-character images. MiniMax cannot preserve their layout; choose Qwen Image Edit or Flux 2 Klein.
+                        </p>
+                      )}
+                      {styleConversionBusy ? (
+                        <button className={`${button} border-amber-500/60 text-amber-200`} onClick={cancelStyleConversion}>
+                          <Loader2 size={13} className="animate-spin" /> Stop after current image
+                        </button>
+                      ) : (
+                        <button
+                          className={`${button} border-violet-400/60 text-violet-200`}
+                          disabled={!styleAssetIds.length || !styleConversion.trim() || !styleModelReady || miniMaxIncompatibleSelection || Boolean(styleModelDownloading)}
+                          onClick={() => void convertSelectedAssetsToStyle()}
+                        >
+                          <Palette size={13} /> Convert selected to style
+                        </button>
+                      )}
+                      <p className="text-[9px] leading-relaxed text-text-muted">
+                        Qwen and Flux both send the original as the main landscape/subject (`KI`) and use the nearest supported aspect ratio. Flux freezes its distilled 4-step edit recipe. MiniMax remains available only for people and character identity.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
                 <section>
-                  <h3 className="mb-2 text-sm font-semibold text-text-primary">Imported asset library · {Object.keys(project.assets).length}</h3>
+                  <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-semibold text-text-primary">Visual reference library · {Object.keys(project.assets).length}</h3>
+                      <p className="mt-0.5 text-[9px] text-text-muted">
+                        {Object.values(project.assets).filter(asset => asset.approval === 'approved').length} approved for Director. Newest images appear first; only approved images leave Story Lab with a production.
+                      </p>
+                    </div>
+                    {Object.keys(project.assets).length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className={button}
+                          onClick={() => setStyleAssetIds(styleAssetIds.length === Object.keys(project.assets).length
+                            ? [] : Object.keys(project.assets))}
+                        >
+                          {styleAssetIds.length === Object.keys(project.assets).length ? 'Clear selection' : 'Select all'}
+                        </button>
+                        <button
+                          className={`${button} border-red-500/60 text-red-300`}
+                          disabled={!selectedDraftAssetIds.length || styleConversionBusy}
+                          onClick={deleteSelectedDraftAssets}
+                          title="Remove only the selected Draft records from this Story; approved images and Gallery files are protected"
+                        >
+                          <Trash2 size={13} /> Delete selected Draft ({selectedDraftAssetIds.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   {Object.keys(project.assets).length ? (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                      {Object.values(project.assets).map(asset => (
-                        <div key={asset.id} className={`${panel} p-2.5`}>
-                          <img src={asset.source} alt={asset.name} className="h-32 w-full rounded-md border border-border object-cover" />
-                          <p className="mt-2 truncate text-xs font-medium text-text-primary" title={asset.name}>{asset.name}</p>
-                          <p className="mt-0.5 text-[9px] uppercase tracking-wide text-text-muted">{asset.assetKind || asset.provider}</p>
-                          {asset.description && <p className="mt-1 line-clamp-3 text-[9px] text-text-muted">{asset.description}</p>}
+                    <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                      {visualAssetsNewestFirst.map(asset => (
+                        <div key={asset.id} className={`${panel} p-2.5 ${asset.approval === 'approved' ? 'border-emerald-500/40' : ''}`}>
+                          <div className="relative">
+                            <img src={asset.source} alt={asset.name} className="h-44 w-full rounded-md border border-border object-cover" />
+                            <label className="absolute left-2 top-2 flex items-center gap-1.5 rounded bg-black/75 px-2 py-1 text-[9px] text-white">
+                              <input type="checkbox" checked={styleAssetIds.includes(asset.id)} onChange={() => toggleStyleAsset(asset.id)} />
+                              Select
+                            </label>
+                            <span className={`absolute right-2 top-2 rounded border px-1.5 py-0.5 text-[9px] ${asset.approval === 'approved'
+                              ? 'border-emerald-400/70 bg-emerald-950/80 text-emerald-200'
+                              : 'border-amber-400/60 bg-amber-950/80 text-amber-200'}`}>
+                              {asset.approval === 'approved' ? 'Approved' : 'Draft'}
+                            </span>
+                          </div>
+                          <input className={`${input} mt-2`} value={asset.name}
+                            onChange={event => patchVisualAsset(asset.id, { name: event.target.value })}
+                            aria-label={`Name for ${asset.name}`} />
+                          <div className="mt-1 flex flex-wrap items-center gap-1 text-[9px] uppercase tracking-wide text-text-muted">
+                            <span>{asset.assetKind || asset.provider}</span>
+                            <span>·</span>
+                            <span>{asset.variantKind === 'styled' ? 'styled variant' : 'original'}</span>
+                            {asset.model && <><span>·</span><span>{asset.provider}/{asset.model}</span></>}
+                            <span>·</span><span>{new Date(asset.createdAt).toLocaleString()}</span>
+                          </div>
+                          <textarea className={`${input} mt-2 min-h-16 resize-y`} value={asset.description || ''}
+                            onChange={event => patchVisualAsset(asset.id, { description: event.target.value })}
+                            placeholder="What is visibly present in this image?" aria-label={`Description for ${asset.name}`} />
+                          <textarea className={`${input} mt-2 min-h-20 resize-y`} value={asset.prompt}
+                            onChange={event => patchVisualAsset(asset.id, { prompt: event.target.value })}
+                            placeholder="Reusable prompt for this reference" aria-label={`Prompt for ${asset.name}`} />
+                          {asset.stylePrompt && <p className="mt-1 text-[9px] text-violet-200">Style: {asset.stylePrompt}</p>}
+                          <button
+                            className={`${button} mt-2 w-full ${asset.approval === 'approved' ? 'border-emerald-500/60 text-emerald-300' : 'border-amber-500/50 text-amber-200'}`}
+                            onClick={() => patchVisualAsset(asset.id, {
+                              approval: asset.approval === 'approved' ? 'draft' : 'approved',
+                            })}
+                          >
+                            <Check size={13} /> {asset.approval === 'approved' ? 'Approved for production' : 'Approve for production'}
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -3946,16 +4782,28 @@ export function StoryLabPanel() {
                         {newSongAction === 'audio' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
                         Generar nueva canción
                       </button>
+                      <button className={button} disabled={Boolean(busy || musicQueue || musicCueBusy)} onClick={() => {
+                        customMusicUploadCueId.current = project.music.cues.find(cue => cue.kind === 'story')?.id || ''
+                        customMusicUploadRef.current?.click()
+                      }}>
+                        <Upload size={13} /> Import custom MP3
+                      </button>
                     </> : <>
                       <button className={button} disabled={Boolean(busy || musicQueue)} onClick={() => generate('music')}>
                         {busy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate LLM suggestions
                       </button>
-                      <button className={`${button} ${completeGenerationButton}`}
-                        disabled={Boolean(busy || musicQueue || musicCueBusy) || !project.music.cues.length || !servicesConfig?.minimax_api_key_set}
-                        onClick={() => void generateAllMusicCues()}>
-                        {musicQueue ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
-                        {musicQueue ? `Queue ${musicQueue.index + 1}/${musicQueue.ids.length}` : 'Generate all sequentially'}
-                      </button>
+                      {musicQueue ? (
+                        <button className={`${button} border-red-400/60 text-red-300`} onClick={cancelMusicQueue} disabled={musicQueue.cancelling === true}>
+                          {musicQueue.cancelling ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                          {musicQueue.cancelling ? 'Cancelling after current track…' : `Cancel queue ${musicQueue.index + 1}/${musicQueue.ids.length}`}
+                        </button>
+                      ) : (
+                        <button className={`${button} ${completeGenerationButton}`}
+                          disabled={Boolean(busy || musicCueBusy) || !project.music.cues.length || !servicesConfig?.minimax_api_key_set}
+                          onClick={() => void generateAllMusicCues()}>
+                          <Music size={13} /> Generate all sequentially
+                        </button>
+                      )}
                     </>}
                   </div>
                 </div>
@@ -4121,7 +4969,7 @@ export function StoryLabPanel() {
                                     <summary className="cursor-pointer text-[9px] text-text-secondary">Inspect the complete Maestro → MiniMax payload</summary>
                                     <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-[9px] text-text-muted">{miniMaxCuePayload(cue, project.music.model)}</pre>
                                   </details>
-                                  <div className="grid sm:grid-cols-2 gap-2">
+                                  <div className="grid sm:grid-cols-3 gap-2">
                                     <button className={button} onClick={() => {
                                       void navigator.clipboard.writeText(miniMaxCuePayload(cue, project.music.model))
                                       setNotice({ kind: 'ok', text: `MiniMax payload for “${cue.title}” copied.` })
@@ -4131,6 +4979,10 @@ export function StoryLabPanel() {
                                       onClick={() => void generateMusicCueAudio(cue.id)}>
                                       {generatingAudio ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />} Generate this track
                                     </button>
+                                    <button className={button} disabled={Boolean(musicCueBusy || musicQueue)} onClick={() => {
+                                      customMusicUploadCueId.current = cue.id
+                                      customMusicUploadRef.current?.click()
+                                    }}><Upload size={12} /> Import custom MP3</button>
                                   </div>
                                 </div>
                                 <div className="space-y-2.5 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3">
@@ -4146,7 +4998,7 @@ export function StoryLabPanel() {
                                     placeholder="Generate provider prompts with the LLM to create a timed composition breakdown…" />
                                   <p className="text-[9px] text-text-muted">Uses contiguous timestamps, section names, intensity, arrangement and separated lyrics. Lyria Pro targets up to about 3:00; longer Story durations are condensed in this prompt.</p>
                                   <div className="grid sm:grid-cols-2 gap-2">
-                                    <button className={button} disabled={Boolean(musicCueBusy || musicQueue) || !cue.referenceSong.trim()}
+                                    <button className={button} disabled={Boolean(musicCueBusy || musicQueue) || !musicWritingReady}
                                       onClick={() => void adaptMusicCueWithLlm(cue.id, true)}>
                                       {adapting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate / refresh Lyria prompt
                                     </button>
@@ -4376,10 +5228,41 @@ export function StoryLabPanel() {
                         onChange={event => setFilmDuration(Math.max(10, Math.min(1800, Number(event.target.value) || 45)))}
                       />
                     </label>
+                    <div className="rounded-md border border-violet-500/25 bg-violet-500/5 p-2.5 space-y-2">
+                      <p className="text-[10px] font-medium text-violet-100">Visual guidance</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          className={`${button} flex-col ${!directReferenceVideo ? 'border-purple-400/60 text-purple-200' : ''}`}
+                          onClick={() => patch({ musicVideoGenerationMode: 'image_guided' })}
+                        >
+                          <span>Generate start images</span>
+                          <span className="text-[9px] text-text-muted">Traditional image-guided pipeline</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`${button} flex-col ${directReferenceVideo ? 'border-violet-400/70 bg-violet-500/10 text-violet-200' : ''}`}
+                          onClick={() => patch({ musicVideoGenerationMode: 'direct_references' })}
+                        >
+                          <span>Direct approved references</span>
+                          <span className="text-[9px] text-text-muted">H3 Ref2VA · no start images</span>
+                        </button>
+                      </div>
+                      {directReferenceVideo && (
+                        <p className={`text-[9px] ${directReferenceVideoReady ? 'text-emerald-200' : 'text-amber-300'}`}>
+                          {directReferenceVideoReady
+                            ? `${approvedVisualReferenceCount} approved reference${approvedVisualReferenceCount === 1 ? '' : 's'} ready for H3.`
+                            : directReferenceVideoSupported
+                              ? 'Approve at least one image in Imágenes.'
+                              : 'Choose a MiniMax H3 video model.'}
+                        </p>
+                      )}
+                    </div>
                     <label className="block text-[10px] text-text-muted">Image model
                       <select
                         className={`${input} mt-1`}
                         value={filmImageModel}
+                        disabled={directReferenceVideo}
                         onChange={event => selectDirectorImageModel(event.target.value)}
                       >
                         {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
@@ -4397,7 +5280,9 @@ export function StoryLabPanel() {
                         </optgroup>
                       </select>
                       <span className={`mt-1 block text-[9px] leading-relaxed ${filmImageReady ? 'text-text-muted' : 'text-amber-300'}`}>
-                        {filmImageModel === MINIMAX_IMAGE_API_MODEL
+                        {directReferenceVideo
+                          ? 'Not used in direct-reference mode; approved Story images go straight to H3 Ref2VA.'
+                          : filmImageModel === MINIMAX_IMAGE_API_MODEL
                           ? filmImageReady
                             ? 'MiniMax Image-01 runs through the external API and does not use local VRAM. It is independent from the local H3 video model.'
                             : 'Add the MiniMax API key in Settings → Services before starting complete generation.'
@@ -4420,11 +5305,14 @@ export function StoryLabPanel() {
                         ))}
                       </select>
                       <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
-                        {filmVideoModel === 'minimax_h3'
+                        {filmVideoModel === 'minimax_h3_legacy'
+                          ? 'H3 Legacy Quality uses its 20-step ConvRot recipe. A 7–10s shot at 720p can take tens of minutes even on an RTX 4090; choose 540p/480p or a Turbo-capable H3 variant when speed matters.'
+                          : filmVideoModel.startsWith('minimax_h3')
                           ? 'MiniMax H3 renders every planned shot locally at up to 768p with native stereo audio. Longer shots are continued and assembled automatically.'
-                          : 'LTX uses Maestro’s established multi-shot Director pipeline.'}
+                          : 'LTX uses Maestro’s multi-shot Director pipeline and requires its bundled Gemma 3 12B text encoder. Gemma may download on first use; it is an LTX dependency, not a separate setting.'}
                       </span>
                     </label>
+                    <StoryVideoFormatControls videoModel={filmVideoModel} />
                     <label className="flex items-start gap-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -4439,7 +5327,7 @@ export function StoryLabPanel() {
                         </span>
                       </span>
                     </label>
-                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmImageReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
+                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmGenerationImageReady || !directReferenceVideoReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> {project.projectType === 'quick_video' ? 'Abrir en Director' : 'Open in Short Film Director'}</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
                   </div>
@@ -4494,17 +5382,25 @@ export function StoryLabPanel() {
                           <div>
                             <p className="text-[10px] font-medium text-fuchsia-200">Cómo generar los planos</p>
                             <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
-                              El modo directo evita por completo MiniMax Image y cualquier referencia visual; cada clip nace únicamente del prompt de vídeo.
+                              Elige fotogramas generados, referencias aprobadas directas mediante H3 Ref2VA, o texto puro sin ninguna imagen.
                             </p>
                           </div>
-                          <div className="grid grid-cols-2 gap-1.5">
+                          <div className="grid gap-1.5 md:grid-cols-3">
                             <button
                               type="button"
                               onClick={() => patch({ musicVideoGenerationMode: 'image_guided' })}
-                              className={`${button} flex-col ${!directMusicVideo ? 'border-pink-500/60 text-pink-300' : ''}`}
+                              className={`${button} flex-col ${project.musicVideoGenerationMode === 'image_guided' ? 'border-pink-500/60 text-pink-300' : ''}`}
                             >
                               <span>Con imágenes</span>
                               <span className="text-[9px] text-text-muted">Crea un fotograma inicial</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => patch({ musicVideoGenerationMode: 'direct_references' })}
+                              className={`${button} flex-col ${directReferenceVideo ? 'border-violet-400/70 bg-violet-500/10 text-violet-200' : ''}`}
+                            >
+                              <span>Directo con referencias</span>
+                              <span className="text-[9px] text-text-muted">H3 Ref2VA · sin start frames</span>
                             </button>
                             <button
                               type="button"
@@ -4515,6 +5411,17 @@ export function StoryLabPanel() {
                               <span className="text-[9px] text-text-muted">T2V puro</span>
                             </button>
                           </div>
+                          {directReferenceVideo && (
+                            <div className={`rounded-md border p-2 text-[9px] leading-relaxed ${directReferenceVideoReady
+                              ? 'border-emerald-500/35 bg-emerald-500/5 text-emerald-100'
+                              : 'border-amber-500/40 bg-amber-500/5 text-amber-200'}`}>
+                              {directReferenceVideoReady
+                                ? `${approvedVisualReferenceCount} approved image${approvedVisualReferenceCount === 1 ? '' : 's'} will be routed by character/location labels directly into H3 Ref2VA. The image model is not run.`
+                                : directReferenceVideoSupported
+                                  ? 'Approve at least one image in Imágenes before generating.'
+                                  : 'Choose a MiniMax H3 video model; this mode is unavailable for LTX and other start-frame models.'}
+                            </div>
+                          )}
                           {directMusicVideo && (
                             <div className="block text-[10px] text-violet-200">
                               <div className="flex flex-wrap items-center gap-1.5">
@@ -4593,10 +5500,14 @@ export function StoryLabPanel() {
                                 )}
                               </label>
                             )}
-                            {directMusicVideo ? (
+                            {directMusicVideo || directReferenceVideo ? (
                               <div className="rounded-md border border-fuchsia-500/25 bg-fuchsia-500/5 px-2 py-1.5 text-[10px] text-text-muted">
                                 <span className="block font-medium text-fuchsia-200">Image model · no usado</span>
-                                <span className="mt-1 block text-[9px]">No se generará, cargará ni enviará ninguna imagen.</span>
+                                <span className="mt-1 block text-[9px]">
+                                  {directReferenceVideo
+                                    ? 'No crea start frames: envía únicamente las referencias aprobadas directamente a H3 Ref2VA.'
+                                    : 'No se generará, cargará ni enviará ninguna imagen.'}
+                                </span>
                               </div>
                             ) : (
                               <label className="block text-[10px] text-text-muted">Image model
@@ -4621,25 +5532,41 @@ export function StoryLabPanel() {
                                   <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>
                                 )}
                                 {selectableVideoModels.map(model => (
-                                  <option key={model.model_type} value={model.model_type}>{model.name}</option>
+                                  <option key={model.model_type} value={model.model_type}>
+                                    {model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}
+                                  </option>
                                 ))}
                               </select>
+                              <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
+                                {filmVideoModel === 'minimax_h3_legacy'
+                                  ? 'H3 Legacy Quality renders 20 full quality steps per shot. At 720p this can take tens of minutes; 540p/480p or a Turbo-capable H3 variant is the faster choice.'
+                                  : filmVideoModel.startsWith('ltx2')
+                                  ? 'LTX also downloads/loads Gemma 3 12B as its required text encoder. Gemma is not another selected model.'
+                                  : 'This exact MiniMax H3 selection is sent to Director and saved for the next session.'}
+                              </span>
                             </label>
+                            <StoryVideoFormatControls videoModel={filmVideoModel} />
                           </div>
                           {project.provider.writingProvider === 'openai-compatible' && (
                             <label className="block text-[10px] text-text-muted">Compatible API base URL
                               <input className={`${input} mt-1`} value={project.provider.writingBaseUrl} onChange={event => patchMusicWritingProvider({ writingBaseUrl: event.target.value })} placeholder="https://…/v1" />
                             </label>
                           )}
-                          <p className={`text-[9px] ${musicWritingReady && musicVideoImageReady && directVideoMasterReady ? 'text-text-muted' : 'text-amber-300'}`}>
-                            {musicWritingReady && musicVideoImageReady && directVideoMasterReady
+                          <p className={`text-[9px] ${musicWritingReady && musicVideoImageReady && directVideoMasterReady && directReferenceVideoReady ? 'text-text-muted' : 'text-amber-300'}`}>
+                            {musicWritingReady && musicVideoImageReady && directVideoMasterReady && directReferenceVideoReady
                               ? directMusicVideo
                                 ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · T2V without images · ${selectedFilmVideoModel?.name || filmVideoModel}`
+                                : directReferenceVideo
+                                  ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · ${approvedVisualReferenceCount} approved references · ${selectedFilmVideoModel?.name || filmVideoModel}`
                                 : `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · ${selectedFilmImageModel?.name || filmImageModel} · ${selectedFilmVideoModel?.name || filmVideoModel}`
                               : !musicWritingReady
                                 ? 'Configure the selected planning LLM in Settings → Services before generating.'
                                 : !directVideoMasterReady
                                   ? 'Define the direct-video master prompt before generating.'
+                                  : !directReferenceVideoReady
+                                    ? directReferenceVideoSupported
+                                      ? 'Approve at least one image in the visual reference library.'
+                                      : 'Direct references require a MiniMax H3 video model.'
                                   : 'Configure MiniMax in Settings → Services before using MiniMax Image.'}
                           </p>
                         </div>
@@ -4708,7 +5635,7 @@ export function StoryLabPanel() {
                         <div className="grid gap-2 sm:grid-cols-2">
                           <button
                             className={`${button} ${completeGenerationButton} w-full`}
-                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady}
+                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady || !directReferenceVideoReady}
                             onClick={() => void stageMusicVideo(true)}
                           >
                             {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
@@ -4716,7 +5643,7 @@ export function StoryLabPanel() {
                           </button>
                           <button
                             className={`${button} w-full`}
-                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady}
+                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady || !directReferenceVideoReady}
                             onClick={() => void stageMusicVideo(false)}
                           >
                             <ChevronRight size={13} /> Open {musicProductionMode === 'trailer' ? 'trailer' : 'music video'} in Director
@@ -4725,6 +5652,8 @@ export function StoryLabPanel() {
                         <p className="text-[9px] text-text-muted">
                           {directMusicVideo
                             ? 'The selected song, structured lyrics, direct-video master prompt and pacing are saved in Adaptation history. Images remain in the Story library but are not sent to this production.'
+                            : directReferenceVideo
+                              ? 'The selected song, structured lyrics, approved custom references and pacing are saved in Adaptation history. H3 Ref2VA receives them directly without generating start images.'
                             : 'The selected song, structured lyrics, focus character/world, approved images and pacing are saved in Adaptation history and can be reopened independently.'}
                         </p>
                       </>
@@ -4912,6 +5841,8 @@ export function StoryLabPanel() {
         onChange={event => void analyzeSmartAssets(Array.from(event.target.files || []))} />
       <input ref={lyriaUploadRef} type="file" accept="audio/*" className="hidden"
         onChange={event => void uploadLyriaResult(event.target.files?.[0])} />
+      <input ref={customMusicUploadRef} type="file" accept=".mp3,audio/mpeg,audio/*" className="hidden"
+        onChange={event => void uploadCustomMusic(event.target.files?.[0])} />
     </div>
   )
 }
@@ -4951,7 +5882,8 @@ function CompactVideoWorkspace({
   const castReady = project.characters.length > 0 && project.characters.every(character =>
     character.approval === 'approved'
     && (!requiresVisualIdentities
-      || Boolean(character.primaryReferenceAssetId && project.assets[character.primaryReferenceAssetId])))
+      || Boolean(character.primaryReferenceAssetId
+        && project.assets[character.primaryReferenceAssetId]?.approval === 'approved')))
   const sequenceReady = project.beats.length >= 3 && project.beats.every(beat =>
     Boolean(beat.summary.trim() && beat.conflict.trim() && beat.turn.trim()))
   const status = (ready: boolean, approved: boolean) => (
@@ -5133,7 +6065,10 @@ function CompactSubjectEditor({
       ? { ...item, approval: 'draft', ...change } : item)
     return current
   })
-  const hasPrimary = Boolean(character.primaryReferenceAssetId && project.assets[character.primaryReferenceAssetId])
+  const primaryAsset = character.primaryReferenceAssetId
+    ? project.assets[character.primaryReferenceAssetId]
+    : undefined
+  const hasPrimary = primaryAsset?.approval === 'approved'
   const canApprove = !requiresVisualIdentity || hasPrimary
   return (
     <div id={`story-review-character-${character.id}`} className="scroll-mt-4 rounded-lg border border-border bg-bg-tertiary/35 p-2.5 space-y-2.5">
@@ -5142,7 +6077,7 @@ function CompactSubjectEditor({
           <p className="truncate text-xs font-semibold text-text-primary">{character.name || 'Sin nombre'}</p>
           <p className={`text-[9px] ${hasPrimary || !requiresVisualIdentity ? 'text-emerald-300' : 'text-amber-300'}`}>
             {requiresVisualIdentity
-              ? hasPrimary ? 'Identidad principal seleccionada' : 'Falta una imagen de identidad principal'
+              ? hasPrimary ? 'Identidad principal aprobada' : 'Falta aprobar una imagen de identidad principal'
               : 'Vídeo directo · la descripción es suficiente'}
           </p>
         </div>
@@ -5181,7 +6116,7 @@ function CompactSubjectEditor({
         <button className={`${button} ${character.approval === 'approved' ? 'border-emerald-500 text-emerald-400' : ''}`}
           disabled={!canApprove}
           title={requiresVisualIdentity
-            ? hasPrimary ? 'Confirmar esta identidad para Director' : 'Selecciona primero una imagen principal'
+            ? hasPrimary ? 'Confirmar esta identidad para Director' : 'Selecciona y aprueba primero una imagen principal en Imágenes'
             : 'Confirmar la descripción para el modo de vídeo directo'}
           onClick={() => set({ approval: character.approval === 'approved' ? 'draft' : 'approved' })}>
           <Check size={13} /> {requiresVisualIdentity

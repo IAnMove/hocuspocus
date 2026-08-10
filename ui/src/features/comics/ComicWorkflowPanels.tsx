@@ -169,6 +169,7 @@ export function ComicWritingProviderFields({
   disabled?: boolean
 }) {
   const services = useStore(state => state.servicesConfig)
+  const profile = useStore(state => state.productionProfile)
   const provider = value.writingProvider || 'maestro'
   const external = provider !== 'maestro'
   const apiKeySet = provider === 'deepseek'
@@ -198,6 +199,21 @@ export function ComicWritingProviderFields({
   }
   return (
     <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5">
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className={`${button} ${value.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`} disabled={disabled}
+          onClick={() => {
+            onChange('useGlobalProfile', true)
+            onChange('writingProvider', profile.text.provider === 'minimax' ? 'minimax' : 'maestro')
+            onChange('writingModel', profile.text.model)
+            onChange('writingBaseUrl', profile.text.provider === 'minimax' ? 'https://api.minimax.io/v1' : '')
+            onChange('provider', profile.image.provider === 'minimax' ? 'minimax' : 'maestro')
+            onChange('imageModel', profile.image.model)
+          }}>Use global profile</button>
+        <button type="button" className={`${button} ${!value.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`} disabled={disabled}
+          onClick={() => onChange('useGlobalProfile', false)}>Override in this comic</button>
+      </div>
+      {value.useGlobalProfile && <p className="text-[9px] text-emerald-400">Global: {profile.text.model} · {profile.image.model}</p>}
+      <fieldset disabled={disabled || value.useGlobalProfile} className="space-y-2 disabled:opacity-50">
       <label className="block text-[10px] text-text-muted">Writing LLM
         <select
           className={`${input} mt-1`}
@@ -246,6 +262,7 @@ export function ComicWritingProviderFields({
             : `Add your ${provider === 'deepseek' ? 'DeepSeek' : provider === 'minimax' ? 'MiniMax' : provider === 'openai' ? 'OpenAI' : 'custom compatible'} credential in Settings → Services.`}
         </p>
       </>}
+      </fieldset>
       {!external && <p className="text-[9px] text-text-muted">Uses Maestro's configured internal LLM. External selection never changes the global provider.</p>}
     </div>
   )

@@ -31,6 +31,7 @@ _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "launch.py"
 _LLM_SERVICE_PATH = _APP / "services" / "llm_service.py"
 _DEFAULT_PATH = _APP / "defaults" / "minimax_h3.json"
+_LEGACY_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_legacy.json"
 _REF2VA_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va.json"
 _FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_full.json"
 _REF2VA_FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va_full.json"
@@ -250,12 +251,42 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("0543966fbdce5ba05709a8f2031c94bdba629b4a", model["URLs"][0])
         self.assertNotIn("minimax_h3_text_encoder", defaults)
 
+    def test_legacy_quality_default_uses_the_fixed_convrot_sidecar(self):
+        defaults = json.loads(_LEGACY_DEFAULT_PATH.read_text(encoding="utf-8"))
+        model = defaults["model"]
+        self.assertEqual(model["architecture"], "minimax_h3_legacy")
+        self.assertEqual(defaults["resolution"], "960x544")
+        self.assertEqual(defaults["num_inference_steps"], 20)
+        self.assertFalse(defaults["h3_allow_low_memory_fallback"])
+        self.assertEqual(defaults["activated_loras"], [])
+        self.assertIn("pruned_int8_convrot", model["URLs"][0])
+
+        model_def = self.handler.query_model_def("minimax_h3_legacy", model)
+        self.assertTrue(model_def["minimax_h3_legacy_sidecar"])
+        self.assertEqual(model_def["max_image_refs"], 9)
+        self.assertEqual(model_def["director_audio_input_mode"], "timeline_remux")
+        self.assertFalse(model_def["sliding_window"])
+        self.assertFalse(model_def["first_block_cache"])
+        self.assertEqual(model_def["minimax_h3_text_encoder_variants"], {})
+        with self.assertRaisesRegex(RuntimeError, "isolated ComfyUI"):
+            self.handler.load_model(
+                "unused.safetensors",
+                base_model_type="minimax_h3_legacy",
+                model_def=model_def,
+            )
+
+        launch = _read(_LAUNCH_PATH)
+        self.assertIn("minimax_h3_service.generate(", launch)
+        self.assertIn("def _is_legacy_h3_model", launch)
+        self.assertIn("_release_legacy_h3_when_queue_allows", launch)
+
     def test_handler_exposes_base_fl2va_contract(self):
         model_def = self.handler.query_model_def("minimax_h3", {})
         self.assertEqual(
             self.handler.query_supported_types(),
             [
                 "minimax_h3",
+                "minimax_h3_legacy",
                 "minimax_h3_full",
                 "minimax_h3_ref2va",
                 "minimax_h3_ref2va_full",
@@ -356,6 +387,8 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_all_h3_variants_expose_native_portrait_and_auto_aspect(self):
         for model_type in self.handler.query_supported_types():
+            if model_type == "minimax_h3_legacy":
+                continue
             model_def = self.handler.query_model_def(model_type, {})
             self.assertTrue(model_def["supports_auto_aspect"])
             self.assertEqual(
@@ -751,6 +784,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
     def test_h3_selector_names_and_audio_badges_are_user_facing(self):
         expected_names = {
             _DEFAULT_PATH: "H3 First / Last — Pruned",
+            _LEGACY_DEFAULT_PATH: "H3 Legacy Quality — ConvRot",
             _FULL_DEFAULT_PATH: "H3 First / Last — Full",
             _REF2VA_DEFAULT_PATH: "H3 Omni — Pruned",
             _REF2VA_FULL_DEFAULT_PATH: "H3 Omni — Full",
@@ -851,13 +885,15 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         store = _read(_STORE_PATH)
         default_block = store.split("const DEFAULT_ENABLED_MODELS = new Set([", 1)[1].split("])\n", 1)[0]
         self.assertIn("'minimax_h3'", default_block)
+        self.assertIn("'minimax_h3_legacy'", default_block)
         self.assertIn("'minimax_h3_full'", default_block)
         self.assertIn("'minimax_h3_ref2va'", default_block)
         self.assertIn("'minimax_h3_ref2va_full'", default_block)
-        self.assertIn("const DEFAULTS_VERSION = 8", store)
+        self.assertIn("const DEFAULTS_VERSION = 9", store)
         self.assertIn("6: ['minimax_h3']", store)
         self.assertIn("7: ['minimax_h3_ref2va']", store)
         self.assertIn("8: ['minimax_h3_full', 'minimax_h3_ref2va_full']", store)
+        self.assertIn("9: ['minimax_h3_legacy']", store)
         self.assertIn('md.get("returns_audio", False)', _read(_LAUNCH_PATH))
 
     def test_h3_prompt_guides_cover_native_audio_and_director(self):
@@ -1106,6 +1142,14 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         legacy = {"latent_size": 4, "frames_steps": 4}
         self.assertEqual(align(120, legacy), 117)
         self.assertEqual(align(120, legacy, for_generation=True), 121)
+
+        store = _read(_STORE_PATH)
+        submit_block = store[store.index("let requestedFrames = Math.max("):]
+        submit_block = submit_block[:submit_block.index("params.video_length = requestedFrames")]
+        self.assertIn(
+            "requestedFrames = alignFrameCount(requestedFrames, state.modelOptions)",
+            submit_block,
+        )
 
 
 class TestMiniMaxH3RuntimeSource(unittest.TestCase):

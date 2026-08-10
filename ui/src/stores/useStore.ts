@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan } from '../types'
+import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { splitPromptSchedule } from '../lib/promptScheduler'
+import { DEFAULT_PRODUCTION_PROFILE, resolveSupportedVideoFormat } from '../lib/productionProfile'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -64,6 +65,60 @@ function _downloadTimestampMs(value: number | null | undefined): number | null {
   const timestamp = Number(value)
   if (!Number.isFinite(timestamp) || timestamp <= 0) return null
   return timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp
+}
+
+function _jobTimingPatch(status: api.ApiJobStatus): Partial<GenerationJob> {
+  const patch: Partial<GenerationJob> = {}
+  if (status.created_at !== undefined) {
+    patch.createdAt = _downloadTimestampMs(status.created_at) ?? undefined
+  }
+  if (status.started_at !== undefined) {
+    patch.startedAt = _downloadTimestampMs(status.started_at) ?? undefined
+  }
+  if (status.finished_at !== undefined) {
+    patch.finishedAt = _downloadTimestampMs(status.finished_at) ?? undefined
+  }
+  if (status.queue_position !== undefined) {
+    patch.queuePosition = status.queue_position
+  }
+  if (status.generation_details) {
+    patch.generationDetails = status.generation_details
+  }
+  return patch
+}
+
+function _generationDetailsFromParams(
+  params: Record<string, unknown>,
+  models: ModelDef[],
+): GenerationDetails | undefined {
+  const modelType = typeof params.model_type === 'string' ? params.model_type.trim() : ''
+  if (!modelType) return undefined
+  const details: GenerationDetails = {
+    model_type: modelType,
+    model_name: models.find(model => model.model_type === modelType)?.name || modelType,
+  }
+  const copy = (
+    source: string,
+    target: keyof GenerationDetails,
+  ) => {
+    const value = params[source]
+    if (value !== undefined && value !== null && value !== '') {
+      Object.assign(details, { [target]: value })
+    }
+  }
+  copy('generation_mode', 'generation_mode')
+  copy('resolution', 'resolution')
+  copy('seed', 'seed')
+  copy('num_inference_steps', 'steps')
+  copy('guidance_scale', 'guidance')
+  copy('video_length', 'frames')
+  copy('duration_seconds', 'duration_seconds')
+  copy('repeat_generation', 'repeat')
+  copy('h3_model_profile', 'profile')
+  copy('flow_shift', 'flow_shift')
+  copy('h3_audio_shift', 'audio_shift')
+  copy('minimax_h3_turbo_mode', 'turbo')
+  return details
 }
 
 function _downloadNeedsPolling(download: CivitAIDownload, now: number): boolean {
@@ -173,6 +228,28 @@ interface PersistedModeSettings {
    *  `_loadSettings` for use in mid-session reconciliation when the fresh
    *  lora map arrives, so we can rewrite filenames that changed since save. */
   _loraFilenameSnapshot?: Record<string, string>
+}
+
+let _modelSelectionSaveTask: Promise<void> = Promise.resolve()
+const _globalModelSelectionModes = new Set<GenerationMode>()
+
+function _persistModelSelections(
+  selections: Partial<Record<GenerationMode, string>>,
+) {
+  const payload = Object.fromEntries(
+    Object.entries(selections).filter(([mode, modelType]) => (
+      Boolean(modelType) && !_globalModelSelectionModes.has(mode as GenerationMode)
+    )),
+  ) as Record<string, string>
+  _modelSelectionSaveTask = _modelSelectionSaveTask
+    .catch(() => { /* a later selection should still be persisted */ })
+    .then(async () => {
+      try {
+        await api.updateModelSelections(payload)
+      } catch (error) {
+        console.warn('Failed to persist model selections:', error)
+      }
+    })
 }
 
 /** Build a lora_id-keyed copy of a single LoraModeBlob using filename → lora_id.
@@ -340,6 +417,9 @@ function _saveSettings(
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedState))
     }
   } catch { /* quota exceeded or private browsing */ }
+  // localStorage is tied to the WebUI origin. Pinokio may assign another
+  // port on the next launch, so mirror model choices into server config.
+  _persistModelSelections(state.selectedModelPerMode)
 }
 
 function _loadSettings(): PersistedModeSettings | null {
@@ -653,6 +733,7 @@ const DEFAULT_ENABLED_MODELS = new Set([
   // MiniMax H3 Base: text, first/last-frame video, and native stereo audio.
   'minimax_h3',
   'minimax_h3_full',
+  'minimax_h3_legacy',
   // MiniMax H3 Ref2VA: ordered image, video, and audio references.
   'minimax_h3_ref2va',
   'minimax_h3_ref2va_full',
@@ -683,7 +764,7 @@ const DEFAULT_ENABLED_MODELS = new Set([
  * a user who then disables them stays disabled forever. (This is
  * deliberately narrower than auto-enabling every unknown model — only
  * the curated list's own additions are pushed.) */
-const DEFAULTS_VERSION = 8
+const DEFAULTS_VERSION = 9
 const DEFAULTS_ADDED_IN: Record<number, string[]> = {
   // v1.2.0: the ACE-Step XL SFT pair; LM_4B becomes the music default.
   2: ['ace_step_v1_5_xl_sft', 'ace_step_v1_5_xl_sft_lm_4b'],
@@ -699,6 +780,8 @@ const DEFAULTS_ADDED_IN: Record<number, string[]> = {
   7: ['minimax_h3_ref2va'],
   // Full 33B H3 variants alongside the recommended Pruned 20B entries.
   8: ['minimax_h3_full', 'minimax_h3_ref2va_full'],
+  // Proven previous-Maestro INT8 ConvRot quality route.
+  9: ['minimax_h3_legacy'],
 }
 const DEFAULTS_VERSION_KEY = 'maestro_defaults_version'
 
@@ -717,6 +800,7 @@ let _initializedMatureModels = new Set<string>()
 let _modelVisibilityHydrated = false
 let _modelVisibilityDefaultsVersion = 1
 let _modelVisibilitySaveTask: Promise<void> = Promise.resolve()
+let _modelSelectionsHydrated = false
 
 function _saveEnabledModels(models: Set<string>) {
   try {
@@ -938,6 +1022,7 @@ export interface ForegroundActivity {
     totalTokens?: number
     calls?: number
   }
+  generationDetails?: GenerationDetails
   error?: string | null
   startedAt?: number
   updatedAt?: number
@@ -1556,6 +1641,13 @@ interface AppState {
   loadServicesConfig: () => Promise<void>
   updateServicesConfig: (partial: Partial<ServicesConfig>) => Promise<void>
 
+  // Credential-free defaults shared by Studio and every Lab.
+  productionProfile: ProductionProfile
+  productionProfileConfigured: boolean
+  productionProfileLoading: boolean
+  loadProductionProfile: () => Promise<void>
+  updateProductionProfile: (profile: ProductionProfile) => Promise<void>
+
   // LLM state
   llmStatus: LlmStatus | null
   llmLoading: boolean
@@ -1745,13 +1837,20 @@ interface AppState {
   pipelinePolling: boolean
   startDirectorPipeline: (useCurrentPlans?: boolean) => Promise<void>
   continuePipeline: (updates?: { clip_plans?: Array<{ video_prompt: string; image_prompt: string }> }) => Promise<void>
-  stopPipeline: () => Promise<void>
+  stopPipeline: (pipelineId?: string) => Promise<void>
   pollPipelineStatus: () => void
 }
 
 function beginAppActivity(
   get: () => AppState,
-  options: { kind: string; title: string; phase: string; message: string; total?: number },
+  options: {
+    kind: string
+    title: string
+    phase: string
+    message: string
+    total?: number
+    generationDetails?: GenerationDetails
+  },
 ) {
   const id = `${options.kind}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
   const report = (
@@ -1759,7 +1858,7 @@ function beginAppActivity(
     message: string,
     current = 0,
     total = options.total || 0,
-    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailCurrent' | 'detailTotal' | 'tokenUsage'>>,
+    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailCurrent' | 'detailTotal' | 'tokenUsage' | 'generationDetails'>>,
   ) => get().upsertActivity({
     id,
     kind: options.kind,
@@ -1771,7 +1870,9 @@ function beginAppActivity(
     total,
     ...details,
   })
-  report(options.phase, options.message, 0, options.total || 0)
+  report(options.phase, options.message, 0, options.total || 0, {
+    generationDetails: options.generationDetails,
+  })
   return {
     id,
     report,
@@ -3385,11 +3486,18 @@ export const useStore = create<AppState>((set, get) => ({
       // download state, so re-adding them from the capabilities endpoint
       // would duplicate every variant in the selectors.
       const shouldHydrateVisibility = !_modelVisibilityHydrated
-      const [data, visibility] = await Promise.all([
+      const shouldHydrateSelections = !_modelSelectionsHydrated
+      const [data, visibility, durableSelections] = await Promise.all([
         api.fetchModels(),
         shouldHydrateVisibility
           ? api.fetchModelVisibility().catch(error => {
               console.warn('Failed to load model visibility:', error)
+              return null
+            })
+          : Promise.resolve(null),
+        shouldHydrateSelections
+          ? api.fetchModelSelections().catch(error => {
+              console.warn('Failed to load model selections:', error)
               return null
             })
           : Promise.resolve(null),
@@ -3498,6 +3606,17 @@ export const useStore = create<AppState>((set, get) => ({
       // them here on refresh; stale text/seeds/LoRAs re-appearing after
       // a reload felt wrong, so a refresh is a clean slate again.
       const saved = _loadSettings()
+      const persistedSelections: Partial<Record<GenerationMode, string>> = {
+        ...(saved?.selectedModelPerMode || {}),
+        ...((durableSelections?.selected_models || {}) as Partial<Record<GenerationMode, string>>),
+      }
+      if (durableSelections?.sources) {
+        Object.entries(durableSelections.sources).forEach(([mode, source]) => {
+          if (source === 'global') _globalModelSelectionModes.add(mode as GenerationMode)
+          else _globalModelSelectionModes.delete(mode as GenerationMode)
+        })
+      }
+      if (shouldHydrateSelections) _modelSelectionsHydrated = true
       // v2 migration: users whose saved audio model IS the old music
       // default follow it to the new default (see NEW_MUSIC_DEFAULT).
       // (The old-model-params concern the migration used to handle is
@@ -3506,6 +3625,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (migrateMusicDefault && saved?.selectedModelPerMode?.audio === OLD_MUSIC_DEFAULT
           && models.some(m => m.model_type === NEW_MUSIC_DEFAULT)) {
         saved.selectedModelPerMode = { ...saved.selectedModelPerMode, audio: NEW_MUSIC_DEFAULT }
+        persistedSelections.audio = NEW_MUSIC_DEFAULT
       }
       let mode = get().generationMode
       let initialModelType: string
@@ -3514,7 +3634,7 @@ export const useStore = create<AppState>((set, get) => ({
         // Restore saved generation mode
         mode = saved.generationMode || mode
         // Validate saved model for this mode still exists
-        const savedModel = saved.selectedModelPerMode?.[mode]
+        const savedModel = persistedSelections[mode]
         initialModelType = savedModel && models.some(m => m.model_type === savedModel)
           ? savedModel
           : getDefaultModelForMode(mode, families, models)
@@ -3536,7 +3656,7 @@ export const useStore = create<AppState>((set, get) => ({
           // Seed the VALIDATED boot model into the map (the saved entry
           // may point at a removed model) — _applyModelDefaults' race
           // guard compares against selectedModelPerMode[mode].
-          selectedModelPerMode: { ...(saved.selectedModelPerMode || {}), [mode]: initialModelType },
+          selectedModelPerMode: { ...persistedSelections, [mode]: initialModelType },
           // Mode-shaping mirrored from setGenerationMode: booting into
           // image mode needs image_mode 1 + Auto resolution. These used
           // to arrive via the restored params snapshot.
@@ -3548,12 +3668,15 @@ export const useStore = create<AppState>((set, get) => ({
           },
         }))
       } else {
-        initialModelType = getDefaultModelForMode(mode, families, models)
+        const durableModel = persistedSelections[mode]
+        initialModelType = durableModel && models.some(m => m.model_type === durableModel)
+          ? durableModel
+          : getDefaultModelForMode(mode, families, models)
         set(s => ({
           families,
           models,
           modelsLoaded: true,
-          selectedModelPerMode: { [mode]: initialModelType },
+          selectedModelPerMode: { ...persistedSelections, [mode]: initialModelType },
           ...(mode === 'image' ? { resolutionPreset: 'auto' as ResolutionPreset, aspectRatio: 'auto' as AspectRatio } : {}),
           params: {
             ...s.params,
@@ -3569,10 +3692,11 @@ export const useStore = create<AppState>((set, get) => ({
       // without it the sliders would show INITIAL_PARAMS' generic values
       // instead of the model's.
       const mt = initialModelType || get().params.model_type
+      _persistModelSelections(get().selectedModelPerMode)
       if (mt) {
         // Restore saved LoRA state for this mode if the model matches
         const savedLora = saved?.savedLoraPerMode?.[mode]
-        const savedModelForMode = saved?.selectedModelPerMode?.[mode]
+        const savedModelForMode = persistedSelections[mode]
         if (savedLora && savedModelForMode === mt) {
           set(s => ({
             params: {
@@ -3810,7 +3934,7 @@ export const useStore = create<AppState>((set, get) => ({
         : await api.submitToolRevoice({ video_path: source, voice_ref_paths: refPaths, mode: s.toolsRevoiceMode, workspace: s.activeWorkspace })
 
       set(st => ({
-        jobs: st.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'running', message: tool === 'upscale' ? 'Upscaling...' : 'Replacing voice...' } : j),
+        jobs: st.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'queued', message: 'Queued...' } : j),
       }))
 
       const pollInterval = setInterval(async () => {
@@ -3823,6 +3947,7 @@ export const useStore = create<AppState>((set, get) => ({
               step: status.step, totalSteps: status.total_steps,
               phase: status.phase, message: status.message,
               outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
+              ..._jobTimingPatch(status),
             }),
           }))
           if (status.status === 'running') get().refreshOutputs()
@@ -4224,7 +4349,7 @@ export const useStore = create<AppState>((set, get) => ({
         })
 
         set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'running', message: 'Blending...' } : j),
+          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'queued', message: 'Queued...' } : j),
         }))
 
         const pollInterval = setInterval(async () => {
@@ -4237,6 +4362,7 @@ export const useStore = create<AppState>((set, get) => ({
                 step: status.step, totalSteps: status.total_steps,
                 phase: status.phase, message: status.message,
                 outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
+                ..._jobTimingPatch(status),
               }),
             }))
             if (status.status === 'running') get().refreshOutputs()
@@ -4375,7 +4501,7 @@ export const useStore = create<AppState>((set, get) => ({
         })
 
         set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'running', message: 'Outpainting...' } : j),
+          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'queued', message: 'Queued...' } : j),
         }))
 
         const pollInterval = setInterval(async () => {
@@ -4388,6 +4514,7 @@ export const useStore = create<AppState>((set, get) => ({
                 step: status.step, totalSteps: status.total_steps,
                 phase: status.phase, message: status.message,
                 outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
+                ..._jobTimingPatch(status),
               }),
             }))
             if (status.status === 'running') get().refreshOutputs()
@@ -4474,7 +4601,7 @@ export const useStore = create<AppState>((set, get) => ({
 
         set(s => ({
           jobs: s.jobs.map(j => j === newJob
-            ? { ...j, id: result.job_id, status: 'running', message: 'Queued...' }
+            ? { ...j, id: result.job_id, status: 'queued', message: 'Queued...' }
             : j),
         }))
 
@@ -4497,6 +4624,7 @@ export const useStore = create<AppState>((set, get) => ({
                 outputFiles: status.output_files,
                 error: status.error,
                 oomInfo: status.oom_info ?? null,
+                ..._jobTimingPatch(status),
               }),
             }))
             if (status.status === 'running') get().refreshOutputs()
@@ -4599,7 +4727,7 @@ export const useStore = create<AppState>((set, get) => ({
         })
 
         set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'running', message: 'Queued...' } : j),
+          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'queued', message: 'Queued...' } : j),
         }))
 
         const pollInterval = setInterval(async () => {
@@ -4612,6 +4740,7 @@ export const useStore = create<AppState>((set, get) => ({
                 step: status.step, totalSteps: status.total_steps,
                 phase: status.phase, message: status.message,
                 outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
+                ..._jobTimingPatch(status),
               }),
             }))
             if (status.status === 'running') get().refreshOutputs()
@@ -4734,7 +4863,7 @@ export const useStore = create<AppState>((set, get) => ({
         }
 
         set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'running', message: 'Queued...' } : j),
+          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'queued', message: 'Queued...' } : j),
         }))
 
         // Standard job polling (same as regular generation)
@@ -4748,6 +4877,7 @@ export const useStore = create<AppState>((set, get) => ({
                 step: status.step, totalSteps: status.total_steps,
                 phase: status.phase, message: status.message,
                 outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
+                ..._jobTimingPatch(status),
               }),
             }))
             if (status.status === 'running') get().refreshOutputs()
@@ -4804,6 +4934,7 @@ export const useStore = create<AppState>((set, get) => ({
         minimumFrames,
         Math.round(state.durationSeconds * fps),
       )
+      requestedFrames = alignFrameCount(requestedFrames, state.modelOptions)
       if (!supportsSlidingWindows && maximumFrames != null) {
         requestedFrames = Math.min(maximumFrames, requestedFrames)
       } else if (
@@ -4934,7 +5065,10 @@ export const useStore = create<AppState>((set, get) => ({
       || (Array.isArray(params.h3_ref_audios) && params.h3_ref_audios.some(Boolean))
     )
     if (
-      params.model_type === 'minimax_h3'
+      (
+        params.model_type === 'minimax_h3'
+        || params.model_type === 'minimax_h3_legacy'
+      )
       && params.h3_reference_mode === 'references'
       && !hasH3References
     ) {
@@ -5375,7 +5509,10 @@ export const useStore = create<AppState>((set, get) => ({
     // Image references (from ImageRefSection). H3 FL2VA intentionally sends
     // only its first/last frame; omni references remain visible in the UI but
     // are submitted only after the user explicitly chooses Ref2VA.
-    const h3FirstFrameMode = params.model_type === 'minimax_h3'
+    const h3FirstFrameMode = (
+      params.model_type === 'minimax_h3'
+      || params.model_type === 'minimax_h3_legacy'
+    )
       && (params.h3_reference_mode ?? 'first_frame') === 'first_frame'
     if (!h3FirstFrameMode && state.imageRefType && state.imageRefs.length > 0) {
       const refPaths: string[] = []
@@ -5514,6 +5651,7 @@ export const useStore = create<AppState>((set, get) => ({
       error: null,
       createdAt: Date.now(),
       oomInfo: null,
+      generationDetails: _generationDetailsFromParams(params, state.models),
     }
 
     set(s => ({
@@ -5540,7 +5678,7 @@ export const useStore = create<AppState>((set, get) => ({
         jobs: s.jobs.map(j => j === newJob ? {
           ...j,
           id: job_id,
-          status: 'running',
+          status: 'queued',
           message: 'Queued...',
           h3WindowPlan: h3_window_plan ?? null,
         } : j),
@@ -5570,6 +5708,7 @@ export const useStore = create<AppState>((set, get) => ({
               error: status.error,
               oomInfo: status.oom_info ?? null,
               taskTimings: status.task_timings ?? [],
+              ..._jobTimingPatch(status),
             }),
           }))
 
@@ -5616,21 +5755,35 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   stopGeneration: (jobId) => {
-    if (jobId) {
-      // Cancel specific job on backend, then remove from UI
-      api.cancelJob(jobId).catch(e => console.error('Cancel failed:', e))
-      set(s => {
-        const remaining = s.jobs.filter(j => j.id !== jobId)
-        return { jobs: remaining, isGenerating: remaining.length > 0 }
+    const targetIds = jobId
+      ? [jobId]
+      : get().jobs
+          .filter(j => j.id && (j.status === 'running' || j.status === 'queued'))
+          .map(j => j.id)
+    if (targetIds.length === 0) return
+
+    // Keep the job visible while the worker unwinds. Removing it immediately
+    // made a still-running model download look as if Cancel had done nothing
+    // and hid backend errors. Existing status polling will publish the final
+    // cancelled state once the endpoint acknowledges the request.
+    const targets = new Set(targetIds)
+    set(s => ({
+      jobs: s.jobs.map(j => targets.has(j.id)
+        ? { ...j, message: 'Cancelling…', phase: 'Cancelling' }
+        : j),
+      isGenerating: s.jobs.some(j => j.status === 'running' || j.status === 'queued'),
+    }))
+    targetIds.forEach(id => {
+      void api.cancelJob(id).catch(e => {
+        const message = e instanceof Error ? e.message : 'Cancel failed'
+        console.error('Cancel failed:', e)
+        set(s => ({
+          jobs: s.jobs.map(j => j.id === id
+            ? { ...j, message: `Cancel failed: ${message}`, phase: j.phase }
+            : j),
+        }))
       })
-    } else {
-      // Cancel all jobs
-      const jobs = get().jobs
-      jobs.forEach(j => {
-        if (j.id) api.cancelJob(j.id).catch(() => {})
-      })
-      set({ jobs: [], isGenerating: false })
-    }
+    })
   },
 
   // UI-only removal of a job tile (e.g. dismissing a failed/cancelled
@@ -5664,9 +5817,13 @@ export const useStore = create<AppState>((set, get) => ({
             outputFiles: j.output_files,
             error: j.error,
             createdAt: j.created_at < 1_000_000_000_000 ? j.created_at * 1000 : j.created_at,
+            startedAt: _downloadTimestampMs(j.started_at) ?? undefined,
+            finishedAt: _downloadTimestampMs(j.finished_at) ?? undefined,
+            queuePosition: j.queue_position,
             oomInfo: (j as { oom_info?: import('../types').OomInfo | null }).oom_info ?? null,
             taskTimings: j.task_timings ?? [],
             h3WindowPlan: j.h3_window_plan ?? null,
+            generationDetails: j.generation_details,
           }))
         if (newJobs.length > 0) {
           set(s => ({
@@ -5691,6 +5848,7 @@ export const useStore = create<AppState>((set, get) => ({
                     error: status.error,
                     oomInfo: status.oom_info ?? null,
                     taskTimings: status.task_timings ?? [],
+                    ..._jobTimingPatch(status),
                   }),
                 }))
                 if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
@@ -6209,9 +6367,9 @@ export const useStore = create<AppState>((set, get) => ({
       // model's values — last requested wins.
       if (seq !== _modelOptionsSeq) return
       const activeState = get()
-      const { durationSeconds, slidingWindowSeconds, aspectRatio } = activeState
+      const { durationSeconds, slidingWindowSeconds } = activeState
       const fps = options.fps || 16
-      const isH3 = modelType === 'minimax_h3' || modelType === 'minimax_h3_ref2va'
+      const isH3 = modelType.startsWith('minimax_h3')
       // Set overlap from model defaults
       const swDefaults = (options as unknown as Record<string, unknown>).sliding_window_defaults as Record<string, number> | undefined
       const overlapDefault = swDefaults?.overlap_default ?? 5
@@ -6293,6 +6451,28 @@ export const useStore = create<AppState>((set, get) => ({
           nextAspectRatio,
         )
       }
+      if (isH3) {
+        const requested = activeState.productionProfile.video.model === modelType
+          ? activeState.productionProfile.video.settings
+          : { resolution: '540p' as ResolutionPreset, aspectRatio: nextAspectRatio }
+        const format = resolveSupportedVideoFormat(
+          options,
+          requested.resolution,
+          requested.aspectRatio,
+        )
+        nextResolutionPreset = format.resolution
+        nextAspectRatio = format.aspectRatio
+        paramUpdates.resolution = resolveResolution(options, nextResolutionPreset, nextAspectRatio)
+        if (modelType === 'minimax_h3_legacy') {
+          paramUpdates.num_inference_steps = 20
+          paramUpdates.flow_shift = 12
+          paramUpdates.h3_audio_shift = 3
+          paramUpdates.minimax_h3_turbo_mode = false
+          paramUpdates.activated_loras = []
+          paramUpdates.loras_multipliers = ''
+          paramUpdates.h3_model_profile = 'quality'
+        }
+      }
       // Apply model defaults for inference steps and guidance scale
       if (options.default_num_inference_steps != null) {
         paramUpdates.num_inference_steps = options.default_num_inference_steps
@@ -6355,10 +6535,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
       set(s => ({
         ...ttsDefaults,
-        ...(isH3 ? {
-          durationSeconds: 124 / fps,
-          resolutionPreset: '540p' as ResolutionPreset,
-        } : {}),
+        ...(isH3 ? { durationSeconds: 124 / fps } : {}),
         modelOptions: options,
         modelOptionsLoading: false,
         durationSeconds: (
@@ -6374,7 +6551,6 @@ export const useStore = create<AppState>((set, get) => ({
         params: {
           ...s.params,
           ...paramUpdates,
-          ...(isH3 ? { resolution: resolutionMap['540p'][aspectRatio] } : {}),
         },
       }))
     } catch {
@@ -6444,6 +6620,63 @@ export const useStore = create<AppState>((set, get) => ({
   // Services config
   servicesConfig: null,
   servicesConfigLoading: false,
+  productionProfile: DEFAULT_PRODUCTION_PROFILE,
+  productionProfileConfigured: false,
+  productionProfileLoading: false,
+  loadProductionProfile: async () => {
+    set({ productionProfileLoading: true })
+    try {
+      const result = await api.fetchProductionProfile()
+      set({
+        productionProfile: result.profile,
+        productionProfileConfigured: result.configured,
+        productionProfileLoading: false,
+      })
+    } catch (e) {
+      console.error('Failed to load production profile:', e)
+      set({ productionProfileLoading: false })
+    }
+  },
+  updateProductionProfile: async (profile) => {
+    const previous = get().productionProfile
+    set({ productionProfile: profile, productionProfileLoading: true })
+    try {
+      const result = await api.updateProductionProfile(profile)
+      const imageModel = result.profile.image.provider === 'minimax'
+        ? `minimax:${result.profile.image.model}` : result.profile.image.model
+      _globalModelSelectionModes.add('image')
+      _globalModelSelectionModes.add('video')
+      set(state => ({
+        productionProfile: result.profile,
+        productionProfileConfigured: result.configured,
+        productionProfileLoading: false,
+        selectedModelPerMode: {
+          ...state.selectedModelPerMode,
+          image: imageModel,
+          video: result.profile.video.model,
+        },
+        ...(state.generationMode === 'image' || state.generationMode === 'video' ? {
+          params: {
+            ...state.params,
+            model_type: state.generationMode === 'image'
+              ? imageModel : result.profile.video.model,
+          },
+        } : {}),
+      }))
+      const activeMode = get().generationMode
+      if (activeMode === 'image' || activeMode === 'video') {
+        const activeModel = get().selectedModelPerMode[activeMode]
+        if (activeModel) await get().loadModelOptions(activeModel)
+      }
+      // The global text profile is also the provider used by generic tools.
+      await get().loadServicesConfig()
+      await get().loadLlmModels()
+    } catch (e) {
+      console.error('Failed to update production profile:', e)
+      set({ productionProfile: previous, productionProfileLoading: false })
+      throw e
+    }
+  },
   loadServicesConfig: async () => {
     set({ servicesConfigLoading: true })
     try {
@@ -6956,6 +7189,7 @@ export const useStore = create<AppState>((set, get) => ({
   })),
 
   selectDirectorImageModel: (modelType) => {
+    _globalModelSelectionModes.delete('image')
     set(s => ({
       selectedModelPerMode: { ...s.selectedModelPerMode, image: modelType },
     }))
@@ -6970,6 +7204,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   selectDirectorVideoModel: async (modelType) => {
+    _globalModelSelectionModes.delete('video')
     set(s => ({
       selectedModelPerMode: { ...s.selectedModelPerMode, video: modelType },
       ...(s.generationMode === 'video' ? {
@@ -6977,8 +7212,20 @@ export const useStore = create<AppState>((set, get) => ({
       } : {}),
     }))
     await get().loadModelOptions(modelType)
-    if (modelType === 'minimax_h3') {
-      set({ directorResolution: '540p' as ResolutionPreset })
+    if (modelType.startsWith('minimax_h3')) {
+      const state = get()
+      const request = state.productionProfile.video.model === modelType
+        ? state.productionProfile.video.settings
+        : { resolution: '540p' as ResolutionPreset, aspectRatio: state.directorAspectRatio }
+      const format = resolveSupportedVideoFormat(
+        state.modelOptions,
+        request.resolution,
+        request.aspectRatio,
+      )
+      set({
+        directorResolution: format.resolution,
+        directorAspectRatio: format.aspectRatio,
+      })
     }
     try {
       const defaults = await api.fetchDefaults(modelType)
@@ -7335,6 +7582,10 @@ export const useStore = create<AppState>((set, get) => ({
       phase: 'writing_song',
       message: 'Writing the music prompt and structured lyrics…',
       total: 2,
+      generationDetails: {
+        text_provider: s.productionProfile.text.provider,
+        text_model: s.productionProfile.text.model,
+      },
     })
     let refPath = s.directorReferenceImagePath
     try {
@@ -7383,6 +7634,11 @@ export const useStore = create<AppState>((set, get) => ({
       phase: 'generating_music',
       message: 'Preparing music generation…',
       total: 2,
+      generationDetails: {
+        model_type: `${s.productionProfile.music.provider}:${s.productionProfile.music.model}`,
+        model_name: s.productionProfile.music.model,
+        duration_seconds: s.directorSongDuration,
+      },
     })
     // Upload the reference image so it can inform BOTH the music and visuals.
     let refPath = s.directorReferenceImagePath
@@ -7862,16 +8118,22 @@ export const useStore = create<AppState>((set, get) => ({
     if (!directorClipPlans.length) return
     const needsAnchor = !get().directorReferenceImage && !get().directorReferenceImagePath
     const activityTotal = directorClipPlans.length + (needsAnchor ? 1 : 0)
+    const imageModel = selectedModelPerMode.image || 'flux2_klein_9b'
     const activity = beginAppActivity(get, {
       kind: 'director_images',
       title: 'Music Video Director',
       phase: 'generating_images',
       message: `Preparing ${activityTotal} start images…`,
       total: activityTotal,
+      generationDetails: {
+        model_type: imageModel,
+        model_name: get().models.find(model => model.model_type === imageModel)?.name || imageModel,
+        generation_mode: 'image',
+        repeat: activityTotal,
+      },
     })
 
     // Use saved image-mode settings if available, otherwise fall back to defaults
-    const imageModel = selectedModelPerMode.image || 'flux2_klein_9b'
     const imageOptions = await api.fetchModelOptions(imageModel).catch(() => null)
     const directorRes = resolveResolution(
       imageOptions,
@@ -7883,6 +8145,23 @@ export const useStore = create<AppState>((set, get) => ({
     const imageParams = savedParamsPerMode.image || { num_inference_steps: 4, guidance_scale: 1, resolution: directorRes }
     imageParams.resolution = directorRes
     const imageLora = savedLoraPerMode.image
+    activity.report(
+      'generating_images',
+      `Preparing ${activityTotal} start images…`,
+      0,
+      activityTotal,
+      {
+        generationDetails: {
+          model_type: imageModel,
+          model_name: get().models.find(model => model.model_type === imageModel)?.name || imageModel,
+          generation_mode: 'image',
+          resolution: String(imageParams.resolution || directorRes),
+          steps: Number(imageParams.num_inference_steps || 0) || undefined,
+          guidance: Number(imageParams.guidance_scale || 0) || undefined,
+          repeat: activityTotal,
+        },
+      },
+    )
 
     const buildImgPostProc = (): Record<string, unknown> => {
       const pp: Record<string, unknown> = {}
@@ -8700,6 +8979,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   selectModel: (modelType) => {
     const currentMode = get().generationMode
+    _globalModelSelectionModes.delete(currentMode)
     set(s => ({
       params: {
         ...s.params,
@@ -9916,7 +10196,10 @@ export const useStore = create<AppState>((set, get) => ({
       ? 'first_frame'
       : savedParamsPerMode.video?.h3_reference_mode || 'first_frame'
     const isH3Omni = selectedVideoModel.startsWith('minimax_h3_ref2va')
-      || (selectedVideoModel === 'minimax_h3' && h3ReferenceMode === 'references')
+      || (
+        ['minimax_h3', 'minimax_h3_legacy'].includes(selectedVideoModel)
+        && h3ReferenceMode === 'references'
+      )
     const h3VideoRefPaths = [...state.directorH3VideoRefPaths]
     const h3AudioRefPaths = [...state.directorH3AudioRefPaths]
     if (!directVideo && isH3Omni) {
@@ -10064,6 +10347,7 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Pipeline failed to start'
       set({ directorError: msg })
+      throw e
     }
   },
 
@@ -10078,14 +10362,38 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  stopPipeline: async () => {
-    const pid = get().pipelineId
+  stopPipeline: async (pipelineId) => {
+    const pid = pipelineId || get().pipelineId
     if (!pid) return
+    set(state => ({
+      activeDirectorPipelines: state.activeDirectorPipelines.map(pipeline =>
+        pipeline.id === pid
+          ? {
+              ...pipeline,
+              phase: 'cancelling',
+              progress: {
+                ...pipeline.progress,
+                message: 'Cancelling after the current model step…',
+              },
+            }
+          : pipeline),
+    }))
     try {
       await api.stopPipeline(pid)
-      set({ pipelineId: null, pipelineStatus: null, pipelinePolling: false, directorLoading: false })
+      set(state => ({
+        activeDirectorPipelines: state.activeDirectorPipelines.filter(
+          pipeline => pipeline.id !== pid,
+        ),
+        ...(state.pipelineId === pid ? {
+          pipelineId: null,
+          pipelineStatus: null,
+          pipelinePolling: false,
+          directorLoading: false,
+        } : {}),
+      }))
     } catch (e) {
       console.error('Failed to stop pipeline:', e)
+      throw e
     }
   },
 
