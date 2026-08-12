@@ -249,7 +249,8 @@ def shot_generation_prompt(series: dict, shot: dict, manifest: dict | None = Non
     dialogue = _h3_dialogue_description(series, shot, character_names)
     ambience = " ".join(str(shot.get("audioDirection") or "").split()).strip()
     soundscape = (
-        f"{ambience}. " if ambience else "Natural room tone and synchronized physical action sounds. "
+        f"{ambience}. " if ambience
+        else "Low room tone and the synchronized sounds of visible objects and physical actions. "
     ).rstrip()
 
     alignment = ""
@@ -275,7 +276,9 @@ def shot_generation_prompt(series: dict, shot: dict, manifest: dict | None = Non
                 f"subject_definitions:\n{definitions}\n\n"
                 f"summary:\n{summary}\n\n"
                 f"retention_analysis:\n{retention}\n\n"
-                f"detailed_description:\n[Shot 1] {scene}"
+                f"detailed_description:\n[Shot 1] {scene}\n\n"
+                f"overall_soundscape: {soundscape}\n\n"
+                "non_diegetic_music: N/A"
             )
         return (
             f"subject_definitions:\n{definitions}\n\n"
@@ -287,7 +290,11 @@ def shot_generation_prompt(series: dict, shot: dict, manifest: dict | None = Non
         )
     visual = f"{alignment}integrated_multimodal_description: [Shot 1] {scene}"
     if not dialogue:
-        return visual
+        return (
+            f"{visual}\n\n"
+            f"overall_soundscape: {soundscape}\n\n"
+            "non_diegetic_music: N/A"
+        )
     return (
         f"{visual} {dialogue}\n\n"
         f"overall_soundscape: {soundscape}\n\n"

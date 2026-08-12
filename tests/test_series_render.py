@@ -106,7 +106,7 @@ def test_prompt_preserves_exact_dialogue_and_text_policy():
     assert prompt.endswith("non_diegetic_music: N/A")
 
 
-def test_silent_prompt_omits_audio_fields_instead_of_requesting_speech_controls():
+def test_silent_prompt_uses_official_minimal_audio_fields_without_speech_controls():
     series, shot, _ = inputs()
     shot["dialogueBeats"] = []
     prompt = shot_generation_prompt(series, shot)
@@ -115,8 +115,11 @@ def test_silent_prompt_omits_audio_fields_instead_of_requesting_speech_controls(
     assert "babble" not in prompt
     assert "remains silent with their mouth closed" not in prompt
     assert "No human voices" not in prompt
-    assert "overall_soundscape:" not in prompt
-    assert "non_diegetic_music:" not in prompt
+    assert (
+        "overall_soundscape: Low room tone and the synchronized sounds of visible "
+        "objects and physical actions."
+    ) in prompt
+    assert prompt.endswith("non_diegetic_music: N/A")
 
 
 def test_short_dialogue_in_long_clip_gets_one_concise_timing_window():
