@@ -54,6 +54,10 @@ export interface ApiOutput {
   favorite?: boolean
   size: number
   created_at: number
+  /** Time the generated asset was fully published. Older/imported assets
+   *  fall back to the media file's modification time. */
+  completed_at?: number
+  completion_time_source?: 'metadata' | 'file'
   url: string
   /** Small static preview for image/video cards and saved 3D/scene assets. */
   thumbnail_url?: string | null

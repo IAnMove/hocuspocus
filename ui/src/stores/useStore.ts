@@ -9154,6 +9154,8 @@ export const useStore = create<AppState>((set, get) => ({
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
+        completed_at: o.completed_at,
+        completion_time_source: o.completion_time_source,
         thumbnail_url: o.thumbnail_url || null,
       }))
       set({ outputs, outputsTotal: total, selectedOutput: 0, outputsLoading: false })
@@ -9185,6 +9187,8 @@ export const useStore = create<AppState>((set, get) => ({
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
+        completed_at: o.completed_at,
+        completion_time_source: o.completion_time_source,
         thumbnail_url: o.thumbnail_url || null,
       }))
       // Deduplicate (in case items shifted during generation)
@@ -9212,6 +9216,8 @@ export const useStore = create<AppState>((set, get) => ({
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
+        completed_at: o.completed_at,
+        completion_time_source: o.completion_time_source,
         thumbnail_url: o.thumbnail_url || null,
       }))
       const current = get().outputs
@@ -9228,6 +9234,8 @@ export const useStore = create<AppState>((set, get) => ({
           && latest.favorite === output.favorite
           && latest.size === output.size
           && latest.created_at === output.created_at
+          && latest.completed_at === output.completed_at
+          && latest.completion_time_source === output.completion_time_source
           && latest.thumbnail_url === output.thumbnail_url
         return unchanged ? output : latest
       })

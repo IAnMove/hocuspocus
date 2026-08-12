@@ -30915,6 +30915,16 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 "edit_sub_mode": params.get("edit_sub_mode"),
                 "multi_clip_info": params.get("multi_clip_info"),
                 "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
+                # Output sidecars are written only after the generated asset
+                # has been published.  Their historical ``created_at`` field
+                # therefore represents completion time, despite the old name.
+                # Prefer an explicit completion field when newer producers
+                # provide one and retain mtime as the legacy/import fallback.
+                "completed_at": next((
+                    float(meta[key])
+                    for key in ("completed_at", "finished_at", "created_at")
+                    if isinstance(meta.get(key), (int, float)) and float(meta[key]) > 0
+                ), None),
             }
             mci = sidecar_cache[name]["multi_clip_info"]
             if mci and mci.get("group_id"):
@@ -30951,6 +30961,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         cached = sidecar_cache.get(name) or {}
         mode = cached.get("mode")
         edit_sub_mode = cached.get("edit_sub_mode")
+        metadata_completed_at = cached.get("completed_at")
         mci = cached.get("multi_clip_info")
         is_intermediate_clip = False
         if mci and mci.get("group_id"):
@@ -30980,6 +30991,8 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             "size": size,
             "created_at": mtime,
             "url": f"/api/v1/file/{name}",
+            "completed_at": metadata_completed_at or mtime,
+            "completion_time_source": "metadata" if metadata_completed_at else "file",
             "thumbnail_url": (
                 f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png"
                 if is_comic and os.path.isfile(os.path.join(out_dir, name[:-len(".comic.json")] + ".comic.preview.png"))

@@ -334,6 +334,10 @@ export interface OutputFile {
   favorite: boolean
   size: number
   created_at: number
+  /** Unix timestamp for when generation and output publication finished. */
+  completed_at?: number
+  /** Metadata is exact; file is a best-effort fallback for legacy/imports. */
+  completion_time_source?: 'metadata' | 'file'
   /** Static preview for 3D output cards; never a live model viewer. */
   thumbnail_url?: string | null
 }
@@ -759,6 +763,8 @@ export interface OutputMetadata {
   generation_timings?: OutputGenerationTimings
   director_pipeline_id?: string
   created_at?: number
+  completed_at?: number
+  finished_at?: number
 }
 
 export interface VideoExtraInfo {
