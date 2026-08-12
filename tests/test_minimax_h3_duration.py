@@ -2,6 +2,7 @@ from pathlib import Path
 
 from services.minimax_h3_duration import (
     apply_h3_dialogue_duration,
+    count_spoken_syllables,
     estimate_h3_dialogue_seconds,
     extract_h3_dialogue,
     h3_dialogue_split_error,
@@ -43,12 +44,22 @@ def test_plain_says_quote_is_supported_for_uncompiled_manual_prompts():
     ]
 
 
-def test_estimate_counts_words_punctuation_speaker_gap_and_edges():
+def test_castilian_counter_handles_diphthongs_hiatus_and_silent_u():
+    assert count_spoken_syllables(
+        "Atención, tripulación, día, ciudad, queso y pingüino.",
+        "Castilian Spanish",
+    ) == 17
+
+
+def test_estimate_uses_seconds_per_syllable_plus_authored_pauses():
     estimate = estimate_h3_dialogue_seconds([
-        {"text": "Hola, Fry."},
-        {"text": "Ya voy!"},
+        {"language": "Spanish", "text": "Hola, Fry."},
+        {"language": "Spanish", "text": "Ya voy!"},
     ])
     assert estimate["word_count"] == 4
+    assert estimate["syllable_count"] == 5
+    assert estimate["seconds_per_syllable"] == 0.22
+    assert estimate["spoken_seconds"] == 1.1
     assert estimate["segment_count"] == 2
     assert estimate["estimated_seconds"] > estimate["spoken_seconds"]
 
@@ -66,8 +77,8 @@ def test_short_dialogue_forces_h3_minimum_instead_of_user_ten_seconds():
     assert contract["requested_frames_before"] == 243
 
 
-def test_longer_dialogue_rounds_up_to_lattice_and_never_cuts_words():
-    words = " ".join(f"palabra{index}" for index in range(20)) + "."
+def test_longer_dialogue_rounds_up_to_lattice_and_never_cuts_syllables():
+    words = " ".join("sol" for _ in range(24)) + "."
     params = {"prompt": f"<d>[Spanish] {words}</d>", "video_length": 124}
     contract = apply_h3_dialogue_duration(params, MODEL)
     assert contract is not None

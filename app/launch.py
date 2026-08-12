@@ -407,7 +407,9 @@ def _new_generation_job(
                 raise ValueError(h3_dialogue_split_error(contract))
             print(
                 "[MiniMax H3] Mandatory dialogue duration: "
-                f"{contract['word_count']} words -> {contract['effective_seconds']:.3f}s "
+                f"{contract['syllable_count']} syllables × "
+                f"{contract['seconds_per_syllable']:.3f}s -> "
+                f"{contract['effective_seconds']:.3f}s "
                 f"({contract['effective_frames']} frames)."
             )
     job = {
@@ -487,6 +489,16 @@ def _public_generation_details(params: dict | None) -> dict:
         "duration_seconds": params.get("duration_seconds"),
         "dialogue_words": (
             params.get("_h3_dialogue_duration_contract", {}).get("word_count")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
+        "dialogue_syllables": (
+            params.get("_h3_dialogue_duration_contract", {}).get("syllable_count")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
+        "dialogue_seconds_per_syllable": (
+            params.get("_h3_dialogue_duration_contract", {}).get("seconds_per_syllable")
             if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
             else None
         ),

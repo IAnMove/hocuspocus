@@ -79,7 +79,12 @@ function generationRecipe(task: CanonicalTask): string {
   if (details.audio_shift !== undefined || details.audioShift !== undefined) {
     parts.push(`audio shift ${details.audio_shift ?? details.audioShift}`)
   }
-  if (details.dialogue_words !== undefined) {
+  if (details.dialogue_syllables !== undefined) {
+    parts.push(
+      `dialogue ${details.dialogue_syllables} syllables × ${details.dialogue_seconds_per_syllable}s → ${details.dialogue_duration_calculated}s calculated`
+      + (details.dialogue_duration_minimum_limited ? ' · H3 minimum applied' : ''),
+    )
+  } else if (details.dialogue_words !== undefined) {
     parts.push(
       `dialogue ${details.dialogue_words} words → ${details.dialogue_duration_calculated}s calculated`
       + (details.dialogue_duration_minimum_limited ? ' · H3 minimum applied' : ''),

@@ -17,6 +17,62 @@ _PLAIN_SPEECH = re.compile(
     flags=re.IGNORECASE | re.DOTALL,
 )
 _WORD = re.compile(r"[^\W_]+(?:[’'-][^\W_]+)*", flags=re.UNICODE)
+_SPANISH_LANGUAGES = {"castilian", "es", "es-es", "español", "spanish"}
+_SPANISH_VOWEL_RUN = re.compile(r"[aeiouáéíóúü]+", flags=re.IGNORECASE)
+_GENERIC_VOWEL_RUN = re.compile(
+    r"[aeiouyáéíóúüàèìòùâêîôûäëïöü]+",
+    flags=re.IGNORECASE,
+)
+_SPANISH_STRONG_VOWELS = frozenset("aeoáéóíú")
+_SPANISH_STRESSED_WEAK_VOWELS = frozenset("íú")
+DEFAULT_SECONDS_PER_SYLLABLE = 0.22
+
+
+def _spanish_word_syllables(word: str) -> int:
+    normalized = word.casefold()
+    # In que/qui and gue/gui, an unmarked "u" is orthographic rather than
+    # spoken. The diaeresis in güe/güi deliberately remains vocalic.
+    normalized = re.sub(r"(?<=[gq])u(?=[eiéí])", "", normalized)
+    runs = _SPANISH_VOWEL_RUN.findall(normalized)
+    if not runs:
+        return 1
+
+    count = 0
+    for run in runs:
+        count += 1
+        for left, right in zip(run, run[1:]):
+            hiatus = (
+                left in _SPANISH_STRESSED_WEAK_VOWELS
+                or right in _SPANISH_STRESSED_WEAK_VOWELS
+                or (
+                    left in _SPANISH_STRONG_VOWELS
+                    and right in _SPANISH_STRONG_VOWELS
+                )
+            )
+            if hiatus:
+                count += 1
+    return count
+
+
+def count_spoken_syllables(text: Any, language: Any = "") -> int:
+    """Count spoken syllables, with Castilian-aware diphthong handling."""
+
+    words = _WORD.findall(str(text or ""))
+    language_key = str(language or "").strip().casefold()
+    is_spanish = (
+        language_key in _SPANISH_LANGUAGES
+        or language_key.startswith("es-")
+        or "spanish" in language_key
+        or "español" in language_key
+        or "castilian" in language_key
+    )
+    if is_spanish:
+        return sum(_spanish_word_syllables(word) for word in words)
+
+    # Other H3 languages use a conservative vowel-nucleus fallback. Keeping
+    # this centralized means a language-specific counter can replace it later
+    # without allowing any generation path to bypass the duration contract.
+    return sum(max(1, len(_GENERIC_VOWEL_RUN.findall(word))) for word in words)
 
 
 def extract_h3_dialogue(prompt: Any) -> list[dict[str, str]]:
@@ -40,23 +96,37 @@ def extract_h3_dialogue(prompt: Any) -> list[dict[str, str]]:
 def estimate_h3_dialogue_seconds(
     segments: list[Mapping[str, str]],
     *,
-    words_per_second: float = 2.1,
+    seconds_per_syllable: float = DEFAULT_SECONDS_PER_SYLLABLE,
 ) -> dict[str, float | int]:
-    """Estimate complete spoken time, including punctuation and safe edge room."""
+    """Estimate speech from syllables, plus authored pauses and small edge room."""
 
-    cleaned = [str(segment.get("text") or "").strip() for segment in segments]
-    cleaned = [text for text in cleaned if text]
-    word_count = sum(len(_WORD.findall(text)) for text in cleaned)
-    comma_pauses = sum(len(re.findall(r"[,;:]", text)) for text in cleaned) * 0.12
-    terminal_pauses = sum(len(re.findall(r"(?<!\.)[.!?](?!\.)", text)) for text in cleaned) * 0.22
-    ellipsis_pauses = sum(len(re.findall(r"(?:\.{3}|…)", text)) for text in cleaned) * 0.38
-    speaker_gaps = max(0, len(cleaned) - 1) * 0.20
-    edge_room = 0.70 if cleaned else 0.0
-    speech_seconds = word_count / max(0.1, float(words_per_second))
+    cleaned = [
+        segment
+        for segment in segments
+        if str(segment.get("text") or "").strip()
+    ]
+    texts = [str(segment.get("text") or "").strip() for segment in cleaned]
+    word_count = sum(len(_WORD.findall(text)) for text in texts)
+    syllable_count = sum(
+        count_spoken_syllables(
+            segment.get("text"),
+            segment.get("language"),
+        )
+        for segment in cleaned
+    )
+    comma_pauses = sum(len(re.findall(r"[,;:]", text)) for text in texts) * 0.12
+    terminal_pauses = sum(len(re.findall(r"(?<!\.)[.!?](?!\.)", text)) for text in texts) * 0.18
+    ellipsis_pauses = sum(len(re.findall(r"(?:\.{3}|…)", text)) for text in texts) * 0.32
+    speaker_gaps = max(0, len(texts) - 1) * 0.15
+    edge_room = 0.35 if texts else 0.0
+    syllable_seconds = max(0.01, float(seconds_per_syllable))
+    speech_seconds = syllable_count * syllable_seconds
     total = speech_seconds + comma_pauses + terminal_pauses + ellipsis_pauses + speaker_gaps + edge_room
     return {
         "word_count": word_count,
-        "segment_count": len(cleaned),
+        "syllable_count": syllable_count,
+        "seconds_per_syllable": round(syllable_seconds, 3),
+        "segment_count": len(texts),
         "spoken_seconds": round(speech_seconds, 3),
         "estimated_seconds": round(max(0.0, total), 3),
     }
@@ -147,7 +217,7 @@ def apply_h3_dialogue_duration(
 def h3_dialogue_split_error(contract: Mapping[str, Any]) -> str:
     return (
         f"MiniMax H3 dialogue needs about {contract.get('estimated_seconds')} seconds "
-        f"for {contract.get('word_count')} words, beyond this model's "
+        f"for {contract.get('syllable_count')} syllables, beyond this model's "
         f"{contract.get('effective_seconds')}-second single-clip limit. "
         "Split the dialogue across multiple clips; it will not be truncated."
     )

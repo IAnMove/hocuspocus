@@ -271,6 +271,8 @@ export interface GenerationDetails {
   frames?: number
   duration_seconds?: number
   dialogue_words?: number
+  dialogue_syllables?: number
+  dialogue_seconds_per_syllable?: number
   dialogue_duration_calculated?: number
   dialogue_duration_minimum_limited?: boolean
   repeat?: number
