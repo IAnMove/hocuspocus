@@ -22,7 +22,7 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react'
-import { Fragment, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 
@@ -326,6 +326,132 @@ function formatTime(value: number): string {
   const minutes = Math.floor(value / 60)
   const seconds = value - minutes * 60
   return `${minutes}:${seconds.toFixed(1).padStart(4, '0')}`
+}
+
+const MIN_TRIM_DURATION = 0.05
+
+function ClipTrimBar({
+  duration,
+  start,
+  end,
+  onChange,
+}: {
+  duration: number
+  start: number
+  end: number
+  onChange: (next: { trimStart?: number; trimEnd?: number }) => void
+}) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef<'start' | 'end' | null>(null)
+  const [dragging, setDragging] = useState<'start' | 'end' | null>(null)
+  const safeDuration = Math.max(MIN_TRIM_DURATION, duration)
+  const startPercent = Math.max(0, Math.min(100, (start / safeDuration) * 100))
+  const endPercent = Math.max(startPercent, Math.min(100, (end / safeDuration) * 100))
+
+  const applyValue = (handle: 'start' | 'end', rawValue: number) => {
+    const value = Math.round(Math.max(0, Math.min(safeDuration, rawValue)) * 100) / 100
+    if (handle === 'start') {
+      onChange({ trimStart: Math.min(value, end - MIN_TRIM_DURATION) })
+    } else {
+      onChange({ trimEnd: Math.max(value, start + MIN_TRIM_DURATION) })
+    }
+  }
+
+  const valueAt = (clientX: number) => {
+    const bounds = trackRef.current?.getBoundingClientRect()
+    if (!bounds?.width) return start
+    return Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width)) * safeDuration
+  }
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const requested = (event.target as HTMLElement).closest<HTMLElement>('[data-trim-handle]')
+      ?.dataset.trimHandle
+    const value = valueAt(event.clientX)
+    const handle = requested === 'start' || requested === 'end'
+      ? requested
+      : Math.abs(value - start) <= Math.abs(value - end) ? 'start' : 'end'
+    event.currentTarget.setPointerCapture(event.pointerId)
+    draggingRef.current = handle
+    setDragging(handle)
+    applyValue(handle, value)
+  }
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (draggingRef.current) applyValue(draggingRef.current, valueAt(event.clientX))
+  }
+
+  const finishDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    draggingRef.current = null
+    setDragging(null)
+  }
+
+  const keyboardStep = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    handle: 'start' | 'end',
+    current: number,
+  ) => {
+    const direction = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0
+    if (!direction) return
+    event.preventDefault()
+    applyValue(handle, current + direction * (event.shiftKey ? 0.5 : 0.05))
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-bg-tertiary/70 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3 text-[10px] tabular-nums">
+        <span className="text-text-muted">Recorte no destructivo</span>
+        <span className="text-text-secondary">
+          Conserva {formatTime(Math.max(0, end - start))} · quita {formatTime(start + Math.max(0, duration - end))}
+        </span>
+      </div>
+      <div
+        ref={trackRef}
+        className="relative h-12 touch-none cursor-pointer select-none"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+      >
+        <div
+          className="absolute inset-x-0 top-4 h-4 overflow-hidden rounded border border-white/10 bg-black/55"
+          style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent 0 7%, rgba(255,255,255,.08) 7.2% 7.8%)' }}
+        />
+        <div
+          className="absolute top-4 h-4 border-y border-accent-blue/70 bg-accent-blue/35"
+          style={{ left: `${startPercent}%`, width: `${endPercent - startPercent}%` }}
+        />
+        {(['start', 'end'] as const).map(handle => {
+          const value = handle === 'start' ? start : end
+          const percent = handle === 'start' ? startPercent : endPercent
+          return (
+            <button
+              key={handle}
+              type="button"
+              role="slider"
+              data-trim-handle={handle}
+              aria-label={handle === 'start' ? 'Punto de entrada' : 'Punto de salida'}
+              aria-valuemin={handle === 'start' ? 0 : start + MIN_TRIM_DURATION}
+              aria-valuemax={handle === 'start' ? end - MIN_TRIM_DURATION : safeDuration}
+              aria-valuenow={Number(value.toFixed(2))}
+              aria-valuetext={formatTime(value)}
+              onKeyDown={event => keyboardStep(event, handle, value)}
+              className={`absolute top-1 z-10 h-10 w-4 -translate-x-1/2 cursor-ew-resize rounded border shadow-lg focus:outline-none focus:ring-2 focus:ring-accent-blue ${dragging === handle ? 'border-white bg-accent-blue' : 'border-accent-blue bg-bg-secondary'}`}
+              style={{ left: `${percent}%` }}
+            >
+              <span className="mx-auto block h-5 w-px bg-white/70" />
+            </button>
+          )
+        })}
+      </div>
+      <div className="flex justify-between text-[9px] text-text-muted tabular-nums">
+        <span>Entrada {formatTime(start)}</span>
+        <span>Salida {formatTime(end)}</span>
+      </div>
+    </div>
+  )
 }
 
 function greatestCommonDivisor(left: number, right: number): number {
@@ -1760,9 +1886,19 @@ export function VideoEditorPanel() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <ClipTrimBar
+                duration={selected.duration}
+                start={selected.trimStart}
+                end={selected.trimEnd}
+                onChange={patch => patchClip(selected.id, patch)}
+              />
+              <p className="mt-2 text-[9px] leading-relaxed text-text-muted">
+                Arrastra los tiradores para fijar la entrada y la salida. El vídeo original no se modifica; estos cortes solo se aplican a la previsualización y al MP4 exportado.
+              </p>
+
+              <div className="mt-2 grid grid-cols-2 gap-2">
                 <label className="text-[10px] text-text-muted">
-                  Trim start
+                  Entrada exacta
                   <input
                     type="number"
                     min={0}
@@ -1776,7 +1912,7 @@ export function VideoEditorPanel() {
                   />
                 </label>
                 <label className="text-[10px] text-text-muted">
-                  Trim end
+                  Salida exacta
                   <input
                     type="number"
                     min={selected.trimStart + 0.05}
@@ -1790,6 +1926,15 @@ export function VideoEditorPanel() {
                   />
                 </label>
               </div>
+              {(selected.trimStart > 0.001 || selected.trimEnd < selected.duration - 0.001) && (
+                <button
+                  type="button"
+                  onClick={() => patchClip(selected.id, { trimStart: 0, trimEnd: selected.duration })}
+                  className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-border px-2 py-1.5 text-[10px] text-text-muted hover:bg-bg-hover hover:text-text-secondary"
+                >
+                  <RotateCcw size={11} /> Restaurar clip completo
+                </button>
+              )}
 
               <div className="flex items-center gap-2 mt-3">
                 <button
