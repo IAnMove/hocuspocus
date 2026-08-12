@@ -28644,18 +28644,47 @@ def cancel_series_render_job(job_id: str):
     if job.get("status") in {"completed", "failed", "cancelled"}:
         return {"jobId": job_id, "status": job.get("status"), "message": job.get("message")}
     cancelled_at = _series_iso_now()
+    with _series_render_jobs_lock:
+        worker_active = job_id in _series_render_active_jobs
+    active_child = next((
+        str(item.get("childJobId")) for item in job.get("items", [])
+        if item.get("status") == "running" and item.get("childJobId")
+    ), "")
+    # A persisted child id can outlive its process after an app restart. Only
+    # defer cancellation when there is an in-memory worker that can actually
+    # reach a safe boundary; otherwise settle the orphaned checkpoint now.
+    active_child_known = bool(active_child and active_child in _jobs)
+    deferred = bool(worker_active or active_child_known)
     items = copy.deepcopy(job.get("items") or [])
     cancellable = {"queued", "running"}
     for item in items:
         if item.get("status") in cancellable:
             item.update({
-                "status": "cancelled", "completedAt": cancelled_at,
-                "error": "Cancelled by user", "updatedAt": time.time(),
+                "status": (
+                    "cancelling"
+                    if deferred and item.get("status") == "running"
+                    else "cancelled"
+                ),
+                "completedAt": (
+                    None
+                    if deferred and item.get("status") == "running"
+                    else cancelled_at
+                ),
+                "error": "Cancellation requested", "updatedAt": time.time(),
             })
     updated_job = _series_render_update(
-        job_id, items=items, status="cancelled", stage="cancelled",
-        activeShotId=None, finishedAt=time.time(),
-        message="Series render cancellation requested. Completed attempts remain available.",
+        job_id,
+        items=items,
+        status="cancelling" if deferred else "cancelled",
+        stage="cancelling" if deferred else "cancelled",
+        activeShotId=job.get("activeShotId") if deferred else None,
+        finishedAt=None if deferred else time.time(),
+        message=(
+            "Series render cancellation requested; waiting for the active "
+            "model thread to reach a safe boundary."
+            if deferred else
+            "Series render cancelled before model execution."
+        ),
     ) or job
     # Persist cancellation for every queued/running attempt too. This keeps
     # recovery honest and guarantees resume appends a fresh attempt instead
