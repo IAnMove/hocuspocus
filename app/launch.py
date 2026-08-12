@@ -28842,6 +28842,12 @@ def approve_series_shot_attempt_endpoint(
     return stored["seriesById"][series_id]["episodesById"][episode_id]["shots"][shot_index]
 
 
+from routers.style_library import create_style_library_router
+from services.style_library import StyleLibrary
+
+_style_library = StyleLibrary(os.path.join(os.path.dirname(__file__), "style_library"))
+api.include_router(create_style_library_router(_style_library))
+
 @api.post("/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot_id}/attempts/{attempt_id}/reject")
 def reject_series_shot_attempt_endpoint(
     series_id: str, episode_id: str, shot_id: str, attempt_id: str, body: dict | None = None,

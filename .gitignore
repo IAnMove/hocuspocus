@@ -64,6 +64,8 @@ app/gradio_outputs/
 app/storage/
 app/samples/
 app/settings/
+# Downloaded style references, source media, manifests and lightweight previews.
+app/style_library/
 app/icons/lora_previews/
 app/uploads/
 app/wgp_config.json

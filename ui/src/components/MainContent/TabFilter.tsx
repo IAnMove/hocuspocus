@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Heart, Film, Search, X, Box, PersonStanding, BookOpen, Library } from 'lucide-react'
+import { Heart, Film, Search, X, Box, PersonStanding, BookOpen, Library, Palette } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
 import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
@@ -13,6 +13,7 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
   { value: 'scenes', label: 'Scenes', shortLabel: 'Scn', icon: 'film' },
   { value: 'stories', label: 'Story Lab', shortLabel: 'Lab', icon: 'library' },
   { value: 'series', label: 'Series Lab', shortLabel: 'Series', icon: 'library' },
+  { value: 'styles', label: 'Hoja de estilos', shortLabel: 'Styles', icon: 'palette' },
   { value: 'comics', label: 'Comics', shortLabel: 'Comic', icon: 'book' },
   { value: 'videoeditor', label: 'Video Editor', shortLabel: 'Edit', icon: 'film' },
   { value: 'scene3d', label: '3D Video', shortLabel: '3DV', icon: 'film' },
@@ -70,6 +71,7 @@ export function TabFilter() {
             {tab.icon === 'person' && <PersonStanding size={11} />}
             {tab.icon === 'book' && <BookOpen size={11} />}
             {tab.icon === 'library' && <Library size={11} />}
+            {tab.icon === 'palette' && <Palette size={11} />}
             <span className="hidden md:inline">{tab.label}</span>
             <span className="md:hidden">{tab.shortLabel}</span>
           </button>
