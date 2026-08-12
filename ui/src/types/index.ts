@@ -270,6 +270,9 @@ export interface GenerationDetails {
   guidance?: number
   frames?: number
   duration_seconds?: number
+  dialogue_words?: number
+  dialogue_duration_calculated?: number
+  dialogue_duration_minimum_limited?: boolean
   repeat?: number
   profile?: string
   flow_shift?: number

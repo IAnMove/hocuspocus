@@ -390,6 +390,26 @@ def _new_generation_job(
     created_at: float | None = None,
     recovered: bool = False,
 ) -> dict:
+    frozen_params = copy.deepcopy(params)
+    if _is_minimax_h3_model(frozen_params.get("model_type")):
+        from services.minimax_h3_duration import (
+            apply_h3_dialogue_duration,
+            h3_dialogue_split_error,
+        )
+
+        try:
+            duration_model_def = wgp.get_model_def(frozen_params.get("model_type")) or {}
+        except Exception:
+            duration_model_def = {}
+        contract = apply_h3_dialogue_duration(frozen_params, duration_model_def)
+        if contract:
+            if contract.get("requires_split"):
+                raise ValueError(h3_dialogue_split_error(contract))
+            print(
+                "[MiniMax H3] Mandatory dialogue duration: "
+                f"{contract['word_count']} words -> {contract['effective_seconds']:.3f}s "
+                f"({contract['effective_frames']} frames)."
+            )
     job = {
         "id": job_id or uuid.uuid4().hex[:8],
         "status": "queued",
@@ -401,7 +421,7 @@ def _new_generation_job(
         "created_at": created_at or time.time(),
         "started_at": None,
         "finished_at": None,
-        "params": copy.deepcopy(params),
+        "params": frozen_params,
         "output_files": [],
         "error": None,
         "workspace": workspace,
@@ -465,6 +485,21 @@ def _public_generation_details(params: dict | None) -> dict:
         "guidance": params.get("guidance_scale"),
         "frames": params.get("video_length") or params.get("total_frames"),
         "duration_seconds": params.get("duration_seconds"),
+        "dialogue_words": (
+            params.get("_h3_dialogue_duration_contract", {}).get("word_count")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
+        "dialogue_duration_calculated": (
+            params.get("_h3_dialogue_duration_contract", {}).get("estimated_seconds")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
+        "dialogue_duration_minimum_limited": (
+            params.get("_h3_dialogue_duration_contract", {}).get("minimum_limited")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
         "repeat": params.get("repeat_generation"),
         "profile": params.get("h3_model_profile"),
         "flow_shift": params.get("flow_shift"),
@@ -10127,6 +10162,22 @@ async def generate(request: Request):
             "minimax_h3_reference_detail",
         ):
             body.pop(key, None)
+
+    if _is_minimax_h3_model(body.get("model_type")):
+        from services.minimax_h3_duration import (
+            apply_h3_dialogue_duration,
+            h3_dialogue_split_error,
+        )
+
+        dialogue_duration_contract = apply_h3_dialogue_duration(
+            body,
+            _generation_model_def,
+        )
+        if dialogue_duration_contract and dialogue_duration_contract.get("requires_split"):
+            raise HTTPException(
+                status_code=400,
+                detail=h3_dialogue_split_error(dialogue_duration_contract),
+            )
 
     if _generation_model_def.get("omni_reference"):
         from models.minimax_h3.ref2va import validate_reference_manifest
