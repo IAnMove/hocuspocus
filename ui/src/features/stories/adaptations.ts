@@ -7,13 +7,24 @@ import type {
 } from '../comics/types'
 import type { ShortFilmCharacter } from '../../types'
 import { storyNegativePromptForStyle, storyRenderStyle, stripStoryVisualStyle } from './model'
-import type { StoryCharacter, StoryMusicCue, StoryProject } from './types'
+import type {
+  StoryCharacter,
+  StoryMusicCue,
+  StoryProject,
+  StoryTrailerFormat,
+  StoryTrailerIntensity,
+  StoryTrailerNarration,
+  StoryTrailerSpoiler,
+} from './types'
 
 export const DEFAULT_COMIC_CHAPTER_DIRECTION =
   'Create a self-contained comic chapter inside this story world. Tell a new compact incident with a beginning, escalation, decisive action and resolution. Preserve the master plot and ending for later chapters; do not summarize or resolve the whole source story.'
 
 export const DEFAULT_SHORT_FILM_DIRECTION =
   'Create a self-contained short-film episode inside this story world. Focus on one concrete incident and emotional turn that can be understood on its own. Preserve the master plot and ending; do not compress the whole source story into this film.'
+
+export const DEFAULT_TRAILER_DIRECTION =
+  'Vende la promesa emocional de esta historia mediante un mini-arco cinematográfico claro. Presenta al protagonista, su deseo y la amenaza central, y detente ante la pregunta sin respuesta más irresistible.'
 
 const line = (label: string, value: string | undefined): string =>
   value?.trim() ? `${label}: ${value.trim()}` : ''
@@ -284,6 +295,15 @@ export interface ShortFilmAdaptationOptions {
   preserveVisualStyle?: boolean
 }
 
+export interface TrailerAdaptationOptions extends ShortFilmAdaptationOptions {
+  format: StoryTrailerFormat
+  narration: StoryTrailerNarration
+  spoiler: StoryTrailerSpoiler
+  intensity: StoryTrailerIntensity
+  tagline?: string
+  titleCards?: boolean
+}
+
 export interface MusicVideoAdaptation {
   sceneDescription: string
   focusKind: 'world' | 'character' | 'story'
@@ -508,4 +528,68 @@ export function buildShortFilmAdaptation(
       new Map(locationReferences.map(reference => [reference.assetId, reference])).values(),
     ),
   }
+}
+
+const trailerFormatDirection: Record<StoryTrailerFormat, string> = {
+  theatrical: 'THEATRICAL FORMAT: establish the world and protagonist, expose the conflict, escalate through a compact montage, pause for one breath, then finish on a powerful final hook.',
+  teaser: 'TEASER FORMAT: prioritize mystery, striking imagery and a single irresistible question. Suggest the conflict without explaining the complete plot.',
+  character: 'CHARACTER FORMAT: build the trailer around the protagonist’s desire, flaw and emotional transformation while the larger threat closes in.',
+}
+
+const trailerNarrationDirection: Record<StoryTrailerNarration, string> = {
+  hybrid: 'PERFORMANCE PLAN: use a few short, purposeful voice-over lines and selective character dialogue. Every spoken line must advance the trailer; visual shots between those lines need no speech.',
+  voice_over: 'PERFORMANCE PLAN: use concise cinematic voice-over as the main verbal thread. Character dialogue should appear only for one essential emotional or dramatic quote.',
+  dialogue: 'PERFORMANCE PLAN: tell the verbal story through brief character dialogue only, with no external narrator.',
+  visual: 'PERFORMANCE PLAN: tell the story visually through action, reactions, atmosphere, music and sound design; do not author narration or dialogue.',
+}
+
+const trailerSpoilerDirection: Record<StoryTrailerSpoiler, string> = {
+  mystery: 'REVEAL POLICY: protect twists, the climax and the ending. Show setup, desire and danger, then cut away before answers.',
+  balanced: 'REVEAL POLICY: make the premise and stakes understandable, but protect the decisive climax, major twists and ending.',
+  revealing: 'REVEAL POLICY: show substantial escalation and several major set pieces, but never reveal the final resolution or last story beat.',
+}
+
+const trailerIntensityDirection: Record<StoryTrailerIntensity, string> = {
+  rising: 'RHYTHM: begin controlled, accelerate progressively, shorten shots during escalation, insert a brief drop to near-silence, then land one final impact.',
+  relentless: 'RHYTHM: start with immediate danger and maintain urgent forward motion, using clean visual escalation rather than disconnected spectacle.',
+  prestige: 'RHYTHM: favor atmosphere, scale, restrained dialogue and deliberate cinematic images; build toward one elegant, high-impact crescendo.',
+}
+
+/** Build a trailer-specific brief while reusing the proven Short Film pipeline. */
+export function buildTrailerAdaptation(
+  project: StoryProject,
+  direction = DEFAULT_TRAILER_DIRECTION,
+  targetDuration = 60,
+  options: TrailerAdaptationOptions,
+): ShortFilmAdaptation {
+  const duration = Math.max(15, Math.min(180, Math.round(targetDuration || 60)))
+  const titleCardPolicy = options.titleCards && project.allowClipText
+    ? `TITLE-CARD PLAN: use at most three short readable cards across the entire trailer: one optional hook card, the story title near the end, and one final tagline card. The exact tagline is “${options.tagline?.trim() || project.logline.trim() || project.title}”. Never render dialogue as subtitles.`
+    : 'TITLE-CARD PLAN: no title cards, captions, subtitles, logos, interface text or other readable words. End on a strong visual hook instead of written text.'
+  const trailerDirection = [
+    'CREATE AN EPIC CINEMATIC STORY TRAILER — NOT A SHORT FILM AND NOT A SYNOPSIS.',
+    `The complete trailer must last approximately ${duration} seconds and every planned shot must contribute to that total.`,
+    direction.trim() || DEFAULT_TRAILER_DIRECTION,
+    trailerFormatDirection[options.format],
+    trailerNarrationDirection[options.narration],
+    trailerSpoilerDirection[options.spoiler],
+    trailerIntensityDirection[options.intensity],
+    titleCardPolicy,
+    '',
+    'MANDATORY TRAILER ARC',
+    '1. Cold open (0–10%): one arresting image, sound or line that creates a question.',
+    '2. Promise (10–30%): establish the world, protagonist and emotional desire with concrete continuity.',
+    '3. Disruption (30–50%): reveal the central threat or impossible obstacle and make the stakes legible.',
+    '4. Escalation (50–80%): build a causal montage of increasingly cinematic actions, locations and reactions; each shot must introduce new information.',
+    '5. Breath (80–90%): a brief contrast, intimate beat or near-silence before the final surge.',
+    '6. Final hook (90–100%): the strongest unanswered image, turn or line. Cut before the story resolves.',
+    '',
+    'TRAILER EDITING CONTRACT',
+    'Plan a coherent sequence whose shot lengths and energy evolve across the arc. Do not repeat the same framing, location-plus-action, generic computer activity or exposition in multiple clips.',
+    'Use cinematic composition, motivated camera movement, visual scale, reaction shots, transitions and sound accents. Keep character identity, wardrobe, geography and cause-and-effect continuous across the ordered clips.',
+    'Never show the source story ending or turn the trailer into a complete episode. The last shot must create anticipation, not closure.',
+  ].join('\n')
+  return buildShortFilmAdaptation(project, trailerDirection, duration, {
+    preserveVisualStyle: options.preserveVisualStyle,
+  })
 }

@@ -12,6 +12,10 @@ export type StoryProjectType = 'full_story' | 'music_video' | 'quick_video'
 export type StoryMusicVideoGenerationMode = 'image_guided' | 'direct_references' | 'direct_video'
 export type StoryDirectVideoPromptMode = 'inherit' | 'custom'
 export type StoryQuickFormat = 'dialogue' | 'meme' | 'parody' | 'sketch' | 'viral' | 'announcement'
+export type StoryTrailerFormat = 'theatrical' | 'teaser' | 'character'
+export type StoryTrailerNarration = 'hybrid' | 'voice_over' | 'dialogue' | 'visual'
+export type StoryTrailerSpoiler = 'mystery' | 'balanced' | 'revealing'
+export type StoryTrailerIntensity = 'rising' | 'relentless' | 'prestige'
 export type StoryAssetKind = 'world' | 'location' | 'character' | 'prop' | 'style' | 'ignore'
 
 export interface StoryVisualAsset {
@@ -106,7 +110,7 @@ export interface StoryBeat {
 
 export interface StoryProduction {
   id: string
-  kind: 'comic' | 'film' | 'music_video'
+  kind: 'comic' | 'film' | 'music_video' | 'trailer'
   title: string
   createdAt: string
   sourceVersion: number

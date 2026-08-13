@@ -537,7 +537,8 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     productions: Array.isArray(project.productions)
       ? project.productions.filter(item => item && typeof item === 'object').map(item => ({
         id: text(item.id) || storyId('production'),
-        kind: item.kind === 'music_video' ? 'music_video' : item.kind === 'film' ? 'film' : 'comic',
+        kind: item.kind === 'music_video'
+          ? 'music_video' : item.kind === 'trailer' ? 'trailer' : item.kind === 'film' ? 'film' : 'comic',
         title: text(item.title, project.title || fallback.title),
         createdAt: text(item.createdAt, now),
         sourceVersion: Math.max(1, Number(item.sourceVersion) || 1),
