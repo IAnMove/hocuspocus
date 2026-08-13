@@ -746,10 +746,17 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
         from .director.minimax_h3_prompting import format_minimax_h3_prompt
     except ImportError:
         from services.director.minimax_h3_prompting import format_minimax_h3_prompt
+    prompt_mode = (
+        "references"
+        if pipeline == "ref2va"
+        else "first_frame"
+        if params.get("image_start")
+        else "direct"
+    )
     prompt = format_minimax_h3_prompt(
         {},
         raw_prompt,
-        reference_mode="references" if pipeline == "ref2va" else "first_frame",
+        reference_mode=prompt_mode,
         audio_direction=audio_direction,
     )
     copy_index = 0

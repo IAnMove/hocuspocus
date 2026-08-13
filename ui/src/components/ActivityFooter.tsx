@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ListVideo, Loader2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, ListVideo, Loader2 } from 'lucide-react'
 import * as api from '../api/client'
 import type { CanonicalTask } from '../api/client'
+import { applyCanonicalTaskEvent, canResumeCanonicalTask, canonicalTaskVisualState, reconcileCanonicalTaskSnapshot } from '../lib/canonicalTaskEvents'
 import { useStore } from '../stores/useStore'
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
+const CONNECTED_RECONCILE_MS = 60_000
+const DISCONNECTED_POLL_MS = 5_000
 const PHASE_LABELS: Record<string, string> = {
   planning: 'Planning',
   known_series_research: 'Building series bible',
@@ -19,6 +22,7 @@ const PHASE_LABELS: Record<string, string> = {
   generating_video: 'Generating video',
   post_processing: 'Post-processing',
   waiting_resource: 'Waiting for resource',
+  cancelling: 'Cancelling at a safe boundary',
   completed: 'Completed',
   failed: 'Failed',
   cancelled: 'Cancelled',
@@ -66,19 +70,26 @@ function generationRecipe(task: CanonicalTask): string {
   const metadata = task.metadata || {}
   const details = (metadata.generation_details || metadata.settings || {}) as Record<string, unknown>
   const parts = [task.provider, task.model].filter(Boolean) as string[]
+  const addModel = (label: string, value: unknown) => {
+    if (!value) return
+    const model = String(value)
+    if (!parts.some(part => part === model || part.endsWith(` ${model}`))) {
+      parts.push(label ? `${label} ${model}` : model)
+    }
+  }
+  addModel('', details.model_name || details.model_type)
+  addModel('text', details.text_model)
+  addModel('image', details.image_model_name || details.image_model_type)
+  addModel('video', details.video_model_name || details.video_model_type)
   const resolution = details.video_resolution || details.image_resolution || details.resolution
   const seed = details.seed
   const steps = details.video_steps || details.image_steps || details.steps || details.numInferenceSteps
   if (resolution) parts.push(String(resolution))
   if (seed !== undefined) parts.push(`seed ${seed}`)
   if (steps !== undefined) parts.push(`${steps} steps`)
+  if (details.guidance !== undefined) parts.push(`guidance ${details.guidance}`)
   if (details.frames !== undefined) parts.push(`${details.frames} frames`)
-  if (details.flow_shift !== undefined || details.flowShift !== undefined) {
-    parts.push(`flow shift ${details.flow_shift ?? details.flowShift}`)
-  }
-  if (details.audio_shift !== undefined || details.audioShift !== undefined) {
-    parts.push(`audio shift ${details.audio_shift ?? details.audioShift}`)
-  }
+  if (details.duration_seconds !== undefined) parts.push(`${details.duration_seconds}s`)
   if (details.dialogue_syllables !== undefined) {
     parts.push(
       `dialogue ${details.dialogue_syllables} syllables × ${details.dialogue_seconds_per_syllable}s → ${details.dialogue_duration_calculated}s calculated`
@@ -90,6 +101,26 @@ function generationRecipe(task: CanonicalTask): string {
       + (details.dialogue_duration_minimum_limited ? ' · H3 minimum applied' : ''),
     )
   }
+  if (details.profile) parts.push(`profile ${details.profile}`)
+  if (details.flow_shift !== undefined || details.flowShift !== undefined) {
+    parts.push(`flow shift ${details.flow_shift ?? details.flowShift}`)
+  }
+  if (details.audio_shift !== undefined || details.audioShift !== undefined) {
+    parts.push(`audio shift ${details.audio_shift ?? details.audioShift}`)
+  }
+  if (details.turbo !== undefined) parts.push(`Turbo ${details.turbo ? 'on' : 'off'}`)
+  if (details.cache !== undefined) {
+    parts.push(details.cache
+      ? `Cache on${details.cache_type ? ` (${details.cache_type})` : ''}`
+      : 'Cache off')
+  }
+  if (details.lora_count !== undefined) {
+    const loras = Array.isArray(details.loras) ? details.loras.map(String).filter(Boolean) : []
+    parts.push(details.lora_count
+      ? `${details.lora_count} LoRA${Number(details.lora_count) === 1 ? '' : 's'}${loras.length ? ` (${loras.join(', ')})` : ''}`
+      : 'LoRAs off')
+  }
+  if (details.clip_count !== undefined) parts.push(`${details.clip_count} clips`)
   return parts.join(' · ')
 }
 
@@ -97,6 +128,7 @@ export function ActivityFooter() {
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const setVideoWorkflowsOpen = useStore(state => state.setDashboardOpen)
   const [tasks, setTasks] = useState<CanonicalTask[]>([])
+  const tasksRef = useRef<CanonicalTask[]>([])
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [clock, setClock] = useState(Date.now())
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
@@ -104,29 +136,73 @@ export function ActivityFooter() {
   useEffect(() => {
     let mounted = true
     let refreshPending = false
+    let streamConnected = false
+    let pollTimer: number | null = null
+    let closeEvents: () => void = () => undefined
+    let unknownTaskBaseline = 0
+
+    const commitTasks = (next: CanonicalTask[]) => {
+      tasksRef.current = next
+      setTasks(next)
+    }
     const refresh = async () => {
       if (refreshPending) return
       refreshPending = true
       try {
         const result = await api.fetchCanonicalTasks(activeWorkspace, 'all')
-        if (mounted) setTasks(result.tasks)
+        if (mounted) {
+          const snapshotBoundary = Math.max(
+            unknownTaskBaseline,
+            ...result.tasks.map(task => Number(task.updated_at || 0)),
+          )
+          unknownTaskBaseline = snapshotBoundary
+          commitTasks(reconcileCanonicalTaskSnapshot(
+            tasksRef.current,
+            result.tasks,
+            snapshotBoundary,
+          ))
+        }
       } catch {
-        // Polling below remains the fallback while the backend is restarting.
+        // Adaptive polling below remains the fallback during a restart.
       } finally {
         refreshPending = false
       }
     }
-    void refresh()
-    const closeEvents = api.subscribeCanonicalTaskEvents(
-      activeWorkspace,
-      () => { void refresh() },
-      () => undefined,
-    )
-    const poll = window.setInterval(() => { void refresh() }, 2000)
+
+    const schedulePoll = () => {
+      if (!mounted) return
+      if (pollTimer !== null) window.clearTimeout(pollTimer)
+      pollTimer = window.setTimeout(async () => {
+        pollTimer = null
+        await refresh()
+        schedulePoll()
+      }, streamConnected ? CONNECTED_RECONCILE_MS : DISCONNECTED_POLL_MS)
+    }
+
+    tasksRef.current = []
+    setTasks([])
+    void refresh().finally(() => {
+      if (!mounted) return
+      closeEvents = api.subscribeCanonicalTaskEvents(
+        activeWorkspace,
+        event => {
+          const result = applyCanonicalTaskEvent(tasksRef.current, event, unknownTaskBaseline)
+          if (result.tasks !== tasksRef.current) commitTasks(result.tasks)
+          if (result.needsRefresh) void refresh()
+        },
+        () => undefined,
+        state => {
+          if (!mounted) return
+          streamConnected = state === 'open'
+          schedulePoll()
+        },
+      )
+      schedulePoll()
+    })
     return () => {
       mounted = false
       closeEvents()
-      window.clearInterval(poll)
+      if (pollTimer !== null) window.clearTimeout(pollTimer)
     }
   }, [activeWorkspace])
 
@@ -168,9 +244,12 @@ export function ActivityFooter() {
       : action === 'resume'
         ? api.resumeCanonicalTask(task.id, activeWorkspace)
         : api.dismissCanonicalTask(task.id, activeWorkspace)
-    void operation.then(async () => {
-      const result = await api.fetchCanonicalTasks(activeWorkspace, 'all')
-      setTasks(result.tasks)
+    void operation.then(result => {
+      const next = action === 'dismiss'
+        ? tasksRef.current.filter(item => item.id !== task.id)
+        : tasksRef.current.map(item => item.id === task.id ? result as CanonicalTask : item)
+      tasksRef.current = next
+      setTasks(next)
     }).catch(error => console.error(`Failed to ${action} Maestro task`, error)).finally(() => {
       setBusyIds(current => {
         const next = new Set(current)
@@ -186,6 +265,7 @@ export function ActivityFooter() {
 
   const isActive = activeTasks.length > 0
   const hasError = !isActive && failedTasks.length > 0
+  const primaryVisualState = primary ? canonicalTaskVisualState(primary.status) : 'neutral'
   const primaryMessage = primary?.error?.message || primary?.detail || primary?.message || 'Ready — no active jobs'
 
   return (
@@ -201,14 +281,17 @@ export function ActivityFooter() {
               const taskChildren = childrenByRoot.get(task.root_id) || []
               const active = ACTIVE.has(task.status)
               const recipe = generationRecipe(task)
+              const visualState = canonicalTaskVisualState(task.status)
               return (
                 <div key={task.id} className="rounded-md border border-border bg-bg-primary p-2">
                   <div className="flex items-start gap-2">
-                    {active
+                    {visualState === 'active'
                       ? <Loader2 size={12} className="mt-0.5 shrink-0 animate-spin text-accent-blue" />
-                      : task.status === 'failed' || task.status === 'interrupted'
+                      : visualState === 'error'
                         ? <AlertCircle size={12} className="mt-0.5 shrink-0 text-red-400" />
-                        : <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-emerald-400" />}
+                        : visualState === 'cancelled'
+                          ? <CircleSlash2 size={12} className="mt-0.5 shrink-0 text-text-muted" />
+                          : <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-emerald-400" />}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-medium text-text-primary">{task.title}</span>
@@ -220,7 +303,7 @@ export function ActivityFooter() {
                               {busyIds.has(task.id) ? 'Cancelling…' : 'Cancel'}
                             </button>
                           )}
-                          {!active && task.resumable && (
+                          {!active && canResumeCanonicalTask(task) && (
                             <button type="button" disabled={busyIds.has(task.id)} onClick={() => runControl(task, 'resume')} className="rounded border border-border px-1.5 py-0.5 text-[9px] text-accent-blue">Resume</button>
                           )}
                           {!active && (
@@ -241,11 +324,31 @@ export function ActivityFooter() {
                       </p>
                       {taskChildren.length > 0 && (
                         <div className="mt-1 border-l border-border pl-2 text-[9px] text-text-muted">
-                          {taskChildren.map(child => (
-                            <p key={child.id} title={child.detail || child.message}>
-                              {phaseLabel(child)} · {child.provider || 'local'}{child.model ? ` / ${child.model}` : ''} · {elapsed(child, clock)} · {child.message}
-                            </p>
-                          ))}
+                          {taskChildren.map(child => {
+                            const childRecipe = generationRecipe(child)
+                            const childResources = resources(child)
+                            return (
+                              <div key={child.id} className="mb-1 last:mb-0" title={child.detail || child.message}>
+                                <p>
+                                  {phaseLabel(child)} · {elapsed(child, clock)} · {child.message}
+                                </p>
+                                <p className="flex flex-wrap gap-x-2 text-[8px] text-text-muted">
+                                  {childRecipe && <span className="text-amber-300">{childRecipe}</span>}
+                                  {child.server_origin && <span>server {child.server_origin}</span>}
+                                  {childResources && <span className="text-accent-blue">{childResources}</span>}
+                                  <span>attempt {child.attempt}/{child.max_attempts}</span>
+                                  {!!child.token_usage?.total && (
+                                    <span>
+                                      {child.token_usage.total.toLocaleString()} tokens · {child.token_usage.prompt || 0} input · {child.token_usage.completion || 0} output
+                                    </span>
+                                  )}
+                                  <button type="button" onClick={() => copyId(child)} className="font-mono hover:text-text-primary" title="Copy child task ID">
+                                    {child.id}
+                                  </button>
+                                </p>
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
                       {active && (
@@ -266,7 +369,13 @@ export function ActivityFooter() {
       )}
 
       <button type="button" onClick={() => setDetailsOpen(open => !open)} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title="Show canonical task history">
-        {isActive ? <Loader2 size={13} className="animate-spin text-accent-blue" /> : hasError ? <AlertCircle size={13} className="text-red-400" /> : <CheckCircle2 size={13} className="text-emerald-400" />}
+        {isActive
+          ? <Loader2 size={13} className="animate-spin text-accent-blue" />
+          : hasError
+            ? <AlertCircle size={13} className="text-red-400" />
+            : primaryVisualState === 'cancelled'
+              ? <CircleSlash2 size={13} className="text-text-muted" />
+              : <CheckCircle2 size={13} className="text-emerald-400" />}
         <span className="font-medium text-text-primary">Activity</span>
         {activeTasks.length > 0 && <span className="rounded-full bg-accent-blue/15 px-1.5 py-0.5 text-accent-blue tabular-nums">{activeTasks.length}</span>}
         {detailsOpen ? <ChevronDown size={11} /> : <ChevronUp size={11} />}

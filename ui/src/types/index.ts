@@ -280,6 +280,10 @@ export interface GenerationDetails {
   flow_shift?: number
   audio_shift?: number
   turbo?: boolean
+  cache?: boolean
+  cache_type?: string
+  lora_count?: number
+  loras?: string[]
   clip_count?: number
   text_provider?: string
   text_model?: string
@@ -295,7 +299,7 @@ export interface GenerationDetails {
 
 export interface GenerationJob {
   id: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   progress: number
   step: number
   totalSteps: number
@@ -764,6 +768,8 @@ export interface OutputMetadata {
   params: Record<string, unknown> | null
   upload_filenames?: Record<string, string>
   job_id?: string
+  task_id?: string | null
+  root_task_id?: string | null
   generation_time?: number
   generation_timings?: OutputGenerationTimings
   director_pipeline_id?: string
@@ -1400,6 +1406,9 @@ export interface DirectorV2PlanResponse {
 
 export interface PipelineClipState {
   index: number
+  shot_id?: string
+  seed?: number
+  duration_seconds?: number
   planned_clip: PlannedClip | null
   image_prompt: string
   video_prompt: string

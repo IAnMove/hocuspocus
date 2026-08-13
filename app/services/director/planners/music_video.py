@@ -995,6 +995,9 @@ MUSIC VIDEO RULES:
 - Instrumental = environment, textures. Bridge = contrasting, unexpected.
 - Use controlled recurrence. Revisit the same chorus set, wardrobe and visual motif.
 - Vary framing and camera coverage inside recurring sets; do not invent a new world for every lyric.
+- Unless the Scene Concept explicitly requests a single-location video, distribute the clips across at least three visually distinct settings. A setting or prop mentioned in the global brief is an available anchor, not a requirement for every clip.
+- Never repeat the same location-plus-action combination (for example, sitting at a computer in a cafe) across most clips. Keep visual style global, but vary situation, action, scale, time of day, and environment across verses and bridge.
+- Treat visual-style text as medium, palette, lighting and design language only. Do not turn an incidental action, prop or location embedded in style text into a repeated scene template.
 - Performer visibility and lip-sync follow the editable treatment and each clip's planned role.
 
 EDITABLE MUSIC-VIDEO TREATMENT:

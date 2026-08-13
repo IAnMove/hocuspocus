@@ -37,10 +37,13 @@ def normalize_reference_mode(value: str | None) -> str:
     mode = str(value or "first_frame").strip().lower()
     mode = {
         "fl2va": "first_frame",
+        "text": "direct",
+        "text_to_video": "direct",
+        "t2v": "direct",
         "ref2va": "references",
         "reference": "references",
     }.get(mode, mode)
-    return mode if mode in {"first_frame", "references"} else "first_frame"
+    return mode if mode in {"direct", "first_frame", "references"} else "first_frame"
 
 
 def is_structured_h3_prompt(prompt: str, reference_mode: str | None = None) -> bool:
@@ -48,6 +51,8 @@ def is_structured_h3_prompt(prompt: str, reference_mode: str | None = None) -> b
     mode = normalize_reference_mode(reference_mode)
     fields = _REFERENCE_FIELDS if mode == "references" else _FIRST_FRAME_FIELDS
     if mode == "first_frame" and FIRST_FRAME_REFERENCE not in text:
+        return False
+    if mode == "direct" and FIRST_FRAME_REFERENCE in text:
         return False
     return all(field in text for field in fields)
 
@@ -292,15 +297,25 @@ def format_minimax_h3_prompt(
             f"non_diegetic_music: {music}",
         ))
 
-    return "\n".join((
-        FIRST_FRAME_REFERENCE,
-        (
-            "integrated_multimodal_description: The referenced picture is the exact opening frame. "
-            "Its visible composition, identity, wardrobe, environment, colors and proportions are "
-            f"authoritative and must not be stretched or redesigned. {description}"
-        ),
+    integrated = (
+        description
+        if mode == "direct"
+        else (
+            "The referenced picture is the exact opening frame. Its visible composition, "
+            "identity, wardrobe, environment, colors and proportions are authoritative and "
+            f"must not be stretched or redesigned. {description}"
+        )
+    )
+    fields = (
+        f"integrated_multimodal_description: {integrated}",
         f"overall_soundscape: {soundscape}.",
         f"non_diegetic_music: {music}",
+    )
+    if mode == "direct":
+        return "\n".join(fields)
+    return "\n".join((
+        FIRST_FRAME_REFERENCE,
+        *fields,
     ))
 
 

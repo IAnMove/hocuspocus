@@ -14,9 +14,12 @@ import mimetypes
 import os
 import re
 import time
+import threading
 import uuid
 
 import requests
+
+from . import resource_scheduler
 
 
 MODEL_ID = "minimax:image-01"
@@ -89,6 +92,8 @@ def generate_image(
     output_dir: str,
     subject_reference: str = "",
     filename_prefix: str = "minimax-image-01",
+    task_id: str = "",
+    root_task_id: str = "",
 ) -> dict:
     """Generate and persist one Image-01 image plus secret-free metadata."""
     if not str(api_key or "").strip():
@@ -113,15 +118,21 @@ def generate_image(
 
     response = None
     try:
-        response = requests.post(
-            API_URL,
-            json=request_body,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            timeout=(15, 300),
-        )
+        lane = resource_scheduler.remote_lane("minimax", API_URL)
+        with resource_scheduler.coordinator.acquire(
+            lane,
+            task_id=f"minimax-image-{threading.get_ident()}-{time.time_ns()}",
+            description="MiniMax Image-01 request",
+        ):
+            response = requests.post(
+                API_URL,
+                json=request_body,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                timeout=(15, 300),
+            )
         response.raise_for_status()
         payload = response.json()
     except requests.RequestException as exc:
@@ -157,6 +168,8 @@ def generate_image(
     with open(meta_path + ".tmp", "w", encoding="utf-8") as handle:
         json.dump({
             "generation_mode": "image",
+            "task_id": str(task_id or "") or None,
+            "root_task_id": str(root_task_id or task_id or "") or None,
             "params": {
                 "prompt": clean_prompt,
                 "provider": "minimax",

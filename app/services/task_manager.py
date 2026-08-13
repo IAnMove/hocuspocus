@@ -12,11 +12,12 @@ from contextlib import contextmanager
 import copy
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
 import uuid
-from typing import Any, Iterator
+from typing import Any, Iterator, TypedDict
 
 
 TASK_DB_NAME = ".maestro-tasks-v1.sqlite3"
@@ -39,8 +40,79 @@ _registries: dict[str, "TaskRegistry"] = {}
 _context = threading.local()
 
 
+class TokenUsage(TypedDict):
+    prompt: int
+    completion: int
+    total: int
+    calls: int
+
+
 def _now() -> float:
     return time.time()
+
+
+def _normalize_token_usage(
+    value: Any,
+    *,
+    fallback: Any = None,
+) -> TokenUsage:
+    """Return the canonical, non-negative integer token counters."""
+    source = value if isinstance(value, dict) else {}
+    previous = fallback if isinstance(fallback, dict) else {}
+
+    def counter(name: str) -> int:
+        raw = source[name] if name in source else previous.get(name, 0)
+        try:
+            return max(0, int(raw or 0))
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    return {
+        "prompt": counter("prompt"),
+        "completion": counter("completion"),
+        "total": counter("total"),
+        "calls": counter("calls"),
+    }
+
+
+_SENSITIVE_KEY_PARTS = (
+    "api_key", "apikey", "access_token", "refresh_token", "authorization",
+    "password", "passwd", "client_secret", "private_key", "cookie", "session",
+)
+
+
+def _is_sensitive_key(value: Any) -> bool:
+    token = str(value or "").strip().casefold().replace("-", "_")
+    return token == "token" or token.endswith("_token") or any(
+        part in token for part in _SENSITIVE_KEY_PARTS
+    )
+
+
+def _redact_string(value: str) -> str:
+    result = re.sub(
+        r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+", r"\1 [REDACTED]", value,
+    )
+    return re.sub(
+        r"(?i)([?&](?:token|api[_-]?key|access[_-]?token)=)[^&#\s]+",
+        r"\1[REDACTED]", result,
+    )
+
+
+def redact_sensitive_data(value: Any, depth: int = 0) -> Any:
+    """Recursively remove credentials before diagnostics or public metadata."""
+    if depth > 8:
+        return None
+    if isinstance(value, str):
+        return _redact_string(value)
+    if isinstance(value, list):
+        return [redact_sensitive_data(item, depth + 1) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): "[REDACTED]" if _is_sensitive_key(key)
+            else redact_sensitive_data(item, depth + 1)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _bounded(value: Any, depth: int = 0) -> Any:
@@ -48,15 +120,19 @@ def _bounded(value: Any, depth: int = 0) -> Any:
     if depth > 6:
         return None
     if isinstance(value, str):
-        return value[:8000]
+        return _redact_string(value)[:8000]
     if isinstance(value, list):
         return [_bounded(item, depth + 1) for item in value[:200]]
     if isinstance(value, dict):
-        return {
-            str(key)[:160]: _bounded(item, depth + 1)
-            for key, item in list(value.items())[:200]
-            if str(key).lower() not in {"prompt", "negative_prompt", "lyrics", "api_key", "token"}
-        }
+        result = {}
+        for key, item in list(value.items())[:200]:
+            safe_key = str(key)[:160]
+            lowered = str(key).lower()
+            if lowered == "token_usage":
+                result[safe_key] = _normalize_token_usage(item)
+            elif lowered not in {"prompt", "negative_prompt", "lyrics"} and not _is_sensitive_key(lowered):
+                result[safe_key] = _bounded(item, depth + 1)
+        return result
     if value is None or isinstance(value, (bool, int, float)):
         return value
     return str(value)[:2000]
@@ -141,12 +217,65 @@ class TaskRegistry:
                     type TEXT NOT NULL,
                     changes TEXT NOT NULL,
                     context TEXT NOT NULL,
-                    FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
                     UNIQUE(task_id, sequence)
                 );
                 CREATE INDEX IF NOT EXISTS idx_task_events_task
                     ON task_events(task_id, sequence);
             """)
+            self._migrate_task_events_to_durable_log(connection)
+
+    @staticmethod
+    def _migrate_task_events_to_durable_log(connection: sqlite3.Connection) -> None:
+        """Remove the legacy cascade so deletion tombstones survive reloads."""
+        if not connection.execute("PRAGMA foreign_key_list(task_events)").fetchall():
+            return
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            # Another process may have completed the migration while this
+            # connection waited for the SQLite write lock.
+            foreign_keys = connection.execute(
+                "PRAGMA foreign_key_list(task_events)"
+            ).fetchall()
+            if not foreign_keys:
+                connection.commit()
+                return
+
+            # SQLite cannot drop a foreign key in place. Rebuild the event log
+            # transactionally, preserving event IDs so Last-Event-ID cursors
+            # remain valid across an application upgrade.
+            connection.execute("DROP INDEX IF EXISTS idx_task_events_task")
+            connection.execute("""
+                CREATE TABLE task_events_durable_migration (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    root_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    timestamp REAL NOT NULL,
+                    type TEXT NOT NULL,
+                    changes TEXT NOT NULL,
+                    context TEXT NOT NULL,
+                    UNIQUE(task_id, sequence)
+                )
+            """)
+            connection.execute("""
+                INSERT INTO task_events_durable_migration
+                    (event_id, task_id, root_id, sequence, timestamp, type, changes, context)
+                SELECT event_id, task_id, root_id, sequence, timestamp, type, changes, context
+                FROM task_events
+            """)
+            connection.execute("DROP TABLE task_events")
+            connection.execute(
+                "ALTER TABLE task_events_durable_migration RENAME TO task_events"
+            )
+            connection.execute("""
+                CREATE INDEX idx_task_events_task
+                    ON task_events(task_id, sequence)
+            """)
+            connection.commit()
+        except BaseException:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
 
     @staticmethod
     def _decode(row: sqlite3.Row | None) -> dict | None:
@@ -156,7 +285,10 @@ class TaskRegistry:
             value = json.loads(row["snapshot"])
         except (json.JSONDecodeError, TypeError):
             return None
-        return value if isinstance(value, dict) else None
+        if not isinstance(value, dict):
+            return None
+        value["token_usage"] = _normalize_token_usage(value.get("token_usage"))
+        return value
 
     def _append_event(
         self,
@@ -220,9 +352,7 @@ class TaskRegistry:
             "acquired_resources": _bounded(fields.get("acquired_resources") or []),
             "attempt": max(1, int(fields.get("attempt") or 1)),
             "max_attempts": max(1, int(fields.get("max_attempts") or 1)),
-            "token_usage": _bounded(fields.get("token_usage") or {
-                "prompt": 0, "completion": 0, "total": 0, "calls": 0,
-            }),
+            "token_usage": _normalize_token_usage(fields.get("token_usage")),
             "workspace": str(fields.get("workspace") or "default")[:300],
             "project_id": str(fields.get("project_id") or "")[:300],
             "entity_type": str(fields.get("entity_type") or "")[:160],
@@ -281,7 +411,13 @@ class TaskRegistry:
             if task is None:
                 connection.rollback()
                 raise KeyError(f"Task not found: {task_id}")
+            raw_token_usage = changes.get("token_usage") if "token_usage" in changes else None
             patch = _bounded(changes)
+            if "token_usage" in changes:
+                patch["token_usage"] = _normalize_token_usage(
+                    raw_token_usage,
+                    fallback=task.get("token_usage"),
+                )
             next_status = str(patch.get("status") or task["status"])
             if next_status not in ALL_STATUSES:
                 connection.rollback()
@@ -330,24 +466,56 @@ class TaskRegistry:
         root_id: str = "",
         limit: int = 200,
     ) -> list[dict]:
-        clauses: list[str] = []
-        params: list[Any] = []
+        requested_statuses = set(ALL_STATUSES)
         if statuses:
-            valid = sorted(set(statuses) & ALL_STATUSES)
-            if not valid:
+            requested_statuses = set(statuses) & ALL_STATUSES
+            if not requested_statuses:
                 return []
-            clauses.append(f"status IN ({','.join('?' for _ in valid)})")
-            params.extend(valid)
-        if root_id:
-            clauses.append("root_id = ?")
-            params.append(str(root_id))
-        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        params.append(max(1, min(1000, int(limit or 200))))
-        with self._connect() as connection:
-            rows = connection.execute(
-                f"SELECT snapshot FROM tasks {where} ORDER BY updated_at DESC LIMIT ?", params,
+
+        active_statuses = sorted(requested_statuses & ACTIVE_STATUSES)
+        terminal_statuses = sorted(requested_statuses & TERMINAL_STATUSES)
+        terminal_limit = max(1, min(1000, int(limit or 200)))
+
+        def query_for(status_group: list[str], *, row_limit: int | None = None):
+            if not status_group:
+                return []
+            clauses = [f"status IN ({','.join('?' for _ in status_group)})"]
+            params: list[Any] = list(status_group)
+            if root_id:
+                clauses.append("root_id = ?")
+                params.append(str(root_id))
+            limit_sql = ""
+            if row_limit is not None:
+                limit_sql = " LIMIT ?"
+                params.append(row_limit)
+            return connection.execute(
+                f"""SELECT id, updated_at, snapshot FROM tasks
+                    WHERE {' AND '.join(clauses)}
+                    ORDER BY updated_at DESC, id ASC{limit_sql}""",
+                params,
             ).fetchall()
-        return [task for row in rows if (task := self._decode(row)) is not None]
+
+        with self._connect() as connection:
+            # Active work must never disappear behind recent history.  The
+            # caller's limit is therefore a history budget: all requested
+            # active rows are returned, plus at most that many terminal rows.
+            # Keep both reads in one SQLite snapshot so a concurrent status
+            # transition cannot fall into the gap between the two queries.
+            connection.execute("BEGIN")
+            rows = query_for(active_statuses)
+            rows.extend(query_for(terminal_statuses, row_limit=terminal_limit))
+
+        deduplicated: dict[str, tuple[float, dict]] = {}
+        for row in rows:
+            task = self._decode(row)
+            if task is None:
+                continue
+            deduplicated[str(row["id"])] = (float(row["updated_at"]), task)
+        ordered = sorted(
+            deduplicated.values(),
+            key=lambda item: (-item[0], str(item[1].get("id") or "")),
+        )
+        return [task for _updated_at, task in ordered]
 
     def events(self, task_id: str = "", *, after: int = 0, limit: int = 500) -> list[dict]:
         clauses = ["event_id > ?"]
@@ -382,10 +550,13 @@ class TaskRegistry:
             self._condition.notify_all()
 
     def wait_for_events(self, after: int, timeout: float = 15.0) -> list[dict]:
-        events = self.events(after=after)
-        if events:
-            return events
         with self._condition:
+            # Query while holding the same condition used by _notify. This
+            # closes the commit-between-query-and-wait window that could make
+            # a live SSE client wait for the full keepalive timeout.
+            events = self.events(after=after)
+            if events:
+                return events
             self._condition.wait(timeout=max(0.05, min(30.0, timeout)))
         return self.events(after=after)
 
@@ -405,13 +576,35 @@ class TaskRegistry:
         return interrupted
 
     def delete(self, task_id: str) -> bool:
-        task = self.get(task_id)
-        if not task:
-            return False
-        if task.get("status") in ACTIVE_STATUSES:
-            raise ValueError("Active tasks must be cancelled before dismissal")
+        task_id = str(task_id)
         with self._write_lock, self._connect() as connection:
-            connection.execute("DELETE FROM tasks WHERE id = ?", (str(task_id),))
+            connection.execute("BEGIN IMMEDIATE")
+            task = self._decode(connection.execute(
+                "SELECT snapshot FROM tasks WHERE id = ?", (task_id,),
+            ).fetchone())
+            if not task:
+                connection.rollback()
+                return False
+            if task.get("status") in ACTIVE_STATUSES:
+                connection.rollback()
+                raise ValueError("Active tasks must be cancelled before dismissal")
+
+            deleted_at = _now()
+            self._append_event(
+                connection,
+                task,
+                "task.deleted",
+                {
+                    "deleted": True,
+                    "tombstone": True,
+                    "task_id": task["id"],
+                    "root_id": task["root_id"],
+                    "status": task["status"],
+                    "deleted_at": deleted_at,
+                },
+            )
+            connection.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            connection.commit()
         self._notify()
         return True
 

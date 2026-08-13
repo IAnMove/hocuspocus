@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react'
-import { CheckSquare, RefreshCw, Square, Upload } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { CheckSquare, Info, RefreshCw, Square, Upload } from 'lucide-react'
 import * as api from '../../api/client'
 import { Pill, SectionCard } from './components'
 import { inputClass, primaryButton, secondaryButton, selectClass, textareaClass } from './styles'
 import type { SeriesEpisode, SeriesProject, SeriesShot } from './types'
 
 export function SeriesShotsPanel({
-  workspace, series, episode, updateEpisode, replaceSeries, saveNow, onRender,
+  workspace, series, episode, updateEpisode, replaceSeries, saveNow, onAcknowledgeLipSync, onRender,
 }: {
   workspace: string
   series: SeriesProject
@@ -14,13 +14,26 @@ export function SeriesShotsPanel({
   updateEpisode: (updater: (episode: SeriesEpisode) => SeriesEpisode) => void
   replaceSeries: (series: SeriesProject) => void
   saveNow: () => Promise<unknown>
+  onAcknowledgeLipSync: () => Promise<void>
   onRender: (mode: 'selected' | 'missing' | 'failed' | 'all', shotIds?: string[]) => void
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [routing, setRouting] = useState(false)
+  const [acknowledgingLipSync, setAcknowledgingLipSync] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const characters = useMemo(() => Object.fromEntries(series.characters.map(item => [item.id, item.name])), [series.characters])
   const locations = useMemo(() => Object.fromEntries(series.locations.map(item => [item.id, item.name])), [series.locations])
+  const selectableShotIds = useMemo(
+    () => episode.shots.filter(shot => !shot.approvedAttemptId).map(shot => shot.id),
+    [episode.shots],
+  )
+  const selectedCount = selectableShotIds.filter(id => selected.has(id)).length
+  const allSelected = selectableShotIds.length > 0 && selectedCount === selectableShotIds.length
+  const hasDialogueShots = episode.shots.some(shot => shot.dialogueBeats.length > 0)
+  useEffect(() => {
+    const validIds = new Set(episode.shots.map(shot => shot.id))
+    setSelected(current => new Set([...current].filter(id => validIds.has(id))))
+  }, [episode.id, episode.shots])
   const patchShot = (shotId: string, updater: (shot: SeriesShot) => SeriesShot) => updateEpisode(current => ({
     ...current, shots: current.shots.map(shot => shot.id === shotId ? updater(shot) : shot),
   }))
@@ -64,11 +77,26 @@ export function SeriesShotsPanel({
     finally { setRouting(false) }
   }
   const totalDuration = episode.shots.reduce((sum, shot) => sum + shot.durationSeconds, 0)
+  const acknowledgeLipSync = async () => {
+    setAcknowledgingLipSync(true); setError(null)
+    try { await onAcknowledgeLipSync() }
+    catch (reason) { setError((reason as Error).message) }
+    finally { setAcknowledgingLipSync(false) }
+  }
   return <div className="space-y-4 pb-10">
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
     <SectionCard title="Shot breakdown" description={`${episode.shots.length} shots · ${totalDuration.toFixed(1)}s planned · exact ID routing before render`} action={<button className={secondaryButton} disabled={routing || !episode.shots.length} onClick={() => void routeAll()}><RefreshCw size={13} className={routing ? 'animate-spin' : ''} />Route all references</button>}>
-      <div className="mb-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!selected.size} onClick={() => onRender('selected', [...selected])}><CheckSquare size={13} />Render selected ({selected.size})</button><button className={secondaryButton} onClick={() => onRender('missing')}>Render missing</button><button className={secondaryButton} onClick={() => onRender('failed')}>Retry failed</button><button className={secondaryButton} onClick={() => onRender('all')}>Render all unapproved</button></div>
-      {!episode.shots.length && <p className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-4 text-xs text-violet-200">Generate and apply a complete episode proposal to create the 8–12 shot plan.</p>}
+      {hasDialogueShots && !series.bestEffortLipSyncAcknowledged && <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+        <Info size={16} className="shrink-0 text-amber-300" />
+        <div className="min-w-0 flex-1"><p className="font-semibold">Dialogue render needs one acknowledgement</p><p className="mt-0.5 text-[10px] text-amber-200/80">MiniMax H3 generates native speech, but exact mouth synchronization is best-effort. Accept it once for this series.</p></div>
+        <button className={secondaryButton} disabled={acknowledgingLipSync} onClick={() => void acknowledgeLipSync()}>{acknowledgingLipSync ? <RefreshCw size={13} className="animate-spin" /> : <CheckSquare size={13} />}I understand · enable dialogue rendering</button>
+      </div>}
+      <div className="mb-3 flex flex-wrap gap-2">
+        <button className={secondaryButton} disabled={!selectableShotIds.length} onClick={() => setSelected(allSelected ? new Set() : new Set(selectableShotIds))}>{allSelected ? <CheckSquare size={13} /> : <Square size={13} />}{allSelected ? 'Clear selection' : `Select all (${selectableShotIds.length})`}</button>
+        <button className={primaryButton} disabled={!selectedCount || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('selected', selectableShotIds.filter(id => selected.has(id)))}><CheckSquare size={13} />Render selected ({selectedCount})</button>
+        <button className={secondaryButton} disabled={hasDialogueShots && !series.bestEffortLipSyncAcknowledged} onClick={() => onRender('missing')}>Render missing</button><button className={secondaryButton} disabled={hasDialogueShots && !series.bestEffortLipSyncAcknowledged} onClick={() => onRender('failed')}>Retry failed</button><button className={secondaryButton} disabled={hasDialogueShots && !series.bestEffortLipSyncAcknowledged} onClick={() => onRender('all')}>Render all unapproved</button>
+      </div>
+      {!episode.shots.length && <p className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-4 text-xs text-violet-200">Generate and apply an episode proposal to create enough 5/10/15-second shots for the target runtime.</p>}
       <div className="space-y-3">{episode.shots.map(shot => {
         const manifest = shot.referenceManifest
         const approved = shot.attempts.find(item => item.id === shot.approvedAttemptId)
@@ -83,7 +111,7 @@ export function SeriesShotsPanel({
             <button className={`ml-auto ${secondaryButton}`} disabled={routing} onClick={() => void routeOne(shot.id)}><RefreshCw size={12} />Re-route</button>
           </div>
           <div className="mt-3 grid gap-2 lg:grid-cols-[120px_120px_1fr]">
-            <input className={inputClass} type="number" min={1} max={30} value={shot.durationSeconds} onChange={event => patchShot(shot.id, current => ({ ...current, durationSeconds: Number(event.target.value), referenceManifest: undefined }))} />
+            <input className={inputClass} type="number" min={5} max={15} step={5} value={shot.durationSeconds} onChange={event => patchShot(shot.id, current => ({ ...current, durationSeconds: Math.max(5, Math.min(15, Math.round(Number(event.target.value) / 5) * 5)), referenceManifest: undefined }))} />
             <select className={selectClass} value={shot.renderStrategy} onChange={event => patchShot(shot.id, current => ({ ...current, renderStrategy: event.target.value as SeriesShot['renderStrategy'], referenceManifest: undefined }))}><option value="auto">Auto</option><option value="direct">Direct T2V</option><option value="references">References</option><option value="first_frame">First frame</option><option value="first_last">First + last</option></select>
             <textarea className={textareaClass} value={shot.prompt} onChange={event => patchShot(shot.id, current => ({ ...current, prompt: event.target.value }))} />
           </div>

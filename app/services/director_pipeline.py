@@ -23,11 +23,13 @@ import secrets
 import subprocess
 import unicodedata
 import traceback
+from contextlib import nullcontext
 from functools import wraps
 from typing import Callable, Optional
 
 from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
+    acknowledge_cancel,
     register_generation_job,
     request_cancel,
     snapshot_job,
@@ -60,6 +62,7 @@ _cancel_generation = None   # reference to launch._request_generation_cancel
 _wgp = None                 # reference to wgp module
 _gen_lock = None            # reference to launch._gen_lock
 _active_gen_states = None   # reference to launch._active_gen_states (abort signaling)
+_pipeline_state_observer: Optional[Callable[[dict, str], Optional[dict]]] = None
 
 _pipelines: dict = {}
 _pipeline_lock = threading.Lock()
@@ -1350,7 +1353,11 @@ def _save_pipeline_state_locked(pid: str) -> bool:
         "completed_at": p.get("_completed_at"),
         "status": p.get("status", "unknown"),
         "phase": p.get("phase"),
+        "error": p.get("error"),
         "progress": copy.deepcopy(p.get("progress") or {}),
+        "resource_schedule": copy.deepcopy(
+            p.get("resource_schedule") or {}
+        ),
         "pipeline_type": params.get("pipeline_type", "music_video"),
         "generation_mode": (
             "direct_video" if _direct_video_settings(params)[0] else "image_guided"
@@ -1767,17 +1774,30 @@ def list_pipeline_states(out_dir: str, workspace: Optional[str] = None) -> list[
                     results.append({
                         "id": pid,
                         "status": status,
+                        "phase": data.get("phase") or status,
                         "pipeline_type": data.get("pipeline_type", ""),
                         "generation_mode": data.get("generation_mode", "image_guided"),
                         "created_at": data.get("created_at"),
+                        "updated_at": data.get("updated_at"),
+                        "completed_at": data.get("completed_at"),
+                        "progress": copy.deepcopy(data.get("progress") or {}),
+                        "error": data.get("error"),
                         "clip_count": len(data.get("clips", [])),
                         "output_count": len(data.get("output_files", [])),
+                        "output_files": list(data.get("output_files", []) or []),
                         "scene_description": (data.get("scene_description", "") or "")[:100],
                         "comic_id": data.get("comic_id"),
                         "preview_fingerprint": data.get("preview_fingerprint"),
                         "preview_revision": data.get("preview_revision", 1),
                         "workspace": os.path.basename(scan_dir) if scan_dir != out_dir else "default",
                         "repair_status": (data.get("repair") or {}).get("status"),
+                        "generation_details": _public_pipeline_generation_details(
+                            _director_params_from_saved_state(data),
+                            len(data.get("clips", [])),
+                        ),
+                        "resource_schedule": copy.deepcopy(
+                            data.get("resource_schedule") or {}
+                        ),
                         "_filepath": filepath,
                     })
                 except Exception:
@@ -4220,6 +4240,79 @@ def cancel_pipeline_repair(out_dir: str, pid: str) -> Optional[dict]:
     return snapshot
 
 
+def _pipeline_observer_snapshot(pipeline: dict) -> dict:
+    """Build one immutable, non-sensitive snapshot for task publication."""
+    snapshot = copy.deepcopy(pipeline)
+    params = snapshot.pop("params", None)
+    snapshot.pop("_llm_passes", None)
+    snapshot["pipeline_type"] = snapshot.get("pipeline_type") or (
+        params or {}
+    ).get("pipeline_type", "")
+    details = _public_pipeline_generation_details(
+        params,
+        len(snapshot.get("clip_plans") or []),
+    )
+    if details:
+        snapshot["generation_details"] = details
+    return snapshot
+
+
+def _observer_task_ids(result) -> tuple[Optional[str], Optional[str]]:
+    """Accept both TaskRegistry records and explicit observer ID payloads."""
+    if not isinstance(result, dict):
+        return None, None
+    task_id = str(
+        result.get("task_id") or result.get("id") or ""
+    ).strip()
+    root_task_id = str(
+        result.get("root_task_id")
+        or result.get("root_id")
+        or task_id
+        or ""
+    ).strip()
+    return task_id or None, root_task_id or None
+
+
+def _notify_pipeline_snapshot(
+    pid: str,
+    snapshot: Optional[dict] = None,
+) -> Optional[dict]:
+    """Publish a pipeline snapshot without holding Director's registry lock.
+
+    The callback is deliberately best-effort: task observability must never
+    stop a render.  A callback may return either the canonical TaskRegistry
+    record (``id``/``root_id``) or explicit ``task_id``/``root_task_id``
+    fields.  Retaining those IDs on the pipeline lets nested LLM calls attach
+    themselves to the Director root from inside the background worker.
+    """
+    with _pipeline_lock:
+        observer = _pipeline_state_observer
+        if snapshot is None:
+            pipeline = _pipelines.get(pid)
+            snapshot = copy.deepcopy(pipeline) if pipeline else None
+    if observer is None or snapshot is None:
+        return None
+
+    public_snapshot = _pipeline_observer_snapshot(snapshot)
+    workspace = str(public_snapshot.get("workspace") or "default")
+    try:
+        result = observer(public_snapshot, workspace)
+    except Exception as exc:
+        print(f"[Pipeline {pid}] State observer warning (non-fatal): {exc}")
+        return None
+
+    task_id, root_task_id = _observer_task_ids(result)
+    if task_id or root_task_id:
+        with _pipeline_lock:
+            pipeline = _pipelines.get(pid)
+            if pipeline is not None:
+                if task_id:
+                    pipeline["task_id"] = task_id
+                if root_task_id:
+                    pipeline["root_task_id"] = root_task_id
+    return result if isinstance(result, dict) else None
+
+
 def init(
     jobs_dict,
     run_gen_fn,
@@ -4227,16 +4320,18 @@ def init(
     gen_lock=None,
     cancel_gen_fn=None,
     active_gen_states=None,
+    state_observer=None,
 ):
     """Called by launch.py to wire up shared references."""
     global _jobs, _run_generation, _cancel_generation, _wgp, _gen_lock
-    global _active_gen_states
+    global _active_gen_states, _pipeline_state_observer
     _jobs = jobs_dict
     _run_generation = run_gen_fn
     _cancel_generation = cancel_gen_fn
     _wgp = wgp_module
     _gen_lock = gen_lock
     _active_gen_states = active_gen_states
+    _pipeline_state_observer = state_observer
 
 
 class _DirectorOutputs(list):
@@ -4314,6 +4409,48 @@ def _clear_active_generation_job(pid: Optional[str], job_id: str) -> None:
             pipeline.pop("_active_generation_job_id", None)
 
 
+def _pipeline_has_active_work_locked(pid: str) -> bool:
+    return bool(
+        pid in _pipeline_threads
+        or _pipeline_child_jobs.get(pid)
+        or pid in _pipeline_starting
+    )
+
+
+def _acknowledge_pipeline_cancel(pid: str, *, force: bool = False) -> bool:
+    """Publish Director cancellation only after all owned work has settled."""
+    snapshot = None
+    with _pipeline_lock:
+        pipeline = _pipelines.get(pid)
+        if not pipeline or not pipeline.get("_cancel_requested"):
+            return False
+        if pipeline.get("status") == "cancelled":
+            return True
+        if not force and _pipeline_has_active_work_locked(pid):
+            return False
+        now = time.time()
+        pipeline["status"] = "cancelled"
+        pipeline["phase"] = "cancelled"
+        pipeline["pause_reason"] = None
+        pipeline["_completed_at"] = now
+        pipeline["updated_at"] = now
+        pipeline["progress"] = {
+            "current": 0,
+            "total": 0,
+            "message": "Cancelled",
+            "step": 0,
+            "total_steps": 0,
+        }
+        snapshot = copy.deepcopy(pipeline)
+    _notify_pipeline_snapshot(pid, snapshot)
+    persisted = _save_pipeline_state(pid)
+    with _pipeline_lock:
+        current = _pipelines.get(pid)
+        if current is not None:
+            current["_state_persisted"] = persisted
+    return True
+
+
 def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None, out_dir: str = None) -> list[str]:
     """Submit a generation job and block until it completes.
 
@@ -4357,13 +4494,26 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
                 return
             _run_generation(job_id)
         finally:
+            # `_run_generation` is synchronous: returning here means its
+            # generation slot/model invocation has fully unwound. A legacy or
+            # mocked worker may have observed the abort flag and returned
+            # before Director dispatched its compatibility callback; settle
+            # that sticky request here so the waiter cannot remain in
+            # `cancelling` forever.
+            acknowledge_cancel(job)
             if _dir_pid:
+                should_acknowledge_parent = False
                 with _pipeline_lock:
                     child_jobs = _pipeline_child_jobs.get(_dir_pid)
                     if child_jobs is not None:
                         child_jobs.discard(job_id)
                         if not child_jobs:
                             _pipeline_child_jobs.pop(_dir_pid, None)
+                    should_acknowledge_parent = not _pipeline_has_active_work_locked(
+                        _dir_pid,
+                    )
+                if should_acknowledge_parent:
+                    _acknowledge_pipeline_cancel(_dir_pid)
 
     # Run generation in a separate thread (it acquires _gen_lock internally).
     # The child lease outlives this waiter if cancellation cannot settle
@@ -4393,9 +4543,11 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
                         request_cancel(job)
                         _skip_generation = True
                 elif not _detached_operation:
-                    pipeline_cancelled = (
-                        _pipelines.get(_dir_pid, {}).get("status")
-                        == "cancelled"
+                    current_pipeline = _pipelines.get(_dir_pid, {})
+                    pipeline_cancelled = bool(
+                        current_pipeline.get("_cancel_requested")
+                        or current_pipeline.get("status") == "cancelled"
+                        or current_pipeline.get("phase") == "cancelling"
                     )
                     if pipeline_cancelled:
                         request_cancel(job)
@@ -4508,11 +4660,6 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
         if j["status"] == "completed":
             _clear_active_generation_job(_dir_pid, job_id)
             if not _detached_operation and _pipeline_cancel_requested(_dir_pid):
-                _update_pipeline(
-                    _dir_pid,
-                    status="cancelled",
-                    phase="cancelled",
-                )
                 _save_pipeline_state(_dir_pid)
                 raise PipelineCancelled("Director pipeline was cancelled.")
             return _director_job_outputs(j)
@@ -4545,9 +4692,7 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
         # while this job runs (e.g. the job was submitted in the window
         # after the stop endpoint scanned _jobs), signal abort from here.
         if _dir_pid and not _detached_operation and not _abort_signalled:
-            with _pipeline_lock:
-                _cancelled = _pipelines.get(_dir_pid, {}).get("status") == "cancelled"
-            if _cancelled:
+            if _pipeline_cancel_requested(_dir_pid):
                 _abort_pipeline_jobs(_dir_pid)
                 _abort_signalled = True
         # Mirror denoising step progress to pipeline status
@@ -4586,11 +4731,19 @@ def _submit_and_wait(params: dict, timeout_s: float = 600, workspace: str = None
 
 def _update_pipeline(pid: str, **kwargs):
     """Thread-safe update; cancellation is an absorbing terminal state."""
+    snapshot = None
     with _pipeline_lock:
         pipeline = _pipelines.get(pid)
         if not pipeline:
             return False
-        if pipeline.get("status") == "cancelled":
+        cancellation_ack = (
+            kwargs.get("status") == "cancelled"
+            and kwargs.get("phase", "cancelled") == "cancelled"
+        )
+        if pipeline.get("_cancel_requested") and not cancellation_ack:
+            if set(kwargs) - _CANCELLED_ARTIFACT_FIELDS:
+                return False
+        if pipeline.get("status") == "cancelled" and not cancellation_ack:
             # Finished clips may still be reported after an in-flight abort,
             # but no later phase, completion, or failure may replace Stop.
             if set(kwargs) - _CANCELLED_ARTIFACT_FIELDS:
@@ -4604,13 +4757,53 @@ def _update_pipeline(pid: str, **kwargs):
             pipeline["phase_started_at"] = now
         pipeline.update(kwargs)
         pipeline["updated_at"] = now
-        return True
+        snapshot = copy.deepcopy(pipeline)
+    _notify_pipeline_snapshot(pid, snapshot)
+    return True
+
+
+def _director_worker_task_context(pid: str):
+    """Return the canonical task scope for one Director worker, if present."""
+    with _pipeline_lock:
+        pipeline = _pipelines.get(pid) or {}
+        task_id = str(pipeline.get("task_id") or "").strip()
+        root_task_id = str(
+            pipeline.get("root_task_id") or task_id or ""
+        ).strip()
+        workspace = str(pipeline.get("workspace") or "default")
+        out_dir = pipeline.get("out_dir")
+    if not task_id:
+        return nullcontext()
+    try:
+        from .task_manager import task_context_scope
+    except Exception:
+        try:
+            from services.task_manager import task_context_scope
+        except Exception:
+            return nullcontext()
+    try:
+        return task_context_scope(
+            task_id=task_id,
+            root_task_id=root_task_id,
+            root_id=root_task_id,
+            workspace=workspace,
+            workspace_dir=out_dir,
+            out_dir=out_dir,
+        )
+    except Exception:
+        return nullcontext()
+
+
+def _run_pipeline_worker(pid: str, *, resume: bool = False) -> None:
+    """Run Director with canonical context inherited by nested LLM calls."""
+    with _director_worker_task_context(pid):
+        _run_pipeline(pid, resume=resume)
 
 
 def _start_pipeline_worker(pid: str, *, resume: bool = False) -> None:
     """Start and track a Director worker until its ``finally`` completes."""
     thread = threading.Thread(
-        target=_run_pipeline,
+        target=_run_pipeline_worker,
         args=(pid,),
         kwargs={"resume": resume},
         daemon=False,
@@ -4626,6 +4819,7 @@ def _start_pipeline_worker(pid: str, *, resume: bool = False) -> None:
     try:
         thread.start()
     except BaseException as exc:
+        should_publish_failure = False
         with _pipeline_lock:
             if _pipeline_threads.get(pid) is thread:
                 _pipeline_threads.pop(pid, None)
@@ -4633,23 +4827,29 @@ def _start_pipeline_worker(pid: str, *, resume: bool = False) -> None:
             if pipeline and pipeline.get("status") not in {
                 "completed", "failed", "cancelled",
             }:
-                pipeline["status"] = "failed"
-                pipeline["phase"] = "failed"
-                pipeline["error"] = f"Could not start pipeline worker: {exc}"
-                pipeline["_completed_at"] = time.time()
-                pipeline["progress"] = {
+                should_publish_failure = True
+        if should_publish_failure:
+            _update_pipeline(
+                pid,
+                status="failed",
+                phase="failed",
+                error=f"Could not start pipeline worker: {exc}",
+                _completed_at=time.time(),
+                progress={
                     "current": 0,
                     "total": 0,
                     "message": "Could not start pipeline worker",
                     "step": 0,
                     "total_steps": 0,
-                }
+                },
+            )
         _save_pipeline_state(pid)
         raise
 
 
 def _accumulate_pipeline_time(pid: str, key: str, elapsed_sec: float) -> None:
     """Atomically add a wall-clock stage duration to a live pipeline."""
+    snapshot = None
     with _pipeline_lock:
         pipeline = _pipelines.get(pid)
         if not pipeline:
@@ -4659,6 +4859,8 @@ def _accumulate_pipeline_time(pid: str, key: str, elapsed_sec: float) -> None:
             2,
         )
         pipeline["updated_at"] = time.time()
+        snapshot = copy.deepcopy(pipeline)
+    _notify_pipeline_snapshot(pid, snapshot)
 
 
 
@@ -4755,6 +4957,11 @@ def start_pipeline(params: dict) -> str:
 
     with _pipeline_lock:
         _pipelines[pid] = pipeline
+
+    # Publish only after the pipeline is discoverable, but before its worker
+    # can advance.  The observer's canonical IDs are stored synchronously so
+    # the very first LLM call inherits the Director parent context.
+    _notify_pipeline_snapshot(pid)
 
     # Non-daemon so pipeline survives browser disconnect during overnight runs.
     _start_pipeline_worker(pid)
@@ -4880,6 +5087,98 @@ def list_active_pipelines(workspace: Optional[str] = None) -> list[dict]:
     results.sort(key=lambda item: item.get("created_at") or 0, reverse=True)
     return results
 
+
+_RECENT_PIPELINE_TERMINAL_STATUSES = frozenset({
+    "completed",
+    "failed",
+    "cancelled",
+    "crashed",
+    "preview_ready",
+})
+
+
+def list_recent_pipelines(
+    out_dir: str,
+    workspace: Optional[str] = None,
+    *,
+    terminal_limit: int = 50,
+) -> list[dict]:
+    """Return active runs plus recent terminal snapshots for task syncing.
+
+    ``list_active_pipelines`` intentionally powers the Dashboard's live-run
+    surface and therefore drops a pipeline at the instant it becomes
+    terminal.  The canonical task registry needs the opposite guarantee: it
+    must observe that final transition even when no poll happened between the
+    last running update and completion.  Merge sanitized in-memory snapshots
+    with durable checkpoints so this also works after a Maestro restart or a
+    failed final checkpoint write.
+    """
+    normalized_workspace = workspace or "default"
+    active_statuses = {"running", "queued", "paused"}
+    with _pipeline_lock:
+        memory = [dict(p) for p in _pipelines.values()]
+
+    by_id: dict[str, dict] = {}
+    for pipeline in memory:
+        pipeline_workspace = pipeline.get("workspace") or "default"
+        status = str(pipeline.get("status") or "").strip().lower()
+        if pipeline_workspace != normalized_workspace:
+            continue
+        if (
+            status not in active_statuses
+            and status not in _RECENT_PIPELINE_TERMINAL_STATUSES
+        ):
+            continue
+        pipeline_type = pipeline.get("pipeline_type") or (
+            pipeline.get("params") or {}
+        ).get("pipeline_type", "")
+        details = _public_pipeline_generation_details(
+            pipeline.get("params"),
+            len(pipeline.get("clip_plans") or []),
+        )
+        pipeline.pop("params", None)
+        pipeline.pop("_llm_passes", None)
+        pipeline["pipeline_type"] = pipeline_type
+        if details:
+            pipeline["generation_details"] = details
+        pipeline_id = str(pipeline.get("id") or "")
+        if pipeline_id:
+            by_id[pipeline_id] = pipeline
+
+    # Checkpoints cover terminal transitions missed by a poll and survive a
+    # backend restart.  Live memory wins for duplicate IDs because it may be
+    # newer than the most recent phase-boundary checkpoint.
+    for pipeline in list_pipeline_states(out_dir, normalized_workspace):
+        pipeline_id = str(pipeline.get("id") or "")
+        status = str(pipeline.get("status") or "").strip().lower()
+        if (
+            pipeline_id
+            and pipeline_id not in by_id
+            and status in _RECENT_PIPELINE_TERMINAL_STATUSES
+        ):
+            by_id[pipeline_id] = pipeline
+
+    active = [
+        pipeline for pipeline in by_id.values()
+        if str(pipeline.get("status") or "").strip().lower()
+        in active_statuses
+    ]
+    terminal = [
+        pipeline for pipeline in by_id.values()
+        if str(pipeline.get("status") or "").strip().lower()
+        in _RECENT_PIPELINE_TERMINAL_STATUSES
+    ]
+    sort_key = lambda item: (
+        item.get("completed_at")
+        or item.get("_completed_at")
+        or item.get("updated_at")
+        or item.get("created_at")
+        or 0
+    )
+    active.sort(key=sort_key, reverse=True)
+    terminal.sort(key=sort_key, reverse=True)
+    return active + terminal[:max(0, int(terminal_limit))]
+
 def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
     """Return live status or a terminal disk snapshot after a UI reconnect.
 
@@ -4948,6 +5247,7 @@ def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
 
 def continue_pipeline(pid: str, updates: Optional[dict] = None):
     """Resume a paused pipeline, optionally with updated clip_plans."""
+    snapshot = None
     with _pipeline_lock:
         p = _pipelines.get(pid)
         if not p or p["status"] != "paused":
@@ -4957,6 +5257,9 @@ def continue_pipeline(pid: str, updates: Optional[dict] = None):
                 p["clip_plans"] = updates["clip_plans"]
         p["status"] = "running"
         p["pause_reason"] = None
+        p["updated_at"] = time.time()
+        snapshot = copy.deepcopy(p)
+    _notify_pipeline_snapshot(pid, snapshot)
     return True
 
 
@@ -6389,6 +6692,10 @@ def _resume_pipeline_reserved(pid: str, out_dir: str) -> tuple[bool, str]:
     }
     with _pipeline_lock:
         _pipelines[pid] = pipeline
+    # Re-publish rehydrated state before either returning a recovered terminal
+    # checkpoint or launching the resumed worker. This also restores the
+    # canonical task IDs needed by nested remote LLM operations.
+    _notify_pipeline_snapshot(pid)
 
     if data.get("status") == "preview_ready" and data.get("preview_clips"):
         _update_pipeline(
@@ -6454,28 +6761,40 @@ def _abort_pipeline_jobs(pid: str):
 
 
 def stop_pipeline(pid: str) -> bool:
+    snapshot = None
     with _pipeline_lock:
         p = _pipelines.get(pid)
         if not p or p.get("status") in ("completed", "failed", "cancelled"):
             return False
-        p["status"] = "cancelled"
-        p["phase"] = "cancelled"
+        has_active_work = _pipeline_has_active_work_locked(pid)
         p["_cancel_requested"] = True
         p["pause_reason"] = None
-        p["_completed_at"] = time.time()
-        p["progress"] = {
-            "current": 0,
-            "total": 0,
-            "message": "Cancelled",
-            "step": 0,
-            "total_steps": 0,
-        }
+        if has_active_work:
+            # Keep the root active until its worker and all child leases have
+            # actually unwound. Canonical observers expose the phase in the
+            # footer while cancellation proceeds at a safe boundary.
+            p["status"] = "running"
+            p["phase"] = "cancelling"
+            p.pop("_completed_at", None)
+            p["progress"] = {
+                "current": 0,
+                "total": 0,
+                "message": "Cancelling at a safe boundary…",
+                "step": 0,
+                "total_steps": 0,
+            }
+        p["updated_at"] = time.time()
+        snapshot = copy.deepcopy(p)
+    _notify_pipeline_snapshot(pid, snapshot)
     _abort_pipeline_jobs(pid)
-    persisted = _save_pipeline_state(pid)
-    with _pipeline_lock:
-        current = _pipelines.get(pid)
-        if current is not None:
-            current["_state_persisted"] = persisted
+    if has_active_work:
+        persisted = _save_pipeline_state(pid)
+        with _pipeline_lock:
+            current = _pipelines.get(pid)
+            if current is not None:
+                current["_state_persisted"] = persisted
+    else:
+        _acknowledge_pipeline_cancel(pid)
     return True
 
 
@@ -6500,12 +6819,27 @@ def _run_pipeline(pid: str, resume: bool = False):
     generation phase re-runs — so a crash 2 hours into a run doesn't
     throw away the LLM planning that already succeeded.
     """
+    planning_resource_context = None
+    parallel_video_thread: Optional[threading.Thread] = None
+    parallel_image_failed = threading.Event()
+    parallel_clip_events: list[threading.Event] = []
     try:
         with _pipeline_lock:
             p = _pipelines.get(pid)
-            if not p or p.get("status") == "cancelled":
+            if not p or p.get("_cancel_requested") or p.get("status") == "cancelled":
                 return
         params = p["params"]
+        from services.director.spoken_language import (
+            append_spoken_language_contract,
+            extract_spoken_language,
+        )
+        if not params.get("spoken_language"):
+            params["spoken_language"] = extract_spoken_language(
+                params.get("scene_description", "")
+            )
+        params["scene_description"] = append_spoken_language_contract(
+            params.get("scene_description", ""), params.get("spoken_language", ""),
+        )
         pipeline_out_dir = p.get("out_dir") or _wgp.save_path
         pipeline_workspace = p.get("workspace")
         direct_video, direct_video_master_prompt = _direct_video_settings(params)
@@ -6564,12 +6898,39 @@ def _run_pipeline(pid: str, resume: bool = False):
             resource_schedule=_resource_schedule_payload(resource_lanes),
         )
 
-        # Only a local GPU planner must wait for the generation queue. Remote
-        # providers and a CPU LLM are independent resources and can plan while
-        # another workflow renders locally.
+        # A local CUDA planner owns the same physical GPU-0 semaphore as Studio,
+        # Series, H3, 3D and UniRig. Keep the lease through planning, prompt
+        # polish and optional vision style detection; polling alone has a race
+        # where a generation can start between the check and the LLM request.
         if resource_lanes["planning"].key.startswith("local_gpu:"):
-            if not _wait_for_gpu(pid):
-                return  # cancelled while waiting
+            try:
+                from services import resource_scheduler
+            except ImportError:  # pragma: no cover - package import mode
+                from app.services import resource_scheduler
+
+            _update_pipeline(
+                pid,
+                phase="waiting_resource",
+                progress={
+                    "current": 0,
+                    "total": 1,
+                    "message": "Waiting for local GPU 0 for LLM planning…",
+                    "step": 0,
+                    "total_steps": 0,
+                },
+            )
+            planning_resource_context = resource_scheduler.coordinator.acquire(
+                resource_lanes["planning"],
+                task_id=f"director-planning-{pid}",
+                description="Local LLM Director planning",
+                cancelled=lambda: _pipeline_cancel_requested(pid),
+            )
+            try:
+                planning_resource_context.__enter__()
+            except resource_scheduler.ResourceAcquireCancelled:
+                planning_resource_context = None
+                return
+            params["_planning_gpu_lease_held"] = True
         else:
             print(
                 f"[Pipeline {pid}] Planning on {resource_lanes['planning'].label}; "
@@ -6864,6 +7225,10 @@ def _run_pipeline(pid: str, resume: bool = False):
             # any LLM polish so a rewrite cannot reduce a recognizable set to
             # a generic room.
             clip_plans = apply_independent_shot_context(clip_plans)
+        from services.director.spoken_language import apply_spoken_language_to_plans
+        apply_spoken_language_to_plans(
+            clip_plans, params.get("spoken_language", ""),
+        )
         _preflight_h3_director_prompts(
             params.get("video_model", ""),
             clip_plans,
@@ -6873,7 +7238,7 @@ def _run_pipeline(pid: str, resume: bool = False):
         _save_pipeline_state(pid)  # Save after planning
 
         # Check cancellation
-        if _pipelines[pid]["status"] == "cancelled":
+        if _pipeline_cancel_requested(pid):
             return
 
         # In non-auto mode, pause for user review after planning
@@ -6892,7 +7257,7 @@ def _run_pipeline(pid: str, resume: bool = False):
             )
             _save_pipeline_state(pid)  # Save paused state so Dashboard shows it
             _wait_for_resume(pid)
-            if _pipelines[pid]["status"] == "cancelled":
+            if _pipeline_cancel_requested(pid):
                 return
             # Reload clip_plans in case user edited them
             clip_plans = _pipelines[pid]["clip_plans"]
@@ -7097,11 +7462,13 @@ def _run_pipeline(pid: str, resume: bool = False):
                 llm_service.unload_model()
         except Exception as e:
             print(f"[Pipeline] LLM unload warning (non-fatal): {e}")
+        finally:
+            if planning_resource_context is not None:
+                planning_resource_context.__exit__(None, None, None)
+                planning_resource_context = None
+                params.pop("_planning_gpu_lease_held", None)
 
-        parallel_video_thread: Optional[threading.Thread] = None
         parallel_video_result: dict = {"outputs": None, "error": None}
-        parallel_image_failed = threading.Event()
-        parallel_clip_events: list[threading.Event] = []
         parallel_clip_images: list[str] = []
         parallel_clip_keyframes: list[list[str]] = []
         can_pipeline_remote_images = bool(
@@ -7308,7 +7675,7 @@ def _run_pipeline(pid: str, resume: bool = False):
         _update_pipeline(pid, clip_images=clip_images, _clip_keyframes=clip_keyframes)
         _save_pipeline_state(pid)  # Save after image generation
 
-        if _pipelines[pid]["status"] == "cancelled":
+        if _pipeline_cancel_requested(pid):
             return
 
         if params.get("comic_preflight_only"):
@@ -7347,7 +7714,7 @@ def _run_pipeline(pid: str, resume: bool = False):
             _update_pipeline(pid, status="paused", pause_reason="review_images",
                              progress={"current": 2, "total": 3, "message": "Review images", "step": 0, "total_steps": 0})
             _wait_for_resume(pid)
-            if _pipelines[pid]["status"] == "cancelled":
+            if _pipeline_cancel_requested(pid):
                 return
 
             # Review can be open for hours; a gallery cleanup or manual rename
@@ -7391,7 +7758,7 @@ def _run_pipeline(pid: str, resume: bool = False):
         # A Stop during the video phase lands here after the abort. Record
         # whatever clips finished (the Dashboard can rerun/rejoin them),
         # but don't overwrite the cancelled status with "completed".
-        if _pipelines[pid]["status"] == "cancelled":
+        if _pipeline_cancel_requested(pid):
             print(f"[Pipeline {pid}] Cancelled during video generation — keeping {len(output_files or [])} finished clip(s)")
             artifacts = {"output_files": output_files or []}
             if not params.get("seamless", True):
@@ -7443,19 +7810,6 @@ def _run_pipeline(pid: str, resume: bool = False):
         _save_pipeline_state(pid)  # Save on completion
 
     except PipelineCancelled:
-        _update_pipeline(
-            pid,
-            status="cancelled",
-            phase="cancelled",
-            _completed_at=time.time(),
-            progress={
-                "current": 0,
-                "total": 0,
-                "message": "Cancelled",
-                "step": 0,
-                "total_steps": 0,
-            },
-        )
         _save_pipeline_state(pid)
         return
     except Exception as e:
@@ -7555,6 +7909,27 @@ def _run_pipeline(pid: str, resume: bool = False):
             )
         _save_pipeline_state(pid)  # Save on failure too
     finally:
+        if (
+            parallel_video_thread is not None
+            and parallel_video_thread.is_alive()
+        ):
+            parallel_image_failed.set()
+            for event in parallel_clip_events:
+                event.set()
+            with _pipeline_lock:
+                active_job_id = (_pipelines.get(pid) or {}).get(
+                    "_active_generation_job_id"
+                )
+            if active_job_id and _cancel_generation is not None:
+                _cancel_generation(active_job_id)
+            parallel_video_thread.join()
+        if planning_resource_context is not None:
+            planning_resource_context.__exit__(None, None, None)
+            planning_resource_context = None
+            try:
+                params.pop("_planning_gpu_lease_held", None)
+            except Exception:
+                pass
         # H3 has two mutually exclusive owners: WGP for native variants and
         # isolated ComfyUI for Legacy ConvRot. Keep only a queued job that can
         # reuse the same owner; otherwise release before the next FIFO item.
@@ -7618,6 +7993,8 @@ def _run_pipeline(pid: str, resume: bool = False):
                         )
                 finally:
                     _gen_lock.release()
+        if _pipeline_cancel_requested(pid):
+            _acknowledge_pipeline_cancel(pid, force=True)
         with _pipeline_lock:
             current = _pipeline_threads.get(pid)
             if current is threading.current_thread():
@@ -7649,7 +8026,7 @@ def _wait_for_gpu(pid: str, poll_interval: float = 2.0):
     })
 
     while True:
-        if _pipelines.get(pid, {}).get("status") == "cancelled":
+        if _pipeline_cancel_requested(pid):
             return False
 
         # Check if any jobs are currently running
@@ -7770,7 +8147,12 @@ def _ensure_llm_loaded(params: dict):
     # identical request verified fine on a free GPU. Guarded by _gen_lock
     # so an active generation is never released mid-run; wgp reloads the
     # gen model transparently on its next job (reload_needed).
-    if desired_provider == "local" and desired_device == "cuda" and _wgp is not None:
+    if (
+        desired_provider == "local"
+        and desired_device == "cuda"
+        and _wgp is not None
+        and not params.get("_planning_gpu_lease_held")
+    ):
         acquired = _gen_lock.acquire(blocking=False) if _gen_lock is not None else True
         if acquired:
             try:
@@ -9499,7 +9881,7 @@ def _run_image_generation(
         print(f"[Pipeline {pid}] Adopted establishing image as shared reference: {anchor_file}")
 
     for i, plan in enumerate(clip_plans):
-        if _pipelines[pid]["status"] == "cancelled":
+        if _pipeline_cancel_requested(pid):
             return clip_images, clip_keyframes
 
         # ── Determine image source: original reference or previous scene's output ──
@@ -9570,7 +9952,7 @@ def _run_image_generation(
             chain_ref = os.path.join(out_dir, clip_images[-1])  # start from the start image
 
             for ki, kf_prompt in enumerate(keyframe_prompts):
-                if _pipelines[pid]["status"] == "cancelled":
+                if _pipeline_cancel_requested(pid):
                     break
 
                 # Ensure kf_prompt is a string (LLM may return dicts or other types)
@@ -12167,6 +12549,15 @@ def _preflight_h3_director_prompts(
     if not str(video_model or "").lower().startswith("minimax_h3"):
         return clip_plans
     from services.director.h3_dialogue import compile_h3_clip_plans
+    from services.director.spoken_language import apply_spoken_language_to_plans
+
+    language = ""
+    for plan in clip_plans:
+        audio_plan = plan.get("_director_audio_plan") or {}
+        if isinstance(audio_plan, dict) and audio_plan.get("spoken_language"):
+            language = audio_plan["spoken_language"]
+            break
+    apply_spoken_language_to_plans(clip_plans, language)
 
     if (
         prompt_modes is None
@@ -12227,6 +12618,8 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         )
     _validate_director_models(params, stages=("video",))
     video_model = params.get("video_model") or "ltx2_22B_distilled_1_1"
+    from services.director.spoken_language import apply_spoken_language_to_plans
+    apply_spoken_language_to_plans(clip_plans, params.get("spoken_language", ""))
     _preflight_h3_director_prompts(video_model, clip_plans, pid=pid)
     video_params = params.get("video_params", {})
     video_loras = params.get("video_loras", {})

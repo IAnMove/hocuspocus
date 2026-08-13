@@ -2357,7 +2357,7 @@ class TestOutpaintShotAwarePlanning(unittest.TestCase):
                     "_jobs": jobs,
                     "_gen_lock": object(),
                     "_active_gen_states": {},
-                    "generation_slot": lambda *args, **kwargs: (
+                    "_coordinated_generation_slot": lambda *args, **kwargs: (
                         contextlib.nullcontext(True)
                     ),
                     "try_start": try_start,

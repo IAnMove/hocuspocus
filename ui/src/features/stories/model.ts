@@ -5,7 +5,7 @@ import type {
 import {
   DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
   LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT,
-} from '../../types'
+} from '../../types/index.ts'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
 
@@ -118,6 +118,32 @@ export function storyRenderStyle(project: Pick<StoryProject, 'visualStyle' | 'ch
   ].filter(Boolean).join(' ')
 }
 
+/** Fast local preflight for prompts that are likely to collapse every clip into one scene. */
+export function analyzeStoryPromptHealth(project: StoryProject): string[] {
+  const warnings: string[] = []
+  const style = `${project.visualStyle} ${project.characterVisualStyle} ${project.directVideoMasterPrompt}`.toLocaleLowerCase()
+  const sceneTerms = [
+    'cafetería', 'cafe', 'café', 'ordenador', 'computer', 'laptop', 'office', 'oficina',
+    'bedroom', 'dormitorio', 'kitchen', 'cocina', 'sitting', 'sentado', 'typing', 'tecleando',
+  ].filter(term => style.includes(term))
+  if (sceneTerms.length >= 2) {
+    warnings.push(`El estilo/prompt maestro contiene escena o acción (${sceneTerms.slice(0, 4).join(', ')}). Muévela al argumento o a un plano concreto para que no se repita en todos los clips.`)
+  }
+  if (project.directVideoMasterPromptMode === 'custom' && project.directVideoMasterPrompt.length > 1200) {
+    warnings.push('El prompt maestro personalizado es muy largo; deja aquí sólo medio visual, paleta, iluminación y reglas de diseño.')
+  }
+  const beatTexts = project.beats.map(beat => `${beat.summary} ${beat.conflict} ${beat.turn}`.toLocaleLowerCase())
+  const repeated = ['cafetería', 'cafe', 'café', 'ordenador', 'computer', 'laptop', 'pantalla', 'screen']
+    .filter(term => beatTexts.length >= 3 && beatTexts.filter(textValue => textValue.includes(term)).length / beatTexts.length >= 0.6)
+  if (repeated.length) {
+    warnings.push(`La mayoría de momentos repite ${repeated.join(', ')}. Reserva ese motivo para uno o dos bloques y añade localizaciones/acciones de contraste.`)
+  }
+  if (project.locationVariety === 'balanced' && project.projectType === 'music_video' && project.creativeBrief.setting.trim() && !project.world.locations.length) {
+    warnings.push('Sólo hay una localización concreta. Con “variedad equilibrada”, añade al menos dos entornos de contraste o deja el lugar como referencia no obligatoria.')
+  }
+  return warnings
+}
+
 export function storyId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
@@ -141,6 +167,8 @@ function normalizeMusicCandidate(value: unknown, now: string): StoryMusicCandida
     model: text(candidate.model),
     durationSeconds: Math.max(0, Number(candidate.durationSeconds) || 0),
     createdAt: text(candidate.createdAt, now),
+    taskId: text(candidate.taskId) || undefined,
+    rootTaskId: text(candidate.rootTaskId) || undefined,
   }
 }
 
@@ -305,6 +333,10 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
       durationSeconds: projectType === 'quick_video' ? 15 : 90,
     },
     language: 'Español',
+    spokenLanguage: 'Español de España',
+    locationVariety: 'balanced',
+    protagonistConsistency: false,
+    protagonistCharacterId: '',
     genre: 'Adventure',
     tone: 'Cinematic',
     audience: 'General',
@@ -328,6 +360,11 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
       writingBaseUrl: 'https://api.deepseek.com',
       imageProvider: 'maestro',
       imageModel: 'flux2_klein_9b',
+    },
+    videoOverride: {
+      model: 'minimax_h3_legacy',
+      resolution: '540p',
+      aspectRatio: '16:9',
     },
     world: {
       summary: '', period: '', geography: '', society: '', technology: '',
@@ -418,6 +455,30 @@ export function normalizeStoryProject(value: unknown): StoryProject {
         && rawDirectVideoMasterPrompt !== LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT
         ? 'custom'
         : 'inherit'
+  const rawVideoOverride = project.videoOverride && typeof project.videoOverride === 'object'
+    ? project.videoOverride
+    : null
+  const videoOverrideModel = text(rawVideoOverride?.model)
+  const videoOverride = rawVideoOverride
+    ? {
+        model: videoOverrideModel,
+        resolution: ['auto', '480p', '540p', '720p', '768p', '1080p']
+          .includes(text(rawVideoOverride.resolution))
+          ? rawVideoOverride.resolution
+          : videoOverrideModel ? fallback.videoOverride.resolution : 'auto',
+        aspectRatio: ['auto', '16:9', '9:16']
+          .includes(text(rawVideoOverride.aspectRatio))
+          ? rawVideoOverride.aspectRatio
+          : videoOverrideModel ? fallback.videoOverride.aspectRatio : 'auto',
+      } as StoryProject['videoOverride']
+    : {
+        // Projects saved before videoOverride used the shared Director/Studio
+        // selection. Keep a sentinel so StoryLabPanel can capture that exact
+        // old value once after model hydration instead of silently changing it.
+        model: '',
+        resolution: 'auto',
+        aspectRatio: 'auto',
+      } as StoryProject['videoOverride']
   return {
     ...fallback,
     version: 1,
@@ -443,6 +504,12 @@ export function normalizeStoryProject(value: unknown): StoryProject {
         Number(creativeBrief.durationSeconds) || (project.projectType === 'quick_video' ? 15 : 90))),
     },
     language: text(project.language, fallback.language),
+    spokenLanguage: text(project.spokenLanguage, text(project.language, fallback.spokenLanguage)),
+    locationVariety: project.locationVariety === 'single_location' ? 'single_location' : 'balanced',
+    protagonistConsistency: project.protagonistConsistency === true,
+    protagonistCharacterId: (Array.isArray(project.characters) ? project.characters : [])
+      .some((character: StoryCharacter) => character.id === text(project.protagonistCharacterId))
+      ? text(project.protagonistCharacterId) : '',
     genre: text(project.genre, fallback.genre),
     tone: text(project.tone, fallback.tone),
     audience: text(project.audience, fallback.audience),
@@ -480,6 +547,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       imageProvider: project.provider?.imageProvider === 'minimax' ? 'minimax' : 'maestro',
       imageModel: text(project.provider?.imageModel, fallback.provider.imageModel),
     },
+    videoOverride,
     world: {
       summary: text(world.summary),
       period: text(world.period),
@@ -559,13 +627,13 @@ export function normalizeStoryProject(value: unknown): StoryProject {
 
 export function changedSections(before: StoryProject, after: StoryProject): StorySection[] {
   const overviewBefore = [
-    before.title, before.projectType, before.creativeBrief, before.language, before.genre, before.tone, before.audience,
+    before.title, before.projectType, before.creativeBrief, before.language, before.spokenLanguage, before.locationVariety, before.protagonistConsistency, before.protagonistCharacterId, before.genre, before.tone, before.audience,
     before.visualStyle, before.characterVisualStyle, before.enforceVisualStyle, before.allowClipText,
     before.musicVideoGenerationMode, before.directVideoMasterPromptMode, before.directVideoMasterPrompt,
     before.premise, before.logline, before.synopsis, before.theme, before.ending,
   ]
   const overviewAfter = [
-    after.title, after.projectType, after.creativeBrief, after.language, after.genre, after.tone, after.audience,
+    after.title, after.projectType, after.creativeBrief, after.language, after.spokenLanguage, after.locationVariety, after.protagonistConsistency, after.protagonistCharacterId, after.genre, after.tone, after.audience,
     after.visualStyle, after.characterVisualStyle, after.enforceVisualStyle, after.allowClipText,
     after.musicVideoGenerationMode, after.directVideoMasterPromptMode, after.directVideoMasterPrompt,
     after.premise, after.logline, after.synopsis, after.theme, after.ending,

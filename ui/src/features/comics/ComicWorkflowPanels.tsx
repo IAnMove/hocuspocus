@@ -1013,6 +1013,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       })
     }
     let activityFailed = false
+    let activityCancelled = false
     setBusy('animatic')
     setResult(null)
     reportAnimaticActivity('Preparing comic animatic…')
@@ -1060,6 +1061,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         fps: 30,
         transition,
         transition_duration: .35,
+        workspace: activeWorkspace,
         panels,
       })
       for (;;) {
@@ -1071,6 +1073,11 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
           job.progress,
           100,
         )
+        if (job.status === 'cancelled') {
+          activityCancelled = true
+          notify('ok', 'Animatic rendering cancelled.')
+          break
+        }
         if (job.status === 'failed') throw new Error(job.error || job.message)
         if (job.status === 'completed' && job.url && job.filename) {
           const completed = { name: job.filename, url: job.url }
@@ -1097,6 +1104,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       if (!activityFailed && foregroundActivity?.id === activityId) {
         useStore.getState().setForegroundActivity(null)
       }
+      if (activityCancelled) setResult(null)
       setBusy(null)
       setProgress('')
     }

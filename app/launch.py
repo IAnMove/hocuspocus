@@ -42,6 +42,7 @@ import asyncio
 import threading
 import traceback
 import requests
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from urllib.parse import quote
@@ -265,6 +266,33 @@ api.add_middleware(
 
 
 @api.middleware("http")
+async def protect_cross_origin_mutations(request: Request, call_next):
+    """Reject browser mutations from a different origin, including on LAN."""
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        if origin:
+            from urllib.parse import urlsplit
+
+            try:
+                origin_host = (urlsplit(origin).netloc or "").casefold()
+            except ValueError:
+                origin_host = ""
+            request_host = str(request.headers.get("host") or "").casefold()
+            local_hosts = {"localhost", "127.0.0.1", "[::1]"}
+            origin_name = origin_host.rsplit(":", 1)[0]
+            request_name = request_host.rsplit(":", 1)[0]
+            same_origin_host = bool(origin_host and origin_host == request_host)
+            local_proxy = origin_name in local_hosts and request_name in local_hosts
+            pinokio_proxy = bool(re.fullmatch(r"\d+\.localhost(?::\d+)?", origin_host))
+            if not (same_origin_host or local_proxy or pinokio_proxy):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Cross-origin API mutations are not allowed"},
+                )
+    return await call_next(request)
+
+
+@api.middleware("http")
 async def trace_user_mutations(request: Request, call_next):
     """Record reconstructible user/API actions while debug tracing is on."""
     should_trace = (
@@ -285,10 +313,13 @@ async def trace_user_mutations(request: Request, call_next):
                 request_body = {"parse_error": str(exc)}
         elif content_type:
             request_body = f"<{content_type}; body omitted>"
+        from services.task_manager import redact_sensitive_data
+
         debug_trace.trace_event(
             "user_action", "api_request", event_id=event_id, phase="request",
             method=request.method, path=request.url.path,
-            query=dict(request.query_params), body=request_body,
+            query=redact_sensitive_data(dict(request.query_params)),
+            body=redact_sensitive_data(request_body),
         )
     try:
         with debug_trace.context_scope(
@@ -318,6 +349,7 @@ async def trace_user_mutations(request: Request, call_next):
 # --- Generation job tracking ---
 from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
+    acknowledge_cancel,
     collect_job_outputs,
     finish_job,
     generation_queue_position,
@@ -327,15 +359,21 @@ from services.job_lifecycle import (
     register_abort_state,
     register_generation_job,
     request_cancel,
+    set_job_state_observer,
     snapshot_job,
     try_requeue,
     try_start,
     unregister_abort_state,
     update_job,
 )
+from services import resource_scheduler
 
 _jobs: dict = {}
-_gen_lock = threading.Lock()
+_local_gpu_lane = resource_scheduler.local_gpu_lane(0)
+# This is the coordinator's physical GPU-0 primitive. The existing generation
+# FIFO keeps using its proven job-lifecycle wrapper around the same object,
+# while migrated 3D/Rig/audio/LLM workers acquire it through the coordinator.
+_gen_lock = resource_scheduler.coordinator.shared_lock(_local_gpu_lane)
 _active_gen_states: dict = {}  # job_id -> wgp gen state dict (for abort signaling)
 _queue_recovery_lock = threading.Lock()
 _durable_generation_queue = DurableGenerationQueue(
@@ -344,10 +382,74 @@ _durable_generation_queue = DurableGenerationQueue(
         ".maestro_generation_queue.json",
     )
 )
-_audio_analysis_execution_lock = threading.Lock()
 _H3_IDLE_RELEASE_SECONDS = 10.0
 _h3_idle_release_timer: threading.Timer | None = None
 _h3_idle_release_lock = threading.RLock()
+
+
+def _prepare_local_gpu_owner(
+    _lane: resource_scheduler.ResourceLane,
+    _task_id: str,
+    description: str,
+) -> None:
+    """Hand GPU 0 to one engine without retaining incompatible runtimes."""
+    owner = str(description or "").strip().lower()
+    is_legacy_h3 = owner.startswith("maestro h3 legacy")
+    is_wgp_generation = owner.startswith("maestro wgp")
+    is_local_llm = owner.startswith("local llm")
+
+    if not is_legacy_h3:
+        minimax_h3_service.cancel_idle_shutdown()
+        minimax_h3_service.stop_runtime()
+    if not is_wgp_generation and getattr(wgp, "wan_model", None) is not None:
+        wgp.release_model()
+    if not is_local_llm:
+        try:
+            from services import llm_service
+            llm_status = llm_service.get_status()
+            if (
+                llm_status.get("provider") == "local"
+                and str(llm_status.get("device") or "").startswith("cuda")
+            ):
+                llm_service.unload_model()
+        except Exception as exc:
+            print(f"[Resources] Local CUDA LLM cleanup skipped: {exc}")
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+resource_scheduler.coordinator.set_prepare_hook(
+    _local_gpu_lane, _prepare_local_gpu_owner,
+)
+
+
+@contextmanager
+def _coordinated_generation_slot(
+    job: dict,
+    *,
+    description: str | None = None,
+):
+    """Keep the legacy FIFO while exposing its acquired GPU lease centrally."""
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    model_type = str(params.get("model_type") or "").strip()
+    if not description:
+        if _is_legacy_h3_model(model_type):
+            description = "Maestro H3 Legacy generation"
+        elif model_type:
+            description = f"Maestro WGP generation · {model_type}"
+        else:
+            description = "Maestro GPU generation"
+    with generation_slot(_gen_lock, job) as acquired:
+        if not acquired:
+            yield False
+            return
+        with resource_scheduler.coordinator.adopt_acquired(
+            _local_gpu_lane,
+            task_id=str(job.get("task_id") or job.get("id") or "generation"),
+            description=description,
+        ):
+            yield True
 
 
 def _is_durable_generation_job(job: dict) -> bool:
@@ -389,6 +491,7 @@ def _new_generation_job(
     job_id: str | None = None,
     created_at: float | None = None,
     recovered: bool = False,
+    reserve_generation: bool = True,
 ) -> dict:
     frozen_params = copy.deepcopy(params)
     if _is_minimax_h3_model(frozen_params.get("model_type")):
@@ -425,6 +528,7 @@ def _new_generation_job(
         "finished_at": None,
         "params": frozen_params,
         "output_files": [],
+        "acquired_resources": [],
         "error": None,
         "workspace": workspace,
         "out_dir": _workspace_dir(workspace),
@@ -433,7 +537,8 @@ def _new_generation_job(
     # Reserve FIFO order synchronously. Starting one thread per request is
     # still useful for cancellation/recovery, but thread scheduling no longer
     # decides which submitted generation reaches the GPU first.
-    register_generation_job(_gen_lock, job)
+    if reserve_generation:
+        register_generation_job(_gen_lock, job)
     publisher = globals().get("_publish_generation_task")
     if callable(publisher):
         try:
@@ -444,6 +549,45 @@ def _new_generation_job(
         except Exception as exc:
             print(f"[Task registry] Could not publish generation {job['id']}: {exc}")
     return job
+
+
+def _register_manual_generation_job(job: dict) -> dict:
+    """Publish older edit/tool jobs before their background thread starts."""
+    job_id = str(job.get("id") or "")
+    if not job_id:
+        raise ValueError("A manual generation job requires an id")
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    if not str(params.get("model_type") or "").strip():
+        params["model_type"] = "post_processing"
+    params.setdefault("generation_mode", "video")
+    job["params"] = params
+    job.setdefault("acquired_resources", [])
+    job.setdefault("started_at", None)
+    job.setdefault("finished_at", None)
+    job.setdefault("task_id", f"task-generation-{job_id}")
+    job.setdefault("root_task_id", job["task_id"])
+    _jobs[job_id] = job
+    register_generation_job(_gen_lock, job)
+    publisher = globals().get("_publish_generation_task")
+    if callable(publisher):
+        try:
+            task = publisher(job)
+            if isinstance(task, dict):
+                job["task_id"] = task.get("id") or job["task_id"]
+                job["root_task_id"] = (
+                    task.get("root_id") or task.get("id") or job["root_task_id"]
+                )
+        except Exception as exc:
+            print(f"[Task registry] Could not publish manual job {job_id}: {exc}")
+    return job
+
+
+def _generation_job_acceptance(job: dict) -> dict:
+    return {
+        "task_id": job.get("task_id"),
+        "root_task_id": job.get("root_task_id") or job.get("task_id"),
+        "generation_details": _public_generation_details(job.get("params")),
+    }
 
 
 _PUBLIC_MODEL_LABELS = {
@@ -521,6 +665,23 @@ def _public_generation_details(params: dict | None) -> dict:
     for key, value in public_values.items():
         if value is not None and value != "":
             details[key] = value
+
+    cache_type = str(params.get("skip_steps_cache_type") or "").strip()
+    if cache_type or model_type.startswith("minimax_h3"):
+        details["cache"] = bool(cache_type)
+        if cache_type:
+            details["cache_type"] = cache_type
+
+    raw_loras = params.get("activated_loras")
+    selected_loras = raw_loras if isinstance(raw_loras, (list, tuple)) else []
+    public_loras = [
+        os.path.basename(str(item).replace("\\", "/"))
+        for item in selected_loras
+        if str(item or "").strip()
+    ]
+    details["lora_count"] = len(public_loras)
+    if public_loras:
+        details["loras"] = public_loras
     return details
 
 
@@ -658,14 +819,32 @@ def _get_active_workspace() -> str:
 
 
 def _workspace_dir(workspace: str = None) -> str:
-    """Get the output directory for a workspace. Creates it if needed."""
-    ws = workspace or _get_active_workspace()
+    """Return a contained output directory for one validated workspace."""
+    ws = _get_active_workspace() if workspace is None else workspace
+    if not isinstance(ws, str) or not re.fullmatch(
+        r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)", ws
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid workspace name. Use letters, numbers, hyphens, "
+                "underscores, without spaces or path separators."
+            ),
+        )
+
     # Always read base from config, never from wgp.save_path (which may already include workspace)
-    base = wgp.server_config.get("save_path", "outputs")
-    if ws == "default":
-        return base
-    ws_dir = os.path.join(base, ws)
-    os.makedirs(ws_dir, exist_ok=True)
+    base = os.path.realpath(os.path.abspath(
+        wgp.server_config.get("save_path", "outputs")
+    ))
+    ws_dir = base if ws == "default" else os.path.realpath(os.path.join(base, ws))
+    try:
+        contained = os.path.commonpath((base, ws_dir)) == base
+    except (TypeError, ValueError):
+        contained = False
+    if not contained:
+        raise HTTPException(status_code=400, detail="Invalid workspace path.")
+    if ws != "default":
+        os.makedirs(ws_dir, exist_ok=True)
     return ws_dir
 
 
@@ -744,6 +923,7 @@ def _init_pipeline():
             _gen_lock,
             _request_generation_cancel,
             _active_gen_states,
+            state_observer=_publish_director_task,
         )
         _pipeline_initialized = True
 
@@ -1431,14 +1611,49 @@ def debug_model(model_type: str):
 @api.delete("/api/v1/models/{model_type}")
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
+    active_generation_ids = [
+        str(job_id)
+        for job_id, job in list(_jobs.items())
+        if (
+            str(job.get("status") or "").lower()
+            in {"created", "queued", "waiting_resource", "running", "cancelling"}
+            or job_id in _active_gen_states
+        )
+        and str((job.get("params") or {}).get("model_type") or "") == model_type
+    ]
+    if active_generation_ids:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot delete {model_type} while generation job(s) "
+                f"{', '.join(active_generation_ids[:5])} are active or queued. "
+                "Cancel them and wait for shutdown first."
+            ),
+        )
     if _is_legacy_h3_model(model_type):
         deleted = minimax_h3_service.delete_model_cache()
         return {"deleted": deleted, "model_type": model_type}
     if model_type == "unirig":
         from services import rig_service
+        if rig_service.has_active_unirig_jobs():
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Cannot delete UniRig while an AI rig job is active, "
+                    "queued, or still shutting down."
+                ),
+            )
         deleted = rig_service.delete_unirig_cache()
         return {"deleted": deleted, "model_type": model_type, "affected_models": []}
     if model_type in model3d_service.MODEL_BY_ID:
+        if model3d_service.has_active_jobs(model_type):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Cannot delete {model_type} while a 3D job using its "
+                    "shared model cache is active, queued, or shutting down."
+                ),
+            )
         affected = [item["id"] for item in model3d_service.models_sharing_repo(model_type)]
         deleted = model3d_service.delete_model_cache(model_type)
         return {"deleted": deleted, "model_type": model_type, "affected_models": affected if deleted else []}
@@ -6620,7 +6835,9 @@ def system_release_model():
     on the next job. Refuses while anything is generating.
     """
     for j in _jobs.values():
-        if j.get("status") in ("queued", "running"):
+        if j.get("status") in {
+            "queued", "waiting_resource", "running", "cancelling",
+        }:
             raise HTTPException(status_code=409, detail="A generation is in progress — stop it or wait for it to finish first.")
     try:
         from services.director_pipeline import _pipelines
@@ -6632,6 +6849,10 @@ def system_release_model():
         raise HTTPException(status_code=409, detail="A generation is in progress — stop it or wait for it to finish first.")
     try:
         released = []
+        if minimax_h3_service.is_runtime_running():
+            print("[ReleaseModel] Stopping isolated H3 Legacy runtime (user request)")
+            minimax_h3_service.stop_runtime()
+            released.append("H3 Legacy runtime")
         if getattr(wgp, "wan_model", None) is not None or getattr(wgp, "offloadobj", None) is not None:
             print("[ReleaseModel] Unloading generation model (user request)")
             wgp.release_model()
@@ -7104,7 +7325,7 @@ async def record_debug_user_action(request: Request):
 # API Routes: native Hunyuan3D generation
 # ============================================================================
 
-def _resolve_model3d_input_path(value: str) -> str | None:
+def _resolve_model3d_input_path(value: str, workspace: str | None = None) -> str | None:
     """Resolve a UI-provided upload/output path to a local file."""
     if not value:
         return None
@@ -7114,7 +7335,7 @@ def _resolve_model3d_input_path(value: str) -> str | None:
         return _safe_join(os.path.join(os.getcwd(), "uploads"), value)
     if value.startswith("/api/v1/file/"):
         value = value.rsplit("/", 1)[-1]
-        return _safe_join(_workspace_dir(), value)
+        return _safe_join(_workspace_dir(workspace), value)
     if os.path.isabs(value):
         uploads_root = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
         outputs_root = os.path.realpath(wgp.server_config.get("save_path", "outputs"))
@@ -7125,7 +7346,7 @@ def _resolve_model3d_input_path(value: str) -> str | None:
     upload_candidate = _safe_join(os.path.join(os.getcwd(), "uploads"), value)
     if upload_candidate and os.path.isfile(upload_candidate):
         return upload_candidate
-    return _safe_join(_workspace_dir(), value)
+    return _safe_join(_workspace_dir(workspace), value)
 
 
 @api.get("/api/v1/model3d/capabilities")
@@ -7138,6 +7359,8 @@ def model3d_capabilities():
 async def generate_model3d(request: Request):
     from services import model3d_service
     body = await request.json()
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    _workspace_dir(workspace)
     raw_images = body.get("images") or {}
     if not isinstance(raw_images, dict):
         raise HTTPException(status_code=400, detail="images must be an object keyed by front/left/right/back")
@@ -7148,22 +7371,29 @@ async def generate_model3d(request: Request):
     for view, value in raw_images.items():
         if view not in {"front", "left", "right", "back"} or not value:
             continue
-        resolved = _resolve_model3d_input_path(str(value))
+        resolved = _resolve_model3d_input_path(str(value), workspace)
         if not resolved or not os.path.isfile(resolved):
             raise HTTPException(status_code=400, detail=f"3D {view} image not found")
         image_paths[view] = resolved
     source_mesh_path = None
     if str(body.get("operation") or "generate").lower() == "retexture":
-        source_mesh_path = _resolve_model3d_input_path(str(body.get("source_model") or ""))
+        source_mesh_path = _resolve_model3d_input_path(
+            str(body.get("source_model") or ""), workspace,
+        )
         if not source_mesh_path or not os.path.isfile(source_mesh_path):
             raise HTTPException(status_code=400, detail="Source GLB not found")
     try:
-        return model3d_service.start_job(
+        job = model3d_service.start_job(
             body=body,
             image_paths=image_paths,
-            output_dir=_workspace_dir(),
+            output_dir=_workspace_dir(workspace),
             source_mesh_path=source_mesh_path,
+            workspace=workspace,
         )
+        publisher = globals().get("_publish_generic_legacy_task")
+        if callable(publisher):
+            publisher(job, "model3d")
+        return job
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -7177,6 +7407,9 @@ def model3d_job_status(job_id: str):
     job = model3d_service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="3D generation job not found")
+    publisher = globals().get("_publish_generic_legacy_task")
+    if callable(publisher):
+        publisher(job, "model3d")
     return job
 
 
@@ -7186,6 +7419,9 @@ def cancel_model3d_job(job_id: str):
     job = model3d_service.cancel_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="3D generation job not found")
+    publisher = globals().get("_publish_generic_legacy_task")
+    if callable(publisher):
+        publisher(job, "model3d")
     return job
 
 
@@ -7211,23 +7447,30 @@ def rig_capabilities():
 async def generate_rig(request: Request):
     from services import rig_service
     body = await request.json()
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    _workspace_dir(workspace)
     source_name = str(body.get("source") or "").strip()
     if not source_name:
         raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
     if not source_name.lower().endswith(".glb"):
         raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
-    source_path = _safe_join(_workspace_dir(), source_name)
+    source_path = _safe_join(_workspace_dir(workspace), source_name)
     if not source_path or not os.path.isfile(source_path):
         # Also accept absolute/upload paths through the shared 3D resolver.
-        source_path = _resolve_model3d_input_path(source_name)
+        source_path = _resolve_model3d_input_path(source_name, workspace)
     if not source_path or not os.path.isfile(source_path):
         raise HTTPException(status_code=400, detail="Source 3D model not found")
     try:
-        return rig_service.start_job(
+        job = rig_service.start_job(
             body=body,
             source_path=source_path,
-            output_dir=_workspace_dir(),
+            output_dir=_workspace_dir(workspace),
+            workspace=workspace,
         )
+        publisher = globals().get("_publish_generic_legacy_task")
+        if callable(publisher):
+            publisher(job, "rig")
+        return job
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -7241,6 +7484,9 @@ def rig_job_status(job_id: str):
     job = rig_service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Rig job not found")
+    publisher = globals().get("_publish_generic_legacy_task")
+    if callable(publisher):
+        publisher(job, "rig")
     return job
 
 
@@ -7250,6 +7496,9 @@ def cancel_rig_job(job_id: str):
     job = rig_service.cancel_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Rig job not found")
+    publisher = globals().get("_publish_generic_legacy_task")
+    if callable(publisher):
+        publisher(job, "rig")
     return job
 
 
@@ -8924,34 +9173,17 @@ async def analyze_audio(request: Request):
     if not os.path.isfile(audio_path):
         raise HTTPException(status_code=404, detail=f"Audio file not found: {audio_path}")
 
-    # Free the generation model's VRAM before analysis. The Director flow
-    # runs analysis right after rendering the song, and as of v1.2.0 the
-    # default music model is much larger (XL SFT, 10GB bf16). On smaller
-    # cards the resident model + vocal separator + Whisper oversubscribe
-    # VRAM, and Windows' CUDA sysmem fallback turns that into a silent,
-    # near-endless crawl instead of a clean OOM ("analyzing never
-    # finishes"). The song is already saved; wgp reloads the model
-    # transparently on the next job. Guarded by _gen_lock so an active
-    # generation is never touched.
-    if _gen_lock.acquire(blocking=False):
-        try:
-            if getattr(wgp, "wan_model", None) is not None:
-                print("[AudioAnalysis] Releasing generation model VRAM before analysis")
-                wgp.release_model()
-            else:
-                import gc
-                gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-        except Exception as e:
-            print(f"[AudioAnalysis] Pre-analysis VRAM release skipped: {e}")
-        finally:
-            _gen_lock.release()
-    else:
-        print("[AudioAnalysis] Generation in progress - skipping pre-analysis VRAM release")
-
+    lane = (
+        resource_scheduler.local_gpu_lane(0)
+        if body.get("transcribe", False)
+        else resource_scheduler.cpu_lane("audio")
+    )
     try:
-        with _audio_analysis_execution_lock:
+        with resource_scheduler.coordinator.acquire(
+            lane,
+            task_id=f"audio-sync-{uuid.uuid4().hex[:12]}",
+            description="Audio analysis",
+        ):
             result = audio_analysis.analyze(
                 audio_path=audio_path,
                 transcribe=body.get("transcribe", False),
@@ -8996,75 +9228,194 @@ _AUDIO_ANALYSIS_STEPS = {
     "identifying_speakers": 8,
     "finalizing": 9,
 }
+_AUDIO_ANALYSIS_ACTIVE = {"queued", "waiting_resource", "running", "cancelling"}
+_AUDIO_ANALYSIS_TERMINAL = {"completed", "failed", "cancelled"}
+_audio_analysis_jobs_lock = threading.RLock()
+
+
+def _publish_audio_analysis_job(job: dict) -> dict | None:
+    publisher = globals().get("_publish_generic_legacy_task")
+    if not callable(publisher):
+        return None
+    try:
+        return publisher(copy.deepcopy(job), "audio-analysis")
+    except Exception as exc:
+        print(f"[Task registry] Could not publish audio analysis {job.get('id')}: {exc}")
+        return None
+
+
+def _audio_analysis_job_update(job_id: str, **patch) -> dict | None:
+    with _audio_analysis_jobs_lock:
+        job = _jobs.get(job_id)
+        if not job or not job_id.startswith("audio-analysis-"):
+            return None
+        current_status = str(job.get("status") or "queued")
+        if current_status in _AUDIO_ANALYSIS_TERMINAL:
+            return snapshot_job(job)
+        requested_status = str(patch.get("status") or "")
+        if job.get("_cancel_requested") and requested_status not in {
+            "cancelled", "cancelling",
+        }:
+            if requested_status in {"completed", "failed"}:
+                patch = {
+                    **patch,
+                    "status": "cancelled",
+                    "phase": "cancelled",
+                    "message": "Cancelled",
+                    "error": None,
+                    "result": None,
+                    "progress": 0,
+                    "acquired_resources": [],
+                    "finished_at": patch.get("finished_at") or time.time(),
+                }
+            else:
+                # A late progress callback must not overwrite a visible
+                # cancelling state or reactivate a task cancelled in queue.
+                return snapshot_job(job)
+        job.update(patch)
+        job["updated_at"] = time.time()
+        snapshot = snapshot_job(job)
+    _publish_audio_analysis_job(snapshot)
+    return snapshot
 
 
 def _run_audio_analysis_job(job_id: str, body: dict) -> None:
     """Run one serialized audio-analysis job with reconnectable progress."""
-    job = _jobs[job_id]
+    with _audio_analysis_jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        return
     from services import audio_analysis
 
-    with _audio_analysis_execution_lock:
-        if job.get("_cancel_requested"):
-            job.update(status="cancelled", message="Cancelled", progress=0)
-            return
-        job.update(status="running", phase="loading_audio", message="Loading audio…")
+    lane = (
+        resource_scheduler.local_gpu_lane(0)
+        if body.get("transcribe", False)
+        else resource_scheduler.cpu_lane("audio")
+    )
 
-        def report(step: str, detail: str) -> None:
-            if job.get("_cancel_requested"):
-                raise RuntimeError("Audio analysis cancelled")
-            if not step:
+    def cancelled() -> bool:
+        with _audio_analysis_jobs_lock:
+            return bool((_jobs.get(job_id) or {}).get("_cancel_requested"))
+
+    if cancelled() or str(job.get("status") or "") in _AUDIO_ANALYSIS_TERMINAL:
+        return
+
+    _audio_analysis_job_update(
+        job_id,
+        status="waiting_resource",
+        phase="waiting_resource",
+        message=("Waiting for local GPU 0" if body.get("transcribe", False)
+                 else "Waiting for audio CPU worker"),
+        acquired_resources=[],
+    )
+    try:
+        lease = resource_scheduler.coordinator.acquire(
+            lane,
+            task_id=str(job.get("task_id") or job_id),
+            description="Audio analysis",
+            cancelled=cancelled,
+        )
+        with lease:
+            if cancelled():
+                _audio_analysis_job_update(
+                    job_id, status="cancelled", phase="cancelled",
+                    message="Cancelled", progress=0, finished_at=time.time(),
+                    acquired_resources=[],
+                )
                 return
-            current = _AUDIO_ANALYSIS_STEPS.get(step, job.get("step", 1))
-            job.update(
-                phase=step,
-                message=f"{detail}…" if detail else step.replace("_", " ").capitalize(),
-                step=current,
-                total_steps=10,
-                progress=int((current / 10) * 100),
-                updated_at=time.time(),
+            _audio_analysis_job_update(
+                job_id, status="running", phase="loading_audio",
+                message="Loading audio…", started_at=time.time(),
+                acquired_resources=[lane.key],
             )
 
-        audio_analysis.set_progress_callback(report)
-        try:
-            result = audio_analysis.analyze(
-                audio_path=body["audio_path"],
-                transcribe=body.get("transcribe", False),
-                extract_vocals_for_transcription=body.get("extract_vocals", True),
-                lyrics_hint=body.get("lyrics_hint") or None,
-            )
-            if job.get("_cancel_requested"):
-                job.update(status="cancelled", message="Cancelled", progress=0, result=None)
-            else:
-                job.update(
-                    status="completed",
-                    phase="completed",
-                    message="Audio analysis complete",
-                    progress=100,
-                    step=10,
+            def report(step: str, detail: str) -> None:
+                if cancelled():
+                    raise RuntimeError("Audio analysis cancelled")
+                if not step:
+                    return
+                current = _AUDIO_ANALYSIS_STEPS.get(step, job.get("step", 1))
+                _audio_analysis_job_update(
+                    job_id,
+                    phase=step,
+                    message=f"{detail}…" if detail else step.replace("_", " ").capitalize(),
+                    step=current,
                     total_steps=10,
-                    result=result,
-                    updated_at=time.time(),
+                    progress=int((current / 10) * 100),
                 )
-        except Exception as exc:
-            if job.get("_cancel_requested"):
-                job.update(
-                    status="cancelled",
-                    message="Cancelled",
-                    error=None,
-                    progress=0,
-                    updated_at=time.time(),
+
+            audio_analysis.set_progress_callback(report)
+            try:
+                result = audio_analysis.analyze(
+                    audio_path=body["audio_path"],
+                    transcribe=body.get("transcribe", False),
+                    extract_vocals_for_transcription=body.get("extract_vocals", True),
+                    lyrics_hint=body.get("lyrics_hint") or None,
                 )
-            else:
-                traceback.print_exc()
-                job.update(
-                    status="failed",
-                    message=f"Audio analysis failed: {exc}",
-                    error=str(exc),
-                    updated_at=time.time(),
-                )
-        finally:
-            audio_analysis.set_progress_callback(None)
-            audio_analysis.clear_progress()
+                if cancelled():
+                    _audio_analysis_job_update(
+                        job_id, status="cancelled", phase="cancelled",
+                        message="Cancelled", progress=0, result=None,
+                        finished_at=time.time(), acquired_resources=[],
+                    )
+                else:
+                    _audio_analysis_job_update(
+                        job_id,
+                        status="completed",
+                        phase="completed",
+                        message="Audio analysis complete",
+                        progress=100,
+                        step=10,
+                        total_steps=10,
+                        result=result,
+                        finished_at=time.time(),
+                        acquired_resources=[],
+                    )
+            except Exception as exc:
+                if cancelled():
+                    _audio_analysis_job_update(
+                        job_id,
+                        status="cancelled",
+                        phase="cancelled",
+                        message="Cancelled",
+                        error=None,
+                        progress=0,
+                        finished_at=time.time(),
+                        acquired_resources=[],
+                    )
+                else:
+                    traceback.print_exc()
+                    _audio_analysis_job_update(
+                        job_id,
+                        status="failed",
+                        phase="failed",
+                        message=f"Audio analysis failed: {exc}",
+                        error=str(exc),
+                        finished_at=time.time(),
+                        acquired_resources=[],
+                    )
+            finally:
+                audio_analysis.set_progress_callback(None)
+                audio_analysis.clear_progress()
+    except resource_scheduler.ResourceAcquireCancelled:
+        _audio_analysis_job_update(
+            job_id, status="cancelled", phase="cancelled",
+            message="Cancelled", progress=0, finished_at=time.time(),
+            acquired_resources=[],
+        )
+    except Exception as exc:
+        traceback.print_exc()
+        _audio_analysis_job_update(
+            job_id,
+            status="cancelled" if cancelled() else "failed",
+            phase="cancelled" if cancelled() else "failed",
+            message=("Cancelled" if cancelled()
+                     else f"Audio analysis failed before it started: {exc}"),
+            error=None if cancelled() else str(exc),
+            result=None,
+            acquired_resources=[],
+            finished_at=time.time(),
+        )
 
 
 @api.post("/api/v1/audio/analyze/jobs")
@@ -9078,8 +9429,31 @@ async def start_audio_analysis_job(request: Request):
         raise HTTPException(status_code=404, detail=f"Audio file not found: {audio_path}")
 
     job_id = f"audio-analysis-{uuid.uuid4().hex[:12]}"
-    _jobs[job_id] = {
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    _workspace_dir(workspace)
+    supplied_task_id = str(body.get("task_id") or "").strip()
+    supplied_root_id = str(body.get("root_task_id") or "").strip()
+    supplied_parent_id = str(body.get("parent_task_id") or "").strip()
+    for label, value in (
+        ("task_id", supplied_task_id),
+        ("root_task_id", supplied_root_id),
+        ("parent_task_id", supplied_parent_id),
+    ):
+        if value and not re.fullmatch(r"task-[A-Za-z0-9_-]{1,180}", value):
+            raise HTTPException(status_code=400, detail=f"Invalid {label}")
+    task_id = supplied_task_id or f"task-audio-analysis-{job_id}"
+    root_task_id = supplied_root_id or supplied_parent_id or task_id
+    lane = (
+        resource_scheduler.local_gpu_lane(0)
+        if body.get("transcribe", False)
+        else resource_scheduler.cpu_lane("audio")
+    )
+    job = {
         "id": job_id,
+        "task_id": task_id,
+        "root_task_id": root_task_id,
+        "parent_task_id": supplied_parent_id or None,
+        "workspace": workspace,
         "status": "queued",
         "progress": 0,
         "step": 0,
@@ -9092,24 +9466,46 @@ async def start_audio_analysis_job(request: Request):
         "result": None,
         "created_at": time.time(),
         "updated_at": time.time(),
+        "provider": "local",
+        "model": "Whisper / pyannote" if body.get("transcribe", False) else "Audio analysis",
+        "server_origin": "local",
+        "resource_lane": lane.key,
+        "acquired_resources": [],
+        "project_id": str(body.get("project_id") or ""),
         "_cancel_requested": False,
     }
+    with _audio_analysis_jobs_lock:
+        _jobs[job_id] = job
+    _publish_audio_analysis_job(job)
     threading.Thread(
         target=_run_audio_analysis_job,
         args=(job_id, dict(body)),
         name=f"audio-analysis-{job_id[-6:]}",
         daemon=True,
     ).start()
-    return {"job_id": job_id}
+    return {
+        "job_id": job_id,
+        "task_id": task_id,
+        "root_task_id": root_task_id,
+        "parent_task_id": supplied_parent_id or None,
+        "status": "queued",
+    }
 
 
 @api.get("/api/v1/audio/analyze/jobs/{job_id}")
-def get_audio_analysis_job(job_id: str):
-    job = _jobs.get(job_id)
+def get_audio_analysis_job(job_id: str, workspace: str | None = None):
+    target_workspace = _get_active_workspace() if workspace is None else workspace
+    _workspace_dir(target_workspace)
+    with _audio_analysis_jobs_lock:
+        job = snapshot_job(_jobs.get(job_id)) if _jobs.get(job_id) else None
     if not job or not job_id.startswith("audio-analysis-"):
+        raise HTTPException(status_code=404, detail="Audio analysis job not found")
+    if str(job.get("workspace") or "default") != str(target_workspace):
         raise HTTPException(status_code=404, detail="Audio analysis job not found")
     return {
         "job_id": job_id,
+        "task_id": job.get("task_id"),
+        "root_task_id": job.get("root_task_id") or job.get("task_id"),
         "status": job["status"],
         "progress": job["progress"],
         "step": job.get("step", 0),
@@ -9122,15 +9518,35 @@ def get_audio_analysis_job(job_id: str):
 
 
 @api.post("/api/v1/audio/analyze/jobs/{job_id}/cancel")
-def cancel_audio_analysis_job(job_id: str):
-    job = _jobs.get(job_id)
+def cancel_audio_analysis_job(job_id: str, workspace: str | None = None):
+    target_workspace = _get_active_workspace() if workspace is None else workspace
+    _workspace_dir(target_workspace)
+    with _audio_analysis_jobs_lock:
+        job = _jobs.get(job_id)
     if not job or not job_id.startswith("audio-analysis-"):
         raise HTTPException(status_code=404, detail="Audio analysis job not found")
-    if job["status"] not in ("queued", "running"):
+    if str(job.get("workspace") or "default") != str(target_workspace):
+        raise HTTPException(status_code=404, detail="Audio analysis job not found")
+    if job["status"] not in _AUDIO_ANALYSIS_ACTIVE:
         return {"job_id": job_id, "status": job["status"]}
-    job["_cancel_requested"] = True
-    job["message"] = "Cancelling after the current analysis phase…"
-    return {"job_id": job_id, "status": "cancelling"}
+    with _audio_analysis_jobs_lock:
+        job["_cancel_requested"] = True
+        waiting = job["status"] in {"queued", "waiting_resource"}
+    snapshot = _audio_analysis_job_update(
+        job_id,
+        status="cancelled" if waiting else "cancelling",
+        phase="cancelled" if waiting else "cancelling",
+        message=(
+            "Cancelled before analysis started"
+            if waiting else "Cancelling after the current analysis phase…"
+        ),
+        **({"finished_at": time.time()} if waiting else {}),
+    ) or job
+    return {
+        "job_id": job_id,
+        "task_id": snapshot.get("task_id"),
+        "status": snapshot.get("status"),
+    }
 
 
 @api.post("/api/v1/audio/suggest-clips")
@@ -9483,13 +9899,20 @@ async def director_pipeline_start(request: Request):
     Runs entirely server-side so the browser can be closed.
     """
     _init_pipeline()
-    from services.director_pipeline import start_pipeline
+    from services.director_pipeline import get_pipeline, start_pipeline
     body = await request.json()
     try:
         pid = start_pipeline(body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"pipeline_id": pid}
+    pipeline = get_pipeline(pid) or {}
+    return {
+        "pipeline_id": pid,
+        "task_id": pipeline.get("task_id"),
+        "root_task_id": (
+            pipeline.get("root_task_id") or pipeline.get("task_id")
+        ),
+    }
 
 
 @api.get("/api/v1/director/pipeline/{pid}")
@@ -9622,19 +10045,27 @@ async def director_pipeline_update_preview(pid: str, request: Request):
 
 @api.post("/api/v1/director/pipeline/{pid}/stop")
 def director_pipeline_stop(pid: str):
-    """Cancel a running pipeline."""
+    """Request cancellation and return the pipeline's current state."""
     from services.director_pipeline import get_pipeline, stop_pipeline
-    if stop_pipeline(pid):
-        current = get_pipeline(pid) or {}
-        return {
-            "status": "cancelled",
-            "cancelled": True,
-            "persisted": current.get("_state_persisted", False),
-        }
+    accepted = stop_pipeline(pid)
     current = get_pipeline(pid)
     if not current:
         raise HTTPException(status_code=404, detail="Pipeline not found")
-    return {"status": current.get("status", "unknown"), "cancelled": False}
+    status = str(current.get("status") or "unknown")
+    phase = str(current.get("phase") or status)
+    cancelled = status == "cancelled"
+    return {
+        "accepted": accepted,
+        "status": status,
+        "phase": phase,
+        "cancel_requested": bool(
+            current.get("_cancel_requested")
+            or phase == "cancelling"
+            or cancelled
+        ),
+        "cancelled": cancelled,
+        "persisted": bool(current.get("_state_persisted", False)),
+    }
 
 
 @api.post("/api/v1/director/pipeline/{pid}/resume")
@@ -9646,12 +10077,23 @@ def director_pipeline_resume(pid: str):
     crash doesn't throw away completed LLM work.
     """
     _init_pipeline()
-    from services.director_pipeline import resume_pipeline
+    from services.director_pipeline import get_pipeline, resume_pipeline
     base = wgp.server_config.get("save_path", "outputs")
     ok, message = resume_pipeline(pid, base)
     if not ok:
         raise HTTPException(status_code=400, detail=message)
-    return {"status": "resumed", "pipeline_id": pid}
+    pipeline = get_pipeline(pid) or {}
+    workspace = str(pipeline.get("workspace") or _get_active_workspace())
+    task_id = f"task-director-{pid}"
+    _reset_canonical_task_for_resume(workspace, task_id)
+    task = _publish_director_task(pipeline, workspace)
+    return {
+        "status": str(pipeline.get("status") or "resumed"),
+        "phase": str(pipeline.get("phase") or "resumed"),
+        "pipeline_id": pid,
+        "task_id": (task or {}).get("id") or task_id,
+        "root_task_id": (task or {}).get("root_id") or task_id,
+    }
 
 
 # ── Director Pipeline Dashboard ───────────────────────────────────────────
@@ -10121,6 +10563,169 @@ def director_v2_plan_progress(activity_id: str):
     return state
 
 
+def _run_generation_with_preparation(job_id: str) -> bool:
+    """Finish deferred, non-GPU preparation before entering generation FIFO.
+
+    H3 window planning may load an LLM or call a remote provider.  It must not
+    block ``POST /generate`` and it must not reserve the scarce video lane
+    while doing so.  The pending request is persisted inside the job params so
+    crash recovery can replay this same worker before starting inference.
+    """
+    job = _jobs.get(job_id)
+    if not isinstance(job, dict):
+        return False
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    pending = params.get("_h3_window_plan_pending")
+    if not isinstance(pending, dict):
+        return bool(_run_generation(job_id))
+    if is_cancel_requested(job):
+        _remove_persisted_generation_job(job)
+        return False
+    if not try_start(
+        job,
+        phase="planning",
+        message="Planning H3 window-by-window prompts with the writing model…",
+        acquired_resources=[],
+    ):
+        if is_cancel_requested(job):
+            _remove_persisted_generation_job(job)
+        return False
+
+    _persist_generation_job(job)
+    planner_llm = None
+    try:
+        from services import llm_service as planner_llm
+        from services.h3_window_planner import plan_h3_sliding_windows
+
+        def _plan_windows():
+            try:
+                _ensure_llm_loaded()
+            except Exception as load_error:
+                # The planner has a deterministic fallback, so a missing
+                # optional LLM must not make an otherwise valid H3 job fail.
+                print(
+                    "[MiniMax H3] Planner LLM unavailable; using fallback: "
+                    f"{load_error}"
+                )
+            services = wgp.server_config.get("services", {})
+            provider = _effective_llm_routing(services)[0]
+            nsfw = (
+                services.get("nsfw_mode", False)
+                and provider not in _PUBLIC_LLM_PROVIDERS
+            )
+            expected_count = int(pending.get("expected_count") or 0)
+            if expected_count <= 0:
+                raise RuntimeError("H3 window plan has no target windows")
+            print(
+                f"[MiniMax H3] Planning {expected_count} window-local prompts "
+                "after VRAM-safe geometry "
+                f"({int(pending.get('window_frames') or 0)} frames/window)."
+            )
+            result = plan_h3_sliding_windows(
+                str(params.get("prompt") or ""),
+                model_type=str(pending.get("model_type") or ""),
+                resolution=str(pending.get("resolution") or ""),
+                total_frames=int(pending.get("total_frames") or 0),
+                window_frames=int(pending.get("window_frames") or 0),
+                overlap_frames=int(pending.get("overlap_frames") or 0),
+                discard_frames=int(pending.get("discard_frames") or 0),
+                fps=float(pending.get("fps") or 24),
+                has_start_image=bool(pending.get("has_start_image")),
+                has_end_image=bool(pending.get("has_end_image")),
+                image_paths=list(pending.get("image_paths") or []) or None,
+                nsfw=bool(nsfw),
+            )
+            prompts = result.get("window_prompts") if isinstance(result, dict) else None
+            if (
+                not isinstance(prompts, list)
+                or len(prompts) != expected_count
+                or not all(isinstance(item, str) and item.strip() for item in prompts)
+            ):
+                raise RuntimeError(
+                    "H3 window planner returned an incomplete prompt plan "
+                    f"({len(prompts) if isinstance(prompts, list) else 0}/"
+                    f"{expected_count})"
+                )
+            return result, list(prompts)
+
+        # Correlate any child LLM call with the visible generation root.  The
+        # fallback keeps model-free tests and older embedded callers working.
+        try:
+            from services.task_manager import task_context_scope
+        except Exception:
+            planned, window_prompts = _plan_windows()
+        else:
+            with task_context_scope(
+                task_id=job.get("task_id"),
+                root_id=job.get("root_task_id") or job.get("task_id"),
+                workspace=job.get("workspace") or "default",
+                workspace_dir=job.get("out_dir")
+                or _workspace_dir(job.get("workspace") or "default"),
+            ):
+                planned, window_prompts = _plan_windows()
+
+        if is_cancel_requested(job):
+            _remove_persisted_generation_job(job)
+            return False
+        prepared_params = copy.deepcopy(params)
+        prepared_params.pop("_h3_window_plan_pending", None)
+        prepared_params["minimax_h3_window_storyboard"] = True
+        prepared_params["h3_window_prompts"] = window_prompts
+        prepared_params["h3_window_plan_signature"] = str(
+            pending.get("signature") or ""
+        )
+        prepared_params["h3_window_plan"] = planned
+        if not update_job(
+            job,
+            params=prepared_params,
+            phase="planning",
+            message=(
+                f"H3 prompt plan ready ({len(window_prompts)} windows); "
+                "queuing video generation…"
+            ),
+        ):
+            _remove_persisted_generation_job(job)
+            return False
+        _persist_generation_job(job)
+        if not try_requeue(
+            job,
+            phase="waiting_resource",
+            message="H3 prompt plan ready · waiting for the local video GPU…",
+            started_at=None,
+        ):
+            _remove_persisted_generation_job(job)
+            return False
+        _persist_generation_job(job)
+        return bool(_run_generation(job_id))
+    except Exception as error:
+        traceback.print_exc()
+        if not is_cancel_requested(job):
+            finish_job(
+                job,
+                "failed",
+                error=str(error),
+                message=f"H3 window planning failed: {error}",
+                phase="planning",
+            )
+        _remove_persisted_generation_job(job)
+        return False
+    finally:
+        # A local writing model cannot remain beside H3's 20B/33B runtime.
+        if planner_llm is not None:
+            try:
+                if (
+                    planner_llm.is_loaded()
+                    and planner_llm.get_status().get("provider") == "local"
+                ):
+                    planner_llm.unload_model()
+            except Exception as unload_error:
+                print(f"[MiniMax H3] Planner LLM unload skipped: {unload_error}")
+        # Deferred planning has no abort-state registration. Confirm terminal
+        # cancellation only after the planner call and its model cleanup have
+        # both returned.
+        acknowledge_cancel(job)
+
+
 @api.post("/api/v1/generate")
 async def generate(request: Request):
     """Submit a generation job. Returns immediately with a job_id."""
@@ -10314,7 +10919,6 @@ async def generate(request: Request):
             from services.h3_window_planner import (
                 compute_h3_window_boundaries,
                 h3_window_plan_signature,
-                plan_h3_sliding_windows,
             )
 
             h3_fps = float(_generation_model_def.get("fps", 24) or 24)
@@ -10356,56 +10960,40 @@ async def generate(request: Request):
                 if isinstance(cached_plan, dict):
                     h3_window_plan_response = cached_plan
             else:
-                from services import llm_service
-
-                llm_was_loaded = llm_service.is_loaded()
-                try:
-                    _ensure_llm_loaded()
-                except Exception as load_error:
-                    print(f"[MiniMax H3] Planner LLM unavailable; using fallback: {load_error}")
-                services = wgp.server_config.get("services", {})
-                provider = _effective_llm_routing(services)[0]
-                nsfw = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
                 h3_images = []
                 for value in (h3_start_value, h3_end_value):
                     if isinstance(value, (list, tuple)):
                         value = value[0] if value else None
                     if isinstance(value, str) and value and os.path.isfile(value):
                         h3_images.append(value)
-                print(
-                    f"[MiniMax H3] Planning {h3_expected_count} window-local prompts "
-                    f"after VRAM-safe geometry ({h3_window_frames} frames/window)."
-                )
-                h3_window_plan_response = await asyncio.to_thread(
-                    plan_h3_sliding_windows,
-                    str(body.get("prompt") or ""),
-                    model_type=str(body.get("model_type") or ""),
-                    resolution=str(body.get("resolution") or ""),
-                    total_frames=h3_total_frames,
-                    window_frames=h3_window_frames,
-                    overlap_frames=h3_overlap_frames,
-                    discard_frames=h3_discard_frames,
-                    fps=h3_fps,
-                    has_start_image=h3_has_start,
-                    has_end_image=h3_has_end,
-                    image_paths=h3_images or None,
-                    nsfw=bool(nsfw),
-                )
-                cached_prompts = h3_window_plan_response["window_prompts"]
-                # A planner loaded only for this request should not compete
-                # with the 20B/33B video model for VRAM or RAM.
-                if not llm_was_loaded and llm_service.is_loaded():
-                    try:
-                        if llm_service.get_status().get("provider") == "local":
-                            llm_service.unload_model()
-                    except Exception as unload_error:
-                        print(f"[MiniMax H3] Planner LLM unload skipped: {unload_error}")
+                # Planning can involve loading an LLM and a remote completion.
+                # Persist the exact geometry and perform that work only after
+                # the API has returned a visible, cancellable canonical task.
+                body["_h3_window_plan_pending"] = {
+                    "signature": h3_expected_signature,
+                    "expected_count": h3_expected_count,
+                    "model_type": str(body.get("model_type") or ""),
+                    "resolution": str(body.get("resolution") or ""),
+                    "total_frames": h3_total_frames,
+                    "window_frames": h3_window_frames,
+                    "overlap_frames": h3_overlap_frames,
+                    "discard_frames": h3_discard_frames,
+                    "fps": h3_fps,
+                    "has_start_image": h3_has_start,
+                    "has_end_image": h3_has_end,
+                    "image_paths": h3_images,
+                }
+                body.pop("h3_window_prompts", None)
+                body.pop("h3_window_plan_signature", None)
+                body.pop("h3_window_plan", None)
 
             body["minimax_h3_window_storyboard"] = True
-            body["h3_window_prompts"] = list(cached_prompts)
-            body["h3_window_plan_signature"] = h3_expected_signature
-            if h3_window_plan_response is not None:
-                body["h3_window_plan"] = h3_window_plan_response
+            if cached_is_valid:
+                body.pop("_h3_window_plan_pending", None)
+                body["h3_window_prompts"] = list(cached_prompts)
+                body["h3_window_plan_signature"] = h3_expected_signature
+                if h3_window_plan_response is not None:
+                    body["h3_window_plan"] = h3_window_plan_response
             # An explicitly reviewed plan may have been created moments ago
             # by the Enhance button, leaving the local planner resident. H3
             # inference needs that VRAM; the planner is cheap to reload later.
@@ -10420,6 +11008,7 @@ async def generate(request: Request):
             except Exception as unload_error:
                 print(f"[MiniMax H3] Planner LLM release skipped: {unload_error}")
         else:
+            body.pop("_h3_window_plan_pending", None)
             body.pop("h3_window_prompts", None)
             body.pop("h3_window_plan_signature", None)
             body.pop("h3_window_plan", None)
@@ -10574,7 +11163,14 @@ async def generate(request: Request):
     workspace = body.pop("workspace", None) or _get_active_workspace()
     job_out_dir = _workspace_dir(workspace)
 
-    job = _new_generation_job(body, workspace)
+    h3_preplan_pending = isinstance(
+        body.get("_h3_window_plan_pending"), dict,
+    )
+    job = _new_generation_job(
+        body,
+        workspace,
+        reserve_generation=not h3_preplan_pending,
+    )
     job_id = job["id"]
     job["out_dir"] = job_out_dir
     _jobs[job_id] = job
@@ -10588,10 +11184,19 @@ async def generate(request: Request):
     _cancel_h3_idle_release()
 
     # Non-daemon so generation survives browser disconnect during overnight runs
-    thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
+    thread = threading.Thread(
+        target=_run_generation_with_preparation,
+        args=(job_id,),
+        daemon=False,
+    )
     thread.start()
 
-    response = {"job_id": job_id, "status": "queued"}
+    response = {
+        "job_id": job_id,
+        "task_id": job.get("task_id"),
+        "root_task_id": job.get("root_task_id") or job.get("task_id"),
+        "status": "queued",
+    }
     if h3_window_plan_response is not None:
         response["h3_window_plan"] = h3_window_plan_response
     return response
@@ -10688,13 +11293,17 @@ async def retake_video_endpoint(request: Request):
         "params": gen_params, "output_files": [], "error": None,
         "workspace": workspace, "out_dir": job_out_dir,
     }
-    _jobs[job_id] = job
-    register_generation_job(_gen_lock, job)
+    _register_manual_generation_job(job)
 
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
     thread.start()
 
-    return {"job_id": job_id, "status": "queued", "retake_frames": f"{start_frame}-{end_frame}/{total_frames}"}
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "retake_frames": f"{start_frame}-{end_frame}/{total_frames}",
+        **_generation_job_acceptance(job),
+    }
 
 
 @api.post("/api/v1/extract-frames")
@@ -11253,8 +11862,7 @@ async def edit_anything_endpoint(request: Request):
         "params": gen_params, "output_files": [], "error": None,
         "workspace": workspace, "out_dir": job_out_dir,
     }
-    _jobs[job_id] = job
-    register_generation_job(_gen_lock, job)
+    _register_manual_generation_job(job)
 
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
     thread.start()
@@ -11263,6 +11871,7 @@ async def edit_anything_endpoint(request: Request):
         "job_id": job_id, "status": "queued",
         "edit_range": f"{start_frame}-{end_frame}/{total_frames}",
         "lora_filename": EDIT_ANYTHING_LORA_FILENAME,
+        **_generation_job_acceptance(job),
     }
 
 
@@ -16949,8 +17558,7 @@ async def repaint_endpoint(request: Request):
         "workspace": workspace_name,
         "out_dir": _workspace_dir(workspace_name),
     }
-    _jobs[job_id] = job
-    register_generation_job(_gen_lock, job)
+    _register_manual_generation_job(job)
 
     if not mappings:
         threading.Thread(
@@ -16968,6 +17576,7 @@ async def repaint_endpoint(request: Request):
             "sliding_window_size": repaint_window_size,
             "num_inference_steps": inference_steps,
             "guidance_scale": guidance_scale,
+            **_generation_job_acceptance(job),
         }
 
     def _run_repaint():
@@ -16975,7 +17584,9 @@ async def repaint_endpoint(request: Request):
         shot_temp_dir = None
         shot_final_out_dir = None
         try:
-            with generation_slot(_gen_lock, job) as acquired:
+            with _coordinated_generation_slot(
+                job, description="Maestro GPU preparation · repaint",
+            ) as acquired:
                 if not acquired:
                     return
                 if not try_start(
@@ -17216,6 +17827,7 @@ async def repaint_endpoint(request: Request):
         "sliding_window_size": repaint_window_size,
         "num_inference_steps": inference_steps,
         "guidance_scale": guidance_scale,
+        **_generation_job_acceptance(job),
     }
 
 
@@ -17908,8 +18520,7 @@ async def recast_endpoint(request: Request):
         "params": gen_params, "output_files": [], "error": None,
         "workspace": workspace_name, "out_dir": job_out_dir,
     }
-    _jobs[job_id] = job
-    register_generation_job(_gen_lock, job)
+    _register_manual_generation_job(job)
     initial_probe_frame = probe_frame
 
     def _run_recast():
@@ -17929,7 +18540,9 @@ async def recast_endpoint(request: Request):
             # is released before _run_generation, which re-acquires it for
             # the generation phase; a waiting job may slip its detection in
             # between, but everything stays strictly one-GPU-task-at-a-time.
-            with generation_slot(_gen_lock, job) as acquired:
+            with _coordinated_generation_slot(
+                job, description="Maestro GPU preparation · recast",
+            ) as acquired:
                 if not acquired:
                     return
                 if not try_start(
@@ -18648,6 +19261,7 @@ async def recast_endpoint(request: Request):
         "sliding_window_size": recast_window_size,
         "num_inference_steps": inference_steps,
         "guidance_scale": guidance_scale,
+        **_generation_job_acceptance(job),
     }
 
 
@@ -19293,7 +19907,9 @@ def _prepare_and_run_outpaint(job_id):
         # Match Recast/Repaint's two-phase lifecycle. Preparation is short and
         # CPU-bound, but taking the slot preserves submission order and avoids
         # stacking ffmpeg decoding on top of another active generation.
-        with generation_slot(_gen_lock, job) as acquired:
+        with _coordinated_generation_slot(
+            job, description="Maestro GPU preparation · outpaint",
+        ) as acquired:
             if not acquired:
                 return
             if not try_start(
@@ -19980,8 +20596,7 @@ async def outpaint_endpoint(request: Request):
         "params": gen_params, "output_files": [], "error": None,
         "workspace": workspace, "out_dir": job_out_dir,
     }
-    _jobs[job_id] = job
-    register_generation_job(_gen_lock, job)
+    _register_manual_generation_job(job)
 
     worker = (
         _prepare_and_run_outpaint
@@ -20009,6 +20624,7 @@ async def outpaint_endpoint(request: Request):
         "total_frames": total_frames,
         "sliding_window_size": sliding_window_size,
         "sliding_window_count": _window_count,
+        **_generation_job_acceptance(job),
     }
 
 
@@ -20442,13 +21058,18 @@ async def blend_endpoint(request: Request):
             "params": gen_params, "output_files": [], "error": None,
             "workspace": workspace, "out_dir": job_out_dir,
         }
-        _jobs[job_id] = job
-        register_generation_job(_gen_lock, job)
+        _register_manual_generation_job(job)
 
         thread = threading.Thread(target=_run_blend_generation, args=(job_id,), daemon=False)
         thread.start()
 
-        return {"job_id": job_id, "status": "queued", "overlap_sec": overlap_sec_eff, "frames": transition_frames}
+        return {
+            "job_id": job_id,
+            "status": "queued",
+            "overlap_sec": overlap_sec_eff,
+            "frames": transition_frames,
+            **_generation_job_acceptance(job),
+        }
 
     except Exception:
         # Setup failed before the background thread took ownership of temp_dir.
@@ -21073,13 +21694,18 @@ async def inpaint_endpoint(request: Request):
         "params": gen_params, "output_files": [], "error": None,
         "workspace": workspace, "out_dir": job_out_dir,
     }
-    _jobs[job_id] = job
-    register_generation_job(_gen_lock, job)
+    _register_manual_generation_job(job)
 
     thread = threading.Thread(target=_run_generation, args=(job_id,), daemon=False)
     thread.start()
 
-    return {"job_id": job_id, "status": "queued", "target": intent["target"], "prompt": intent["prompt"]}
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "target": intent["target"],
+        "prompt": intent["prompt"],
+        **_generation_job_acceptance(job),
+    }
 
 
 def _apply_film_grain_to_file(video_path: str, intensity: float, saturation: float):
@@ -22071,7 +22697,18 @@ def _resolve_tool_clip_path(raw_path, workspace=None):
     return raw_path if os.path.isfile(raw_path) else None
 
 
-def _write_tool_sidecar(out_dir, filename, *, source_name, tool, params, elapsed, job_id):
+def _write_tool_sidecar(
+    out_dir,
+    filename,
+    *,
+    source_name,
+    tool,
+    params,
+    elapsed,
+    job_id,
+    task_id=None,
+    root_task_id=None,
+):
     """Write a .meta.json sidecar so a Tools output shows up in the gallery
     with the right mode + edit_sub_mode tag (mirrors _run_sfx_generation)."""
     sidecar = {
@@ -22080,6 +22717,8 @@ def _write_tool_sidecar(out_dir, filename, *, source_name, tool, params, elapsed
         "tool": tool,
         "tool_source": source_name,
         "job_id": job_id,
+        "task_id": task_id,
+        "root_task_id": root_task_id or task_id,
         "generation_time": round(elapsed),
         "created_at": time.time(),
     }
@@ -22099,7 +22738,9 @@ def _run_tool_upscale(job_id: str):
     start_time = None
     abort_state = {"abort": False}
     audio_tracks = []
-    with generation_slot(_gen_lock, job) as acquired:
+    with _coordinated_generation_slot(
+        job, description="Maestro GPU tool · upscale",
+    ) as acquired:
         if not acquired:
             return False
         try:
@@ -22227,7 +22868,17 @@ def _run_tool_upscale(job_id: str):
             if is_cancel_requested(job):
                 return False
             for fname in new_files:
-                _write_tool_sidecar(out_dir, fname, source_name=os.path.basename(video_source), tool="upscale", params={"method": method, "model_type": "post_processing"}, elapsed=time.time() - start_time, job_id=job_id)
+                _write_tool_sidecar(
+                    out_dir,
+                    fname,
+                    source_name=os.path.basename(video_source),
+                    tool="upscale",
+                    params={"method": method, "model_type": "post_processing"},
+                    elapsed=time.time() - start_time,
+                    job_id=job_id,
+                    task_id=job.get("task_id"),
+                    root_task_id=job.get("root_task_id"),
+                )
 
             completed = finish_job(
                 job,
@@ -22263,7 +22914,9 @@ def _run_tool_revoice(job_id: str):
     start_time = None
     abort_state = {"abort": False}
     final_path = None
-    with generation_slot(_gen_lock, job) as acquired:
+    with _coordinated_generation_slot(
+        job, description="Maestro GPU tool · revoice",
+    ) as acquired:
         if not acquired:
             return False
         try:
@@ -22361,7 +23014,17 @@ def _run_tool_revoice(job_id: str):
                 except OSError:
                     pass
                 return False
-            _write_tool_sidecar(out_dir, fname, source_name=os.path.basename(video_source), tool="revoice", params={"mode": mode, "model_type": "post_processing"}, elapsed=time.time() - start_time, job_id=job_id)
+            _write_tool_sidecar(
+                out_dir,
+                fname,
+                source_name=os.path.basename(video_source),
+                tool="revoice",
+                params={"mode": mode, "model_type": "post_processing"},
+                elapsed=time.time() - start_time,
+                job_id=job_id,
+                task_id=job.get("task_id"),
+                root_task_id=job.get("root_task_id"),
+            )
 
             completed = finish_job(
                 job,
@@ -22398,20 +23061,26 @@ async def tools_upscale(request: Request):
         raise HTTPException(status_code=400, detail=f"Clip not found: {video_path}")
 
     job_id = uuid.uuid4().hex[:8]
-    _jobs[job_id] = {
+    job = {
         "id": job_id, "status": "queued", "progress": 0, "step": 0, "total_steps": 0,
         "phase": "", "message": "Queued (upscale)", "created_at": time.time(),
         "params": {
             "video_path": resolved,
             "method": body.get("method") or "flashvsr2",
             "seed": body.get("seed", -1),
+            "model_type": "post_processing",
+            "generation_mode": "video",
         },
         "output_files": [], "error": None,
         "workspace": workspace, "out_dir": _workspace_dir(workspace),
     }
-    register_generation_job(_gen_lock, _jobs[job_id])
+    _register_manual_generation_job(job)
     threading.Thread(target=_run_tool_upscale, args=(job_id,), daemon=False).start()
-    return {"job_id": job_id, "status": "queued"}
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        **_generation_job_acceptance(job),
+    }
 
 
 @api.post("/api/v1/tools/revoice")
@@ -22442,7 +23111,7 @@ async def tools_revoice(request: Request):
         mode = "single"
 
     job_id = uuid.uuid4().hex[:8]
-    _jobs[job_id] = {
+    job = {
         "id": job_id, "status": "queued", "progress": 0, "step": 0, "total_steps": 0,
         "phase": "", "message": "Queued (revoice)", "created_at": time.time(),
         "params": {
@@ -22451,13 +23120,19 @@ async def tools_revoice(request: Request):
             "mode": mode,
             "diffusion_steps": body.get("diffusion_steps", 25),
             "cfg_rate": body.get("cfg_rate", 0.5),
+            "model_type": "post_processing",
+            "generation_mode": "video",
         },
         "output_files": [], "error": None,
         "workspace": workspace, "out_dir": _workspace_dir(workspace),
     }
-    register_generation_job(_gen_lock, _jobs[job_id])
+    _register_manual_generation_job(job)
     threading.Thread(target=_run_tool_revoice, args=(job_id,), daemon=False).start()
-    return {"job_id": job_id, "status": "queued"}
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        **_generation_job_acceptance(job),
+    }
 
 
 def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
@@ -22470,7 +23145,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
     active_task_timer = None
     abort_state = None
 
-    with generation_slot(_gen_lock, job) as acquired:
+    with _coordinated_generation_slot(job) as acquired:
         if not acquired:
             return False
         try:
@@ -22480,6 +23155,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                     "Restarting recovered job from the beginning…"
                     if job.get("recovered") else "Preparing..."
                 ),
+                acquired_resources=[_local_gpu_lane.key],
             ):
                 return False
             # Active generation timing begins only after this job owns the GPU
@@ -24204,24 +24880,25 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
             finish_job(job, "failed", **failure_updates)
             return False
         finally:
-            if abort_state is not None:
-                unregister_abort_state(job_id, _active_gen_states, abort_state)
             # Restore the persisted base coefficient so the next job
             # starts from the user's auto-tuned value, not whatever
             # this job's adjustment left it at.
             _restore_base_coefficient()
+            if abort_state is not None:
+                # Unregistration is the cancellation acknowledgement. Keep it
+                # after per-job cleanup so `cancelled` never means inference is
+                # still unwinding.
+                unregister_abort_state(
+                    job_id, _active_gen_states, abort_state,
+                )
+            else:
+                acknowledge_cancel(job)
             # If no other jobs are running, sync save_path to the current active
             # workspace (which may have changed while this job was running).
             if not _active_gen_states:
                 active_dir = _workspace_dir()
                 wgp.save_path = active_dir
                 wgp.image_save_path = active_dir
-            if is_cancel_requested(job) or job.get("_cancel_requested"):
-                # This is the terminal acknowledgement observed by Director.
-                # It is intentionally last: until here, the GPU job is still
-                # considered active and a second PRE launch remains blocked.
-                job["status"] = "cancelled"
-                job["message"] = "Cancelled"
             # The generation itself is terminal now. Remove its request before
             # optional model-idle cleanup so a shutdown during cleanup cannot
             # offer a duplicate completed job for recovery.
@@ -25035,6 +25712,11 @@ def get_status(job_id: str):
             if j.get("status") == "queued" else None
         ),
         "generation_details": _public_generation_details(j.get("params")),
+        "h3_window_plan": (
+            (j.get("params") or {}).get("h3_window_plan")
+            if isinstance(j.get("params"), dict)
+            else None
+        ),
         # Present only on failed jobs that look like CUDA OOMs. UI
         # renders the OOM recovery banner when this is non-null.
         "oom_info": j.get("oom_info"),
@@ -25048,11 +25730,7 @@ def cancel_job(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
 
     if job_id.startswith("audio-analysis-"):
-        job = _jobs[job_id]
-        if job["status"] in ("queued", "running"):
-            job["_cancel_requested"] = True
-            job["message"] = "Cancelling after the current analysis phase…"
-        return {"job_id": job_id, "status": job["status"]}
+        return cancel_audio_analysis_job(job_id)
 
     job = _jobs[job_id]
     result = request_cancel(
@@ -25077,7 +25755,7 @@ def list_jobs():
     active = []
     for job in list(_jobs.values()):
         j = snapshot_job(job)
-        if j["status"] in ("queued", "running"):
+        if j["status"] in ("queued", "waiting_resource", "running", "cancelling"):
             active.append({
                 "job_id": j["id"],
                 "task_id": j.get("task_id"),
@@ -25156,18 +25834,25 @@ def resume_generation_queue():
                     _durable_generation_queue.remove(job_id)
                 continue
             workspace = str(record.get("workspace") or "default")
+            _reset_canonical_task_for_resume(
+                workspace,
+                f"task-generation-{job_id}",
+            )
             job = _new_generation_job(
                 params,
                 workspace,
                 job_id=job_id,
                 created_at=float(record.get("created_at") or time.time()),
                 recovered=True,
+                reserve_generation=not isinstance(
+                    params.get("_h3_window_plan_pending"), dict,
+                ),
             )
             _jobs[job_id] = job
             _persist_generation_job(job)
             _cancel_h3_idle_release()
             threads.append(threading.Thread(
-                target=_run_generation,
+                target=_run_generation_with_preparation,
                 args=(job_id,),
                 name=f"recovered-generation-{job_id}",
                 daemon=False,
@@ -25588,7 +26273,7 @@ def get_comic_output(name: str):
         raise HTTPException(status_code=400, detail=f"Invalid comic project: {exc}") from exc
 
 
-def _comic_reference_image_file(source: str) -> str:
+def _comic_reference_image_file(source: str, workspace: str | None = None) -> str:
     """Resolve a local asset to base64, or preserve a validated public URL."""
     if source.startswith("data:image/"):
         if len(source) > 25 * 1024 * 1024:
@@ -25614,7 +26299,7 @@ def _comic_reference_image_file(source: str) -> str:
     if source.startswith("/api/v1/file/"):
         filename = source.split("/api/v1/file/", 1)[1]
         from urllib.parse import unquote
-        path = _safe_join(_workspace_dir(), unquote(filename))
+        path = _safe_join(_workspace_dir(workspace), unquote(filename))
     elif source.startswith("/api/v1/uploads/"):
         filename = source.split("/api/v1/uploads/", 1)[1]
         from urllib.parse import unquote
@@ -25627,6 +26312,298 @@ def _comic_reference_image_file(source: str) -> str:
     mime = mimetypes.guess_type(path)[0] or "image/png"
     with open(path, "rb") as handle:
         return f"data:{mime};base64,{base64.b64encode(handle.read()).decode('ascii')}"
+
+
+_minimax_image_jobs: dict[str, dict] = {}
+_minimax_image_jobs_lock = threading.RLock()
+
+
+def _publish_minimax_image_job(job: dict) -> dict | None:
+    publisher = globals().get("_publish_generic_legacy_task")
+    if not callable(publisher):
+        return None
+    try:
+        return publisher(copy.deepcopy(job), "minimax-image")
+    except Exception as exc:
+        print(f"[Task registry] Could not publish MiniMax image {job.get('jobId')}: {exc}")
+        return None
+
+
+def _minimax_image_job_update(job_id: str, **patch) -> dict | None:
+    with _minimax_image_jobs_lock:
+        job = _minimax_image_jobs.get(job_id)
+        if job is None:
+            return None
+        requested_status = str(patch.get("status") or "")
+        if (
+            job.get("_cancel_requested")
+            and requested_status in {
+                "created", "queued", "waiting_resource", "running",
+            }
+        ):
+            return copy.deepcopy(job)
+        if (
+            str(job.get("status") or "") in {
+                "completed", "failed", "cancelled", "interrupted",
+            }
+            and requested_status
+            and requested_status not in {
+                "completed", "failed", "cancelled", "interrupted",
+            }
+        ):
+            return copy.deepcopy(job)
+        job.update(patch)
+        job["updatedAt"] = time.time()
+        snapshot = copy.deepcopy(job)
+    _publish_minimax_image_job(snapshot)
+    return snapshot
+
+
+def _minimax_image_claim_provider(job_id: str, lane_key: str) -> dict | None:
+    """Atomically cross the last cancellable boundary before a paid call."""
+    with _minimax_image_jobs_lock:
+        job = _minimax_image_jobs.get(job_id)
+        if (
+            job is None
+            or job.get("_cancel_requested")
+            or str(job.get("status") or "") in {
+                "completed", "failed", "cancelled", "interrupted",
+            }
+        ):
+            return None
+        now = time.time()
+        job.update(
+            status="running",
+            phase="requesting",
+            message="Generating image with MiniMax Image-01…",
+            startedAt=job.get("startedAt") or now,
+            acquired_resources=[lane_key],
+            updatedAt=now,
+        )
+        snapshot = copy.deepcopy(job)
+    _publish_minimax_image_job(snapshot)
+    return snapshot
+
+
+def _public_minimax_image_job(job: dict) -> dict:
+    return {
+        key: copy.deepcopy(value)
+        for key, value in job.items()
+        if key not in {"request", "_cancel_requested"}
+    }
+
+
+def _run_minimax_image_job(job_id: str) -> None:
+    with _minimax_image_jobs_lock:
+        job = copy.deepcopy(_minimax_image_jobs.get(job_id) or {})
+    if not job:
+        return
+
+    def cancelled() -> bool:
+        with _minimax_image_jobs_lock:
+            return bool(
+                (_minimax_image_jobs.get(job_id) or {}).get("_cancel_requested")
+            )
+
+    if cancelled():
+        _minimax_image_job_update(
+            job_id, status="cancelled", phase="cancelled", message="Cancelled",
+            finishedAt=time.time(),
+        )
+        return
+
+    request_body = job.get("request") if isinstance(job.get("request"), dict) else {}
+    workspace = str(job.get("workspace") or "default")
+    lane = resource_scheduler.remote_lane("minimax", minimax_image_service.API_URL)
+    _minimax_image_job_update(
+        job_id,
+        status="waiting_resource",
+        phase="waiting_resource",
+        message="Waiting for MiniMax Image-01 API",
+        acquired_resources=[],
+    )
+    try:
+        with resource_scheduler.coordinator.acquire(
+            lane,
+            task_id=str(job.get("taskId") or job_id),
+            description="MiniMax Image-01 user request",
+            cancelled=cancelled,
+        ):
+            claimed = _minimax_image_claim_provider(job_id, lane.key)
+            if claimed is None:
+                raise resource_scheduler.ResourceAcquireCancelled(
+                    f"MiniMax image job {job_id} was cancelled"
+                )
+            generated = minimax_image_service.generate_image(
+                api_key=str(
+                    (wgp.server_config.get("services") or {}).get("minimax_api_key")
+                    or ""
+                ),
+                prompt=str(request_body.get("prompt") or ""),
+                aspect_ratio=str(request_body.get("aspect_ratio") or "1:1"),
+                output_dir=_workspace_dir(workspace),
+                subject_reference=(
+                    _comic_reference_image_file(
+                        str(request_body.get("subject_reference") or ""), workspace,
+                    )
+                    if request_body.get("subject_reference") else ""
+                ),
+                filename_prefix="minimax-comic",
+                task_id=str(job.get("taskId") or ""),
+                root_task_id=str(job.get("rootTaskId") or job.get("taskId") or ""),
+            )
+        name = generated["name"]
+        asset = {
+            "id": f"asset-{uuid.uuid4().hex[:12]}",
+            "name": name,
+            "kind": "minimax",
+            "source": f"/api/v1/file/{name}",
+            "thumbnail": f"/api/v1/file/{name}",
+            "prompt": generated["prompt"],
+            "provider": "minimax",
+            "model": "image-01",
+            "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "metadata": {
+                "jobId": job_id,
+                "taskId": job.get("taskId"),
+                "rootTaskId": job.get("rootTaskId") or job.get("taskId"),
+                "subjectReference": generated["subject_reference"],
+                "aspectRatio": generated["aspect_ratio"],
+            },
+        }
+        if cancelled():
+            _minimax_image_job_update(
+                job_id,
+                status="cancelled",
+                phase="cancelled",
+                message="Cancelled after the provider reached a safe boundary",
+                output_files=[name],
+                result={"asset": asset},
+                finishedAt=time.time(), acquired_resources=[],
+            )
+        else:
+            _minimax_image_job_update(
+                job_id,
+                status="completed",
+                phase="completed",
+                message="MiniMax image generated",
+                current=1,
+                total=1,
+                progress=100,
+                output_files=[name],
+                result={"asset": asset},
+                finishedAt=time.time(), acquired_resources=[],
+            )
+    except resource_scheduler.ResourceAcquireCancelled:
+        _minimax_image_job_update(
+            job_id, status="cancelled", phase="cancelled", message="Cancelled",
+            finishedAt=time.time(), acquired_resources=[],
+        )
+    except minimax_image_service.MiniMaxImageError as exc:
+        _minimax_image_job_update(
+            job_id, status="failed", phase="failed", message=str(exc),
+            error=str(exc), statusCode=exc.status_code, finishedAt=time.time(),
+            acquired_resources=[],
+        )
+    except Exception as exc:
+        traceback.print_exc()
+        _minimax_image_job_update(
+            job_id, status="failed", phase="failed",
+            message=f"MiniMax image generation failed: {exc}", error=str(exc),
+            finishedAt=time.time(), acquired_resources=[],
+        )
+
+
+@api.post("/api/v1/comics/generate/minimax/jobs")
+def start_comic_minimax_job(body: dict):
+    """Start one observable, cancellable MiniMax Image-01 request."""
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    _workspace_dir(workspace)
+    job_id = f"minimax-image-{uuid.uuid4().hex[:12]}"
+    now = time.time()
+    job = {
+        "jobId": job_id,
+        "workspace": workspace,
+        "status": "queued",
+        "phase": "queued",
+        "message": "MiniMax image request queued",
+        "current": 0,
+        "total": 1,
+        "progress": 0,
+        "provider": "minimax",
+        "model": "image-01",
+        "server_origin": "https://api.minimax.io",
+        "resource_lane": "remote:https://api.minimax.io",
+        "acquired_resources": [],
+        "output_files": [],
+        "result": None,
+        "error": None,
+        "createdAt": now,
+        "updatedAt": now,
+        "_cancel_requested": False,
+        "request": {
+            "prompt": str(body.get("prompt") or ""),
+            "aspect_ratio": str(body.get("aspect_ratio") or "1:1"),
+            "subject_reference": body.get("subject_reference"),
+        },
+    }
+    # Validate inexpensive request fields before returning a durable job ID.
+    try:
+        minimax_image_service.prepare_prompt(job["request"]["prompt"])
+        if job["request"]["aspect_ratio"] not in minimax_image_service.SUPPORTED_ASPECT_RATIOS:
+            raise minimax_image_service.MiniMaxImageError(
+                "Unsupported MiniMax image aspect ratio", 400,
+            )
+    except minimax_image_service.MiniMaxImageError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    with _minimax_image_jobs_lock:
+        _minimax_image_jobs[job_id] = job
+    task = _publish_minimax_image_job(job)
+    if isinstance(task, dict):
+        with _minimax_image_jobs_lock:
+            _minimax_image_jobs[job_id]["taskId"] = task.get("id")
+            _minimax_image_jobs[job_id]["rootTaskId"] = task.get("root_id") or task.get("id")
+            job = copy.deepcopy(_minimax_image_jobs[job_id])
+    threading.Thread(
+        target=_run_minimax_image_job,
+        args=(job_id,),
+        name=f"minimax-image-{job_id[-6:]}",
+        daemon=True,
+    ).start()
+    return _public_minimax_image_job(job)
+
+
+@api.get("/api/v1/comics/generate/minimax/jobs/{job_id}")
+def get_comic_minimax_job(job_id: str):
+    with _minimax_image_jobs_lock:
+        job = copy.deepcopy(_minimax_image_jobs.get(job_id) or {})
+    if not job:
+        raise HTTPException(status_code=404, detail="MiniMax image job not found")
+    return _public_minimax_image_job(job)
+
+
+@api.post("/api/v1/comics/generate/minimax/jobs/{job_id}/cancel")
+def cancel_comic_minimax_job(job_id: str):
+    with _minimax_image_jobs_lock:
+        job = _minimax_image_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="MiniMax image job not found")
+        if job.get("status") in {"completed", "failed", "cancelled"}:
+            return _public_minimax_image_job(job)
+        job["_cancel_requested"] = True
+        waiting = job.get("status") in {"created", "queued", "waiting_resource"}
+        job["status"] = "cancelled" if waiting else "cancelling"
+        job["phase"] = job["status"]
+        job["message"] = (
+            "Cancelled before the provider call"
+            if waiting else "Cancellation requested; waiting for a safe provider boundary…"
+        )
+        job["updatedAt"] = time.time()
+        if waiting:
+            job["finishedAt"] = time.time()
+        snapshot = copy.deepcopy(job)
+    _publish_minimax_image_job(snapshot)
+    return _public_minimax_image_job(snapshot)
 
 
 @api.post("/api/v1/comics/generate/minimax")
@@ -27010,7 +27987,8 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
 def _story_project_prompt_context(project: dict, scope: str) -> str:
     """Return bounded, valid JSON with editorial facts but no heavy runtime data."""
     overview_keys = (
-        "title", "projectType", "creativeBrief", "language", "genre", "tone", "audience", "premise",
+        "title", "projectType", "creativeBrief", "language", "spokenLanguage", "locationVariety",
+        "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience", "premise",
         "logline", "synopsis", "theme", "ending", "visualStyle",
         "characterVisualStyle", "enforceVisualStyle", "allowClipText",
     )
@@ -27239,7 +28217,8 @@ def put_series_project_endpoint(series_id: str, body: dict):
                 )
             updated = normalize_series_project({**raw_series, "id": series_id}, series_id, workspace)
             canon_inputs = (
-                "title", "premise", "logline", "format", "language", "genre", "tone", "audience",
+                "title", "premise", "logline", "format", "language", "spokenLanguage",
+                "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience",
                 "visualStyle", "characterVisualStyle", "cameraLanguage", "sourceMode",
                 "masterUniversePrompt", "characters", "relationships", "locations", "props",
             )
@@ -27668,6 +28647,11 @@ def _series_plan_update(job_id: str, **patch) -> dict | None:
         job = _series_plan_jobs.get(job_id)
         if not job:
             return None
+        if (
+            job.get("status") == "cancelling"
+            and patch.get("status") not in {"cancelling", "cancelled"}
+        ):
+            return copy.deepcopy(job)
         job.update(copy.deepcopy(patch))
         job["updatedAt"] = time.time()
         snapshot = copy.deepcopy(job)
@@ -27732,6 +28716,7 @@ def _run_series_plan_job_inner(job_id: str) -> None:
     from services.series_planning import (
         apply_planning_stage,
         normalize_planning_result,
+        planning_output_token_budget,
         planning_prompt,
         planning_schema,
         planning_stages,
@@ -27740,7 +28725,7 @@ def _run_series_plan_job_inner(job_id: str) -> None:
     job = _load_series_plan_job(job_id)
     if not job:
         return
-    if job.get("status") == "cancelled":
+    if job.get("status") in {"cancelling", "cancelled"}:
         return
     request = copy.deepcopy(job.get("request") or {})
     series = request.get("seriesSnapshot") if isinstance(request.get("seriesSnapshot"), dict) else {}
@@ -27753,7 +28738,7 @@ def _run_series_plan_job_inner(job_id: str) -> None:
             _ensure_llm_loaded()
         for index, stage in enumerate(stages):
             latest = _load_series_plan_job(job_id)
-            if latest and latest.get("status") == "cancelled":
+            if latest and latest.get("status") in {"cancelling", "cancelled"}:
                 return
             if stage in completed:
                 result = normalize_planning_result(stage, completed[stage], series, episode)
@@ -27768,18 +28753,17 @@ def _run_series_plan_job_inner(job_id: str) -> None:
                 raw = _generate_comic_director_json(
                     prompt=prompt,
                     system_prompt=system_prompt,
-                    schema=planning_schema(stage),
-                    # Eight fully described shots can exceed 5k tokens in
-                    # Spanish. A low cap makes otherwise compliant providers
-                    # stop after 6–7 shots; json_repair then turns truncation
-                    # into a deceptively valid but incomplete object.
-                    max_new_tokens=(9000 if stage == "shots" else 6000 if stage == "script" else 2400),
+                    schema=planning_schema(stage, episode),
+                    # Long episodes need proportionally more independent
+                    # 5/10/15-second clips; keep enough output room for their
+                    # complete structured shot records.
+                    max_new_tokens=planning_output_token_budget(stage, episode),
                     stage=f"Series Lab {stage}",
                     llm_override=llm_override,
                 )
                 # JSON-schema support differs between providers. A response can
                 # be valid JSON yet still violate a cross-field production rule
-                # such as "every speaker is visible" or the two-speaker model
+                # such as "every speaker is visible" or the single-speaker clip
                 # limit. Give the writing model two bounded, evidence-rich
                 # semantic repair passes instead of throwing away all earlier
                 # durable stages after the first invalid response.
@@ -27796,7 +28780,10 @@ def _run_series_plan_job_inner(job_id: str) -> None:
                         previous_response = json.dumps(
                             raw, ensure_ascii=False, separators=(",", ":"), default=str,
                         )
-                        previous_limit = 20000
+                        previous_limit = min(
+                            250000,
+                            planning_output_token_budget(stage, episode) * 4,
+                        )
                         if len(previous_response) > previous_limit:
                             previous_response = (
                                 previous_response[:previous_limit]
@@ -27819,8 +28806,10 @@ def _run_series_plan_job_inner(job_id: str) -> None:
                             f"{prompt}\n\nSERIES STAGE VALIDATION REPAIR: The previous response "
                             f"failed this production rule: {exc}. Preserve all valid story facts and "
                             "dialogue, but correct the smallest necessary structure. For a shot with "
-                            "more than two actual dialogue speakers, distribute those lines across "
-                            "separate shots while keeping 8–12 shots total. speakingCharacterIds must "
+                            "more than one actual dialogue speaker, distribute every speaker turn across "
+                            "separate single-speaker shots. Keep the duration-aware shot count stated above; "
+                            "use only 5, 10, or 15 seconds and never exceed 15 seconds. "
+                            "speakingCharacterIds must "
                             "equal the unique characterId values in dialogueBeats, not every visible "
                             "participant. Return exactly one complete JSON object matching the schema.\n"
                             f"PREVIOUS RESPONSE TO REPAIR:\n{previous_response}"
@@ -27828,20 +28817,18 @@ def _run_series_plan_job_inner(job_id: str) -> None:
                         raw = _generate_comic_director_json(
                             prompt=repair_prompt,
                             system_prompt=system_prompt,
-                            schema=planning_schema(stage),
-                            max_new_tokens=(
-                                9000 if stage == "shots" else 6000 if stage == "script" else 2400
-                            ),
+                            schema=planning_schema(stage, episode),
+                            max_new_tokens=planning_output_token_budget(stage, episode),
                             stage=f"Series Lab {stage} validation repair {repair_attempt + 1}",
                             llm_override=llm_override,
                         )
                         latest = _load_series_plan_job(job_id)
-                        if latest and latest.get("status") == "cancelled":
+                        if latest and latest.get("status") in {"cancelling", "cancelled"}:
                             return
                 if semantic_error is not None:  # pragma: no cover - loop raises first
                     raise semantic_error
                 latest = _load_series_plan_job(job_id)
-                if latest and latest.get("status") == "cancelled":
+                if latest and latest.get("status") in {"cancelling", "cancelled"}:
                     return
                 completed[stage] = result
             episode = apply_planning_stage(episode, stage, result)
@@ -27855,6 +28842,9 @@ def _run_series_plan_job_inner(job_id: str) -> None:
             result={"episode": episode}, error=None, finishedAt=time.time(),
         )
     except Exception as exc:
+        latest = _load_series_plan_job(job_id)
+        if latest and latest.get("status") in {"cancelling", "cancelled"}:
+            return
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
         _series_plan_update(
             job_id, status="failed", error=str(detail), finishedAt=time.time(),
@@ -27901,7 +28891,7 @@ def _run_series_canon_plan_job_inner(job_id: str) -> None:
     job = _load_series_plan_job(job_id)
     if not job:
         return
-    if job.get("status") == "cancelled":
+    if job.get("status") in {"cancelling", "cancelled"}:
         return
     request = copy.deepcopy(job.get("request") or {})
     series = request.get("seriesSnapshot") if isinstance(request.get("seriesSnapshot"), dict) else {}
@@ -27938,7 +28928,7 @@ def _run_series_canon_plan_job_inner(job_id: str) -> None:
             stage=stage_label, llm_override=llm_override,
         )
         latest = _load_series_plan_job(job_id)
-        if latest and latest.get("status") == "cancelled":
+        if latest and latest.get("status") in {"cancelling", "cancelled"}:
             return
         proposal = (
             normalize_known_series_bootstrap(raw, series)
@@ -27951,7 +28941,7 @@ def _run_series_canon_plan_job_inner(job_id: str) -> None:
                 message="Known-series bible generated; applying it as an editable draft…",
             )
             latest = _load_series_plan_job(job_id)
-            if latest and latest.get("status") == "cancelled":
+            if latest and latest.get("status") in {"cancelling", "cancelled"}:
                 return
             try:
                 applied = _apply_series_canon_proposal(job, proposal)
@@ -27978,6 +28968,9 @@ def _run_series_canon_plan_job_inner(job_id: str) -> None:
             finishedAt=time.time(),
         )
     except Exception as exc:
+        latest = _load_series_plan_job(job_id)
+        if latest and latest.get("status") in {"cancelling", "cancelled"}:
+            return
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
         _series_plan_update(
             job_id, status="failed", error=str(detail), finishedAt=time.time(),
@@ -28011,6 +29004,18 @@ def _run_series_plan_job(job_id: str) -> None:
     finally:
         with _series_plan_jobs_lock:
             _series_plan_active_jobs.discard(job_id)
+        settling = _load_series_plan_job(job_id) or {}
+        if settling.get("status") == "cancelling":
+            _series_plan_update(
+                job_id,
+                status="cancelled",
+                stage="cancelled",
+                finishedAt=time.time(),
+                message=(
+                    "Series planning cancelled after the active LLM call "
+                    "reached a safe boundary. Completed stages remain recoverable."
+                ),
+            )
 
 
 @api.post("/api/v1/series/{series_id}/canon/prepare/start")
@@ -28048,6 +29053,7 @@ def start_series_canon_preparation(series_id: str, body: dict):
     }
     _comic_writing_llm(request)
     job_id = f"series-canon-{uuid.uuid4().hex[:12]}"
+    task_id = f"task-series-plan-{job_id}"
     now = time.time()
     job = {
         "jobId": job_id, "jobType": "canon", "kind": "planning",
@@ -28060,14 +29066,25 @@ def start_series_canon_preparation(series_id: str, body: dict):
         "bootstrapKnownSeries": bootstrap_known_series,
         "autoApply": request["autoApply"], "autoApplied": False,
         "createdAt": now, "updatedAt": now,
+        "taskId": task_id, "rootTaskId": task_id,
     }
     with _series_plan_jobs_lock:
         _series_plan_jobs[job_id] = job
         _series_plan_store(workspace).save(job)
+    publisher = globals().get("_publish_series_task")
+    task = publisher(job, "series-plan") if callable(publisher) else None
+    if isinstance(task, dict):
+        job["taskId"] = task.get("id")
+        job["rootTaskId"] = task.get("root_id") or task.get("id")
+        with _series_plan_jobs_lock:
+            _series_plan_jobs[job_id] = copy.deepcopy(job)
+            _series_plan_store(workspace).save(job)
     threading.Thread(target=_run_series_plan_job, args=(job_id,), daemon=True).start()
     return {key: job[key] for key in (
-        "jobId", "jobType", "status", "stage", "current", "total", "message", "generateImages",
-        "bootstrapKnownSeries", "autoApply", "autoApplied", "createdAt",
+        "jobId", "jobType", "workspace", "seriesId", "episodeId",
+        "status", "stage", "current", "total", "message", "generateImages",
+        "bootstrapKnownSeries", "autoApply", "autoApplied", "taskId",
+        "rootTaskId", "createdAt",
     )}
 
 
@@ -28094,6 +29111,7 @@ def start_series_episode_plan(series_id: str, episode_id: str, body: dict):
     # key does not leave a permanently queued phantom checkpoint.
     _comic_writing_llm(request)
     job_id = f"series-plan-{uuid.uuid4().hex[:12]}"
+    task_id = f"task-series-plan-{job_id}"
     now = time.time()
     job = {
         "jobId": job_id, "kind": "planning", "workspace": workspace,
@@ -28104,13 +29122,24 @@ def start_series_episode_plan(series_id: str, episode_id: str, body: dict):
         "sourceEpisodeUpdatedAt": episode.get("updatedAt"),
         "completedStages": {}, "episodeResult": None, "result": None, "error": None,
         "createdAt": now, "updatedAt": now,
+        "taskId": task_id, "rootTaskId": task_id,
     }
     with _series_plan_jobs_lock:
         _series_plan_jobs[job_id] = job
         _series_plan_store(workspace).save(job)
+    publisher = globals().get("_publish_series_task")
+    task = publisher(job, "series-plan") if callable(publisher) else None
+    if isinstance(task, dict):
+        job["taskId"] = task.get("id")
+        job["rootTaskId"] = task.get("root_id") or task.get("id")
+        with _series_plan_jobs_lock:
+            _series_plan_jobs[job_id] = copy.deepcopy(job)
+            _series_plan_store(workspace).save(job)
     threading.Thread(target=_run_series_plan_job, args=(job_id,), daemon=True).start()
     return {key: job[key] for key in (
-        "jobId", "status", "stage", "current", "total", "message", "createdAt",
+        "jobId", "taskId", "rootTaskId", "workspace", "seriesId", "episodeId",
+        "status", "stage", "current",
+        "total", "message", "createdAt",
     )}
 
 
@@ -28125,6 +29154,7 @@ def get_series_episode_plan(job_id: str):
         "validationAttempt", "validationError",
         "bootstrapKnownSeries", "autoApply", "autoApplied", "appliedSeriesRevision", "applyError",
         "result", "error", "createdAt", "updatedAt", "finishedAt", "appliedAt",
+        "taskId", "rootTaskId",
     )}
 
 
@@ -28133,13 +29163,27 @@ def cancel_series_episode_plan(job_id: str):
     job = _load_series_plan_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Series planning job not found")
-    if job.get("status") == "completed":
-        return {"jobId": job_id, "status": "completed", "message": job.get("message")}
+    if job.get("status") in {"completed", "failed", "cancelled"}:
+        return {"jobId": job_id, "status": job.get("status"), "message": job.get("message")}
+    with _series_plan_jobs_lock:
+        worker_active = job_id in _series_plan_active_jobs
     updated = _series_plan_update(
-        job_id, status="cancelled", finishedAt=time.time(),
-        message="Episode planning cancelled. Completed stages remain recoverable.",
+        job_id,
+        status="cancelling" if worker_active else "cancelled",
+        stage="cancelling" if worker_active else "cancelled",
+        finishedAt=None if worker_active else time.time(),
+        message=(
+            "Series planning cancellation requested; waiting for the active "
+            "LLM call to reach a safe boundary."
+            if worker_active else
+            "Series planning cancelled before an LLM call started."
+        ),
     )
-    return {"jobId": job_id, "status": "cancelled", "message": updated.get("message")}
+    return {
+        "jobId": job_id,
+        "status": updated.get("status"),
+        "message": updated.get("message"),
+    }
 
 
 @api.post("/api/v1/series/plan/jobs/{job_id}/resume")
@@ -28158,6 +29202,10 @@ def resume_series_episode_plan(job_id: str, body: dict | None = None):
             if key in body:
                 request[key] = body[key]
         _comic_writing_llm(request)
+    _reset_canonical_task_for_resume(
+        str(job.get("workspace") or "default"),
+        str(job.get("taskId") or f"task-series-plan-{job_id}"),
+    )
     _series_plan_update(
         job_id, request=request, status="queued", error=None, finishedAt=None,
         message="Resuming episode planning from the last completed stage…",
@@ -28166,8 +29214,151 @@ def resume_series_episode_plan(job_id: str, body: dict | None = None):
     return {"jobId": job_id, "status": "queued", "message": "Episode planning resumed."}
 
 
+def _prepare_edited_series_episode_proposal(stored: dict, edited: dict | None, series: dict) -> dict:
+    """Merge reviewable fields while keeping generated identities and protected state authoritative."""
+    if edited is None:
+        return copy.deepcopy(stored)
+    if not isinstance(edited, dict):
+        raise ValueError("Edited episode proposal must be an object")
+    if edited.get("id") not in {None, "", stored.get("id")}:
+        raise ValueError("Edited episode proposal id does not match the generated proposal")
+
+    proposed = copy.deepcopy(stored)
+    outline = edited.get("outline")
+    beats = outline.get("beats") if isinstance(outline, dict) else None
+    if not isinstance(beats, list) or any(not isinstance(beat, str) for beat in beats):
+        raise ValueError("Edited outline beats must be text values")
+    proposed["outline"] = {"beats": copy.deepcopy(beats)}
+
+    def merge_identified(original_items, edited_items, label, editable_keys, *, ordered=False):
+        if not isinstance(original_items, list) or not isinstance(edited_items, list):
+            raise ValueError(f"Edited {label} must be a list")
+        original_ids = [str(item.get("id") or "") for item in original_items if isinstance(item, dict)]
+        edited_by_id = {
+            str(item.get("id") or ""): item for item in edited_items if isinstance(item, dict)
+        }
+        if (
+            len(original_ids) != len(original_items)
+            or len(edited_by_id) != len(edited_items)
+            or set(original_ids) != set(edited_by_id)
+        ):
+            raise ValueError(f"Edited {label} cannot add, remove, duplicate, or replace internal IDs")
+        merged = []
+        for index, original in enumerate(original_items):
+            item = copy.deepcopy(original)
+            revision = edited_by_id[str(original["id"])]
+            for key in editable_keys:
+                if key in revision:
+                    item[key] = copy.deepcopy(revision[key])
+            item["id"] = original["id"]
+            if ordered:
+                item["order"] = index + 1
+            merged.append(item)
+        return merged
+
+    scene_keys = (
+        "locationId", "locationVariantId", "time", "participatingCharacterIds", "purpose",
+        "entryState", "exitState", "beats", "dialogue",
+    )
+    proposed["script"] = merge_identified(
+        stored.get("script"), edited.get("script"), "script scenes", scene_keys, ordered=True,
+    )
+    for original_scene, scene in zip(stored.get("script", []), proposed["script"]):
+        scene["beats"] = merge_identified(
+            original_scene.get("beats"), scene.get("beats"), "scene beats", ("kind", "summary"),
+        )
+        scene["dialogue"] = merge_identified(
+            original_scene.get("dialogue"), scene.get("dialogue"), "scene dialogue", ("characterId", "text", "emotion", "delivery"),
+        )
+
+    shot_keys = (
+        "sceneId", "durationSeconds", "framing", "camera", "action", "dialogueBeats",
+        "visibleCharacterIds", "locationId", "locationVariantId", "wardrobeByCharacterId",
+        "propIds", "emotionalStateByCharacterId", "continuityFromShotId", "renderStrategy",
+        "referencePolicy", "prompt", "negativePrompt", "audioDirection",
+    )
+    proposed["shots"] = merge_identified(
+        stored.get("shots"), edited.get("shots"), "shots", shot_keys, ordered=True,
+    )
+    for original_shot, shot in zip(stored.get("shots", []), proposed["shots"]):
+        shot["dialogueBeats"] = merge_identified(
+            original_shot.get("dialogueBeats"), shot.get("dialogueBeats"), "shot dialogue", ("characterId", "text", "emotion", "delivery"),
+        )
+
+    character_ids = {str(item.get("id")) for item in series.get("characters", []) if isinstance(item, dict)}
+    location_ids = {str(item.get("id")) for item in series.get("locations", []) if isinstance(item, dict)}
+    scene_ids = {str(item["id"]) for item in proposed["script"]}
+    shot_ids = {str(item["id"]) for item in proposed["shots"]}
+    for scene in proposed["script"]:
+        if scene.get("locationId") not in location_ids:
+            raise ValueError(f"Scene {scene['id']} uses an unknown location")
+        dialogue_speakers = []
+        for line in scene["dialogue"]:
+            character_id = str(line.get("characterId") or "")
+            if character_id not in character_ids:
+                raise ValueError(f"Scene {scene['id']} dialogue uses an unknown character")
+            if character_id not in dialogue_speakers:
+                dialogue_speakers.append(character_id)
+        scene["participatingCharacterIds"] = list(dict.fromkeys([
+            *[str(item) for item in scene.get("participatingCharacterIds", []) if str(item) in character_ids],
+            *dialogue_speakers,
+        ]))
+    for shot in proposed["shots"]:
+        if shot.get("sceneId") not in scene_ids:
+            raise ValueError(f"Shot {shot['id']} uses an unknown scene")
+        if shot.get("locationId") and shot.get("locationId") not in location_ids:
+            raise ValueError(f"Shot {shot['id']} uses an unknown location")
+        if shot.get("durationSeconds") not in {5, 10, 15}:
+            raise ValueError(f"Shot {shot['id']} duration must be 5, 10, or 15 seconds")
+        continuity_id = str(shot.get("continuityFromShotId") or "")
+        if continuity_id and continuity_id not in shot_ids:
+            raise ValueError(f"Shot {shot['id']} references an unknown continuity shot")
+        visible = list(dict.fromkeys(
+            str(item) for item in shot.get("visibleCharacterIds", []) if str(item) in character_ids
+        ))
+        dialogue_speakers = []
+        for line in shot["dialogueBeats"]:
+            character_id = str(line.get("characterId") or "")
+            if character_id not in character_ids:
+                raise ValueError(f"Shot {shot['id']} dialogue uses an unknown character")
+            if character_id not in visible:
+                visible.append(character_id)
+            if character_id not in dialogue_speakers:
+                dialogue_speakers.append(character_id)
+        if len(dialogue_speakers) > 1:
+            raise ValueError(f"Shot {shot['id']} must contain dialogue from only one speaker")
+        shot["visibleCharacterIds"] = visible
+        shot["speakingCharacterIds"] = dialogue_speakers
+        shot["primarySpeakerId"] = dialogue_speakers[0] if dialogue_speakers else ""
+
+    edited_delta = edited.get("proposedCanonDelta")
+    stored_delta = stored.get("proposedCanonDelta")
+    if not isinstance(edited_delta, dict) or not isinstance(stored_delta, dict):
+        raise ValueError("Edited canon delta must be an object")
+    delta = copy.deepcopy(stored_delta)
+    for key in ("add", "change"):
+        delta[key] = merge_identified(
+            stored_delta.get(key), edited_delta.get(key), f"canon {key}", ("description", "decision"),
+        )
+    # Retire entries use factId rather than id; only their decision is reviewable.
+    stored_retire = stored_delta.get("retire") if isinstance(stored_delta.get("retire"), list) else []
+    edited_retire = edited_delta.get("retire") if isinstance(edited_delta.get("retire"), list) else []
+    edited_retire_by_id = {str(item.get("factId") or ""): item for item in edited_retire if isinstance(item, dict)}
+    if len(edited_retire_by_id) != len(stored_retire) or {
+        str(item.get("factId") or "") for item in stored_retire
+    } != set(edited_retire_by_id):
+        raise ValueError("Edited canon retire list cannot change internal fact IDs")
+    delta["retire"] = [
+        {**copy.deepcopy(item), "decision": edited_retire_by_id[str(item.get("factId") or "")].get("decision", item.get("decision"))}
+        for item in stored_retire
+    ]
+    proposed["proposedCanonDelta"] = delta
+    proposed["continuityIssues"] = copy.deepcopy(stored.get("continuityIssues"))
+    return proposed
+
+
 @api.post("/api/v1/series/plan/jobs/{job_id}/apply")
-def apply_series_episode_plan(job_id: str):
+def apply_series_episode_plan(job_id: str, body: dict | None = None):
     job = _load_series_plan_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Series planning job not found")
@@ -28189,7 +29380,12 @@ def apply_series_episode_plan(job_id: str):
                 status_code=409,
                 detail="The episode was edited after planning started. Review the saved proposal instead of overwriting it.",
             )
-        proposed = copy.deepcopy(job["episodeResult"])
+        try:
+            proposed = _prepare_edited_series_episode_proposal(
+                job["episodeResult"], body.get("episodeResult") if isinstance(body, dict) else None, series,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         proposed["canonSnapshot"] = copy.deepcopy(current.get("canonSnapshot"))
         proposed["canonRevisionAtCreation"] = current.get("canonRevisionAtCreation")
         proposed["createdAt"] = current.get("createdAt")
@@ -28262,6 +29458,31 @@ def _series_render_store(workspace: str):
     return SeriesJobStore(_workspace_dir(workspace), "render")
 
 
+def _active_series_render_for_episode(
+    workspace: str, series_id: str, episode_id: str,
+) -> dict | None:
+    """Return the one queue that owns an episode, including after restart."""
+    active_statuses = {"queued", "running", "cancelling"}
+    with _series_render_jobs_lock:
+        cached = [copy.deepcopy(job) for job in _series_render_jobs.values()]
+    try:
+        persisted = _series_render_store(workspace).list()
+    except (OSError, ValueError, json.JSONDecodeError):
+        persisted = []
+    by_id = {
+        str(job.get("jobId")): job
+        for job in [*persisted, *cached]
+        if isinstance(job, dict) and job.get("jobId")
+    }
+    return next((
+        job for job in by_id.values()
+        if job.get("workspace") == workspace
+        and job.get("seriesId") == series_id
+        and job.get("episodeId") == episode_id
+        and job.get("status") in active_statuses
+    ), None)
+
+
 def _load_series_render_job(job_id: str) -> dict | None:
     with _series_render_jobs_lock:
         cached = _series_render_jobs.get(job_id)
@@ -28284,6 +29505,11 @@ def _series_render_update(job_id: str, **patch) -> dict | None:
         job = _series_render_jobs.get(job_id)
         if not job:
             return None
+        if (
+            job.get("status") == "cancelling"
+            and patch.get("status") not in {"cancelling", "cancelled"}
+        ):
+            return copy.deepcopy(job)
         job.update(copy.deepcopy(patch))
         job["updatedAt"] = time.time()
         snapshot = copy.deepcopy(job)
@@ -28391,6 +29617,38 @@ def _series_patch_attempt(
         return stored["seriesById"][series["id"]]["episodesById"][episode["id"]]["shots"][shot_index]
 
 
+def _series_settle_episode_render_status(job: dict) -> str:
+    """Leave an episode in a truthful terminal state after a render job settles."""
+    workspace = str(job["workspace"])
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, str(job["seriesId"])))
+        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
+        if not isinstance(episode, dict):
+            raise ValueError("Series episode no longer exists")
+        shots = [item for item in episode.get("shots", []) if isinstance(item, dict)]
+        all_rendered = bool(shots) and all(
+            any(
+                isinstance(attempt, dict)
+                and attempt.get("status") == "completed"
+                and bool(attempt.get("outputAssetIds"))
+                for attempt in shot.get("attempts", [])
+            )
+            for shot in shots
+        )
+        status = "completed" if all_rendered else "shot_plan"
+        if episode.get("status") == status:
+            return status
+        now = _series_iso_now()
+        episode["status"] = status
+        episode["updatedAt"] = now
+        series["updatedAt"] = now
+        series["revision"] = int(series.get("revision") or 1) + 1
+        library["seriesById"][series["id"]] = series
+        _write_series_workspace(workspace, library)
+        return status
+
+
 def _run_series_render_job_inner(job_id: str) -> None:
     from services.series_render import build_h3_generation_params
 
@@ -28402,7 +29660,7 @@ def _run_series_render_job_inner(job_id: str) -> None:
     try:
         for item_index, item in enumerate(items):
             latest = _load_series_render_job(job_id)
-            if not latest or latest.get("status") == "cancelled":
+            if not latest or latest.get("status") in {"cancelling", "cancelled"}:
                 return
             current_item = latest.get("items", [])[item_index]
             if current_item.get("status") == "completed":
@@ -28420,6 +29678,26 @@ def _run_series_render_job_inner(job_id: str) -> None:
                 job_id, status="running", stage="rendering", activeShotId=current_item["shotId"],
                 message=f"Rendering shot {item_index + 1}/{len(items)}…",
             )
+            latest = _load_series_render_job(job_id) or latest
+            if latest.get("status") in {"cancelling", "cancelled"}:
+                completed_at = _series_iso_now()
+                _series_patch_attempt(
+                    latest,
+                    current_item,
+                    {
+                        "status": "cancelled",
+                        "completedAt": completed_at,
+                        "error": "Cancelled by user",
+                    },
+                )
+                _series_render_update_item(
+                    job_id,
+                    item_index,
+                    status="cancelled",
+                    completedAt=completed_at,
+                    error="Cancelled by user",
+                )
+                return
             started = time.time()
             child_job_id = ""
             try:
@@ -28435,6 +29713,9 @@ def _run_series_render_job_inner(job_id: str) -> None:
                     resolved[asset_id] = _series_asset_local_path(str(latest["workspace"]), asset)
                 params = build_h3_generation_params(series, shot, attempt, resolved)
                 params["_director_pipeline_id"] = f"series:{job_id}"
+                cancellation_check = _load_series_render_job(job_id) or latest
+                if cancellation_check.get("status") in {"cancelling", "cancelled"}:
+                    raise RuntimeError("Cancelled by user before model execution")
                 request_hash = "sha256:" + hashlib.sha256(
                     json.dumps(params, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
                 ).hexdigest()
@@ -28447,6 +29728,10 @@ def _run_series_render_job_inner(job_id: str) -> None:
                     job_id, item_index, childJobId=child_job_id,
                     requestPayloadHash=request_hash,
                 )
+                cancellation_check = _load_series_render_job(job_id) or latest
+                if cancellation_check.get("status") in {"cancelling", "cancelled"}:
+                    _request_generation_cancel(child_job_id)
+                    raise RuntimeError("Cancelled by user before model execution")
                 _series_patch_attempt(
                     latest, current_item,
                     {"providerTaskId": child_job_id, "requestPayloadHash": request_hash},
@@ -28477,6 +29762,11 @@ def _run_series_render_job_inner(job_id: str) -> None:
                             "createdAt": attempt.get("createdAt"), "submittedAt": submitted_at,
                             "completedAt": completed_at, "elapsedMs": elapsed_ms,
                             "generationJobId": child_job_id, "requestPayloadHash": request_hash,
+                            "taskId": child_result.get("task_id"),
+                            "rootTaskId": (
+                                child_result.get("root_task_id")
+                                or child_result.get("task_id")
+                            ),
                         },
                     })
                 _series_patch_attempt(
@@ -28498,7 +29788,7 @@ def _run_series_render_job_inner(job_id: str) -> None:
                 completed_at = _series_iso_now()
                 elapsed_ms = max(0, round((time.time() - started) * 1000))
                 current = _load_series_render_job(job_id)
-                if current and current.get("status") == "cancelled":
+                if current and current.get("status") in {"cancelling", "cancelled"}:
                     try:
                         _series_patch_attempt(
                             current, current["items"][item_index],
@@ -28518,8 +29808,10 @@ def _run_series_render_job_inner(job_id: str) -> None:
                     job_id, item_index, status="failed", completedAt=completed_at,
                     elapsedMs=elapsed_ms, error=error, childJobId=child_job_id,
                 )
-        finished = time.time()
         latest = _load_series_render_job(job_id) or job
+        if latest.get("status") in {"cancelling", "cancelled"}:
+            return
+        finished = time.time()
         failures = [item for item in latest.get("items", []) if item.get("status") == "failed"]
         _series_render_update(
             job_id,
@@ -28531,11 +29823,16 @@ def _run_series_render_job_inner(job_id: str) -> None:
                 if failures else "All requested Series shots completed."
             ),
         )
+        _series_settle_episode_render_status(latest)
     except Exception as exc:
         _series_render_update(
             job_id, status="failed", error=str(exc), finishedAt=time.time(),
             message="Series render stopped. Completed attempts were preserved.",
         )
+        try:
+            _series_settle_episode_render_status(job)
+        except Exception:
+            pass
 
 
 def _run_series_render_job(job_id: str) -> None:
@@ -28548,6 +29845,39 @@ def _run_series_render_job(job_id: str) -> None:
     finally:
         with _series_render_jobs_lock:
             _series_render_active_jobs.discard(job_id)
+        settling = _load_series_render_job(job_id) or {}
+        if settling.get("status") == "cancelling":
+            settled_items = copy.deepcopy(settling.get("items") or [])
+            for item in settled_items:
+                if item.get("status") in {"queued", "running", "cancelling"}:
+                    item.update({
+                        "status": "cancelled",
+                        "completedAt": item.get("completedAt") or _series_iso_now(),
+                        "error": item.get("error") or "Cancelled by user",
+                        "updatedAt": time.time(),
+                    })
+            _series_render_update(
+                job_id,
+                items=settled_items,
+                status="cancelled",
+                stage="cancelled",
+                activeShotId=None,
+                finishedAt=time.time(),
+                message=(
+                    "Series render cancelled after the active model thread "
+                    "reached a safe boundary. Completed attempts remain available."
+                ),
+            )
+        # Series deliberately marks child generations as one Director-like
+        # group so H3 stays warm between adjacent shots. Once the parent job
+        # settles, restore the ordinary idle-release policy; otherwise the
+        # isolated ConvRot process can retain roughly 50 GB of host RAM forever.
+        finished = _load_series_render_job(job_id) or {}
+        model_type = str(finished.get("model") or "")
+        if _is_legacy_h3_model(model_type):
+            _release_legacy_h3_when_queue_allows(job_id)
+        elif _is_minimax_h3_model(model_type):
+            _release_h3_when_queue_allows(job_id)
 
 
 def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
@@ -28556,6 +29886,11 @@ def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
     selected_ids = {str(item) for item in body.get("shotIds", []) if isinstance(item, str)}
     if mode == "selected":
         shots = [item for item in shots if item.get("id") in selected_ids]
+        if not shots:
+            raise ValueError("Select at least one Series shot")
+        # Append a new alternative in the same slot while retaining the older
+        # approved cut until the user explicitly approves the replacement.
+        return shots
     elif mode == "failed":
         shots = [
             item for item in shots
@@ -28567,8 +29902,8 @@ def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
         shots = [item for item in shots if not item.get("approvedAttemptId")]
     else:
         raise ValueError("Render mode must be selected, failed, missing, or all")
-    # Approved shots are authoritative in every bulk mode. The user can
-    # explicitly unapprove first, but bulk generation never overwrites them.
+    # Bulk generation never spends compute on approved shots. Only explicit
+    # per-slot regeneration may append an alternative attempt.
     return [item for item in shots if not item.get("approvedAttemptId")]
 
 
@@ -28577,8 +29912,8 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
     from services.series_library import append_shot_render_attempt, series_for_episode_snapshot
     from services.series_reference_router import route_shot_references
     from services.series_render import (
-        model_for_manifest, normalize_series_resolution, quantize_h3_frames,
-        shot_generation_prompt,
+        model_for_manifest, normalize_series_resolution, normalize_series_shot_duration,
+        quantize_h3_frames, series_dialogue_preflight_issues, shot_generation_prompt,
     )
 
     workspace = _series_library_workspace(body.get("workspace"))
@@ -28588,13 +29923,14 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         episode = series.get("episodesById", {}).get(episode_id)
         if not isinstance(episode, dict):
             raise HTTPException(status_code=404, detail="Series episode not found")
-        if any(
-            isinstance(shot, dict) and bool(shot.get("dialogueBeats"))
-            for shot in episode.get("shots", [])
-        ) and not series.get("bestEffortLipSyncAcknowledged"):
+        active_job = _active_series_render_for_episode(workspace, series_id, episode_id)
+        if active_job:
             raise HTTPException(
-                status_code=400,
-                detail="Acknowledge best-effort native lip sync in Series setup before rendering dialogue shots",
+                status_code=409,
+                detail=(
+                    f"Series episode already has active render {active_job.get('jobId')}; "
+                    "resume or cancel that queue instead of creating duplicate attempts"
+                ),
             )
         routing_series = series_for_episode_snapshot(series, episode)
         try:
@@ -28603,6 +29939,31 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not candidates:
             raise HTTPException(status_code=400, detail="No unapproved Series shots match this render request")
+        if any(bool(shot.get("dialogueBeats")) for shot in candidates) and not series.get(
+            "bestEffortLipSyncAcknowledged"
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Dialogue rendering is blocked until best-effort native lip sync is acknowledged. "
+                    "Use ‘I understand · enable dialogue rendering’ in Shots or enable it in Series setup."
+                ),
+            )
+        dialogue_issues = [
+            (shot.get("order"), issue)
+            for shot in candidates
+            for issue in series_dialogue_preflight_issues(shot)
+        ]
+        if dialogue_issues:
+            summary = "; ".join(
+                f"shot {order}: {issue}" for order, issue in dialogue_issues[:8]
+            )
+            if len(dialogue_issues) > 8:
+                summary += f"; and {len(dialogue_issues) - 8} more"
+            raise HTTPException(
+                status_code=400,
+                detail=f"Fix dialogue timing/format before rendering: {summary}",
+            )
         provider = routing_series.get("provider") if isinstance(routing_series.get("provider"), dict) else {}
         provider_settings = provider.get("videoSettings") if isinstance(provider.get("videoSettings"), dict) else {}
         settings = {**copy.deepcopy(provider_settings), **(
@@ -28637,6 +29998,9 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
                 )
             model = model_for_manifest(str(provider.get("videoModel") or "minimax_h3"), manifest)
             retry_count = len(shot.get("attempts", []))
+            shot["durationSeconds"] = normalize_series_shot_duration(
+                shot.get("durationSeconds"),
+            )
             shot_settings = {
                 **settings,
                 "requestedDurationSeconds": float(shot.get("durationSeconds") or 0),
@@ -28647,7 +30011,9 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
             updated_shot, attempt = append_shot_render_attempt(
                 shot, manifest=manifest, model=model, settings=shot_settings,
                 seed=(base_seed + int(shot.get("order") or shot_index)) & 0x7FFFFFFF,
-                retry_count=retry_count, prompt=shot_generation_prompt(routing_series, shot),
+                retry_count=retry_count, prompt=shot_generation_prompt(
+                    routing_series, shot, manifest,
+                ),
             )
             episode["shots"][shot_index] = updated_shot
             items.append({
@@ -28664,26 +30030,41 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
         series["updatedAt"] = now_iso
         library["seriesById"][series_id] = series
         _write_series_workspace(workspace, library)
-    job_id = f"series-render-{uuid.uuid4().hex[:12]}"
-    now = time.time()
-    job = {
-        "jobId": job_id, "kind": "render", "workspace": workspace,
-        "seriesId": series_id, "episodeId": episode_id, "status": "queued",
-        "stage": "queued", "current": 0, "total": len(items), "items": items,
-        "activeShotId": None, "message": "Series shot render queued.",
-        "settings": settings, "model": str(provider.get("videoModel") or "minimax_h3"),
-        "seed": base_seed, "outputAssetIds": [], "retryCount": 0,
-        "createdAt": now, "updatedAt": now, "error": None,
-    }
-    with _series_render_jobs_lock:
-        _series_render_jobs[job_id] = job
-        _series_render_store(workspace).save(job)
+        # Persist the episode attempts and their owning job before releasing
+        # the library lock. A concurrent start therefore observes this queue
+        # and cannot append a second set of attempts for the same episode.
+        job_id = f"series-render-{uuid.uuid4().hex[:12]}"
+        task_id = f"task-series-render-{job_id}"
+        now = time.time()
+        job = {
+            "jobId": job_id, "kind": "render", "workspace": workspace,
+            "seriesId": series_id, "episodeId": episode_id, "status": "queued",
+            "stage": "queued", "current": 0, "total": len(items), "items": items,
+            "activeShotId": None, "message": "Series shot render queued.",
+            "settings": settings, "model": str(provider.get("videoModel") or "minimax_h3"),
+            "seed": base_seed, "outputAssetIds": [], "retryCount": 0,
+            "createdAt": now, "updatedAt": now, "error": None,
+            "taskId": task_id, "rootTaskId": task_id,
+        }
+        with _series_render_jobs_lock:
+            _series_render_jobs[job_id] = job
+            _series_render_store(workspace).save(job)
+    publisher = globals().get("_publish_series_task")
+    task = publisher(job, "series-render") if callable(publisher) else None
+    if isinstance(task, dict):
+        job["taskId"] = task.get("id")
+        job["rootTaskId"] = task.get("root_id") or task.get("id")
+        with _series_render_jobs_lock:
+            _series_render_jobs[job_id] = copy.deepcopy(job)
+            _series_render_store(workspace).save(job)
     threading.Thread(
         target=_run_series_render_job, args=(job_id,),
         name=f"series-render-{job_id[-6:]}", daemon=False,
     ).start()
     return {key: job[key] for key in (
-        "jobId", "status", "stage", "current", "total", "message", "settings", "seed", "createdAt",
+        "jobId", "taskId", "rootTaskId", "workspace", "seriesId", "episodeId",
+        "status", "stage", "current",
+        "total", "message", "settings", "seed", "createdAt",
     )}
 
 
@@ -28696,6 +30077,7 @@ def get_series_render_job(job_id: str):
         "jobId", "workspace", "seriesId", "episodeId", "status", "stage", "current", "total",
         "items", "activeShotId", "message", "settings", "model", "seed", "error",
         "createdAt", "updatedAt", "finishedAt",
+        "taskId", "rootTaskId",
     )}
 
 
@@ -28784,15 +30166,15 @@ def cancel_series_render_job(job_id: str):
                 series["updatedAt"] = cancelled_at
                 library["seriesById"][series["id"]] = series
                 _write_series_workspace(str(job["workspace"]), library)
-    active_child = next((
-        str(item.get("childJobId")) for item in job.get("items", [])
-        if item.get("status") == "running" and item.get("childJobId")
-    ), "")
     if active_child and active_child in _jobs:
         _request_generation_cancel(active_child)
     return {
-        "jobId": job_id, "status": "cancelled",
-        "message": updated_job.get("message") or "Cancellation requested; the active model thread may take a moment to release.",
+        "jobId": job_id,
+        "status": updated_job.get("status"),
+        "message": updated_job.get("message") or (
+            "Cancellation requested; the active model thread may take a "
+            "moment to release."
+        ),
     }
 
 
@@ -28816,6 +30198,10 @@ def resume_series_render_job(job_id: str):
     with _series_render_jobs_lock:
         if job_id in _series_render_active_jobs:
             return {"jobId": job_id, "status": job.get("status"), "message": "Series render is already running."}
+    _reset_canonical_task_for_resume(
+        str(job.get("workspace") or "default"),
+        str(job.get("taskId") or f"task-series-render-{job_id}"),
+    )
     items = copy.deepcopy(job.get("items") or [])
     # A local diffusion process cannot resume mid-step. On explicit recovery,
     # Interrupted/failed/cancelled items get a new append-only attempt;
@@ -28934,11 +30320,66 @@ def approve_series_shot_attempt_endpoint(
     return stored["seriesById"][series_id]["episodesById"][episode_id]["shots"][shot_index]
 
 
+@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/attempts/approve-bulk")
+def approve_series_episode_attempts_endpoint(
+    series_id: str, episode_id: str, body: dict,
+):
+    from services.series_library import approve_episode_render_attempts
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    with _series_library_lock:
+        library = _read_series_workspace(workspace)
+        series = copy.deepcopy(_series_project_or_404(library, series_id))
+        episode = series.get("episodesById", {}).get(episode_id)
+        if not isinstance(episode, dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        try:
+            episode = approve_episode_render_attempts(episode, body.get("selections"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        now = _series_iso_now()
+        if episode.get("shots") and all(
+            isinstance(shot, dict) and bool(shot.get("approvedAttemptId"))
+            for shot in episode.get("shots", [])
+        ):
+            episode["status"] = "completed"
+        episode["updatedAt"] = now
+        series["episodesById"][episode_id] = episode
+        series["revision"] = int(series.get("revision") or 1) + 1
+        series["updatedAt"] = now
+        library["seriesById"][series_id] = series
+        stored = _write_series_workspace(workspace, library)
+    stored_series = stored["seriesById"][series_id]
+    return {
+        "seriesId": series_id,
+        "episodeId": episode_id,
+        "revision": stored_series["revision"],
+        "episode": stored_series["episodesById"][episode_id],
+    }
+
+
+from routers.series_assembly import create_series_assembly_router
+
+api.include_router(create_series_assembly_router(
+    resolve_workspace=_series_library_workspace,
+    workspace_dir=_workspace_dir,
+    list_workspaces=_list_workspaces,
+    library_lock=_series_library_lock,
+    read_library=_read_series_workspace,
+    write_library=_write_series_workspace,
+    find_series=_series_project_or_404,
+    asset_local_path=_series_asset_local_path,
+    available_filename=wgp.get_available_filename,
+    concatenate_clips=wgp.concatenate_multi_clip_videos,
+    iso_now=_series_iso_now,
+))
+
 from routers.style_library import create_style_library_router
 from services.style_library import StyleLibrary
 
 _style_library = StyleLibrary(os.path.join(os.path.dirname(__file__), "style_library"))
 api.include_router(create_style_library_router(_style_library))
+
 
 @api.post("/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot_id}/attempts/{attempt_id}/reject")
 def reject_series_shot_attempt_endpoint(
@@ -29414,11 +30855,22 @@ def _persist_story_plan_job(job: dict) -> None:
             pass
 
 
-def _story_job_update(job_id: str, **patch) -> None:
+def _story_job_update(job_id: str, **patch) -> dict | None:
     with _story_plan_jobs_lock:
         job = _story_plan_jobs.get(job_id)
         if not job:
-            return
+            return None
+        next_status = str(patch.get("status") or job.get("status") or "")
+        if (
+            job.get("status") == "cancelling"
+            and next_status not in {"cancelling", "cancelled"}
+        ):
+            return copy.deepcopy(job)
+        if (
+            job.get("status") == "cancelled"
+            and next_status != "cancelled"
+        ):
+            return copy.deepcopy(job)
         job.update(patch)
         job["updatedAt"] = time.time()
         snapshot = copy.deepcopy(job)
@@ -29433,6 +30885,7 @@ def _story_job_update(job_id: str, **patch) -> None:
                 publisher(snapshot, "story-plan")
             except Exception as exc:
                 print(f"[Task registry] Could not publish Story plan {job_id}: {exc}")
+        return snapshot
 
 
 def _load_story_plan_job(job_id: str) -> dict | None:
@@ -29482,7 +30935,7 @@ def _run_story_plan_job_inner(job_id: str) -> None:
     try:
         for index, stage in enumerate(stages):
             latest = _load_story_plan_job(job_id)
-            if latest and latest.get("status") == "cancelled":
+            if latest and latest.get("status") in {"cancelling", "cancelled"}:
                 return
             if stage in completed:
                 original_result = completed[stage]
@@ -29506,7 +30959,7 @@ def _run_story_plan_job_inner(job_id: str) -> None:
                 }
                 result = _generate_story_lab_stage(stage_body, stage)
                 latest = _load_story_plan_job(job_id)
-                if latest and latest.get("status") == "cancelled":
+                if latest and latest.get("status") in {"cancelling", "cancelled"}:
                     return
                 completed[stage] = result
                 _story_job_update(job_id, completedStages=completed)
@@ -29536,14 +30989,57 @@ def _run_story_plan_job_inner(job_id: str) -> None:
 
 def _run_story_plan_job(job_id: str) -> None:
     with _story_plan_jobs_lock:
-        if job_id in _story_plan_active_jobs:
-            return
         _story_plan_active_jobs.add(job_id)
+        job = copy.deepcopy(_story_plan_jobs.get(job_id) or {})
     try:
-        _run_story_plan_job_inner(job_id)
+        from services.task_manager import task_context_scope
+
+        workspace = str(job.get("workspace") or "default")
+        task_id = str(job.get("taskId") or f"task-story-plan-{job_id}")
+        root_task_id = str(job.get("rootTaskId") or task_id)
+        with task_context_scope(
+            task_id=task_id,
+            root_task_id=root_task_id,
+            workspace=workspace,
+            workspace_dir=_workspace_dir(workspace),
+        ):
+            _run_story_plan_job_inner(job_id)
     finally:
         with _story_plan_jobs_lock:
             _story_plan_active_jobs.discard(job_id)
+        settling = _load_story_plan_job(job_id) or {}
+        if settling.get("status") == "cancelling":
+            _story_job_update(
+                job_id,
+                status="cancelled",
+                stage="cancelled",
+                message=(
+                    "Story generation cancelled after the active LLM call "
+                    "reached a safe boundary. Completed stages remain recoverable."
+                ),
+                finishedAt=time.time(),
+            )
+
+
+def _start_story_plan_worker(job_id: str) -> bool:
+    """Claim a Story planner before Thread.start so resume cannot duplicate it."""
+    with _story_plan_jobs_lock:
+        if job_id in _story_plan_active_jobs:
+            return False
+        _story_plan_active_jobs.add(job_id)
+    thread = threading.Thread(
+        target=_run_story_plan_job,
+        args=(job_id,),
+        name=f"story-plan-{job_id[-6:]}",
+        daemon=True,
+    )
+    try:
+        thread.start()
+    except Exception:
+        with _story_plan_jobs_lock:
+            _story_plan_active_jobs.discard(job_id)
+        raise
+    return True
 
 
 @api.post("/api/v1/stories/generate")
@@ -29561,9 +31057,545 @@ def generate_story_lab_section(body: dict):
     return {"result": _generate_story_lab_stage(body, scope)}
 
 
+_minimax_music_jobs: dict[str, dict] = {}
+_minimax_music_jobs_lock = threading.RLock()
+_MINIMAX_MUSIC_TERMINAL = {"completed", "failed", "cancelled", "interrupted"}
+
+
+def _minimax_music_checkpoint_dir(workspace: str | None = None) -> str:
+    path = os.path.join(_workspace_dir(workspace), ".minimax-music-jobs")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _minimax_music_checkpoint_path(job_id: str, workspace: str) -> str | None:
+    if not re.fullmatch(r"minimax-music-[a-f0-9]{12}", str(job_id or "")):
+        return None
+    return os.path.join(_minimax_music_checkpoint_dir(workspace), f"{job_id}.json")
+
+
+def _persist_minimax_music_job(job: dict) -> None:
+    path = _minimax_music_checkpoint_path(
+        str(job.get("jobId") or ""), str(job.get("workspace") or "default"),
+    )
+    if not path:
+        return
+    temporary = f"{path}.{uuid.uuid4().hex}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(job, handle, ensure_ascii=False)
+        os.replace(temporary, path)
+    finally:
+        try:
+            if os.path.isfile(temporary):
+                os.remove(temporary)
+        except OSError:
+            pass
+
+
+def _public_minimax_music_job(job: dict) -> dict:
+    return {
+        key: copy.deepcopy(value)
+        for key, value in job.items()
+        if key not in {"request", "_cancel_requested"}
+    }
+
+
+def _publish_minimax_music_job(job: dict) -> None:
+    publisher = globals().get("_publish_generic_legacy_task")
+    if not callable(publisher):
+        return
+    try:
+        publisher(copy.deepcopy(job), "minimax-music")
+        for child in job.get("children") or []:
+            if isinstance(child, dict):
+                publisher(copy.deepcopy(child), "minimax-music-candidate")
+    except Exception as exc:
+        print(f"[Task registry] Could not publish MiniMax Music {job.get('jobId')}: {exc}")
+
+
+def _minimax_music_job_update(job_id: str, **patch) -> dict | None:
+    with _minimax_music_jobs_lock:
+        job = _minimax_music_jobs.get(job_id)
+        if job is None:
+            return None
+        requested_status = str(patch.get("status") or "")
+        if (
+            job.get("_cancel_requested")
+            and requested_status in {
+                "created", "queued", "waiting_resource", "running",
+            }
+        ):
+            return copy.deepcopy(job)
+        if (
+            str(job.get("status") or "") in _MINIMAX_MUSIC_TERMINAL
+            and requested_status
+            and requested_status not in _MINIMAX_MUSIC_TERMINAL
+        ):
+            return copy.deepcopy(job)
+        job.update(patch)
+        job["updatedAt"] = time.time()
+        snapshot = copy.deepcopy(job)
+        _persist_minimax_music_job(snapshot)
+    _publish_minimax_music_job(snapshot)
+    return snapshot
+
+
+def _minimax_music_child_update(job_id: str, child_index: int, **patch) -> dict | None:
+    with _minimax_music_jobs_lock:
+        job = _minimax_music_jobs.get(job_id)
+        children = job.get("children") if isinstance(job, dict) else None
+        if not isinstance(children, list) or not 0 <= child_index < len(children):
+            return None
+        child = children[child_index]
+        requested_status = str(patch.get("status") or "")
+        if (
+            job.get("_cancel_requested")
+            and requested_status in {
+                "created", "queued", "waiting_resource", "running",
+            }
+        ):
+            return copy.deepcopy(job)
+        if (
+            str(child.get("status") or "") in _MINIMAX_MUSIC_TERMINAL
+            and requested_status
+            and requested_status not in _MINIMAX_MUSIC_TERMINAL
+        ):
+            return copy.deepcopy(job)
+        child.update(patch)
+        child["updatedAt"] = time.time()
+        job["updatedAt"] = child["updatedAt"]
+        snapshot = copy.deepcopy(job)
+        _persist_minimax_music_job(snapshot)
+    _publish_minimax_music_job(snapshot)
+    return snapshot
+
+
+def _minimax_music_claim_candidate(
+    job_id: str,
+    child_index: int,
+    lane_key: str,
+) -> dict | None:
+    """Atomically commit one candidate before entering the provider call."""
+    with _minimax_music_jobs_lock:
+        job = _minimax_music_jobs.get(job_id)
+        children = job.get("children") if isinstance(job, dict) else None
+        if (
+            not isinstance(children, list)
+            or not 0 <= child_index < len(children)
+            or job.get("_cancel_requested")
+            or str(job.get("status") or "") in _MINIMAX_MUSIC_TERMINAL
+        ):
+            return None
+        now = time.time()
+        child = children[child_index]
+        child.update(
+            status="running",
+            phase="requesting",
+            message=(
+                f"MiniMax is generating candidate {child_index + 1}/"
+                f"{len(children)}…"
+            ),
+            startedAt=child.get("startedAt") or now,
+            acquired_resources=[lane_key],
+            updatedAt=now,
+        )
+        job.update(
+            status="running",
+            phase="requesting",
+            message=(
+                f"MiniMax is generating candidate {child_index + 1}/"
+                f"{len(children)}…"
+            ),
+            startedAt=job.get("startedAt") or now,
+            acquired_resources=[],
+            updatedAt=now,
+        )
+        snapshot = copy.deepcopy(job)
+        _persist_minimax_music_job(snapshot)
+    _publish_minimax_music_job(snapshot)
+    return snapshot
+
+
+def _load_minimax_music_job(job_id: str) -> dict | None:
+    with _minimax_music_jobs_lock:
+        cached = _minimax_music_jobs.get(job_id)
+        if cached is not None:
+            return copy.deepcopy(cached)
+    for item in _list_workspaces():
+        path = _minimax_music_checkpoint_path(job_id, item["name"])
+        if not path or not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                job = json.load(handle)
+            if not isinstance(job, dict):
+                continue
+            if str(job.get("status") or "") not in _MINIMAX_MUSIC_TERMINAL:
+                now = time.time()
+                job.update(
+                    status="interrupted",
+                    phase="interrupted",
+                    message=(
+                        "Maestro restarted while MiniMax Music was active. "
+                        "Existing outputs were preserved; start a new request only after checking them."
+                    ),
+                    error="Provider completion is unknown after restart",
+                    finishedAt=now,
+                    updatedAt=now,
+                )
+                for child in job.get("children") or []:
+                    if str(child.get("status") or "") not in _MINIMAX_MUSIC_TERMINAL:
+                        child.update(
+                            status="interrupted", phase="interrupted",
+                            message="Provider completion is unknown after restart",
+                            finishedAt=now, updatedAt=now,
+                        )
+                _persist_minimax_music_job(job)
+            with _minimax_music_jobs_lock:
+                _minimax_music_jobs[job_id] = job
+            _publish_minimax_music_job(job)
+            return copy.deepcopy(job)
+        except Exception as exc:
+            print(f"[MiniMax Music] Could not restore {job_id}: {exc}")
+    return None
+
+
+def _finish_unstarted_music_children(job_id: str, start_index: int, message: str) -> None:
+    with _minimax_music_jobs_lock:
+        job = _minimax_music_jobs.get(job_id)
+        children = job.get("children") if isinstance(job, dict) else []
+        indices = [
+            index for index in range(start_index, len(children))
+            if str(children[index].get("status") or "") not in _MINIMAX_MUSIC_TERMINAL
+        ]
+    for index in indices:
+        _minimax_music_child_update(
+            job_id, index, status="cancelled", phase="cancelled",
+            message=message, finishedAt=time.time(), acquired_resources=[],
+        )
+
+
+def _run_minimax_music_job(job_id: str) -> None:
+    from services import minimax_music_service
+
+    with _minimax_music_jobs_lock:
+        initial = copy.deepcopy(_minimax_music_jobs.get(job_id) or {})
+    if not initial:
+        return
+    request_body = initial.get("request") if isinstance(initial.get("request"), dict) else {}
+    workspace = str(initial.get("workspace") or "default")
+    count = max(1, min(3, int(initial.get("total") or 1)))
+    lane = resource_scheduler.remote_lane("minimax", minimax_music_service.API_URL)
+
+    def cancelled() -> bool:
+        with _minimax_music_jobs_lock:
+            return bool(
+                (_minimax_music_jobs.get(job_id) or {}).get("_cancel_requested")
+            )
+
+    for index in range(count):
+        if cancelled():
+            _finish_unstarted_music_children(
+                job_id, index, "Cancelled before this candidate started",
+            )
+            _minimax_music_job_update(
+                job_id, status="cancelled", phase="cancelled",
+                message="MiniMax Music generation cancelled",
+                finishedAt=time.time(), acquired_resources=[],
+            )
+            return
+        child = initial["children"][index]
+        child_task_id = str(child["taskId"])
+        _minimax_music_child_update(
+            job_id, index, status="waiting_resource", phase="waiting_resource",
+            message=f"Waiting for MiniMax API · candidate {index + 1}/{count}",
+            acquired_resources=[],
+        )
+        _minimax_music_job_update(
+            job_id, status="waiting_resource", phase="waiting_resource",
+            message=f"Waiting for MiniMax API · candidate {index + 1}/{count}",
+            acquired_resources=[],
+        )
+        try:
+            with resource_scheduler.coordinator.acquire(
+                lane,
+                task_id=child_task_id,
+                description=f"MiniMax Music candidate {index + 1}/{count}",
+                cancelled=cancelled,
+            ):
+                claimed = _minimax_music_claim_candidate(
+                    job_id, index, lane.key,
+                )
+                if claimed is None:
+                    raise resource_scheduler.ResourceAcquireCancelled(
+                        f"MiniMax Music job {job_id} was cancelled"
+                    )
+                result = minimax_music_service.generate_candidates(
+                    api_key=str(
+                        (wgp.server_config.get("services") or {}).get("minimax_api_key")
+                        or ""
+                    ),
+                    prompt=str(request_body.get("prompt") or ""),
+                    lyrics=str(request_body.get("lyrics") or ""),
+                    count=1,
+                    output_dir=_workspace_dir(workspace),
+                    instrumental=bool(request_body.get("instrumental")),
+                    model=str(request_body.get("model") or "music-3.0"),
+                    reference_audio_path=request_body.get("reference_audio_path"),
+                    task_id=child_task_id,
+                    root_task_id=str(initial.get("rootTaskId") or initial.get("taskId")),
+                    cancelled=cancelled,
+                )[0]
+            candidate = {
+                **result,
+                "source": f"/api/v1/file/{result['filename']}",
+                "taskId": result.get("task_id") or child_task_id,
+                "rootTaskId": (
+                    result.get("root_task_id")
+                    or initial.get("rootTaskId")
+                    or initial.get("taskId")
+                ),
+            }
+            with _minimax_music_jobs_lock:
+                live = _minimax_music_jobs.get(job_id) or {}
+                results = list(live.get("candidates") or [])
+                outputs = list(live.get("output_files") or [])
+            results.append(candidate)
+            if result["filename"] not in outputs:
+                outputs.append(result["filename"])
+            _minimax_music_child_update(
+                job_id, index, status="completed", phase="completed",
+                message=f"Candidate {index + 1}/{count} generated",
+                current=1, total=1, progress=100,
+                output_files=[result["filename"]], result=candidate,
+                acquired_resources=[], finishedAt=time.time(),
+            )
+            _minimax_music_job_update(
+                job_id, current=index + 1, progress=((index + 1) / count) * 100,
+                candidates=results, output_files=outputs,
+            )
+            if cancelled():
+                _finish_unstarted_music_children(
+                    job_id, index + 1,
+                    "Cancelled before this candidate started",
+                )
+                _minimax_music_job_update(
+                    job_id, status="cancelled", phase="cancelled",
+                    message=(
+                        "Cancellation completed at a safe provider boundary; "
+                        f"{len(results)} generated candidate(s) were preserved"
+                    ),
+                    result={"candidates": results}, finishedAt=time.time(),
+                    acquired_resources=[],
+                )
+                return
+        except resource_scheduler.ResourceAcquireCancelled:
+            _finish_unstarted_music_children(
+                job_id, index, "Cancelled before this candidate started",
+            )
+            _minimax_music_job_update(
+                job_id, status="cancelled", phase="cancelled",
+                message="MiniMax Music generation cancelled",
+                finishedAt=time.time(), acquired_resources=[],
+            )
+            return
+        except minimax_music_service.MiniMaxMusicError as exc:
+            _minimax_music_child_update(
+                job_id, index, status="failed", phase="failed",
+                message=str(exc), error=str(exc), statusCode=exc.status_code,
+                acquired_resources=[], finishedAt=time.time(),
+            )
+            _finish_unstarted_music_children(
+                job_id, index + 1, "Not started because an earlier candidate failed",
+            )
+            _minimax_music_job_update(
+                job_id, status="failed", phase="failed", message=str(exc),
+                error=str(exc), statusCode=exc.status_code,
+                finishedAt=time.time(), acquired_resources=[],
+            )
+            return
+        except Exception as exc:
+            traceback.print_exc()
+            _minimax_music_child_update(
+                job_id, index, status="failed", phase="failed",
+                message=f"MiniMax Music failed: {exc}", error=str(exc),
+                acquired_resources=[], finishedAt=time.time(),
+            )
+            _finish_unstarted_music_children(
+                job_id, index + 1, "Not started because an earlier candidate failed",
+            )
+            _minimax_music_job_update(
+                job_id, status="failed", phase="failed",
+                message=f"MiniMax Music failed: {exc}", error=str(exc),
+                finishedAt=time.time(), acquired_resources=[],
+            )
+            return
+
+    with _minimax_music_jobs_lock:
+        results = list((_minimax_music_jobs.get(job_id) or {}).get("candidates") or [])
+    _minimax_music_job_update(
+        job_id, status="completed", phase="completed",
+        message=f"Generated {len(results)} MiniMax Music candidate(s)",
+        current=count, total=count, progress=100,
+        result={"candidates": results}, finishedAt=time.time(),
+        acquired_resources=[],
+    )
+
+
+@api.post("/api/v1/stories/music-candidates/jobs", status_code=202)
+def start_story_music_candidates_job(body: dict):
+    """Start observable MiniMax Music generation and return immediately."""
+    from services import minimax_music_service
+
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    _workspace_dir(workspace)
+    model = str(body.get("model") or "music-3.0").strip()
+    if model not in minimax_music_service.ALLOWED_MODELS:
+        raise HTTPException(status_code=400, detail=f"Unsupported MiniMax Music model: {model}")
+    try:
+        count = max(1, min(3, int(body.get("count") or 2)))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="MiniMax Music candidate count must be an integer from 1 to 3",
+        ) from exc
+    prompt = str(body.get("prompt") or "").strip()[:300]
+    lyrics = str(body.get("lyrics") or "").strip()[:3500]
+    instrumental = bool(body.get("instrumental"))
+    if not prompt:
+        raise HTTPException(status_code=400, detail="A music style prompt is required")
+    if model not in minimax_music_service.COVER_MODELS and not instrumental and not lyrics:
+        raise HTTPException(status_code=400, detail="Lyrics are required for a vocal song")
+    reference_audio_path = None
+    if model in minimax_music_service.COVER_MODELS:
+        reference_name = os.path.basename(
+            str(body.get("reference_audio_filename") or "").strip()
+        )
+        upload_root = os.path.realpath(os.path.join(os.getcwd(), "uploads", "audio"))
+        reference_audio_path = _safe_join(upload_root, reference_name) if reference_name else None
+        if not reference_audio_path or not os.path.isfile(reference_audio_path):
+            raise HTTPException(
+                status_code=400,
+                detail="Upload a valid reference song before generating a cover",
+            )
+
+    job_id = f"minimax-music-{uuid.uuid4().hex[:12]}"
+    task_id = f"task-minimax-music-{job_id}"
+    now = time.time()
+    children = []
+    for index in range(count):
+        child_job_id = f"{job_id}-candidate-{index + 1}"
+        child_task_id = f"{task_id}-candidate-{index + 1}"
+        children.append({
+            "jobId": child_job_id,
+            "taskId": child_task_id,
+            "rootTaskId": task_id,
+            "parentTaskId": task_id,
+            "workspace": workspace,
+            "status": "queued",
+            "phase": "queued",
+            "message": f"MiniMax Music candidate {index + 1}/{count} queued",
+            "current": 0,
+            "total": 1,
+            "progress": 0,
+            "provider": "minimax",
+            "model": model,
+            "server_origin": "https://api.minimax.io",
+            "resource_lane": "remote:https://api.minimax.io",
+            "acquired_resources": [],
+            "output_files": [],
+            "result": None,
+            "error": None,
+            "createdAt": now,
+            "updatedAt": now,
+        })
+    job = {
+        "jobId": job_id,
+        "taskId": task_id,
+        "rootTaskId": task_id,
+        "workspace": workspace,
+        "status": "queued",
+        "phase": "queued",
+        "message": f"{count} MiniMax Music candidate(s) queued",
+        "current": 0,
+        "total": count,
+        "progress": 0,
+        "provider": "minimax",
+        "model": model,
+        "server_origin": "https://api.minimax.io",
+        "resource_lane": "remote:https://api.minimax.io",
+        "acquired_resources": [],
+        "output_files": [],
+        "candidates": [],
+        "result": None,
+        "error": None,
+        "children": children,
+        "createdAt": now,
+        "updatedAt": now,
+        "_cancel_requested": False,
+        "request": {
+            "prompt": prompt,
+            "lyrics": lyrics,
+            "instrumental": instrumental,
+            "model": model,
+            "reference_audio_path": reference_audio_path,
+        },
+    }
+    with _minimax_music_jobs_lock:
+        _minimax_music_jobs[job_id] = job
+        _persist_minimax_music_job(job)
+    _publish_minimax_music_job(job)
+    threading.Thread(
+        target=_run_minimax_music_job,
+        args=(job_id,),
+        name=f"minimax-music-{job_id[-6:]}",
+        daemon=True,
+    ).start()
+    return _public_minimax_music_job(job)
+
+
+@api.get("/api/v1/stories/music-candidates/jobs/{job_id}")
+def get_story_music_candidates_job(job_id: str):
+    job = _load_minimax_music_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="MiniMax Music job not found")
+    return _public_minimax_music_job(job)
+
+
+@api.post("/api/v1/stories/music-candidates/jobs/{job_id}/cancel")
+def cancel_story_music_candidates_job(job_id: str):
+    job = _load_minimax_music_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="MiniMax Music job not found")
+    if str(job.get("status") or "") in _MINIMAX_MUSIC_TERMINAL:
+        return _public_minimax_music_job(job)
+    with _minimax_music_jobs_lock:
+        live = _minimax_music_jobs[job_id]
+        live["_cancel_requested"] = True
+        waiting = str(live.get("status") or "") in {
+            "created", "queued", "waiting_resource",
+        }
+    if waiting:
+        _finish_unstarted_music_children(
+            job_id, 0, "Cancelled before this candidate started",
+        )
+        updated = _minimax_music_job_update(
+            job_id, status="cancelled", phase="cancelled",
+            message="Cancelled before the provider call", finishedAt=time.time(),
+            acquired_resources=[],
+        )
+    else:
+        updated = _minimax_music_job_update(
+            job_id, status="cancelling", phase="cancelling",
+            message="Cancellation requested; waiting for the active MiniMax request…",
+        )
+    return _public_minimax_music_job(updated or job)
+
+
 @api.post("/api/v1/stories/music-candidates")
 async def generate_story_music_candidates(body: dict):
-    """Generate 1–3 durable MiniMax Music candidates from an approved song draft."""
+    """Compatibility endpoint for older clients; new clients use durable jobs."""
     from services import minimax_music_service
 
     services = wgp.server_config.get("services", {})
@@ -29669,6 +31701,7 @@ def start_story_lab_generation(body: dict):
     project_type = str(project.get("projectType") or "full_story").strip().lower()
     stage_total = 5 if project_type == "music_video" else 4 if project_type == "quick_video" else 6
     job_id = f"story-plan-{uuid.uuid4().hex[:12]}"
+    task_id = f"task-story-plan-{job_id}"
     job = {
         "jobId": job_id,
         "status": "queued",
@@ -29683,14 +31716,25 @@ def start_story_lab_generation(body: dict):
         "createdAt": time.time(),
         "updatedAt": time.time(),
         "workspace": _get_active_workspace(),
+        "taskId": task_id,
+        "rootTaskId": task_id,
     }
     with _story_plan_jobs_lock:
         _story_plan_jobs[job_id] = job
+    publisher = globals().get("_publish_generic_legacy_task")
+    if callable(publisher):
+        task = publisher(job, "story-plan")
+        if isinstance(task, dict):
+            job["taskId"] = task.get("id")
+            job["rootTaskId"] = task.get("root_id") or task.get("id")
+            with _story_plan_jobs_lock:
+                _story_plan_jobs[job_id] = copy.deepcopy(job)
     _persist_story_plan_job(job)
-    threading.Thread(target=_run_story_plan_job, args=(job_id,), daemon=True).start()
+    _start_story_plan_worker(job_id)
     return {
         key: job[key] for key in (
-            "jobId", "status", "message", "stage", "current", "total", "createdAt",
+            "jobId", "taskId", "rootTaskId", "status", "message", "stage",
+            "current", "total", "createdAt",
         )
     }
 
@@ -29703,7 +31747,8 @@ def get_story_lab_generation(job_id: str):
     return {
         key: job.get(key) for key in (
             "jobId", "status", "message", "stage", "current", "total",
-            "createdAt", "updatedAt", "finishedAt", "result", "error",
+            "taskId", "rootTaskId", "createdAt", "updatedAt", "finishedAt",
+            "result", "error",
         )
     }
 
@@ -29728,6 +31773,10 @@ def resume_story_lab_generation(job_id: str, body: dict | None = None):
     # model names or missing credentials fail without damaging recovery.
     if isinstance(body, dict) and str(body.get("writingProvider") or "").strip():
         _comic_writing_llm(request)
+    _reset_canonical_task_for_resume(
+        str(job.get("workspace") or "default"),
+        str(job.get("taskId") or f"task-story-plan-{job_id}"),
+    )
     _story_job_update(
         job_id,
         request=request,
@@ -29736,7 +31785,13 @@ def resume_story_lab_generation(job_id: str, body: dict | None = None):
         error=None,
         finishedAt=None,
     )
-    threading.Thread(target=_run_story_plan_job, args=(job_id,), daemon=True).start()
+    if not _start_story_plan_worker(job_id):
+        current = _load_story_plan_job(job_id) or job
+        return {
+            "jobId": job_id,
+            "status": current.get("status") or "queued",
+            "message": "Story generation is already running.",
+        }
     return {"jobId": job_id, "status": "queued", "message": "Story generation resumed."}
 
 
@@ -29747,16 +31802,24 @@ def cancel_story_lab_generation(job_id: str):
         raise HTTPException(status_code=404, detail="Story generation job not found")
     if job.get("status") == "completed":
         return {"jobId": job_id, "status": "completed", "message": job.get("message")}
-    _story_job_update(
+    with _story_plan_jobs_lock:
+        worker_active = job_id in _story_plan_active_jobs
+    updated = _story_job_update(
         job_id,
-        status="cancelled",
-        message="Story generation cancelled. Completed stages remain recoverable.",
-        finishedAt=time.time(),
+        status="cancelling" if worker_active else "cancelled",
+        stage="cancelling" if worker_active else "cancelled",
+        message=(
+            "Story generation cancellation requested; waiting for the active "
+            "LLM call to reach a safe boundary."
+            if worker_active else
+            "Story generation cancelled before an LLM call started."
+        ),
+        finishedAt=None if worker_active else time.time(),
     )
     return {
         "jobId": job_id,
-        "status": "cancelled",
-        "message": "Story generation cancelled. Completed stages remain recoverable.",
+        "status": (updated or job).get("status"),
+        "message": (updated or job).get("message"),
     }
 
 
@@ -30616,6 +32679,7 @@ Existing plan: {json.dumps(plan, ensure_ascii=False)}""",
 # honest server-side state instead of waiting on one opaque HTTP request.
 _comic_plan_jobs: dict[str, dict] = {}
 _comic_plan_jobs_lock = threading.Lock()
+_comic_plan_active_jobs: set[str] = set()
 
 
 def _comic_plan_checkpoint_dir(workspace: str | None = None) -> str:
@@ -30682,7 +32746,7 @@ def _comic_plan_job_update(job_id: str, **patch) -> None:
                 print(f"[Task registry] Could not publish comic plan {job_id}: {exc}")
 
 
-def _run_comic_plan_job(job_id: str, body: dict) -> None:
+def _run_comic_plan_job_inner(job_id: str, body: dict) -> None:
     services = wgp.server_config.get("services", {})
     requested_provider = str(body.get("writingProvider") or "maestro").strip().lower()
     external = requested_provider not in ("", "maestro", "internal", "local")
@@ -30743,12 +32807,64 @@ def _run_comic_plan_job(job_id: str, body: dict) -> None:
         )
 
 
+def _run_comic_plan_job(job_id: str, body: dict) -> None:
+    """Run one claimed Comic planner and restore its canonical task context."""
+    with _comic_plan_jobs_lock:
+        _comic_plan_active_jobs.add(job_id)
+        job = copy.deepcopy(_comic_plan_jobs.get(job_id) or {})
+    try:
+        from services.task_manager import task_context_scope
+
+        workspace = str(job.get("workspace") or body.get("workspace") or "default")
+        task_id = str(
+            job.get("taskId") or f"task-comic-plan-{job_id}"
+        )
+        root_task_id = str(job.get("rootTaskId") or task_id)
+        with task_context_scope(
+            task_id=task_id,
+            root_task_id=root_task_id,
+            workspace=workspace,
+            workspace_dir=_workspace_dir(workspace),
+        ):
+            _run_comic_plan_job_inner(job_id, body)
+    finally:
+        with _comic_plan_jobs_lock:
+            _comic_plan_active_jobs.discard(job_id)
+
+
+def _start_comic_plan_worker(
+    job_id: str,
+    body: dict,
+    *,
+    thread_name: str,
+) -> bool:
+    """Atomically prevent duplicate Comic planner threads in this process."""
+    with _comic_plan_jobs_lock:
+        if job_id in _comic_plan_active_jobs:
+            return False
+        _comic_plan_active_jobs.add(job_id)
+    thread = threading.Thread(
+        target=_run_comic_plan_job,
+        args=(job_id, dict(body)),
+        name=thread_name,
+        daemon=True,
+    )
+    try:
+        thread.start()
+    except Exception:
+        with _comic_plan_jobs_lock:
+            _comic_plan_active_jobs.discard(job_id)
+        raise
+    return True
+
+
 @api.post("/api/v1/director/comic/plan/start")
 def start_director_comic_plan(body: dict):
     premise = str(body.get("premise") or "").strip()
     if not premise:
         raise HTTPException(status_code=400, detail="Comic premise is required")
     job_id = f"comic-plan-job-{uuid.uuid4().hex[:12]}"
+    task_id = f"task-comic-plan-{job_id}"
     now = time.time()
     workspace = str(body.get("workspace") or _get_active_workspace())
     request_body = dict(body)
@@ -30771,16 +32887,35 @@ def start_director_comic_plan(body: dict):
             "updatedAt": now,
             "workspace": workspace,
             "request": request_body,
+            "taskId": task_id,
+            "rootTaskId": task_id,
         }
         initial_job = copy.deepcopy(_comic_plan_jobs[job_id])
     _persist_comic_plan_job(initial_job)
-    threading.Thread(
-        target=_run_comic_plan_job,
-        args=(job_id, request_body),
-        name=f"comic-plan-{job_id[-6:]}",
-        daemon=True,
-    ).start()
-    return {"jobId": job_id, "status": "queued", "message": "Comic Director accepted the request."}
+    publisher = globals().get("_publish_generic_legacy_task")
+    if callable(publisher):
+        task = publisher(initial_job, "comic-plan")
+        if isinstance(task, dict):
+            initial_job["taskId"] = task.get("id")
+            initial_job["rootTaskId"] = task.get("root_id") or task.get("id")
+            with _comic_plan_jobs_lock:
+                _comic_plan_jobs[job_id].update({
+                    "taskId": initial_job["taskId"],
+                    "rootTaskId": initial_job["rootTaskId"],
+                })
+            _persist_comic_plan_job(initial_job)
+    _start_comic_plan_worker(
+        job_id,
+        request_body,
+        thread_name=f"comic-plan-{job_id[-6:]}",
+    )
+    return {
+        "jobId": job_id,
+        "taskId": initial_job.get("taskId"),
+        "rootTaskId": initial_job.get("rootTaskId"),
+        "status": "queued",
+        "message": "Comic Director accepted the request.",
+    }
 
 
 @api.get("/api/v1/director/comic/plan/status/{job_id}")
@@ -30800,11 +32935,17 @@ def get_director_comic_plan_status(job_id: str):
 @api.post("/api/v1/director/comic/plan/resume/{job_id}")
 def resume_director_comic_plan(job_id: str):
     job = get_director_comic_plan_status(job_id)
-    if job.get("status") in ("queued", "loading_llm", "planning", "planning_bible", "planning_page"):
+    with _comic_plan_jobs_lock:
+        active = job_id in _comic_plan_active_jobs
+    if active:
         return {"jobId": job_id, "status": job["status"], "message": job.get("message", "Already running")}
     body = job.get("request")
     if not isinstance(body, dict):
         raise HTTPException(status_code=409, detail="This legacy checkpoint has no saved request and cannot resume planning")
+    _reset_canonical_task_for_resume(
+        str(job.get("workspace") or "default"),
+        str(job.get("taskId") or f"task-comic-plan-{job_id}"),
+    )
     _comic_plan_job_update(
         job_id,
         status="queued",
@@ -30813,12 +32954,17 @@ def resume_director_comic_plan(job_id: str):
         result=None,
         finishedAt=None,
     )
-    threading.Thread(
-        target=_run_comic_plan_job,
-        args=(job_id, dict(body)),
-        name=f"comic-plan-resume-{job_id[-6:]}",
-        daemon=True,
-    ).start()
+    if not _start_comic_plan_worker(
+        job_id,
+        body,
+        thread_name=f"comic-plan-resume-{job_id[-6:]}",
+    ):
+        current = get_director_comic_plan_status(job_id)
+        return {
+            "jobId": job_id,
+            "status": current.get("status") or "queued",
+            "message": current.get("message") or "Already running",
+        }
     return {"jobId": job_id, "status": "queued", "message": "Resuming from the latest durable checkpoint…"}
 
 
@@ -30862,26 +33008,11 @@ _MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
 )
 
 
-def _resolve_output_file(filename: str) -> str | None:
-    """Resolve an output in the active, default, or another workspace."""
-    save_root = wgp.server_config.get("save_path", "outputs")
-    roots = [_workspace_dir(), save_root]
-    if os.path.isdir(save_root):
-        roots.extend(
-            os.path.join(save_root, name)
-            for name in os.listdir(save_root)
-            if os.path.isdir(os.path.join(save_root, name))
-        )
-    seen: set[str] = set()
-    for root in roots:
-        root_real = os.path.realpath(root)
-        if root_real in seen:
-            continue
-        seen.add(root_real)
-        candidate = _safe_join(root_real, filename)
-        if candidate and os.path.isfile(candidate):
-            return candidate
-    return None
+def _resolve_output_file(filename: str, workspace: str | None = None) -> str | None:
+    """Resolve one output only inside its explicit or active workspace."""
+    root = _workspace_dir(workspace)
+    candidate = _safe_join(root, filename)
+    return candidate if candidate and os.path.isfile(candidate) else None
 
 
 @api.get("/api/v1/outputs")
@@ -30902,7 +33033,13 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
     if workspace == "__uploads__":
         out_dir = os.path.join(os.getcwd(), "uploads")
     else:
-        out_dir = _workspace_dir()
+        out_dir = _workspace_dir(workspace or None)
+    workspace_suffix = (
+        f"?workspace={quote(workspace, safe='')}" if workspace else ""
+    )
+    workspace_extra = (
+        f"&workspace={quote(workspace, safe='')}" if workspace else ""
+    )
     if not os.path.isdir(out_dir):
         return {"outputs": [], "total": 0}
 
@@ -30924,7 +33061,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         """
         preview_name = os.path.splitext(name)[0] + ".preview.png"
         if os.path.isfile(os.path.join(out_dir, preview_name)):
-            return f"/api/v1/file/{preview_name}"
+            return f"/api/v1/file/{preview_name}{workspace_suffix}"
         images = params.get("images")
         if not isinstance(images, dict):
             return None
@@ -30941,7 +33078,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             if source.startswith(uploads_root + os.sep):
                 return f"/api/v1/uploads/{filename}"
             if source.startswith(outputs_root + os.sep):
-                return f"/api/v1/file/{filename}"
+                return f"/api/v1/file/{filename}{workspace_suffix}"
         except OSError:
             pass
         return None
@@ -31088,15 +33225,15 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             "favorite": name in favs,
             "size": size,
             "created_at": mtime,
-            "url": f"/api/v1/file/{name}",
             "completed_at": metadata_completed_at or mtime,
             "completion_time_source": "metadata" if metadata_completed_at else "file",
+            "url": f"/api/v1/file/{name}{workspace_suffix}",
             "thumbnail_url": (
-                f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png"
+                f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png{workspace_suffix}"
                 if is_comic and os.path.isfile(os.path.join(out_dir, name[:-len(".comic.json")] + ".comic.preview.png"))
-                else (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png"
+                else (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png{workspace_suffix}"
                       if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png"))
-                      else (f"/api/v1/outputs/thumbnail/{quote(name, safe='')}?v={int(mtime * 1_000_000)}-{size}"
+                      else (f"/api/v1/outputs/thumbnail/{quote(name, safe='')}?v={int(mtime * 1_000_000)}-{size}{workspace_extra}"
                             if ftype in {"image", "video"}
                             else cached.get("thumbnail_url")))
             ),
@@ -31166,11 +33303,16 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
 
 
 @api.get("/api/v1/outputs/thumbnail/{filename:path}")
-def serve_output_thumbnail(filename: str):
+def serve_output_thumbnail(filename: str, workspace: str | None = None):
     """Lazily create one small static preview for an image or video output."""
     from services.media_thumbnails import ensure_media_thumbnail
 
-    source = _resolve_output_file(filename)
+    if workspace == "__uploads__":
+        source = _safe_join(os.path.join(os.getcwd(), "uploads"), filename)
+        if source and not os.path.isfile(source):
+            source = None
+    else:
+        source = _resolve_output_file(filename, workspace)
     if not source:
         raise HTTPException(status_code=404, detail="Output not found")
     extension = os.path.splitext(source)[1].lower()
@@ -31194,8 +33336,8 @@ def serve_output_thumbnail(filename: str):
 
 
 @api.get("/api/v1/file/{filename:path}")
-def serve_file(filename: str):
-    """Serve an output file. Checks active workspace first, then all workspaces.
+def serve_file(filename: str, workspace: str | None = None):
+    """Serve an output file from the explicit or active workspace.
 
     Uses share_delete_file_response so that on Windows the file can be
     deleted/renamed by the gallery delete button even while the browser
@@ -31204,7 +33346,7 @@ def serve_file(filename: str):
     user has to close the entire app to clean up.
     """
     from services.win_safe_files import share_delete_file_response
-    filepath = _resolve_output_file(filename)
+    filepath = _resolve_output_file(filename, workspace)
     if filepath:
         return share_delete_file_response(filepath)
     # Uploads folder — the gallery's virtual "Uploads" view lists these
@@ -31212,16 +33354,16 @@ def serve_file(filename: str):
     #    builds (thumbnails, playback, send-to-input). Upload names are
     #    hash-uniquified at upload time, and outputs are checked first, so
     #    an output name can never be shadowed by an upload.
-    filepath = _safe_join(os.path.join(os.getcwd(), "uploads"), filename)
+    filepath = _safe_join(os.path.join(os.getcwd(), "uploads"), filename) if workspace in {None, "", "__uploads__"} else None
     if filepath and os.path.isfile(filepath):
         return share_delete_file_response(filepath)
     raise HTTPException(status_code=404, detail="File not found")
 
 
 @api.get("/api/v1/outputs/{name}/metadata")
-def get_output_metadata(name: str):
+def get_output_metadata(name: str, workspace: str | None = None):
     """Get metadata for an output file. Tries sidecar first, then embedded."""
-    out_dir = _workspace_dir()
+    out_dir = _workspace_dir(workspace)
     filepath = _safe_join(out_dir, name)
     if filepath is None or not os.path.isfile(filepath):
         raise HTTPException(status_code=404, detail="Output file not found")
@@ -31599,18 +33741,166 @@ def get_group_clips(group_id: str):
 # ============================================================================
 
 _video_editor_jobs: dict[str, dict] = {}
+_video_editor_jobs_lock = threading.RLock()
+_VIDEO_EDITOR_TERMINAL = frozenset({"completed", "failed", "cancelled"})
+_VIDEO_EDITOR_FFMPEG_LANE = resource_scheduler.cpu_lane("ffmpeg")
 _VIDEO_EDITOR_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"}
 _COMIC_ANIMATIC_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
-def _resolve_video_editor_source(source: str) -> str:
+def _public_video_editor_job(job: dict) -> dict:
+    """Return a stable API snapshot without worker-only coordination flags."""
+    return {
+        key: copy.deepcopy(value)
+        for key, value in job.items()
+        if not key.startswith("_")
+    }
+
+
+def _publish_video_editor_job(snapshot: dict) -> dict | None:
+    """Publish every editor/animatic mutation immediately to task SSE."""
+    return _publish_generic_legacy_task(snapshot, "video-editor")
+
+
+def _video_editor_job_snapshot(job_id: str) -> dict | None:
+    with _video_editor_jobs_lock:
+        job = _video_editor_jobs.get(job_id)
+        return copy.deepcopy(job) if job is not None else None
+
+
+def _video_editor_job_update(job_id: str, **changes) -> dict:
+    """Atomically mutate a job while making cancellation terminally absorbing."""
+    should_publish = False
+    with _video_editor_jobs_lock:
+        job = _video_editor_jobs.get(job_id)
+        if job is None:
+            raise KeyError(job_id)
+        if str(job.get("status") or "") in _VIDEO_EDITOR_TERMINAL:
+            snapshot = copy.deepcopy(job)
+        else:
+            requested_status = str(changes.get("status") or "")
+            if job.get("_cancel_requested"):
+                if requested_status in {"completed", "failed"}:
+                    changes.update({
+                        "status": "cancelled",
+                        "phase": "cancelled",
+                        "message": "Cancelled at the FFmpeg safe boundary",
+                        "error": None,
+                        "result": None,
+                        "filename": None,
+                        "url": None,
+                        "output_files": [],
+                        "acquired_resources": [],
+                        "cancel_mode": job.get("cancel_mode") or "deferred",
+                        "safe_boundary": (
+                            job.get("safe_boundary")
+                            or "after_current_ffmpeg_render"
+                        ),
+                        "finished_at": time.time(),
+                    })
+                elif requested_status not in {"cancelled", "cancelling"}:
+                    owns_lane = bool(
+                        changes.get(
+                            "acquired_resources",
+                            job.get("acquired_resources") or [],
+                        )
+                    )
+                    changes.update({
+                        "status": "cancelling",
+                        "phase": "cancelling",
+                        "message": (
+                            "Cancellation deferred to a safe boundary; "
+                            "waiting for FFmpeg to finish…"
+                            if owns_lane else
+                            "FFmpeg safe boundary reached; cleaning up cancellation…"
+                        ),
+                        "cancel_mode": "deferred",
+                        "safe_boundary": "after_current_ffmpeg_render",
+                    })
+            job.update(changes)
+            job["updated_at"] = time.time()
+            snapshot = copy.deepcopy(job)
+            should_publish = True
+        # Keep mutation and publication ordered relative to cancel/progress
+        # calls from other threads. The registry write is local SQLite only.
+        if should_publish:
+            _publish_video_editor_job(snapshot)
+    return snapshot
+
+
+def _register_video_editor_job(job: dict) -> dict:
+    """Reserve legacy and canonical identities before starting any worker."""
+    job_id = str(job["job_id"])
+    with _video_editor_jobs_lock:
+        _video_editor_jobs[job_id] = job
+        snapshot = copy.deepcopy(job)
+        try:
+            _publish_video_editor_job(snapshot)
+        except Exception:
+            if _video_editor_jobs.get(job_id) is job:
+                _video_editor_jobs.pop(job_id, None)
+            raise
+    return snapshot
+
+
+def _video_editor_cancel_requested(job_id: str) -> bool:
+    with _video_editor_jobs_lock:
+        job = _video_editor_jobs.get(job_id)
+        return job is None or bool(job.get("_cancel_requested"))
+
+
+def _remove_video_editor_output_bundle(output_path: str) -> None:
+    """Remove an incomplete/cancelled MP4 and its metadata sidecar."""
+    for candidate in (
+        output_path,
+        os.path.splitext(output_path)[0] + ".meta.json",
+    ):
+        try:
+            if os.path.isfile(candidate):
+                os.remove(candidate)
+        except OSError:
+            pass
+
+
+def _finish_video_editor_cancelled(
+    job_id: str,
+    output_path: str,
+    *,
+    message: str = "Cancelled before FFmpeg started",
+    cancel_mode: str = "immediate",
+    safe_boundary: str = "before_ffmpeg",
+) -> dict:
+    """Finish cancellation only after the worker no longer owns its lane."""
+    _remove_video_editor_output_bundle(output_path)
+    changes = {
+        "status": "cancelled",
+        "phase": "cancelled",
+        "message": message,
+        "cancel_mode": cancel_mode,
+        "safe_boundary": safe_boundary,
+        "error": None,
+        "result": None,
+        "filename": None,
+        "url": None,
+        "output_files": [],
+        "acquired_resources": [],
+        "finished_at": time.time(),
+        "_worker_active": False,
+    }
+    if cancel_mode == "immediate":
+        changes["progress"] = 0
+        changes["current"] = 0
+    return _video_editor_job_update(job_id, **changes)
+
+
+def _resolve_video_editor_source(source: str, workspace: str | None = None) -> str:
     """Resolve an editor reference without allowing access outside Maestro."""
     from urllib.parse import unquote
 
     if not isinstance(source, str) or not source.strip():
         raise ValueError("Video source is missing")
     decoded = unquote(source.strip())
-    resolved = _resolve_model3d_input_path(decoded)
+    resolved = _resolve_model3d_input_path(decoded, workspace)
     if not resolved or not os.path.isfile(resolved):
         raise ValueError(f"Video source could not be found: {os.path.basename(decoded)}")
     if os.path.splitext(resolved)[1].lower() not in _VIDEO_EDITOR_EXTENSIONS:
@@ -31618,12 +33908,12 @@ def _resolve_video_editor_source(source: str) -> str:
     return resolved
 
 
-def _resolve_comic_animatic_image(source: str) -> str:
+def _resolve_comic_animatic_image(source: str, workspace: str | None = None) -> str:
     """Resolve a captured panel image using Maestro's existing safe path rules."""
     from urllib.parse import unquote
 
     decoded = unquote(str(source or "").strip())
-    resolved = _resolve_model3d_input_path(decoded)
+    resolved = _resolve_model3d_input_path(decoded, workspace)
     if not resolved or not os.path.isfile(resolved):
         raise ValueError(f"Comic panel image could not be found: {os.path.basename(decoded)}")
     if os.path.splitext(resolved)[1].lower() not in _COMIC_ANIMATIC_IMAGE_EXTENSIONS:
@@ -31736,35 +34026,173 @@ def capture_video_editor_frame(body: dict):
         ) from exc
 
 
+def _video_editor_task_identity(body: dict, job_id: str) -> tuple[str, str, str | None]:
+    """Accept an optional caller hierarchy without allowing malformed task IDs."""
+    supplied_task_id = str(body.get("task_id") or "").strip()
+    supplied_root_id = str(body.get("root_task_id") or "").strip()
+    supplied_parent_id = str(body.get("parent_task_id") or "").strip()
+    for label, value in (
+        ("task_id", supplied_task_id),
+        ("root_task_id", supplied_root_id),
+        ("parent_task_id", supplied_parent_id),
+    ):
+        if value and not re.fullmatch(r"task-[A-Za-z0-9_-]{1,180}", value):
+            raise HTTPException(status_code=400, detail=f"Invalid {label}")
+    task_id = supplied_task_id or f"task-video-editor-{job_id}"
+    root_task_id = supplied_root_id or supplied_parent_id or task_id
+    return task_id, root_task_id, supplied_parent_id or None
+
+
 def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path: str) -> None:
     from services.video_editor import render_project
 
-    job = _video_editor_jobs[job_id]
+    job = _video_editor_job_snapshot(job_id)
+    if job is None or str(job.get("status") or "") in _VIDEO_EDITOR_TERMINAL:
+        return
+    workspace = str(job["workspace"])
+    task_id = str(job["task_id"])
 
     def report(progress: int, message: str) -> None:
-        job["progress"] = max(0, min(progress, 100))
-        job["message"] = message
-        job["updated_at"] = time.time()
+        bounded = max(0, min(int(progress), 100))
+        if _video_editor_cancel_requested(job_id):
+            _video_editor_job_update(
+                job_id,
+                status="cancelling",
+                phase="cancelling",
+                progress=bounded,
+                current=bounded,
+                message=(
+                    "Cancellation deferred to a safe boundary; "
+                    f"FFmpeg is finishing: {message}"
+                ),
+                cancel_mode="deferred",
+                safe_boundary="after_current_ffmpeg_render",
+            )
+            # render_project calls progress only between blocking FFmpeg
+            # subprocesses. Raising here stops before the next subprocess,
+            # after the current one has reached a safe boundary.
+            raise resource_scheduler.ResourceAcquireCancelled(
+                f"Video editor export {job_id} reached an FFmpeg safe boundary"
+            )
+        else:
+            _video_editor_job_update(
+                job_id,
+                status="running",
+                phase="rendering",
+                progress=bounded,
+                current=bounded,
+                message=message,
+            )
 
     try:
-        job["status"] = "running"
-        report(1, "Validating source clips…")
+        _video_editor_job_update(
+            job_id,
+            status="queued",
+            phase="validating_sources",
+            progress=1,
+            current=1,
+            message="Validating source clips…",
+        )
         resolved_clips = []
         for clip in body["clips"]:
+            if _video_editor_cancel_requested(job_id):
+                _finish_video_editor_cancelled(job_id, output_path)
+                return
             if not isinstance(clip, dict):
                 raise ValueError("Every timeline entry must be a clip object")
             resolved = dict(clip)
-            resolved["resolved_path"] = _resolve_video_editor_source(str(clip.get("source") or ""))
+            resolved["resolved_path"] = _resolve_video_editor_source(
+                str(clip.get("source") or ""), workspace,
+            )
             resolved_clips.append(resolved)
 
-        result = render_project(
-            resolved_clips,
-            output_path,
-            width=int(body["width"]),
-            height=int(body["height"]),
-            fps=int(body["fps"]),
-            progress=report,
+        if _video_editor_cancel_requested(job_id):
+            _finish_video_editor_cancelled(job_id, output_path)
+            return
+        _video_editor_job_update(
+            job_id,
+            status="waiting_resource",
+            phase="waiting_resource",
+            message="Waiting for the local FFmpeg lane…",
+            acquired_resources=[],
         )
+        try:
+            with resource_scheduler.coordinator.acquire(
+                _VIDEO_EDITOR_FFMPEG_LANE,
+                task_id=task_id,
+                description="Video editor export",
+                cancelled=lambda: _video_editor_cancel_requested(job_id),
+            ):
+                started = _video_editor_job_update(
+                    job_id,
+                    status="running",
+                    phase="rendering",
+                    message="Preparing video export with FFmpeg…",
+                    started_at=time.time(),
+                    acquired_resources=[_VIDEO_EDITOR_FFMPEG_LANE.key],
+                    _resource_acquired=True,
+                )
+                if (
+                    _video_editor_cancel_requested(job_id)
+                    or str(started.get("status") or "") in _VIDEO_EDITOR_TERMINAL
+                ):
+                    raise resource_scheduler.ResourceAcquireCancelled(
+                        f"Video editor export {job_id} was cancelled before FFmpeg started"
+                    )
+                result = render_project(
+                    resolved_clips,
+                    output_path,
+                    width=int(body["width"]),
+                    height=int(body["height"]),
+                    fps=int(body["fps"]),
+                    progress=report,
+                )
+        except resource_scheduler.ResourceAcquireCancelled:
+            current = _video_editor_job_snapshot(job_id) or {}
+            deferred = bool(current.get("started_at"))
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message=(
+                    "Cancelled after FFmpeg reached a safe boundary"
+                    if deferred else "Cancelled before FFmpeg started"
+                ),
+                cancel_mode="deferred" if deferred else "immediate",
+                safe_boundary=(
+                    "after_current_ffmpeg_render" if deferred else "before_ffmpeg"
+                ),
+            )
+            return
+
+        if _video_editor_cancel_requested(job_id):
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message="Cancelled after FFmpeg reached a safe boundary",
+                cancel_mode="deferred",
+                safe_boundary="after_current_ffmpeg_render",
+            )
+            return
+        saving = _video_editor_job_update(
+            job_id,
+            status="running",
+            phase="saving",
+            message="Saving video metadata…",
+            acquired_resources=[],
+            _resource_acquired=False,
+        )
+        if (
+            _video_editor_cancel_requested(job_id)
+            or str(saving.get("status") or "") == "cancelling"
+        ):
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message="Cancelled after FFmpeg reached a safe boundary",
+                cancel_mode="deferred",
+                safe_boundary="after_current_ffmpeg_render",
+            )
+            return
 
         output_name = os.path.basename(output_path)
         sidecar = {
@@ -31799,41 +34227,67 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
             },
             "generation_mode": "video",
             "job_id": job_id,
+            "task_id": task_id,
+            "root_task_id": str(job["root_task_id"]),
+            "workspace": workspace,
             "created_at": time.time(),
         }
         meta_path = os.path.join(out_dir, os.path.splitext(output_name)[0] + ".meta.json")
         with open(meta_path, "w", encoding="utf-8") as handle:
             json.dump(sidecar, handle, indent=2, ensure_ascii=False)
 
-        job.update(
-            {
-                "status": "completed",
-                "progress": 100,
-                "message": "Video export complete",
-                "filename": output_name,
-                "url": f"/api/v1/file/{output_name}",
-                "result": result,
-                "updated_at": time.time(),
-            }
+        completed = _video_editor_job_update(
+            job_id,
+            status="completed",
+            phase="completed",
+            progress=100,
+            current=100,
+            message="Video export complete",
+            filename=output_name,
+            url=f"/api/v1/file/{output_name}",
+            output_files=[output_name],
+            result=result,
+            error=None,
+            acquired_resources=[],
+            finished_at=time.time(),
+            _worker_active=False,
         )
+        if str(completed.get("status") or "") == "cancelled":
+            _remove_video_editor_output_bundle(output_path)
     except Exception as exc:
-        traceback.print_exc()
-        try:
-            if os.path.isfile(output_path):
-                os.remove(output_path)
-        except OSError:
-            pass
-        job.update(
-            {
-                "status": "failed",
-                "error": str(exc),
-                "message": f"Export failed: {exc}",
-                "updated_at": time.time(),
-            }
+        if _video_editor_cancel_requested(job_id):
+            current = _video_editor_job_snapshot(job_id) or {}
+            deferred = bool(current.get("started_at"))
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message=(
+                    "Cancelled after FFmpeg reached a safe boundary"
+                    if deferred else "Cancelled before FFmpeg started"
+                ),
+                cancel_mode="deferred" if deferred else "immediate",
+                safe_boundary=(
+                    "after_current_ffmpeg_render" if deferred else "before_ffmpeg"
+                ),
+            )
+            return
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+        _remove_video_editor_output_bundle(output_path)
+        _video_editor_job_update(
+            job_id,
+            status="failed",
+            phase="failed",
+            error=str(exc),
+            message=f"Export failed: {exc}",
+            output_files=[],
+            acquired_resources=[],
+            finished_at=time.time(),
+            _resource_acquired=False,
+            _worker_active=False,
         )
 
 
-@api.post("/api/v1/video-editor/export")
+@api.post("/api/v1/video-editor/export", status_code=202)
 def start_video_editor_export(body: dict):
     """Queue a non-blocking FFmpeg export for uploaded and/or Maestro clips."""
     from services.video_editor import normalise_time_card_text
@@ -31897,10 +34351,11 @@ def start_video_editor_export(body: dict):
         })
         clean_clips.append(clean_clip)
 
+    workspace = body.get("workspace") if body.get("workspace") is not None else _get_active_workspace()
+    out_dir = _workspace_dir(workspace)
     safe_project_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("name") or "edited_video")).strip("_")
     safe_project_name = safe_project_name[:60] or "edited_video"
     timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    out_dir = _workspace_dir()
     os.makedirs(out_dir, exist_ok=True)
     output_name = f"{timestamp}_{safe_project_name}.mp4"
     output_path = os.path.join(out_dir, output_name)
@@ -31913,51 +34368,216 @@ def start_video_editor_export(body: dict):
     clean_body = dict(body)
     clean_body.update({"width": width, "height": height, "fps": fps, "clips": clean_clips})
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
-    _video_editor_jobs[job_id] = {
+    task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
+    now = time.time()
+    job = {
         "job_id": job_id,
+        "task_id": task_id,
+        "root_task_id": root_task_id,
+        "parent_task_id": parent_task_id,
+        "workspace": workspace,
         "status": "queued",
+        "phase": "queued",
         "progress": 0,
+        "current": 0,
+        "total": 100,
         "message": "Waiting to export…",
         "filename": None,
         "url": None,
+        "output_files": [],
+        "result": None,
         "error": None,
-        "created_at": time.time(),
-        "updated_at": time.time(),
+        "provider": "local",
+        "model": "FFmpeg",
+        "server_origin": "local",
+        "resource_lane": _VIDEO_EDITOR_FFMPEG_LANE.key,
+        "resource_requirements": [_VIDEO_EDITOR_FFMPEG_LANE.key],
+        "acquired_resources": [],
+        "created_at": now,
+        "queued_at": now,
+        "updated_at": now,
+        "_cancel_requested": False,
+        "_resource_acquired": False,
+        "_worker_active": True,
     }
-    threading.Thread(
+    try:
+        snapshot = _register_video_editor_job(job)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not queue video export: {exc}") from exc
+    worker = threading.Thread(
         target=_run_video_editor_export,
         args=(job_id, clean_body, out_dir, output_path),
         daemon=True,
         name=f"maestro-{job_id}",
-    ).start()
-    return {"job_id": job_id}
+    )
+    try:
+        worker.start()
+    except Exception as exc:
+        _video_editor_job_update(
+            job_id,
+            status="failed",
+            phase="failed",
+            error=str(exc),
+            message=f"Could not start video export worker: {exc}",
+            acquired_resources=[],
+            finished_at=time.time(),
+            _worker_active=False,
+        )
+        raise HTTPException(status_code=500, detail=f"Could not start video export: {exc}") from exc
+    return _public_video_editor_job(snapshot)
 
 
 def _run_comic_animatic(job_id: str, body: dict, output_path: str) -> None:
     from services.video_editor import render_comic_animatic
 
-    job = _video_editor_jobs[job_id]
+    job = _video_editor_job_snapshot(job_id)
+    if job is None or str(job.get("status") or "") in _VIDEO_EDITOR_TERMINAL:
+        return
+    workspace = str(job["workspace"])
+    task_id = str(job["task_id"])
 
     def report(progress: int, message: str) -> None:
-        job.update(progress=max(0, min(progress, 100)), message=message, updated_at=time.time())
+        bounded = max(0, min(int(progress), 100))
+        if _video_editor_cancel_requested(job_id):
+            _video_editor_job_update(
+                job_id,
+                status="cancelling",
+                phase="cancelling",
+                progress=bounded,
+                current=bounded,
+                message=(
+                    "Cancellation deferred to a safe boundary; "
+                    f"FFmpeg is finishing: {message}"
+                ),
+                cancel_mode="deferred",
+                safe_boundary="after_current_ffmpeg_render",
+            )
+            # The callback runs only between blocking FFmpeg subprocesses.
+            raise resource_scheduler.ResourceAcquireCancelled(
+                f"Comic animatic {job_id} reached an FFmpeg safe boundary"
+            )
+        else:
+            _video_editor_job_update(
+                job_id,
+                status="running",
+                phase="rendering",
+                progress=bounded,
+                current=bounded,
+                message=message,
+            )
 
     try:
-        job["status"] = "running"
+        _video_editor_job_update(
+            job_id,
+            status="queued",
+            phase="validating_sources",
+            progress=1,
+            current=1,
+            message="Validating comic panels…",
+        )
         panels = []
         for panel in body["panels"]:
+            if _video_editor_cancel_requested(job_id):
+                _finish_video_editor_cancelled(job_id, output_path)
+                return
+            if not isinstance(panel, dict):
+                raise ValueError("Every animatic panel must be an object")
             resolved = dict(panel)
-            resolved["resolved_path"] = _resolve_comic_animatic_image(panel.get("source", ""))
+            resolved["resolved_path"] = _resolve_comic_animatic_image(
+                panel.get("source", ""), workspace,
+            )
             panels.append(resolved)
-        result = render_comic_animatic(
-            panels,
-            output_path,
-            width=body["width"],
-            height=body["height"],
-            fps=body["fps"],
-            transition=body["transition"],
-            transition_duration=body["transition_duration"],
-            progress=report,
+
+        if _video_editor_cancel_requested(job_id):
+            _finish_video_editor_cancelled(job_id, output_path)
+            return
+        _video_editor_job_update(
+            job_id,
+            status="waiting_resource",
+            phase="waiting_resource",
+            message="Waiting for the local FFmpeg lane…",
+            acquired_resources=[],
         )
+        try:
+            with resource_scheduler.coordinator.acquire(
+                _VIDEO_EDITOR_FFMPEG_LANE,
+                task_id=task_id,
+                description="Comic animatic render",
+                cancelled=lambda: _video_editor_cancel_requested(job_id),
+            ):
+                started = _video_editor_job_update(
+                    job_id,
+                    status="running",
+                    phase="rendering",
+                    message="Animating comic panels with FFmpeg…",
+                    started_at=time.time(),
+                    acquired_resources=[_VIDEO_EDITOR_FFMPEG_LANE.key],
+                    _resource_acquired=True,
+                )
+                if (
+                    _video_editor_cancel_requested(job_id)
+                    or str(started.get("status") or "") in _VIDEO_EDITOR_TERMINAL
+                ):
+                    raise resource_scheduler.ResourceAcquireCancelled(
+                        f"Comic animatic {job_id} was cancelled before FFmpeg started"
+                    )
+                result = render_comic_animatic(
+                    panels,
+                    output_path,
+                    width=body["width"],
+                    height=body["height"],
+                    fps=body["fps"],
+                    transition=body["transition"],
+                    transition_duration=body["transition_duration"],
+                    progress=report,
+                )
+        except resource_scheduler.ResourceAcquireCancelled:
+            current = _video_editor_job_snapshot(job_id) or {}
+            deferred = bool(current.get("started_at"))
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message=(
+                    "Cancelled after FFmpeg reached a safe boundary"
+                    if deferred else "Cancelled before FFmpeg started"
+                ),
+                cancel_mode="deferred" if deferred else "immediate",
+                safe_boundary=(
+                    "after_current_ffmpeg_render" if deferred else "before_ffmpeg"
+                ),
+            )
+            return
+
+        if _video_editor_cancel_requested(job_id):
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message="Cancelled after FFmpeg reached a safe boundary",
+                cancel_mode="deferred",
+                safe_boundary="after_current_ffmpeg_render",
+            )
+            return
+        saving = _video_editor_job_update(
+            job_id,
+            status="running",
+            phase="saving",
+            message="Saving animatic metadata…",
+            acquired_resources=[],
+            _resource_acquired=False,
+        )
+        if (
+            _video_editor_cancel_requested(job_id)
+            or str(saving.get("status") or "") == "cancelling"
+        ):
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message="Cancelled after FFmpeg reached a safe boundary",
+                cancel_mode="deferred",
+                safe_boundary="after_current_ffmpeg_render",
+            )
+            return
+
         output_name = os.path.basename(output_path)
         with open(os.path.splitext(output_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
             json.dump({
@@ -31975,20 +34595,63 @@ def _run_comic_animatic(job_id: str, body: dict, output_path: str) -> None:
                 },
                 "generation_mode": "video",
                 "job_id": job_id,
+                "task_id": task_id,
+                "root_task_id": str(job["root_task_id"]),
+                "workspace": workspace,
                 "created_at": time.time(),
             }, handle, indent=2, ensure_ascii=False)
-        job.update(status="completed", progress=100, message="Comic animatic complete", filename=output_name, url=f"/api/v1/file/{output_name}", result=result, updated_at=time.time())
+        completed = _video_editor_job_update(
+            job_id,
+            status="completed",
+            phase="completed",
+            progress=100,
+            current=100,
+            message="Comic animatic complete",
+            filename=output_name,
+            url=f"/api/v1/file/{output_name}",
+            output_files=[output_name],
+            result=result,
+            error=None,
+            acquired_resources=[],
+            finished_at=time.time(),
+            _worker_active=False,
+        )
+        if str(completed.get("status") or "") == "cancelled":
+            _remove_video_editor_output_bundle(output_path)
     except Exception as exc:
-        traceback.print_exc()
-        try:
-            if os.path.isfile(output_path):
-                os.remove(output_path)
-        except OSError:
-            pass
-        job.update(status="failed", error=str(exc), message=f"Animatic failed: {exc}", updated_at=time.time())
+        if _video_editor_cancel_requested(job_id):
+            current = _video_editor_job_snapshot(job_id) or {}
+            deferred = bool(current.get("started_at"))
+            _finish_video_editor_cancelled(
+                job_id,
+                output_path,
+                message=(
+                    "Cancelled after FFmpeg reached a safe boundary"
+                    if deferred else "Cancelled before FFmpeg started"
+                ),
+                cancel_mode="deferred" if deferred else "immediate",
+                safe_boundary=(
+                    "after_current_ffmpeg_render" if deferred else "before_ffmpeg"
+                ),
+            )
+            return
+        traceback.print_exception(type(exc), exc, exc.__traceback__)
+        _remove_video_editor_output_bundle(output_path)
+        _video_editor_job_update(
+            job_id,
+            status="failed",
+            phase="failed",
+            error=str(exc),
+            message=f"Animatic failed: {exc}",
+            output_files=[],
+            acquired_resources=[],
+            finished_at=time.time(),
+            _resource_acquired=False,
+            _worker_active=False,
+        )
 
 
-@api.post("/api/v1/comics/animatic")
+@api.post("/api/v1/comics/animatic", status_code=202)
 def start_comic_animatic(body: dict):
     """Create a video storyboard from the comic's final, lettered panels."""
     panels = body.get("panels")
@@ -32010,26 +34673,136 @@ def start_comic_animatic(body: dict):
     transition = str(body.get("transition") or "none")
     if transition not in {"none", "crossfade", "fade-black", "wipe-left", "slide-left", "slide-right", "circle-open", "dissolve", "pixelize", "blur", "zoom-in"}:
         raise HTTPException(status_code=400, detail="Unsupported animatic transition")
+    workspace = body.get("workspace") if body.get("workspace") is not None else _get_active_workspace()
+    out_dir = _workspace_dir(workspace)
+    os.makedirs(out_dir, exist_ok=True)
     safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("comic_title") or "comic")).strip("_")[:60] or "comic"
     output_name = f"{time.strftime('%Y-%m-%d-%Hh%Mm%Ss')}_{safe_name}_animatic.mp4"
-    output_path = os.path.join(_workspace_dir(), output_name)
+    output_path = os.path.join(out_dir, output_name)
+    suffix = 2
+    while os.path.exists(output_path):
+        output_name = f"{time.strftime('%Y-%m-%d-%Hh%Mm%Ss')}_{safe_name}_animatic_{suffix}.mp4"
+        output_path = os.path.join(out_dir, output_name)
+        suffix += 1
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     clean = dict(body, width=width, height=height, fps=fps, transition=transition, transition_duration=transition_duration)
-    _video_editor_jobs[job_id] = {
-        "job_id": job_id, "status": "queued", "progress": 0,
+    task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
+    now = time.time()
+    job = {
+        "job_id": job_id,
+        "task_id": task_id,
+        "root_task_id": root_task_id,
+        "parent_task_id": parent_task_id,
+        "workspace": workspace,
+        "status": "queued",
+        "phase": "queued",
+        "progress": 0,
+        "current": 0,
+        "total": 100,
         "message": "Capturing comic panels…", "filename": None, "url": None,
-        "error": None, "created_at": time.time(), "updated_at": time.time(),
+        "output_files": [],
+        "result": None,
+        "error": None,
+        "provider": "local",
+        "model": "FFmpeg",
+        "server_origin": "local",
+        "resource_lane": _VIDEO_EDITOR_FFMPEG_LANE.key,
+        "resource_requirements": [_VIDEO_EDITOR_FFMPEG_LANE.key],
+        "acquired_resources": [],
+        "created_at": now,
+        "queued_at": now,
+        "updated_at": now,
+        "project_id": str(body.get("comic_id") or ""),
+        "_cancel_requested": False,
+        "_resource_acquired": False,
+        "_worker_active": True,
     }
-    threading.Thread(target=_run_comic_animatic, args=(job_id, clean, output_path), daemon=True, name=f"maestro-{job_id}").start()
-    return {"job_id": job_id}
+    try:
+        snapshot = _register_video_editor_job(job)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not queue comic animatic: {exc}") from exc
+    worker = threading.Thread(
+        target=_run_comic_animatic,
+        args=(job_id, clean, output_path),
+        daemon=True,
+        name=f"maestro-{job_id}",
+    )
+    try:
+        worker.start()
+    except Exception as exc:
+        _video_editor_job_update(
+            job_id,
+            status="failed",
+            phase="failed",
+            error=str(exc),
+            message=f"Could not start comic animatic worker: {exc}",
+            acquired_resources=[],
+            finished_at=time.time(),
+            _worker_active=False,
+        )
+        raise HTTPException(status_code=500, detail=f"Could not start comic animatic: {exc}") from exc
+    return _public_video_editor_job(snapshot)
 
 
 @api.get("/api/v1/video-editor/export/{job_id}")
 def get_video_editor_export(job_id: str):
-    job = _video_editor_jobs.get(job_id)
+    job = _video_editor_job_snapshot(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Video editor export job not found")
-    return job
+    return _public_video_editor_job(job)
+
+
+@api.post("/api/v1/video-editor/export/{job_id}/cancel")
+def cancel_video_editor_export(job_id: str):
+    """Cancel before FFmpeg, or defer cancellation to its safe boundary."""
+    now = time.time()
+    with _video_editor_jobs_lock:
+        job = _video_editor_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Video editor export job not found")
+        if str(job.get("status") or "") in _VIDEO_EDITOR_TERMINAL:
+            snapshot = copy.deepcopy(job)
+            should_publish = False
+        else:
+            job["_cancel_requested"] = True
+            job["cancel_requested_at"] = now
+            if str(job.get("status") or "") in {"queued", "waiting_resource"}:
+                job.update({
+                    "status": "cancelled",
+                    "phase": "cancelled",
+                    "message": "Cancelled before FFmpeg started",
+                    "cancel_mode": "immediate",
+                    "safe_boundary": "before_ffmpeg",
+                    "error": None,
+                    "result": None,
+                    "filename": None,
+                    "url": None,
+                    "output_files": [],
+                    "acquired_resources": [],
+                    "progress": 0,
+                    "current": 0,
+                    "finished_at": now,
+                })
+            else:
+                owns_lane = bool(job.get("acquired_resources"))
+                job.update({
+                    "status": "cancelling",
+                    "phase": "cancelling",
+                    "message": (
+                        "Cancellation deferred to a safe boundary; "
+                        "waiting for FFmpeg to finish…"
+                        if owns_lane else
+                        "FFmpeg safe boundary reached; cleaning up cancellation…"
+                    ),
+                    "cancel_mode": "deferred",
+                    "safe_boundary": "after_current_ffmpeg_render",
+                })
+            job["updated_at"] = now
+            snapshot = copy.deepcopy(job)
+            should_publish = True
+        if should_publish:
+            _publish_video_editor_job(snapshot)
+    return _public_video_editor_job(snapshot)
 
 
 @api.post("/api/v1/outputs/{name:path}/move")
@@ -32302,7 +35075,32 @@ def serve_upload(filename: str):
 def _task_registry(workspace: str | None = None):
     from services.task_manager import get_task_registry
 
-    return get_task_registry(_workspace_dir(workspace or _get_active_workspace()))
+    target = _get_active_workspace() if workspace is None else workspace
+    return get_task_registry(_workspace_dir(target))
+
+
+def _reset_canonical_task_for_resume(workspace: str, task_id: str) -> None:
+    """Explicitly reopen a terminal adapter task before its worker publishes."""
+    if not task_id:
+        return
+    try:
+        registry = _task_registry(workspace)
+        existing = registry.get(task_id)
+        if existing and str(existing.get("status") or "") in {
+            "failed", "cancelled", "interrupted",
+        }:
+            registry.update(
+                task_id,
+                status="queued",
+                phase="queued",
+                message="Resume requested",
+                error=None,
+                completed_at=None,
+                event_type="task.resume_requested",
+                force=True,
+            )
+    except Exception as exc:
+        print(f"[Task registry] Could not reopen {task_id}: {exc}")
 
 
 def _task_legacy_id(record: dict) -> str:
@@ -32333,11 +35131,40 @@ def _task_timestamp(record: dict, *keys: str) -> float | None:
     return None
 
 
+def _canonical_legacy_progress(current: object, total: object, progress: object) -> float:
+    """Convert legacy counters/percentages to the canonical 0..1 scale."""
+    try:
+        total_value = float(total)
+    except (TypeError, ValueError):
+        total_value = 0.0
+    if math.isfinite(total_value) and total_value > 0:
+        try:
+            current_value = float(current)
+        except (TypeError, ValueError):
+            current_value = 0.0
+        value = current_value / total_value if math.isfinite(current_value) else 0.0
+    else:
+        try:
+            percent_value = float(progress)
+        except (TypeError, ValueError):
+            percent_value = 0.0
+        value = percent_value / 100.0 if math.isfinite(percent_value) else 0.0
+    return max(0.0, min(1.0, value))
+
+
 def _upsert_canonical_task(workspace: str, task_id: str, **fields) -> dict:
     registry = _task_registry(workspace)
     existing = registry.get(task_id)
     if existing is None:
         return registry.create(id=task_id, workspace=workspace, **fields)
+    from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES
+    existing_status = str(existing.get("status") or "")
+    incoming_status = str(fields.get("status") or existing_status)
+    if existing_status in TERMINAL_STATUSES and incoming_status in ACTIVE_STATUSES:
+        # A lagging compatibility snapshot must never resurrect a task after
+        # cancellation/completion won. Canonical resume explicitly transitions
+        # the registry before the next active adapter snapshot arrives.
+        return existing
     mutable = {
         key: value for key, value in fields.items()
         if key not in {"id", "created_at"}
@@ -32370,6 +35197,18 @@ def _publish_generation_task(job: dict) -> dict:
     current = int(job.get("step") or 0)
     total = int(job.get("total_steps") or 0)
     error = job.get("error")
+    if status in {"completed", "failed", "cancelled", "interrupted"}:
+        acquired_resources = []
+    elif "acquired_resources" in job:
+        acquired_resources = list(job.get("acquired_resources") or [])
+    else:
+        # Compatibility for older in-memory tool jobs. Newly-created jobs
+        # always carry the field, which lets planning remain visibly distinct
+        # from actual GPU ownership.
+        acquired_resources = (
+            [] if status in {"created", "queued", "waiting_resource"}
+            else ["remote:https://api.minimax.io" if is_remote else _local_gpu_lane.key]
+        )
     return _upsert_canonical_task(
         workspace,
         task_id,
@@ -32387,7 +35226,7 @@ def _publish_generation_task(job: dict) -> dict:
         message=str(job.get("message") or status.replace("_", " ").title()),
         current=current,
         total=total,
-        progress=float(job.get("progress") or 0),
+        progress=_canonical_legacy_progress(current, total, job.get("progress")),
         created_at=_task_timestamp(job, "created_at") or time.time(),
         started_at=_task_timestamp(job, "started_at"),
         completed_at=_task_timestamp(job, "finished_at"),
@@ -32395,10 +35234,12 @@ def _publish_generation_task(job: dict) -> dict:
         model=str(details.get("model_name") or model_type),
         server_origin="https://api.minimax.io" if is_remote else "local",
         resource_requirements=["remote:https://api.minimax.io" if is_remote else "local_gpu:0"],
-        acquired_resources=([] if status in {"created", "queued", "waiting_resource"}
-                            else ["remote:https://api.minimax.io" if is_remote else "local_gpu:0"]),
+        acquired_resources=acquired_resources,
         backend_job_id=legacy_id,
-        cancelable=status in {"created", "queued", "waiting_resource", "running"},
+        cancelable=(
+            status in {"created", "queued", "waiting_resource", "running"}
+            and str(job.get("status") or "").lower() != "cancelling"
+        ),
         recoverable=_is_durable_generation_job(job),
         error=({"message": str(error), "retryable": True} if error else None),
         result_refs=list(job.get("output_files") or []),
@@ -32407,6 +35248,18 @@ def _publish_generation_task(job: dict) -> dict:
             "owner_pipeline_id": owner_id,
         },
     )
+
+
+def _observe_generation_job_state(record: dict) -> None:
+    """Forward atomic lifecycle changes to the canonical task event stream."""
+    job = dict(record)
+    params = job.get("params") if isinstance(job.get("params"), dict) else {}
+    if not str(params.get("model_type") or "").strip():
+        return
+    _publish_generation_task(job)
+
+
+set_job_state_observer(_observe_generation_job_state)
 
 
 def _publish_series_task(job: dict, adapter: str) -> dict:
@@ -32418,7 +35271,17 @@ def _publish_series_task(job: dict, adapter: str) -> dict:
     provider = job.get("provider") if isinstance(job.get("provider"), dict) else {}
     request_body = job.get("request") if isinstance(job.get("request"), dict) else {}
     model = str(job.get("model") or request_body.get("writingModel") or provider.get("videoModel") or "")
+    provider_name = str(request_body.get("writingProvider") or "local")
     server = "local" if is_render else str(request_body.get("writingBaseUrl") or "")
+    lane = (
+        resource_scheduler.local_gpu_lane(0)
+        if is_render
+        else resource_scheduler.llm_lane(
+            provider_name,
+            base_url=server,
+            device=str(request_body.get("writingDevice") or "cpu"),
+        )
+    )
     task_id = f"task-{adapter}-{legacy_id}"
     return _upsert_canonical_task(
         workspace,
@@ -32438,13 +35301,14 @@ def _publish_series_task(job: dict, adapter: str) -> dict:
         total=int(job.get("total") or 0),
         created_at=_task_timestamp(job, "createdAt") or time.time(),
         completed_at=_task_timestamp(job, "finishedAt"),
-        provider="local" if is_render else str(request_body.get("writingProvider") or ""),
+        provider="local" if is_render else provider_name,
         model=model,
         server_origin=server,
-        resource_requirements=["local_gpu:0" if is_render else f"remote:{server or 'llm'}"],
-        acquired_resources=[] if status in {"created", "queued", "waiting_resource"} else [
-            "local_gpu:0" if is_render else f"remote:{server or 'llm'}"
-        ],
+        resource_requirements=[lane.key],
+        # Parent workflows span parsing/checkpoint phases as well as provider
+        # calls. Only observable child operations publish an acquired lease;
+        # inferring one from the parent's broad "running" state is misleading.
+        acquired_resources=[],
         attempt=max(1, int(job.get("retryCount") or job.get("validationAttempt") or 0) + 1),
         project_id=str(job.get("seriesId") or ""),
         entity_type="episode",
@@ -32465,6 +35329,10 @@ _GENERIC_TASK_CONFIG = {
     "video-editor": ("Video editor", "ffmpeg", False),
     "model3d": ("3D generation", "model3d", False),
     "rig": ("Character rigging", "rig", False),
+    "minimax-image": ("MiniMax Image-01", "image", False),
+    "audio-analysis": ("Audio analysis", "audio-analysis", False),
+    "minimax-music": ("MiniMax Music", "music", False),
+    "minimax-music-candidate": ("MiniMax Music candidate", "music", False),
 }
 
 
@@ -32476,18 +35344,68 @@ def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
     title, kind, resumable = _GENERIC_TASK_CONFIG.get(adapter, (adapter.replace("-", " ").title(), adapter, False))
     status = _task_status(record.get("status"))
     phase = str(record.get("stage") or record.get("phase") or record.get("status") or status)
-    task_id = f"task-{adapter}-{legacy_id}"
-    provider = str(record.get("provider") or "local")
+    task_id = str(
+        record.get("task_id")
+        or record.get("taskId")
+        or f"task-{adapter}-{legacy_id}"
+    )
+    root_task_id = str(
+        record.get("root_task_id")
+        or record.get("rootTaskId")
+        or task_id
+    )
+    parent_task_id = str(
+        record.get("parent_task_id")
+        or record.get("parentTaskId")
+        or ""
+    ) or None
+    request_body = record.get("request") if isinstance(record.get("request"), dict) else {}
+    provider = str(
+        record.get("provider")
+        or request_body.get("writingProvider")
+        or "local"
+    )
     model = str(record.get("model") or record.get("model_id") or record.get("modelId") or "")
-    is_gpu = adapter in {"model3d", "rig"}
+    explicit_lane = str(record.get("resource_lane") or "").strip()
+    if explicit_lane:
+        lane_key = explicit_lane
+    elif adapter == "model3d":
+        lane_key = resource_scheduler.local_gpu_lane(0).key
+    elif adapter == "rig":
+        lane_key = (
+            resource_scheduler.local_gpu_lane(0).key
+            if str(record.get("engine") or request_body.get("engine") or "").lower() == "unirig"
+            else resource_scheduler.cpu_lane("rig").key
+        )
+    elif adapter in {"story-plan", "comic-plan"}:
+        lane_key = resource_scheduler.llm_lane(
+            provider,
+            base_url=str(
+                record.get("writingBaseUrl")
+                or request_body.get("writingBaseUrl")
+                or ""
+            ),
+            device=str(
+                record.get("writingDevice")
+                or request_body.get("writingDevice")
+                or "cpu"
+            ),
+        ).key
+    elif adapter == "video-editor":
+        lane_key = resource_scheduler.cpu_lane("ffmpeg").key
+    else:
+        lane_key = resource_scheduler.cpu_lane(adapter).key
+    current = int(record.get("current") or record.get("step") or 0)
+    total = int(record.get("total") or record.get("total_steps") or 0)
     return _upsert_canonical_task(
         workspace, task_id,
-        root_id=task_id, kind=kind, workflow=adapter, title=title,
+        root_id=root_task_id, parent_id=parent_task_id,
+        kind=kind, workflow=adapter, title=title,
         status=status, phase=phase,
         message=str(record.get("message") or phase.replace("_", " ").title()),
-        current=int(record.get("current") or record.get("step") or 0),
-        total=int(record.get("total") or record.get("total_steps") or 0),
-        progress=float(record.get("progress") or 0),
+        current=current,
+        total=total,
+        progress=_canonical_legacy_progress(current, total, record.get("progress")),
         detail_current=int(record.get("detailCurrent") or 0),
         detail_total=int(record.get("detailTotal") or 0),
         created_at=_task_timestamp(record, "createdAt", "created_at") or time.time(),
@@ -32495,14 +35413,20 @@ def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
         completed_at=_task_timestamp(record, "finishedAt", "finished_at"),
         provider=provider, model=model,
         server_origin=str(record.get("server_origin") or record.get("writingBaseUrl") or "local"),
-        resource_requirements=["local_gpu:0" if is_gpu else "local_cpu"],
+        resource_requirements=[lane_key],
+        acquired_resources=list(record.get("acquired_resources") or []),
         backend_job_id=legacy_id,
         cancelable=(status in {"created", "queued", "waiting_resource", "running"}
-                    and adapter not in {"comic-plan", "video-editor"}),
+                    and str(record.get("status") or "").lower() != "cancelling"
+                    and adapter != "comic-plan"),
         resumable=resumable, recoverable=resumable,
         error=({"message": str(record.get("error")), "retryable": resumable} if record.get("error") else None),
         result_refs=list(record.get("output_files") or ([record["output"]] if record.get("output") else [])),
-        metadata={"adapter": adapter},
+        metadata={
+            "adapter": adapter,
+            "cancel_mode": record.get("cancel_mode"),
+            "safe_boundary": record.get("safe_boundary"),
+        },
     )
 
 
@@ -32513,8 +35437,28 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
     progress = pipeline.get("progress") if isinstance(pipeline.get("progress"), dict) else {}
     details = pipeline.get("generation_details") if isinstance(pipeline.get("generation_details"), dict) else {}
     schedule = pipeline.get("resource_schedule") if isinstance(pipeline.get("resource_schedule"), dict) else {}
-    status = _task_status(pipeline.get("status"))
+    schedule_lanes = schedule.get("lanes") if isinstance(schedule.get("lanes"), dict) else {}
+    resource_requirements = list(dict.fromkeys(
+        str(lane.get("key") or "")
+        for lane in schedule_lanes.values()
+        if isinstance(lane, dict) and str(lane.get("key") or "")
+    ))
+    raw_status = str(pipeline.get("status") or "").strip().lower()
+    status = {
+        "crashed": "interrupted",
+        "preview_ready": "completed",
+    }.get(raw_status, _task_status(raw_status))
     task_id = f"task-director-{pipeline_id}"
+    completed_at = _task_timestamp(
+        pipeline,
+        "finished_at",
+        "_completed_at",
+        "completed_at",
+    )
+    if completed_at is None and status in {
+        "completed", "failed", "cancelled", "interrupted",
+    }:
+        completed_at = _task_timestamp(pipeline, "updated_at")
     return _upsert_canonical_task(
         workspace, task_id,
         root_id=task_id, kind="director", workflow="director",
@@ -32527,15 +35471,16 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
         detail_total=int(progress.get("detail_total") or 0),
         created_at=_task_timestamp(pipeline, "created_at") or time.time(),
         started_at=_task_timestamp(pipeline, "phase_started_at", "created_at"),
-        completed_at=_task_timestamp(pipeline, "finished_at"),
+        completed_at=completed_at,
         provider=str(details.get("text_provider") or ""),
         model=str(details.get("text_model") or details.get("video_model_name") or ""),
         server_origin=str(details.get("text_server") or ""),
-        resource_requirements=list((schedule.get("lanes") or {}).keys()),
+        resource_requirements=resource_requirements,
         pipeline_id=pipeline_id, backend_job_id=pipeline_id,
         cancelable=status in {"created", "queued", "waiting_resource", "running"},
         resumable=True, recoverable=True,
         error=({"message": str(pipeline.get("error")), "retryable": True} if pipeline.get("error") else None),
+        result_refs=list(pipeline.get("output_files") or []),
         metadata={"adapter": "director", "generation_details": details, "resource_schedule": schedule},
     )
 
@@ -32543,10 +35488,15 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
 def _sync_canonical_tasks(workspace: str) -> None:
     for job in list(_jobs.values()):
         if str(job.get("workspace") or "default") == workspace:
-            _publish_generation_task(snapshot_job(job))
+            snapshot = snapshot_job(job)
+            if str(job.get("id") or "").startswith("audio-analysis-"):
+                _publish_generic_legacy_task(snapshot, "audio-analysis")
+            else:
+                _publish_generation_task(snapshot)
     try:
-        from services.director_pipeline import list_active_pipelines
-        for pipeline in list_active_pipelines(workspace):
+        from services.director_pipeline import list_recent_pipelines
+        director_base = wgp.server_config.get("save_path", "outputs")
+        for pipeline in list_recent_pipelines(director_base, workspace):
             _publish_director_task(pipeline, workspace)
     except Exception:
         pass
@@ -32570,14 +35520,27 @@ def _sync_canonical_tasks(workspace: str) -> None:
     for job in comic_jobs:
         if str(job.get("workspace") or "default") == workspace:
             _publish_generic_legacy_task(job, "comic-plan")
-    for job in list(_video_editor_jobs.values()):
+    with _video_editor_jobs_lock:
+        video_editor_jobs = [copy.deepcopy(job) for job in _video_editor_jobs.values()]
+    for job in video_editor_jobs:
         if str(job.get("workspace") or "default") == workspace:
             _publish_generic_legacy_task(job, "video-editor")
+    with _minimax_image_jobs_lock:
+        minimax_image_jobs = [copy.deepcopy(job) for job in _minimax_image_jobs.values()]
+    for job in minimax_image_jobs:
+        if str(job.get("workspace") or "default") == workspace:
+            _publish_generic_legacy_task(job, "minimax-image")
+    with _minimax_music_jobs_lock:
+        minimax_music_jobs = [copy.deepcopy(job) for job in _minimax_music_jobs.values()]
+    for job in minimax_music_jobs:
+        if str(job.get("workspace") or "default") == workspace:
+            _publish_minimax_music_job(job)
     try:
         with model3d_service._lock:
             model3d_jobs = [copy.deepcopy(job) for job in model3d_service._jobs.values()]
         for job in model3d_jobs:
-            _publish_generic_legacy_task({**job, "workspace": workspace}, "model3d")
+            if str(job.get("workspace") or "default") == workspace:
+                _publish_generic_legacy_task(job, "model3d")
     except Exception:
         pass
     try:
@@ -32585,7 +35548,8 @@ def _sync_canonical_tasks(workspace: str) -> None:
         with rig_service._lock:
             rig_jobs = [copy.deepcopy(job) for job in rig_service._jobs.values()]
         for job in rig_jobs:
-            _publish_generic_legacy_task({**job, "workspace": workspace}, "rig")
+            if str(job.get("workspace") or "default") == workspace:
+                _publish_generic_legacy_task(job, "rig")
     except Exception:
         pass
 
@@ -32597,7 +35561,7 @@ def list_canonical_tasks(
     root_id: str = "",
     limit: int = 200,
 ):
-    target = str(workspace or _get_active_workspace())
+    target = _get_active_workspace() if workspace is None else workspace
     _sync_canonical_tasks(target)
     from services.task_manager import ACTIVE_STATUSES, ALL_STATUSES
     statuses = set(ACTIVE_STATUSES) if status == "active" else (
@@ -32611,7 +35575,8 @@ def list_canonical_tasks(
 @api.post("/api/v1/tasks/upsert")
 def upsert_client_task(body: dict):
     raw = body.get("task") if isinstance(body.get("task"), dict) else body
-    workspace = str(raw.get("workspace") or _get_active_workspace())
+    workspace = raw.get("workspace") if "workspace" in raw else _get_active_workspace()
+    _workspace_dir(workspace)
     client_id = re.sub(r"[^A-Za-z0-9_-]+", "-", str(raw.get("id") or uuid.uuid4().hex))[:160]
     task_id = client_id if client_id.startswith("task-") else f"task-client-{client_id}"
     status = _task_status(raw.get("status"))
@@ -32635,13 +35600,35 @@ def upsert_client_task(body: dict):
     return task
 
 
+def _task_event_cursor(after: object, last_event_id: object) -> int:
+    """Resolve an SSE cursor from query state and the reconnect header."""
+    values = []
+    for value in (after, last_event_id):
+        try:
+            values.append(max(0, int(value or 0)))
+        except (TypeError, ValueError, OverflowError):
+            continue
+    return max(values, default=0)
+
+
+@api.get("/api/v1/resources")
+def list_resource_lanes():
+    """Expose the coordinator's real active and waiting leases for the UI."""
+    return {"lanes": resource_scheduler.coordinator.snapshot()}
+
+
 @api.get("/api/v1/tasks/events")
-async def stream_canonical_task_events(workspace: str | None = None, after: int = 0):
-    target = str(workspace or _get_active_workspace())
+async def stream_canonical_task_events(
+    request: Request,
+    workspace: str | None = None,
+    after: int = 0,
+):
+    target = _get_active_workspace() if workspace is None else workspace
     registry = _task_registry(target)
 
     async def event_stream():
-        cursor = max(0, int(after or 0))
+        cursor = _task_event_cursor(after, request.headers.get("last-event-id"))
+        yield "retry: 2000\n\n"
         while True:
             events = await asyncio.to_thread(registry.wait_for_events, cursor, 15.0)
             if not events:
@@ -32658,13 +35645,13 @@ async def stream_canonical_task_events(workspace: str | None = None, after: int 
 
 @api.get("/api/v1/tasks/{task_id}/events")
 def get_canonical_task_events(task_id: str, workspace: str | None = None, after: int = 0):
-    target = str(workspace or _get_active_workspace())
+    target = _get_active_workspace() if workspace is None else workspace
     return {"events": _task_registry(target).events(task_id, after=after)}
 
 
 @api.get("/api/v1/tasks/{task_id}")
 def get_canonical_task(task_id: str, workspace: str | None = None):
-    target = str(workspace or _get_active_workspace())
+    target = _get_active_workspace() if workspace is None else workspace
     _sync_canonical_tasks(target)
     task = _task_registry(target).get(task_id)
     if not task:
@@ -32683,8 +35670,17 @@ def _control_canonical_task(task: dict, action: str):
         if adapter == "series-plan": return cancel_series_episode_plan(legacy_id)
         if adapter == "series-render": return cancel_series_render_job(legacy_id)
         if adapter == "story-plan": return cancel_story_lab_generation(legacy_id)
+        if adapter == "video-editor": return cancel_video_editor_export(legacy_id)
         if adapter == "model3d": return cancel_model3d_job(legacy_id)
         if adapter == "rig": return cancel_rig_job(legacy_id)
+        if adapter == "minimax-image": return cancel_comic_minimax_job(legacy_id)
+        if adapter == "audio-analysis": return cancel_audio_analysis_job(legacy_id)
+        if adapter == "minimax-music": return cancel_story_music_candidates_job(legacy_id)
+        if adapter == "minimax-music-candidate":
+            root_backend_id = str(task.get("root_id") or "").removeprefix(
+                "task-minimax-music-"
+            )
+            return cancel_story_music_candidates_job(root_backend_id)
     if action in {"retry", "resume"}:
         if adapter == "director": return director_pipeline_resume(legacy_id)
         if adapter == "series-plan": return resume_series_episode_plan(legacy_id)
@@ -32696,7 +35692,7 @@ def _control_canonical_task(task: dict, action: str):
 
 @api.post("/api/v1/tasks/{task_id}/cancel")
 def cancel_canonical_task(task_id: str, workspace: str | None = None):
-    target = str(workspace or _get_active_workspace())
+    target = _get_active_workspace() if workspace is None else workspace
     task = _task_registry(target).get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -32707,11 +35703,21 @@ def cancel_canonical_task(task_id: str, workspace: str | None = None):
 
 @api.post("/api/v1/tasks/{task_id}/retry")
 def retry_canonical_task(task_id: str, workspace: str | None = None):
-    target = str(workspace or _get_active_workspace())
+    target = _get_active_workspace() if workspace is None else workspace
     task = _task_registry(target).get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     result = _control_canonical_task(task, "retry")
+    if str(task.get("status") or "") in {"failed", "interrupted", "cancelled"}:
+        _task_registry(target).update(
+            task_id,
+            status="queued",
+            phase="queued",
+            message="Resume requested",
+            error=None,
+            completed_at=None,
+            event_type="task.resume_requested",
+        )
     _sync_canonical_tasks(target)
     return {"task": _task_registry(target).get(task_id), "result": result}
 
@@ -32723,7 +35729,7 @@ def resume_canonical_task(task_id: str, workspace: str | None = None):
 
 @api.delete("/api/v1/tasks/{task_id}")
 def dismiss_canonical_task(task_id: str, workspace: str | None = None):
-    target = str(workspace or _get_active_workspace())
+    target = _get_active_workspace() if workspace is None else workspace
     try:
         deleted = _task_registry(target).delete(task_id)
     except ValueError as exc:

@@ -789,12 +789,33 @@ def analyze(
                     result.warnings.append(
                         "Speaker identification is unavailable; continuing without singer labels."
                     )
-                unload_diarizer()  # Free VRAM immediately
-            unload_whisper()  # Free Whisper VRAM before LLM loads
         except ImportError as e:
             print(f"[AudioAnalysis] Transcription skipped (faster-whisper not installed): {e}")
         except Exception as e:
             print(f"[AudioAnalysis] Transcription failed, continuing without lyrics: {e}")
+        finally:
+            # Whisper and pyannote are both optional, lazy-loaded GPU models.
+            # Always drop them before the next pipeline phase, including when
+            # transcription degrades after an error or the progress callback
+            # aborts the worker because the job was cancelled.  Keep the two
+            # cleanups independent so a secondary cleanup failure cannot keep
+            # the other model resident or mask the original analysis outcome.
+            try:
+                unload_diarizer()
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Could not fully unload the diarization model: %s",
+                    cleanup_error,
+                    exc_info=True,
+                )
+            try:
+                unload_whisper()
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Could not fully unload the transcription model: %s",
+                    cleanup_error,
+                    exc_info=True,
+                )
 
     _set_progress("finalizing", "Finalizing")
     print(f"[AudioAnalysis] Done: {bpm:.1f} BPM, {len(beats)} beats, {len(sections)} sections")

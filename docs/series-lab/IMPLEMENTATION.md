@@ -21,7 +21,7 @@ Every new episode freezes its approved canon, entity definitions, provider/capab
 2. Complete Setup and choose explicit writing, image and MiniMax H3 defaults. Local concept-image generation never silently chooses a recommended model.
 3. Prepare a durable canon proposal as text, optionally followed by missing identity/location images. Inspect the proposal before applying it.
 4. Review World, Characters, Relationships, Locations, Props, Long arcs, Timeline and Voice bible. Approving the reviewed canon creates a new canon revision.
-5. Create an episode, then generate an outline or a complete editable script and 8–12-shot proposal. Planning uses the frozen canon and compact prior-episode summaries.
+5. Create an episode, then generate an outline or a complete editable script and a duration-aware shot proposal. Planning uses the frozen canon and compact prior-episode summaries. Each generated video is 5, 10, or 15 seconds; longer episodes add shots instead of extending a clip.
 6. Inspect or manually override each deterministic reference manifest. Loose portraits are never labelled as exact start frames; composed start/end frames are explicit shot assets.
 7. Render selected, missing, failed or all unapproved shots. Cancellation records interrupted attempts and recovery appends a new retry instead of overwriting history.
 8. Preview thumbnail-first attempts, approve/reject them, regenerate individual rejected shots, and open the approved sequence in Video Editor.
@@ -45,7 +45,7 @@ All mutating requests carry a workspace in their JSON body, or a workspace query
 
 ## MVP boundaries
 
-The optimized production path is a manually reviewed 60–90 second pilot with 8–12 shots, up to two principal characters per generated episode, at most two speakers in one shot, two active locations and MiniMax H3. Native dialogue includes exact text/emotion but lip sync is explicitly best-effort. A one-click known-series bootstrap may seed a broader reusable draft bible (up to 12 recurring characters/locations, 24 relationships and 12 props) from the selected writing model's general knowledge. It performs no live web research, copies no scripts or dialogue, preserves uploaded assets, and never approves the generated canon; users must verify facts and rights before production or publication. Controlled TTS, training/fine-tuning, crowds with individually stable identities and automatic publication remain non-goals.
+The optimized production path remains a manually reviewed short pilot, but episode planning scales to the saved target runtime with duration-aware shot counts. Every shot has a nominal duration of 5, 10, or 15 seconds, the generated H3 request stays below the hard 15-second ceiling, and dialogue is limited to one speaker per shot so speaker changes become separate clips. Native dialogue includes exact text/emotion but lip sync is explicitly best-effort. A one-click known-series bootstrap may seed a broader reusable draft bible (up to 12 recurring characters/locations, 24 relationships and 12 props) from the selected writing model's general knowledge. It performs no live web research, copies no scripts or dialogue, preserves uploaded assets, and never approves the generated canon; users must verify facts and rights before production or publication. Controlled TTS, training/fine-tuning, crowds with individually stable identities and automatic publication remain non-goals.
 
 ## Verification
 

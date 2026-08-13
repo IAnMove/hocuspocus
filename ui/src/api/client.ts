@@ -1,4 +1,6 @@
 import { rememberPrompt } from '../lib/promptHistory'
+import { openCanonicalTaskEventStream } from '../lib/canonicalTaskEvents'
+import type { CanonicalTaskEvent, CanonicalTaskStreamState } from '../lib/canonicalTaskEvents'
 import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ProductionPlan, ScailResolutionProfile } from '../types'
 
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
@@ -71,7 +73,9 @@ export interface ApiOutput {
 
 export interface ApiJobStatus {
   job_id: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  task_id?: string | null
+  root_task_id?: string | null
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   progress: number
   step: number
   total_steps: number
@@ -89,6 +93,7 @@ export interface ApiJobStatus {
    *  See `OomInfo` in types/index.ts. */
   oom_info?: import('../types').OomInfo | null
   generation_details?: GenerationDetails
+  h3_window_plan?: H3WindowPlan | null
 }
 
 export interface ApiTaskTiming {
@@ -155,13 +160,11 @@ export async function fetchCanonicalTasks(
 
 export function subscribeCanonicalTaskEvents(
   workspace: string,
-  onEvent: () => void,
+  onEvent: (event: CanonicalTaskEvent) => void,
   onError?: () => void,
+  onStateChange?: (state: CanonicalTaskStreamState) => void,
 ): () => void {
-  const source = new EventSource(`${BASE}/api/v1/tasks/events?workspace=${encodeURIComponent(workspace)}`)
-  source.addEventListener('task', onEvent)
-  source.onerror = () => onError?.()
-  return () => source.close()
+  return openCanonicalTaskEventStream(BASE, workspace, onEvent, onError, onStateChange)
 }
 
 export async function upsertCanonicalClientTask(task: Record<string, unknown>): Promise<CanonicalTask> {
@@ -329,7 +332,13 @@ export async function fetchDefaults(modelType: string): Promise<Record<string, u
 
 // --- Generation ---
 
-export async function submitGeneration(params: Record<string, unknown>): Promise<{ job_id: string; h3_window_plan?: H3WindowPlan }> {
+export async function submitGeneration(params: Record<string, unknown>): Promise<{
+  job_id: string
+  task_id?: string | null
+  root_task_id?: string | null
+  status: string
+  h3_window_plan?: H3WindowPlan
+}> {
   const res = await fetch(`${BASE}/api/v1/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -422,9 +431,31 @@ export interface MiniMaxMusicCandidate {
   duration_seconds: number
   provider: 'minimax'
   model: string
+  task_id?: string
+  root_task_id?: string
+  taskId?: string
+  rootTaskId?: string
 }
 
-export async function generateStoryMusicCandidates(params: {
+export interface MiniMaxMusicJob {
+  jobId: string
+  taskId: string
+  rootTaskId: string
+  workspace: string
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  phase: string
+  message: string
+  current: number
+  total: number
+  progress: number
+  provider: 'minimax'
+  model: string
+  candidates: MiniMaxMusicCandidate[]
+  error?: string | null
+  statusCode?: number
+}
+
+export interface StoryMusicCandidateRequest {
   prompt: string
   lyrics: string
   count: 1 | 2 | 3
@@ -432,8 +463,12 @@ export async function generateStoryMusicCandidates(params: {
   reference_audio_filename?: string
   instrumental?: boolean
   workspace?: string
-}): Promise<{ candidates: MiniMaxMusicCandidate[] }> {
-  const res = await fetch(`${BASE}/api/v1/stories/music-candidates`, {
+}
+
+export async function startStoryMusicCandidatesJob(
+  params: StoryMusicCandidateRequest,
+): Promise<MiniMaxMusicJob> {
+  const res = await fetch(`${BASE}/api/v1/stories/music-candidates/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -443,6 +478,75 @@ export async function generateStoryMusicCandidates(params: {
     throw new Error(error.detail || 'MiniMax Music generation failed')
   }
   return res.json()
+}
+
+export async function fetchStoryMusicCandidatesJob(jobId: string): Promise<MiniMaxMusicJob> {
+  const res = await fetch(
+    `${BASE}/api/v1/stories/music-candidates/jobs/${encodeURIComponent(jobId)}`,
+  )
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'MiniMax Music job not found' }))
+    throw new Error(error.detail || 'MiniMax Music job not found')
+  }
+  return res.json()
+}
+
+export async function cancelStoryMusicCandidatesJob(jobId: string): Promise<MiniMaxMusicJob> {
+  const res = await fetch(
+    `${BASE}/api/v1/stories/music-candidates/jobs/${encodeURIComponent(jobId)}/cancel`,
+    { method: 'POST' },
+  )
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'MiniMax Music cancellation failed' }))
+    throw new Error(error.detail || 'MiniMax Music cancellation failed')
+  }
+  return res.json()
+}
+
+export async function generateStoryMusicCandidates(
+  params: StoryMusicCandidateRequest,
+  options: {
+    onJobSubmitted?: (job: MiniMaxMusicJob) => void
+    onProgress?: (job: MiniMaxMusicJob) => void
+  } = {},
+): Promise<{
+  candidates: MiniMaxMusicCandidate[]
+  status: 'completed' | 'cancelled' | 'failed' | 'interrupted'
+  jobId: string
+  taskId: string
+  message: string
+}> {
+  let job = await startStoryMusicCandidatesJob(params)
+  options.onJobSubmitted?.(job)
+  let pollFailures = 0
+  while (!['completed', 'failed', 'cancelled', 'interrupted'].includes(job.status)) {
+    await new Promise(resolve => window.setTimeout(resolve, pollFailures ? Math.min(10_000, pollFailures * 1_500) : 1_000))
+    try {
+      job = await fetchStoryMusicCandidatesJob(job.jobId)
+      pollFailures = 0
+      options.onProgress?.(job)
+    } catch (error) {
+      pollFailures += 1
+      if (pollFailures >= 20) {
+        throw new Error(
+          `Could not reconnect to MiniMax Music job ${job.jobId}; its ID was preserved: ${(error as Error).message}`,
+        )
+      }
+    }
+  }
+  if (job.status === 'completed' || job.candidates.length > 0) {
+    return {
+      candidates: job.candidates,
+      status: job.status as 'completed' | 'cancelled' | 'failed' | 'interrupted',
+      jobId: job.jobId,
+      taskId: job.taskId,
+      message: job.message,
+    }
+  }
+  throw new Error(
+    `${job.statusCode ? `HTTP ${job.statusCode}: ` : ''}`
+    + (job.error || job.message || `MiniMax Music job ${job.status}`),
+  )
 }
 
 export async function translateStoryLyrics(params: {
@@ -683,12 +787,14 @@ export async function saveScene(scene: import('../types').Scene, preview: string
   return res.json()
 }
 
-export function getFileUrl(filename: string): string {
-  return `${BASE}/api/v1/file/${encodeURIComponent(filename)}`
+export function getFileUrl(filename: string, workspace?: string): string {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  return `${BASE}/api/v1/file/${encodeURIComponent(filename)}${query}`
 }
 
-export function getOutputThumbnailUrl(filename: string): string {
-  return `${BASE}/api/v1/outputs/thumbnail/${encodeURIComponent(filename)}`
+export function getOutputThumbnailUrl(filename: string, workspace?: string): string {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  return `${BASE}/api/v1/outputs/thumbnail/${encodeURIComponent(filename)}${query}`
 }
 
 export function getUploadUrl(filename: string): string {
@@ -949,12 +1055,19 @@ export interface VideoEditorProbe {
 
 export interface VideoEditorExportJob {
   job_id: string
-  status: 'queued' | 'running' | 'completed' | 'failed'
+  task_id?: string | null
+  root_task_id?: string | null
+  workspace?: string
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
+  phase?: string
   progress: number
   message: string
   filename: string | null
   url: string | null
   error: string | null
+  acquired_resources?: string[]
+  cancel_mode?: 'immediate' | 'deferred' | string
+  safe_boundary?: string
   result?: { duration: number; clip_count: number }
 }
 
@@ -1006,6 +1119,7 @@ export async function startVideoEditorExport(payload: {
   width: number
   height: number
   fps: number
+  workspace?: string
   clips: Array<{
     name: string
     source: string
@@ -1033,7 +1147,7 @@ export async function startVideoEditorExport(payload: {
     transition_text: string
     transition_text_size: number
   }>
-}): Promise<{ job_id: string }> {
+}): Promise<VideoEditorExportJob> {
   const res = await fetch(`${BASE}/api/v1/video-editor/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1055,6 +1169,17 @@ export async function fetchVideoEditorExport(jobId: string): Promise<VideoEditor
   return res.json()
 }
 
+export async function cancelVideoEditorExport(jobId: string): Promise<VideoEditorExportJob> {
+  const res = await fetch(`${BASE}/api/v1/video-editor/export/${encodeURIComponent(jobId)}/cancel`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Could not cancel export' }))
+    throw new Error(error.detail || 'Could not cancel export')
+  }
+  return res.json()
+}
+
 export async function startComicAnimatic(payload: {
   comic_id: string
   comic_title: string
@@ -1063,6 +1188,7 @@ export async function startComicAnimatic(payload: {
   fps: number
   transition: string
   transition_duration: number
+  workspace?: string
   panels: Array<{
     source: string
     page_number: number
@@ -1071,7 +1197,7 @@ export async function startComicAnimatic(payload: {
     motion: string
     script: string
   }>
-}): Promise<{ job_id: string }> {
+}): Promise<VideoEditorExportJob> {
   const res = await fetch(`${BASE}/api/v1/comics/animatic`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2326,6 +2452,49 @@ export async function generateComicWithMiniMax(params: {
   return res.json()
 }
 
+export interface MiniMaxImageJob {
+  jobId: string
+  workspace: string
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
+  phase: string
+  message: string
+  current: number
+  total: number
+  progress: number
+  taskId?: string | null
+  rootTaskId?: string | null
+  statusCode?: number
+  error?: string | null
+  result?: { asset: import('../features/comics/types').ComicAsset } | null
+}
+
+export async function startMiniMaxImageJob(params: {
+  prompt: string
+  aspect_ratio: string
+  subject_reference?: string
+  workspace: string
+}): Promise<MiniMaxImageJob> {
+  const res = await fetch(`${BASE}/api/v1/comics/generate/minimax/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'MiniMax generation failed' }))
+    throw new Error(`HTTP ${res.status}: ${err.detail || 'MiniMax generation failed'}`)
+  }
+  return res.json()
+}
+
+export async function fetchMiniMaxImageJob(jobId: string): Promise<MiniMaxImageJob> {
+  const res = await fetch(`${BASE}/api/v1/comics/generate/minimax/jobs/${encodeURIComponent(jobId)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'MiniMax image job not found' }))
+    throw new Error(`HTTP ${res.status}: ${err.detail || 'MiniMax image job not found'}`)
+  }
+  return res.json()
+}
+
 export async function generateStorySection(params: {
   scope: import('../features/stories/types').StoryGenerationScope
   premise: string
@@ -2658,9 +2827,15 @@ export async function resumeSeriesPlanJob(jobId: string): Promise<import('../fea
   ), 'Could not resume Series planning job')
 }
 
-export async function applySeriesPlanJob(jobId: string): Promise<import('../features/series/types').SeriesEpisode> {
+export async function applySeriesPlanJob(
+  jobId: string,
+  episodeResult?: import('../features/series/types').SeriesEpisode,
+): Promise<import('../features/series/types').SeriesEpisode> {
   return seriesResponse(fetch(
-    `${BASE}/api/v1/series/plan/jobs/${encodeURIComponent(jobId)}/apply`, { method: 'POST' },
+    `${BASE}/api/v1/series/plan/jobs/${encodeURIComponent(jobId)}/apply`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(episodeResult ? { episodeResult } : {}),
+    },
   ), 'Could not apply Series planning proposal')
 }
 
@@ -2770,6 +2945,41 @@ export async function approveSeriesAttempt(
   ), 'Could not approve Series shot attempt')
 }
 
+export async function approveSeriesAttemptsBulk(
+  workspace: string,
+  seriesId: string,
+  episodeId: string,
+  selections: Array<{ shotId: string; attemptId: string }>,
+): Promise<{ seriesId: string; episodeId: string; revision: number; episode: import('../features/series/types').SeriesEpisode }> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/attempts/approve-bulk`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, selections }),
+    },
+  ), 'Could not approve Series shot attempts')
+}
+
+export async function startSeriesEpisodeAssembly(
+  workspace: string, seriesId: string, episodeId: string,
+): Promise<import('../features/series/types').SeriesAssemblyJob> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/assembly/start`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace }),
+    },
+  ), 'Could not start Series episode assembly')
+}
+
+export async function fetchSeriesEpisodeAssembly(
+  jobId: string,
+): Promise<import('../features/series/types').SeriesAssemblyJob> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/assembly/jobs/${encodeURIComponent(jobId)}`,
+  ), 'Could not read Series episode assembly')
+}
+
 export async function rejectSeriesAttempt(
   workspace: string, seriesId: string, episodeId: string, shotId: string, attemptId: string,
 ): Promise<import('../features/series/types').SeriesShot> {
@@ -2810,6 +3020,8 @@ export async function cancelStoryGeneration(jobId: string): Promise<void> {
 
 export interface StoryGenerationStatus {
   jobId: string
+  taskId?: string | null
+  rootTaskId?: string | null
   status: string
   message: string
   stage: string
@@ -2878,6 +3090,8 @@ export async function resumeStoryGeneration(
 
 export type ComicPlanProgress = {
   jobId?: string
+  taskId?: string | null
+  rootTaskId?: string | null
   status: 'queued' | 'loading_llm' | 'planning' | 'planning_bible' | 'planning_page' | 'completed' | 'failed'
   message: string
   provider?: string
@@ -3519,7 +3733,9 @@ export async function analyzeAudio(params: {
 
 export interface AudioAnalysisJobStatus {
   job_id: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  task_id?: string
+  root_task_id?: string
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   progress: number
   step: number
   total_steps: number
@@ -3534,7 +3750,8 @@ export async function startAudioAnalysisJob(params: {
   transcribe?: boolean
   extract_vocals?: boolean
   lyrics_hint?: string
-}): Promise<{ job_id: string }> {
+  workspace?: string
+}): Promise<{ job_id: string; task_id: string; root_task_id: string }> {
   const res = await fetch(`${BASE}/api/v1/audio/analyze/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

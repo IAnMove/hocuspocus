@@ -83,9 +83,27 @@ class TestJobLifecycleWiring(unittest.TestCase):
             for node in ast.walk(cancel)
         ))
 
+    def test_generation_lifecycle_is_connected_to_canonical_task_events(self):
+        observer = _function(self.launch, "_observe_generation_job_state")
+        self.assertIn("_publish_generation_task", _called_names(observer))
+        registrations = [
+            node for node in ast.walk(self.launch)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "set_job_state_observer"
+        ]
+        self.assertEqual(len(registrations), 1)
+        self.assertIsInstance(registrations[0].args[0], ast.Name)
+        self.assertEqual(
+            registrations[0].args[0].id,
+            "_observe_generation_job_state",
+        )
+
     def test_generation_jobs_reserve_fifo_position_before_worker_start(self):
         new_job = _function(self.launch, "_new_generation_job")
         self.assertIn("register_generation_job", _called_names(new_job))
+        manual_job = _function(self.launch, "_register_manual_generation_job")
+        self.assertIn("register_generation_job", _called_names(manual_job))
         for endpoint_name in (
             "retake_video_endpoint",
             "edit_anything_endpoint",
@@ -99,7 +117,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         ):
             with self.subTest(endpoint=endpoint_name):
                 self.assertIn(
-                    "register_generation_job",
+                    "_register_manual_generation_job",
                     _called_names(_function(self.launch, endpoint_name)),
                 )
 

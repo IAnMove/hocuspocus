@@ -1,3 +1,5 @@
+import type { AspectRatio, ResolutionPreset } from '../../types'
+
 export type StoryWritingProvider =
   | 'maestro'
   | 'deepseek'
@@ -137,6 +139,9 @@ export interface StoryMusicCandidate {
   model: string
   durationSeconds: number
   createdAt: string
+  /** Canonical backend identity for audit, cancellation and exact output correlation. */
+  taskId?: string
+  rootTaskId?: string
 }
 
 export interface StoryMusicCue {
@@ -187,6 +192,13 @@ export interface StoryProviderSettings {
   imageModel: string
 }
 
+export interface StoryVideoOverride {
+  /** Empty only while a legacy project captures the old shared Director selection once. */
+  model: string
+  resolution: ResolutionPreset
+  aspectRatio: AspectRatio
+}
+
 export interface StoryProject {
   version: 1
   id: string
@@ -208,6 +220,13 @@ export interface StoryProject {
     durationSeconds: number
   }
   language: string
+  /** Exact spoken language/accent contract for generated native video audio. Empty means auto. */
+  spokenLanguage: string
+  /** Prefer distinct settings across music-video clips instead of repeating one scene. */
+  locationVariety: 'balanced' | 'single_location'
+  /** Require one approved primary protagonist image before video production. */
+  protagonistConsistency: boolean
+  protagonistCharacterId: string
   genre: string
   tone: string
   audience: string
@@ -232,6 +251,8 @@ export interface StoryProject {
   ending: string
   workflowMode: StoryWorkflowMode
   provider: StoryProviderSettings
+  /** Durable Story-only video recipe; ignored while the global profile is inherited. */
+  videoOverride: StoryVideoOverride
   world: StoryWorld
   characters: StoryCharacter[]
   relationships: StoryRelationship[]

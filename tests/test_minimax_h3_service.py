@@ -159,7 +159,8 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         self.assertEqual(workflow["10"]["class_type"], "MiniMaxH3ImageToVideo")
         final_prompt = workflow["10"]["inputs"]["prompt"]
         self.assertEqual(final_prompt.lower().count("overall_soundscape:"), 1)
-        self.assertIn("at 0.00 seconds", final_prompt)
+        self.assertNotIn("at 0.00 seconds", final_prompt)
+        self.assertNotIn("referenced picture", final_prompt)
         self.assertEqual(workflow["27"]["inputs"]["fps"], 24.0)
         self.assertEqual(workflow["27"]["inputs"]["audio"], ["26", 0])
         self.assertEqual(workflow["28"]["inputs"]["codec"], "auto")
@@ -270,6 +271,17 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         prompt = workflow["10"]["inputs"]["prompt"]
         self.assertIn("overall_soundscape:", prompt)
         self.assertIn("clear, audible stereo mix", prompt)
+
+    def test_structured_direct_prompt_reaches_h3_verbatim(self):
+        source = (
+            "integrated_multimodal_description: [Shot 1] A silent machine starts.\n\n"
+            "overall_soundscape: Low mechanical hum. No human voices.\n\n"
+            "non_diegetic_music: N/A"
+        )
+
+        workflow, _ = h3.build_workflow({**h3.DEFAULTS, "prompt": source}, "jobdirect")
+
+        self.assertEqual(workflow["10"]["inputs"]["prompt"], source)
 
     def test_authored_audio_clause_is_not_duplicated(self):
         prompt = "A quiet beach. Audio: gentle waves and gulls."

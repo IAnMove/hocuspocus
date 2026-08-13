@@ -19,6 +19,7 @@ from typing import Any
 SERIES_LIBRARY_FILENAME = ".series-library-v1.json"
 MAX_SERIES_PROJECTS = 100
 MAX_SERIES_LIBRARY_BYTES = 100 * 1024 * 1024
+MAX_BULK_ATTEMPT_APPROVALS = 500
 _WORKSPACE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _ASSET_PATH = re.compile(r"^(assets|outputs)/[A-Za-z0-9._/-]+$")
 
@@ -29,6 +30,10 @@ class SeriesConflictError(ValueError):
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _new_uid(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex}"
 
 
 def _text(value: Any, fallback: str = "") -> str:
@@ -112,13 +117,15 @@ def create_series_project(
 ) -> dict:
     workspace_id = validate_workspace_id(workspace_id)
     now = _now()
-    suffix = uuid.uuid4().hex[:10]
+    suffix = uuid.uuid4().hex
     series_id = f"series_{suffix}"
     value = {
         "version": 1, "id": series_id, "revision": 1,
         "title": title.strip() or "Untitled series", "logline": "", "premise": "",
         "format": "episodic", "defaultEpisodeDurationSeconds": 75,
-        "language": "Español", "genre": "", "tone": "Cinematic", "audience": "General",
+        "language": "Español", "spokenLanguage": "Español de España",
+        "protagonistConsistency": False, "protagonistCharacterId": "",
+        "genre": "", "tone": "Cinematic", "audience": "General",
         "visualStyle": "", "characterVisualStyle": "", "cameraLanguage": "",
         "allowClipText": False, "sourceMode": "original", "masterUniversePrompt": "",
         "rightsNote": "", "bestEffortLipSyncAcknowledged": False,
@@ -225,17 +232,73 @@ def _normalize_canon(value: Any) -> dict:
     return canon
 
 
+def _normalize_dialogue_beat(value: dict, fallback_id: str) -> dict:
+    beat = copy.deepcopy(value)
+    beat.update({
+        "id": _id(beat.get("id"), fallback_id),
+        "characterId": _id(beat.get("characterId"), "character_unknown"),
+        "text": _text(beat.get("text")),
+        "emotion": _text(beat.get("emotion"), "natural"),
+        "delivery": _text(beat.get("delivery"), "natural delivery"),
+    })
+    return beat
+
+
+def _normalize_attempt(value: dict, shot_id: str, index: int) -> dict:
+    attempt = copy.deepcopy(value)
+    seed = attempt.get("seed")
+    try:
+        seed = int(seed) if seed is not None else None
+    except (TypeError, ValueError, OverflowError):
+        seed = None
+    status = str(attempt.get("status") or "queued")
+    if status not in {"queued", "running", "cancelling", "completed", "failed", "cancelled"}:
+        status = "failed"
+    attempt.update({
+        "id": _id(attempt.get("id"), f"{shot_id}_attempt_{index + 1}"),
+        "status": status,
+        "prompt": _text(attempt.get("prompt")),
+        "negativePrompt": _text(attempt.get("negativePrompt")),
+        "model": _text(attempt.get("model"), "minimax_h3"),
+        "referenceManifest": copy.deepcopy(attempt.get("referenceManifest"))
+        if isinstance(attempt.get("referenceManifest"), dict) else {},
+        "seed": seed,
+        "settings": copy.deepcopy(attempt.get("settings"))
+        if isinstance(attempt.get("settings"), dict) else {},
+        "startTimeSeconds": _number(attempt.get("startTimeSeconds"), 0, 0),
+        "endTimeSeconds": _number(attempt.get("endTimeSeconds"), 0, 0),
+        "createdAt": _text(attempt.get("createdAt"), _now()),
+        "elapsedMs": _integer(attempt.get("elapsedMs"), 0, 0),
+        "outputAssetIds": _unique_ids(attempt.get("outputAssetIds")),
+        "retryCount": _integer(attempt.get("retryCount"), 0, 0),
+    })
+    if attempt.get("reviewDecision") not in {"approved", "rejected"}:
+        attempt.pop("reviewDecision", None)
+    return attempt
+
+
 def _normalize_shot(value: dict, index: int) -> dict:
+    from .series_render import normalize_series_shot_duration
+
     shot = copy.deepcopy(value)
+    shot_id = _id(shot.get("id"), f"shot_{index + 1}")
+    dialogue = [
+        _normalize_dialogue_beat(item, f"{shot_id}_dialogue_{dialogue_index + 1}")
+        for dialogue_index, item in enumerate(_objects(shot.get("dialogueBeats")))
+    ]
+    attempts = [
+        _normalize_attempt(item, shot_id, attempt_index)
+        for attempt_index, item in enumerate(_objects(shot.get("attempts")))
+    ]
     shot.update({
-        "id": _id(shot.get("id"), f"shot_{index + 1}"),
+        "id": shot_id,
         "sceneId": _id(shot.get("sceneId"), "scene_1"),
         "order": _integer(shot.get("order"), index + 1, 1),
-        "durationSeconds": max(1.0, min(30.0, _number(shot.get("durationSeconds"), 8, 1))),
+        "durationSeconds": float(normalize_series_shot_duration(shot.get("durationSeconds"))),
         "framing": _text(shot.get("framing")),
         "camera": _text(shot.get("camera")),
         "action": _text(shot.get("action")),
-        "dialogueBeats": _objects(shot.get("dialogueBeats")),
+        "dialogueBeats": dialogue,
         "visibleCharacterIds": _unique_ids(shot.get("visibleCharacterIds")),
         "speakingCharacterIds": _unique_ids(shot.get("speakingCharacterIds")),
         "wardrobeByCharacterId": copy.deepcopy(shot.get("wardrobeByCharacterId"))
@@ -252,13 +315,53 @@ def _normalize_shot(value: dict, index: int) -> dict:
         },
         "prompt": _text(shot.get("prompt")),
         "negativePrompt": _text(shot.get("negativePrompt")),
-        "attempts": _objects(shot.get("attempts")),
+        "attempts": attempts,
     })
     policy = shot["referencePolicy"]
     policy["mode"] = "manual" if policy.get("mode") == "manual" else "automatic"
     policy["manualIncludeAssetIds"] = _unique_ids(policy.get("manualIncludeAssetIds"))
     policy["manualExcludeAssetIds"] = _unique_ids(policy.get("manualExcludeAssetIds"))
     return shot
+
+
+def _normalize_scene(value: dict, episode_id: str, index: int) -> dict:
+    scene = copy.deepcopy(value)
+    scene_id = _id(scene.get("id"), f"{episode_id}_scene_{index + 1}")
+    scene.update({
+        "id": scene_id,
+        "order": _integer(scene.get("order"), index + 1, 1),
+        "locationId": _text(scene.get("locationId")),
+        "time": _text(scene.get("time")),
+        "participatingCharacterIds": _unique_ids(scene.get("participatingCharacterIds")),
+        "purpose": _text(scene.get("purpose")),
+        "entryState": _text(scene.get("entryState")),
+        "exitState": _text(scene.get("exitState")),
+        "beats": _objects(scene.get("beats")),
+        "dialogue": [
+            _normalize_dialogue_beat(item, f"{scene_id}_dialogue_{dialogue_index + 1}")
+            for dialogue_index, item in enumerate(_objects(scene.get("dialogue")))
+        ],
+    })
+    for beat_index, beat in enumerate(scene["beats"]):
+        beat["id"] = _id(beat.get("id"), f"{scene_id}_beat_{beat_index + 1}")
+        beat["kind"] = "dialogue" if beat.get("kind") == "dialogue" else "action"
+        beat["summary"] = _text(beat.get("summary"))
+    return scene
+
+
+def _unique_runtime_id(candidate: str, used: set[str], fallback: str) -> str:
+    """Repair legacy copied dialogue IDs without creating unstable random IDs."""
+    value = candidate.strip() if isinstance(candidate, str) else ""
+    if value and value not in used:
+        used.add(value)
+        return value
+    value = fallback
+    suffix = 2
+    while value in used:
+        value = f"{fallback}_{suffix}"
+        suffix += 1
+    used.add(value)
+    return value
 
 
 def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon: dict) -> dict:
@@ -273,6 +376,70 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
     snapshot.setdefault("currentFacts", copy.deepcopy(canon["currentFacts"]))
     for state_key in ("characterStates", "relationshipStates", "locationStates", "propStates"):
         snapshot.setdefault(state_key, {})
+    script = [
+        _normalize_scene(item, episode_id, scene_index)
+        for scene_index, item in enumerate(_objects(episode.get("script")))
+    ]
+    shots = [
+        _normalize_shot(item, shot_index)
+        for shot_index, item in enumerate(_objects(episode.get("shots")))
+    ]
+    # Older planner responses sometimes copied IDs when a scene was expanded or
+    # repeated. Repair those IDs in document order so the first occurrence keeps
+    # its stable identifier and every later occurrence gets an episode-scoped ID.
+    # This makes loading old libraries safe while the graph validator below still
+    # rejects ambiguous IDs in every other live collection.
+    used_runtime_ids: set[str] = set()
+    scene_id_remap: dict[str, str] = {}
+    for scene_index, scene in enumerate(script):
+        original_scene_id = str(scene.get("id") or "")
+        scene["id"] = _unique_runtime_id(
+            original_scene_id, used_runtime_ids,
+            f"{episode_id}_scene_{scene_index + 1}",
+        )
+        scene_id_remap.setdefault(original_scene_id, scene["id"])
+        for beat_index, beat in enumerate(scene.get("beats", [])):
+            beat["id"] = _unique_runtime_id(
+                str(beat.get("id") or ""), used_runtime_ids,
+                f"{scene['id']}_beat_{beat_index + 1}",
+            )
+        for dialogue_index, beat in enumerate(scene.get("dialogue", [])):
+            beat["id"] = _unique_runtime_id(
+                str(beat.get("id") or ""), used_runtime_ids,
+                f"{scene['id']}_dialogue_{dialogue_index + 1}",
+            )
+
+    shot_id_remap: dict[str, str] = {}
+    for shot_index, shot in enumerate(shots):
+        original_shot_id = str(shot.get("id") or "")
+        shot["id"] = _unique_runtime_id(
+            original_shot_id, used_runtime_ids,
+            f"{episode_id}_shot_{shot_index + 1}",
+        )
+        shot_id_remap.setdefault(original_shot_id, shot["id"])
+        original_scene_id = str(shot.get("sceneId") or "")
+        shot["sceneId"] = scene_id_remap.get(original_scene_id, original_scene_id)
+        for dialogue_index, beat in enumerate(shot.get("dialogueBeats", [])):
+            beat["id"] = _unique_runtime_id(
+                str(beat.get("id") or ""), used_runtime_ids,
+                f"{shot['id']}_dialogue_{dialogue_index + 1}",
+            )
+        approved_attempt_id = str(shot.get("approvedAttemptId") or "")
+        approved_replacement = ""
+        for attempt_index, attempt in enumerate(shot.get("attempts", [])):
+            original_attempt_id = str(attempt.get("id") or "")
+            attempt["id"] = _unique_runtime_id(
+                original_attempt_id, used_runtime_ids,
+                f"{shot['id']}_attempt_{attempt_index + 1}",
+            )
+            if original_attempt_id == approved_attempt_id and not approved_replacement:
+                approved_replacement = attempt["id"]
+        if approved_attempt_id:
+            shot["approvedAttemptId"] = approved_replacement or approved_attempt_id
+    for shot in shots:
+        continuity_id = str(shot.get("continuityFromShotId") or "")
+        if continuity_id:
+            shot["continuityFromShotId"] = shot_id_remap.get(continuity_id, continuity_id)
     episode.update({
         "id": episode_id,
         "seasonId": _id(episode.get("seasonId"), season_id),
@@ -290,10 +457,8 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
         "canonSnapshot": snapshot,
         "outline": copy.deepcopy(episode.get("outline"))
         if isinstance(episode.get("outline"), dict) else {"beats": []},
-        "script": _objects(episode.get("script")),
-        "shots": [_normalize_shot(item, shot_index) for shot_index, item in enumerate(
-            _objects(episode.get("shots"))
-        )],
+        "script": script,
+        "shots": shots,
         "proposedCanonDelta": copy.deepcopy(episode.get("proposedCanonDelta"))
         if isinstance(episode.get("proposedCanonDelta"), dict) else {
             "baseRevision": snapshot["revision"], "sourceEpisodeId": episode_id,
@@ -304,6 +469,216 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
         "updatedAt": _text(episode.get("updatedAt"), now),
     })
     return episode
+
+
+def _validate_project_graph_ids(project: dict) -> None:
+    """Reject ambiguous IDs and references that would corrupt the live graph."""
+    seen: dict[str, str] = {}
+
+    def register(item: dict, path: str) -> None:
+        item_id = _id(item.get("id"))
+        previous = seen.get(item_id)
+        if previous is not None:
+            raise ValueError(
+                f"Series Lab contains duplicate id {item_id} at {previous} and {path}"
+            )
+        seen[item_id] = path
+
+    def require_known(value: Any, known: set[str], path: str, kind: str, *, optional: bool = False) -> None:
+        item_id = str(value or "").strip()
+        if optional and not item_id:
+            return
+        if item_id not in known:
+            raise ValueError(f"{path} references unknown {kind} {item_id or '<empty>'}")
+
+    register(project, "series")
+    for collection in ("characters", "relationships", "locations", "props", "seasons"):
+        for index, item in enumerate(_objects(project.get(collection))):
+            register(item, f"{collection}[{index}]")
+            for variants_key in ("wardrobeVariants", "variants"):
+                for variant_index, variant in enumerate(_objects(item.get(variants_key))):
+                    register(variant, f"{collection}[{index}].{variants_key}[{variant_index}]")
+    character_ids = {str(item["id"]) for item in _objects(project.get("characters"))}
+    location_ids = {str(item["id"]) for item in _objects(project.get("locations"))}
+    prop_ids = {str(item["id"]) for item in _objects(project.get("props"))}
+    season_ids = {str(item["id"]) for item in _objects(project.get("seasons"))}
+    for index, relationship in enumerate(_objects(project.get("relationships"))):
+        require_known(
+            relationship.get("fromCharacterId"), character_ids,
+            f"relationships[{index}].fromCharacterId", "character",
+        )
+        require_known(
+            relationship.get("toCharacterId"), character_ids,
+            f"relationships[{index}].toCharacterId", "character",
+        )
+    for index, prop in enumerate(_objects(project.get("props"))):
+        require_known(
+            prop.get("ownerCharacterId"), character_ids,
+            f"props[{index}].ownerCharacterId", "character", optional=True,
+        )
+    canon = project.get("canon") if isinstance(project.get("canon"), dict) else {}
+    for collection in ("immutableRules", "currentFacts", "longArcs", "timeline"):
+        for index, item in enumerate(_objects(canon.get(collection))):
+            register(item, f"canon.{collection}[{index}]")
+    for episode_index, episode in enumerate(
+        item for item in project.get("episodesById", {}).values() if isinstance(item, dict)
+    ):
+        register(episode, f"episodes[{episode_index}]")
+        require_known(
+            episode.get("seasonId"), season_ids,
+            f"episodes[{episode_index}].seasonId", "season",
+        )
+        scene_ids: set[str] = set()
+        for scene_index, scene in enumerate(_objects(episode.get("script"))):
+            register(scene, f"episodes[{episode_index}].script[{scene_index}]")
+            scene_ids.add(str(scene["id"]))
+            require_known(
+                scene.get("locationId"), location_ids,
+                f"episodes[{episode_index}].script[{scene_index}].locationId",
+                "location", optional=True,
+            )
+            for participant_index, character_id in enumerate(scene.get("participatingCharacterIds", [])):
+                require_known(
+                    character_id, character_ids,
+                    f"episodes[{episode_index}].script[{scene_index}].participatingCharacterIds[{participant_index}]",
+                    "character",
+                )
+            for beat_index, beat in enumerate(_objects(scene.get("beats"))):
+                register(beat, f"episodes[{episode_index}].script[{scene_index}].beats[{beat_index}]")
+            for line_index, line in enumerate(_objects(scene.get("dialogue"))):
+                register(line, f"episodes[{episode_index}].script[{scene_index}].dialogue[{line_index}]")
+                require_known(
+                    line.get("characterId"), character_ids,
+                    f"episodes[{episode_index}].script[{scene_index}].dialogue[{line_index}].characterId",
+                    "character",
+                )
+        shot_ids = {
+            str(shot.get("id")) for shot in _objects(episode.get("shots"))
+            if shot.get("id")
+        }
+        for shot_index, shot in enumerate(_objects(episode.get("shots"))):
+            register(shot, f"episodes[{episode_index}].shots[{shot_index}]")
+            if shot.get("sceneId") not in scene_ids:
+                raise ValueError(
+                    f"Shot {shot.get('id')} uses unknown scene {shot.get('sceneId')}"
+                )
+            for key in ("visibleCharacterIds", "speakingCharacterIds"):
+                for character_index, character_id in enumerate(shot.get(key, [])):
+                    require_known(
+                        character_id, character_ids,
+                        f"episodes[{episode_index}].shots[{shot_index}].{key}[{character_index}]",
+                        "character",
+                    )
+            require_known(
+                shot.get("primarySpeakerId"), character_ids,
+                f"episodes[{episode_index}].shots[{shot_index}].primarySpeakerId",
+                "character", optional=True,
+            )
+            require_known(
+                shot.get("locationId"), location_ids,
+                f"episodes[{episode_index}].shots[{shot_index}].locationId",
+                "location", optional=True,
+            )
+            for prop_index, prop_id in enumerate(shot.get("propIds", [])):
+                require_known(
+                    prop_id, prop_ids,
+                    f"episodes[{episode_index}].shots[{shot_index}].propIds[{prop_index}]",
+                    "prop",
+                )
+            for key in ("wardrobeByCharacterId", "emotionalStateByCharacterId"):
+                values = shot.get(key) if isinstance(shot.get(key), dict) else {}
+                for character_id in values:
+                    require_known(
+                        character_id, character_ids,
+                        f"episodes[{episode_index}].shots[{shot_index}].{key}",
+                        "character",
+                    )
+            require_known(
+                shot.get("continuityFromShotId"), shot_ids,
+                f"episodes[{episode_index}].shots[{shot_index}].continuityFromShotId",
+                "shot", optional=True,
+            )
+            attempt_ids: set[str] = set()
+            for line_index, line in enumerate(_objects(shot.get("dialogueBeats"))):
+                register(line, f"episodes[{episode_index}].shots[{shot_index}].dialogue[{line_index}]")
+                require_known(
+                    line.get("characterId"), character_ids,
+                    f"episodes[{episode_index}].shots[{shot_index}].dialogue[{line_index}].characterId",
+                    "character",
+                )
+            for attempt_index, attempt in enumerate(_objects(shot.get("attempts"))):
+                register(attempt, f"episodes[{episode_index}].shots[{shot_index}].attempts[{attempt_index}]")
+                attempt_ids.add(str(attempt["id"]))
+            approved_attempt_id = str(shot.get("approvedAttemptId") or "")
+            if approved_attempt_id and approved_attempt_id not in attempt_ids:
+                raise ValueError(
+                    f"Shot {shot.get('id')} approves unknown attempt {approved_attempt_id}"
+                )
+    for asset_index, asset in enumerate(
+        item for item in project.get("assets", {}).values() if isinstance(item, dict)
+    ):
+        register(asset, f"assets[{asset_index}]")
+    asset_ids = {
+        str(asset["id"])
+        for asset in project.get("assets", {}).values()
+        if isinstance(asset, dict)
+    }
+    owner_ids = {
+        "series": {str(project["id"])},
+        "character": character_ids,
+        "location": location_ids,
+        "prop": prop_ids,
+        "episode": {
+            str(episode["id"]) for episode in project.get("episodesById", {}).values()
+            if isinstance(episode, dict)
+        },
+        "shot": {
+            str(shot["id"])
+            for episode in project.get("episodesById", {}).values() if isinstance(episode, dict)
+            for shot in _objects(episode.get("shots"))
+        },
+        "attempt": {
+            str(attempt["id"])
+            for episode in project.get("episodesById", {}).values() if isinstance(episode, dict)
+            for shot in _objects(episode.get("shots"))
+            for attempt in _objects(shot.get("attempts"))
+        },
+    }
+    for asset_index, asset in enumerate(
+        item for item in project.get("assets", {}).values() if isinstance(item, dict)
+    ):
+        owner_type = str(asset.get("ownerType") or "series")
+        require_known(
+            asset.get("ownerId"), owner_ids.get(owner_type, set()),
+            f"assets[{asset_index}].ownerId", owner_type,
+        )
+    for collection in ("characters", "locations", "props"):
+        for entity_index, entity in enumerate(_objects(project.get(collection))):
+            for reference_index, asset_id in enumerate(entity.get("referenceAssetIds", [])):
+                require_known(
+                    asset_id, asset_ids,
+                    f"{collection}[{entity_index}].referenceAssetIds[{reference_index}]",
+                    "asset",
+                )
+    for episode_index, episode in enumerate(
+        item for item in project.get("episodesById", {}).values() if isinstance(item, dict)
+    ):
+        for shot_index, shot in enumerate(_objects(episode.get("shots"))):
+            policy = shot.get("referencePolicy") if isinstance(shot.get("referencePolicy"), dict) else {}
+            for key in ("manualIncludeAssetIds", "manualExcludeAssetIds"):
+                for reference_index, asset_id in enumerate(policy.get(key, [])):
+                    require_known(
+                        asset_id, asset_ids,
+                        f"episodes[{episode_index}].shots[{shot_index}].referencePolicy.{key}[{reference_index}]",
+                        "asset",
+                    )
+            for attempt_index, attempt in enumerate(_objects(shot.get("attempts"))):
+                for output_index, asset_id in enumerate(attempt.get("outputAssetIds", [])):
+                    require_known(
+                        asset_id, asset_ids,
+                        f"episodes[{episode_index}].shots[{shot_index}].attempts[{attempt_index}].outputAssetIds[{output_index}]",
+                        "asset",
+                    )
 
 
 def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
@@ -437,6 +812,15 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
             project.get("defaultEpisodeDurationSeconds"), 75, 15
         ))),
         "language": _text(project.get("language"), "Español"),
+        "spokenLanguage": _text(
+            project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
+        ),
+        "protagonistConsistency": project.get("protagonistConsistency") is True,
+        "protagonistCharacterId": (
+            _text(project.get("protagonistCharacterId"))
+            if any(item.get("id") == project.get("protagonistCharacterId") for item in characters)
+            else ""
+        ),
         "genre": _text(project.get("genre")),
         "tone": _text(project.get("tone")),
         "audience": _text(project.get("audience"), "General"),
@@ -463,6 +847,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "createdAt": _text(project.get("createdAt"), now),
         "updatedAt": _text(project.get("updatedAt"), now),
     })
+    _validate_project_graph_ids(project)
     return project
 
 
@@ -482,6 +867,8 @@ def normalize_series_library(value: Any, workspace_id: str | None = None) -> dic
     projects: dict[str, dict] = {}
     for key, raw_project in raw_projects.items():
         project = normalize_series_project(raw_project, str(key), authoritative_workspace)
+        if project["id"] in projects:
+            raise ValueError(f"Series library contains duplicate project id {project['id']}")
         projects[project["id"]] = project
     order = [item for item in _unique_ids(value.get("seriesOrder")) if item in projects]
     order.extend(item for item in projects if item not in order)
@@ -598,6 +985,9 @@ def create_episode_canon_snapshot(series: dict) -> dict:
         "visualStyle": _text(series.get("visualStyle")),
         "characterVisualStyle": _text(series.get("characterVisualStyle")),
         "cameraLanguage": _text(series.get("cameraLanguage")),
+        "spokenLanguage": _text(series.get("spokenLanguage"), _text(series.get("language"))),
+        "protagonistConsistency": series.get("protagonistConsistency") is True,
+        "protagonistCharacterId": _text(series.get("protagonistCharacterId")),
         "allowClipText": series.get("allowClipText") is True,
         "provider": provider,
         "capabilitySnapshot": capability,
@@ -668,7 +1058,7 @@ def create_series_episode(series: dict, season_id: str | None = None, **override
         if isinstance(item, dict) and item.get("seasonId") == season.get("id")
     ]
     now = _now()
-    episode_id = f"episode_{uuid.uuid4().hex[:10]}"
+    episode_id = _new_uid("episode")
     snapshot = create_episode_canon_snapshot(series)
     episode = {
         "id": episode_id, "seasonId": str(season["id"]),
@@ -697,7 +1087,7 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
     if not isinstance(story, dict):
         raise ValueError("Story import requires one Story Lab project")
     now = _now()
-    suffix = uuid.uuid4().hex[:10]
+    suffix = uuid.uuid4().hex
     series_id = f"series_{suffix}"
     story_assets = story.get("assets") if isinstance(story.get("assets"), dict) else {}
     assets: dict[str, dict] = {}
@@ -832,7 +1222,7 @@ def duplicate_series_project(series: dict) -> dict:
     duplicate = copy.deepcopy(series)
     now = _now()
     old_id = _id(duplicate.get("id"))
-    new_id = f"series_{uuid.uuid4().hex[:10]}"
+    new_id = _new_uid("series")
     duplicate.update({
         "id": new_id, "title": f"{_text(duplicate.get('title'), 'Untitled series')} (copy)",
         "revision": 1, "createdAt": now, "updatedAt": now,
@@ -938,7 +1328,7 @@ def append_shot_render_attempt(
     updated = copy.deepcopy(shot)
     now = _now()
     attempt = {
-        "id": f"attempt_{uuid.uuid4().hex[:12]}", "status": "queued",
+        "id": _new_uid("attempt"), "status": "queued",
         "prompt": prompt if isinstance(prompt, str) else _text(updated.get("prompt")),
         "negativePrompt": _text(updated.get("negativePrompt")), "model": str(model),
         "referenceManifest": copy.deepcopy(manifest), "seed": seed,
@@ -981,6 +1371,34 @@ def approve_shot_render_attempt(shot: dict, attempt_id: str) -> dict:
     updated = update_shot_render_attempt(
         updated, attempt_id, reviewDecision="approved", reviewedAt=_now(),
     )
+    return updated
+
+
+def approve_episode_render_attempts(episode: dict, selections: Any) -> dict:
+    """Approve a reviewed episode selection atomically on a detached copy."""
+    if not isinstance(selections, list) or not selections:
+        raise ValueError("Select at least one completed Series shot attempt")
+    if len(selections) > MAX_BULK_ATTEMPT_APPROVALS:
+        raise ValueError(f"Bulk approval is limited to {MAX_BULK_ATTEMPT_APPROVALS} shots")
+    updated = copy.deepcopy(episode)
+    shots = _objects(updated.get("shots"))
+    shot_indexes = {
+        str(shot.get("id")): index for index, shot in enumerate(shots) if shot.get("id")
+    }
+    selected_shots: set[str] = set()
+    for selection in selections:
+        if not isinstance(selection, dict):
+            raise ValueError("Every bulk approval selection must identify a shot and attempt")
+        shot_id = _id(selection.get("shotId"))
+        attempt_id = _id(selection.get("attemptId"))
+        if shot_id in selected_shots:
+            raise ValueError(f"Shot {shot_id} appears more than once in bulk approval")
+        selected_shots.add(shot_id)
+        shot_index = shot_indexes.get(shot_id)
+        if shot_index is None:
+            raise ValueError(f"Series shot {shot_id} not found")
+        shots[shot_index] = approve_shot_render_attempt(shots[shot_index], attempt_id)
+    updated["shots"] = shots
     return updated
 
 

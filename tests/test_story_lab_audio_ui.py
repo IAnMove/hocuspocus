@@ -9,7 +9,9 @@ ACTIVITY = ROOT / "ui" / "src" / "components" / "ActivityFooter.tsx"
 STORY_TYPES = ROOT / "ui" / "src" / "features" / "stories" / "types.ts"
 STORY_MODEL = ROOT / "ui" / "src" / "features" / "stories" / "model.ts"
 STORY_ADAPTATIONS = ROOT / "ui" / "src" / "features" / "stories" / "adaptations.ts"
+STORY_ACTIVITY = ROOT / "ui" / "src" / "features" / "stories" / "activityLifecycle.ts"
 IMAGE_GENERATION = ROOT / "ui" / "src" / "lib" / "imageGeneration.ts"
+STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 
 
 def test_lyria_prompt_does_not_require_an_optional_reference_song():
@@ -41,10 +43,54 @@ def test_chained_music_and_director_workflows_expose_cancel_controls():
     activity = ACTIVITY.read_text(encoding="utf-8")
 
     assert "cancelMusicQueue" in story
-    assert "Cancelling after current track" in story
-    assert "row.id.startsWith('pipeline:')" in activity
-    assert "stopPipeline(row.id.slice('pipeline:'.length))" in activity
-    assert "Cancel this complete generation workflow" in activity
+    assert "Cancelling active request" in story
+    assert "cancelStoryMusicCandidatesJob(jobId)" in story
+    assert "api.cancelCanonicalTask(task.id, activeWorkspace)" in activity
+    assert "active && task.cancelable" in activity
+    assert "Cancelling…" in activity
+
+
+def test_story_lab_frontend_wrappers_reach_terminal_state_before_dismissal():
+    source = STORY_ACTIVITY.read_text(encoding="utf-8")
+
+    assert "let terminal = false" in source
+    assert "publishDismissibleTerminal('completed', phase, message)" in source
+    assert "publishDismissibleTerminal('cancelled', 'cancelled', message)" in source
+    assert "publishDismissibleTerminal('completed', 'handed_off', message)" in source
+    assert "options.scheduleDismiss(options.id)" in source
+    assert "if (terminal) return" in source
+
+
+def test_story_lab_client_task_writes_are_serial_and_delete_only_terminal_roots():
+    source = STORE.read_text(encoding="utf-8")
+
+    assert "createKeyedWriteSequencer" in source
+    assert "_canonicalClientTaskWrites.enqueue(activity.id" in source
+    assert "_canonicalClientTaskWrites.enqueue(activityId" in source
+    assert "!CLIENT_ACTIVITY_TERMINAL_STATUSES.has(activity.status)" in source
+    assert "await api.dismissCanonicalTask" in source
+
+
+def test_story_lab_hands_backend_jobs_to_the_durable_registry():
+    source = STORY.read_text(encoding="utf-8")
+
+    assert "activity.handoff(`Continuing as recoverable job ${progress.jobId}`)" in source
+    assert "activity.handoff(\n            `Continuing as recoverable image job ${jobId}`" in source
+    assert "activity.handoff(`Continuing as recoverable MiniMax Music job ${job.jobId}`)" in source
+    assert "activity?.handoff(`Continuing as recoverable MiniMax Music job ${job.jobId}`)" in source
+    assert "activity.handoff(`Continuing as recoverable job ${recoveryJobId.trim()}`)" in source
+    assert "activity.handoff('Continuing in Director as a recoverable music-video workflow')" in source
+
+
+def test_story_lab_refresh_recovers_the_backend_job_without_opening_a_client_root():
+    source = STORY.read_text(encoding="utf-8")
+    refresh = source.split("const savedJobId = window.localStorage.getItem", 1)[1].split(
+        "useEffect(() => {\n    if (project.projectType === 'quick_video')", 1,
+    )[0]
+
+    assert "api.getStoryGenerationStatus(savedJobId)" in refresh
+    assert "setPendingDraft" in refresh
+    assert "beginStoryActivity" not in refresh
 
 
 def test_music_video_confirmation_names_the_frozen_video_model():

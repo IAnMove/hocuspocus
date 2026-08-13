@@ -17,6 +17,7 @@ if _APP_DIR not in sys.path:
 
 from services.job_lifecycle import (  # noqa: E402
     GENERATED_MEDIA_EXTENSIONS,
+    acknowledge_cancel,
     acquire_generation_slot,
     call_with_sticky_interrupt,
     collect_job_outputs,
@@ -26,6 +27,7 @@ from services.job_lifecycle import (  # noqa: E402
     register_abort_state,
     register_generation_job,
     request_cancel,
+    set_job_state_observer,
     snapshot_job,
     try_requeue,
     try_start,
@@ -39,6 +41,9 @@ def _job() -> dict:
 
 
 class TestJobLifecycle(unittest.TestCase):
+    def tearDown(self):
+        set_job_state_observer(None)
+
     def test_generated_media_extension_contract_is_complete(self):
         self.assertEqual(GENERATED_MEDIA_EXTENSIONS, frozenset({
             ".aac", ".flac", ".gif", ".jpeg", ".jpg", ".m4a", ".mkv",
@@ -168,6 +173,39 @@ class TestJobLifecycle(unittest.TestCase):
         self.assertFalse(result.was_running)
         self.assertFalse(try_start(job))
         self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(job["phase"], "cancelled")
+        self.assertIsNotNone(job["finished_at"])
+
+    def test_cancel_waiting_job_is_terminal_immediately(self):
+        job = {**_job(), "status": "waiting_resource"}
+
+        result = request_cancel(job)
+
+        self.assertTrue(result.changed)
+        self.assertFalse(result.was_running)
+        self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(job["message"], "Cancelled")
+        self.assertIsNotNone(job["finished_at"])
+
+    def test_state_observer_receives_atomic_transition_snapshots(self):
+        observed = []
+        set_job_state_observer(lambda snapshot: observed.append(dict(snapshot)))
+        job = {**_job(), "output_files": []}
+
+        self.assertTrue(try_start(job, phase="loading"))
+        self.assertTrue(update_job(job, phase="sampling", step=1))
+        record_job_outputs(job, ["clip.mp4"])
+        self.assertTrue(finish_job(job, "completed", message="Done"))
+
+        self.assertEqual(
+            [snapshot["status"] for snapshot in observed],
+            ["running", "running", "running", "completed"],
+        )
+        self.assertEqual(observed[1]["phase"], "sampling")
+        self.assertEqual(observed[2]["output_files"], ["clip.mp4"])
+        self.assertEqual(observed[-1]["message"], "Done")
+        observed[2]["output_files"].append("observer-only.mp4")
+        self.assertEqual(job["output_files"], ["clip.mp4"])
 
     def test_active_timestamps_exclude_time_spent_queued(self):
         job = {**_job(), "created_at": 10.0, "started_at": None, "finished_at": None}
@@ -197,6 +235,10 @@ class TestJobLifecycle(unittest.TestCase):
         self.assertTrue(result.was_running)
         self.assertTrue(result.abort_signalled)
         self.assertTrue(state["abort"])
+        self.assertEqual(job["status"], "cancelling")
+        self.assertEqual(job["phase"], "cancelling")
+        self.assertEqual(job["message"], "Cancelling…")
+        self.assertIsNone(job["finished_at"])
         interrupt.assert_called_once_with()
 
         # Cancellation is idempotent and cannot signal the model again.
@@ -205,6 +247,9 @@ class TestJobLifecycle(unittest.TestCase):
         ).changed)
         interrupt.assert_called_once_with()
         unregister_abort_state(job["id"], states, state)
+        self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(job["message"], "Cancelled")
+        self.assertIsNotNone(job["finished_at"])
 
     def test_finish_and_failure_cannot_overwrite_cancellation(self):
         for terminal in ("completed", "failed"):
@@ -212,9 +257,27 @@ class TestJobLifecycle(unittest.TestCase):
                 job = _job()
                 self.assertTrue(try_start(job))
                 request_cancel(job)
+                self.assertEqual(job["status"], "cancelling")
                 self.assertFalse(finish_job(job, terminal, message=terminal))
                 self.assertEqual(job["status"], "cancelled")
                 self.assertEqual(job["message"], "Cancelled")
+
+    def test_cancel_stays_pending_until_registered_worker_releases(self):
+        job = _job()
+        states = {}
+        state = {"abort": False}
+        self.assertTrue(try_start(job))
+        self.assertTrue(register_abort_state(job, job["id"], states, state))
+        request_cancel(job, job_id=job["id"], active_states=states)
+
+        self.assertFalse(finish_job(job, "failed", error="late"))
+        self.assertEqual(job["status"], "cancelling")
+        self.assertIsNone(job["finished_at"])
+
+        unregister_abort_state(job["id"], states, state)
+        self.assertEqual(job["status"], "cancelled")
+        self.assertIsNotNone(job["finished_at"])
+        self.assertNotIn("error", job)
 
     def test_outputs_can_settle_after_cancel_without_changing_terminal_state(self):
         job = _job()
@@ -228,8 +291,8 @@ class TestJobLifecycle(unittest.TestCase):
             clip_output_files={0: "clip-2.mp4"},
         )
         self.assertEqual(merged, ["clip-1.mp4", "clip-2.mp4"])
-        self.assertEqual(job["status"], "cancelled")
-        self.assertEqual(job["message"], "Cancelled")
+        self.assertEqual(job["status"], "cancelling")
+        self.assertEqual(job["message"], "Cancelling…")
 
         snapshot = snapshot_job(job)
         snapshot["output_files"].append("snapshot-only.mp4")
@@ -238,6 +301,58 @@ class TestJobLifecycle(unittest.TestCase):
             job["output_files"], ["clip-1.mp4", "clip-2.mp4"],
         )
         self.assertEqual(job["clip_output_files"], {"0": "clip-2.mp4"})
+
+        self.assertTrue(acknowledge_cancel(job))
+        self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(job["message"], "Cancelled")
+
+    def test_explicit_cancel_acknowledgement_is_guarded_and_idempotent(self):
+        untouched = _job()
+        self.assertFalse(acknowledge_cancel(untouched))
+        self.assertEqual(untouched["status"], "queued")
+        completed = {
+            **_job(), "status": "completed", "cancel_requested": True,
+        }
+        self.assertFalse(acknowledge_cancel(completed))
+        self.assertEqual(completed["status"], "completed")
+
+        job = _job()
+        self.assertTrue(try_start(job))
+        request_cancel(job)
+
+        self.assertTrue(acknowledge_cancel(job, detail="Worker released"))
+        self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(job["phase"], "cancelled")
+        self.assertEqual(job["message"], "Cancelled")
+        self.assertEqual(job["detail"], "Worker released")
+        self.assertIsNotNone(job["finished_at"])
+        self.assertFalse(acknowledge_cancel(job))
+
+    def test_cancel_observer_sees_deferred_then_terminal_snapshots(self):
+        observed = []
+        set_job_state_observer(lambda snapshot: observed.append(dict(snapshot)))
+        job = {**_job(), "finished_at": None}
+
+        self.assertTrue(try_start(job))
+        request_cancel(job)
+        pending = snapshot_job(job)
+        self.assertEqual(pending["status"], "cancelling")
+        self.assertIsNone(pending["finished_at"])
+        self.assertFalse(finish_job(
+            job,
+            "failed",
+            message="Late failure",
+            error="must not leak into cancellation",
+        ))
+
+        self.assertEqual(
+            [snapshot["status"] for snapshot in observed],
+            ["running", "cancelling", "cancelled"],
+        )
+        self.assertIsNone(observed[1]["finished_at"])
+        self.assertIsNotNone(observed[2]["finished_at"])
+        self.assertEqual(observed[2]["message"], "Cancelled")
+        self.assertNotIn("error", observed[2])
 
     def test_outputs_normalize_live_positional_multiclip_progress(self):
         job = _job()
@@ -453,11 +568,13 @@ class TestJobLifecycle(unittest.TestCase):
             if job["status"] == "completed":
                 self.assertFalse(state["abort"])
                 interrupt.assert_not_called()
+                unregister_abort_state(job["id"], states, state)
             else:
-                self.assertEqual(job["status"], "cancelled")
+                self.assertEqual(job["status"], "cancelling")
                 self.assertTrue(state["abort"])
                 interrupt.assert_called_once_with()
-            unregister_abort_state(job["id"], states, state)
+                unregister_abort_state(job["id"], states, state)
+                self.assertEqual(job["status"], "cancelled")
 
 
 if __name__ == "__main__":

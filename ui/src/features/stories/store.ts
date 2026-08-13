@@ -215,11 +215,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   }),
   newProject: projectType => set(state => {
     const fresh = createStoryProject(projectType)
-    // Provider choices are user preferences in practice. Keep them when a
-    // new Story is created instead of silently returning to Maestro internal.
+    // New projects inherit the production profile. Keep the dormant explicit
+    // provider values for a later opt-out, but never copy the previous Story's
+    // inheritance mode or video override into a brand-new project.
     const project = {
       ...fresh,
-      provider: { ...fresh.provider, ...state.project.provider },
+      provider: { ...fresh.provider, ...state.project.provider, useGlobalProfile: true },
     }
     return {
       project,

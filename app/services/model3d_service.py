@@ -22,6 +22,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from . import resource_scheduler
+
 
 SERVICE_DIR = Path(__file__).resolve().parent / "hunyuan3d"
 ENV_DIR = SERVICE_DIR / "env"
@@ -223,13 +225,21 @@ PRESETS: dict[str, dict[str, Any]] = {
 _jobs: dict[str, dict[str, Any]] = {}
 _processes: dict[str, subprocess.Popen] = {}
 _lock = threading.RLock()
-_generation_slot = threading.Semaphore(1)
-# Public alias: any Maestro service that runs its own GPU-heavy worker
-# (e.g. rig_service's UniRig jobs) must hold this slot too, so 3D
-# generation and AI rigging never compete for the same VRAM.
-GPU_SLOT = _generation_slot
+# Backward-compatible alias for callers that still need the physical
+# primitive. New work must use ResourceCoordinator.acquire so waiting and
+# cancellation are observable.
+GPU_SLOT = resource_scheduler.coordinator.shared_lock(
+    resource_scheduler.local_gpu_lane(0)
+)
 
 _TERMINAL_STATES = {"completed", "failed", "cancelled"}
+_ACTIVE_JOB_STATES = frozenset({
+    "queued",
+    "waiting",
+    "waiting_resource",
+    "running",
+    "cancelling",
+})
 # Job-registry hygiene: keep a short history of finished jobs for status
 # polling, but never let the in-memory dict grow with server uptime.
 _MAX_FINISHED_JOBS = 20
@@ -294,6 +304,46 @@ def models_sharing_repo(model_id: str) -> list[dict[str, Any]]:
     return [item for item in MODELS if item["repo"] == model["repo"] and item["id"] != model_id]
 
 
+def has_active_jobs(model_id: str | None = None) -> bool:
+    """Return whether a job can still be using the selected model cache.
+
+    Hunyuan3D variants in the same Hugging Face repository share one cache,
+    so filtering by ``model_id`` intentionally includes active sibling
+    variants from that repository.  A registered worker process also counts
+    as active even if cancellation has already changed the public job status;
+    this closes the short race while that process is still shutting down.
+    Passing no model returns whether any Hunyuan3D job is active.
+    """
+    cache_model_ids: set[str] | None = None
+    if model_id is not None:
+        requested_id = str(model_id)
+        model = MODEL_BY_ID.get(requested_id)
+        if model is None:
+            cache_model_ids = {requested_id}
+        else:
+            cache_model_ids = {
+                item["id"] for item in MODELS if item["repo"] == model["repo"]
+            }
+
+    with _lock:
+        for job_id, job in _jobs.items():
+            job_model_id = str(job.get("model_id") or "")
+            if not job_model_id:
+                request_model = (job.get("request") or {}).get("model") or {}
+                if isinstance(request_model, dict):
+                    job_model_id = str(request_model.get("id") or "")
+            if cache_model_ids is not None and job_model_id not in cache_model_ids:
+                continue
+            if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES:
+                return True
+            # A registered process remains authoritative while cancellation
+            # unwinds. The cache must stay untouched until the worker removes
+            # this handle in _run_job_serialized's finally block.
+            if job_id in _processes:
+                return True
+    return False
+
+
 def delete_model_cache(model_id: str) -> list[str]:
     """Remove the upstream repository cache used by a Hunyuan3D variant.
 
@@ -312,7 +362,7 @@ def delete_model_cache(model_id: str) -> list[str]:
 
 def capabilities() -> dict[str, Any]:
     with _lock:
-        active = sum(1 for job in _jobs.values() if job["status"] in {"queued", "running"})
+        active = sum(1 for job in _jobs.values() if job["status"] in _ACTIVE_JOB_STATES)
     return {
         "runtime": installation_status(),
         "models": MODELS,
@@ -421,7 +471,16 @@ def _prepare_request(
 
 
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in job.items() if key not in {"request", "process"}}
+    return {
+        key: value
+        for key, value in job.items()
+        if key not in {"request", "process", "cancel_requested"}
+    }
+
+
+def _canonical_task_id(job_id: str) -> str:
+    """Return the durable task identity used by the canonical task adapter."""
+    return f"task-model3d-{job_id}"
 
 
 def _prune_finished_jobs_locked() -> None:
@@ -443,6 +502,7 @@ def start_job(
     image_paths: dict[str, str],
     output_dir: str,
     source_mesh_path: str | None = None,
+    workspace: str = "default",
 ) -> dict[str, Any]:
     runtime = installation_status()
     if not runtime["installed"]:
@@ -450,14 +510,17 @@ def start_job(
 
     with _lock:
         _prune_finished_jobs_locked()
-        active = sum(1 for job in _jobs.values() if job["status"] in {"queued", "running"})
+        active = sum(1 for job in _jobs.values() if job["status"] in _ACTIVE_JOB_STATES)
     if active >= _MAX_ACTIVE_JOBS:
         raise ValueError("Too many queued 3D jobs; wait for the current ones to finish or cancel them")
 
     request_data = _prepare_request(body, image_paths, source_mesh_path)
     job_id = uuid.uuid4().hex
+    task_id = _canonical_task_id(job_id)
     job = {
         "job_id": job_id,
+        "task_id": task_id,
+        "root_task_id": task_id,
         "status": "queued",
         "progress": 0.0,
         "phase": "queued",
@@ -467,6 +530,7 @@ def start_job(
         "url": None,
         "operation": request_data["operation"],
         "model_id": request_data["model"]["id"],
+        "workspace": str(workspace or "default"),
         "created_at": time.time(),
         "updated_at": time.time(),
         "request": request_data,
@@ -479,37 +543,143 @@ def start_job(
     return initial_response
 
 
-def _update_job(job_id: str, **updates: Any) -> None:
+def _update_job(job_id: str, **updates: Any) -> bool:
     with _lock:
         job = _jobs.get(job_id)
         if not job:
-            return
+            return False
+        # Terminal cancellation is absorbing, and a running worker that is
+        # already unwinding must not be resurrected by a late progress or
+        # completion update.
+        if (
+            job.get("status") in _TERMINAL_STATES
+            or job.get("status") == "cancelling"
+            or job.get("cancel_requested")
+        ):
+            return False
         job.update(updates)
         job["updated_at"] = time.time()
         # The request payload (settings + image paths) is only needed while
         # the job runs; keeping it on finished jobs just bloats the registry.
         if job["status"] in _TERMINAL_STATES:
             job.pop("request", None)
+        return True
+
+
+def _settle_cancelled_job(job_id: str) -> bool:
+    """Publish terminal cancellation after the worker has released its lane."""
+    with _lock:
+        job = _jobs.get(job_id)
+        if (
+            not job
+            or job.get("status") in _TERMINAL_STATES
+            or not (
+                job.get("cancel_requested")
+                or job.get("status") == "cancelling"
+            )
+        ):
+            return False
+        job.update({
+            "status": "cancelled",
+            "phase": "cancelled",
+            "message": (
+                "3D retexture cancelled"
+                if job.get("operation") == "retexture"
+                else "3D generation cancelled"
+            ),
+            "updated_at": time.time(),
+        })
+        job.pop("request", None)
+        return True
 
 
 def _run_job(job_id: str, output_dir: str) -> None:
-    _generation_slot.acquire()
-    try:
+    def cancelled() -> bool:
         with _lock:
-            if _jobs.get(job_id, {}).get("status") == "cancelled":
+            job = _jobs.get(job_id, {})
+            return bool(job.get("cancel_requested")) or job.get("status") in {
+                "cancelling",
+                "cancelled",
+            }
+
+    _update_job(
+        job_id,
+        phase="waiting_resource",
+        message="Waiting for local GPU 0",
+    )
+    try:
+        with resource_scheduler.coordinator.acquire(
+            resource_scheduler.local_gpu_lane(0),
+            task_id=_canonical_task_id(job_id),
+            description="Hunyuan3D generation",
+            cancelled=cancelled,
+        ):
+            if cancelled():
                 return
-        _run_job_serialized(job_id, output_dir)
+            _run_job_serialized(job_id, output_dir)
+    except resource_scheduler.ResourceAcquireCancelled:
+        return
     finally:
-        _generation_slot.release()
+        # The coordinator context has exited here, so a running cancellation
+        # becomes terminal only after the GPU lane is actually available.
+        _settle_cancelled_job(job_id)
 
 
 def _cleanup_partial_output(output_path: Path) -> None:
     """Remove a failed/cancelled job's half-written export and its preview."""
-    for stale in (output_path, output_path.with_suffix(".preview.png")):
+    for stale in (
+        output_path,
+        output_path.with_suffix(".preview.png"),
+        output_path.with_suffix(".meta.json"),
+    ):
         try:
             stale.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def _spawn_worker_if_active(
+    job_id: str,
+    command: list[str],
+    *,
+    cwd: str,
+    env: dict[str, str],
+    message: str,
+) -> subprocess.Popen | None:
+    """Atomically transition an active job and register its subprocess.
+
+    Holding ``_lock`` across the short ``Popen`` call gives cancellation one
+    linearization point: it either wins before this block (no process starts),
+    or it runs afterward with a registered, terminable process handle.
+    """
+    with _lock:
+        job = _jobs.get(job_id)
+        if (
+            not job
+            or job.get("status") not in {"queued", "waiting", "waiting_resource"}
+            or job.get("cancel_requested")
+            or not job.get("request")
+            or job_id in _processes
+        ):
+            return None
+        job.update({
+            "status": "running",
+            "phase": "starting",
+            "message": message,
+            "progress": 0.02,
+            "updated_at": time.time(),
+        })
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        _processes[job_id] = process
+        return process
 
 
 def _run_job_serialized(job_id: str, output_dir: str) -> None:
@@ -569,24 +739,20 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     })
     lines: list[str] = []
     try:
-        _update_job(
+        process = _spawn_worker_if_active(
             job_id,
-            status="running",
-            phase="starting",
-            message=("Starting isolated Hunyuan3D retexture worker" if operation == "retexture" else "Starting isolated Hunyuan3D worker"),
-            progress=0.02,
-        )
-        process = subprocess.Popen(
             command,
             cwd=str(SERVICE_DIR),
             env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
+            message=(
+                "Starting isolated Hunyuan3D retexture worker"
+                if operation == "retexture"
+                else "Starting isolated Hunyuan3D worker"
+            ),
         )
-        with _lock:
-            _processes[job_id] = process
+        if process is None:
+            _cleanup_partial_output(output_path)
+            return
         # Record the worker PID on disk so a hard-killed Maestro (SIGKILL,
         # OOM, reload) can reap the orphan on the next startup instead of
         # leaving it holding VRAM forever.
@@ -641,8 +807,10 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
 
         exit_code = process.wait()
         with _lock:
-            status = _jobs.get(job_id, {}).get("status")
-        if status == "cancelled":
+            current_job = _jobs.get(job_id, {})
+            status = current_job.get("status")
+            cancellation_pending = bool(current_job.get("cancel_requested"))
+        if cancellation_pending or status in {"cancelling", "cancelled"}:
             _cleanup_partial_output(output_path)
             return
         if timeout_reason:
@@ -658,6 +826,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                     "generation_mode": "model3d",
                     "mode": "model3d",
                     "job_id": job_id,
+                    "task_id": _canonical_task_id(job_id),
+                    "root_task_id": _canonical_task_id(job_id),
                     "created_at": time.time(),
                     "params": {
                         **request_data["settings"],
@@ -697,6 +867,13 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     finally:
         with _lock:
             _processes.pop(job_id, None)
+            current_job = _jobs.get(job_id, {})
+            cancellation_pending = (
+                bool(current_job.get("cancel_requested"))
+                or current_job.get("status") in {"cancelling", "cancelled"}
+            )
+        if cancellation_pending:
+            _cleanup_partial_output(output_path)
         for stale_path in (request_path, pid_path):
             try:
                 stale_path.unlink(missing_ok=True)
@@ -718,25 +895,45 @@ def cancel_job(job_id: str) -> dict[str, Any] | None:
             return None
         if job["status"] in {"completed", "failed", "cancelled"}:
             return _public_job(dict(job))
-        job.update({
-            "status": "cancelled",
-            "phase": "cancelled",
-            "message": "3D retexture cancelled" if job.get("operation") == "retexture" else "3D generation cancelled",
-            "updated_at": time.time(),
-        })
-        job.pop("request", None)
+        spawned = process is not None
+        if spawned:
+            job.update({
+                "cancel_requested": True,
+                "phase": "cancelling",
+                "message": "Stopping the 3D worker at a safe boundary",
+                "updated_at": time.time(),
+            })
+        else:
+            job.update({
+                "status": "cancelled",
+                "cancel_requested": True,
+                "phase": "cancelled",
+                "message": (
+                    "3D retexture cancelled"
+                    if job.get("operation") == "retexture"
+                    else "3D generation cancelled"
+                ),
+                "updated_at": time.time(),
+            })
+            job.pop("request", None)
     if process and process.poll() is None:
-        process.terminate()
+        try:
+            process.terminate()
+        except OSError:
+            pass
         try:
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
-            process.kill()
+            try:
+                process.kill()
+            except OSError:
+                pass
     return get_job(job_id)
 
 
 def cancel_all_jobs() -> int:
     with _lock:
-        active_ids = [job_id for job_id, job in _jobs.items() if job["status"] in {"queued", "running"}]
+        active_ids = [job_id for job_id, job in _jobs.items() if job["status"] in _ACTIVE_JOB_STATES]
     for job_id in active_ids:
         cancel_job(job_id)
     return len(active_ids)

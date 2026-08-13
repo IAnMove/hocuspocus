@@ -5,7 +5,7 @@ export type SeriesFormat = 'serial' | 'episodic' | 'hybrid'
 export type SeriesSourceMode = 'original' | 'known_universe_experimental' | 'hybrid'
 export type SeriesRenderStrategy = 'auto' | 'direct' | 'first_frame' | 'references' | 'first_last'
 export type SeriesEpisodeStatus = 'draft' | 'outline' | 'script' | 'shot_plan' | 'rendering' | 'completed' | 'archived'
-export type SeriesAttemptStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type SeriesAttemptStatus = 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
 
 export interface SeriesAsset {
   id: string
@@ -287,6 +287,9 @@ export interface SeriesProject {
   format: SeriesFormat
   defaultEpisodeDurationSeconds: number
   language: string
+  spokenLanguage: string
+  protagonistConsistency: boolean
+  protagonistCharacterId: string
   genre: string
   tone: string
   audience: string
@@ -330,11 +333,13 @@ export interface SeriesLibrary {
 
 export interface SeriesJobStatus {
   jobId: string
+  taskId?: string | null
+  rootTaskId?: string | null
   jobType?: 'canon' | 'episode'
   workspace: string
   seriesId: string
   episodeId: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   stage: string
   current: number
   total: number
@@ -344,6 +349,7 @@ export interface SeriesJobStatus {
   seriesResult?: (Pick<SeriesProject, 'canon' | 'characters' | 'relationships' | 'locations'> & Partial<Pick<
     SeriesProject,
     'title' | 'premise' | 'logline' | 'format' | 'defaultEpisodeDurationSeconds' | 'language' |
+    'spokenLanguage' | 'protagonistConsistency' | 'protagonistCharacterId' |
     'genre' | 'tone' | 'audience' | 'visualStyle' | 'characterVisualStyle' | 'cameraLanguage' |
     'sourceMode' | 'masterUniversePrompt' | 'rightsNote' | 'props'
   >>) | null
@@ -360,6 +366,24 @@ export interface SeriesJobStatus {
   activeShotId?: string | null
   settings?: Record<string, unknown>
   seed?: number
+  createdAt?: number
+  updatedAt?: number
+  finishedAt?: number
+}
+
+export interface SeriesAssemblyJob {
+  jobId: string
+  workspace: string
+  seriesId: string
+  episodeId: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  stage: string
+  current: number
+  total: number
+  message: string
+  error?: string | null
+  assetId?: string | null
+  filename?: string | null
   createdAt?: number
   updatedAt?: number
   finishedAt?: number

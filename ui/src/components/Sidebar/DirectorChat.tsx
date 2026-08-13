@@ -395,6 +395,8 @@ export function DirectorChat() {
     || s.directorLocationRefPaths.length
   ))
   const sceneDescription = useStore(s => s.directorSceneDescription)
+  const spokenLanguage = useStore(s => s.directorSpokenLanguage)
+  const setSpokenLanguage = useStore(s => s.setDirectorSpokenLanguage)
   const audioFile = useStore(s => s.directorAudioFile)
   const referenceImage = useStore(s => s.directorReferenceImage)
   const clipImages = useStore(s => s.directorClipImages)
@@ -898,6 +900,20 @@ export function DirectorChat() {
         {/* Style step */}
         {(atStep('style') || pastStep('style')) && (
           <>
+            {atStep('style') && <SystemBubble>
+              <label className="block">
+                <span className="text-[10px] text-text-muted">Idioma hablado del vídeo</span>
+                <select className="mt-1 w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
+                  <option value="">Automático según el diálogo</option>
+                  <option value="Español de España">Español de España</option>
+                  <option value="Español latinoamericano">Español latinoamericano</option>
+                  <option value="English">English</option>
+                  <option value="French">Français</option>
+                  <option value="Italian">Italiano</option>
+                </select>
+                <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">Se añade a todos los planos; la variante regional es best effort del modelo.</span>
+              </label>
+            </SystemBubble>}
             {/* Story path: show reference image + characters + duration here (since no upload step) */}
             {isStoryPath && atStep('style') && (
               <SystemBubble>

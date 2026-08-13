@@ -1,7 +1,10 @@
 import base64
 import json
 
+import pytest
+
 from app.services import minimax_music_service
+from app.services import resource_scheduler
 
 
 class FakeResponse:
@@ -46,6 +49,45 @@ def test_generates_three_persistent_candidates(tmp_path):
     sent = session.calls[0][1]["json"]
     assert sent["output_format"] == "hex"
     assert sent["audio_setting"]["sample_rate"] == 44100
+
+
+def test_correlates_candidate_outputs_with_canonical_task_ids(tmp_path):
+    results = minimax_music_service.generate_candidates(
+        api_key="secret",
+        prompt="cinematic dream pop",
+        lyrics="[Verse]\nWe cross the night",
+        count=1,
+        output_dir=str(tmp_path),
+        session=FakeSession(),
+        task_id="task-minimax-music-candidate-1",
+        root_task_id="task-minimax-music-root",
+    )
+
+    result = results[0]
+    metadata = json.loads((tmp_path / f"{result['filename']}.json").read_text())
+    assert result["task_id"] == "task-minimax-music-candidate-1"
+    assert result["root_task_id"] == "task-minimax-music-root"
+    assert metadata["task_id"] == result["task_id"]
+    assert metadata["root_task_id"] == result["root_task_id"]
+
+
+def test_cancelled_resource_wait_never_calls_minimax(tmp_path):
+    session = FakeSession()
+
+    with pytest.raises(resource_scheduler.ResourceAcquireCancelled):
+        minimax_music_service.generate_candidates(
+            api_key="secret",
+            prompt="cinematic dream pop",
+            lyrics="[Verse]\nWe cross the night",
+            count=1,
+            output_dir=str(tmp_path),
+            session=session,
+            task_id="task-minimax-music-cancelled",
+            cancelled=lambda: True,
+        )
+
+    assert session.calls == []
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_cover_sends_reference_audio_and_optional_rewritten_lyrics(tmp_path):

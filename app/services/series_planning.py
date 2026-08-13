@@ -4,11 +4,56 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
+import uuid
 from typing import Any
 
 
 ALL_PLANNING_STAGES = ["outline", "script", "shots", "canon_validation", "canon_delta"]
+
+SERIES_SHOT_DURATIONS = (5, 10, 15)
+SERIES_SHOT_IDEAL_SECONDS = 10
+SERIES_SHOT_MAX_ITEMS = 720
+
+
+def _planning_uid(prefix: str) -> str:
+    """Create a server-owned, globally unique Series planning identifier."""
+    return f"{prefix}_{uuid.uuid4().hex}"
+
+
+def series_shot_count_profile(episode: dict | None = None) -> dict[str, int | float]:
+    """Return duration-aware shot bounds using only 5/10/15-second clips."""
+    raw_target = (episode or {}).get("targetDurationSeconds", 75)
+    try:
+        target = max(5.0, min(3600.0, float(raw_target or 75)))
+    except (TypeError, ValueError):
+        target = 75.0
+    minimum = max(1, math.ceil(target / max(SERIES_SHOT_DURATIONS)))
+    maximum = min(
+        SERIES_SHOT_MAX_ITEMS,
+        max(minimum, math.ceil(target / min(SERIES_SHOT_DURATIONS))),
+    )
+    ideal = max(
+        minimum,
+        min(maximum, int(math.floor(target / SERIES_SHOT_IDEAL_SECONDS + 0.5))),
+    )
+    return {
+        "target": target,
+        "minimum": minimum,
+        "ideal": ideal,
+        "maximum": maximum,
+    }
+
+
+def planning_output_token_budget(stage: str, episode: dict | None = None) -> int:
+    """Scale long-form shot JSON without inflating small planning stages."""
+    if stage == "shots":
+        ideal = int(series_shot_count_profile(episode)["ideal"])
+        return min(64000, max(9000, 2000 + ideal * 600))
+    if stage == "script":
+        return 6000
+    return 2400
 
 
 def planning_stages(scope: str) -> list[str]:
@@ -31,7 +76,7 @@ def _string_array(max_items: int = 24) -> dict:
     return {"type": "array", "items": _string(), "maxItems": max_items}
 
 
-def planning_schema(stage: str) -> dict:
+def planning_schema(stage: str, episode: dict | None = None) -> dict:
     string = _string()
     dialogue = {
         "type": "object",
@@ -81,14 +126,16 @@ def planning_schema(stage: str) -> dict:
             }}, "required": ["script"], "additionalProperties": False,
         }
     if stage == "shots":
+        profile = series_shot_count_profile(episode)
         shot = {
             "type": "object",
             "properties": {
                 "id": string, "sceneId": string, "order": {"type": "integer"},
-                "durationSeconds": {"type": "number"}, "framing": string, "camera": string,
+                "durationSeconds": {"type": "number", "enum": list(SERIES_SHOT_DURATIONS)},
+                "framing": string, "camera": string,
                 "action": string,
                 "dialogueBeats": {"type": "array", "items": dialogue, "maxItems": 4},
-                "visibleCharacterIds": _string_array(4), "speakingCharacterIds": _string_array(2),
+                "visibleCharacterIds": _string_array(4), "speakingCharacterIds": _string_array(1),
                 "primarySpeakerId": string, "locationId": string, "locationVariantId": string,
                 "wardrobeByCharacterId": {"type": "object"}, "propIds": _string_array(6),
                 "emotionalStateByCharacterId": {"type": "object"},
@@ -107,7 +154,9 @@ def planning_schema(stage: str) -> dict:
         }
         return {
             "type": "object", "properties": {"shots": {
-                "type": "array", "items": shot, "minItems": 8, "maxItems": 12,
+                "type": "array", "items": shot,
+                "minItems": int(profile["minimum"]),
+                "maxItems": int(profile["maximum"]),
             }}, "required": ["shots"], "additionalProperties": False,
         }
     if stage == "canon_validation":
@@ -240,7 +289,7 @@ def canon_preparation_prompt(series: dict, instruction: str = "") -> tuple[str, 
         "Do not claim legal rights, create copyrighted-franchise defaults, or create episode events."
     )
     prompt = (
-        "Prepare a persistent series canon for a 60–90 second, 8–12 shot pilot. "
+        "Prepare a compact persistent series canon that can support short or long episodes. "
         "Include immutable rules, visual identity locks, named wardrobe/location variants, relationships and long arcs.\n"
         f"USER DIRECTION: {instruction.strip() or 'Use the saved setup and improve any existing draft canon.'}\n\n"
         f"SAVED SETUP AND DRAFT CANON:\n{json.dumps(_bounded(context), ensure_ascii=False)}"
@@ -736,11 +785,16 @@ def _bounded(value: Any, depth: int = 0) -> Any:
 
 
 def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = "") -> tuple[str, str]:
+    shot_profile = series_shot_count_profile(episode)
+    script_scene_ids = [
+        str(item.get("id")) for item in episode.get("script", [])
+        if isinstance(item, dict) and item.get("id")
+    ]
     canon_snapshot = episode.get("canonSnapshot") if isinstance(episode.get("canonSnapshot"), dict) else {}
     context = {
         "series": {
             key: series.get(key) for key in (
-                "title", "logline", "premise", "format", "language", "genre", "tone",
+                "title", "logline", "premise", "format", "language", "spokenLanguage", "genre", "tone",
                 "audience", "visualStyle", "characterVisualStyle", "cameraLanguage",
                 "allowClipText", "sourceMode", "masterUniversePrompt",
             )
@@ -760,10 +814,14 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
         "You are the Series Lab planning engine. Return exactly one JSON object matching the schema. "
         "CanonSnapshot is immutable evidence, never rewrite it. Use entity IDs exactly as supplied. "
         "Every speaking character must also be visible. Never invent a reference asset or entity ID. "
-        "Keep at most two speakers per shot and write short dialogue suitable for best-effort native lip sync. "
+        "Each shot may contain dialogue from only one character; split every speaker change into a separate shot. "
+        "Write short dialogue suitable for best-effort native lip sync. "
+        "Write all generation-facing visual shot fields (prompt, action, framing, camera, and negativePrompt) "
+        "in English. Keep only dialogueBeats.text in the series spokenLanguage, with natural regional wording. "
+        "Never put quoted dialogue or instructions to speak in prompt or action; dialogueBeats is the sole speech source. "
         "For shots, speakingCharacterIds must be exactly the unique characterId values used by dialogueBeats; "
         "never copy every visible character into speakingCharacterIds. If a scene needs three people to speak, "
-        "cover them across separate shots with no more than two actual speakers in each shot. "
+        "cover them across separate single-speaker shots in conversational order. "
         "Do not mutate canon; canon changes are proposals for later human review."
     )
     requirements = {
@@ -773,10 +831,18 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
             "emotion and delivery. Use only supplied location/character IDs."
         ),
         "shots": (
-            "Create exactly 8–12 shots totaling close to targetDurationSeconds. Assign visibleCharacterIds, "
+            f"Create about {int(shot_profile['ideal'])} shots (valid range "
+            f"{int(shot_profile['minimum'])}–{int(shot_profile['maximum'])}) for the "
+            f"{float(shot_profile['target']):g}-second target. Use only 5, 10, or 15 seconds per shot: "
+            "prefer 10 seconds, use 5 when the visible action or spoken line comfortably fits, and never exceed "
+            "15 seconds. Add shots to cover runtime; never make a clip longer to fill the episode. "
+            "Set every sceneId by copying one exact ID from episode.script; never rename or describe a scene. "
+            f"The only valid scene IDs are {json.dumps(script_scene_ids, ensure_ascii=False)}. "
+            "Assign visibleCharacterIds, "
             "speakingCharacterIds, location/variant, wardrobe and props by ID. Keep renderStrategy auto unless "
             "a clear explicit strategy is essential. Prompts describe only the shot; do not claim loose portraits "
-            "are exact first frames."
+            "are exact first frames. Describe visible action rather than saying that a character talks, asks, replies, "
+            "sings, mutters, or shouts; put every spoken word only in dialogueBeats.text."
         ),
         "canon_validation": (
             "Report structured contradictions or continuity risks. Do not rewrite the episode and return an empty "
@@ -816,6 +882,112 @@ def _resolve(value: Any, valid_ids: set[str], lookup: dict[str, str]) -> str:
     return result if result in valid_ids else lookup.get(_token(result), result)
 
 
+def _split_dialogue_speaker_turns(
+    shots: list[Any],
+    character_ids: set[str],
+    character_lookup: dict[str, str],
+    character_names: dict[str, str],
+) -> list[Any]:
+    """Split provider-combined conversations into ordered single-speaker clips."""
+    expanded: list[Any] = []
+    for raw in shots:
+        if not isinstance(raw, dict):
+            expanded.append(raw)
+            continue
+        dialogue = raw.get("dialogueBeats") if isinstance(raw.get("dialogueBeats"), list) else []
+        groups: list[tuple[str, list[Any]]] = []
+        for beat in dialogue:
+            if not isinstance(beat, dict):
+                # Keep malformed data in place so the authoritative validator
+                # below returns its precise error instead of silently dropping it.
+                speaker = ""
+            else:
+                speaker = _resolve(beat.get("characterId"), character_ids, character_lookup)
+            if groups and groups[-1][0] == speaker:
+                groups[-1][1].append(beat)
+            else:
+                groups.append((speaker, [beat]))
+        distinct = {speaker for speaker, _beats in groups if speaker}
+        if len(distinct) <= 1:
+            expanded.append(raw)
+            continue
+
+        base_id = str(raw.get("id") or f"shot_{len(expanded) + 1}").strip()
+        previous_id = str(raw.get("continuityFromShotId") or "")
+        for group_index, (speaker, beats) in enumerate(groups, start=1):
+            clone = copy.deepcopy(raw)
+            clone_id = base_id if group_index == 1 else f"{base_id}_turn_{group_index}"
+            clone["id"] = clone_id
+            clone["dialogueBeats"] = beats
+            clone["speakingCharacterIds"] = [speaker] if speaker else []
+            clone["primarySpeakerId"] = speaker
+            clone["continuityFromShotId"] = previous_id
+            if group_index > 1:
+                label = character_names.get(speaker, speaker or "the next speaker")
+                clone["action"] = (
+                    f"{str(raw.get('action') or '').strip()} Conversational coverage shifts to {label}."
+                ).strip()
+                clone["prompt"] = (
+                    f"{str(raw.get('prompt') or '').strip()} Single-speaker coverage on {label}; "
+                    "the other visible characters listen without speaking."
+                ).strip()
+            expanded.append(clone)
+            previous_id = clone_id
+    return expanded
+
+
+def _shot_complexity(shot: dict) -> tuple[int, int, int]:
+    dialogue = shot.get("dialogueBeats") if isinstance(shot.get("dialogueBeats"), list) else []
+    dialogue_words = sum(
+        len(str(beat.get("text") or "").split())
+        for beat in dialogue if isinstance(beat, dict)
+    )
+    action_words = len(str(shot.get("action") or "").split())
+    return dialogue_words * 2 + action_words, dialogue_words, action_words
+
+
+def _assign_series_shot_durations(shots: list[dict], target: float) -> None:
+    """Allocate a near-target runtime with deterministic 5/10/15-second clips."""
+    if not shots:
+        return
+    durations = [SERIES_SHOT_IDEAL_SECONDS for _shot in shots]
+    target_units = max(len(shots), min(len(shots) * 3, int(math.floor(target / 5.0 + 0.5))))
+    current_units = len(shots) * 2
+    complexity = [_shot_complexity(shot) for shot in shots]
+
+    if target_units < current_units:
+        for index in sorted(range(len(shots)), key=lambda value: (complexity[value], value)):
+            if current_units <= target_units:
+                break
+            durations[index] = 5
+            current_units -= 1
+    elif target_units > current_units:
+        for index in sorted(range(len(shots)), key=lambda value: (complexity[value], -value), reverse=True):
+            if current_units >= target_units:
+                break
+            durations[index] = 15
+            current_units += 1
+
+    # At an approximately ten-second average, exchange concise coverage for
+    # longer dialogue/action beats without changing the episode total.
+    short = [
+        index for index, (_score, dialogue_words, action_words) in enumerate(complexity)
+        if durations[index] == 10 and dialogue_words <= 8 and action_words <= 14
+    ]
+    long = [
+        index for index, (_score, dialogue_words, action_words) in enumerate(complexity)
+        if durations[index] == 10 and (dialogue_words >= 18 or action_words >= 24)
+    ]
+    for short_index, long_index in zip(short[:max(1, len(shots) // 4)], reversed(long)):
+        if short_index == long_index:
+            continue
+        durations[short_index] = 5
+        durations[long_index] = 15
+
+    for shot, duration in zip(shots, durations):
+        shot["durationSeconds"] = duration
+
+
 def normalize_planning_result(stage: str, result: Any, series: dict, episode: dict) -> dict:
     if not isinstance(result, dict):
         raise ValueError(f"Series Lab {stage} response is not an object")
@@ -841,14 +1013,12 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
         scenes = normalized.get("script")
         if not isinstance(scenes, list) or not scenes:
             raise ValueError("Series script has no scenes")
-        used: set[str] = set()
         for index, scene in enumerate(scenes):
             if not isinstance(scene, dict):
                 raise ValueError(f"Series scene {index + 1} is invalid")
-            scene_id = str(scene.get("id") or f"scene_{index + 1}").strip()
-            if scene_id in used:
-                scene_id = f"scene_{index + 1}"
-            used.add(scene_id)
+            # Provider IDs are untrusted aliases. Assign the persisted UID here
+            # so later stages can only reference one canonical scene identity.
+            scene_id = _planning_uid("scene")
             scene["id"] = scene_id
             scene["order"] = index + 1
             scene["locationId"] = _resolve(scene.get("locationId"), location_ids, location_lookup)
@@ -862,14 +1032,20 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
                 if resolved not in participants:
                     participants.append(resolved)
             scene["participatingCharacterIds"] = participants
+            beats = scene.get("beats") if isinstance(scene.get("beats"), list) else []
+            for beat_index, beat in enumerate(beats):
+                if not isinstance(beat, dict):
+                    raise ValueError(f"Scene {scene_id} has invalid beat {beat_index + 1}")
+                beat["id"] = _planning_uid("scene_beat")
+            scene["beats"] = beats
             dialogue = scene.get("dialogue") if isinstance(scene.get("dialogue"), list) else []
-            for dialogue_index, beat in enumerate(dialogue):
+            for beat in dialogue:
                 if not isinstance(beat, dict):
                     raise ValueError(f"Scene {scene_id} has invalid dialogue")
                 character_id = _resolve(beat.get("characterId"), character_ids, character_lookup)
                 if character_id not in character_ids:
                     raise ValueError(f"Scene {scene_id} dialogue uses unknown character {character_id}")
-                beat["id"] = str(beat.get("id") or f"dialogue_{index + 1}_{dialogue_index + 1}")
+                beat["id"] = _planning_uid("dialogue")
                 beat["characterId"] = character_id
                 if character_id not in participants:
                     participants.append(character_id)
@@ -879,27 +1055,75 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
         shots = normalized.get("shots")
         if not isinstance(shots, list):
             raise ValueError("Complete Series Lab shot plans require a shots array")
-        if not 8 <= len(shots) <= 12:
-            raise ValueError(
-                f"Complete Series Lab shot plans require 8–12 shots; received {len(shots)}"
-            )
-        scene_ids = {
-            str(item.get("id")) for item in episode.get("script", [])
+        character_names = {
+            str(item.get("id")): str(item.get("name") or item.get("id"))
+            for item in series.get("characters", [])
             if isinstance(item, dict) and item.get("id")
         }
-        used: set[str] = set()
+        shots = _split_dialogue_speaker_turns(
+            shots, character_ids, character_lookup, character_names,
+        )
+        profile = series_shot_count_profile(episode)
+        if not int(profile["minimum"]) <= len(shots) <= int(profile["maximum"]):
+            raise ValueError(
+                f"Series shot plan for {float(profile['target']):g}s requires "
+                f"{int(profile['minimum'])}–{int(profile['maximum'])} clips at 5–15 seconds each "
+                f"(ideal about {int(profile['ideal'])}); received {len(shots)}"
+            )
+        provider_shot_ids: dict[str, str] = {}
         for index, shot in enumerate(shots):
             if not isinstance(shot, dict):
                 raise ValueError(f"Series shot {index + 1} is invalid")
-            shot_id = str(shot.get("id") or f"shot_{index + 1}").strip()
-            if shot_id in used:
-                shot_id = f"shot_{index + 1}"
-            used.add(shot_id)
+            provider_id = str(shot.get("id") or f"provider_shot_{index + 1}").strip()
+            if provider_id in provider_shot_ids:
+                raise ValueError(
+                    f"Series shot plan repeats provider shot ID {provider_id}; every shot alias must be unique"
+                )
+            provider_shot_ids[provider_id] = _planning_uid("shot")
+        script_scenes = [
+            item for item in episode.get("script", [])
+            if isinstance(item, dict) and item.get("id")
+        ]
+        scene_ids = {str(item.get("id")) for item in script_scenes}
+        scenes_by_dialogue_id: dict[str, set[str]] = {}
+        scenes_by_location_id: dict[str, list[str]] = {}
+        for scene in script_scenes:
+            scene_id = str(scene.get("id"))
+            location_id = str(scene.get("locationId") or "")
+            if location_id:
+                scenes_by_location_id.setdefault(location_id, []).append(scene_id)
+            for beat in scene.get("dialogue", []):
+                if isinstance(beat, dict) and beat.get("id"):
+                    scenes_by_dialogue_id.setdefault(str(beat["id"]), set()).add(scene_id)
+        for index, shot in enumerate(shots):
+            if not isinstance(shot, dict):
+                raise ValueError(f"Series shot {index + 1} is invalid")
+            provider_id = str(shot.get("id") or f"provider_shot_{index + 1}").strip()
+            shot_id = provider_shot_ids[provider_id]
             shot["id"] = shot_id
             shot["order"] = index + 1
-            shot["sceneId"] = str(shot.get("sceneId") or "")
+            shot["sceneId"] = str(shot.get("sceneId") or "").strip()
             if shot["sceneId"] not in scene_ids:
-                raise ValueError(f"Shot {shot_id} uses unknown scene {shot['sceneId']}")
+                dialogue_scene_ids: set[str] = set()
+                for beat in shot.get("dialogueBeats", []):
+                    if not isinstance(beat, dict) or not beat.get("id"):
+                        continue
+                    dialogue_scene_ids.update(scenes_by_dialogue_id.get(str(beat["id"]), set()))
+                if len(dialogue_scene_ids) == 1:
+                    shot["sceneId"] = next(iter(dialogue_scene_ids))
+                else:
+                    resolved_location = _resolve(
+                        shot.get("locationId"), location_ids, location_lookup,
+                    )
+                    location_scenes = scenes_by_location_id.get(resolved_location, [])
+                    if len(location_scenes) == 1:
+                        shot["sceneId"] = location_scenes[0]
+            if shot["sceneId"] not in scene_ids:
+                valid_scene_ids = ", ".join(sorted(scene_ids)) or "(none)"
+                raise ValueError(
+                    f"Shot {shot_id} uses unknown scene {shot['sceneId']}; "
+                    f"valid scene IDs: {valid_scene_ids}"
+                )
             visible = []
             for raw in shot.get("visibleCharacterIds", []):
                 resolved = _resolve(raw, character_ids, character_lookup)
@@ -907,6 +1131,14 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
                     raise ValueError(f"Shot {shot_id} uses unknown visible character {resolved}")
                 if resolved not in visible:
                     visible.append(resolved)
+            raw_continuity_id = str(shot.get("continuityFromShotId") or "").strip()
+            if raw_continuity_id and raw_continuity_id not in provider_shot_ids:
+                raise ValueError(
+                    f"Shot {shot_id} references unknown continuity shot {raw_continuity_id}"
+                )
+            shot["continuityFromShotId"] = (
+                provider_shot_ids[raw_continuity_id] if raw_continuity_id else ""
+            )
             dialogue = shot.get("dialogueBeats") if isinstance(shot.get("dialogueBeats"), list) else []
             dialogue_speakers = []
             for dialogue_index, beat in enumerate(dialogue):
@@ -922,14 +1154,14 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
                 # makes canon validation report a false cross-shot reference.
                 # Re-key them deterministically to the owning shot while
                 # preserving the actual line, speaker and delivery.
-                beat["id"] = f"{shot_id}_d{dialogue_index + 1}"
+                beat["id"] = _planning_uid("shot_dialogue")
                 beat["characterId"] = resolved
                 if resolved not in dialogue_speakers:
                     dialogue_speakers.append(resolved)
-            if len(dialogue_speakers) > 2:
+            if len(dialogue_speakers) > 1:
                 raise ValueError(
                     f"Shot {shot_id} contains dialogue from {len(dialogue_speakers)} speakers; "
-                    "split the dialogue across separate shots"
+                    "split every speaker turn across separate shots"
                 )
             shot["dialogueBeats"] = dialogue
 
@@ -937,8 +1169,8 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
             # visible participant. Dialogue beats are the authoritative proof
             # of who actually speaks, so repair that harmless schema drift
             # without dropping any spoken line. Explicit speakers only fill an
-            # otherwise silent/underspecified shot, and never exceed the model
-            # capability of two voices.
+            # otherwise silent/underspecified shot, and never exceed the
+            # single-speaker Series clip contract.
             declared_speakers = []
             for raw in shot.get("speakingCharacterIds", []):
                 resolved = _resolve(raw, character_ids, character_lookup)
@@ -948,7 +1180,7 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
                     declared_speakers.append(resolved)
             speakers = list(dialogue_speakers)
             for resolved in declared_speakers:
-                if len(speakers) >= 2:
+                if len(speakers) >= 1:
                     break
                 if resolved not in speakers:
                     speakers.append(resolved)
@@ -968,7 +1200,6 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
                 if resolved not in resolved_props:
                     resolved_props.append(resolved)
             shot["propIds"] = resolved_props
-            shot["durationSeconds"] = max(1, min(30, float(shot.get("durationSeconds") or 8)))
             shot["renderStrategy"] = shot.get("renderStrategy") if shot.get("renderStrategy") in {
                 "auto", "direct", "first_frame", "references", "first_last"
             } else "auto"
@@ -976,36 +1207,19 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
                 "mode": "automatic", "manualIncludeAssetIds": [], "manualExcludeAssetIds": [],
             }
             shot["attempts"] = []
-        target = max(1.0, float(episode.get("targetDurationSeconds") or 75))
-        total = sum(float(shot["durationSeconds"]) for shot in shots)
-        tolerance = max(10.0, target * 0.2)
-        if total and abs(total - target) > tolerance:
-            scale = target / total
-            for shot in shots:
-                shot["durationSeconds"] = max(
-                    1.0, min(30.0, round(float(shot["durationSeconds"]) * scale * 2) / 2),
-                )
-            adjusted_total = sum(float(shot["durationSeconds"]) for shot in shots)
-            remaining = round((target - adjusted_total) * 2) / 2
-            for shot in reversed(shots):
-                if abs(remaining) < 0.25:
-                    break
-                available = (30.0 - float(shot["durationSeconds"])) if remaining > 0 else (
-                    float(shot["durationSeconds"]) - 1.0
-                )
-                delta = min(abs(remaining), available) * (1 if remaining > 0 else -1)
-                shot["durationSeconds"] = round((float(shot["durationSeconds"]) + delta) * 2) / 2
-                remaining = round((remaining - delta) * 2) / 2
-            if abs(sum(float(shot["durationSeconds"]) for shot in shots) - target) > tolerance:
-                raise ValueError(
-                    f"Series shot durations cannot fit the {target:g}s episode target within MVP limits"
-                )
+        _assign_series_shot_durations(shots, float(profile["target"]))
         return {"shots": shots}
     if stage == "canon_validation":
         issues = normalized.get("issues")
         if not isinstance(issues, list):
             raise ValueError("Canon validation response has no issues array")
-        return {"issues": [item for item in issues if isinstance(item, dict)][:30]}
+        normalized_issues = []
+        for item in issues[:30]:
+            if not isinstance(item, dict):
+                continue
+            item["id"] = _planning_uid("continuity_issue")
+            normalized_issues.append(item)
+        return {"issues": normalized_issues}
     if stage == "canon_delta":
         result_delta = {}
         existing_ids = {
@@ -1020,7 +1234,8 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
             for index, item in enumerate(items[:12]):
                 if not isinstance(item, dict):
                     continue
-                item_id = str(item.get("id") or f"fact_{episode['id']}_{index + 1}")
+                provider_item_id = str(item.get("id") or "")
+                item_id = _planning_uid("fact") if group == "add" else provider_item_id
                 if group == "change" and item_id not in existing_ids:
                     raise ValueError(f"Canon change references unknown fact {item_id}")
                 result_delta[group].append({

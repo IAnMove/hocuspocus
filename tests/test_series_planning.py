@@ -1,4 +1,5 @@
 import copy
+import re
 
 import pytest
 
@@ -13,9 +14,11 @@ from services.series_planning import (
     normalize_canon_preparation,
     normalize_known_series_bootstrap,
     normalize_planning_result,
+    planning_output_token_budget,
     planning_prompt,
     planning_schema,
     planning_stages,
+    series_shot_count_profile,
 )
 
 
@@ -28,6 +31,10 @@ def prepared():
     series["locations"] = [{"id": "loc_a", "name": "Lab", "referenceAssetIds": []}]
     episode = create_series_episode(series, title="Pilot", premise="A test")
     return series, episode
+
+
+def assert_uid(value: str, prefix: str) -> None:
+    assert re.fullmatch(rf"{prefix}_[0-9a-f]{{32}}", value)
 
 
 def script_result():
@@ -59,7 +66,17 @@ def shot_result(count=8):
 def test_scopes_and_schemas_are_bounded():
     assert planning_stages("outline") == ["outline"]
     assert planning_stages("complete")[-1] == "canon_delta"
-    assert planning_schema("shots")["properties"]["shots"]["maxItems"] == 12
+    shot_schema = planning_schema("shots")["properties"]["shots"]
+    assert shot_schema["minItems"] == 5
+    assert shot_schema["maxItems"] == 15
+    assert shot_schema["items"]["properties"]["durationSeconds"]["enum"] == [5, 10, 15]
+    assert shot_schema["items"]["properties"]["speakingCharacterIds"]["maxItems"] == 1
+    long_episode = {"targetDurationSeconds": 600}
+    assert series_shot_count_profile(long_episode) == {
+        "target": 600.0, "minimum": 40, "ideal": 60, "maximum": 120,
+    }
+    assert planning_schema("shots", long_episode)["properties"]["shots"]["minItems"] == 40
+    assert planning_output_token_budget("shots", long_episode) > 9000
     assert canon_preparation_schema()["properties"]["characters"]["maxItems"] == 2
     bootstrap = known_series_bootstrap_schema()["properties"]
     assert bootstrap["characters"]["maxItems"] == 12
@@ -83,15 +100,23 @@ def test_prompt_uses_frozen_snapshot_and_excludes_attempt_history():
     assert "Ada discovered the signal" in prompt
     assert "never rewrite" in system
 
+    episode["script"] = script_result()["script"]
+    shots_prompt, _ = planning_prompt("shots", series, episode)
+    assert 'The only valid scene IDs are ["scene_a"]' in shots_prompt
+
 
 def test_script_resolves_labels_to_authoritative_ids():
     series, episode = prepared()
     result = normalize_planning_result("script", script_result(), series, episode)
     scene = result["script"][0]
+    assert_uid(scene["id"], "scene")
     assert scene["order"] == 1
     assert scene["locationId"] == "loc_a"
     assert scene["participatingCharacterIds"] == ["char_a", "char_b"]
     assert scene["dialogue"][0]["characterId"] == "char_a"
+    assert_uid(scene["beats"][0]["id"], "scene_beat")
+    assert_uid(scene["dialogue"][0]["id"], "dialogue")
+    assert len({scene["id"], scene["beats"][0]["id"], scene["dialogue"][0]["id"]}) == 3
 
 
 def test_shots_require_visible_speaker_ids_and_keep_attempts_empty():
@@ -112,7 +137,36 @@ def test_shots_require_visible_speaker_ids_and_keep_attempts_empty():
         normalize_planning_result("shots", invalid, series, episode)
 
 
-def test_shots_repair_inflated_declared_speakers_without_dropping_dialogue():
+def test_shots_repair_invented_scene_id_only_from_authoritative_evidence():
+    series, episode = prepared()
+    episode = apply_planning_stage(episode, "script", normalize_planning_result(
+        "script", script_result(), series, episode,
+    ))
+    raw = shot_result()
+    raw["shots"][0]["sceneId"] = "scn_lab_activation"
+    raw["shots"][0]["dialogueBeats"] = [{
+        "id": "line_a", "characterId": "Ada", "text": "Ready?",
+        "emotion": "focused", "delivery": "quiet",
+    }]
+
+    normalized = normalize_planning_result("shots", raw, series, episode)["shots"]
+    assert normalized[0]["sceneId"] == episode["script"][0]["id"]
+
+    ambiguous = shot_result()
+    ambiguous["shots"][0]["sceneId"] = "scn_invented"
+    episode["script"].append({
+        **copy.deepcopy(episode["script"][0]),
+        "id": "scene_b",
+        "dialogue": [{
+            **copy.deepcopy(episode["script"][0]["dialogue"][0]),
+            "id": "line_b",
+        }],
+    })
+    with pytest.raises(ValueError, match="valid scene IDs:.*scene_b"):
+        normalize_planning_result("shots", ambiguous, series, episode)
+
+
+def test_shots_split_inflated_declared_speakers_without_dropping_dialogue():
     series, episode = prepared()
     series["characters"].append({
         "id": "char_c", "name": "Cy", "aliases": [], "referenceAssetIds": [],
@@ -132,15 +186,29 @@ def test_shots_repair_inflated_declared_speakers_without_dropping_dialogue():
         "emotion": "calm", "delivery": "dry",
     }]
 
-    normalized = normalize_planning_result("shots", raw, series, episode)["shots"][0]
+    normalized = normalize_planning_result("shots", raw, series, episode)["shots"]
 
-    assert normalized["visibleCharacterIds"] == ["char_a", "char_b", "char_c"]
-    assert normalized["speakingCharacterIds"] == ["char_a", "char_b"]
-    assert [line["id"] for line in normalized["dialogueBeats"]] == ["shot_1_d1", "shot_1_d2"]
-    assert [line["characterId"] for line in normalized["dialogueBeats"]] == ["char_a", "char_b"]
+    assert len(normalized) == 9
+    assert normalized[0]["visibleCharacterIds"] == ["char_a", "char_b", "char_c"]
+    assert normalized[0]["speakingCharacterIds"] == ["char_a"]
+    assert normalized[1]["speakingCharacterIds"] == ["char_b"]
+    assert normalized[1]["continuityFromShotId"] == normalized[0]["id"]
+    assert_uid(normalized[0]["id"], "shot")
+    assert_uid(normalized[1]["id"], "shot")
+    assert_uid(normalized[0]["dialogueBeats"][0]["id"], "shot_dialogue")
+    assert_uid(normalized[1]["dialogueBeats"][0]["id"], "shot_dialogue")
+    assert len({
+        normalized[0]["id"], normalized[1]["id"],
+        normalized[0]["dialogueBeats"][0]["id"],
+        normalized[1]["dialogueBeats"][0]["id"],
+    }) == 4
+    assert [
+        line["characterId"]
+        for shot in normalized[:2] for line in shot["dialogueBeats"]
+    ] == ["char_a", "char_b"]
 
 
-def test_shots_require_semantic_repair_for_three_actual_dialogue_speakers():
+def test_shots_deterministically_split_three_actual_dialogue_speakers():
     series, episode = prepared()
     series["characters"].append({
         "id": "char_c", "name": "Cy", "aliases": [], "referenceAssetIds": [],
@@ -160,15 +228,33 @@ def test_shots_require_semantic_repair_for_three_actual_dialogue_speakers():
         for character in ("Ada", "Bo", "Cy")
     ]
 
-    with pytest.raises(ValueError, match="dialogue from 3 speakers"):
+    normalized = normalize_planning_result("shots", raw, series, episode)["shots"]
+    assert len(normalized) == 10
+    assert len({shot["id"] for shot in normalized}) == len(normalized)
+    assert all(re.fullmatch(r"shot_[0-9a-f]{32}", shot["id"]) for shot in normalized)
+    assert [shot["speakingCharacterIds"] for shot in normalized[:3]] == [
+        ["char_a"], ["char_b"], ["char_c"],
+    ]
+    assert all(len(shot["speakingCharacterIds"]) <= 1 for shot in normalized)
+
+
+def test_shots_reject_duplicate_provider_aliases_before_persisting_uids():
+    series, episode = prepared()
+    episode["script"] = script_result()["script"]
+    raw = shot_result()
+    raw["shots"][1]["id"] = raw["shots"][0]["id"]
+    with pytest.raises(ValueError, match="repeats provider shot ID"):
         normalize_planning_result("shots", raw, series, episode)
 
 
-def test_shot_count_mvp_limit_is_enforced():
+def test_shot_count_scales_with_duration_and_clip_limits():
     series, episode = prepared()
     episode["script"] = script_result()["script"]
-    with pytest.raises(ValueError, match="8–12 shots; received 7"):
-        normalize_planning_result("shots", shot_result(7), series, episode)
+    with pytest.raises(ValueError, match="requires 5–15 clips at 5–15 seconds each"):
+        normalize_planning_result("shots", shot_result(4), series, episode)
+    episode["targetDurationSeconds"] = 600
+    with pytest.raises(ValueError, match="requires 40–120 clips"):
+        normalize_planning_result("shots", shot_result(12), series, episode)
 
 
 def test_shot_durations_are_normalized_toward_episode_target():
@@ -180,7 +266,19 @@ def test_shot_durations_are_normalized_toward_episode_target():
         shot["durationSeconds"] = 2
     normalized = normalize_planning_result("shots", raw, series, episode)["shots"]
     assert sum(shot["durationSeconds"] for shot in normalized) == pytest.approx(80)
-    assert all(1 <= shot["durationSeconds"] <= 30 for shot in normalized)
+    assert all(shot["durationSeconds"] in {5, 10, 15} for shot in normalized)
+    assert max(shot["durationSeconds"] for shot in normalized) <= 15
+
+
+def test_ten_minute_plan_uses_sixty_short_clips_without_long_video_substitution():
+    series, episode = prepared()
+    episode["targetDurationSeconds"] = 600
+    episode["script"] = script_result()["script"]
+    raw = shot_result(60)
+    normalized = normalize_planning_result("shots", raw, series, episode)["shots"]
+    assert len(normalized) == 60
+    assert sum(shot["durationSeconds"] for shot in normalized) == 600
+    assert set(shot["durationSeconds"] for shot in normalized) <= {5, 10, 15}
 
 
 def test_apply_stages_never_mutates_canon_or_input():
@@ -199,7 +297,10 @@ def test_canon_delta_remains_pending_until_separate_commit():
         "add": [{"id": "fact_new", "description": "New fact"}], "change": [], "retire": [],
     }, series, episode)
     updated = apply_planning_stage(episode, "canon_delta", result)
-    assert updated["proposedCanonDelta"]["add"][0]["decision"] == "pending"
+    added = updated["proposedCanonDelta"]["add"][0]
+    assert added["decision"] == "pending"
+    assert_uid(added["id"], "fact")
+    assert added["id"] != "fact_new"
     assert series["canon"]["currentFacts"] == []
 
 

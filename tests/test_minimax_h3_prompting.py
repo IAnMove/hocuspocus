@@ -56,6 +56,21 @@ def test_first_frame_prompt_uses_official_field_order_and_dialogue_tags():
     assert "Audio:" not in prompt
 
 
+def test_direct_structured_prompt_is_preserved_without_a_fake_picture_reference():
+    source = (
+        "integrated_multimodal_description: [Shot 1] A silent machine starts.\n\n"
+        "overall_soundscape: Low mechanical hum. No human voices.\n\n"
+        "non_diegetic_music: N/A"
+    )
+
+    prompt = format_minimax_h3_prompt({}, source, reference_mode="direct")
+
+    assert prompt == source
+    assert is_structured_h3_prompt(prompt, "direct")
+    assert FIRST_FRAME_REFERENCE not in prompt
+    assert "referenced picture" not in prompt
+
+
 def test_reference_prompt_uses_six_field_contract_without_first_frame_claim():
     prompt = format_minimax_h3_prompt(
         _shot(),

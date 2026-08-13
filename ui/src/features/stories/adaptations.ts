@@ -29,6 +29,28 @@ export const DEFAULT_TRAILER_DIRECTION =
 const line = (label: string, value: string | undefined): string =>
   value?.trim() ? `${label}: ${value.trim()}` : ''
 
+const spokenLanguageContract = (project: StoryProject): string => project.spokenLanguage.trim()
+  ? `SPOKEN LANGUAGE CONTRACT: Every generated spoken word must be only in ${project.spokenLanguage.trim()}. Use a native regional accent and vocabulary, never switch to another language, and preserve supplied dialogue verbatim.`
+  : ''
+
+const locationVarietyContract = (project: StoryProject): string => project.locationVariety === 'single_location'
+  ? 'LOCATION STRATEGY: This production intentionally remains in one location; vary zones, framing, action, scale and lighting without inventing unrelated places.'
+  : 'LOCATION STRATEGY: Use at least three visually distinct settings across the finished music video. A location or prop in the global brief is an available anchor, not a mandatory template for every clip; never repeat the same location-plus-action combination across most clips.'
+
+function protagonistFirst<T extends { assetId: string; label: string }>(
+  project: StoryProject,
+  references: T[],
+): T[] {
+  if (!project.protagonistConsistency || !project.protagonistCharacterId) return references
+  const protagonist = project.characters.find(character => character.id === project.protagonistCharacterId)
+  if (!protagonist) return references
+  const protagonistIds = new Set(approvedCharacterReferenceIds(project, protagonist))
+  return [
+    ...references.filter(reference => protagonistIds.has(reference.assetId)),
+    ...references.filter(reference => !protagonistIds.has(reference.assetId)),
+  ]
+}
+
 function characterName(project: StoryProject, id: string): string {
   return project.characters.find(character => character.id === id)?.name || id
 }
@@ -337,11 +359,11 @@ export function buildMusicVideoAdaptation(
           .filter(Boolean)
           .map(character => [character!.id, character!])).values())
       : mentionedCharacters
-  const characterReferences = focusedCharacters.flatMap(character =>
+  const characterReferences = protagonistFirst(project, focusedCharacters.flatMap(character =>
     approvedCharacterReferenceIds(project, character).map((assetId, index) => ({
       assetId,
       label: index === 0 ? `${character.name} · primary` : `${character.name} · view ${index + 1}`,
-    })))
+    }))))
   const locationReferences = [
     ...approvedReferenceIds(project, project.world.referenceAssetIds).map(assetId => ({
       assetId,
@@ -414,6 +436,11 @@ export function buildMusicVideoAdaptation(
     sceneDescription: [
       'PRODUCTION TASK',
       `Create a song-led music video focused on ${focusLabel}.`,
+      spokenLanguageContract(project),
+      locationVarietyContract(project),
+      project.protagonistConsistency && project.protagonistCharacterId
+        ? `PROTAGONIST IDENTITY LOCK: ${characterName(project, project.protagonistCharacterId)} is the recurring protagonist. Use their first approved primary reference as the identity authority in every relevant shot; preserve face, body design and canonical wardrobe.`
+        : '',
       focusKind === 'character'
         ? 'Keep this character visually recognizable in every relevant shot. Other characters may appear only when named in the lyrics.'
         : focusKind === 'world'
@@ -472,11 +499,11 @@ export function buildShortFilmAdaptation(
   )
   const visualStyle = enforcedVisualStyle || project.world.visualLanguage.trim()
     || 'Match the approved Story reference artwork exactly, preserving its authored visual medium and character design; if it is anime, comic or illustration, keep it illustrated and never reinterpret it as live action.'
-  const characterReferences = project.characters.flatMap(character =>
+  const characterReferences = protagonistFirst(project, project.characters.flatMap(character =>
     approvedCharacterReferenceIds(project, character).map((assetId, index) => ({
       assetId,
       label: index === 0 ? `${character.name} · primary` : `${character.name} · view ${index + 1}`,
-    })))
+    }))))
   const locationReferences = [
     ...approvedReferenceIds(project, project.world.referenceAssetIds).map(assetId => ({
       assetId,
@@ -491,6 +518,10 @@ export function buildShortFilmAdaptation(
     sceneDescription: [
       'PRODUCTION TASK',
       direction.trim() || DEFAULT_SHORT_FILM_DIRECTION,
+      spokenLanguageContract(project),
+      project.protagonistConsistency && project.protagonistCharacterId
+        ? `PROTAGONIST IDENTITY LOCK: ${characterName(project, project.protagonistCharacterId)} must use the first approved primary identity reference consistently in every appearance.`
+        : '',
       'The film must be a new compact episode that is faithful to the canon below, not a synopsis of the entire master story.',
       '',
       'MASTER STORY CANON',

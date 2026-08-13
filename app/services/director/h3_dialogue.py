@@ -181,10 +181,12 @@ def _dialogue_payload(value: Any) -> tuple[str, str]:
     return language, text
 
 
-def h3_dialogue_tag(spoken_text: Any) -> str:
+def h3_dialogue_tag(spoken_text: Any, forced_language: str = "") -> str:
     """Build exactly one canonical H3 dialogue block."""
 
     language, words = _dialogue_payload(spoken_text)
+    if forced_language:
+        language = forced_language
     return f"<d>[{language}] {words}</d>"
 
 
@@ -792,6 +794,7 @@ def _compile_official_dialogue(
     existing_blocks: Sequence[str],
     *,
     has_driving_audio: bool = False,
+    forced_language: str = "",
 ) -> tuple[str, str]:
     """Place exact tagged lines and stable speaker IDs in the visual field."""
 
@@ -810,7 +813,7 @@ def _compile_official_dialogue(
             stable_id = f"(S{len(valid_beats) + 1})"
         valid_beats.append({
             "words": normalize_h3_text(words),
-            "tag": h3_dialogue_tag(spoken),
+            "tag": h3_dialogue_tag(spoken, forced_language),
             "stable_id": stable_id,
             "speaker_name": speaker_name,
             "delivery": _normalized_space(_field(beat, "delivery", "")),
@@ -869,9 +872,9 @@ def _compile_official_dialogue(
             for beat in valid_beats
         )
     else:
-        canonical_blocks = [h3_dialogue_tag(block) for block in existing_blocks]
+        canonical_blocks = [h3_dialogue_tag(block, forced_language) for block in existing_blocks]
         if spans:
-            canonical_blocks = [h3_dialogue_tag(body[start:end]) for start, end in spans]
+            canonical_blocks = [h3_dialogue_tag(body[start:end], forced_language) for start, end in spans]
             body = _replace_spans(body, spans, canonical_blocks)
         elif canonical_blocks:
             additions = " ".join(
@@ -1239,6 +1242,11 @@ def compile_h3_official_prompt(
         closing_blocking=closing_blocking,
         audio_plan=audio_plan,
     )
+    from .spoken_language import h3_language_tag
+    forced_language = h3_language_tag(
+        audio_plan.get("spoken_language")
+        if isinstance(audio_plan, Mapping) else ""
+    )
     body, vocal_contract = _compile_official_dialogue(
         body,
         subjects or [],
@@ -1246,6 +1254,7 @@ def compile_h3_official_prompt(
         registry,
         existing_blocks,
         has_driving_audio=has_driving_audio,
+        forced_language=forced_language,
     )
     body = re.sub(r"^\s*\[Shot\s+1\]\s*", "", body, flags=re.IGNORECASE)
     body = f"[Shot 1] {body}".strip()

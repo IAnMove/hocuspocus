@@ -106,6 +106,17 @@ const RESOLUTIONS: ResolutionOption[] = [
 const VIDEO_ACCEPT = '.mp4,.webm,.mov,.mkv,.avi,.m4v'
 const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
 const MAESTRO_PICKER_PAGE_SIZE = 24
+const VIDEO_EDITOR_ACTIVE_STATUSES = new Set<api.VideoEditorExportJob['status']>([
+  'queued',
+  'waiting_resource',
+  'running',
+  'cancelling',
+])
+
+const isVideoEditorJobActive = (job: api.VideoEditorExportJob | null): boolean => (
+  Boolean(job && VIDEO_EDITOR_ACTIVE_STATUSES.has(job.status))
+)
+
 const TRANSITIONS: Array<{ value: Transition; label: string; description: string }> = [
   { value: 'none', label: 'Hard cut', description: 'Immediate cut with no overlap.' },
   { value: 'crossfade', label: 'Crossfade', description: 'One shot dissolves smoothly into the next.' },
@@ -1380,7 +1391,7 @@ export function VideoEditorPanel() {
   }, [clips, sequenceMode, totalDuration])
 
   const startExport = async () => {
-    if (!clips.length || exportJob?.status === 'queued' || exportJob?.status === 'running') return
+    if (!clips.length || isVideoEditorJobActive(exportJob)) return
     setError(null)
     setExportJob({
       job_id: '',
@@ -1397,6 +1408,7 @@ export function VideoEditorPanel() {
         width: resolution.width,
         height: resolution.height,
         fps,
+        workspace: activeWorkspace,
         clips: clips.map(clip => ({
           name: clip.name,
           source: clip.source,
@@ -1418,13 +1430,29 @@ export function VideoEditorPanel() {
           await refreshOutputs()
           break
         }
-        if (status.status === 'failed') break
+        if (status.status === 'failed' || status.status === 'cancelled') break
         await wait(1000)
       }
     } catch (reason) {
       const message = (reason as Error).message
       setError(message)
       setExportJob(current => current ? { ...current, status: 'failed', error: message, message } : null)
+    }
+  }
+
+  const cancelExport = async () => {
+    if (!exportJob?.job_id || !isVideoEditorJobActive(exportJob) || exportJob.status === 'cancelling') return
+    setExportJob(current => current ? {
+      ...current,
+      status: 'cancelling',
+      phase: 'cancelling',
+      message: 'Cancelling at the next FFmpeg safe boundary…',
+    } : current)
+    try {
+      setExportJob(await api.cancelVideoEditorExport(exportJob.job_id))
+    } catch (reason) {
+      const message = (reason as Error).message
+      setError(message)
     }
   }
 
@@ -1506,14 +1534,26 @@ export function VideoEditorPanel() {
         </button>
         <button
           onClick={startExport}
-          disabled={!clips.length || exportJob?.status === 'queued' || exportJob?.status === 'running'}
+          disabled={!clips.length || isVideoEditorJobActive(exportJob)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 disabled:opacity-40"
         >
-          {exportJob?.status === 'queued' || exportJob?.status === 'running'
+          {isVideoEditorJobActive(exportJob)
             ? <Loader2 size={13} className="animate-spin" />
             : <Download size={13} />}
           Export MP4
         </button>
+        {isVideoEditorJobActive(exportJob) && (
+          <button
+            onClick={() => void cancelExport()}
+            disabled={exportJob?.status === 'cancelling'}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+          >
+            {exportJob?.status === 'cancelling'
+              ? <Loader2 size={13} className="animate-spin" />
+              : <X size={13} />}
+            {exportJob?.status === 'cancelling' ? 'Cancelling…' : 'Cancel'}
+          </button>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -2024,17 +2064,19 @@ export function VideoEditorPanel() {
                     ? 'border-red-500/30 bg-red-500/5'
                     : exportJob.status === 'completed'
                       ? 'border-green-500/30 bg-green-500/5'
+                      : exportJob.status === 'cancelled'
+                        ? 'border-border bg-bg-secondary'
                       : 'border-accent-blue/30 bg-accent-blue/5'
                 }`}>
                   <div className="flex items-center gap-1.5 text-[10px]">
                     {exportJob.status === 'completed'
                       ? <Check size={12} className="text-green-400" />
-                      : exportJob.status === 'failed'
+                      : exportJob.status === 'failed' || exportJob.status === 'cancelled'
                         ? <X size={12} className="text-red-400" />
                         : <Loader2 size={12} className="animate-spin text-accent-blue" />}
                     <span className="truncate">{exportJob.message}</span>
                   </div>
-                  {(exportJob.status === 'queued' || exportJob.status === 'running') && (
+                  {isVideoEditorJobActive(exportJob) && (
                     <div className="h-1 bg-bg-active rounded mt-2 overflow-hidden">
                       <div className="h-full bg-accent-blue" style={{ width: `${exportJob.progress}%` }} />
                     </div>

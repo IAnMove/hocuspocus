@@ -14,6 +14,8 @@ import subprocess
 import threading
 import logging
 import requests
+from contextlib import contextmanager
+from functools import wraps
 from typing import Optional
 from . import debug_trace
 from .debug_trace import trace_llm_call
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Singleton state
 _process: Optional[subprocess.Popen] = None
-_lock = threading.Lock()
+_lock = threading.RLock()
 _model_id: str = ""
 _device: str = ""
 _server_port: int = 0
@@ -1286,6 +1288,45 @@ def _get_server_exe() -> str:
     return os.path.join(bin_dir, "llama-server")
 
 
+def _scheduled_llm_load(function):
+    """Serialize local model loading on the same lane used for inference."""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        model_id = kwargs.get("model_id", args[0] if len(args) > 0 else "")
+        device = kwargs.get("device", args[1] if len(args) > 1 else "cpu")
+        provider = kwargs.get("provider", args[3] if len(args) > 3 else "local")
+        remote_url = kwargs.get("remote_url", args[4] if len(args) > 4 else "")
+        if str(provider or "local").lower() in {
+            "remote", "openai", "anthropic", "minimax",
+        }:
+            return function(*args, **kwargs)
+        from . import resource_scheduler
+        lane = resource_scheduler.llm_lane(
+            str(provider or "local"),
+            base_url=str(remote_url or ""),
+            device=str(device or "cpu"),
+        )
+        task_id = f"llm-load-{threading.get_ident()}-{time.time_ns()}"
+        cancelled = _current_task_cancel_callback()
+        try:
+            with resource_scheduler.coordinator.acquire(
+                lane,
+                task_id=task_id,
+                description=f"Local LLM load · {model_id or 'default'}",
+                cancelled=cancelled,
+            ):
+                with _cancelable_singleton_lock(
+                    cancelled,
+                    task_id=task_id,
+                    operation="loading the local LLM",
+                ):
+                    return function(*args, **kwargs)
+        except resource_scheduler.ResourceAcquireCancelled as exc:
+            raise InterruptedError(str(exc)) from exc
+    return wrapped
+
+
+@_scheduled_llm_load
 def load_model(
     model_id: str = "",
     device: str = "cpu",
@@ -1326,11 +1367,12 @@ def load_model(
         return
 
     repo_id = model_id or DEFAULT_HF_REPO
-    _provider = "local"
-    _remote_url = ""
-    _api_key = ""
-
     with _lock:
+        # Keep every singleton routing mutation under the same lock used by
+        # scheduled requests when they validate their routing snapshot.
+        _provider = "local"
+        _remote_url = ""
+        _api_key = ""
         if is_loaded() and _model_id == repo_id and not force_reload:
             return
 
@@ -1709,7 +1751,135 @@ def _image_to_data_url(image_path: str, max_size: int = 768) -> Optional[str]:
         return f"data:{mime};base64,{data}"
 
 
+def _current_task_cancel_callback():
+    """Return a cheap cancellation probe for the active canonical task."""
+    try:
+        from .task_manager import current_task_context, get_task_registry
+        context = current_task_context()
+        parent_task_id = str(context.get("task_id") or "")
+        workspace_dir = str(context.get("workspace_dir") or "")
+        if not parent_task_id or not workspace_dir:
+            return None
+        operation_registry = get_task_registry(workspace_dir)
+    except Exception:
+        return None
+
+    def cancelled() -> bool:
+        try:
+            parent = operation_registry.get(parent_task_id)
+        except Exception:
+            return False
+        return bool(
+            parent and (
+                parent.get("status") in {"cancelled", "interrupted"}
+                or parent.get("phase") == "cancelling"
+            )
+        )
+
+    return cancelled
+
+
+@contextmanager
+def _cancelable_singleton_lock(
+    cancelled=None,
+    *,
+    task_id: str = "llm",
+    operation: str = "using the LLM",
+):
+    """Acquire the mutable singleton lock without making cancel wait forever."""
+    acquired = False
+    try:
+        if cancelled is None:
+            _lock.acquire()
+            acquired = True
+        else:
+            while True:
+                if cancelled():
+                    from .resource_scheduler import ResourceAcquireCancelled
+                    raise ResourceAcquireCancelled(
+                        f"Task {task_id} was cancelled while {operation}"
+                    )
+                if _lock.acquire(timeout=0.1):
+                    acquired = True
+                    break
+        yield
+    finally:
+        if acquired:
+            _lock.release()
+
+
+def _singleton_routing_snapshot(cancelled=None) -> tuple:
+    """Read all globals a singleton completion uses while holding its lock."""
+    with _cancelable_singleton_lock(
+        cancelled,
+        operation="waiting for the LLM configuration",
+    ):
+        return (
+            _provider,
+            _remote_url,
+            _model_id,
+            _device,
+            _api_key,
+            _vision_available,
+        )
+
+
+def _scheduled_llm_request(function):
+    """Acquire the concrete local/remote LLM lane for singleton requests."""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        from . import resource_scheduler
+        cancelled = _current_task_cancel_callback()
+        try:
+            while True:
+                routing = _singleton_routing_snapshot(cancelled)
+                provider, remote_url, model_id, device, _key, _vision = routing
+                provider = str(provider or "local")
+                lane = resource_scheduler.llm_lane(
+                    provider,
+                    base_url=(remote_url if provider != "local" else ""),
+                    device=device or "cpu",
+                )
+                task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
+                # The GPU hand-off hook identifies an intentional CUDA LLM
+                # owner by this prefix. A generic label made it unload the
+                # very model this request was about to use.
+                owner_label = (
+                    "Local LLM" if provider == "local" else "Remote LLM"
+                )
+                with resource_scheduler.coordinator.acquire(
+                    lane,
+                    task_id=task_id,
+                    description=f"{owner_label} completion · {model_id or 'default'}",
+                    cancelled=cancelled,
+                ):
+                    # The provider may have changed while this request waited
+                    # for its physical lane. Revalidate under the singleton
+                    # lock; if it moved, release the stale lane and retry. The
+                    # lock then prevents load/unload from mutating routing or
+                    # killing llama-server during the active HTTP request.
+                    with _cancelable_singleton_lock(
+                        cancelled,
+                        task_id=task_id,
+                        operation="waiting to start the LLM request",
+                    ):
+                        if routing != (
+                            _provider,
+                            _remote_url,
+                            _model_id,
+                            _device,
+                            _api_key,
+                            _vision_available,
+                        ):
+                            continue
+                        return function(*args, **kwargs)
+        except resource_scheduler.ResourceAcquireCancelled as exc:
+            raise InterruptedError(str(exc)) from exc
+    return wrapped
+
+
 @trace_llm_call("generate", context=lambda: {"provider": _provider, "model_id": _model_id})
+@_scheduled_llm_request
 def generate(
     prompt: str,
     system_prompt: str = "",
@@ -2033,7 +2203,7 @@ def generate_openai_compatible(
                     title=f"{model_id} completion", status="waiting_resource",
                     phase="waiting_resource", message=f"Waiting to call {provider_name}",
                     provider=provider_name, model=model_id, server_origin=base_url,
-                    resource_requirements=[str(request_lane)], attempt=1, max_attempts=attempts,
+                    resource_requirements=[request_lane.key], attempt=1, max_attempts=attempts,
                     cancelable=False, recoverable=False,
                     metadata={"operation": "generate_openai_compatible"},
                 )
@@ -2080,18 +2250,31 @@ def generate_openai_compatible(
             )
         try:
             task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
-            if operation_registry and operation_id:
-                operation_registry.update(
-                    operation_id, status="running", phase="requesting",
-                    message=f"Calling {provider_name} · attempt {content_attempt + 1}/{attempts}",
-                    attempt=content_attempt + 1, acquired_resources=[str(request_lane)],
-                    event_type="operation.started", force=True,
+
+            def request_cancelled() -> bool:
+                if not operation_registry:
+                    return False
+                operation = operation_registry.get(operation_id) if operation_id else None
+                parent = operation_registry.get(parent_task_id) if parent_task_id else None
+                return any(
+                    task and task.get("status") in {"cancelled", "interrupted"}
+                    for task in (operation, parent)
                 )
+
             with resource_scheduler.coordinator.acquire(
                 request_lane,
                 task_id=task_id,
                 description=f"{model_id} completion",
+                cancelled=request_cancelled,
             ):
+                if operation_registry and operation_id:
+                    operation_registry.update(
+                        operation_id, status="running", phase="requesting",
+                        message=f"Calling {provider_name} · attempt {content_attempt + 1}/{attempts}",
+                        attempt=content_attempt + 1,
+                        acquired_resources=[request_lane.key],
+                        event_type="operation.started", force=True,
+                    )
                 response = requests.post(
                     endpoint, json=request_payload, headers=headers, timeout=(10, 600),
                 )
@@ -2105,6 +2288,9 @@ def generate_openai_compatible(
                         endpoint, json=fallback_payload, headers=headers, timeout=(10, 600),
                     )
                 response.raise_for_status()
+        except resource_scheduler.ResourceAcquireCancelled as exc:
+            finish_operation("cancelled", "Provider call cancelled before it started")
+            raise InterruptedError(str(exc)) from exc
         except requests.exceptions.RequestException as exc:
             detail = ""
             if getattr(exc, "response", None) is not None:
@@ -2159,6 +2345,7 @@ def get_stream_status() -> dict:
 
 
 @trace_llm_call("generate_streaming", context=lambda: {"provider": _provider, "model_id": _model_id})
+@_scheduled_llm_request
 def generate_streaming(
     prompt: str,
     system_prompt: str = "",

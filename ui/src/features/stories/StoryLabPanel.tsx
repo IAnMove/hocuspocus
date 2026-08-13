@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import {
   BookOpen, Boxes, Check, ChevronDown, ChevronRight, ChevronUp, Copy, Download, ExternalLink, Film, ImagePlus, Loader2,
-  Languages, Music, Network, Palette, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
+  Languages, Music, Network, Palette, Play, Plus, RefreshCcw, Sparkles, Trash2, Upload, Users,
 } from 'lucide-react'
 import * as api from '../../api/client'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
@@ -10,7 +10,10 @@ import { EditableLanguageInput } from '../../components/common/EditableLanguageI
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { getOutputReference } from '../../lib/outputReference'
+import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
+import { StoryProductionTimeline } from './StoryProductionTimeline'
 import { AudioRangeSelector } from './AudioRangeSelector'
+import { createStoryActivityLifecycle } from './activityLifecycle'
 import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
 import {
@@ -25,6 +28,7 @@ import {
 import type { TrailerAdaptationOptions } from './adaptations'
 import { normalizeStoryProject, storyId, useStoryStore } from './store'
 import {
+  analyzeStoryPromptHealth,
   applyStoryVisualStyle,
   normalizeStoryCharacter,
   storyNegativePromptForStyle,
@@ -220,7 +224,7 @@ function nextMusicCandidateVersion(
   }, 0) + 1
 }
 
-type StoryTab = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'trailer' | 'productions'
+type StoryTab = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'trailer' | 'productions' | 'assembly'
 type ProductionReviewIssue = {
   id: string
   label: string
@@ -273,21 +277,25 @@ function savedStoryVideoAspect(value: unknown, fallback: AspectRatio): AspectRat
     : fallback
 }
 
-function StoryVideoFormatControls({ videoModel }: { videoModel: string }) {
-  const resolution = useStore(state => state.directorResolution)
-  const aspectRatio = useStore(state => state.directorAspectRatio)
-  const setResolution = useStore(state => state.setDirectorResolution)
-  const setAspectRatio = useStore(state => state.setDirectorAspectRatio)
-  const [options, setOptions] = useState<ModelOptions | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    api.fetchModelOptions(videoModel)
-      .then(value => { if (!cancelled) setOptions(value) })
-      .catch(() => { if (!cancelled) setOptions(null) })
-    return () => { cancelled = true }
-  }, [videoModel])
-
+function StoryVideoFormatControls({
+  videoModel,
+  resolution,
+  aspectRatio,
+  options,
+  disabled,
+  inherited,
+  adjusted,
+  onChange,
+}: {
+  videoModel: string
+  resolution: ResolutionPreset
+  aspectRatio: AspectRatio
+  options: ModelOptions | null
+  disabled: boolean
+  inherited: boolean
+  adjusted: boolean
+  onChange: (resolution: ResolutionPreset, aspectRatio: AspectRatio) => void
+}) {
   const modelOrder = (options?.resolution_preset_order || [])
     .filter(preset => preset !== 'auto' && (preset !== '768p' || videoModel === 'minimax_h3_legacy'))
   const availablePresets = modelOrder.length > 0
@@ -306,7 +314,8 @@ function StoryVideoFormatControls({ videoModel }: { videoModel: string }) {
           <select
             className={`${input} mt-1`}
             value={resolution}
-            onChange={event => setResolution(event.target.value as ResolutionPreset)}
+            disabled={disabled}
+            onChange={event => onChange(event.target.value as ResolutionPreset, aspectRatio)}
           >
             {visiblePresets.map(preset => (
               <option key={preset} value={preset}>
@@ -322,7 +331,8 @@ function StoryVideoFormatControls({ videoModel }: { videoModel: string }) {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setAspectRatio(option.value)}
+                disabled={disabled}
+                onClick={() => onChange(resolution, option.value)}
                 className={`${button} min-h-12 flex-col ${aspectRatio === option.value ? 'border-accent-blue/70 bg-accent-blue/10 text-text-primary' : ''}`}
               >
                 <span>{option.label}</span>
@@ -335,6 +345,20 @@ function StoryVideoFormatControls({ videoModel }: { videoModel: string }) {
       <p className="text-[9px] leading-relaxed text-text-muted">
         Output canvas: <span className="font-medium text-text-secondary">{outputSize}</span>. Landscape is the default; Portrait / Shorts keeps the complete production vertical.
       </p>
+      {inherited ? (
+        <p className="text-[9px] leading-relaxed text-emerald-300">
+          Inherited from the global production profile. Choose “Override in this project” to edit it here.
+        </p>
+      ) : disabled ? (
+        <p className="text-[9px] leading-relaxed text-text-muted">
+          Checking this model’s supported resolutions and screen formats…
+        </p>
+      ) : null}
+      {adjusted && (
+        <p className="text-[9px] leading-relaxed text-amber-300">
+          The requested canvas is unavailable for this model; Story Lab selected its nearest supported format.
+        </p>
+      )}
       {selectedConfig?.hint && (
         <p className={`text-[9px] leading-relaxed ${selectedConfig.experimental ? 'text-amber-300' : 'text-text-muted'}`}>
           {selectedConfig.hint}
@@ -537,10 +561,11 @@ function Choice({
 }
 
 function ProviderPanel({
-  project, patch,
+  project, patch, onProfileModeChange,
 }: {
   project: StoryProject
   patch: (patch: Partial<StoryProject>) => void
+  onProfileModeChange: (useGlobalProfile: boolean) => void
 }) {
   const services = useStore(state => state.servicesConfig)
   const models = useStore(state => state.models)
@@ -587,13 +612,14 @@ function ProviderPanel({
       </div>
       <div className="grid grid-cols-2 gap-2">
         <button type="button" className={`${button} ${project.provider.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`}
-          onClick={() => patchProvider({ useGlobalProfile: true })}>Use global profile</button>
+          onClick={() => onProfileModeChange(true)}>Use global profile</button>
         <button type="button" className={`${button} ${!project.provider.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`}
-          onClick={() => patchProvider({ useGlobalProfile: false })}>Override in this project</button>
+          onClick={() => onProfileModeChange(false)}>Override in this project</button>
       </div>
       {project.provider.useGlobalProfile && (
         <p className="text-[10px] text-emerald-300">
           Global: {profile.text.provider} / {profile.text.model} · {profile.image.provider} / {profile.image.model}
+          {' · '}video {profile.video.model} · {profile.video.settings.resolution} {profile.video.settings.aspectRatio}
         </p>
       )}
       <fieldset disabled={project.provider.useGlobalProfile} className="space-y-3 disabled:opacity-50">
@@ -751,14 +777,56 @@ export function StoryLabPanel() {
   const newProject = useStoryStore(state => state.newProject)
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const videoModels = useStore(state => state.models)
+  const modelsLoaded = useStore(state => state.modelsLoaded)
   const enabledModels = useStore(state => state.enabledModels)
   const servicesConfig = useStore(state => state.servicesConfig)
   const filmImageModel = useStore(state => state.selectedModelPerMode.image) || 'flux2_klein_9b'
-  const filmVideoModel = useStore(state => state.selectedModelPerMode.video) || 'ltx2_22B_distilled_1_1'
-  const storyVideoResolution = useStore(state => state.directorResolution)
-  const storyVideoAspectRatio = useStore(state => state.directorAspectRatio)
+  const studioVideoModel = useStore(state => state.selectedModelPerMode.video)
+  const studioVideoResolution = useStore(state => state.directorResolution)
+  const studioVideoAspectRatio = useStore(state => state.directorAspectRatio)
   const selectDirectorImageModel = useStore(state => state.selectDirectorImageModel)
-  const selectDirectorVideoModel = useStore(state => state.selectDirectorVideoModel)
+  const legacyVideoOverridePending = !project.videoOverride.model.trim()
+  const requestedStoryVideoModel = project.provider.useGlobalProfile
+    ? productionProfile.video.model
+    : project.videoOverride.model.trim()
+      || studioVideoModel
+      || productionProfile.video.model
+      || 'minimax_h3_legacy'
+  const requestedStoryVideoResolution = savedStoryVideoResolution(
+    project.provider.useGlobalProfile
+      ? productionProfile.video.settings.resolution
+      : legacyVideoOverridePending
+        ? studioVideoResolution
+        : project.videoOverride.resolution,
+    '540p',
+  )
+  const requestedStoryVideoAspectRatio = savedStoryVideoAspect(
+    project.provider.useGlobalProfile
+      ? productionProfile.video.settings.aspectRatio
+      : legacyVideoOverridePending
+        ? studioVideoAspectRatio
+        : project.videoOverride.aspectRatio,
+    '16:9',
+  )
+  const [storyVideoOptionsState, setStoryVideoOptionsState] = useState<{
+    model: string
+    options: ModelOptions | null
+    settled: boolean
+  }>({ model: '', options: null, settled: false })
+  const storyVideoOptions = storyVideoOptionsState.model === requestedStoryVideoModel
+    ? storyVideoOptionsState.options : null
+  const storyVideoFormat = resolveSupportedVideoFormat(
+    storyVideoOptions,
+    requestedStoryVideoResolution,
+    requestedStoryVideoAspectRatio,
+  )
+  const filmVideoModel = requestedStoryVideoModel
+  const storyVideoResolution = storyVideoFormat.resolution
+  const storyVideoAspectRatio = storyVideoFormat.aspectRatio
+  const storyVideoOptionsReady = storyVideoOptionsState.model === filmVideoModel
+    && storyVideoOptionsState.settled
+  const storyVideoConfigurationReady = storyVideoOptionsReady
+    && (project.provider.useGlobalProfile || !legacyVideoOverridePending)
   const [tab, setTab] = useState<StoryTab>('overview')
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
   const [imageBusy, setImageBusy] = useState('')
@@ -831,6 +899,7 @@ export function StoryLabPanel() {
   const customMusicUploadRef = useRef<HTMLInputElement>(null)
   const customMusicUploadCueId = useRef('')
   const musicQueueCancelRequested = useRef(false)
+  const activeMusicJobId = useRef('')
   const styleConversionCancelRequested = useRef(false)
   const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
@@ -857,6 +926,89 @@ export function StoryLabPanel() {
     return options
   }, [project.language, project.music.candidates, project.music.cues, project.music.lyricsLanguage, project.title])
   const selectedMusicOption = musicCandidateOptions.find(option => option.candidate.id === musicProductionCandidateId)
+
+  useEffect(() => {
+    let cancelled = false
+    const model = requestedStoryVideoModel.trim()
+    setStoryVideoOptionsState({ model, options: null, settled: !model })
+    if (!model) return () => { cancelled = true }
+    void api.fetchModelOptions(model).then(options => {
+      if (!cancelled) setStoryVideoOptionsState({ model, options, settled: true })
+    }).catch(() => {
+      if (!cancelled) setStoryVideoOptionsState({ model, options: null, settled: true })
+    })
+    return () => { cancelled = true }
+  }, [requestedStoryVideoModel])
+
+  useEffect(() => {
+    if (
+      project.provider.useGlobalProfile
+      || !storyVideoOptionsReady
+      || !filmVideoModel
+      || (legacyVideoOverridePending && !modelsLoaded)
+    ) return
+    const normalized = {
+      model: filmVideoModel,
+      resolution: storyVideoResolution,
+      aspectRatio: storyVideoAspectRatio,
+    }
+    if (
+      project.videoOverride.model === normalized.model
+      && project.videoOverride.resolution === normalized.resolution
+      && project.videoOverride.aspectRatio === normalized.aspectRatio
+    ) return
+    // Legacy override projects used the shared Director values. Capture them
+    // once after hydration; subsequent edits are fully Story-local.
+    patch({ videoOverride: normalized })
+  }, [
+    filmVideoModel,
+    legacyVideoOverridePending,
+    modelsLoaded,
+    patch,
+    project.provider.useGlobalProfile,
+    project.videoOverride.aspectRatio,
+    project.videoOverride.model,
+    project.videoOverride.resolution,
+    storyVideoAspectRatio,
+    storyVideoOptionsReady,
+    storyVideoResolution,
+  ])
+
+  const setStoryProfileMode = (useGlobalProfile: boolean) => {
+    patch({
+      provider: { ...project.provider, useGlobalProfile },
+      ...(!useGlobalProfile && legacyVideoOverridePending ? {
+        videoOverride: {
+          model: filmVideoModel,
+          resolution: storyVideoResolution,
+          aspectRatio: storyVideoAspectRatio,
+        },
+      } : {}),
+    })
+  }
+
+  const selectStoryVideoModel = (model: string) => {
+    if (project.provider.useGlobalProfile || !model.trim()) return
+    patch({
+      videoOverride: {
+        model,
+        resolution: storyVideoResolution,
+        aspectRatio: storyVideoAspectRatio,
+      },
+    })
+  }
+
+  const setStoryVideoFormat = (resolution: ResolutionPreset, aspectRatio: AspectRatio) => {
+    if (project.provider.useGlobalProfile) return
+    const format = resolveSupportedVideoFormat(storyVideoOptions, resolution, aspectRatio)
+    patch({
+      videoOverride: {
+        model: filmVideoModel,
+        resolution: format.resolution,
+        aspectRatio: format.aspectRatio,
+      },
+    })
+  }
 
   useEffect(() => {
     if (selectedMusicOption || !musicCandidateOptions.length) return
@@ -939,55 +1091,17 @@ export function StoryLabPanel() {
       ? 'Maestro internal'
       : project.provider.writingModel || project.provider.writingProvider
     const title = `Story Lab · ${project.title.trim() || 'Untitled story'} · ${writer}`
-    let failed = false
-    useStore.getState().upsertActivity({
+    return createStoryActivityLifecycle({
       id,
-      kind: 'story_lab',
       title,
-      status: 'running',
       phase,
       message,
-      current: 0,
       total,
+      publish: activity => useStore.getState().upsertActivity(activity),
+      scheduleDismiss: activityId => {
+        window.setTimeout(() => useStore.getState().removeActivity(activityId), 4000)
+      },
     })
-    const updateActivity = (
-      nextMessage: string,
-      nextPhase = phase,
-      current = 0,
-      nextTotal = total,
-    ) => {
-      useStore.getState().upsertActivity({
-        id,
-        kind: 'story_lab',
-        title,
-        status: 'running',
-        phase: nextPhase,
-        message: nextMessage,
-        current,
-        total: nextTotal,
-      })
-    }
-    return {
-      id,
-      update: updateActivity,
-      fail: (error: unknown, nextPhase = phase) => {
-        failed = true
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        useStore.getState().upsertActivity({
-          id,
-          kind: 'story_lab',
-          title,
-          status: 'failed',
-          phase: nextPhase,
-          message: errorMessage,
-          error: errorMessage,
-        })
-      },
-      finish: () => {
-        if (failed) return
-        useStore.getState().removeActivity(id)
-      },
-    }
   }
   const selectableVideoModels = useMemo(
     () => videoModels
@@ -1006,6 +1120,12 @@ export function StoryLabPanel() {
   const filmImageReady = filmImageModel !== MINIMAX_IMAGE_API_MODEL || Boolean(servicesConfig?.minimax_api_key_set)
   const directMusicVideo = project.musicVideoGenerationMode === 'direct_video'
   const directReferenceVideo = project.musicVideoGenerationMode === 'direct_references'
+  const promptHealthWarnings = useMemo(() => analyzeStoryPromptHealth(project), [project])
+  const protagonist = project.characters.find(character => character.id === project.protagonistCharacterId)
+  const protagonistReferenceReady = !project.protagonistConsistency || Boolean(
+    protagonist?.primaryReferenceAssetId
+    && project.assets[protagonist.primaryReferenceAssetId]?.approval === 'approved',
+  )
   const attachedVisualReferenceIds = new Set([
     ...project.world.referenceAssetIds,
     ...project.world.locations.flatMap(location => location.referenceAssetIds),
@@ -1461,6 +1581,9 @@ export function StoryLabPanel() {
         const ready = await generateVisual(item.target, item.prompt, {
           quiet: true,
           onError: message => { lastError = message },
+          onJobSubmitted: jobId => activity.handoff(
+            `Continuing as recoverable image job ${jobId}`,
+          ),
         })
         if (!ready) {
           setNotice({
@@ -1574,6 +1697,7 @@ export function StoryLabPanel() {
         writingBaseUrl: effectiveProvider.writingBaseUrl,
         workspace: activeWorkspace,
       }, progress => {
+        activity.handoff(`Continuing as recoverable job ${progress.jobId}`)
         activeJobId = progress.jobId
         setRecoveryJobId(progress.jobId)
         window.localStorage.setItem(storyJobKey(activeWorkspace, project.id), progress.jobId)
@@ -1598,7 +1722,11 @@ export function StoryLabPanel() {
       }
       await completeGeneratedDraft(scope, result, options)
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') activity.fail(error)
+      if ((error as Error).name === 'AbortError') {
+        activity.cancel('Story generation cancellation requested')
+      } else {
+        activity.fail(error)
+      }
       setNotice({
         kind: (error as Error).name === 'AbortError' ? 'ok' : 'error',
         text: (error as Error).name === 'AbortError'
@@ -1636,10 +1764,12 @@ export function StoryLabPanel() {
     if (!recoveryJobId.trim() || busy) return
     const sourceProjectId = project.id
     const activity = beginStoryActivity('story_planning', 'Story Lab is resuming the saved generation…')
+    activity.handoff(`Continuing as recoverable job ${recoveryJobId.trim()}`)
     setBusy('all')
     setNotice(null)
     try {
       const { result } = await api.resumeStoryGeneration(recoveryJobId.trim(), progress => {
+        activity.handoff(`Continuing as recoverable job ${progress.jobId}`)
         setJobProgress(`${progress.message} ${progress.total ? `${progress.current}/${progress.total}` : ''}`)
         activity.update(
           progress.message,
@@ -1677,7 +1807,7 @@ export function StoryLabPanel() {
     } catch (error) {
       const message = (error as Error).message
       if (/cancelled/i.test(message)) {
-        useStore.getState().removeActivity(activity.id)
+        activity.cancel('Saved Story Lab generation cancelled')
         setNotice({ kind: 'ok', text: 'That saved attempt was cancelled. Any completed stages and newer completed drafts remain available.' })
       } else {
         activity.fail(error)
@@ -1732,6 +1862,7 @@ export function StoryLabPanel() {
       usePrimaryReference?: boolean
       quiet?: boolean
       onError?: (message: string) => void
+      onJobSubmitted?: (jobId: string) => void
     } = {},
   ) => {
     if (!prompt.trim()) return
@@ -1766,9 +1897,11 @@ export function StoryLabPanel() {
       compatibleNegativePrompt ? `Strictly avoid: ${compatibleNegativePrompt}.` : '',
     ].filter(Boolean).join(' ')
     const jobKey = `${key}:${stableTextKey(effectivePrompt)}`
+    const existingJobId = current.visualJobs[jobKey]
     setImageBusy(key)
     if (!options.quiet) setNotice(null)
     try {
+      if (existingJobId) options.onJobSubmitted?.(existingJobId)
       const generated = await generateImageAsset(
         effectiveImageProvider,
         effectivePrompt,
@@ -1777,15 +1910,18 @@ export function StoryLabPanel() {
         negativePrompt.trim(),
         {
           panelId: `story-${jobKey}`,
-          existingJobId: current.visualJobs[jobKey],
-          onJobSubmitted: jobId => update(latest => {
-            if (latest.id !== sourceProjectId) return latest
-            Object.keys(latest.visualJobs)
-              .filter(item => item.startsWith(`${key}:`))
-              .forEach(item => { delete latest.visualJobs[item] })
-            latest.visualJobs[jobKey] = jobId
-            return latest
-          }),
+          existingJobId,
+          onJobSubmitted: jobId => {
+            options.onJobSubmitted?.(jobId)
+            update(latest => {
+              if (latest.id !== sourceProjectId) return latest
+              Object.keys(latest.visualJobs)
+                .filter(item => item.startsWith(`${key}:`))
+                .forEach(item => { delete latest.visualJobs[item] })
+              latest.visualJobs[jobKey] = jobId
+              return latest
+            })
+          },
           strictReference: Boolean(primaryReference),
         },
       )
@@ -2232,6 +2368,9 @@ export function StoryLabPanel() {
             referenceMode: 'edit',
             resolution: STYLE_RESOLUTION_BY_ASPECT[aspectRatio],
             strictReference: true,
+            onJobSubmitted: jobId => activity.handoff(
+              `Continuing as recoverable image job ${jobId}`,
+            ),
           },
         )
         const derivedId = storyId('asset')
@@ -2469,6 +2608,12 @@ export function StoryLabPanel() {
     }
     if (videoModel) {
       await useStore.getState().selectDirectorVideoModel(videoModel)
+      const selected = useStore.getState().selectedModelPerMode.video
+      if (selected !== videoModel) {
+        throw new Error(
+          `Video model selection did not settle: requested ${videoModel}, effective ${selected || 'none'}.`,
+        )
+      }
     }
     store.setDirectorResolution(resolution)
     store.setDirectorAspectRatio(aspectRatio)
@@ -2490,6 +2635,7 @@ export function StoryLabPanel() {
     store.shortFilmSetPreserveVisualStyle(adaptation.preserveVisualStyle)
     store.setDirectorCharacterVisualStyle(source.characterVisualStyle)
     store.setDirectorAllowClipText(source.allowClipText)
+    store.setDirectorSpokenLanguage(source.spokenLanguage)
     store.setDirectorAutoMode(autoStart)
     useStore.setState({
       directorWritingProvider: source.provider.writingProvider,
@@ -2539,6 +2685,15 @@ export function StoryLabPanel() {
   }
 
   const stageFilm = async (autoStart = false) => {
+    if (!storyVideoConfigurationReady) {
+      setNotice({
+        kind: 'error',
+        text: legacyVideoOverridePending
+          ? 'Restoring this legacy Story’s previous video model and format. Try again in a moment.'
+          : 'Checking the selected video model’s supported formats. Try again in a moment.',
+      })
+      return
+    }
     const director = useStore.getState()
     const hasDirectorWork = Boolean(
       director.directorSceneDescription.trim()
@@ -2593,6 +2748,7 @@ export function StoryLabPanel() {
             generationMode: project.musicVideoGenerationMode,
             resolution: storyVideoResolution,
             aspectRatio: storyVideoAspectRatio,
+            pipelineId: useStore.getState().pipelineId || undefined,
           },
           status: 'staged',
         }],
@@ -2614,6 +2770,15 @@ export function StoryLabPanel() {
   }
 
   const stageTrailer = async (autoStart = false) => {
+    if (!storyVideoConfigurationReady) {
+      setNotice({
+        kind: 'error',
+        text: legacyVideoOverridePending
+          ? 'Restaurando el modelo y formato anterior de esta Story. Inténtalo de nuevo en un momento.'
+          : 'Comprobando los formatos compatibles del modelo de vídeo. Inténtalo de nuevo en un momento.',
+      })
+      return
+    }
     if (!project.synopsis.trim() || !project.characters.length) {
       setNotice({ kind: 'error', text: 'El tráiler necesita una sinopsis y al menos un personaje.' })
       return
@@ -2877,6 +3042,17 @@ export function StoryLabPanel() {
         reference_audio_filename: project.music.mode === 'cover'
           ? project.music.coverReferenceFilename : undefined,
         workspace: activeWorkspace,
+      }, {
+        onJobSubmitted: job => {
+          activeMusicJobId.current = job.jobId
+          activity.handoff(`Continuing as recoverable MiniMax Music job ${job.jobId}`)
+        },
+        onProgress: job => activity.update(
+          job.message,
+          job.phase === 'waiting_resource' ? 'waiting_resource' : 'generating_music',
+          job.current,
+          job.total,
+        ),
       })
       const createdAt = new Date().toISOString()
       const language = generationLanguage
@@ -2895,6 +3071,8 @@ export function StoryLabPanel() {
         model: candidate.model,
         durationSeconds: candidate.duration_seconds,
         createdAt,
+        taskId: candidate.taskId || candidate.task_id,
+        rootTaskId: candidate.rootTaskId || candidate.root_task_id,
       }))
       patch({
         music: {
@@ -2907,11 +3085,17 @@ export function StoryLabPanel() {
           selectedCandidateId: candidates[0]?.id || project.music.selectedCandidateId,
         },
       })
-      setNotice({ kind: 'ok', text: `${candidates.length} MiniMax Music candidates generated. Listen and choose one for the musical trailer.` })
+      setNotice({
+        kind: result.status === 'completed' ? 'ok' : 'error',
+        text: result.status === 'completed'
+          ? `${candidates.length} MiniMax Music candidates generated. Listen and choose one for the musical trailer.`
+          : `${result.message}. ${candidates.length} completed candidate(s) were preserved.`,
+      })
     } catch (error) {
       activity.fail(error, 'generating_music')
       setNotice({ kind: 'error', text: `MiniMax Music could not generate the candidates: ${(error as Error).message}` })
     } finally {
+      activeMusicJobId.current = ''
       activity.finish()
       setProductionBusy(null)
     }
@@ -3087,7 +3271,9 @@ export function StoryLabPanel() {
         total,
       )
       if (generateAudio) {
-        const ready = await generateMusicCueAudio(cue.id, true)
+        const ready = await generateMusicCueAudio(cue.id, true, jobId => activity.handoff(
+          `Continuing as recoverable MiniMax Music job ${jobId}`,
+        ))
         if (!ready) {
           activity.fail(new Error('MiniMax Music did not complete the new song.'), 'generating_music')
           return
@@ -3369,7 +3555,11 @@ export function StoryLabPanel() {
     }
   }
 
-  const generateMusicCueAudio = async (cueId: string, queued = false): Promise<boolean> => {
+  const generateMusicCueAudio = async (
+    cueId: string,
+    queued = false,
+    onJobSubmitted?: (jobId: string) => void,
+  ): Promise<boolean> => {
     if (!servicesConfig?.minimax_api_key_set) {
       setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
       return false
@@ -3401,6 +3591,18 @@ export function StoryLabPanel() {
         count: 1,
         model: current.music.model,
         workspace: activeWorkspace,
+      }, {
+        onJobSubmitted: job => {
+          activeMusicJobId.current = job.jobId
+          activity?.handoff(`Continuing as recoverable MiniMax Music job ${job.jobId}`)
+          onJobSubmitted?.(job.jobId)
+        },
+        onProgress: job => activity?.update(
+          job.message,
+          job.phase === 'waiting_resource' ? 'waiting_resource' : 'generating_music',
+          job.current,
+          job.total,
+        ),
       })
       const createdAt = new Date().toISOString()
       const language = cue.lyricsLanguage || current.language
@@ -3419,6 +3621,8 @@ export function StoryLabPanel() {
         model: candidate.model,
         durationSeconds: candidate.duration_seconds,
         createdAt,
+        taskId: candidate.taskId || candidate.task_id,
+        rootTaskId: candidate.rootTaskId || candidate.root_task_id,
       }))
       update(latest => {
         const target = latest.music.cues.find(item => item.id === cueId)
@@ -3429,14 +3633,20 @@ export function StoryLabPanel() {
         return latest
       })
       if (!queued) {
-        setNotice({ kind: 'ok', text: `MiniMax generated “${cue.title}”. The result is saved under this proposal.` })
+        setNotice({
+          kind: result.status === 'completed' ? 'ok' : 'error',
+          text: result.status === 'completed'
+            ? `MiniMax generated “${cue.title}”. The result is saved under this proposal.`
+            : `${result.message}. Any completed audio was saved under “${cue.title}”.`,
+        })
       }
-      return true
+      return result.status === 'completed' || result.status === 'cancelled'
     } catch (error) {
       activity?.fail(error, 'generating_music')
       setNotice({ kind: 'error', text: `“${cue.title}” could not be generated: ${(error as Error).message}` })
       return false
     } finally {
+      activeMusicJobId.current = ''
       activity?.finish()
       if (!queued) setMusicCueBusy('')
     }
@@ -3480,7 +3690,9 @@ export function StoryLabPanel() {
           index,
           ids.length,
         )
-        const ready = await generateMusicCueAudio(ids[index], true)
+        const ready = await generateMusicCueAudio(ids[index], true, jobId => activity.handoff(
+          `Continuing as recoverable MiniMax Music job ${jobId}`,
+        ))
         if (!ready) break
         completed += 1
         activity.update(
@@ -3512,7 +3724,15 @@ export function StoryLabPanel() {
   const cancelMusicQueue = () => {
     musicQueueCancelRequested.current = true
     setMusicQueue(current => current ? { ...current, cancelling: true } : current)
-    setNotice({ kind: 'ok', text: 'Cancelling the music queue after the current provider request finishes…' })
+    const jobId = activeMusicJobId.current
+    if (jobId) {
+      void api.cancelStoryMusicCandidatesJob(jobId).catch(error => {
+        setNotice({ kind: 'error', text: `Could not request MiniMax cancellation: ${(error as Error).message}` })
+      })
+    }
+    setNotice({ kind: 'ok', text: jobId
+      ? 'Cancellation sent to the active MiniMax request; waiting for its safe boundary…'
+      : 'Music queue cancellation requested before the next track starts.' })
   }
 
   const musicCueForCandidate = (source: StoryProject, candidateId?: string) =>
@@ -3563,6 +3783,7 @@ export function StoryLabPanel() {
       writingModel: source.provider.writingModel,
       writingBaseUrl: source.provider.writingBaseUrl,
     },
+    onDirectorHandoff?: () => void,
   ) => {
     const resolvedCue = effectiveMusicCue(source, cue, candidate)
     const directVideo = generationSettings.generationMode === 'direct_video'
@@ -3613,6 +3834,7 @@ export function StoryLabPanel() {
     store.shortFilmSetPreserveVisualStyle(directVideo ? false : source.enforceVisualStyle)
     store.setDirectorCharacterVisualStyle(directVideo ? '' : source.characterVisualStyle)
     store.setDirectorAllowClipText(source.allowClipText)
+    store.setDirectorSpokenLanguage(source.spokenLanguage)
     useStore.setState({
       directorMusicSource: 'upload',
       directorSongDescription: resolvedCue.brief,
@@ -3662,6 +3884,7 @@ export function StoryLabPanel() {
       if (!response.ok) throw new Error('The selected song file is unavailable')
       return response.blob()
     })
+    onDirectorHandoff?.()
     await useStore.getState().directorUploadAndAnalyze(new File(
       [blob], candidate.name, { type: blob.type || 'audio/mpeg' },
     ), {
@@ -3689,12 +3912,34 @@ export function StoryLabPanel() {
       excerpt?: { start: number; end: number }
     } = {},
   ) => {
+    if (!storyVideoConfigurationReady) {
+      setNotice({
+        kind: 'error',
+        text: legacyVideoOverridePending
+          ? 'Restoring this legacy Story’s previous video model and format. Try again in a moment.'
+          : 'Checking the selected video model’s supported formats. Try again in a moment.',
+      })
+      return
+    }
     const cue = musicCueForCandidate(project, candidateId)
     const candidate = musicCandidateById(project, candidateId)
     if (!candidate) {
       const director = useStore.getState()
       director.directorReset()
       director.setGenerationMode('video')
+      if (filmVideoModel) {
+        await director.selectDirectorVideoModel(filmVideoModel)
+        const selected = useStore.getState().selectedModelPerMode.video
+        if (selected !== filmVideoModel) {
+          setNotice({
+            kind: 'error',
+            text: `Director could not apply this Story’s video model: requested ${filmVideoModel}, effective ${selected || 'none'}.`,
+          })
+          return
+        }
+      }
+      director.setDirectorResolution(storyVideoResolution)
+      director.setDirectorAspectRatio(storyVideoAspectRatio)
       director.setSidebarMode('director')
       director.setDirectorSkill('music_video')
       director.setDirectorAutoMode(false)
@@ -3748,6 +3993,7 @@ export function StoryLabPanel() {
         options.pacing || musicProductionPacing,
         options.mode === 'trailer' ? options.excerpt : undefined,
         generationSettings,
+        () => activity.handoff('Continuing in Director as a recoverable music-video workflow'),
       )
       activity.update('Saving the independent production snapshot…', 'preparing_music_video', 2, 3)
       if (options.saveProduction !== false) {
@@ -3811,6 +4057,15 @@ export function StoryLabPanel() {
   }
 
   const stageMusicVideo = async (autoStart = false) => {
+    if (!storyVideoConfigurationReady) {
+      setNotice({
+        kind: 'error',
+        text: legacyVideoOverridePending
+          ? 'Restoring this legacy Story’s previous video model and format. Try again in a moment.'
+          : 'Checking the selected video model’s supported formats. Try again in a moment.',
+      })
+      return
+    }
     if (!selectedMusicOption) {
       setNotice({ kind: 'error', text: 'Generate or import a song in Music before creating a music video.' })
       return
@@ -4026,6 +4281,7 @@ export function StoryLabPanel() {
       { id: 'music', label: 'Canción', icon: Music },
       { id: 'trailer', label: 'Tráiler', icon: Film },
       { id: 'productions', label: 'Generar', icon: Sparkles },
+      { id: 'assembly', label: 'Montaje', icon: Play },
     ]
     : project.projectType === 'quick_video'
       ? [
@@ -4033,6 +4289,7 @@ export function StoryLabPanel() {
         { id: 'assets', label: 'Imágenes', icon: ImagePlus },
         { id: 'trailer', label: 'Tráiler', icon: Film },
         { id: 'productions', label: 'Generar', icon: Sparkles },
+        { id: 'assembly', label: 'Montaje', icon: Play },
       ]
       : [
         { id: 'overview', label: 'Story', icon: BookOpen },
@@ -4044,6 +4301,7 @@ export function StoryLabPanel() {
         { id: 'structure', label: 'Structure', icon: ChevronRight },
         { id: 'trailer', label: 'Tráiler', icon: Film },
         { id: 'productions', label: 'Productions', icon: Film },
+        { id: 'assembly', label: 'Assembly', icon: Play },
       ]
   const visibleTabIds = tabs.map(item => item.id)
   const foundationChecks = project.projectType === 'music_video'
@@ -4414,6 +4672,40 @@ export function StoryLabPanel() {
                         required
                       />
                     </label>
+                    <label className="block text-[10px] text-violet-200">
+                      Idioma hablado del vídeo
+                      <select className={`${input} mt-1`} value={project.spokenLanguage} onChange={event => patch({ spokenLanguage: event.target.value })}>
+                        <option value="">Automático según el diálogo</option>
+                        <option value="Español de España">Español de España</option>
+                        <option value="Español latinoamericano">Español latinoamericano</option>
+                        <option value="English">English</option>
+                        <option value="French">Français</option>
+                        <option value="Italian">Italiano</option>
+                      </select>
+                      <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">Fuerza el idioma en cada prompt. El acento regional depende de la adherencia del modelo.</span>
+                    </label>
+                    {project.projectType === 'music_video' && <label className="block text-[10px] text-violet-200">
+                      Variedad de localizaciones
+                      <select className={`${input} mt-1`} value={project.locationVariety} onChange={event => patch({ locationVariety: event.target.value as StoryProject['locationVariety'] })}>
+                        <option value="balanced">Equilibrada · mínimo 3 entornos</option>
+                        <option value="single_location">Una sola localización intencionada</option>
+                      </select>
+                    </label>}
+                    <div className="md:col-span-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
+                      <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
+                        <input type="checkbox" checked={project.protagonistConsistency} onChange={event => patch({ protagonistConsistency: event.target.checked, protagonistCharacterId: event.target.checked ? (project.protagonistCharacterId || project.characters[0]?.id || '') : project.protagonistCharacterId, ...(event.target.checked && project.musicVideoGenerationMode === 'direct_video' ? { musicVideoGenerationMode: 'image_guided' as const } : {}) })} className="mt-0.5 accent-violet-400" />
+                        <span><span className="block text-violet-200">Crear primero y fijar protagonista</span><span className="block text-[9px] text-text-muted">Opcional. Exige una identidad principal aprobada y la coloca como primera referencia en todos los vídeos compatibles.</span></span>
+                      </label>
+                      {project.protagonistConsistency && <select className={input} value={project.protagonistCharacterId} onChange={event => patch({ protagonistCharacterId: event.target.value })}>
+                        <option value="">Selecciona protagonista</option>
+                        {project.characters.map(character => <option key={character.id} value={character.id}>{character.name || 'Sin nombre'}</option>)}
+                      </select>}
+                      {project.protagonistConsistency && <p className={`text-[9px] ${protagonistReferenceReady ? 'text-emerald-200' : 'text-amber-300'}`}>{protagonistReferenceReady ? 'Identidad principal aprobada y lista.' : 'Ve a Personajes, crea o sube la identidad del protagonista, selecciónala como principal y apruébala.'}</p>}
+                    </div>
+                    {promptHealthWarnings.length > 0 && <div className="md:col-span-2 rounded-lg border border-amber-500/35 bg-amber-500/5 p-3">
+                      <p className="text-[10px] font-medium text-amber-200">Análisis preventivo del prompt</p>
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-[9px] leading-relaxed text-amber-100">{promptHealthWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
+                    </div>}
                     {project.projectType === 'full_story' && (
                       <>
                         <Choice required label="Genre" value={project.genre} options={GENRES} onChange={genre => patch({ genre })} />
@@ -4494,7 +4786,7 @@ export function StoryLabPanel() {
                       </div>
                     </div>
                   </div>
-                  <ProviderPanel project={project} patch={patch} />
+                  <ProviderPanel project={project} patch={patch} onProfileModeChange={setStoryProfileMode} />
                 </div>
                 {project.projectType !== 'full_story' && (
                   <CompactVideoWorkspace
@@ -4962,7 +5254,7 @@ export function StoryLabPanel() {
                       {musicQueue ? (
                         <button className={`${button} border-red-400/60 text-red-300`} onClick={cancelMusicQueue} disabled={musicQueue.cancelling === true}>
                           {musicQueue.cancelling ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                          {musicQueue.cancelling ? 'Cancelling after current track…' : `Cancel queue ${musicQueue.index + 1}/${musicQueue.ids.length}`}
+                          {musicQueue.cancelling ? 'Cancelling active request…' : `Cancel queue ${musicQueue.index + 1}/${musicQueue.ids.length}`}
                         </button>
                       ) : (
                         <button className={`${button} ${completeGenerationButton}`}
@@ -5198,7 +5490,7 @@ export function StoryLabPanel() {
                                           <span className="text-text-muted">{candidate.durationSeconds ? `${candidate.durationSeconds.toFixed(1)}s` : 'duration on playback'}</span>
                                         </button>
                                         <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
-                                        <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue)}
+                                        <button className={`${button} w-full`} disabled={Boolean(musicCueBusy || musicQueue) || !storyVideoConfigurationReady}
                                           onClick={() => void openMusicalTrailer(candidate.id)}>
                                           <Film size={12} /> Use in musical trailer
                                         </button>
@@ -5307,10 +5599,10 @@ export function StoryLabPanel() {
                         <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">
                           <span className="text-[10px] text-text-primary">{musicCandidateDisplayName(candidate, project.title || 'Story song', project.music.lyricsLanguage || project.language, project.music.candidates.indexOf(candidate) + 1)} · {candidate.model}</span>
                           <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
-                          <button className={`${button} w-full`} onClick={() => void openMusicalTrailer(candidate.id)}><Film size={12} /> Use in musical trailer</button>
+                          <button className={`${button} w-full`} disabled={!storyVideoConfigurationReady} onClick={() => void openMusicalTrailer(candidate.id)}><Film size={12} /> Use in musical trailer</button>
                         </div>
                       ))}
-                      <button className={`${button} w-full`} onClick={() => void openMusicalTrailer()}>
+                      <button className={`${button} w-full`} disabled={!storyVideoConfigurationReady} onClick={() => void openMusicalTrailer()}>
                         <ChevronRight size={13} /> Open Musical Video Director
                       </button>
                     </div>
@@ -5423,18 +5715,18 @@ export function StoryLabPanel() {
                         </select>
                       </label>
                       <label className="block text-[10px] text-text-muted">Modelo de vídeo
-                        <select className={`${input} mt-1`} value={filmVideoModel} onChange={event => void selectDirectorVideoModel(event.target.value)}>
+                        <select className={`${input} mt-1`} value={filmVideoModel} disabled={project.provider.useGlobalProfile || !storyVideoOptionsReady} onChange={event => selectStoryVideoModel(event.target.value)}>
                           {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>}
                           {selectableVideoModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}</option>)}
                         </select>
                       </label>
                     </div>
                   </div>
-                  <StoryVideoFormatControls videoModel={filmVideoModel} />
+                  <StoryVideoFormatControls videoModel={filmVideoModel} resolution={storyVideoResolution} aspectRatio={storyVideoAspectRatio} options={storyVideoOptions} disabled={project.provider.useGlobalProfile || !storyVideoOptionsReady} inherited={project.provider.useGlobalProfile} adjusted={storyVideoFormat.adjusted} onChange={setStoryVideoFormat} />
                   {productionIssues.length > 0 && <div className="rounded-md border border-amber-400/30 bg-amber-500/10 p-2 text-[10px] text-amber-200">Revisa {productionIssues.length} requisito{productionIssues.length === 1 ? '' : 's'} de Story antes de generar. Puedes abrir Producciones para ver el detalle.</div>}
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmGenerationImageReady || !directReferenceVideoReady || (trailerTitleCards && !project.allowClipText)} onClick={() => void stageTrailer(true)}>{productionBusy === 'trailer' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generar tráiler completo</button>
-                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || (trailerTitleCards && !project.allowClipText)} onClick={() => void stageTrailer(false)}><ChevronRight size={13} /> Abrir y revisar en Director</button>
+                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmGenerationImageReady || !directReferenceVideoReady || !storyVideoConfigurationReady || (trailerTitleCards && !project.allowClipText)} onClick={() => void stageTrailer(true)}>{productionBusy === 'trailer' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generar tráiler completo</button>
+                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !storyVideoConfigurationReady || (trailerTitleCards && !project.allowClipText)} onClick={() => void stageTrailer(false)}><ChevronRight size={13} /> Abrir y revisar en Director</button>
                   </div>
                   <p className="text-[9px] text-text-muted">La generación completa crea el plan y lanza un trabajo recuperable; puede consumir créditos de imagen y vídeo. Abrir en Director permite editar primero todos los clips propuestos.</p>
                 </div>
@@ -5582,7 +5874,8 @@ export function StoryLabPanel() {
                       <select
                         className={`${input} mt-1`}
                         value={filmVideoModel}
-                        onChange={event => void selectDirectorVideoModel(event.target.value)}
+                        disabled={project.provider.useGlobalProfile || !storyVideoOptionsReady}
+                        onChange={event => selectStoryVideoModel(event.target.value)}
                       >
                         {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && (
                           <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>
@@ -5594,14 +5887,27 @@ export function StoryLabPanel() {
                         ))}
                       </select>
                       <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
-                        {filmVideoModel === 'minimax_h3_legacy'
+                        {!storyVideoOptionsReady
+                          ? 'Checking this model’s supported formats…'
+                          : project.provider.useGlobalProfile
+                            ? 'Inherited from the global production profile. Choose “Override in this project” above to edit it only for this Story.'
+                            : filmVideoModel === 'minimax_h3_legacy'
                           ? 'H3 Legacy Quality uses its 20-step ConvRot recipe. A 7–10s shot at 720p can take tens of minutes even on an RTX 4090; choose 540p/480p or a Turbo-capable H3 variant when speed matters.'
                           : filmVideoModel.startsWith('minimax_h3')
                           ? 'MiniMax H3 renders every planned shot locally at up to 768p with native stereo audio. Longer shots are continued and assembled automatically.'
-                          : 'LTX uses Maestro’s multi-shot Director pipeline and requires its bundled Gemma 3 12B text encoder. Gemma may download on first use; it is an LTX dependency, not a separate setting.'}
+                          : 'LTX uses Maestro’s multi-shot Director pipeline and requires its bundled Gemma 3 12B text encoder. Gemma may download on first use; it is an LTX dependency, not a separate setting. This choice is saved only in this Story.'}
                       </span>
                     </label>
-                    <StoryVideoFormatControls videoModel={filmVideoModel} />
+                    <StoryVideoFormatControls
+                      videoModel={filmVideoModel}
+                      resolution={storyVideoResolution}
+                      aspectRatio={storyVideoAspectRatio}
+                      options={storyVideoOptions}
+                      disabled={project.provider.useGlobalProfile || !storyVideoOptionsReady}
+                      inherited={project.provider.useGlobalProfile}
+                      adjusted={storyVideoFormat.adjusted}
+                      onChange={setStoryVideoFormat}
+                    />
                     <label className="flex items-start gap-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -5616,8 +5922,8 @@ export function StoryLabPanel() {
                         </span>
                       </span>
                     </label>
-                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmGenerationImageReady || !directReferenceVideoReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
-                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy)} onClick={() => stageFilm(false)}><ChevronRight size={13} /> {project.projectType === 'quick_video' ? 'Abrir en Director' : 'Open in Short Film Director'}</button>
+                    <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmGenerationImageReady || !directReferenceVideoReady || !storyVideoConfigurationReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
+                    <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !storyVideoConfigurationReady} onClick={() => stageFilm(false)}><ChevronRight size={13} /> {project.projectType === 'quick_video' ? 'Abrir en Director' : 'Open in Short Film Director'}</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
                   </div>
                   )}
@@ -5693,6 +5999,7 @@ export function StoryLabPanel() {
                             </button>
                             <button
                               type="button"
+                              disabled={project.protagonistConsistency}
                               onClick={() => patch({ musicVideoGenerationMode: 'direct_video' })}
                               className={`${button} flex-col ${directMusicVideo ? 'border-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-200' : ''}`}
                             >
@@ -5700,6 +6007,7 @@ export function StoryLabPanel() {
                               <span className="text-[9px] text-text-muted">T2V puro</span>
                             </button>
                           </div>
+                          {project.protagonistConsistency && <p className="text-[9px] text-amber-300">El modo de protagonista fijo necesita imágenes: usa “Con imágenes” o “Directo con referencias”.</p>}
                           {directReferenceVideo && (
                             <div className={`rounded-md border p-2 text-[9px] leading-relaxed ${directReferenceVideoReady
                               ? 'border-emerald-500/35 bg-emerald-500/5 text-emerald-100'
@@ -5816,7 +6124,12 @@ export function StoryLabPanel() {
                               </label>
                             )}
                             <label className="block text-[10px] text-text-muted">Video model
-                              <select className={`${input} mt-1`} value={filmVideoModel} onChange={event => void selectDirectorVideoModel(event.target.value)}>
+                              <select
+                                className={`${input} mt-1`}
+                                value={filmVideoModel}
+                                disabled={project.provider.useGlobalProfile || !storyVideoOptionsReady}
+                                onChange={event => selectStoryVideoModel(event.target.value)}
+                              >
                                 {!selectableVideoModels.some(model => model.model_type === filmVideoModel) && (
                                   <option value={filmVideoModel}>{selectedFilmVideoModel?.name || filmVideoModel}</option>
                                 )}
@@ -5827,14 +6140,27 @@ export function StoryLabPanel() {
                                 ))}
                               </select>
                               <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
-                                {filmVideoModel === 'minimax_h3_legacy'
+                                {!storyVideoOptionsReady
+                                  ? 'Checking this model’s supported formats…'
+                                  : project.provider.useGlobalProfile
+                                    ? 'Inherited from the global production profile. Choose “Override in this project” above to make a Story-only selection.'
+                                    : filmVideoModel === 'minimax_h3_legacy'
                                   ? 'H3 Legacy Quality renders 20 full quality steps per shot. At 720p this can take tens of minutes; 540p/480p or a Turbo-capable H3 variant is the faster choice.'
                                   : filmVideoModel.startsWith('ltx2')
                                   ? 'LTX also downloads/loads Gemma 3 12B as its required text encoder. Gemma is not another selected model.'
-                                  : 'This exact MiniMax H3 selection is sent to Director and saved for the next session.'}
+                                  : 'This exact MiniMax H3 selection is saved only in this Story and sent to Director when production opens.'}
                               </span>
                             </label>
-                            <StoryVideoFormatControls videoModel={filmVideoModel} />
+                            <StoryVideoFormatControls
+                              videoModel={filmVideoModel}
+                              resolution={storyVideoResolution}
+                              aspectRatio={storyVideoAspectRatio}
+                              options={storyVideoOptions}
+                              disabled={project.provider.useGlobalProfile || !storyVideoOptionsReady}
+                              inherited={project.provider.useGlobalProfile}
+                              adjusted={storyVideoFormat.adjusted}
+                              onChange={setStoryVideoFormat}
+                            />
                           </div>
                           {project.provider.writingProvider === 'openai-compatible' && (
                             <label className="block text-[10px] text-text-muted">Compatible API base URL
@@ -5924,7 +6250,7 @@ export function StoryLabPanel() {
                         <div className="grid gap-2 sm:grid-cols-2">
                           <button
                             className={`${button} ${completeGenerationButton} w-full`}
-                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady || !directReferenceVideoReady}
+                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !protagonistReferenceReady || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady || !directReferenceVideoReady || !storyVideoConfigurationReady}
                             onClick={() => void stageMusicVideo(true)}
                           >
                             {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
@@ -5932,7 +6258,7 @@ export function StoryLabPanel() {
                           </button>
                           <button
                             className={`${button} w-full`}
-                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady || !directReferenceVideoReady}
+                            disabled={Boolean(productionBusy) || Boolean(musicProductionIssues.length) || !protagonistReferenceReady || !musicWritingReady || !musicVideoImageReady || !directVideoMasterReady || !directReferenceVideoReady || !storyVideoConfigurationReady}
                             onClick={() => void stageMusicVideo(false)}
                           >
                             <ChevronRight size={13} /> Open {musicProductionMode === 'trailer' ? 'trailer' : 'music video'} in Director
@@ -6059,7 +6385,7 @@ export function StoryLabPanel() {
                               </button>
                               <audio src={candidate.source} controls preload="metadata" className="w-full h-8" />
                               <button className={`${button} w-full ${selected ? 'border-pink-500/50 text-pink-300' : ''}`}
-                                onClick={() => void openMusicalTrailer(candidate.id)} disabled={productionBusy === 'music'}>
+                                onClick={() => void openMusicalTrailer(candidate.id)} disabled={productionBusy === 'music' || !storyVideoConfigurationReady}>
                                 <Film size={12} /> Use this song in musical trailer
                               </button>
                             </div>
@@ -6067,7 +6393,7 @@ export function StoryLabPanel() {
                         })}
                       </div>
                     )}
-                    <button className={`${button} w-full`} onClick={() => void openMusicalTrailer()} disabled={productionBusy === 'music'}>
+                    <button className={`${button} w-full`} onClick={() => void openMusicalTrailer()} disabled={productionBusy === 'music' || !storyVideoConfigurationReady}>
                       <ChevronRight size={13} /> Open Musical Video Director
                     </button>
                     <p className="text-[9px] text-text-muted">Uploaded songs work too. Beat-aware cuts synchronize editing rhythm; generated motion itself is not guaranteed to hit every beat semantically.</p>
@@ -6095,32 +6421,20 @@ export function StoryLabPanel() {
                     </div>
                   </div>
                 )}
-                <div className={`${panel} mt-4`}>
-                  <h3 className="text-sm font-semibold text-text-primary mb-3">Adaptation history</h3>
-                  {project.productions.length ? project.productions.map(item => (
-                    <div key={item.id} className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 border-b border-border last:border-0 py-2 text-xs">
-                      <div>
-                        <span className="text-text-primary capitalize">
-                          {item.kind === 'music_video' ? 'Music video' : item.kind} · {item.targetName || item.title}
-                        </span>
-                        <span className="text-text-muted ml-2">
-                          source v{item.sourceVersion} · {new Date(item.createdAt).toLocaleString()}
-                        </span>
-                        {item.sourceSnapshot?.sectionVersions
-                          && JSON.stringify(item.sourceSnapshot.sectionVersions) !== JSON.stringify(project.sectionVersions) && (
-                          <span className="ml-2 text-amber-300">source changed since staging</span>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <button className={button} onClick={() => reopenProduction(item.id)}>Reopen target</button>
-                        {item.sourceSnapshot && (
-                          <button className={button} onClick={() => restoreProductionSource(item.id)}>Restore source as copy</button>
-                        )}
-                      </div>
-                    </div>
-                  )) : <p className="text-xs text-text-muted">No adaptation has been staged yet.</p>}
-                </div>
+                {project.productions.length > 0 && <div className={`${panel} mt-4 flex flex-wrap items-center gap-3`}><div className="mr-auto"><h3 className="text-sm font-semibold text-text-primary">Hay {project.productions.length} producción{project.productions.length === 1 ? '' : 'es'} en el montaje</h3><p className="mt-1 text-[10px] text-text-muted">Ábrelas en orden, reprodúcelas completas y sustituye clips desde su posición.</p></div><button className={button} onClick={() => setTab('assembly')}><Play size={13} />Abrir montaje</button></div>}
               </>
+            )}
+
+            {tab === 'assembly' && (
+              <div className={panel}>
+                <div className="mb-4"><h2 className="text-lg font-semibold text-text-primary">Montaje de producciones</h2><p className="mt-1 text-xs text-text-muted">Cada trabajo conserva su secuencia completa. El último se abre automáticamente; al acabar una regeneración, su clip vuelve a aparecer en la misma posición.</p></div>
+                {project.productions.length ? [...project.productions].reverse().map((item, index) => (
+                  <div key={item.id} className="border-b border-border py-3 text-xs last:border-0"><div className="flex flex-col justify-between gap-2 lg:flex-row lg:items-center">
+                    <div><span className="text-text-primary capitalize">{item.kind === 'music_video' ? 'Music video' : item.kind} · {item.targetName || item.title}</span><span className="ml-2 text-text-muted">source v{item.sourceVersion} · {new Date(item.createdAt).toLocaleString()}</span>{item.sourceSnapshot?.sectionVersions && JSON.stringify(item.sourceSnapshot.sectionVersions) !== JSON.stringify(project.sectionVersions) && <span className="ml-2 text-amber-300">source changed since staging</span>}</div>
+                    <div className="flex gap-2"><button className={button} onClick={() => reopenProduction(item.id)}>Reopen target</button>{item.sourceSnapshot && <button className={button} onClick={() => restoreProductionSource(item.id)}>Restore source as copy</button>}</div>
+                  </div><StoryProductionTimeline production={item} initiallyOpen={index === 0} /></div>
+                )) : <p className="text-xs text-text-muted">No adaptation has been staged yet.</p>}
+              </div>
             )}
           </div>
         </div>

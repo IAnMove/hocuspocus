@@ -55,6 +55,8 @@ export function DirectorPanel() {
   const energyBias = useStore(s => s.directorEnergyBias)
   const clipPlans = useStore(s => s.directorClipPlans)
   const sceneDescription = useStore(s => s.directorSceneDescription)
+  const spokenLanguage = useStore(s => s.directorSpokenLanguage)
+  const setSpokenLanguage = useStore(s => s.setDirectorSpokenLanguage)
   const audioFile = useStore(s => s.directorAudioFile)
   const referenceImage = useStore(s => s.directorReferenceImage)
   const clipImages = useStore(s => s.directorClipImages)
@@ -419,6 +421,17 @@ export function DirectorPanel() {
       {/* Step 3: Scene description + Reference image */}
       {step === 'style' && (
         <div className="space-y-2">
+          <label className="block">
+            <span className="text-[11px] text-text-muted uppercase tracking-wider">Spoken language</span>
+            <select className="mt-1 w-full rounded-lg border border-border bg-bg-secondary px-2 py-1.5 text-xs text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
+              <option value="">Auto from dialogue</option>
+              <option value="Español de España">Español de España</option>
+              <option value="Español latinoamericano">Español latinoamericano</option>
+              <option value="English">English</option>
+              <option value="French">Français</option>
+              <option value="Italian">Italiano</option>
+            </select>
+          </label>
           {/* Auto-mode checkbox */}
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
