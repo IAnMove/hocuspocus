@@ -63,7 +63,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | TRAILER-01 | pendiente | — |
 | STYLE-01 | pendiente | — |
 | STYLE-02 | pendiente | — |
-| TEST-01 | delegado | Worker Luna high, worktree aislado |
+| TEST-01 | completado | 1.278 tests coleccionados desde raíz con `PYTHONPATH` eliminado |
 | TEST-02 | delegado | Worker Luna high, worktree aislado |
 | CI-01 | delegado | Worker Luna high, worktree aislado |
 | CI-02 | delegado | Worker Luna high, worktree aislado |

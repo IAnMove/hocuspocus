@@ -42,6 +42,13 @@ python -m compileall -q app/services app/launch.py scripts
 cd ui && npm run build
 ```
 
+The canonical backend test command is run from the repository root, so the
+`pytest.ini` `pythonpath` setting resolves imports from `app/` consistently:
+
+```bash
+app/env/bin/python -m pytest -q
+```
+
 ### The clean-repo guard
 
 `scripts/verify_clean_repo.py` enforces that certain **locally-generated or
