@@ -1,0 +1,11 @@
+{
+  "name": "Loreframe Studio - UI (solo frontend, sin GPU)",
+  "install": "cd ui && npm ci",
+  "terminals": [
+    {
+      "name": "ui-dev",
+      "command": "cd ui && npm run dev -- --host 127.0.0.1"
+    }
+  ],
+  "ports": [3000]
+}
