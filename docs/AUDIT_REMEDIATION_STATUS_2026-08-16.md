@@ -54,7 +54,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | RES-01 | completado | Ticket monotónico + Condition por lane; sólo la cabeza adquiere, cancelación elimina/despierta; FIFO A/B/C validado 100 veces y B cancelado deja A/C; 17 tests verdes |
 | A11Y-01 | completado | `ModalShell` aporta nombre, `role=dialog`, `aria-modal`, foco inicial/restaurado, Escape y trap Tab/Shift+Tab; migrados Director Dashboard y picker del editor; tests RTL + lint/build verdes. |
 | A11Y-02 | pendiente | — |
-| RESP-01 | pendiente | — |
+| RESP-01 | completado | Series Lab usa selector horizontal y layout full-width bajo `md`, rail vertical en desktop, header con wrap y contenedor principal `min-h-0`; prueba RTL monta y consulta la estructura accesible; lint/build verdes. |
 | RESP-02 | pendiente | — |
 | RESP-03 | pendiente | — |
 | MEM-01 | pendiente | — |
