@@ -13,7 +13,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | Ticket | Estado | Evidencia principal |
 | --- | --- | --- |
 | SEC-01 | completado | Tests de move válido, traversal, absoluta y symlink de escape |
-| SEC-02 | pendiente | — |
+| SEC-02 | completado | Resolver común para trim/análisis; uploads/workspace válidos, externos y symlinks rechazados |
 | SEC-03 | pendiente | — |
 | TASK-01 | pendiente | — |
 | TASK-02 | pendiente | — |
@@ -81,4 +81,3 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | DEPS-03 | pendiente | — |
 | DOC-01 | pendiente | — |
 | BRAND-01 | pendiente | Sustituir nombre visible Maestro por Loreframe Lab; conservar atribución del fork |
-

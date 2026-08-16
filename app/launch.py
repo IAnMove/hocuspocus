@@ -110,6 +110,7 @@ import wgp
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import debug_trace
 from services.durable_generation_queue import DurableGenerationQueue
+from services.media_paths import MediaPathNotAllowed, resolve_permitted_media_path
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 from models.minimax_h3.turbo import (
@@ -879,6 +880,26 @@ def _workspace_dir(workspace: str = None) -> str:
     if ws != "default":
         os.makedirs(ws_dir, exist_ok=True)
     return ws_dir
+
+
+def _resolve_request_media_path(
+    value: str,
+    *,
+    workspace: str | None = None,
+    kinds: tuple[str, ...] = ("audio", "video"),
+) -> str:
+    """Resolve request media without exposing host paths in API errors."""
+    try:
+        return resolve_permitted_media_path(
+            value,
+            uploads_root=os.path.join(os.getcwd(), "uploads"),
+            workspace_root=_workspace_dir(workspace),
+            kinds=kinds,
+        )
+    except MediaPathNotAllowed:
+        raise HTTPException(status_code=400, detail="Media path is not allowed") from None
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Media file not found") from None
 
 
 def _workspace_file_count(path: str) -> int:
@@ -9044,9 +9065,11 @@ def serve_audio_upload(filename: str):
 async def trim_uploaded_audio(request: Request):
     """Create a PCM WAV excerpt used by musical-trailer productions."""
     body = await request.json()
-    audio_path = body.get("audio_path", "")
-    if not audio_path or not os.path.isfile(audio_path):
-        raise HTTPException(status_code=404, detail="Uploaded audio file not found")
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    audio_path = _resolve_request_media_path(
+        body.get("audio_path", ""),
+        workspace=workspace,
+    )
     try:
         start = max(0.0, float(body.get("start", 0)))
         end = float(body.get("end", 0))
@@ -9200,11 +9223,11 @@ async def analyze_audio(request: Request):
     from services import audio_analysis
     body = await request.json()
 
-    audio_path = body.get("audio_path", "")
-    if not audio_path:
-        raise HTTPException(status_code=400, detail="audio_path is required")
-    if not os.path.isfile(audio_path):
-        raise HTTPException(status_code=404, detail=f"Audio file not found: {audio_path}")
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    audio_path = _resolve_request_media_path(
+        body.get("audio_path", ""),
+        workspace=workspace,
+    )
 
     lane = (
         resource_scheduler.local_gpu_lane(0)
@@ -9455,15 +9478,14 @@ def _run_audio_analysis_job(job_id: str, body: dict) -> None:
 async def start_audio_analysis_job(request: Request):
     """Queue audio analysis and return immediately with a durable job id."""
     body = await request.json()
-    audio_path = body.get("audio_path", "")
-    if not audio_path:
-        raise HTTPException(status_code=400, detail="audio_path is required")
-    if not os.path.isfile(audio_path):
-        raise HTTPException(status_code=404, detail=f"Audio file not found: {audio_path}")
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    audio_path = _resolve_request_media_path(
+        body.get("audio_path", ""),
+        workspace=workspace,
+    )
+    body["audio_path"] = audio_path
 
     job_id = f"audio-analysis-{uuid.uuid4().hex[:12]}"
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
     supplied_task_id = str(body.get("task_id") or "").strip()
     supplied_root_id = str(body.get("root_task_id") or "").strip()
     supplied_parent_id = str(body.get("parent_task_id") or "").strip()

@@ -257,12 +257,16 @@ def test_start_preserves_workspace_and_supplied_task_hierarchy(tmp_path):
     audio_path = tmp_path / "song.wav"
     audio_path.write_bytes(b"RIFF")
     published = []
+    resolved = []
     namespace = {
         "HTTPException": _HTTPException,
         "_jobs": {},
         "_audio_analysis_jobs_lock": threading.RLock(),
         "_get_active_workspace": lambda: "default",
         "_workspace_dir": lambda workspace=None: str(tmp_path / str(workspace or "default")),
+        "_resolve_request_media_path": lambda value, **kwargs: (
+            resolved.append((value, kwargs["workspace"])) or value
+        ),
         "_publish_audio_analysis_job": lambda job: published.append(copy.deepcopy(job)),
         "_run_audio_analysis_job": lambda *_args: None,
         "resource_scheduler": _resource_scheduler(lambda *_args, **_kwargs: None),
@@ -292,6 +296,7 @@ def test_start_preserves_workspace_and_supplied_task_hierarchy(tmp_path):
     assert job["parent_task_id"] == "task-director-root"
     assert job["workspace"] == "project-a"
     assert job["project_id"] == "story-1"
+    assert resolved == [(str(audio_path), "project-a")]
     assert published[0]["resource_lane"] == "local_gpu:0"
 
 
