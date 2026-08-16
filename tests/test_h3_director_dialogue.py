@@ -245,6 +245,86 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         self.assertEqual(validate_h3_prompt_contract(fl2va, mode="fl2va"), [])
         self.assertEqual(validate_h3_prompt_contract(l2va, mode="l2va"), [])
 
+    def test_short_dialogue_is_timed_and_silent_before_and_after(self):
+        prompt, _ = compile_h3_official_prompt(
+            "Ana looks toward the door and says: "
+            "<d>[Spanish] Ya están aquí.</d>. "
+            "overall_soundscape: Quiet room tone. "
+            "non_diegetic_music: N/A",
+            [{
+                "character_id": "ana",
+                "speaker_name": "Ana",
+                "visual_description": "an alert woman beside the door",
+            }],
+            [{
+                "speaker_id": "ana",
+                "spoken_text": "Ya están aquí.",
+                "delivery": "quiet and controlled",
+            }],
+            mode="t2va",
+            duration_seconds=5.167,
+        )
+
+        self.assertEqual(prompt.count("VOCAL TIMELINE LOCK:"), 1)
+        self.assertIn("the first tagged line is spoken exactly once", prompt)
+        self.assertIn("00:05.167", prompt)
+        self.assertIn("only the described ambience", prompt)
+        self.assertLess(
+            prompt.index("VOCAL TIMELINE LOCK:"),
+            prompt.index("overall_soundscape:"),
+        )
+        self.assertEqual(
+            validate_h3_prompt_contract(
+                prompt,
+                [{"speaker_id": "ana", "spoken_text": "Ya están aquí."}],
+                mode="t2va",
+            ),
+            [],
+        )
+
+    def test_voice_instructions_are_removed_from_soundscape_not_dialogue(self):
+        prompt, _ = compile_h3_official_prompt(
+            "A narrator says in an off-screen voiceover with a hushed and grave delivery: "
+            "<d>[Spanish] Nadie volvió a verlo.</d> while the visible man's "
+            "lips remain completely closed. "
+            "overall_soundscape: Wind; Clear foreground voices with precise "
+            "lip sync and natural delivery; Vocal delivery: hushed and grave. "
+            "non_diegetic_music: N/A",
+            [],
+            [{
+                "speaker_id": "narrator",
+                "spoken_text": "Nadie volvió a verlo.",
+                "delivery": "hushed and grave",
+            }],
+            mode="t2va",
+            duration_seconds=5.167,
+        )
+
+        soundscape = prompt.split("overall_soundscape:", 1)[1].split(
+            "non_diegetic_music:", 1,
+        )[0]
+        self.assertNotIn("foreground voices", soundscape.casefold())
+        self.assertNotIn("vocal delivery", soundscape.casefold())
+        self.assertIn("<d>[Spanish] Nadie volvió a verlo.</d>", prompt)
+        self.assertIn("hushed and grave", prompt)
+
+    def test_silent_clip_covers_the_entire_physical_duration(self):
+        prompt, _ = compile_h3_official_prompt(
+            "A woman silently crosses the room. "
+            "overall_soundscape: Footsteps and room tone. "
+            "non_diegetic_music: N/A",
+            [],
+            [],
+            mode="t2va",
+            duration_seconds=5.167,
+        )
+
+        self.assertIn(
+            "From 00:00.000 to 00:05.167, all characters remain silent",
+            prompt,
+        )
+        self.assertNotIn("the first tagged line", prompt)
+
     def test_ref2va_compiler_emits_six_fields_and_maps_real_manifest_order(self):
         references = [
             {

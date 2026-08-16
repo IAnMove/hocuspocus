@@ -83,7 +83,11 @@ def test_h3_segment_prompt_renders_director_audio_plan_and_dialogue():
     assert "rain on the metal roof" in prompt
     assert "door clang" in prompt
     assert "Mara says <d>[English] We leave at dawn.</d>" in prompt
-    assert "precise lip sync" in prompt
+    assert "with quietly delivery" in prompt
+    soundscape = prompt.split("overall_soundscape:", 1)[1].split("non_diegetic_music:", 1)[0]
+    assert "precise lip sync" not in soundscape
+    assert "Vocal delivery:" not in soundscape
+    assert "non_diegetic_music: N/A" in prompt
 
 
 def test_h3_dialogue_is_assigned_once_across_continuation_segments():

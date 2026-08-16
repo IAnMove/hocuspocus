@@ -254,6 +254,7 @@ def _harness(monkeypatch, tmp_path: Path, planner) -> tuple[dict, dict, float]:
         "_gen_lock": object(),
         "_PUBLIC_LLM_PROVIDERS": frozenset({"openai", "anthropic"}),
         "_is_legacy_h3_model": lambda _model_type: False,
+        "_is_minimax_h3_model": lambda model_type: model_type == "minimax_h3_test",
         "_recommended_minimax_h3_encoder": lambda *_args: "qwen-test",
         "_get_cached_hardware": lambda: {"cuda_available": True},
         "_effective_llm_routing": lambda _services: ("minimax", "MiniMax-M3", ""),

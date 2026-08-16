@@ -240,6 +240,12 @@ def compile_h3_window_prompts(
             f"non_diegetic_music: {music_value}",
         ]
         prompt = "\n\n".join(prompt_parts)
+        # Each sliding-window pass has its own local clock. Rebuild the vocal
+        # schedule against that exact pass duration so a short line cannot
+        # leak gibberish into the unused part of the window.
+        from .minimax_h3_duration import inject_h3_vocal_timeline
+
+        prompt, _ = inject_h3_vocal_timeline(prompt, duration)
         compiled.append(
             {
                 **span,

@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .spoken_language import infer_h3_spoken_language
+
 
 FIRST_FRAME_REFERENCE = (
     "For the target video, at 0.00 seconds into the target video, <Picture 1> "
@@ -102,23 +104,6 @@ def _strip_legacy_contracts(prompt: str) -> str:
     return text
 
 
-def _language_name(text: str) -> str:
-    if re.search(r"[\u3040-\u30ff\u3400-\u9fff]", text):
-        return "Japanese"
-    if re.search(r"[\u0400-\u04ff]", text):
-        return "Russian"
-    if re.search(r"[\u0600-\u06ff]", text):
-        return "Arabic"
-    if re.search(r"[\uac00-\ud7af]", text):
-        return "Korean"
-    lower = f" {_clean(text).casefold()} "
-    if re.search(r"[¿¡ñáéíóúü]", lower) or any(
-        token in lower for token in (" que ", " por ", " para ", " una ", " el ", " la ")
-    ):
-        return "Spanish"
-    return "English"
-
-
 def _subject_definitions(plan: dict) -> tuple[list[str], list[str]]:
     definitions: list[str] = []
     subject_ids: list[str] = []
@@ -167,6 +152,8 @@ def _camera_sentence(plan: dict) -> str:
 
 def _dialogue_sentences(plan: dict, subject_ids: list[str]) -> list[str]:
     sentences: list[str] = []
+    audio = plan.get("audio_plan") if isinstance(plan.get("audio_plan"), dict) else {}
+    default_delivery = _clean(audio.get("vocal_style"))
     for index, raw in enumerate(_items(plan.get("dialogue_beats"))):
         if not isinstance(raw, dict):
             continue
@@ -175,11 +162,11 @@ def _dialogue_sentences(plan: dict, subject_ids: list[str]) -> list[str]:
             continue
         speaker = _clean(raw.get("speaker_name") or raw.get("speaker_id"))
         speaker_id = subject_ids[min(index, len(subject_ids) - 1)] if subject_ids else "S1"
-        delivery = _clean(raw.get("delivery"))
+        delivery = _clean(raw.get("delivery")) or default_delivery
         cue = f"({speaker_id})"
         if speaker:
             cue += f" {speaker}"
-        cue += f" says <d>[{_language_name(spoken)}] {spoken}</d>"
+        cue += f" says <d>[{infer_h3_spoken_language(spoken)}] {spoken}</d>"
         if delivery:
             cue += f" with {delivery} delivery"
         sentences.append(cue + ".")
@@ -238,11 +225,10 @@ def _sound_fields(plan: dict, audio_direction: str) -> tuple[str, str]:
         soundscape_parts.append(ambience)
     if effects:
         soundscape_parts.append("Synchronized effects: " + ", ".join(effects))
-    if audio.get("lip_sync_critical"):
-        soundscape_parts.append("Clear foreground voices with precise lip sync and natural delivery")
-    vocal_style = _clean(audio.get("vocal_style"))
-    if vocal_style:
-        soundscape_parts.append(f"Vocal delivery: {vocal_style}")
+    # Dialogue, language, delivery and lip sync belong beside the exact <d>
+    # block in integrated_multimodal_description. Keeping a generic voice cue
+    # in the full-clip soundscape can make H3 extend a short line with invented
+    # speech before or after the authored words.
     direction = _clean(audio_direction)
     if direction:
         soundscape_parts.append(direction)
@@ -253,7 +239,7 @@ def _sound_fields(plan: dict, audio_direction: str) -> tuple[str, str]:
     if mode in {"music_driven", "audio_driven"}:
         music = "The selected song segment remains the timing and editorial anchor; do not invent a competing melody."
     else:
-        music = "None unless explicitly motivated by the scene."
+        music = "N/A"
     return "; ".join(soundscape_parts).rstrip("."), music
 
 

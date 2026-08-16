@@ -50,6 +50,48 @@ def h3_language_tag(value: Any) -> str:
     return language
 
 
+def infer_h3_spoken_language(text: Any) -> str:
+    """Infer a broad H3 language tag only when no authored tag exists."""
+
+    source = str(text or "")
+    if re.search(r"[\u3040-\u30ff]", source):
+        return "Japanese"
+    if re.search(r"[\uac00-\ud7af]", source):
+        return "Korean"
+    if re.search(r"[\u0400-\u04ff]", source):
+        return "Russian"
+    if re.search(r"[\u0600-\u06ff]", source):
+        return "Arabic"
+    if re.search(r"[\u3400-\u9fff]", source):
+        return "Chinese"
+
+    folded = source.casefold()
+    words = set(re.findall(r"[^\W_]+", folded, flags=re.UNICODE))
+    scores = {
+        "Spanish": (
+            3 * len(re.findall(r"[¿¡ñ]", folded))
+            + len(words & {"que", "por", "para", "una", "está", "nadie", "aquí", "pero"})
+        ),
+        "French": (
+            3 * len(re.findall(r"[œêëÿ]", folded))
+            + len(words & {"je", "vous", "avec", "une", "est", "pas", "mais", "ici"})
+        ),
+        "Portuguese": (
+            3 * len(re.findall(r"[ãõ]", folded))
+            + len(words & {"você", "não", "uma", "está", "mas", "aqui"})
+        ),
+        "German": (
+            3 * len(re.findall(r"[äöß]", folded))
+            + len(words & {"ich", "nicht", "und", "ist", "aber", "hier"})
+        ),
+        "Italian": len(words & {"io", "non", "una", "sono", "che", "ma", "qui"}),
+    }
+    language, score = max(scores.items(), key=lambda item: item[1])
+    if score:
+        return language
+    return "English"
+
+
 def spoken_language_contract(value: Any) -> str:
     language = normalize_spoken_language(value)
     if not language:

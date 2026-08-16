@@ -4,6 +4,7 @@ from services.director.spoken_language import (
     append_spoken_language_contract,
     extract_spoken_language,
     h3_language_tag,
+    infer_h3_spoken_language,
     spoken_language_contract,
 )
 
@@ -33,6 +34,23 @@ def test_h3_forces_broad_language_tag_but_keeps_regional_contract():
     )
     assert "<d>[Spanish] Hola, qué alegría verte.</d>" in prompt
     assert "[English]" not in prompt
+
+
+def test_h3_preserves_authored_spanish_tag_without_global_contract():
+    prompt, _ = compile_h3_official_prompt(
+        "Ada says: <d>[Spanish] Nadie volvió a verlo.</d>",
+        [{"character_id": "ada", "speaker_name": "Ada"}],
+        [{"speaker_id": "ada", "spoken_text": "Nadie volvió a verlo."}],
+        duration_seconds=5.167,
+    )
+    assert "<d>[Spanish] Nadie volvió a verlo.</d>" in prompt
+    assert "[English]" not in prompt
+
+
+def test_h3_language_inference_uses_broad_tags_only_when_tag_is_missing():
+    assert infer_h3_spoken_language("¿Dónde está la puerta?") == "Spanish"
+    assert infer_h3_spoken_language("Je ne suis pas ici.") == "French"
+    assert infer_h3_spoken_language("日本語です") == "Japanese"
 
 
 def test_reapplying_language_does_not_wrap_an_already_compiled_h3_prompt():

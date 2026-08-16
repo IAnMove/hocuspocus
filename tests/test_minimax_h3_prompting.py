@@ -54,6 +54,11 @@ def test_first_frame_prompt_uses_official_field_order_and_dialogue_tags():
     assert "(S1) Erio says <d>[Spanish] ¿Dónde está la semilla?</d>" in prompt
     assert "slow dolly in" in prompt
     assert "Audio:" not in prompt
+    soundscape = prompt.split("overall_soundscape:", 1)[1].split(
+        "non_diegetic_music:", 1,
+    )[0]
+    assert "foreground voices" not in soundscape.casefold()
+    assert "vocal delivery" not in soundscape.casefold()
 
 
 def test_direct_structured_prompt_is_preserved_without_a_fake_picture_reference():

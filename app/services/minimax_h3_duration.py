@@ -16,6 +16,15 @@ _PLAIN_SPEECH = re.compile(
     r"(?:\s+exactly)?\s*[:,]?\s*[\"“«](.*?)[\"”»]",
     flags=re.IGNORECASE | re.DOTALL,
 )
+_VOCAL_TIMELINE_BLOCK = re.compile(
+    r"\s*VOCAL TIMELINE LOCK:\s*.*?"
+    r"(?=\s+(?:overall_soundscape|non_diegetic_music)\s*:|$)",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+_SOUND_FIELD = re.compile(
+    r"\b(?:overall_soundscape|non_diegetic_music)\s*:",
+    flags=re.IGNORECASE,
+)
 _WORD = re.compile(r"[^\W_]+(?:[’'-][^\W_]+)*", flags=re.UNICODE)
 _SPANISH_LANGUAGES = {"castilian", "es", "es-es", "español", "spanish"}
 _SPANISH_VOWEL_RUN = re.compile(r"[aeiouáéíóúü]+", flags=re.IGNORECASE)
@@ -26,6 +35,21 @@ _GENERIC_VOWEL_RUN = re.compile(
 _SPANISH_STRONG_VOWELS = frozenset("aeoáéóíú")
 _SPANISH_STRESSED_WEAK_VOWELS = frozenset("íú")
 DEFAULT_SECONDS_PER_SYLLABLE = 0.22
+
+
+def _h3_timestamp(seconds: float) -> str:
+    milliseconds = max(0, int(round(float(seconds or 0.0) * 1000)))
+    minutes, remainder = divmod(milliseconds, 60_000)
+    whole_seconds, millis = divmod(remainder, 1000)
+    return f"{minutes:02d}:{whole_seconds:02d}.{millis:03d}"
+
+
+def _ordinal_line(index: int) -> str:
+    words = (
+        "first", "second", "third", "fourth", "fifth", "sixth",
+        "seventh", "eighth", "ninth", "tenth",
+    )
+    return words[index] if index < len(words) else f"number {index + 1}"
 
 
 def _spanish_word_syllables(word: str) -> int:
@@ -130,6 +154,219 @@ def estimate_h3_dialogue_seconds(
         "spoken_seconds": round(speech_seconds, 3),
         "estimated_seconds": round(max(0.0, total), 3),
     }
+
+
+def plan_h3_vocal_timeline(
+    segments: list[Mapping[str, str]],
+    duration_seconds: float,
+    *,
+    mapped_driving_audio: bool = False,
+) -> dict[str, Any]:
+    """Allocate every H3 second to authored speech or explicit silence.
+
+    H3's native minimum can leave several seconds around a short line.  A
+    generic "do not improvise" instruction does not tell the audiovisual model
+    what occupies that time, so it may extend the vocal texture with invented
+    syllables.  This deterministic schedule gives each authored line a bounded
+    local interval and assigns all remaining time to closed-mouth action,
+    ambience, and physical effects.
+    """
+
+    duration = round(max(0.0, float(duration_seconds or 0.0)), 3)
+    cleaned = [
+        {
+            "language": str(segment.get("language") or "").strip(),
+            "text": str(segment.get("text") or "").strip(),
+        }
+        for segment in segments
+        if str(segment.get("text") or "").strip()
+    ]
+    if duration <= 0:
+        return {
+            "duration_seconds": duration,
+            "segment_count": len(cleaned),
+            "estimated_dialogue_seconds": 0.0,
+            "intervals": [],
+            "text": "",
+        }
+
+    end_stamp = _h3_timestamp(duration)
+    if not cleaned:
+        if mapped_driving_audio:
+            text = (
+                f"From 00:00.000 to {end_stamp}, audible voice or vocals come "
+                "only from the mapped driving audio and remain synchronized to "
+                "it; H3 generates no additional dialogue, muttering, gibberish, "
+                "or speech-like vocalization."
+            )
+            kind = "mapped_audio"
+        else:
+            text = (
+                f"From 00:00.000 to {end_stamp}, all characters remain silent "
+                "with mouths closed while only the described ambience, physical "
+                "actions, and non-verbal sounds continue; no voice, muttering, "
+                "gibberish, or speech-like vocalization occurs."
+            )
+            kind = "silence"
+        return {
+            "duration_seconds": duration,
+            "segment_count": 0,
+            "estimated_dialogue_seconds": 0.0,
+            "intervals": [{
+                "kind": kind,
+                "start_seconds": 0.0,
+                "end_seconds": duration,
+            }],
+            "text": text,
+        }
+
+    combined = estimate_h3_dialogue_seconds(cleaned)
+    estimated = min(duration, float(combined["estimated_seconds"]))
+    free_seconds = max(0.0, duration - estimated)
+    if free_seconds >= 1.0:
+        lead_silence = min(1.25, max(0.45, free_seconds * 0.35))
+    else:
+        lead_silence = free_seconds * 0.35
+    tail_silence = max(0.0, free_seconds - lead_silence)
+
+    gap_count = max(0, len(cleaned) - 1)
+    interline_gap = min(0.15, estimated * 0.08 / max(1, gap_count)) if gap_count else 0.0
+    dialogue_budget = max(0.0, estimated - interline_gap * gap_count)
+    weights = [
+        max(
+            0.25,
+            float(estimate_h3_dialogue_seconds([segment])["estimated_seconds"]),
+        )
+        for segment in cleaned
+    ]
+    weight_total = sum(weights) or float(len(weights))
+    line_durations = [dialogue_budget * weight / weight_total for weight in weights]
+
+    intervals: list[dict[str, Any]] = []
+    sentences: list[str] = []
+    cursor = 0.0
+
+    def add_silence(start: float, end: float) -> None:
+        if end - start < 0.025:
+            return
+        start = round(start, 3)
+        end = round(end, 3)
+        intervals.append({
+            "kind": "silence",
+            "start_seconds": start,
+            "end_seconds": end,
+        })
+        sentences.append(
+            f"From {_h3_timestamp(start)} to {_h3_timestamp(end)}, all "
+            "characters remain silent with mouths closed while only the "
+            "described ambience, physical actions, and non-verbal sounds continue."
+        )
+
+    add_silence(cursor, lead_silence)
+    cursor = lead_silence
+    for index, line_duration in enumerate(line_durations):
+        start = round(cursor, 3)
+        end = round(min(duration, cursor + line_duration), 3)
+        intervals.append({
+            "kind": "dialogue",
+            "line": index + 1,
+            "start_seconds": start,
+            "end_seconds": end,
+        })
+        sentences.append(
+            f"From {_h3_timestamp(start)} to {_h3_timestamp(end)}, the "
+            f"{_ordinal_line(index)} tagged line is spoken exactly once by its "
+            "assigned speaker; every other character remains silent with their "
+            "mouth closed."
+        )
+        cursor = end
+        if index < len(line_durations) - 1:
+            next_start = min(duration, cursor + interline_gap)
+            add_silence(cursor, next_start)
+            cursor = next_start
+
+    # Use the exact physical clip boundary for the final closed-mouth interval;
+    # rounding the per-line schedule must never leave an undescribed tail.
+    add_silence(cursor, duration)
+    sentences.append(
+        "Outside the assigned dialogue intervals, no tagged line starts, "
+        "continues, repeats, or is replaced by other speech, muttering, "
+        "gibberish, background voices, or speech-like vocalization."
+    )
+    return {
+        "duration_seconds": duration,
+        "segment_count": len(cleaned),
+        "estimated_dialogue_seconds": round(estimated, 3),
+        "leading_silence_seconds": round(lead_silence, 3),
+        "trailing_silence_seconds": round(tail_silence, 3),
+        "intervals": intervals,
+        "text": " ".join(sentences),
+    }
+
+
+def inject_h3_vocal_timeline(prompt: Any, duration_seconds: float) -> tuple[str, dict[str, Any]]:
+    """Insert one idempotent vocal schedule before H3's sound fields."""
+
+    source = str(prompt or "").strip()
+    if not source or float(duration_seconds or 0.0) <= 0:
+        return source, {}
+    clean = _VOCAL_TIMELINE_BLOCK.sub(" ", source).strip()
+    segments = extract_h3_dialogue(clean)
+    mapped_driving_audio = not segments and "mapped driving audio" in clean.casefold()
+    explicit_silence = bool(re.search(
+        r"\b(?:no (?:one|character) speaks|all (?:visible )?(?:people|characters) "
+        r"remain silent|everyone remains silent)\b",
+        clean,
+        flags=re.IGNORECASE,
+    ))
+    # Do not reinterpret an unstructured Studio prompt such as "a woman
+    # sings" as silence merely because it contains no canonical <d> block.
+    # Director and the window planner already emit an explicit silence
+    # contract whenever no vocal performance is authored.
+    if not segments and not mapped_driving_audio and not explicit_silence:
+        return clean, {}
+    timeline = plan_h3_vocal_timeline(
+        segments,
+        duration_seconds,
+        mapped_driving_audio=mapped_driving_audio,
+    )
+    statement = f"VOCAL TIMELINE LOCK: {timeline['text']}"
+    boundary = _SOUND_FIELD.search(clean)
+    if boundary:
+        updated = (
+            f"{clean[:boundary.start()].rstrip()} {statement}\n\n"
+            f"{clean[boundary.start():].lstrip()}"
+        )
+    else:
+        updated = f"{clean} {statement}"
+    return re.sub(r"[ \t]+", " ", updated).strip(), timeline
+
+
+def apply_h3_vocal_timeline(
+    params: MutableMapping[str, Any],
+    model_def: Mapping[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Bind a generation job's final prompt to its effective H3 duration."""
+
+    definition = model_def if isinstance(model_def, Mapping) else {}
+    fps = float(definition.get("fps") or 24.0)
+    try:
+        duration = float(
+            params.get("duration_seconds")
+            or params.get("_duration_seconds")
+            or float(params.get("video_length") or 0) / max(0.1, fps)
+        )
+    except (TypeError, ValueError):
+        return None
+    if duration <= 0 or not str(params.get("prompt") or "").strip():
+        return None
+    prompt, contract = inject_h3_vocal_timeline(params.get("prompt"), duration)
+    params["prompt"] = prompt
+    if contract:
+        params["_h3_vocal_timeline_contract"] = contract
+        return contract
+    params.pop("_h3_vocal_timeline_contract", None)
+    return None
 
 
 def _positive_int(value: Any, fallback: int) -> int:

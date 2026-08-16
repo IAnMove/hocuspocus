@@ -497,6 +497,7 @@ def _new_generation_job(
     if _is_minimax_h3_model(frozen_params.get("model_type")):
         from services.minimax_h3_duration import (
             apply_h3_dialogue_duration,
+            apply_h3_vocal_timeline,
             h3_dialogue_split_error,
         )
 
@@ -514,6 +515,14 @@ def _new_generation_job(
                 f"{contract['seconds_per_syllable']:.3f}s -> "
                 f"{contract['effective_seconds']:.3f}s "
                 f"({contract['effective_frames']} frames)."
+            )
+        timeline = apply_h3_vocal_timeline(frozen_params, duration_model_def)
+        if timeline:
+            print(
+                "[MiniMax H3] Vocal timeline locked: "
+                f"{timeline['segment_count']} authored line(s), "
+                f"{len(timeline['intervals'])} timed interval(s) across "
+                f"{timeline['duration_seconds']:.3f}s."
             )
     job = {
         "id": job_id or uuid.uuid4().hex[:8],
@@ -10780,6 +10789,7 @@ async def generate(request: Request):
     if _is_minimax_h3_model(body.get("model_type")):
         from services.minimax_h3_duration import (
             apply_h3_dialogue_duration,
+            apply_h3_vocal_timeline,
             h3_dialogue_split_error,
         )
 
@@ -10792,6 +10802,7 @@ async def generate(request: Request):
                 status_code=400,
                 detail=h3_dialogue_split_error(dialogue_duration_contract),
             )
+        apply_h3_vocal_timeline(body, _generation_model_def)
 
     if _generation_model_def.get("omni_reference"):
         from models.minimax_h3.ref2va import validate_reference_manifest
