@@ -1,4 +1,6 @@
 import sqlite3
+import json
+import time
 
 from services.task_manager import TaskRegistry, redact_sensitive_data, task_context_scope
 
@@ -304,3 +306,103 @@ def test_compatibility_adapter_can_attach_an_existing_task_to_its_parent(tmp_pat
     assert [task["id"] for task in registry.list(root_id="task-parent")] == [
         "task-child", "task-parent",
     ]
+
+
+def test_prune_keeps_active_latest_terminal_and_tombstone(tmp_path):
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    active = registry.create(id="task-active", kind="video", status="running")
+    old = registry.create(
+        id="task-old", kind="video", status="completed", root_id="workflow",
+    )
+    latest = registry.create(
+        id="task-latest", kind="video", status="completed", root_id="workflow",
+    )
+
+    with sqlite3.connect(registry.path) as connection:
+        connection.execute(
+            "UPDATE tasks SET updated_at = 1, snapshot = ? WHERE id = ?",
+            (json.dumps({**old, "updated_at": 1}), old["id"]),
+        )
+
+    removed = registry.prune(
+        terminal_before=time.time() - 1,
+        keep=100,
+        max_events=100,
+    )
+
+    assert removed == 1
+    assert registry.get(active["id"])["status"] == "running"
+    assert registry.get(latest["id"])["status"] == "completed"
+    assert registry.get(old["id"]) is None
+    tombstone = registry.events(old["id"])[-1]
+    assert tombstone["type"] == "task.deleted"
+    assert tombstone["changes"]["tombstone"] is True
+
+
+def test_prune_dry_run_reports_without_deleting(tmp_path):
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    old = registry.create(id="task-dry-run", kind="image", status="completed")
+    with sqlite3.connect(registry.path) as connection:
+        connection.execute(
+            "UPDATE tasks SET updated_at = 1, snapshot = ? WHERE id = ?",
+            (json.dumps({**old, "updated_at": 1}), old["id"]),
+        )
+
+    plan = registry.prune(terminal_before=time.time() - 1, keep=0, dry_run=True)
+
+    assert plan["tasks"] == 0  # the newest terminal snapshot is protected
+    assert plan["protected_latest_terminal"] == 1
+    assert registry.get(old["id"]) is not None
+
+
+def test_pruned_cursor_requires_resync_but_retained_cursor_does_not(tmp_path):
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    task = registry.create(id="task-events", kind="llm", status="running")
+    registry.update(task["id"], message="step 1")
+    registry.update(task["id"], message="step 2")
+    before_prune = registry.latest_event_id()
+
+    registry.prune(
+        terminal_before=time.time() - 1,
+        keep=1000,
+        max_events=1,
+    )
+
+    retained = registry.events()
+    assert len(retained) == 1
+    assert retained[0]["event_id"] == before_prune
+    assert registry.latest_event_id() == before_prune
+    assert registry.cursor_requires_resync(before_prune - 2) is True
+    assert registry.cursor_requires_resync(before_prune) is False
+    marker = registry.resync_required_event(before_prune - 2)
+    assert marker["type"] == "resync_required"
+    assert marker["changes"]["resync_required"] is True
+
+    reloaded = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    assert reloaded.cursor_requires_resync(before_prune - 2) is True
+    assert reloaded.cursor_requires_resync(before_prune) is False
+    reloaded.update(task["id"], message="step 3")
+    continued = reloaded.events(after=before_prune)
+    assert [event["changes"]["message"] for event in continued] == ["step 3"]
+
+
+def test_prune_terminal_count_keeps_newest_snapshots(tmp_path):
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    tasks = [
+        registry.create(id=f"task-terminal-{index}", kind="video", status="completed")
+        for index in range(3)
+    ]
+    with sqlite3.connect(registry.path) as connection:
+        for index, task in enumerate(tasks, start=1):
+            snapshot = {**task, "updated_at": float(index)}
+            connection.execute(
+                "UPDATE tasks SET updated_at = ?, snapshot = ? WHERE id = ?",
+                (float(index), json.dumps(snapshot), task["id"]),
+            )
+
+    removed = registry.prune(terminal_before=0, keep=2, max_events=100)
+
+    assert removed == 1
+    assert registry.get(tasks[0]["id"]) is None
+    assert registry.get(tasks[1]["id"])["status"] == "completed"
+    assert registry.get(tasks[2]["id"])["status"] == "completed"

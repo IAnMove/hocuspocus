@@ -42,6 +42,20 @@ test('applies current SSE patches directly and ignores historical replay', () =>
   assert.equal(current.needsRefresh, false)
 })
 
+test('retention marker requests a full snapshot without mutating current tasks', () => {
+  const tasks = [{ id: 'task-1', status: 'running', updated_at: 100, resumable: false }]
+  const result = applyCanonicalTaskEvent(tasks, event({
+    event_id: 42,
+    task_id: '',
+    root_id: '',
+    type: 'resync_required',
+    changes: { after: 7, latest_event_id: 42, resync_required: true },
+  }))
+
+  assert.equal(result.tasks, tasks)
+  assert.equal(result.needsRefresh, true)
+})
+
 test('adds recent creates, ignores unknown history, and requests recovery for a missed create', () => {
   const tasks = [{ id: 'task-1', status: 'completed', updated_at: 200, resumable: false }]
   const oldUnknown = applyCanonicalTaskEvent(tasks, event({

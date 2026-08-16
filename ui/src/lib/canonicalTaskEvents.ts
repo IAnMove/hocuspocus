@@ -84,6 +84,11 @@ export function applyCanonicalTaskEvent<T extends CanonicalTaskLike>(
   event: CanonicalTaskEvent,
   unknownTaskBaseline = 0,
 ): ApplyCanonicalTaskEventResult<T> {
+  if (event.type === 'resync_required') {
+    // Retention has removed part of the event history. The snapshot endpoint
+    // is the only authoritative way to rebuild the footer from that cursor.
+    return { tasks, needsRefresh: true }
+  }
   if (isRemovalEvent(event.type)) {
     const next = tasks.filter(task => task.id !== event.task_id)
     return { tasks: next.length === tasks.length ? tasks : next, needsRefresh: false }

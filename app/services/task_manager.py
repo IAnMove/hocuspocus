@@ -2,8 +2,8 @@
 
 Domain engines keep their own editable checkpoints, but every meaningful
 operation publishes a small, non-sensitive task snapshot here. SQLite gives
-the footer one atomic source of truth while the append-only event table keeps
-the history needed to diagnose retries, resource waits and provider calls.
+the footer one atomic source of truth while the retained event log keeps the
+bounded history needed to diagnose retries, resource waits and provider calls.
 """
 
 from __future__ import annotations
@@ -21,6 +21,13 @@ from typing import Any, Iterator, TypedDict
 
 
 TASK_DB_NAME = ".maestro-tasks-v1.sqlite3"
+TASK_RETENTION_MAX_AGE_ENV = "LOREFRAME_TASK_RETENTION_MAX_AGE_SECONDS"
+TASK_RETENTION_MAX_TERMINAL_ENV = "LOREFRAME_TASK_RETENTION_MAX_TERMINAL_TASKS"
+TASK_RETENTION_MAX_EVENTS_ENV = "LOREFRAME_TASK_RETENTION_MAX_EVENTS"
+DEFAULT_TASK_RETENTION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+DEFAULT_TASK_RETENTION_MAX_TERMINAL_TASKS = 1_000
+DEFAULT_TASK_RETENTION_MAX_EVENTS = 10_000
+_PRUNED_THROUGH_META_KEY = "events_pruned_through"
 ACTIVE_STATUSES = frozenset({"created", "queued", "waiting_resource", "running"})
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "interrupted"})
 ALL_STATUSES = ACTIVE_STATUSES | TERMINAL_STATUSES
@@ -137,6 +144,22 @@ class TokenUsage(TypedDict):
 
 def _now() -> float:
     return time.time()
+
+
+def _env_non_negative_float(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, default))
+    except (TypeError, ValueError, OverflowError):
+        return float(default)
+    return max(0.0, value) if value == value else float(default)
+
+
+def _env_non_negative_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError, OverflowError):
+        return int(default)
+    return max(0, value)
 
 
 def _normalize_token_usage(
@@ -309,6 +332,10 @@ class TaskRegistry:
                 );
                 CREATE INDEX IF NOT EXISTS idx_task_events_task
                     ON task_events(task_id, sequence);
+                CREATE TABLE IF NOT EXISTS task_registry_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
             """)
             self._migrate_task_events_to_durable_log(connection)
 
@@ -665,7 +692,60 @@ class TaskRegistry:
     def latest_event_id(self) -> int:
         with self._connect() as connection:
             row = connection.execute("SELECT COALESCE(MAX(event_id), 0) AS value FROM task_events").fetchone()
-        return int(row["value"] if row else 0)
+            sequence = connection.execute(
+                "SELECT COALESCE(seq, 0) AS value FROM sqlite_sequence WHERE name = 'task_events'",
+            ).fetchone()
+        return max(
+            int(row["value"] if row else 0),
+            int(sequence["value"] if sequence else 0),
+        )
+
+    @staticmethod
+    def _meta_int(connection: sqlite3.Connection, key: str, default: int = 0) -> int:
+        row = connection.execute(
+            "SELECT value FROM task_registry_meta WHERE key = ?", (key,),
+        ).fetchone()
+        try:
+            return max(0, int(row["value"])) if row else int(default)
+        except (TypeError, ValueError, OverflowError):
+            return int(default)
+
+    def cursor_requires_resync(self, after: int) -> bool:
+        """Return whether ``after`` predates an event retention boundary.
+
+        The boundary is durable because deleting all rows from an AUTOINCREMENT
+        event table otherwise loses the information needed to distinguish a
+        current empty log from a cursor that skipped pruned history.
+        """
+        try:
+            cursor = max(0, int(after or 0))
+        except (TypeError, ValueError, OverflowError):
+            cursor = 0
+        with self._connect() as connection:
+            pruned_through = self._meta_int(connection, _PRUNED_THROUGH_META_KEY)
+        return cursor < pruned_through
+
+    def resync_required_event(self, after: int) -> dict:
+        """Build a transient SSE marker for a cursor that missed retention."""
+        try:
+            cursor = max(0, int(after or 0))
+        except (TypeError, ValueError, OverflowError):
+            cursor = 0
+        latest = self.latest_event_id()
+        return {
+            "event_id": latest,
+            "task_id": "",
+            "root_id": "",
+            "sequence": 0,
+            "timestamp": _now(),
+            "type": "resync_required",
+            "changes": {
+                "after": cursor,
+                "latest_event_id": latest,
+                "resync_required": True,
+            },
+            "context": {},
+        }
 
     def snapshot(
         self,
@@ -748,16 +828,133 @@ class TaskRegistry:
         self._notify()
         return True
 
-    def prune(self, *, terminal_before: float, keep: int = 1000) -> int:
-        terminal = self.list(statuses=set(TERMINAL_STATUSES), limit=5000)
-        stale = [
-            task for index, task in enumerate(terminal)
-            if index >= max(0, int(keep)) and float(task.get("updated_at") or 0) < terminal_before
-        ]
-        removed = 0
-        for task in stale:
-            removed += int(self.delete(task["id"]))
-        return removed
+    def prune(
+        self,
+        *,
+        terminal_before: float | None = None,
+        keep: int | None = None,
+        max_age_seconds: float | None = None,
+        max_events: int | None = None,
+        dry_run: bool = False,
+    ) -> int | dict:
+        """Apply bounded retention without dropping recovery-critical state.
+
+        Active tasks and the newest terminal task are always retained. Older
+        terminal snapshots can be removed by age or by
+        the terminal count budget; their ``task.deleted`` tombstones remain in
+        the event log until the independent event budget removes them. Once
+        event rows are removed, the durable cursor boundary makes old SSE
+        clients request a fresh snapshot instead of silently missing history.
+
+        ``LOREFRAME_TASK_RETENTION_MAX_AGE_SECONDS``,
+        ``LOREFRAME_TASK_RETENTION_MAX_TERMINAL_TASKS`` and
+        ``LOREFRAME_TASK_RETENTION_MAX_EVENTS`` provide process-wide defaults.
+        ``dry_run`` returns the planned counts and changes nothing.
+        """
+        now = _now()
+        if max_age_seconds is None:
+            max_age_seconds = _env_non_negative_float(
+                TASK_RETENTION_MAX_AGE_ENV,
+                DEFAULT_TASK_RETENTION_MAX_AGE_SECONDS,
+            )
+        else:
+            max_age_seconds = max(0.0, float(max_age_seconds))
+        cutoff = float(terminal_before) if terminal_before is not None else now - max_age_seconds
+        keep_count = (
+            _env_non_negative_int(
+                TASK_RETENTION_MAX_TERMINAL_ENV,
+                DEFAULT_TASK_RETENTION_MAX_TERMINAL_TASKS,
+            )
+            if keep is None else max(0, int(keep))
+        )
+        event_limit = (
+            _env_non_negative_int(TASK_RETENTION_MAX_EVENTS_ENV, DEFAULT_TASK_RETENTION_MAX_EVENTS)
+            if max_events is None else max(0, int(max_events))
+        )
+
+        with self._write_lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                """SELECT snapshot FROM tasks
+                   WHERE status IN (?, ?, ?, ?)
+                   ORDER BY updated_at DESC, id ASC""",
+                tuple(sorted(TERMINAL_STATUSES)),
+            ).fetchall()
+            terminal = [task for row in rows if (task := self._decode(row)) is not None]
+
+            protected_ids = {terminal[0]["id"]} if terminal else set()
+            active_count = int(connection.execute(
+                "SELECT COUNT(*) AS count FROM tasks WHERE status IN (?, ?, ?, ?)",
+                tuple(sorted(ACTIVE_STATUSES)),
+            ).fetchone()["count"])
+            stale = [
+                task for index, task in enumerate(terminal)
+                if task["id"] not in protected_ids
+                and (
+                    float(task.get("updated_at") or 0) < cutoff
+                    or index >= keep_count
+                )
+            ]
+
+            event_rows = connection.execute(
+                "SELECT event_id, timestamp FROM task_events ORDER BY event_id DESC",
+            ).fetchall()
+            event_delete_ids = [
+                int(row["event_id"])
+                for index, row in enumerate(event_rows)
+                if index >= event_limit or float(row["timestamp"] or 0) < cutoff
+            ]
+            plan = {
+                "tasks": len(stale),
+                "events": len(event_delete_ids),
+                "protected_active": active_count,
+                "protected_latest_terminal": len(protected_ids),
+                "terminal_before": cutoff,
+                "max_terminal_tasks": keep_count,
+                "max_events": event_limit,
+            }
+            if dry_run:
+                connection.rollback()
+                return plan
+
+            for task in stale:
+                deleted_at = _now()
+                self._append_event(
+                    connection,
+                    task,
+                    "task.deleted",
+                    {
+                        "deleted": True,
+                        "tombstone": True,
+                        "task_id": task["id"],
+                        "root_id": task["root_id"],
+                        "status": task["status"],
+                        "deleted_at": deleted_at,
+                    },
+                )
+                connection.execute("DELETE FROM tasks WHERE id = ?", (task["id"],))
+
+            # Delete in chunks so a large retention pass stays below SQLite's
+            # bound-parameter limit while keeping the operation transactional.
+            for offset in range(0, len(event_delete_ids), 500):
+                chunk = event_delete_ids[offset:offset + 500]
+                placeholders = ",".join("?" for _ in chunk)
+                connection.execute(
+                    f"DELETE FROM task_events WHERE event_id IN ({placeholders})",
+                    chunk,
+                )
+            if event_delete_ids:
+                previous = self._meta_int(connection, _PRUNED_THROUGH_META_KEY)
+                connection.execute(
+                    """INSERT INTO task_registry_meta(key, value) VALUES (?, ?)
+                       ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+                    (_PRUNED_THROUGH_META_KEY, str(max(previous, max(event_delete_ids)))),
+                )
+            connection.commit()
+
+        if stale or event_delete_ids:
+            self._notify()
+        return len(stale)
 
 
 def get_task_registry(workspace_dir: str) -> TaskRegistry:

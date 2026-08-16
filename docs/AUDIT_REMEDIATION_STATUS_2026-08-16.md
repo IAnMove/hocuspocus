@@ -19,7 +19,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | TASK-02 | completado | Comparación semántica normalizada antes de timestamp/evento: 10.000 syncs idénticas => 1 cambio, transiciones reales/terminales => 1 cada una, sin notify ni renovación de `completed_at`; 16 tests verdes. |
 | TASK-03 | completado | Hash semántico sin `updatedAt`, dedupe y coalescing a 1,5 s; terminal/error inmediato; 100 polls iguales => 1 publicación; 30 tests UI verdes |
 | TASK-04 | completado | Snapshot devuelve cursor bajo frontera atómica; Activity espera snapshot y abre SSE desde high-water mark; carrera concurrente + 10.000 eventos históricos cubiertos |
-| TASK-05 | pendiente | — |
+| TASK-05 | completado | Retención configurable por edad/cantidad conserva activos y terminal más reciente, mantiene tombstones, persiste frontera de cursor y emite `resync_required`; dry-run, reinicio y continuación desde cursor reciente cubiertos. |
 | TASK-06 | pendiente | — |
 | TASK-07 | pendiente | — |
 | DIR-01 | completado | Helper compartido mapea antes de filtrar, conserva índices originales/explicitos y prioriza `shotId`; huecos `[∅,b,∅,d] => [1,3]`, null y plan reordenado cubiertos; 49 tests UI + lint/build verdes. |

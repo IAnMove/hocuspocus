@@ -35788,6 +35788,11 @@ async def stream_canonical_task_events(
         cursor = _task_event_cursor(after, request.headers.get("last-event-id"))
         yield "retry: 2000\n\n"
         while True:
+            if registry.cursor_requires_resync(cursor):
+                marker = await asyncio.to_thread(registry.resync_required_event, cursor)
+                cursor = max(cursor, int(marker["event_id"]))
+                yield f"id: {cursor}\nevent: task\ndata: {json.dumps(marker, ensure_ascii=False)}\n\n"
+                continue
             events = await asyncio.to_thread(registry.wait_for_events, cursor, 15.0)
             if not events:
                 yield ": keepalive\n\n"
@@ -35804,7 +35809,11 @@ async def stream_canonical_task_events(
 @api.get("/api/v1/tasks/{task_id}/events")
 def get_canonical_task_events(task_id: str, workspace: str | None = None, after: int = 0):
     target = _get_active_workspace() if workspace is None else workspace
-    return {"events": _task_registry(target).events(task_id, after=after)}
+    registry = _task_registry(target)
+    if registry.cursor_requires_resync(after):
+        marker = registry.resync_required_event(after)
+        return {"events": [marker], "resync_required": True}
+    return {"events": registry.events(task_id, after=after), "resync_required": False}
 
 
 @api.get("/api/v1/tasks/{task_id}")
