@@ -12,6 +12,18 @@ import {
 } from './directorClipHandoff'
 
 const control = 'inline-flex items-center gap-1 rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] text-text-secondary hover:bg-bg-hover disabled:opacity-40'
+const TERMINAL_PIPELINE_STATUSES = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'crashed',
+  'interrupted',
+  'preview_ready',
+])
+
+function isTerminalPipelineStatus(status: string | undefined): boolean {
+  return TERMINAL_PIPELINE_STATUSES.has((status || '').trim().toLowerCase())
+}
 
 function attemptsForClip(clip: PipelineClipState): PipelineVideoAttempt[] {
   if (clip.video_attempts?.length) return clip.video_attempts
@@ -50,8 +62,10 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
   const [playingAll, setPlayingAll] = useState(false)
   const [selectingAttempt, setSelectingAttempt] = useState<string | null>(null)
   const [preparingCreator, setPreparingCreator] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const playerRef = useRef<HTMLVideoElement>(null)
   const pipelineLoadedRef = useRef(false)
+  const refreshRef = useRef<(() => void) | null>(null)
   const setDashboardOpen = useStore(state => state.setDashboardOpen)
   const rejoinPipelineClips = useStore(state => state.rejoinPipelineClips)
 
@@ -75,12 +89,35 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
   useEffect(() => {
     if (!open || !pipelineId) return
     let active = true
-    const refresh = (initial = false) => {
+    let inFlight = false
+    let terminalSeen = false
+    let timer: number | null = null
+
+    const stopPolling = () => {
+      if (timer !== null) window.clearTimeout(timer)
+      timer = null
+    }
+    const scheduleNext = () => {
+      if (!active || terminalSeen || timer !== null) return
+      timer = window.setTimeout(() => {
+        timer = null
+        void refresh(false, false)
+      }, 3000)
+    }
+    const refresh = async (initial = false, manual = false) => {
+      if (inFlight) return
+      inFlight = true
       if (initial) setLoading(true)
-      void api.fetchSavedPipeline(pipelineId).then(value => {
+      if (manual) setRefreshing(true)
+      try {
+        const value = await api.fetchSavedPipeline(pipelineId)
         if (active) {
           pipelineLoadedRef.current = true
           setPipeline(value)
+          setError(null)
+          terminalSeen = isTerminalPipelineStatus(value.status)
+          if (terminalSeen) stopPolling()
+          else scheduleNext()
           const returned = returnedSelection.current
           if (returned?.pipelineId === pipelineId) {
             const next = [...value.clips]
@@ -92,15 +129,24 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
             clearDirectorClipReplacementResult()
           }
         }
-      }).catch(reason => {
-        if (active) setError((reason as Error).message)
-      }).finally(() => {
+      } catch (reason) {
+        if (active) {
+          setError((reason as Error).message)
+          scheduleNext()
+        }
+      } finally {
+        inFlight = false
         if (active && initial) setLoading(false)
-      })
+        if (active && manual) setRefreshing(false)
+      }
     }
-    refresh(!pipelineLoadedRef.current)
-    const timer = window.setInterval(() => refresh(false), 3000)
-    return () => { active = false; window.clearInterval(timer) }
+    refreshRef.current = () => { void refresh(false, true) }
+    void refresh(!pipelineLoadedRef.current)
+    return () => {
+      active = false
+      stopPolling()
+      refreshRef.current = null
+    }
   }, [open, pipelineId])
 
   useEffect(() => {
@@ -187,6 +233,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
     {open && <div className="mt-2 rounded-xl border border-border bg-bg-secondary p-2">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="text-[10px] text-text-muted">Pipeline {pipelineId} · {playable.length}/{pipeline?.clips.length || 0} playable</span>
+        <button className={control} disabled={loading || refreshing} onClick={() => refreshRef.current?.()}>{refreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}Refresh timeline</button>
         <button className={control} disabled={!playable.length || playingAll} onClick={() => { setPlayIndex(0); setPlayingAll(true) }}><Play size={11} />Play all</button>
         {playingAll && <button className={control} onClick={() => { playerRef.current?.pause(); setPlayingAll(false); setPlayIndex(0) }}><Square size={11} />Stop</button>}
         <button className={control} disabled={playable.length < 2 || loading} onClick={() => { setLoading(true); setError(null); void rejoinPipelineClips(pipelineId).then(() => api.fetchSavedPipeline(pipelineId)).then(setPipeline).catch(reason => setError((reason as Error).message)).finally(() => setLoading(false)) }}>{loading ? <Loader2 size={11} className="animate-spin" /> : <Combine size={11} />}Join clips</button>
