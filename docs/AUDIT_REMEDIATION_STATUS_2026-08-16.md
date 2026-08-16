@@ -40,7 +40,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | STORY-03 | pendiente | — |
 | STORY-04 | pendiente | — |
 | UI-WS-01 | pendiente | — |
-| UI-SEARCH-01 | pendiente | — |
+| UI-SEARCH-01 | completado | Input controlado; debounce cancelado al cerrar/desmontar y store limpiado sin búsqueda/carga fantasma; 35 tests UI + lint/build verdes |
 | UI-GEN-01 | pendiente | — |
 | EDITOR-01 | pendiente | Revalidar contra `b6c741a` y `68aa157` |
 | EDITOR-02 | pendiente | — |

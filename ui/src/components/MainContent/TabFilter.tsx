@@ -29,16 +29,43 @@ export function TabFilter() {
   const searchQuery = useStore(s => s.outputSearchQuery)
   const setSearchQuery = useStore(s => s.setOutputSearchQuery)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [draftQuery, setDraftQuery] = useState(searchQuery)
   const searchRef = useRef<HTMLInputElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounceRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (searchOpen && searchRef.current) searchRef.current.focus()
   }, [searchOpen])
 
+  useEffect(() => () => {
+    if (debounceRef.current !== null) window.clearTimeout(debounceRef.current)
+    // Unmounting the filter must not leave a hidden backend search active.
+    // Set the store directly so teardown does not start a needless reload.
+    useStore.setState({ outputSearchQuery: '', selectedOutput: 0 })
+  }, [])
+
+  const cancelPendingSearch = () => {
+    if (debounceRef.current === null) return
+    window.clearTimeout(debounceRef.current)
+    debounceRef.current = null
+  }
+
   const handleSearchChange = (val: string) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => setSearchQuery(val), 400)
+    setDraftQuery(val)
+    cancelPendingSearch()
+    debounceRef.current = window.setTimeout(() => {
+      debounceRef.current = null
+      setSearchQuery(val)
+    }, 400)
+  }
+
+  const closeSearch = () => {
+    cancelPendingSearch()
+    setDraftQuery('')
+    setSearchOpen(false)
+    // A pending draft has never reached the store, so avoid an unnecessary
+    // normal-output reload when the canonical query is already empty.
+    if (useStore.getState().outputSearchQuery) setSearchQuery('')
   }
 
   return (
@@ -85,19 +112,20 @@ export function TabFilter() {
           <input
             ref={searchRef}
             type="text"
-            defaultValue={searchQuery}
+            value={draftQuery}
             onChange={e => handleSearchChange(e.target.value)}
             placeholder="Search..."
             className="bg-transparent text-xs text-text-primary placeholder:text-text-muted focus:outline-none w-24 md:w-36"
           />
-          <button onClick={() => { setSearchOpen(false); if (searchQuery) setSearchQuery('') }}
+          <button type="button" onClick={closeSearch} aria-label="Close search"
             className="text-text-muted hover:text-text-secondary">
             <X size={12} />
           </button>
         </div>
       ) : (
         <button
-          onClick={() => setSearchOpen(true)}
+          type="button"
+          onClick={() => { setDraftQuery(searchQuery); setSearchOpen(true) }}
           className={`p-1.5 rounded-lg transition-colors ${searchQuery ? 'text-accent-blue bg-accent-blue/10' : 'text-text-muted hover:text-text-secondary hover:bg-bg-hover'}`}
           title="Search outputs"
         >
