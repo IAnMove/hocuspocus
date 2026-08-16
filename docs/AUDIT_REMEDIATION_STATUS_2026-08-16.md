@@ -35,7 +35,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | DUR-01 | pendiente | Revalidar contra `c2da86c` |
 | SER-UI-03 | completado | Selección se poda contra `selectableShotIds`; aprobado queda desmarcado y con control deshabilitado/nombre explícito, contador y Render selected caen a cero, y desaprobar no resucita selección stale. Prueba RTL E1 seleccionada→aprobada→desaprobada + 81 UI/lint/build verdes. |
 | SER-03 | pendiente | — |
-| STORY-01 | pendiente | — |
+| STORY-01 | completado | Resultados asíncronos mutan por `projectId`, las operaciones activas protegen duplicado/borrado y la duplicación remapea IDs y referencias internas (incluidas selecciones musicales de colecciones distintas). Prueba A→B y clon completo; 91 UI, lint y build verdes. |
 | STORY-02 | completado | Resolver puro compartido conserva MiniMax, OpenAI, DeepSeek, OpenAI-compatible y Maestro con provider/model/base URL coherentes en UI, generación y reanudación; tabla de casos automatizada + lint/build verdes. |
 | STORY-03 | completado | Merge por `updatedAt` conserva exclusivos y versión más nueva; empate divergente no autosalva y ofrece Keep local/Use remote con timestamp monotónico. Primer load remoto no mezcla fallback sintético. Casos puros + alerta/acciones DOM + suite/lint/build verdes. |
 | STORY-04 | completado | Biblioteca backend añade revisión CAS monotónica y exige `baseRevision`; stale devuelve 409 estructurado sin perder primer write. UI persiste revisión, ante conflicto refetch/merge/retry y bloquea empates; PATCH/DELETE incrementales preservan proyectos ajenos. 7 backend + 85 UI/lint/build verdes. |

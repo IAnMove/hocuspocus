@@ -879,6 +879,10 @@ export function StoryLabPanel() {
   const deleteProject = useStoryStore(state => state.deleteProject)
   const patch = useStoryStore(state => state.patchProject)
   const update = useStoryStore(state => state.updateProject)
+  const updateProjectById = useStoryStore(state => state.updateProjectById)
+  const beginProjectOperation = useStoryStore(state => state.beginProjectOperation)
+  const endProjectOperation = useStoryStore(state => state.endProjectOperation)
+  const activeProjectOperations = useStoryStore(state => state.activeProjectOperations)
   const setProject = useStoryStore(state => state.setProject)
   const newProject = useStoryStore(state => state.newProject)
   const activeWorkspace = useStore(state => state.activeWorkspace)
@@ -1013,6 +1017,7 @@ export function StoryLabPanel() {
   const styleConversionCancelRequested = useRef(false)
   const generationAbortRef = useRef<AbortController | null>(null)
   const [uploadTarget, setUploadTarget] = useState<{ kind: 'world' | 'character' | 'location'; id?: string } | null>(null)
+  const projectOperationBusy = Boolean(activeProjectOperations[project.id])
   const musicCandidateOptions = useMemo(() => {
     const seen = new Set<string>()
     const options: Array<{ candidate: StoryMusicCandidate; cue?: StoryMusicCue; label: string }> = []
@@ -1197,6 +1202,14 @@ export function StoryLabPanel() {
     project.provider,
   ])
   const beginStoryActivity = (phase: string, message: string, total = 0) => {
+    const operationProjectId = project.id
+    beginProjectOperation(operationProjectId)
+    let operationEnded = false
+    const endOperation = () => {
+      if (operationEnded) return
+      operationEnded = true
+      endProjectOperation(operationProjectId)
+    }
     const prefix = `story-lab:${project.id}:`
     const activityStore = useStore.getState()
     Object.values(activityStore.activities).forEach(previous => {
@@ -1210,7 +1223,7 @@ export function StoryLabPanel() {
       ? 'Maestro internal'
       : project.provider.writingModel || project.provider.writingProvider
     const title = `Story Lab · ${project.title.trim() || 'Untitled story'} · ${writer}`
-    return createStoryActivityLifecycle({
+    const lifecycle = createStoryActivityLifecycle({
       id,
       title,
       phase,
@@ -1221,6 +1234,21 @@ export function StoryLabPanel() {
         window.setTimeout(() => useStore.getState().removeActivity(activityId), 4000)
       },
     })
+    return {
+      ...lifecycle,
+      fail: (error: unknown, failPhase?: string) => {
+        endOperation()
+        lifecycle.fail(error, failPhase)
+      },
+      cancel: (message?: string) => {
+        endOperation()
+        lifecycle.cancel(message)
+      },
+      finish: (message?: string, finishPhase?: string) => {
+        endOperation()
+        lifecycle.finish(message, finishPhase)
+      },
+    }
   }
   const selectableVideoModels = useMemo(
     () => videoModels
@@ -1472,9 +1500,10 @@ export function StoryLabPanel() {
     result: Record<string, unknown>,
     selected = draftPaths(result),
     replaceCollections = true,
+    projectId = project.id,
   ) => {
     const chosen = new Set(selected)
-    update(current => {
+    updateProjectById(projectId, current => {
       const next = structuredClone(current)
       const characterIdMap = new Map<string, string>()
       const overview = result.overview as Record<string, unknown> | undefined
@@ -1640,9 +1669,9 @@ export function StoryLabPanel() {
       return next
     })
     setPendingDraft(null)
-    window.localStorage.removeItem(storyResultKey(activeWorkspace, project.id))
-    window.localStorage.removeItem(storyJobKey(activeWorkspace, project.id))
-    setRecoveryJobId('')
+    window.localStorage.removeItem(storyResultKey(activeWorkspace, projectId))
+    window.localStorage.removeItem(storyJobKey(activeWorkspace, projectId))
+    if (useStoryStore.getState().project.id === projectId) setRecoveryJobId('')
     const characterCount = Array.isArray(result.characters) ? result.characters.length : 0
     const world = result.world && typeof result.world === 'object'
       ? result.world as Record<string, unknown> : null
@@ -1656,15 +1685,19 @@ export function StoryLabPanel() {
     const overview = result.overview && typeof result.overview === 'object'
       ? result.overview as Record<string, unknown> : null
     const appliedTitle = typeof overview?.title === 'string' && overview.title.trim()
-      ? overview.title.trim() : project.title || 'Untitled story'
+      ? overview.title.trim() : useStoryStore.getState().projects[projectId]?.title || 'Untitled story'
     setNotice({
       kind: 'ok',
       text: `Applied to “${appliedTitle}”: ${characterCount} characters · ${locationCount} locations · ${structure.length} moments · ${musicCount} song${musicCount === 1 ? '' : 's'}.`,
     })
   }
 
-  const generateMissingImagesForScope = async (scope: StoryGenerationScope): Promise<boolean> => {
-    const current = useStoryStore.getState().project
+  const generateMissingImagesForScope = async (
+    scope: StoryGenerationScope,
+    projectId = useStoryStore.getState().project.id,
+  ): Promise<boolean> => {
+    const current = useStoryStore.getState().projects[projectId]
+    if (!current) return false
     const targets = storyStyledReferenceTargets(current, {
       includeLocations: true,
       existingOnly: false,
@@ -1709,6 +1742,7 @@ export function StoryLabPanel() {
         )
         const ready = await generateVisual(item.target, item.prompt, {
           quiet: true,
+          projectId,
           onError: message => { lastError = message },
           onJobSubmitted: jobId => activity.handoff(
             `Continuing as recoverable image job ${jobId}`,
@@ -1735,6 +1769,7 @@ export function StoryLabPanel() {
     scope: StoryGenerationScope,
     result: Record<string, unknown>,
     options: StoryGenerationOptions = {},
+    projectId = project.id,
   ) => {
     if (project.workflowMode === 'guided') {
       setPendingDraft({
@@ -1752,15 +1787,15 @@ export function StoryLabPanel() {
       })
       return
     }
-    applyGeneratedResult(result)
+    applyGeneratedResult(result, draftPaths(result), true, projectId)
     if (scope === 'all') {
-      if (options.generateImages && !await generateMissingImagesForScope(scope)) return
+      if (options.generateImages && !await generateMissingImagesForScope(scope, projectId)) return
       if (!options.generateImages) {
         setNotice({ kind: 'ok', text: 'Text preparation completed. No images were generated.' })
       }
       setTab(project.projectType === 'music_video' ? 'music' : project.projectType === 'trailer' ? 'trailer' : 'productions')
     } else if (options.generateImages) {
-      await generateMissingImagesForScope(scope)
+      await generateMissingImagesForScope(scope, projectId)
     }
   }
 
@@ -1848,7 +1883,7 @@ export function StoryLabPanel() {
         setNotice({ kind: 'ok', text: 'Generation completed and was saved with its source story. Reopen that story to review the draft.' })
         return
       }
-      await completeGeneratedDraft(scope, result, options)
+      await completeGeneratedDraft(scope, result, options, sourceProjectId)
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         activity.cancel('Story generation cancellation requested')
@@ -1872,8 +1907,9 @@ export function StoryLabPanel() {
   const applyPendingGeneratedDraft = async () => {
     if (!pendingDraft) return
     const { scope, result, selected, replaceCollections, generateImagesAfterApply } = pendingDraft
-    applyGeneratedResult(result, selected, replaceCollections)
-    if (generateImagesAfterApply && !await generateMissingImagesForScope(scope)) return
+    const sourceProjectId = project.id
+    applyGeneratedResult(result, selected, replaceCollections, sourceProjectId)
+    if (generateImagesAfterApply && !await generateMissingImagesForScope(scope, sourceProjectId)) return
     if (scope === 'all') setTab(project.projectType === 'music_video' ? 'music' : project.projectType === 'trailer' ? 'trailer' : 'productions')
   }
 
@@ -1956,8 +1992,9 @@ export function StoryLabPanel() {
     asset: StoryVisualAsset,
     target: { kind: 'world' | 'character' | 'location'; id?: string },
     replaceReferences = false,
+    projectId = project.id,
   ) => {
-    update(current => {
+    updateProjectById(projectId, current => {
       current.assets[asset.id] = asset
       if (target.kind === 'world') {
         current.world.referenceAssetIds = replaceReferences
@@ -1995,17 +2032,19 @@ export function StoryLabPanel() {
       quiet?: boolean
       onError?: (message: string) => void
       onJobSubmitted?: (jobId: string) => void
+      projectId?: string
     } = {},
   ) => {
     if (!prompt.trim()) return
     const key = `${target.kind}:${target.id || 'world'}`
-    const current = useStoryStore.getState().project
+    const sourceProjectId = options.projectId || useStoryStore.getState().project.id
+    const current = useStoryStore.getState().projects[sourceProjectId]
+    if (!current) return false
     const globalProfile = useStore.getState().productionProfile
     const effectiveImageProvider = current.provider.useGlobalProfile && globalProfile.image.provider === 'minimax'
       ? 'minimax' : current.provider.imageProvider
     const effectiveImageModel = current.provider.useGlobalProfile
       ? globalProfile.image.model : current.provider.imageModel
-    const sourceProjectId = current.id
     const character = target.kind === 'character'
       ? current.characters.find(item => item.id === target.id) : undefined
     const location = target.kind === 'location'
@@ -2030,6 +2069,7 @@ export function StoryLabPanel() {
     ].filter(Boolean).join(' ')
     const jobKey = `${key}:${stableTextKey(effectivePrompt)}`
     const existingJobId = current.visualJobs[jobKey]
+    beginProjectOperation(sourceProjectId)
     setImageBusy(key)
     if (!options.quiet) setNotice(null)
     try {
@@ -2045,8 +2085,7 @@ export function StoryLabPanel() {
           existingJobId,
           onJobSubmitted: jobId => {
             options.onJobSubmitted?.(jobId)
-            update(latest => {
-              if (latest.id !== sourceProjectId) return latest
+            updateProjectById(sourceProjectId, latest => {
               Object.keys(latest.visualJobs)
                 .filter(item => item.startsWith(`${key}:`))
                 .forEach(item => { delete latest.visualJobs[item] })
@@ -2075,9 +2114,8 @@ export function StoryLabPanel() {
         createdAt: new Date().toISOString(),
         approval: 'draft',
         variantKind: 'original',
-      }, target, options.replaceReferences)
-      update(latest => {
-        if (latest.id !== sourceProjectId) return latest
+      }, target, options.replaceReferences, sourceProjectId)
+      updateProjectById(sourceProjectId, latest => {
         Object.keys(latest.visualJobs)
           .filter(item => item.startsWith(`${key}:`))
           .forEach(item => { delete latest.visualJobs[item] })
@@ -2090,8 +2128,7 @@ export function StoryLabPanel() {
     } catch (error) {
       const message = (error as Error).message
       if (!/job ID was preserved|could not reconnect/i.test(message)) {
-        update(latest => {
-          if (latest.id !== sourceProjectId) return latest
+        updateProjectById(sourceProjectId, latest => {
           delete latest.visualJobs[jobKey]
           return latest
         })
@@ -2101,6 +2138,7 @@ export function StoryLabPanel() {
       return false
     } finally {
       setImageBusy('')
+      endProjectOperation(sourceProjectId)
     }
   }
 
@@ -2136,7 +2174,9 @@ export function StoryLabPanel() {
   }
 
   const regenerateStyledReferences = () => {
-    const current = useStoryStore.getState().project
+    const sourceProjectId = project.id
+    const current = useStoryStore.getState().projects[sourceProjectId]
+    if (!current) return false
     if (!storyRenderStyle(current)) {
       setNotice({ kind: 'error', text: 'Write a global or character visual style before preparing reference conversion.' })
       return
@@ -2165,6 +2205,8 @@ export function StoryLabPanel() {
 
   const uploadVisual = async (files: FileList | null) => {
     if (!files?.length || !uploadTarget) return
+    const sourceProjectId = project.id
+    beginProjectOperation(sourceProjectId)
     setImageBusy('upload')
     try {
       for (const file of Array.from(files)) {
@@ -2173,12 +2215,13 @@ export function StoryLabPanel() {
           id: storyId('asset'), name: file.name, source: uploaded.url, prompt: '',
           provider: 'upload', createdAt: new Date().toISOString(),
           approval: 'draft', variantKind: 'original',
-        }, uploadTarget)
+        }, uploadTarget, false, sourceProjectId)
       }
     } catch (error) {
       setNotice({ kind: 'error', text: (error as Error).message })
     } finally {
       setImageBusy('')
+      endProjectOperation(sourceProjectId)
       if (uploadRef.current) uploadRef.current.value = ''
     }
   }
@@ -2189,6 +2232,9 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'Choose one or more image files.' })
       return
     }
+    const sourceProjectId = project.id
+    const sourceProject = useStoryStore.getState().projects[sourceProjectId]
+    if (!sourceProject) return
     const activity = beginStoryActivity(
       'uploading_assets', `Uploading 0/${images.length} assets…`, images.length + 1,
     )
@@ -2212,13 +2258,15 @@ export function StoryLabPanel() {
       const result = await api.analyzeStoryAssets({
         assets: uploaded,
         description: smartAssetDescription,
-        project,
+        project: sourceProject,
         writingProvider: project.provider.writingProvider,
         writingModel: project.provider.writingModel,
         writingBaseUrl: project.provider.writingBaseUrl,
         activity_id: activity.id,
       })
-      setPendingSmartAssets(result.assets.map(item => ({ ...item, selected: item.kind !== 'ignore' })))
+      if (useStoryStore.getState().projects[sourceProjectId]) {
+        setPendingSmartAssets(result.assets.map(item => ({ ...item, selected: item.kind !== 'ignore' })))
+      }
       setNotice({ kind: 'ok', text: `${result.assets.length} asset suggestions are ready for review.` })
       activity.finish()
     } catch (error) {
@@ -2438,6 +2486,7 @@ export function StoryLabPanel() {
   }
 
   const convertSelectedAssetsToStyle = async () => {
+    const sourceProjectId = project.id
     const style = styleConversion.trim()
     const selected = styleAssetIds
       .map(id => useStoryStore.getState().project.assets[id])
@@ -2506,7 +2555,7 @@ export function StoryLabPanel() {
           },
         )
         const derivedId = storyId('asset')
-        update(current => {
+        updateProjectById(sourceProjectId, current => {
           if (!current.assets[sourceAsset.id]) return current
           const shortStyle = style.replace(/\s+/g, ' ').slice(0, 48)
           current.assets[derivedId] = {
@@ -2596,31 +2645,39 @@ export function StoryLabPanel() {
   }
 
   const exportStorypack = async () => {
-    const zip = new JSZip()
-    const packed = structuredClone(project) as StoryProject & { packedAssets?: Record<string, string> }
-    packed.packedAssets = {}
-    await Promise.all(Object.values(project.assets).map(async asset => {
-      try {
-        const blob = await fetch(asset.source).then(response => response.blob())
-        const extension = blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png'
-        const path = `assets/${asset.id}.${extension}`
-        zip.file(path, blob)
-        packed.packedAssets![asset.id] = path
-      } catch {
-        // Keep the original source in the manifest when an old asset is unavailable.
-      }
-    }))
-    zip.file('story.json', JSON.stringify(packed, null, 2))
-    const blob = await zip.generateAsync({ type: 'blob' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `${project.title.replace(/[^\w.-]+/g, '-') || 'story'}.storypack`
-    link.click()
-    URL.revokeObjectURL(link.href)
+    const sourceProjectId = project.id
+    beginProjectOperation(sourceProjectId)
+    try {
+      const zip = new JSZip()
+      const packed = structuredClone(project) as StoryProject & { packedAssets?: Record<string, string> }
+      packed.packedAssets = {}
+      await Promise.all(Object.values(project.assets).map(async asset => {
+        try {
+          const blob = await fetch(asset.source).then(response => response.blob())
+          const extension = blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png'
+          const path = `assets/${asset.id}.${extension}`
+          zip.file(path, blob)
+          packed.packedAssets![asset.id] = path
+        } catch {
+          // Keep the original source in the manifest when an old asset is unavailable.
+        }
+      }))
+      zip.file('story.json', JSON.stringify(packed, null, 2))
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${project.title.replace(/[^\w.-]+/g, '-') || 'story'}.storypack`
+      link.click()
+      URL.revokeObjectURL(link.href)
+    } finally {
+      endProjectOperation(sourceProjectId)
+    }
   }
 
   const importStorypack = async (file?: File) => {
     if (!file) return
+    const sourceProjectId = project.id
+    beginProjectOperation(sourceProjectId)
     try {
       let imported: StoryProject & { packedAssets?: Record<string, string> }
       let zip: JSZip | null = null
@@ -2647,11 +2704,18 @@ export function StoryLabPanel() {
         normalized.id = storyId('story')
         normalized.title = `${normalized.title} imported`
       }
+      // Import is owned by the Story that opened the file picker. If the user
+      // navigated while uploads were in flight, do not replace the new Story.
+      if (useStoryStore.getState().project.id !== sourceProjectId) {
+        setNotice({ kind: 'error', text: 'The Storypack finished after you changed Stories; it was not applied to the wrong Story.' })
+        return
+      }
       setProject(normalized)
       setNotice({ kind: 'ok', text: 'Story project imported with its editable bible and available visual references.' })
     } catch (error) {
       setNotice({ kind: 'error', text: (error as Error).message })
     } finally {
+      endProjectOperation(sourceProjectId)
       if (importRef.current) importRef.current.value = ''
     }
   }
@@ -2822,6 +2886,7 @@ export function StoryLabPanel() {
   }
 
   const stageFilm = async (autoStart = false) => {
+    const sourceProjectId = project.id
     if (!storyVideoConfigurationReady) {
       setNotice({
         kind: 'error',
@@ -2857,6 +2922,7 @@ export function StoryLabPanel() {
         'Open a clean short-film episode in Director? The current Director draft will be replaced.',
     )
     if (!confirmed) return
+    beginProjectOperation(sourceProjectId)
     setProductionBusy('film')
     try {
       const adaptation = await loadFilmProduction(
@@ -2866,8 +2932,9 @@ export function StoryLabPanel() {
         filmDuration,
         filmPreserveVisualStyle,
       )
-      patch({
-        productions: [...project.productions, {
+      updateProjectById(sourceProjectId, current => ({
+        ...current,
+        productions: [...current.productions, {
           id: storyId('production'), kind: 'film', title: `${project.title} · short episode`,
           createdAt: new Date().toISOString(), sourceVersion: project.revision,
           sourceSnapshot: { ...structuredClone(project), productions: [] },
@@ -2889,7 +2956,7 @@ export function StoryLabPanel() {
           },
           status: 'staged',
         }],
-      })
+      }))
       setNotice({
         kind: 'ok',
         text: autoStart
@@ -2902,11 +2969,13 @@ export function StoryLabPanel() {
         text: `The short-film episode could not be staged: ${(error as Error).message}`,
       })
     } finally {
+      endProjectOperation(sourceProjectId)
       setProductionBusy(null)
     }
   }
 
   const stageTrailer = async (autoStart = false) => {
+    const sourceProjectId = project.id
     if (!storyVideoConfigurationReady) {
       setNotice({
         kind: 'error',
@@ -2957,6 +3026,7 @@ export function StoryLabPanel() {
         '¿Abrir este tráiler en Director? El borrador actual de Director se sustituirá.',
       )
     if (!confirmed) return
+    beginProjectOperation(sourceProjectId)
     const trailerOptions: TrailerAdaptationOptions = {
       format: trailerFormat,
       narration: trailerNarration,
@@ -2980,8 +3050,9 @@ export function StoryLabPanel() {
         storyVideoAspectRatio,
         trailerOptions,
       )
-      patch({
-        productions: [...project.productions, {
+      updateProjectById(sourceProjectId, current => ({
+        ...current,
+        productions: [...current.productions, {
           id: storyId('production'),
           kind: 'trailer',
           title: `${project.title} · epic trailer`,
@@ -3012,7 +3083,7 @@ export function StoryLabPanel() {
           },
           status: 'staged',
         }],
-      })
+      }))
       setNotice({
         kind: 'ok',
         text: directVideo
@@ -3026,11 +3097,13 @@ export function StoryLabPanel() {
     } catch (error) {
       setNotice({ kind: 'error', text: `No se pudo preparar el tráiler: ${(error as Error).message}` })
     } finally {
+      endProjectOperation(sourceProjectId)
       setProductionBusy(null)
     }
   }
 
   const writeStorySong = async () => {
+    const sourceProjectId = project.id
     const activity = beginStoryActivity('writing_song', 'Story Lab is writing the song prompt and lyrics…', 1)
     setProductionBusy('music')
     try {
@@ -3047,15 +3120,16 @@ export function StoryLabPanel() {
         language: project.language,
         duration_seconds: project.music.targetDurationSeconds,
       })
-      patch({
+      updateProjectById(sourceProjectId, current => ({
+        ...current,
         music: {
-          ...project.music,
+          ...current.music,
           brief,
           style: written.style,
           lyrics: written.lyrics,
           lyricsLanguage: project.language,
         },
-      })
+      }))
       setNotice({ kind: 'ok', text: 'Song prompt and editable lyrics are ready. Review them before spending MiniMax credits.' })
       return { brief, style: written.style, lyrics: written.lyrics }
     } catch (error) {
@@ -3069,6 +3143,7 @@ export function StoryLabPanel() {
   }
 
   const adaptStoryLyrics = async () => {
+    const sourceProjectId = project.id
     const sourceLyrics = project.music.sourceLyrics.trim()
     if (!sourceLyrics) {
       setNotice({ kind: 'error', text: 'Paste the source lyrics you are authorized to adapt first.' })
@@ -3090,15 +3165,16 @@ export function StoryLabPanel() {
         language: project.language,
         duration_seconds: project.music.targetDurationSeconds,
       })
-      patch({
+      updateProjectById(sourceProjectId, current => ({
+        ...current,
         music: {
-          ...project.music,
+          ...current.music,
           brief: storyBrief,
           style: written.style || project.music.style,
           lyrics: written.lyrics,
           lyricsLanguage: project.language,
         },
-      })
+      }))
       setNotice({ kind: 'ok', text: 'The Story lyrics were adapted and remain fully editable before generation.' })
     } catch (error) {
       activity.fail(error)
@@ -3111,6 +3187,7 @@ export function StoryLabPanel() {
 
   const uploadCoverReference = async (file?: File) => {
     if (!file) return
+    const sourceProjectId = project.id
     if (file.size > 50 * 1024 * 1024) {
       setNotice({ kind: 'error', text: 'MiniMax Cover accepts reference audio up to 50 MB.' })
       return
@@ -3119,14 +3196,15 @@ export function StoryLabPanel() {
     setProductionBusy('music')
     try {
       const uploaded = await api.uploadAudio(file)
-      patch({
+      updateProjectById(sourceProjectId, current => ({
+        ...current,
         music: {
-          ...project.music,
+          ...current.music,
           mode: 'cover',
           coverReferenceFilename: uploaded.filename,
           coverReferenceName: file.name,
         },
-      })
+      }))
       setNotice({ kind: 'ok', text: 'Cover reference uploaded. You can keep its lyrics or replace them with the editable Story lyrics.' })
     } catch (error) {
       activity.fail(error)
@@ -3139,6 +3217,7 @@ export function StoryLabPanel() {
   }
 
   const generateMinimaxSongs = async () => {
+    const sourceProjectId = project.id
     if (!servicesConfig?.minimax_api_key_set) {
       setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
       return
@@ -3221,17 +3300,18 @@ export function StoryLabPanel() {
         taskId: candidate.taskId || candidate.task_id,
         rootTaskId: candidate.rootTaskId || candidate.root_task_id,
       }))
-      patch({
+      updateProjectById(sourceProjectId, current => ({
+        ...current,
         music: {
-          ...project.music,
+          ...current.music,
           brief,
           style,
           lyrics,
           lyricsLanguage: project.music.lyricsLanguage || project.language,
-          candidates: [...project.music.candidates, ...candidates],
-          selectedCandidateId: candidates[0]?.id || project.music.selectedCandidateId,
+          candidates: [...current.music.candidates, ...candidates],
+          selectedCandidateId: candidates[0]?.id || current.music.selectedCandidateId,
         },
-      })
+      }))
       setNotice({
         kind: result.status === 'completed' ? 'ok' : 'error',
         text: result.status === 'completed'
@@ -3248,8 +3328,12 @@ export function StoryLabPanel() {
     }
   }
 
-  const patchMusicCue = (cueId: string, changes: Partial<StoryMusicCue>) => {
-    update(current => {
+  const patchMusicCue = (
+    cueId: string,
+    changes: Partial<StoryMusicCue>,
+    projectId = useStoryStore.getState().project.id,
+  ) => {
+    updateProjectById(projectId, current => {
       const cue = current.music.cues.find(item => item.id === cueId)
       if (cue) Object.assign(cue, changes)
       return current
@@ -3257,7 +3341,8 @@ export function StoryLabPanel() {
   }
 
   const translateMusicCueLyrics = async (cueId: string) => {
-    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    const sourceProjectId = project.id
+    const cue = useStoryStore.getState().projects[sourceProjectId]?.music.cues.find(item => item.id === cueId)
     const targetLanguage = (lyricsTranslationLanguage[cueId] || '').trim()
     if (!cue?.lyrics.trim()) return
     if (!targetLanguage) {
@@ -3274,7 +3359,11 @@ export function StoryLabPanel() {
         writingModel: project.provider.writingModel,
         writingBaseUrl: project.provider.writingBaseUrl,
       })
-      patchMusicCue(cueId, { lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage })
+      updateProjectById(sourceProjectId, current => {
+        const target = current.music.cues.find(item => item.id === cueId)
+        if (target) Object.assign(target, { lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage })
+        return current
+      })
       setNotice({ kind: 'ok', text: `“${cue.title}” lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
     } catch (error) {
       activity.fail(error, 'writing_song')
@@ -3286,6 +3375,7 @@ export function StoryLabPanel() {
   }
 
   const translateManualSongLyrics = async () => {
+    const sourceProjectId = project.id
     const lyrics = project.music.lyrics.trim()
     const targetLanguage = (lyricsTranslationLanguage.manual || '').trim()
     if (!lyrics) return
@@ -3303,7 +3393,10 @@ export function StoryLabPanel() {
         writingModel: project.provider.writingModel,
         writingBaseUrl: project.provider.writingBaseUrl,
       })
-      patch({ music: { ...project.music, lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage } })
+      updateProjectById(sourceProjectId, current => ({
+        ...current,
+        music: { ...current.music, lyrics: translated.lyrics, lyricsLanguage: translated.targetLanguage },
+      }))
       setNotice({ kind: 'ok', text: `Manual song lyrics were translated into ${translated.targetLanguage}. Review them before generating audio.` })
     } catch (error) {
       activity.fail(error, 'writing_song')
@@ -3318,8 +3411,10 @@ export function StoryLabPanel() {
     cue: StoryMusicCue,
     requestedStyle: string,
     requestedLanguage: string,
+    projectId = useStoryStore.getState().project.id,
   ) => {
-    const latest = useStoryStore.getState().project
+    const latest = useStoryStore.getState().projects[projectId]
+    if (!latest) throw new Error('The source Story is no longer available.')
     const targetLanguage = requestedLanguage.trim() || cue.lyricsLanguage || latest.language
     const targetStyle = requestedStyle.trim() || cue.style || cue.brief
     const target = cue.kind === 'character'
@@ -3399,11 +3494,11 @@ export function StoryLabPanel() {
     setMusicCueBusy(`new-song:${cue.id}`)
     setNotice(null)
     try {
-      const rewritten = await rewriteMusicCueDraft(cue, instruction, '')
+      const rewritten = await rewriteMusicCueDraft(cue, instruction, '', current.id)
       if (existingCue) {
-        patchMusicCue(cue.id, rewritten)
+        patchMusicCue(cue.id, rewritten, current.id)
       } else {
-        update(latest => {
+        updateProjectById(current.id, latest => {
           latest.music.cues.unshift({ ...cue, ...rewritten })
           return latest
         })
@@ -3444,7 +3539,8 @@ export function StoryLabPanel() {
   }
 
   const createMusicCueVersion = async (cueId: string) => {
-    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    const sourceProjectId = project.id
+    const cue = useStoryStore.getState().projects[sourceProjectId]?.music.cues.find(item => item.id === cueId)
     if (!cue) return
     const requestedStyle = (musicVersionStyle[cueId] || '').trim()
     const requestedLanguage = (musicVersionLanguage[cueId] || '').trim()
@@ -3456,8 +3552,8 @@ export function StoryLabPanel() {
     const activity = beginStoryActivity('writing_song', `Creating a new version of “${cue.title}” · ${changeLabel}…`, 1)
     setMusicCueBusy(`version:${cueId}`)
     try {
-      const rewritten = await rewriteMusicCueDraft(cue, requestedStyle, requestedLanguage)
-      patchMusicCue(cueId, rewritten)
+      const rewritten = await rewriteMusicCueDraft(cue, requestedStyle, requestedLanguage, sourceProjectId)
+      patchMusicCue(cueId, rewritten, sourceProjectId)
       setNotice({
         kind: 'ok',
         text: `A completely new “${cue.title}” draft is ready in ${rewritten.lyricsLanguage}. Existing generated audio was preserved. Review the prompts before generating it.`,
@@ -3472,7 +3568,8 @@ export function StoryLabPanel() {
   }
 
   const createAllMusicCueVersions = async () => {
-    const cues = useStoryStore.getState().project.music.cues
+    const sourceProjectId = project.id
+    const cues = useStoryStore.getState().projects[sourceProjectId]?.music.cues || []
     const requestedStyle = (musicVersionStyle.all || '').trim()
     const requestedLanguage = (musicVersionLanguage.all || '').trim()
     if (!cues.length) {
@@ -3491,11 +3588,11 @@ export function StoryLabPanel() {
     let completed = 0
     try {
       for (let index = 0; index < cues.length; index += 1) {
-        const currentCue = useStoryStore.getState().project.music.cues.find(item => item.id === cues[index].id)
+        const currentCue = useStoryStore.getState().projects[sourceProjectId]?.music.cues.find(item => item.id === cues[index].id)
         if (!currentCue) continue
         activity.update(`Rewriting “${currentCue.title}” · ${index + 1}/${cues.length}`, 'writing_song', index, cues.length)
-        const rewritten = await rewriteMusicCueDraft(currentCue, requestedStyle, requestedLanguage)
-        patchMusicCue(currentCue.id, rewritten)
+        const rewritten = await rewriteMusicCueDraft(currentCue, requestedStyle, requestedLanguage, sourceProjectId)
+        patchMusicCue(currentCue.id, rewritten, sourceProjectId)
         completed += 1
         activity.update(`Completed “${currentCue.title}” · ${completed}/${cues.length}`, 'writing_song', completed, cues.length)
       }
@@ -3516,6 +3613,7 @@ export function StoryLabPanel() {
   }
 
   const createManualSongVersion = async () => {
+    const sourceProjectId = project.id
     const requestedStyle = (musicVersionStyle.manual || '').trim()
     const requestedLanguage = (musicVersionLanguage.manual || '').trim()
     if (!requestedStyle && !requestedLanguage) {
@@ -3537,14 +3635,15 @@ export function StoryLabPanel() {
         language: targetLanguage,
         duration_seconds: project.music.targetDurationSeconds,
       })
-      patch({
+      updateProjectById(sourceProjectId, current => ({
+        ...current,
         music: {
-          ...project.music,
+          ...current.music,
           style: written.style,
           lyrics: written.lyrics,
           lyricsLanguage: targetLanguage,
         },
-      })
+      }))
       setNotice({ kind: 'ok', text: `The manual ${requestedStyle || 'alternate'} version is ready in ${targetLanguage}. Existing audio candidates were preserved.` })
     } catch (error) {
       activity.fail(error, 'writing_song')
@@ -3556,7 +3655,8 @@ export function StoryLabPanel() {
   }
 
   const adaptMusicCueWithLlm = async (cueId: string, includeLyria = false) => {
-    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    const sourceProjectId = project.id
+    const cue = useStoryStore.getState().projects[sourceProjectId]?.music.cues.find(item => item.id === cueId)
     if (!cue) return
     const activity = beginStoryActivity('music_planning', `Story Lab is adapting “${cue.title}”…`, 1)
     setMusicCueBusy(`llm:${cueId}`)
@@ -3574,7 +3674,7 @@ export function StoryLabPanel() {
         reference_song: cue.referenceSong,
         style_direction: cue.brief,
         lyrics_direction: cue.lyrics,
-        story_context: storySongBrief(project, cue.durationSeconds, lyricsLanguage),
+        story_context: storySongBrief(useStoryStore.getState().projects[sourceProjectId] || project, cue.durationSeconds, lyricsLanguage),
         language: lyricsLanguage,
         duration_seconds: cue.durationSeconds,
         include_lyria: includeLyria,
@@ -3585,7 +3685,7 @@ export function StoryLabPanel() {
         lyrics: written.lyrics,
         lyricsLanguage,
         ...(includeLyria ? { lyriaPrompt: written.lyria_prompt } : {}),
-      })
+      }, sourceProjectId)
       const lyriaMissing = includeLyria && !written.lyria_prompt.trim()
       setNotice({
         kind: 'ok',
@@ -3607,7 +3707,8 @@ export function StoryLabPanel() {
   const uploadLyriaResult = async (file?: File) => {
     const cueId = lyriaUploadCueId.current
     if (!file || !cueId) return
-    const cue = useStoryStore.getState().project.music.cues.find(item => item.id === cueId)
+    const sourceProjectId = project.id
+    const cue = useStoryStore.getState().projects[sourceProjectId]?.music.cues.find(item => item.id === cueId)
     if (!cue) return
     const activity = beginStoryActivity('uploading_music', `Importing Google Lyria result “${file.name}”…`, 1)
     setMusicCueBusy(`lyria-upload:${cueId}`)
@@ -3630,7 +3731,7 @@ export function StoryLabPanel() {
         durationSeconds: 0,
         createdAt: new Date().toISOString(),
       }
-      update(current => {
+      updateProjectById(sourceProjectId, current => {
         const target = current.music.cues.find(item => item.id === cueId)
         if (target) {
           target.candidates.push(candidate)
@@ -3653,7 +3754,9 @@ export function StoryLabPanel() {
   const uploadCustomMusic = async (file?: File) => {
     if (!file) return
     const cueId = customMusicUploadCueId.current
-    const current = useStoryStore.getState().project
+    const sourceProjectId = project.id
+    const current = useStoryStore.getState().projects[sourceProjectId]
+    if (!current) return
     const cue = current.music.cues.find(item => item.id === cueId)
     const destination = cue?.title || current.title || 'Story music'
     const activity = beginStoryActivity('uploading_music', `Importing custom audio “${file.name}”…`, 1)
@@ -3678,7 +3781,7 @@ export function StoryLabPanel() {
         durationSeconds: 0,
         createdAt: new Date().toISOString(),
       }
-      update(latest => {
+      updateProjectById(sourceProjectId, latest => {
         const target = latest.music.cues.find(item => item.id === cueId)
         if (target) {
           target.candidates.push(candidate)
@@ -3711,7 +3814,9 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
       return false
     }
-    const current = useStoryStore.getState().project
+    const sourceProjectId = project.id
+    const current = useStoryStore.getState().projects[sourceProjectId]
+    if (!current) return false
     const cue = current.music.cues.find(item => item.id === cueId)
     if (!cue) return false
     if (!cue.style.trim() || (!cue.instrumental && !cue.lyrics.trim())) {
@@ -3771,7 +3876,7 @@ export function StoryLabPanel() {
         taskId: candidate.taskId || candidate.task_id,
         rootTaskId: candidate.rootTaskId || candidate.root_task_id,
       }))
-      update(latest => {
+      updateProjectById(sourceProjectId, latest => {
         const target = latest.music.cues.find(item => item.id === cueId)
         if (target) {
           target.candidates.push(...candidates)
@@ -4059,6 +4164,7 @@ export function StoryLabPanel() {
       excerpt?: { start: number; end: number }
     } = {},
   ) => {
+    const sourceProjectId = project.id
     if (!storyVideoConfigurationReady) {
       setNotice({
         kind: 'error',
@@ -4144,14 +4250,15 @@ export function StoryLabPanel() {
       )
       activity.update('Saving the independent production snapshot…', 'preparing_music_video', 2, 3)
       if (options.saveProduction !== false) {
-        patch({
-          productions: [...project.productions, {
+        updateProjectById(sourceProjectId, current => ({
+          ...current,
+          productions: [...current.productions, {
             id: storyId('production'),
             kind: 'music_video',
             title: `${loaded.adaptation.focusLabel} · ${options.mode === 'trailer' ? 'musical trailer' : 'music video'}`,
             createdAt: new Date().toISOString(),
-            sourceVersion: project.revision,
-            sourceSnapshot: { ...structuredClone(project), productions: [] },
+            sourceVersion: current.revision,
+            sourceSnapshot: { ...structuredClone(current), productions: [] },
             targetId: loaded.adaptation.focusTargetId,
             targetName: loaded.adaptation.focusLabel,
             targetSnapshot: {
@@ -4182,7 +4289,7 @@ export function StoryLabPanel() {
             },
             status: 'staged',
           }],
-        })
+        }))
       }
       setNotice({
         kind: 'ok',
@@ -4583,7 +4690,7 @@ export function StoryLabPanel() {
         <select
           className={`${input} w-44`}
           value={project.id}
-          disabled={Boolean(busy || imageBusy)}
+          disabled={Boolean(busy || imageBusy || projectOperationBusy)}
           title={`Story Lab library · ${activeWorkspace}`}
           onChange={event => openProject(event.target.value)}
         >
@@ -4594,7 +4701,7 @@ export function StoryLabPanel() {
         <select
           className={`${input} w-40`}
           value={project.projectType}
-          disabled={Boolean(busy || imageBusy)}
+          disabled={Boolean(busy || imageBusy || projectOperationBusy)}
           title="Tipo de proyecto Story Lab"
           onChange={event => {
             const projectType = event.target.value as StoryProjectType
@@ -4661,7 +4768,7 @@ export function StoryLabPanel() {
           <summary className={`${button} list-none cursor-pointer`}><Plus size={13} /> New</summary>
           <div className="absolute right-0 z-40 mt-1 w-64 rounded-lg border border-border bg-bg-primary p-1.5 shadow-xl">
             {STORY_PROJECT_TYPES.map(item => (
-              <button key={item.id} type="button" disabled={Boolean(busy || imageBusy)}
+              <button key={item.id} type="button" disabled={Boolean(busy || imageBusy || projectOperationBusy)}
                 className="block w-full rounded-md px-2.5 py-2 text-left hover:bg-bg-hover disabled:opacity-40"
                 onClick={event => {
                   newProject(item.id)
@@ -4674,10 +4781,10 @@ export function StoryLabPanel() {
             ))}
           </div>
         </details>
-        <button className={button} disabled={Boolean(busy || imageBusy)} onClick={() => duplicateProject()} title="Duplicate current story">Duplicate</button>
+        <button className={button} disabled={Boolean(busy || imageBusy || projectOperationBusy)} onClick={() => duplicateProject()} title="Duplicate current story">Duplicate</button>
         <button className={button} onClick={() => {
           if (window.confirm(`Delete "${project.title}" from this workspace's Story Lab library?`)) deleteProject(project.id)
-        }} disabled={Boolean(busy || imageBusy)} title="Delete current story"><Trash2 size={13} /></button>
+        }} disabled={Boolean(busy || imageBusy || projectOperationBusy)} title="Delete current story"><Trash2 size={13} /></button>
         <input ref={importRef} type="file" accept=".storypack,.zip,.json" className="hidden" onChange={event => importStorypack(event.target.files?.[0])} />
       </div>
 
