@@ -15,10 +15,11 @@ import { WelcomeModal } from './components/WelcomeModal'
 import { QueueRecoveryDialog } from './components/QueueRecoveryDialog'
 import { RecipesOverlay } from './components/Recipes/RecipesOverlay'
 import { BrandIdentity } from './components/BrandIdentity'
+import { LanAuthGate } from './components/LanAuthGate'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
 
-function App() {
+function AppContent() {
   const loadModels = useStore(s => s.loadModels)
   const loadOutputs = useStore(s => s.loadOutputs)
   const refreshOutputs = useStore(s => s.refreshOutputs)
@@ -184,6 +185,10 @@ function App() {
       <QueueRecoveryDialog />
     </div>
   )
+}
+
+function App() {
+  return <LanAuthGate><AppContent /></LanAuthGate>
 }
 
 export default App

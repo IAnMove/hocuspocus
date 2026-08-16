@@ -14,7 +14,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | --- | --- | --- |
 | SEC-01 | completado | Tests de move válido, traversal, absoluta y symlink de escape |
 | SEC-02 | completado | Resolver común para trim/análisis; uploads/workspace válidos, externos y symlinks rechazados |
-| SEC-03 | pendiente | — |
+| SEC-03 | completado | Token bearer + cookie de sesión para LAN; loopback libre; UI, API y `/classic` cubiertos |
 | TASK-01 | pendiente | — |
 | TASK-02 | pendiente | — |
 | TASK-03 | pendiente | — |

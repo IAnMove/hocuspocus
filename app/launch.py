@@ -109,7 +109,9 @@ print("[Maestro] Importing WanGP engine...")
 import wgp
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import debug_trace
+from routers.lan_auth import create_lan_auth_router
 from services.durable_generation_queue import DurableGenerationQueue
+from services.lan_auth import LanAuthMiddleware, describe_lan_auth_startup
 from services.media_paths import MediaPathNotAllowed, resolve_permitted_media_path
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
@@ -279,8 +281,8 @@ def _resolve_output_move_path(base: str, relative_name: str) -> str | None:
 
 # CORS — restricted to localhost (the Vite dev server + the bundled UI
 # served from the same FastAPI process + Pinokio's HTTPS proxy at
-# https://<port>.localhost). Do NOT loosen this to `*` — the API has
-# no authentication and would be trivially CSRF'able from any site.
+# https://<port>.localhost). Do NOT loosen this to `*`: browser access stays
+# intentionally same-origin even when LAN session authentication is enabled.
 _cors_origin_regex = r"^https?://(127\.0\.0\.1|localhost|\d+\.localhost)(:\d+)?$"
 api.add_middleware(
     CORSMiddleware,
@@ -288,6 +290,7 @@ api.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+api.include_router(create_lan_auth_router())
 
 
 @api.middleware("http")
@@ -370,6 +373,12 @@ async def trace_user_mutations(request: Request, call_next):
             duration_ms=round((time.monotonic() - started) * 1000, 2),
         )
     return response
+
+
+# Registered after decorator-based middleware so Starlette places LAN auth at
+# the outside of the stack. Unauthenticated remote requests are rejected
+# before request-body tracing or endpoint work can run.
+api.add_middleware(LanAuthMiddleware)
 
 # --- Generation job tracking ---
 from services.job_lifecycle import (
@@ -35918,6 +35927,9 @@ if __name__ == "__main__":
         host = "127.0.0.1"
     else:
         host = os.environ.get("SERVER_NAME", "127.0.0.1")
+
+    for _lan_auth_message in describe_lan_auth_startup():
+        print(_lan_auth_message)
 
     # Port resolution: Pinokio hands us a free port via SERVER_PORT, but a
     # stale prior instance or another app can still be holding it by the time

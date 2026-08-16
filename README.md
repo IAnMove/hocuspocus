@@ -397,7 +397,17 @@ After clicking **Start**, the launcher shows an **Open Web UI** button once the 
 
 ## Sharing on the local network
 
-Maestro respects Pinokio's `PINOKIO_SHARE_LOCAL` environment variable. Set it to `false` (in the per-app or global ENVIRONMENT file) to bind the server to loopback only; set to `true` for LAN access. Pinokio's own daemon proxy is a separate concern that may also need to honor the variable depending on your setup.
+The app respects Pinokio's `PINOKIO_SHARE_LOCAL` environment variable. Set it to `false` (in the per-app or global ENVIRONMENT file) to bind the server to loopback only; set it to `true` for authenticated LAN access. Pinokio's own daemon proxy is a separate concern that may also need to honor the variable depending on your setup.
+
+When LAN sharing is enabled, the launch terminal prints a random session token. A browser on another device must enter that token before the API or classic UI is available. The browser receives an `HttpOnly`, `SameSite=Strict` session cookie (`Secure` when served over HTTPS); command-line clients can instead send `Authorization: Bearer <token>`. Direct local access through `127.0.0.1` or `localhost` remains credential-free.
+
+To keep the same secret across restarts, set `LOREFRAME_LAN_TOKEN` in the per-app ENVIRONMENT file. It must contain at least 24 characters; treat it like a password and use a long random value. When the variable is configured, its value is never printed by the server. Plain HTTP does not encrypt LAN traffic, so use this only on a trusted network or put the app behind an HTTPS endpoint.
+
+For example, an API client on another device can authenticate without creating a browser session:
+
+```bash
+curl -H "Authorization: Bearer $LOREFRAME_LAN_TOKEN" http://SERVER_IP:PORT/api/v1/tasks
+```
 
 ## Credits
 
