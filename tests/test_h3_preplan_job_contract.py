@@ -127,6 +127,12 @@ def _install_h3_fakes(monkeypatch, planner) -> None:
         get_status=lambda: {"provider": "minimax"},
         unload_model=lambda: None,
     )
+    duration_module = _module(
+        "services.minimax_h3_duration",
+        apply_h3_dialogue_duration=lambda _body, _model_def: None,
+        apply_h3_vocal_timeline=lambda _body, _model_def: None,
+        h3_dialogue_split_error=lambda _contract: "dialogue split required",
+    )
 
     @contextmanager
     def task_context_scope(**_context):
@@ -140,6 +146,7 @@ def _install_h3_fakes(monkeypatch, planner) -> None:
         "services",
         h3_window_planner=planner_module,
         llm_service=llm_module,
+        minimax_h3_duration=duration_module,
         task_manager=task_module,
     )
     services_package.__path__ = []
@@ -153,6 +160,11 @@ def _install_h3_fakes(monkeypatch, planner) -> None:
         sys.modules,
         "services.llm_service",
         llm_module,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "services.minimax_h3_duration",
+        duration_module,
     )
     monkeypatch.setitem(sys.modules, "services.task_manager", task_module)
 
