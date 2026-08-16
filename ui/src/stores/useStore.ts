@@ -7,9 +7,11 @@ import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
 import { createActivityPublicationGate } from '../lib/activityPublication'
-import { deriveIsGenerating, isGenerationJobActive } from '../lib/generationJobState'
+import { isGenerationJobActive } from '../lib/generationJobState'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
 import { llmActivityPreview } from '../lib/llmActivityPreview'
+import { createDirectorSlice } from './directorSlice'
+import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -2279,6 +2281,7 @@ async function _syncGlobalProductionVideoFormat(
 }
 
 export const useStore = create<AppState>((set, get) => ({
+  ...createDirectorSlice(partial => set(partial as never)),
   // Generation mode
   generationMode: 'video',
   editSubMode: 'retake' as import('../types').EditSubMode,
@@ -4101,8 +4104,7 @@ export const useStore = create<AppState>((set, get) => ({
       outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
     }
     set(st => {
-      const jobs = [newJob, ...st.jobs]
-      return { jobs, isGenerating: deriveIsGenerating(jobs) }
+      return prependJob(st.jobs, newJob)
     })
 
     try {
@@ -4131,22 +4133,21 @@ export const useStore = create<AppState>((set, get) => ({
           if (status.status === 'completed') {
             clearInterval(pollInterval)
             set(st => {
-              const remaining = st.jobs.filter(j => j.id !== result.job_id)
-              return { jobs: remaining, isGenerating: deriveIsGenerating(remaining) }
+              return removeJob(st.jobs, j => j.id === result.job_id)
             })
             get().loadOutputs()
           } else if (status.status === 'failed' || status.status === 'cancelled') {
             clearInterval(pollInterval)
-            set(st => ({ isGenerating: deriveIsGenerating(st.jobs.filter(j => j.id !== result.job_id)) }))
+            // Keep the terminal tile visible so the user can inspect or dismiss it.
+            set(st => withJobs(st.jobs))
           }
         } catch { /* ignore poll errors */ }
       }, 2000)
     } catch (e) {
       const msg = e instanceof Error ? e.message : (tool === 'upscale' ? 'Upscale failed' : 'Revoice failed')
-      set(st => ({
-        jobs: st.jobs.map(j => j === newJob ? { ...j, id: j.id || `tool-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-        isGenerating: deriveIsGenerating(st.jobs.filter(j => j !== newJob)),
-      }))
+      set(st => updateJob(st.jobs, j => j === newJob, j => ({
+        ...j, id: j.id || `tool-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+      })))
       console.error(`Tool ${tool} failed:`, msg)
     }
   },
@@ -4500,8 +4501,7 @@ export const useStore = create<AppState>((set, get) => ({
       phase: '', message: 'Submitting blend...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => {
-        const jobs = [newJob, ...s.jobs]
-        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+        return prependJob(s.jobs, newJob)
       })
 
       try {
@@ -4550,19 +4550,14 @@ export const useStore = create<AppState>((set, get) => ({
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: deriveIsGenerating(remaining),
-                }
+                return withJobs(remaining)
               })
               get().loadOutputs()
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
-              set(s => ({
-                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
@@ -4571,10 +4566,9 @@ export const useStore = create<AppState>((set, get) => ({
         // Submit itself failed (pre-queue). Convert the placeholder to a
         // failed state in place so the user sees what went wrong instead of
         // the tile silently disappearing.
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Blend failed:', msg)
       }
       return
@@ -4642,8 +4636,7 @@ export const useStore = create<AppState>((set, get) => ({
       phase: '', message: 'Submitting outpaint...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => {
-        const jobs = [newJob, ...s.jobs]
-        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+        return prependJob(s.jobs, newJob)
       })
 
       // Sliding window size: the Advanced Settings slider stores seconds.
@@ -4705,19 +4698,14 @@ export const useStore = create<AppState>((set, get) => ({
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: deriveIsGenerating(remaining),
-                }
+                return withJobs(remaining)
               })
               get().loadOutputs()
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
-              set(s => ({
-                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
@@ -4726,10 +4714,9 @@ export const useStore = create<AppState>((set, get) => ({
         // Submit itself failed (pre-queue). Convert the placeholder to a
         // failed state in place so the user sees what went wrong instead of
         // the tile silently disappearing.
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Outpaint failed:', msg)
       }
       return
@@ -4752,8 +4739,7 @@ export const useStore = create<AppState>((set, get) => ({
         phase: '', message: 'Submitting repaint...', outputFiles: [], error: null, oomInfo: null,
       }
       set(s => {
-        const jobs = [newJob, ...s.jobs]
-        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+        return prependJob(s.jobs, newJob)
       })
 
       try {
@@ -4818,28 +4804,20 @@ export const useStore = create<AppState>((set, get) => ({
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: deriveIsGenerating(remaining),
-                }
+                return withJobs(remaining)
               })
               get().loadOutputs()
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
-              set(s => ({
-                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Repaint failed'
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob
-            ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg }
-            : j),
-          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Repaint failed:', msg)
       }
       return
@@ -4859,8 +4837,7 @@ export const useStore = create<AppState>((set, get) => ({
         phase: '', message: 'Submitting recast...', outputFiles: [], error: null, oomInfo: null,
       }
       set(s => {
-        const jobs = [newJob, ...s.jobs]
-        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+        return prependJob(s.jobs, newJob)
       })
 
       try {
@@ -4937,26 +4914,20 @@ export const useStore = create<AppState>((set, get) => ({
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: deriveIsGenerating(remaining),
-                }
+                return withJobs(remaining)
               })
               get().loadOutputs()
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
-              set(s => ({
-                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Recast failed'
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Recast failed:', msg)
       }
       return
@@ -4973,8 +4944,7 @@ export const useStore = create<AppState>((set, get) => ({
       phase: '', message: 'Submitting...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
       set(s => {
-        const jobs = [newJob, ...s.jobs]
-        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+        return prependJob(s.jobs, newJob)
       })
 
       try {
@@ -5077,19 +5047,14 @@ export const useStore = create<AppState>((set, get) => ({
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: deriveIsGenerating(remaining),
-                }
+                return withJobs(remaining)
               })
               get().loadOutputs()
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
-              set(s => ({
-                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
@@ -5098,10 +5063,9 @@ export const useStore = create<AppState>((set, get) => ({
         // Submit itself failed (pre-queue). Convert the placeholder to a
         // failed state in place so the user sees what went wrong instead of
         // the tile silently disappearing.
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Edit generation failed:', msg)
       }
       return  // Don't fall through to normal generation
@@ -5847,8 +5811,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     set(s => {
-      const jobs = [newJob, ...s.jobs]
-      return { jobs, isGenerating: deriveIsGenerating(jobs) }
+      return prependJob(s.jobs, newJob)
     })
 
     try {
@@ -5915,10 +5878,7 @@ export const useStore = create<AppState>((set, get) => ({
             // Completed job — remove the placeholder, real output now in gallery
             set(s => {
               const remaining = s.jobs.filter(j => j.id !== job_id)
-              return {
-                jobs: remaining,
-                isGenerating: deriveIsGenerating(remaining),
-              }
+              return withJobs(remaining)
             })
             get().loadOutputs()
           } else if (status.status === 'failed' || status.status === 'cancelled') {
@@ -5926,9 +5886,7 @@ export const useStore = create<AppState>((set, get) => ({
             // Keep the failed/cancelled job in the queue so its placeholder
             // card stays visible with the error message. User dismisses via
             // the X button on the tile.
-            set(s => ({
-              isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== job_id)),
-            }))
+            set(s => withJobs(s.jobs))
           }
         } catch (e) {
           console.error('Status poll error:', e)
@@ -5940,10 +5898,9 @@ export const useStore = create<AppState>((set, get) => ({
       // Submit itself failed (pre-queue). Convert the placeholder to a failed
       // state in place so the user sees what happened, rather than making the
       // tile disappear and leaving them to wonder.
-      set(s => ({
-        jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-        isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
-      }))
+      set(s => updateJob(s.jobs, j => j === newJob, j => ({
+        ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+      })))
     }
   },
 
@@ -5968,12 +5925,7 @@ export const useStore = create<AppState>((set, get) => ({
     // and hid backend errors. Existing status polling will publish the final
     // cancelled state once the endpoint acknowledges the request.
     const targets = new Set(targetIds)
-    set(s => ({
-      jobs: s.jobs.map(j => targets.has(j.id)
-        ? { ...j, status: 'cancelling', message: 'Cancelling…', phase: 'Cancelling' }
-        : j),
-      isGenerating: deriveIsGenerating(s.jobs),
-    }))
+    set(s => markJobsCancelling(s.jobs, targets))
     targetIds.forEach(id => {
       void api.cancelJob(id).catch(e => {
         const message = e instanceof Error ? e.message : 'Cancel failed'
@@ -5997,13 +5949,7 @@ export const useStore = create<AppState>((set, get) => ({
   // UI-only removal of a job tile (e.g. dismissing a failed/cancelled
   // placeholder). No backend call — the job is already terminal.
   dismissJob: (jobId) => {
-    set(s => {
-      const remaining = s.jobs.filter(j => j.id !== jobId)
-      return {
-        jobs: remaining,
-        isGenerating: deriveIsGenerating(remaining),
-      }
-    })
+    set(s => removeJob(s.jobs, j => j.id === jobId))
   },
 
   reconnectJobs: async () => {
@@ -6034,10 +5980,7 @@ export const useStore = create<AppState>((set, get) => ({
             generationDetails: j.generation_details,
           }))
         if (newJobs.length > 0) {
-          set(s => {
-            const jobs = [...s.jobs, ...newJobs]
-            return { jobs, isGenerating: deriveIsGenerating(jobs) }
-          })
+          set(s => withJobs([...s.jobs, ...newJobs]))
           // Start polling for each reconnected job
           newJobs.forEach(job => {
             const pollInterval = setInterval(async () => {
@@ -6062,19 +6005,13 @@ export const useStore = create<AppState>((set, get) => ({
                 }))
                 if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
                   clearInterval(pollInterval)
-                  set(s => {
-                    const remaining = s.jobs.filter(j => j.id !== job.id)
-                    return { jobs: remaining, isGenerating: deriveIsGenerating(remaining) }
-                  })
+                  set(s => removeJob(s.jobs, j => j.id === job.id))
                   get().loadOutputs()
                 }
               } catch {
                 // Job may have been cleaned up
                 clearInterval(pollInterval)
-                set(s => {
-                  const remaining = s.jobs.filter(j => j.id !== job.id)
-                  return { jobs: remaining, isGenerating: deriveIsGenerating(remaining) }
-                })
+                set(s => removeJob(s.jobs, j => j.id === job.id))
               }
             }, 2000)
           })
@@ -7202,103 +7139,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Director (Music Video Director)
   sidebarMode: 'studio' as const,
-  directorStep: 'upload',
-  directorAudioFile: null,
-  directorAudioPath: null,
-  directorAnalysis: null,
-  directorPlannedClips: [],
-  directorEnergyBias: 0,
-  directorPacingProfile: 'balanced',
-  directorMusicVideoTreatment: {
-    generation_mode: 'image_guided',
-    direct_video_master_prompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
-    mode: 'hybrid',
-    performer_presence: 60,
-    lip_sync: 'frequent',
-    recurring_sets: ['Main performance set', 'Story world', 'Bridge contrast set'],
-    wardrobe: '',
-    palette: '',
-    camera_language: 'Controlled cinematic movement; intimate verses and bold chorus coverage',
-    recurring_motif: '',
-    chorus_signature: 'Return to the main performance set with direct-to-camera delivery and the boldest lighting',
-    surrealism: 35,
-    forbidden_elements: '',
-  },
-  setDirectorMusicVideoTreatment: (partial) => set(state => ({
-    directorMusicVideoTreatment: { ...state.directorMusicVideoTreatment, ...partial },
-    ...(partial.generation_mode === 'direct_video' ? { directorSeamless: false } : {}),
-  })),
-  directorClipPlans: [],
-  directorSceneDescription: '',
-  directorSpokenLanguage: 'Español de España',
-  directorLoading: false,
-  directorLoadingMessage: null,
-  directorError: null,
-  directorPlanRecovery: null,
-  directorReferenceImage: null,
-  directorReferenceImagePath: null,
-  directorCharacterRefs: [],
-  directorCharacterRefPaths: [],
-  directorCharacterRefLabels: [],
-  directorLocationRefs: [],
-  directorLocationRefPaths: [],
-  directorLocationRefLabels: [],
-  directorH3VideoRefs: [],
-  directorH3VideoRefPaths: [],
-  directorH3AudioRefs: [],
-  directorH3AudioRefPaths: [],
-  directorVoiceRef: null,
-  directorVoiceRefPath: null,
-  directorIdentityGuidanceScale: 3.0,
-  setDirectorVoiceRef: (file) => {
-    if (file) {
-      set({ directorVoiceRef: file, directorVoiceRefPath: null })
-    } else {
-      set({ directorVoiceRef: null, directorVoiceRefPath: null })
-    }
-  },
-  setDirectorIdentityGuidanceScale: (v) => set({ directorIdentityGuidanceScale: v }),
-  directorClipImages: [],
-  directorImageGenProgress: null,
-  directorSpeakers: [],
-  directorSpeakerMappings: [],
-  // Defaults per user preference (2026-06): Auto ON (hands-off pipeline is
-  // the common flow), Seamless OFF (separate per-clip generations are easier
-  // to retake/review than one rolling-window render).
-  directorAutoMode: true,
-  directorSeamless: false,
-  directorShotImageGuidance: 'auto' as DirectorShotImageGuidance,
-  directorLlmLog: [],
   directorSkill: null,
-  directorMusicSource: null,
-  directorSongDescription: '',
-  directorSongInstrumental: false,
-  directorSongStyle: '',
-  directorSongLyrics: '',
-  directorSongDuration: 120,
-  directorTrackGenerating: false,
-  setDirectorMusicSource: (s) => set({ directorMusicSource: s }),
-  setDirectorSongDescription: (v) => set({ directorSongDescription: v }),
-  setDirectorSongInstrumental: (v) => set({ directorSongInstrumental: v }),
-  setDirectorSongStyle: (v) => set({ directorSongStyle: v }),
-  setDirectorSongLyrics: (v) => set({ directorSongLyrics: v }),
-  setDirectorSongDuration: (v) => set({ directorSongDuration: v }),
-  directorResolution: '720p' as ResolutionPreset,
-  directorAspectRatio: '16:9' as AspectRatio,
-  directorVideoInferenceStepsByModel: {},
-  directorVideoMaxShotFramesByModel: {},
-  directorH3TurboModeByModel: {},
-  shortFilmCharacters: [],
-  shortFilmPath: null,
-  shortFilmTargetDuration: 30,
-  directorWritingProvider: 'maestro',
-  directorWritingModel: '',
-  directorWritingBaseUrl: '',
-  shortFilmNarrative: false,
-  shortFilmVisualStyle: '',
-  shortFilmPreserveVisualStyle: true,
-  directorCharacterVisualStyle: '',
-  directorAllowClipText: false,
   llmStreamText: '',
   llmStreamDone: true,
   foregroundActivity: null,
@@ -7371,18 +7212,6 @@ export const useStore = create<AppState>((set, get) => ({
     activities[activity.id] = normalized
     return { foregroundActivity: normalized, activities }
   }),
-  setDirectorAutoMode: (v) => set({ directorAutoMode: v }),
-  setDirectorSeamless: (v) => set({ directorSeamless: v }),
-  setDirectorShotImageGuidance: (v) => set({ directorShotImageGuidance: v }),
-  directorAppendLlmLog: (stage, text) => set(s => {
-    const t = (text || '').trim()
-    if (!t) return {}
-    const last = s.directorLlmLog[s.directorLlmLog.length - 1]
-    // Skip exact repeats (the poll can fire the done-transition more than
-    // once for the same stream when stages restart back-to-back).
-    if (last && last.stage === stage && last.text === t) return {}
-    return { directorLlmLog: [...s.directorLlmLog, { stage, text: t }] }
-  }),
   setDirectorSkill: (skill) => {
     set({ directorSkill: skill, ...(skill === 'music_video' ? { directorPacingProfile: 'balanced' as const } : {}) })
     // Music director default for image-to-video reference strength is
@@ -7403,33 +7232,6 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
   },
-  setDirectorResolution: (preset) => set({ directorResolution: preset }),
-  setDirectorAspectRatio: (ratio) => set({ directorAspectRatio: ratio }),
-  setDirectorVideoInferenceSteps: (modelType, steps) => set(s => {
-    const next = { ...s.directorVideoInferenceStepsByModel }
-    if (steps == null || !Number.isFinite(steps)) {
-      delete next[modelType]
-    } else {
-      next[modelType] = Math.max(1, Math.min(50, Math.round(steps)))
-    }
-    return { directorVideoInferenceStepsByModel: next }
-  }),
-  setDirectorVideoMaxShotFrames: (modelType, frames) => set(s => {
-    const next = { ...s.directorVideoMaxShotFramesByModel }
-    if (frames == null || !Number.isFinite(frames) || frames <= 0) {
-      delete next[modelType]
-    } else {
-      next[modelType] = Math.round(frames)
-    }
-    return { directorVideoMaxShotFramesByModel: next }
-  }),
-  setDirectorH3TurboMode: (modelType, enabled) => set(s => ({
-    directorH3TurboModeByModel: {
-      ...s.directorH3TurboModeByModel,
-      [modelType]: enabled,
-    },
-  })),
-
   selectDirectorImageModel: (modelType) => {
     _globalModelSelectionModes.delete('image')
     set(s => ({
