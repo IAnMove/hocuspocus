@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react'
 import { getFileUrl } from '../api/client'
 import type { DirectorClipImage } from '../types'
+import { useObjectUrl } from './useObjectUrl'
 
 /**
  * Resolve a Director image from the local upload when available, otherwise
@@ -10,15 +10,5 @@ import type { DirectorClipImage } from '../types'
 export function useDirectorClipImageUrl(image: DirectorClipImage | null): string | null {
   const file = image?.file ?? null
   const filename = image?.filename ?? ''
-  const url = useMemo(() => {
-    if (file) return URL.createObjectURL(file)
-    return filename ? getFileUrl(filename) : null
-  }, [file, filename])
-
-  useEffect(() => {
-    if (!file || !url) return
-    return () => URL.revokeObjectURL(url)
-  }, [file, url])
-
-  return url
+  return useObjectUrl(file, filename ? getFileUrl(filename) : null)
 }

@@ -20,10 +20,16 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const { cleanup, render, waitFor } = await import('@testing-library/react')
 const { useDirectorClipImageUrl } = await import('../src/lib/directorClipImageUrl.ts')
+const { useObjectUrl } = await import('../src/lib/useObjectUrl.ts')
 
 function Preview({ image }) {
   const url = useDirectorClipImageUrl(image)
   return createElement('output', { 'data-testid': 'preview-url' }, url || '')
+}
+
+function GenericPreview({ source, fallback }) {
+  const url = useObjectUrl(source, fallback)
+  return createElement('output', { 'data-testid': 'generic-preview-url' }, url || '')
 }
 
 function image(overrides = {}) {
@@ -82,6 +88,29 @@ test('File previews create and revoke object URLs on replacement and unmount', a
 
     view.unmount()
     assert.deepEqual(revoked, ['blob:one.png:0', 'blob:two.png:1'])
+  } finally {
+    cleanup()
+    URL.createObjectURL = originalCreateObjectURL
+    URL.revokeObjectURL = originalRevokeObjectURL
+  }
+})
+
+test('persisted fallbacks never create or revoke an object URL', async () => {
+  const originalCreateObjectURL = URL.createObjectURL
+  const originalRevokeObjectURL = URL.revokeObjectURL
+  const created = []
+  const revoked = []
+  URL.createObjectURL = value => { created.push(value); return 'blob:unexpected' }
+  URL.revokeObjectURL = value => revoked.push(value)
+
+  try {
+    const view = render(createElement(GenericPreview, { source: null, fallback: '/first.png' }))
+    assert.equal(view.getByTestId('generic-preview-url').textContent, '/first.png')
+    view.rerender(createElement(GenericPreview, { source: null, fallback: '/second.png' }))
+    assert.equal(view.getByTestId('generic-preview-url').textContent, '/second.png')
+    view.unmount()
+    assert.deepEqual(created, [])
+    assert.deepEqual(revoked, [])
   } finally {
     cleanup()
     URL.createObjectURL = originalCreateObjectURL

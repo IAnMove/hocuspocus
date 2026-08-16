@@ -10,6 +10,7 @@ import type { DirectorPipelineType, DirectorShotImageGuidance, DirectorSkill, Mo
 import { formatSeconds, recommendedWindowProfile } from './DurationSlider'
 import { DirectorClipImagePreview } from './DirectorClipImagePreview'
 import { DirectorPlanRecoveryCard } from './DirectorPlanRecoveryCard'
+import { useObjectUrl } from '../../lib/useObjectUrl'
 
 const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
   .then(module => ({ default: module.ComicDirectorPanel })))
@@ -494,10 +495,7 @@ export function DirectorChat() {
   const [chatInput, setChatInput] = useState<string | null>(null)
   const resolvedChatInput = chatInput ?? (step === 'style' ? sceneDescription : '')
 
-  const refImagePreview = useMemo(
-    () => referenceImage ? URL.createObjectURL(referenceImage) : null,
-    [referenceImage]
-  )
+  const refImagePreview = useObjectUrl(referenceImage)
 
   const speakerSamples = useMemo(() => {
     const samples: Record<string, string[]> = {}
@@ -1838,6 +1836,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
   placeholder: string
 }) {
   const [dragOver, setDragOver] = useState(false)
+  const previewUrl = useObjectUrl(file)
 
   return (
     <div
@@ -1855,7 +1854,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
       }`}
     >
       <div className="relative flex-shrink-0">
-        <img src={URL.createObjectURL(file)} alt={`Ref ${index+1}`}
+        <img src={previewUrl || ''} alt={`Ref ${index+1}`}
           className="w-[60px] h-[60px] object-cover rounded border border-border pointer-events-none" />
         <button onClick={() => onRemove(index)}
           className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
