@@ -58,7 +58,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | RESP-02 | pendiente | — |
 | RESP-03 | pendiente | — |
 | MEM-01 | pendiente | — |
-| STORAGE-01 | pendiente | — |
+| STORAGE-01 | completado | Wrapper seguro para local/session storage con fallback en memoria sólo cuando persiste el fallo; Welcome/Preflight sobreviven SecurityError/cuota y una eliminación externa no resucita valores; tests UI + lint/build verdes. |
 | I18N-01 | pendiente | — |
 | TRAILER-01 | pendiente | — |
 | STYLE-01 | pendiente | — |
