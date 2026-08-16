@@ -28,7 +28,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | PLAN-02 | completado | Job JSON atómico por workspace persiste índices/planes tras cada lote, lote activo, llamadas y tokens; status/list/resume públicos y claim único. Reinicio simulado tras lote 3 recupera 1–24 y sólo llama 25–41; 84 tests backend + 68 UI/lint/build verdes. |
 | PLAN-03 | completado | Fallo durable devuelve contrato estructurado sin prompts con job, lotes, completos/faltantes, llamadas/tokens y acción Resume; tarjeta recuperable reanuda sólo huecos y bloquea imágenes hasta respuesta completa. Fallo repetido + éxito cubiertos; 36 tests backend, 78 UI, lint/build verdes. |
 | DIR-03 | completado | Fallo de lista/detalle conserva pipeline previa, muestra alerta accesible y destino de Retry; nueva carga limpia error stale y Retry exitoso selecciona el destino. Prueba RTL funcional + suite/lint/build verdes. |
-| SER-01 | pendiente | — |
+| SER-01 | completado | PUT de episodio exige `baseSeriesRevision` o `baseEpisodeUpdatedAt` y devuelve 409 estructurado al stale; aplica sólo campos editoriales, conserva status/canon/production/assembly/unknown runtime y fusiona shots por ID sin aceptar attempts, aprobación ni manifest del cliente. Copia vieja tras attempt servidor y patch vigente cubiertos en servicio+capa HTTP; 29 tests backend, 87 UI, lint y build verdes. |
 | SER-02 | pendiente | — |
 | SER-UI-01 | pendiente | — |
 | SER-UI-02 | completado | Cambio de `episode.id` pausa el último reproductor y reinicia error, decisiones, aprobación, cursor/Play all, foco, preview, edición, seed/busy, assembly y subvista; el efecto de playback ignora el render transitorio stale. Prueba E1→E2 funcional + 80 UI, lint/build verdes. |

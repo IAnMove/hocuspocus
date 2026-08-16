@@ -2744,9 +2744,24 @@ async function seriesResponse<T>(responsePromise: Response | Promise<Response>, 
   const response = await responsePromise
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: fallback }))
-    throw new Error(error.detail || error.error || fallback)
+    const detailMessage = typeof error.detail === 'object' && error.detail
+      ? error.detail.message
+      : error.detail
+    throw new Error(detailMessage || error.error || fallback)
   }
   return response.json() as Promise<T>
+}
+
+export class SeriesEpisodeRevisionError extends Error {
+  readonly currentSeriesRevision: number
+  readonly currentEpisodeUpdatedAt: string
+
+  constructor(message: string, currentSeriesRevision: number, currentEpisodeUpdatedAt: string) {
+    super(message)
+    this.name = 'SeriesEpisodeRevisionError'
+    this.currentSeriesRevision = currentSeriesRevision
+    this.currentEpisodeUpdatedAt = currentEpisodeUpdatedAt
+  }
 }
 
 export async function fetchSeriesLibrary(workspace: string): Promise<import('../features/series/types').SeriesLibrary> {
@@ -2876,14 +2891,25 @@ export async function saveSeriesEpisode(
   workspace: string,
   seriesId: string,
   episode: import('../features/series/types').SeriesEpisode,
+  concurrency: { baseSeriesRevision?: number; baseEpisodeUpdatedAt?: string },
 ): Promise<import('../features/series/types').SeriesEpisode> {
-  return seriesResponse(fetch(
+  const response = await fetch(
     `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episode.id)}`,
     {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace, episode }),
+      body: JSON.stringify({ workspace, episode, ...concurrency }),
     },
-  ), 'Could not save Series episode')
+  )
+  if (response.status === 409) {
+    const payload = await response.json().catch(() => null)
+    const detail = payload?.detail
+    throw new SeriesEpisodeRevisionError(
+      (typeof detail === 'object' && detail?.message) || 'Episode changed; reload before saving',
+      Number(detail?.currentSeriesRevision || 0),
+      String(detail?.currentEpisodeUpdatedAt || ''),
+    )
+  }
+  return seriesResponse(response, 'Could not save Series episode')
 }
 
 export async function startSeriesPlan(

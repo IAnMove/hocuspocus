@@ -23,9 +23,24 @@ MAX_BULK_ATTEMPT_APPROVALS = 500
 _WORKSPACE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _ASSET_PATH = re.compile(r"^(assets|outputs)/[A-Za-z0-9._/-]+$")
 
+EPISODE_EDITOR_FIELDS = frozenset({
+    "seasonId", "number", "title", "premise", "logline",
+    "targetDurationSeconds", "outline", "script", "shots",
+    "continuityIssues", "proposedCanonDelta",
+})
+SHOT_EDITOR_FIELDS = frozenset({
+    "sceneId", "order", "durationSeconds", "framing", "camera", "action",
+    "dialogueBeats", "visibleCharacterIds", "speakingCharacterIds",
+    "primarySpeakerId", "locationId", "locationVariantId",
+    "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
+    "continuityFromShotId", "renderStrategy", "referencePolicy", "prompt",
+    "negativePrompt", "audioDirection",
+})
+SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
+
 
 class SeriesConflictError(ValueError):
-    """Raised when an optimistic revision no longer matches stored canon."""
+    """Raised when an optimistic revision no longer matches stored state."""
 
 
 def _now() -> str:
@@ -1248,6 +1263,121 @@ def duplicate_series_project(series: dict) -> dict:
         "migrationNotes": f"Duplicated from Series Lab project {old_id}; episodes and attempts were not copied.",
     }
     return duplicate
+
+
+def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[dict]:
+    """Merge editable shot fields while retaining server-owned render history."""
+    if not isinstance(incoming_shots, list):
+        raise ValueError("Episode shots patch must be an array")
+    current = _objects(current_shots)
+    current_by_id = {
+        str(shot.get("id")): shot for shot in current if isinstance(shot.get("id"), str)
+    }
+    incoming_by_id: dict[str, dict] = {}
+    incoming_order: list[str] = []
+    for raw_shot in incoming_shots:
+        if not isinstance(raw_shot, dict):
+            raise ValueError("Every episode shot patch must be an object")
+        shot_id = _id(raw_shot.get("id"))
+        if shot_id in incoming_by_id:
+            raise ValueError(f"Episode shot patch contains duplicate id {shot_id}")
+        incoming_by_id[shot_id] = raw_shot
+        incoming_order.append(shot_id)
+
+    def merge_one(shot_id: str, raw_shot: dict) -> dict:
+        stored = current_by_id.get(shot_id)
+        merged = copy.deepcopy(stored) if stored is not None else {"id": shot_id, "attempts": []}
+        for key in SHOT_EDITOR_FIELDS:
+            if key in raw_shot:
+                merged[key] = copy.deepcopy(raw_shot[key])
+        merged["id"] = shot_id
+        if stored is not None:
+            for key in SHOT_SERVER_FIELDS:
+                if key in stored:
+                    merged[key] = copy.deepcopy(stored[key])
+                else:
+                    merged.pop(key, None)
+        else:
+            merged["attempts"] = []
+            merged.pop("approvedAttemptId", None)
+            merged.pop("referenceManifest", None)
+        return merged
+
+    # A full collection can express ordering. A sparse patch updates shots in
+    # place and cannot accidentally delete another shot (or its attempts).
+    if set(current_by_id).issubset(incoming_by_id):
+        return [merge_one(shot_id, incoming_by_id[shot_id]) for shot_id in incoming_order]
+    result: list[dict] = []
+    for stored in current:
+        shot_id = str(stored.get("id") or "")
+        result.append(
+            merge_one(shot_id, incoming_by_id[shot_id])
+            if shot_id in incoming_by_id else copy.deepcopy(stored)
+        )
+    result.extend(
+        merge_one(shot_id, incoming_by_id[shot_id])
+        for shot_id in incoming_order if shot_id not in current_by_id
+    )
+    return result
+
+
+def update_series_episode(
+    series: dict,
+    episode_id: str,
+    patch: dict,
+    *,
+    base_series_revision: Any = None,
+    base_episode_updated_at: Any = None,
+    updated_at: str | None = None,
+) -> dict:
+    """Apply an editor patch with optimistic concurrency and runtime ownership."""
+    if not isinstance(series, dict) or not isinstance(patch, dict):
+        raise ValueError("Series and episode patch are required")
+    if base_series_revision is None and base_episode_updated_at is None:
+        raise ValueError("baseSeriesRevision or baseEpisodeUpdatedAt is required")
+
+    updated = copy.deepcopy(series)
+    episodes = updated.get("episodesById")
+    current = episodes.get(episode_id) if isinstance(episodes, dict) else None
+    if not isinstance(current, dict):
+        raise ValueError("Series episode not found")
+    current_revision = _integer(updated.get("revision"), 1, 1)
+    if base_series_revision is not None:
+        try:
+            requested_revision = int(base_series_revision)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("baseSeriesRevision must be an integer") from exc
+        if requested_revision != current_revision:
+            raise SeriesConflictError(
+                f"Series revision changed from {requested_revision} to {current_revision}; reload before saving"
+            )
+    if (
+        base_episode_updated_at is not None
+        and str(base_episode_updated_at) != str(current.get("updatedAt") or "")
+    ):
+        raise SeriesConflictError(
+            "Episode changed after it was loaded; reload before saving"
+        )
+    if patch.get("id") not in {None, "", episode_id}:
+        raise ValueError("Episode id does not match the route")
+
+    merged = copy.deepcopy(current)
+    for key in EPISODE_EDITOR_FIELDS - {"shots"}:
+        if key in patch:
+            merged[key] = copy.deepcopy(patch[key])
+    if "shots" in patch:
+        merged["shots"] = _merge_episode_shot_patch(current.get("shots"), patch["shots"])
+
+    # Every non-editor field remains authoritative, including status,
+    # production/assembly assets, immutable canon and all unknown runtime data.
+    now = updated_at or _now()
+    merged["id"] = episode_id
+    merged["updatedAt"] = now
+    episodes[episode_id] = merged
+    updated["episodesById"] = episodes
+    updated["revision"] = current_revision + 1
+    updated["updatedAt"] = now
+    return updated
 
 
 def commit_canon_delta(series: dict, episode_id: str, decisions: dict[str, str], base_revision: int) -> dict:

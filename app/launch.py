@@ -28813,28 +28813,16 @@ def import_series_asset_endpoint(series_id: str, body: dict):
 
 @api.put("/api/v1/series/{series_id}/episodes/{episode_id}")
 def put_series_episode_endpoint(series_id: str, episode_id: str, body: dict):
+    from routers.series_episode import apply_series_episode_update
+
     workspace = _series_library_workspace(body.get("workspace"))
-    raw_episode = body.get("episode")
-    if not isinstance(raw_episode, dict):
-        raise HTTPException(status_code=400, detail="Episode is required")
     with _series_library_lock:
         library = _read_series_workspace(workspace)
-        series = copy.deepcopy(_series_project_or_404(library, series_id))
-        current = series.get("episodesById", {}).get(episode_id)
-        if not isinstance(current, dict):
-            raise HTTPException(status_code=404, detail="Series episode not found")
-        if raw_episode.get("id") not in {None, "", episode_id}:
-            raise HTTPException(status_code=400, detail="Episode id does not match the route")
-        # Canon snapshots are immutable after episode creation.
-        updated = {**copy.deepcopy(raw_episode), "id": episode_id}
-        updated["canonSnapshot"] = copy.deepcopy(current.get("canonSnapshot"))
-        updated["canonRevisionAtCreation"] = current.get("canonRevisionAtCreation")
-        updated["createdAt"] = current.get("createdAt")
-        updated["updatedAt"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        series["episodesById"][episode_id] = updated
-        series["revision"] = int(series.get("revision") or 1) + 1
-        series["updatedAt"] = updated["updatedAt"]
-        library["seriesById"][series_id] = series
+        series = _series_project_or_404(library, series_id)
+        updated_series = apply_series_episode_update(
+            series_id, episode_id, body, series, updated_at=_series_iso_now(),
+        )
+        library["seriesById"][series_id] = updated_series
         stored = _write_series_workspace(workspace, library)
     return stored["seriesById"][series_id]["episodesById"][episode_id]
 

@@ -22,6 +22,7 @@ from services.series_library import (
     validate_series_asset_uri,
     write_series_library,
     update_shot_render_attempt,
+    update_series_episode,
 )
 
 
@@ -244,6 +245,78 @@ def test_canon_optimistic_revision_conflict_and_old_snapshot_survives():
     updated = commit_canon_delta(series, "episode_1", {"fact_signal_human": "accepted"}, 1)
     assert updated["episodesById"]["episode_1"]["canonSnapshot"]["revision"] == 1
     assert updated["canon"]["revision"] == 2
+
+
+def test_episode_update_requires_a_revision_and_rejects_stale_runtime_overwrite():
+    series = normalize_series_library(example_library(), "default")["seriesById"]["series_signal"]
+    episode = series["episodesById"]["episode_1"]
+    stale_episode = copy.deepcopy(episode)
+    stale_revision = series["revision"]
+
+    with pytest.raises(ValueError, match="baseSeriesRevision or baseEpisodeUpdatedAt"):
+        update_series_episode(series, "episode_1", {"title": "Unsafe save"})
+
+    rendered_shot, attempt = append_shot_render_attempt(
+        episode["shots"][0], manifest={"strategy": "references"},
+        model="minimax_h3_ref2va", settings={"durationSeconds": 10}, seed=91,
+    )
+    episode["shots"][0] = rendered_shot
+    episode["updatedAt"] = "2026-08-16T10:00:00Z"
+    series["revision"] += 1
+    stale_episode["title"] = "Stale tab title"
+    stale_episode["shots"][0]["attempts"] = []
+
+    with pytest.raises(SeriesConflictError, match="revision changed"):
+        update_series_episode(
+            series,
+            "episode_1",
+            stale_episode,
+            base_series_revision=stale_revision,
+        )
+
+    assert series["episodesById"]["episode_1"]["shots"][0]["attempts"][-1]["id"] == attempt["id"]
+
+
+def test_current_episode_patch_edits_prompt_without_touching_server_runtime():
+    series = normalize_series_library(example_library(), "default")["seriesById"]["series_signal"]
+    episode = series["episodesById"]["episode_1"]
+    episode["assemblyAssetIds"] = ["asset-joined"]
+    episode["runtimeJob"] = {"id": "render-job-1", "status": "completed"}
+    current_shot = copy.deepcopy(episode["shots"][0])
+    patch_shot = copy.deepcopy(current_shot)
+    patch_shot["prompt"] = "A precise, newly edited shot prompt."
+    patch_shot["attempts"] = []
+    patch_shot.pop("approvedAttemptId", None)
+    patch_shot["referenceManifest"] = {"strategy": "client-overwrite"}
+
+    updated = update_series_episode(
+        series,
+        "episode_1",
+        {
+            "id": "episode_1",
+            "title": "Edited safely",
+            "status": "archived",
+            "productionIds": ["client-overwrite"],
+            "assemblyAssetIds": ["client-overwrite"],
+            "shots": [patch_shot],
+        },
+        base_episode_updated_at=episode["updatedAt"],
+        updated_at="2026-08-16T11:00:00Z",
+    )
+    saved = updated["episodesById"]["episode_1"]
+
+    assert saved["title"] == "Edited safely"
+    assert saved["status"] == episode["status"]
+    assert saved["productionIds"] == episode["productionIds"]
+    assert saved["assemblyAssetIds"] == ["asset-joined"]
+    assert saved["runtimeJob"] == episode["runtimeJob"]
+    assert saved["canonSnapshot"] == episode["canonSnapshot"]
+    assert len(saved["shots"]) == len(episode["shots"])
+    assert saved["shots"][0]["prompt"] == "A precise, newly edited shot prompt."
+    assert saved["shots"][0]["attempts"] == current_shot["attempts"]
+    assert saved["shots"][0]["approvedAttemptId"] == current_shot["approvedAttemptId"]
+    assert saved["shots"][0]["referenceManifest"] == current_shot["referenceManifest"]
+    assert updated["revision"] == series["revision"] + 1
 
 
 def test_shot_retry_appends_attempt_and_approval_is_explicit():
