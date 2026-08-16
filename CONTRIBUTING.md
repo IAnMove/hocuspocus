@@ -27,6 +27,21 @@ Maestro is a Pinokio app, so the easiest dev loop is:
    Pinokio's **Update** flow does this automatically; during active dev you can
    run it yourself.
 
+## PR review agent
+
+Every pull request gets an automatic heuristic review from
+`.github/workflows/pr-review.yml` (script: `scripts/analyze_pr.py`). It
+comments risk, clean-repo leaks, secrets, local-first regressions, and
+whether tests/UI rebuilds are missing. Re-run it locally:
+
+```bash
+python scripts/analyze_pr.py --base origin/main
+```
+
+This is the in-repo stand-in for Cursor Automations / Bugbot. Those cloud
+agents require Cursor usage-based billing (a payment method) even with
+SuperGrok Heavy / complimentary Ultra; this workflow does not.
+
 ## Before you open a PR
 
 CI runs three checks on every PR — please run them locally first:
