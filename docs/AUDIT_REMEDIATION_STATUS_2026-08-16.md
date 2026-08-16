@@ -44,7 +44,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | UI-GEN-01 | completado | `deriveIsGenerating` es la única derivación del flag y sólo acepta queued/waiting/running/cancelling; todas las rutas migradas; historial terminal => false; 37 tests UI + lint/build verdes |
 | EDITOR-01 | pendiente | Revalidar contra `b6c741a` y `68aa157` |
 | EDITOR-02 | pendiente | — |
-| EDITOR-03 | pendiente | — |
+| EDITOR-03 | completado | Normalizador único en carga y export exige fuente + duración finita, repara IDs únicos, metadata numérica, trims ordenados/acotados, volumen y enums, y descarta irreparables con aviso visible. Tabla NaN/strings/invertidos/ausentes/duplicados + 84 UI/lint/build verdes. |
 | PLAY-01 | completado | Cursor de reproducción por ID estable en Series y Stories: reordenar o reemplazar un intento conserva el clip activo y eliminarlo detiene Play all explícitamente; 39 tests UI, lint y build verdes. |
 | POLL-01 | pendiente | — |
 | TIMELINE-01 | completado | Poll serial de Story timeline se detiene en estados terminales; Refresh manual recupera/reanuda y un éxito limpia el error; 33 tests UI + lint/build verdes |

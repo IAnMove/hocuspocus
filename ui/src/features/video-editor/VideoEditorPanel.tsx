@@ -33,23 +33,13 @@ import {
   readVideoEditorReplacementResult,
   writeVideoEditorReplacementTarget,
 } from './replacementHandoff'
-
-type ClipFit = 'fit' | 'fill'
-type Transition =
-  | 'none'
-  | 'crossfade'
-  | 'fade-black'
-  | 'wipe-left'
-  | 'slide-left'
-  | 'slide-right'
-  | 'circle-open'
-  | 'dissolve'
-  | 'pixelize'
-  | 'blur'
-  | 'zoom-in'
-  | 'later-clock'
-  | 'later-tropical'
-  | 'later-cinematic'
+import {
+  editorClipRecoveryMessage,
+  normalizeEditorClips,
+  type ClipFit,
+  type EditorClip,
+  type Transition,
+} from './editorClipNormalization'
 
 type InterstitialTransition = 'later-clock' | 'later-tropical' | 'later-cinematic'
 
@@ -58,23 +48,6 @@ interface SequenceStyle {
   clipPath: string
   transform: string
   filter: string
-}
-
-interface EditorClip extends api.VideoEditorProbe {
-  id: string
-  name: string
-  source: string
-  previewUrl: string
-  thumbnailUrl: string
-  trimStart: number
-  trimEnd: number
-  volume: number
-  muted: boolean
-  fit: ClipFit
-  transition: Transition
-  transitionDuration: number
-  transitionText: string
-  transitionTextSize: number
 }
 
 interface ResolutionOption {
@@ -142,7 +115,6 @@ const TRANSITIONS: Array<{ value: Transition; label: string; description: string
   { value: 'later-cinematic', label: 'Momentos después · Cine', description: 'Inserts an elegant cinematic intertitle between the two clips.' },
 ]
 
-const TRANSITION_VALUES = new Set<Transition>(TRANSITIONS.map(option => option.value))
 const INTERSTITIAL_TRANSITIONS = new Set<Transition>([
   'later-clock',
   'later-tropical',
@@ -599,32 +571,25 @@ function loadEditorDraft(): {
   projectName: string
   resolution: ResolutionOption
   fps: number
+  warning: string | null
 } {
-  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30 }
+  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30, warning: null }
   try {
     const saved = JSON.parse(window.localStorage.getItem(VIDEO_EDITOR_DRAFT_KEY) || 'null')
     if (!saved || !Array.isArray(saved.clips)) return fallback
     const resolution = RESOLUTIONS.find(option =>
       option.width === saved.resolution?.width && option.height === saved.resolution?.height,
     ) || RESOLUTIONS[0]
+    const normalized = normalizeEditorClips(saved.clips, {
+      idFactory: clipId,
+      thumbnailUrl: api.getVideoEditorThumbnailUrl,
+    })
     return {
-      clips: saved.clips
-        .filter((clip: EditorClip) => typeof clip?.source === 'string')
-        .map((clip: EditorClip) => ({
-          ...clip,
-          thumbnailUrl: typeof clip.thumbnailUrl === 'string' && clip.thumbnailUrl
-            ? clip.thumbnailUrl
-            : api.getVideoEditorThumbnailUrl(clip.source),
-          transition: TRANSITION_VALUES.has(clip.transition) ? clip.transition : 'none',
-          transitionDuration: Number.isFinite(clip.transitionDuration) ? clip.transitionDuration : 0.5,
-          transitionText: typeof clip.transitionText === 'string' ? clip.transitionText : 'Momentos después…',
-          transitionTextSize: Number.isFinite(clip.transitionTextSize)
-            ? Math.max(50, Math.min(160, clip.transitionTextSize))
-            : 100,
-        })),
+      clips: normalized.clips,
       projectName: typeof saved.projectName === 'string' ? saved.projectName : fallback.projectName,
       resolution,
       fps: [24, 25, 30, 50, 60].includes(saved.fps) ? saved.fps : 30,
+      warning: editorClipRecoveryMessage(normalized),
     }
   } catch {
     return fallback
@@ -691,7 +656,7 @@ export function VideoEditorPanel() {
   const [maestroVideos, setMaestroVideos] = useState<api.ApiOutput[]>([])
   const [maestroVideoTotal, setMaestroVideoTotal] = useState(0)
   const [pickerLoading, setPickerLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(draft.warning)
   const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(null)
   const [capturingFrame, setCapturingFrame] = useState(false)
   const [capturedFrame, setCapturedFrame] = useState<api.VideoEditorScreenshot | null>(null)
@@ -1491,7 +1456,21 @@ export function VideoEditorPanel() {
 
   const startExport = async () => {
     if (!clips.length || isVideoEditorJobActive(exportJob)) return
-    setError(null)
+    const normalized = normalizeEditorClips(clips, {
+      idFactory: clipId,
+      thumbnailUrl: api.getVideoEditorThumbnailUrl,
+    })
+    if (!normalized.clips.length) {
+      setClips([])
+      setError('No valid clips remain. Restore a source with a finite duration before exporting.')
+      return
+    }
+    const recoveryMessage = editorClipRecoveryMessage(normalized)
+    if (recoveryMessage) {
+      setClips(normalized.clips)
+      persistEditorDraft(normalized.clips, projectName, resolution, fps)
+    }
+    setError(recoveryMessage)
     setExportJob({
       job_id: '',
       status: 'queued',
@@ -1508,7 +1487,7 @@ export function VideoEditorPanel() {
         height: resolution.height,
         fps,
         workspace: activeWorkspace,
-        clips: clips.map(clip => ({
+        clips: normalized.clips.map(clip => ({
           name: clip.name,
           source: clip.source,
           trim_start: clip.trimStart,
