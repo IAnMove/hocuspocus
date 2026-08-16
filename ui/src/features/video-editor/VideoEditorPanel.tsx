@@ -1586,7 +1586,8 @@ export function VideoEditorPanel() {
 
   return (
     <div
-      className="h-full min-h-[620px] flex flex-col bg-bg-secondary border border-border rounded-xl overflow-hidden"
+      data-testid="video-editor-panel"
+      className="h-full min-h-0 min-w-0 flex flex-col bg-bg-secondary border border-border rounded-xl overflow-hidden"
       onDragOver={event => {
         if (event.dataTransfer.types.includes('Files')) event.preventDefault()
       }}
@@ -1608,15 +1609,15 @@ export function VideoEditorPanel() {
         }}
       />
 
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-bg-tertiary/40">
-        <Film size={16} className="text-accent-blue" />
+      <div role="toolbar" aria-label="Video editor tools" className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border bg-bg-tertiary/40">
+        <Film size={16} className="shrink-0 text-accent-blue" />
         <input
           value={projectName}
           onChange={event => setProjectName(event.target.value)}
-          className="w-40 md:w-56 bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
+          className="min-w-0 w-32 sm:w-40 md:w-56 bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
           aria-label="Project name"
         />
-        <div className="flex-1" />
+        <div className="hidden flex-1 sm:block" />
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={adding}
@@ -1655,7 +1656,7 @@ export function VideoEditorPanel() {
         )}
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border">
           <div className="flex-1 min-h-[280px] flex items-center justify-center p-4 bg-black/70 relative">
             {sequenceMode ? (
@@ -1801,7 +1802,7 @@ export function VideoEditorPanel() {
           </div>
         </section>
 
-        <aside className="min-h-0 overflow-y-auto p-3 space-y-4 bg-bg-secondary">
+        <aside aria-label="Video editor inspector" className="min-h-0 overflow-y-auto p-3 space-y-4 bg-bg-secondary">
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">Output</label>
             <select
@@ -2214,7 +2215,7 @@ export function VideoEditorPanel() {
         </aside>
       </div>
 
-      <div className="h-32 shrink-0 border-t border-border bg-bg-tertiary/30 flex flex-col">
+      <div role="region" aria-label="Video editor timeline" className="h-32 shrink-0 border-t border-border bg-bg-tertiary/30 flex flex-col">
         <div className="h-7 flex items-center px-3 border-b border-border text-[10px] text-text-muted">
           <span>Timeline · {clips.length} {clips.length === 1 ? 'clip' : 'clips'} · {formatTime(totalDuration)}</span>
           <span className="ml-auto">Drag clips to reorder</span>
