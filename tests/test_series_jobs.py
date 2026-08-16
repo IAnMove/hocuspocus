@@ -336,6 +336,7 @@ def test_running_series_plan_cancel_waits_for_llm_worker_boundary():
         "_workspace_dir": lambda _workspace=None: "/unused",
     }
     _load_launch_functions(
+        "_planning_cancel_message",
         "cancel_series_episode_plan",
         "_run_series_plan_job",
         namespace=namespace,
@@ -349,6 +350,7 @@ def test_running_series_plan_cancel_waits_for_llm_worker_boundary():
     namespace["_run_series_plan_job"](job_id)
     assert jobs[job_id]["status"] == "cancelled"
     assert jobs[job_id]["finishedAt"] is not None
+    assert "Completed stages remain recoverable" in jobs[job_id]["message"]
 
 
 def _editable_episode_fixture():
