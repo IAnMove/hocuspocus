@@ -8,5 +8,11 @@ module.exports = Object.freeze({
     path: "app/services/hunyuan3d/vendor/Hunyuan3D-2",
     revision: "f8db63096c8282cb27354314d896feba5ba6ff8a",
     marker: "app/services/hunyuan3d/env/.maestro_hunyuan3d_2_f8db63096c8282cb27354314d896feba5ba6ff8a.installed"
+  }),
+  hunyuan3d21: Object.freeze({
+    url: "https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1",
+    path: "app/services/hunyuan3d/vendor/Hunyuan3D-2.1",
+    revision: "82920d643c0dc2f7bfd7255f45f62d386edfe60c",
+    marker: "app/services/hunyuan3d/env/.maestro_hunyuan3d_21_82920d643c0dc2f7bfd7255f45f62d386edfe60c.installed"
   })
 })
