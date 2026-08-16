@@ -28439,6 +28439,24 @@ def _series_project_or_404(library: dict, series_id: str) -> dict:
     return series
 
 
+def _require_series_deletion_ready(
+    workspace: str,
+    series_id: str,
+    episode_id: str | None = None,
+) -> None:
+    from services.series_lifecycle import ActiveSeriesJobsError, require_no_active_series_jobs
+
+    try:
+        require_no_active_series_jobs(
+            _workspace_dir(workspace),
+            workspace,
+            series_id,
+            episode_id=episode_id,
+        )
+    except ActiveSeriesJobsError as exc:
+        raise HTTPException(status_code=409, detail=exc.detail()) from exc
+
+
 @api.get("/api/v1/series/library")
 def get_series_library(workspace: str | None = None):
     """Load the authoritative Series Lab library for one workspace."""
@@ -28558,6 +28576,7 @@ def delete_series_project_endpoint(series_id: str, workspace: str | None = None)
     with _series_library_lock:
         library = _read_series_workspace(target_workspace)
         _series_project_or_404(library, series_id)
+        _require_series_deletion_ready(target_workspace, series_id)
         del library["seriesById"][series_id]
         library["seriesOrder"] = [item for item in library["seriesOrder"] if item != series_id]
         _write_series_workspace(target_workspace, library)
@@ -28712,15 +28731,12 @@ def get_series_episode_endpoint(series_id: str, episode_id: str, workspace: str 
 @api.delete("/api/v1/series/{series_id}/episodes/{episode_id}")
 def delete_series_episode_endpoint(series_id: str, episode_id: str, workspace: str | None = None):
     target_workspace = _series_library_workspace(workspace)
-    for active_job_id in list(_series_plan_active_jobs) + list(_series_render_active_jobs):
-        job = _load_series_plan_job(active_job_id) if active_job_id in _series_plan_active_jobs else _load_series_render_job(active_job_id)
-        if job and job.get("seriesId") == series_id and job.get("episodeId") == episode_id:
-            raise HTTPException(status_code=409, detail="Cancel the active episode job before deleting this episode")
     with _series_library_lock:
         library = _read_series_workspace(target_workspace)
         series = copy.deepcopy(_series_project_or_404(library, series_id))
         if episode_id not in series.get("episodesById", {}):
             raise HTTPException(status_code=404, detail="Series episode not found")
+        _require_series_deletion_ready(target_workspace, series_id, episode_id)
         del series["episodesById"][episode_id]
         for season in series.get("seasons", []):
             if isinstance(season, dict):
@@ -29401,9 +29417,14 @@ def start_series_canon_preparation(series_id: str, body: dict):
         "createdAt": now, "updatedAt": now,
         "taskId": task_id, "rootTaskId": task_id,
     }
-    with _series_plan_jobs_lock:
-        _series_plan_jobs[job_id] = job
-        _series_plan_store(workspace).save(job)
+    # Revalidate and publish the durable checkpoint while deletion holds the
+    # same library lock. Either deletion wins and this start returns 404, or
+    # the checkpoint wins and the deletion guard observes it.
+    with _series_library_lock:
+        _series_project_or_404(_read_series_workspace(workspace), series_id)
+        with _series_plan_jobs_lock:
+            _series_plan_jobs[job_id] = job
+            _series_plan_store(workspace).save(job)
     publisher = globals().get("_publish_series_task")
     task = publisher(job, "series-plan") if callable(publisher) else None
     if isinstance(task, dict):
@@ -29457,9 +29478,14 @@ def start_series_episode_plan(series_id: str, episode_id: str, body: dict):
         "createdAt": now, "updatedAt": now,
         "taskId": task_id, "rootTaskId": task_id,
     }
-    with _series_plan_jobs_lock:
-        _series_plan_jobs[job_id] = job
-        _series_plan_store(workspace).save(job)
+    # Revalidate and publish atomically with respect to Series deletion.
+    with _series_library_lock:
+        current_series = _series_project_or_404(_read_series_workspace(workspace), series_id)
+        if not isinstance(current_series.get("episodesById", {}).get(episode_id), dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        with _series_plan_jobs_lock:
+            _series_plan_jobs[job_id] = job
+            _series_plan_store(workspace).save(job)
     publisher = globals().get("_publish_series_task")
     task = publisher(job, "series-plan") if callable(publisher) else None
     if isinstance(task, dict):
@@ -29535,14 +29561,22 @@ def resume_series_episode_plan(job_id: str, body: dict | None = None):
             if key in body:
                 request[key] = body[key]
         _comic_writing_llm(request)
-    _reset_canonical_task_for_resume(
-        str(job.get("workspace") or "default"),
-        str(job.get("taskId") or f"task-series-plan-{job_id}"),
-    )
-    _series_plan_update(
-        job_id, request=request, status="queued", error=None, finishedAt=None,
-        message="Resuming episode planning from the last completed stage…",
-    )
+    workspace = str(job.get("workspace") or "default")
+    with _series_library_lock:
+        current_series = _series_project_or_404(
+            _read_series_workspace(workspace), str(job.get("seriesId") or ""),
+        )
+        episode_id = str(job.get("episodeId") or "")
+        if episode_id and not isinstance(current_series.get("episodesById", {}).get(episode_id), dict):
+            raise HTTPException(status_code=404, detail="Series episode not found")
+        _reset_canonical_task_for_resume(
+            workspace,
+            str(job.get("taskId") or f"task-series-plan-{job_id}"),
+        )
+        _series_plan_update(
+            job_id, request=request, status="queued", error=None, finishedAt=None,
+            message="Resuming episode planning from the last completed stage…",
+        )
     threading.Thread(target=_run_series_plan_job, args=(job_id,), daemon=True).start()
     return {"jobId": job_id, "status": "queued", "message": "Episode planning resumed."}
 
@@ -30531,10 +30565,6 @@ def resume_series_render_job(job_id: str):
     with _series_render_jobs_lock:
         if job_id in _series_render_active_jobs:
             return {"jobId": job_id, "status": job.get("status"), "message": "Series render is already running."}
-    _reset_canonical_task_for_resume(
-        str(job.get("workspace") or "default"),
-        str(job.get("taskId") or f"task-series-render-{job_id}"),
-    )
     items = copy.deepcopy(job.get("items") or [])
     # A local diffusion process cannot resume mid-step. On explicit recovery,
     # Interrupted/failed/cancelled items get a new append-only attempt;
@@ -30588,10 +30618,16 @@ def resume_series_render_job(job_id: str):
             series["updatedAt"] = now_iso
             library["seriesById"][series["id"]] = series
             _write_series_workspace(str(job["workspace"]), library)
-    _series_render_update(
-        job_id, items=items, status="queued", stage="queued", error=None, finishedAt=None,
-        message="Resuming Series render; completed shots will be reused.",
-    )
+        # Publish the resumed checkpoint before releasing the same lock used
+        # by deletion, closing the terminal-job resume/delete race.
+        _reset_canonical_task_for_resume(
+            str(job.get("workspace") or "default"),
+            str(job.get("taskId") or f"task-series-render-{job_id}"),
+        )
+        _series_render_update(
+            job_id, items=items, status="queued", stage="queued", error=None, finishedAt=None,
+            message="Resuming Series render; completed shots will be reused.",
+        )
     threading.Thread(
         target=_run_series_render_job, args=(job_id,),
         name=f"series-render-{job_id[-6:]}", daemon=False,

@@ -285,57 +285,59 @@ def create_series_assembly_router(
                 clips = episode_assembly_plan(series, episode)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
+            # Keep validation and durable registration under the same lock as
+            # Series deletion. Deletion therefore either wins first (404 here)
+            # or observes this queued Assembly checkpoint and returns 409.
+            active = persisted_active_job(workspace, series_id, episode_id)
+            if active:
+                with jobs_lock:
+                    active_here = str(active.get("jobId")) in active_job_ids
+                if active_here:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Episode assembly {active['jobId']} is already running",
+                    )
+                mark_interrupted(active)
 
-        active = persisted_active_job(workspace, series_id, episode_id)
-        if active:
             with jobs_lock:
-                active_here = str(active.get("jobId")) in active_job_ids
-            if active_here:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Episode assembly {active['jobId']} is already running",
-                )
-            mark_interrupted(active)
-
-        with jobs_lock:
-            # Re-check under the mutation lock so simultaneous requests cannot
-            # enqueue two assemblers for the same episode.
-            active_here = next((
-                value
-                for value in jobs.values()
-                if value.get("workspace") == workspace
-                and value.get("seriesId") == series_id
-                and value.get("episodeId") == episode_id
-                and value.get("status") in {"queued", "running"}
-            ), None)
-            if active_here:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Episode assembly {active_here['jobId']} is already running",
-                )
-            job_id = f"series-assembly-{uuid.uuid4().hex[:12]}"
-            now = time.time()
-            job = {
-                "jobId": job_id,
-                "kind": "assembly",
-                "workspace": workspace,
-                "seriesId": series_id,
-                "episodeId": episode_id,
-                "status": "queued",
-                "stage": "queued",
-                "current": 0,
-                "total": len(clips),
-                "clips": clips,
-                "message": "Episode assembly queued.",
-                "error": None,
-                "assetId": None,
-                "filename": None,
-                "createdAt": now,
-                "updatedAt": now,
-            }
-            jobs[job_id] = job
-            active_job_ids.add(job_id)
-            store(workspace).save(job)
+                # Re-check under the mutation lock so simultaneous requests cannot
+                # enqueue two assemblers for the same episode.
+                active_here = next((
+                    value
+                    for value in jobs.values()
+                    if value.get("workspace") == workspace
+                    and value.get("seriesId") == series_id
+                    and value.get("episodeId") == episode_id
+                    and value.get("status") in {"queued", "running"}
+                ), None)
+                if active_here:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Episode assembly {active_here['jobId']} is already running",
+                    )
+                job_id = f"series-assembly-{uuid.uuid4().hex[:12]}"
+                now = time.time()
+                job = {
+                    "jobId": job_id,
+                    "kind": "assembly",
+                    "workspace": workspace,
+                    "seriesId": series_id,
+                    "episodeId": episode_id,
+                    "status": "queued",
+                    "stage": "queued",
+                    "current": 0,
+                    "total": len(clips),
+                    "clips": clips,
+                    "message": "Episode assembly queued.",
+                    "error": None,
+                    "assetId": None,
+                    "filename": None,
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+                jobs[job_id] = job
+                active_job_ids.add(job_id)
+                store(workspace).save(job)
         threading.Thread(
             target=run,
             args=(job_id,),
