@@ -2644,6 +2644,7 @@ export async function generateStorySection(params: {
 
 export interface StoryLibraryPayload {
   version: 2
+  revision: number
   activeId: string
   projects: Record<string, import('../features/stories/types').StoryProject>
 }
@@ -2666,13 +2667,39 @@ export async function saveStoryLibrary(
   const response = await fetch(`${BASE}/api/v1/stories/library`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace, library }),
+    body: JSON.stringify({ workspace, baseRevision: library.revision, library }),
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Could not save Story Lab library' }))
-    throw new Error(error.detail || 'Could not save Story Lab library')
+    const error: unknown = await response.json().catch(() => null)
+    if (error && typeof error === 'object') {
+      const detail = (error as Record<string, unknown>).detail
+      if (detail && typeof detail === 'object') {
+        const conflict = detail as Record<string, unknown>
+        if (
+          conflict.code === 'story_library_revision_conflict'
+          && typeof conflict.currentRevision === 'number'
+        ) {
+          throw new StoryLibraryRevisionError(
+            typeof conflict.message === 'string' ? conflict.message : 'Story library changed in another tab',
+            conflict.currentRevision,
+          )
+        }
+      }
+      if (typeof detail === 'string') throw new Error(detail)
+    }
+    throw new Error('Could not save Story Lab library')
   }
   return response.json()
+}
+
+export class StoryLibraryRevisionError extends Error {
+  readonly currentRevision: number
+
+  constructor(message: string, currentRevision: number) {
+    super(message)
+    this.name = 'StoryLibraryRevisionError'
+    this.currentRevision = currentRevision
+  }
 }
 
 async function seriesResponse<T>(responsePromise: Response | Promise<Response>, fallback: string): Promise<T> {

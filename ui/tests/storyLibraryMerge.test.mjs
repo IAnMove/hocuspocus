@@ -17,8 +17,9 @@ function installDom() {
 installDom()
 
 const project = (id, title, updatedAt) => ({ id, title, updatedAt })
-const library = (projects, activeId = Object.keys(projects)[0]) => ({
+const library = (projects, activeId = Object.keys(projects)[0], revision = 0) => ({
   version: 2,
+  revision,
   activeId,
   projects,
 })
@@ -105,4 +106,72 @@ test('a first remote load does not promote the synthetic local fallback', { conc
 
   assert.equal(useStoryStore.getState().project.id, 'remote')
   assert.deepEqual(Object.keys(useStoryStore.getState().projects), ['remote'])
+})
+
+test('a backend revision conflict refetches, merges, and retries at the new revision', { concurrency: false }, async t => {
+  const workspace = 'story-revision-retry-test'
+  const storageKey = `maestro-story-library-v2:${workspace}`
+  const { useStoryStore, createStoryProject } = await import('../src/features/stories/store.ts')
+  const localProject = {
+    ...createStoryProject(),
+    id: 'shared-story',
+    title: 'Local unsaved edit',
+    updatedAt: '2026-08-16T14:00:00Z',
+  }
+  const remoteProject = {
+    ...localProject,
+    title: 'Remote older edit',
+    updatedAt: '2026-08-16T12:00:00Z',
+  }
+  window.localStorage.setItem(storageKey, JSON.stringify(
+    library({ 'shared-story': localProject }, 'shared-story', 0),
+  ))
+  useStoryStore.setState({ hydrated: false, loading: false, libraryConflicts: [] })
+  const originalFetch = globalThis.fetch
+  const putBaseRevisions = []
+  let getCount = 0
+  t.after(() => {
+    globalThis.fetch = originalFetch
+    useStoryStore.setState({ hydrated: false, loading: false })
+    window.localStorage.removeItem(storageKey)
+  })
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (url.includes('/api/v1/stories/library?')) {
+      getCount += 1
+      const revision = getCount === 1 ? 1 : 2
+      return new Response(JSON.stringify(
+        library({ 'shared-story': remoteProject }, 'shared-story', revision),
+      ), { headers: { 'content-type': 'application/json' } })
+    }
+    if (url.endsWith('/api/v1/stories/library') && init?.method === 'PUT') {
+      const body = JSON.parse(String(init.body))
+      putBaseRevisions.push(body.baseRevision)
+      if (putBaseRevisions.length === 1) {
+        return new Response(JSON.stringify({ detail: {
+          code: 'story_library_revision_conflict',
+          message: 'expected 1, current 2',
+          expectedRevision: 1,
+          currentRevision: 2,
+        } }), { status: 409, headers: { 'content-type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({ ...body.library, revision: 3 }), {
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    throw new Error(`Unexpected request: ${url}`)
+  }
+
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const deadline = Date.now() + 4_000
+  while (Date.now() < deadline && useStoryStore.getState().libraryRevision !== 3) {
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+
+  assert.deepEqual(putBaseRevisions, [1, 2])
+  assert.equal(getCount, 2)
+  assert.equal(useStoryStore.getState().libraryRevision, 3)
+  assert.equal(useStoryStore.getState().project.title, 'Local unsaved edit')
+  assert.equal(useStoryStore.getState().saveError, null)
+  assert.deepEqual(useStoryStore.getState().libraryConflicts, [])
 })

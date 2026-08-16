@@ -9,7 +9,10 @@ from pathlib import Path
 
 from app.services.story_library import (
     MAX_STORY_PROJECTS,
+    StoryLibraryRevisionConflict,
     normalize_story_library,
+    delete_story_project,
+    patch_story_project,
     read_story_library,
     story_library_path,
     write_story_library,
@@ -21,7 +24,7 @@ class TestStoryLibrary(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(
                 read_story_library(directory),
-                {"version": 2, "activeId": "", "projects": {}},
+                {"version": 2, "revision": 0, "activeId": "", "projects": {}},
             )
 
     def test_round_trip_is_atomic_and_repairs_active_id(self):
@@ -33,10 +36,69 @@ class TestStoryLibrary(unittest.TestCase):
                     "nara": {"id": "nara", "title": "The Last Seed"},
                     "kael": {"id": "kael", "title": "The Guardian"},
                 },
-            })
+            }, base_revision=0)
+            self.assertEqual(saved["revision"], 1)
             self.assertEqual(saved["activeId"], "nara")
             self.assertEqual(read_story_library(directory), saved)
             self.assertFalse(list(Path(directory).glob("*.tmp")))
+
+    def test_two_writes_from_the_same_revision_never_lose_the_first(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = write_story_library(directory, {
+                "version": 2,
+                "activeId": "first",
+                "projects": {"first": {"id": "first", "title": "First tab"}},
+            }, base_revision=0)
+
+            with self.assertRaises(StoryLibraryRevisionConflict) as raised:
+                write_story_library(directory, {
+                    "version": 2,
+                    "activeId": "second",
+                    "projects": {"second": {"id": "second", "title": "Stale tab"}},
+                }, base_revision=0)
+
+            self.assertEqual(raised.exception.expected, 0)
+            self.assertEqual(raised.exception.current, 1)
+            self.assertEqual(read_story_library(directory), first)
+
+    def test_current_revision_advances_monotonically(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = write_story_library(directory, {
+                "projects": {"story": {"id": "story", "title": "Draft 1"}},
+            }, base_revision=0)
+            second = write_story_library(directory, {
+                "projects": {"story": {"id": "story", "title": "Draft 2"}},
+            }, base_revision=first["revision"])
+            self.assertEqual((first["revision"], second["revision"]), (1, 2))
+            self.assertEqual(read_story_library(directory)["projects"]["story"]["title"], "Draft 2")
+
+    def test_incremental_project_patch_preserves_unrelated_stories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            initial = write_story_library(directory, {
+                "activeId": "one",
+                "projects": {
+                    "one": {"id": "one", "title": "One"},
+                    "two": {"id": "two", "title": "Two"},
+                },
+            }, base_revision=0)
+            patched = patch_story_project(
+                directory,
+                "one",
+                {"id": "one", "title": "One updated"},
+                base_revision=initial["revision"],
+            )
+            self.assertEqual(patched["revision"], 2)
+            self.assertEqual(patched["projects"]["one"]["title"], "One updated")
+            self.assertEqual(patched["projects"]["two"]["title"], "Two")
+
+            deleted = delete_story_project(
+                directory,
+                "one",
+                base_revision=patched["revision"],
+            )
+            self.assertEqual(deleted["revision"], 3)
+            self.assertEqual(deleted["activeId"], "two")
+            self.assertEqual(list(deleted["projects"]), ["two"])
 
     def test_invalid_existing_json_is_not_silently_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:

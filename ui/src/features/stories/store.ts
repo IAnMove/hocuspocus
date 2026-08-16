@@ -38,13 +38,15 @@ function normalizeLibrary(value: unknown): StoryLibraryData | null {
   if (!firstId) return null
   const activeId = typeof raw.activeId === 'string' && projects[raw.activeId]
     ? raw.activeId : firstId
-  return { version: 2, activeId, projects }
+  const revision = typeof raw.revision === 'number' && Number.isInteger(raw.revision) && raw.revision >= 0
+    ? raw.revision : 0
+  return { version: 2, revision, activeId, projects }
 }
 
 function restoreLocalLibrary(workspace: string): StoryLibraryData {
   const fallback = createStoryProject()
   if (typeof window === 'undefined') {
-    return { version: 2, activeId: fallback.id, projects: { [fallback.id]: fallback } }
+    return { version: 2, revision: 0, activeId: fallback.id, projects: { [fallback.id]: fallback } }
   }
   try {
     const raw = JSON.parse(window.localStorage.getItem(libraryKey(workspace)) || 'null')
@@ -55,20 +57,22 @@ function restoreLocalLibrary(workspace: string): StoryLibraryData {
       : null
     if (legacy) {
       const project = normalizeStoryProject(legacy)
-      return { version: 2, activeId: project.id, projects: { [project.id]: project } }
+      return { version: 2, revision: 0, activeId: project.id, projects: { [project.id]: project } }
     }
   } catch {
     // Fall through to a clean, valid library.
   }
-  return { version: 2, activeId: fallback.id, projects: { [fallback.id]: fallback } }
+  return { version: 2, revision: 0, activeId: fallback.id, projects: { [fallback.id]: fallback } }
 }
 
 function buildLibrary(
   project: StoryProject,
   projects: Record<string, StoryProject>,
+  revision: number,
 ): StoryLibraryData {
   return {
     version: 2,
+    revision,
     activeId: project.id,
     projects: { ...projects, [project.id]: project },
   }
@@ -78,11 +82,12 @@ function persistLocalLibrary(
   workspace: string,
   project: StoryProject,
   projects: Record<string, StoryProject>,
+  revision: number,
 ): void {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(
     libraryKey(workspace),
-    JSON.stringify(buildLibrary(project, projects)),
+    JSON.stringify(buildLibrary(project, projects, revision)),
   )
 }
 
@@ -103,6 +108,7 @@ interface StoryState {
   workspace: string
   project: StoryProject
   projects: Record<string, StoryProject>
+  libraryRevision: number
   dirty: boolean
   hydrated: boolean
   loading: boolean
@@ -126,6 +132,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   workspace: initialWorkspace,
   project: restored.projects[restored.activeId],
   projects: restored.projects,
+  libraryRevision: restored.revision,
   dirty: false,
   hydrated: false,
   loading: false,
@@ -155,7 +162,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     if (workspace === previous.workspace && (previous.hydrated || previous.loading)) return
 
     try {
-      persistLocalLibrary(previous.workspace, previous.project, previous.projects)
+      persistLocalLibrary(previous.workspace, previous.project, previous.projects, previous.libraryRevision)
     } catch {
       // The visible story remains exportable even if browser storage is full.
     }
@@ -165,9 +172,15 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     // workspace switch.
     if (previous.hydrated && workspace !== previous.workspace && !previous.libraryConflicts.length) {
       try {
-        const previousLibrary = buildLibrary(previous.project, previous.projects)
-        await api.saveStoryLibrary(previous.workspace, previousLibrary)
-        lastPersistedLibrary.set(previous.workspace, JSON.stringify(previousLibrary))
+        const previousLibrary = buildLibrary(previous.project, previous.projects, previous.libraryRevision)
+        const savedPrevious = await api.saveStoryLibrary(previous.workspace, previousLibrary)
+        lastPersistedLibrary.set(previous.workspace, JSON.stringify(savedPrevious))
+        persistLocalLibrary(
+          previous.workspace,
+          previous.project,
+          previous.projects,
+          savedPrevious.revision,
+        )
       } catch {
         // Its local cache remains intact and will be retried next time.
       }
@@ -178,6 +191,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       workspace,
       project: local.projects[local.activeId],
       projects: local.projects,
+      libraryRevision: local.revision,
       dirty: false,
       hydrated: false,
       loading: true,
@@ -193,8 +207,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       let needsRemoteSync = false
       if (!library) {
         // First-run migration: upload the existing v2/legacy browser cache.
-        library = local
-        await api.saveStoryLibrary(workspace, library)
+        library = {
+          ...local,
+          revision: Number.isInteger(remoteValue.revision) && remoteValue.revision >= 0
+            ? remoteValue.revision : 0,
+        }
+        library = normalizeLibrary(await api.saveStoryLibrary(workspace, library)) || library
       } else if (localSnapshotExisted) {
         const merged = mergeStoryLibraries(local, library)
         library = merged.library
@@ -205,6 +223,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
         workspace,
         library.projects[library.activeId],
         library.projects,
+        library.revision,
       )
       // A local-newer/exclusive merge must be sent back to the server. A
       // conflict deliberately stays unsynced until a future explicit review.
@@ -220,6 +239,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       set({
         project: library.projects[library.activeId],
         projects: library.projects,
+        libraryRevision: library.revision,
         dirty: false,
         hydrated: true,
         loading: false,
@@ -331,7 +351,7 @@ const lastPersistedLibrary = new Map<string, string>()
 useStoryStore.subscribe(state => {
   if (typeof window === 'undefined') return
   try {
-    persistLocalLibrary(state.workspace, state.project, state.projects)
+    persistLocalLibrary(state.workspace, state.project, state.projects, state.libraryRevision)
   } catch {
     // Storypack export remains available when browser storage is full.
   }
@@ -339,7 +359,7 @@ useStoryStore.subscribe(state => {
   if (state.libraryConflicts.length) return
 
   const workspace = state.workspace
-  const library = buildLibrary(state.project, state.projects)
+  const library = buildLibrary(state.project, state.projects, state.libraryRevision)
   const serialized = JSON.stringify(library)
   if (lastPersistedLibrary.get(workspace) === serialized) return
 
@@ -348,17 +368,64 @@ useStoryStore.subscribe(state => {
     backendSaveChain = backendSaveChain
       .catch(() => undefined)
       .then(async () => {
-        await api.saveStoryLibrary(workspace, library)
-        lastPersistedLibrary.set(workspace, serialized)
+        const saved = await api.saveStoryLibrary(workspace, library)
+        const savedSerialized = JSON.stringify(saved)
+        lastPersistedLibrary.set(workspace, savedSerialized)
         useStoryStore.setState(current => {
-          if (
-            current.workspace !== workspace
-            || JSON.stringify(buildLibrary(current.project, current.projects)) !== serialized
-          ) return {}
-          return { dirty: false, saveError: null }
+          if (current.workspace !== workspace) return {}
+          const contentUnchanged = JSON.stringify(
+            buildLibrary(current.project, current.projects, library.revision),
+          ) === serialized
+          return {
+            libraryRevision: saved.revision,
+            dirty: !contentUnchanged,
+            saveError: null,
+          }
         })
       })
-      .catch(error => {
+      .catch(async error => {
+        if (error instanceof api.StoryLibraryRevisionError) {
+          try {
+            const remoteValue = await api.fetchStoryLibrary(workspace)
+            const current = useStoryStore.getState()
+            if (current.workspace !== workspace) return
+            const remote = normalizeLibrary(remoteValue) || {
+              version: 2 as const,
+              revision: Number.isInteger(remoteValue.revision) ? remoteValue.revision : error.currentRevision,
+              activeId: '',
+              projects: {},
+            }
+            const local = buildLibrary(
+              current.project,
+              current.projects,
+              current.libraryRevision,
+            )
+            const merged = mergeStoryLibraries(local, remote)
+            // The remote snapshot is the CAS baseline. A conflict blocks
+            // autosave; a clean local-newer merge immediately retries at the
+            // newly observed revision.
+            lastPersistedLibrary.set(workspace, JSON.stringify(remote))
+            persistLocalLibrary(
+              workspace,
+              merged.library.projects[merged.library.activeId],
+              merged.library.projects,
+              merged.library.revision,
+            )
+            useStoryStore.setState({
+              project: merged.library.projects[merged.library.activeId],
+              projects: merged.library.projects,
+              libraryRevision: merged.library.revision,
+              dirty: merged.needsRemoteSync || merged.conflicts.length > 0,
+              libraryConflicts: merged.conflicts,
+              saveError: merged.conflicts.length
+                ? 'Story library changed in another tab. Review the conflict before saving.'
+                : null,
+            })
+            return
+          } catch (recoveryError) {
+            error = recoveryError
+          }
+        }
         useStoryStore.setState(current => current.workspace === workspace
           ? {
               dirty: true,

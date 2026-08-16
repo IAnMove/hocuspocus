@@ -38,7 +38,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | STORY-01 | pendiente | — |
 | STORY-02 | completado | Resolver puro compartido conserva MiniMax, OpenAI, DeepSeek, OpenAI-compatible y Maestro con provider/model/base URL coherentes en UI, generación y reanudación; tabla de casos automatizada + lint/build verdes. |
 | STORY-03 | completado | Merge por `updatedAt` conserva exclusivos y versión más nueva; empate divergente no autosalva y ofrece Keep local/Use remote con timestamp monotónico. Primer load remoto no mezcla fallback sintético. Casos puros + alerta/acciones DOM + suite/lint/build verdes. |
-| STORY-04 | pendiente | — |
+| STORY-04 | completado | Biblioteca backend añade revisión CAS monotónica y exige `baseRevision`; stale devuelve 409 estructurado sin perder primer write. UI persiste revisión, ante conflicto refetch/merge/retry y bloquea empates; PATCH/DELETE incrementales preservan proyectos ajenos. 7 backend + 85 UI/lint/build verdes. |
 | UI-WS-01 | completado | Epochs y AbortController aíslan outputs/metadata por workspace, invalidan listas y mutaciones tardías y pasan workspace explícito en todos los consumidores; 5 regresiones diferidas, 44 tests UI, lint y build verdes. |
 | UI-SEARCH-01 | completado | Input controlado; debounce cancelado al cerrar/desmontar y store limpiado sin búsqueda/carga fantasma; 35 tests UI + lint/build verdes |
 | UI-GEN-01 | completado | `deriveIsGenerating` es la única derivación del flag y sólo acepta queued/waiting/running/cancelling; todas las rutas migradas; historial terminal => false; 37 tests UI + lint/build verdes |

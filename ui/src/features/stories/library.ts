@@ -2,6 +2,8 @@ import type { StoryProject } from './types'
 
 export interface StoryLibraryData {
   version: 2
+  /** Monotonic backend CAS revision; project revisions remain independent. */
+  revision: number
   activeId: string
   projects: Record<string, StoryProject>
 }
@@ -89,7 +91,9 @@ export function mergeStoryLibraries(
     : remote.projects[remote.activeId]
       ? remote.activeId
       : Object.keys(projects)[0] || ''
-  const library: StoryLibraryData = { version: 2, activeId, projects }
+  const remoteRevision = Number.isInteger(remote.revision) && remote.revision >= 0
+    ? remote.revision : 0
+  const library: StoryLibraryData = { version: 2, revision: remoteRevision, activeId, projects }
   return {
     library,
     conflicts,
