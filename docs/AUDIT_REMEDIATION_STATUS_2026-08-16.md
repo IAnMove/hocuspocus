@@ -49,7 +49,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | POLL-01 | pendiente | — |
 | TIMELINE-01 | pendiente | — |
 | ACT-01 | pendiente | — |
-| UPLOAD-01 | pendiente | — |
+| UPLOAD-01 | completado | Ingesta en chunks de 1 MiB con límite acumulado y 413; publicación atómica, cleanup en error/cancelación, concurrencia acotada y transcode cancel-safe; 4 tests verdes |
 | CANCEL-01 | pendiente | — |
 | RES-01 | pendiente | — |
 | A11Y-01 | pendiente | — |

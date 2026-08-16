@@ -113,6 +113,12 @@ from routers.lan_auth import create_lan_auth_router
 from services.durable_generation_queue import DurableGenerationQueue
 from services.lan_auth import LanAuthMiddleware, describe_lan_auth_startup
 from services.media_paths import MediaPathNotAllowed, resolve_permitted_media_path
+from services.upload_stream import (
+    UploadTooLargeError,
+    UploadTranscodeError,
+    stream_upload_file,
+    transcode_upload,
+)
 from services.task_identity import canonical_client_task_identity
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
@@ -233,6 +239,27 @@ MAX_IMAGE_UPLOAD_BYTES = 500 * 1024 * 1024   # 500 MB (generic /api/v1/upload ha
 # music video runs ~30-100 MB; longer reference clips can push
 # higher. 500 MB covers ~25-50 min of typical music-video bitrates.
 MAX_AUDIO_UPLOAD_BYTES = 500 * 1024 * 1024   # 500 MB (also covers video-for-audio-extract)
+
+# Uploads are deliberately bounded independently from GPU/model lanes.  A
+# handful of concurrent clients may ingest at once, while only two ffmpeg
+# workers can compete for CPU, disk and decoder resources.  Waiting on these
+# semaphores is cancellable and never holds a global application lock.
+_UPLOAD_INGEST_SLOTS = asyncio.Semaphore(4)
+_UPLOAD_TRANSCODE_SLOTS = asyncio.Semaphore(2)
+
+
+async def _stream_upload(upload, destination: str, *, max_bytes: int) -> int:
+    async with _UPLOAD_INGEST_SLOTS:
+        return await stream_upload_file(
+            upload,
+            destination,
+            max_bytes=max_bytes,
+        )
+
+
+async def _transcode_upload(source: str, destination: str, *, is_video: bool) -> None:
+    async with _UPLOAD_TRANSCODE_SLOTS:
+        await transcode_upload(source, destination, is_video=is_video)
 
 
 def _safe_join(base: str, *parts: str) -> str | None:
@@ -8936,7 +8963,7 @@ def _probe_audio_duration(filepath: str) -> float | None:
     return None
 
 @api.post("/api/v1/upload-audio")
-async def upload_audio(request: Request, file: UploadFile = File(...)):
+async def upload_audio(file: UploadFile = File(...)):
     """Upload an audio file (wav, mp3, flac, ogg, m4a) OR a video file
     (mp4, mov, mkv, webm, avi, m4v) for audio extraction. Video files
     are transparently demuxed to a 16-bit PCM WAV containing only the
@@ -8959,24 +8986,28 @@ async def upload_audio(request: Request, file: UploadFile = File(...)):
             ),
         )
 
-    # Pre-check via Content-Length to reject obviously-too-large uploads
-    # before we read them into memory. The post-read length check below
-    # is the authoritative one since Content-Length can be spoofed.
-    cl = request.headers.get("content-length")
-    if cl and cl.isdigit() and int(cl) > MAX_AUDIO_UPLOAD_BYTES:
+    # Starlette counts the actual multipart file bytes while spooling.  Unlike
+    # Content-Length, this excludes multipart overhead and cannot reject a
+    # valid file sitting exactly at the limit.  The chunk counter below remains
+    # authoritative for custom/malformed clients that omit the size.
+    if file.size is not None and file.size > MAX_AUDIO_UPLOAD_BYTES:
+        await file.close()
         raise HTTPException(status_code=413, detail="File too large (max 500 MB)")
 
     upload_dir = os.path.join(os.getcwd(), "uploads", "audio")
     os.makedirs(upload_dir, exist_ok=True)
 
-    unique_name = f"{uuid.uuid4().hex[:8]}{ext}"
+    unique_name = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(upload_dir, unique_name)
 
-    content = await file.read()
-    if len(content) > MAX_AUDIO_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 500 MB)")
-    with open(filepath, "wb") as f:
-        f.write(content)
+    try:
+        await _stream_upload(
+            file,
+            filepath,
+            max_bytes=MAX_AUDIO_UPLOAD_BYTES,
+        )
+    except UploadTooLargeError as err:
+        raise HTTPException(status_code=413, detail="File too large (max 500 MB)") from err
 
     # libsndfile (soundfile) supports wav/flac/ogg natively but NOT the
     # compressed formats users commonly have (mp3, m4a, aac). Downstream code
@@ -8995,21 +9026,7 @@ async def upload_audio(request: Request, file: UploadFile = File(...)):
         source_original = filepath
         transcode_ok = False
         try:
-            import ffmpeg as _ffmpeg
-            output_kwargs = {"acodec": "pcm_s16le"}
-            if is_video:
-                # `-vn`: explicitly drop video stream. The .wav container
-                # doesn't support video so ffmpeg would drop it anyway,
-                # but being explicit avoids edge cases where the encoder
-                # tries to copy an unsupported video bitstream.
-                output_kwargs["vn"] = None
-            (
-                _ffmpeg
-                .input(filepath)
-                .output(wav_path, **output_kwargs)
-                .overwrite_output()
-                .run(quiet=True)
-            )
+            await _transcode_upload(filepath, wav_path, is_video=is_video)
             transcode_ok = True
             os.remove(source_original)
             filepath = wav_path
@@ -9020,17 +9037,14 @@ async def upload_audio(request: Request, file: UploadFile = File(...)):
                     f"{file.filename!r} ({ext}) → {wav_name}. Source "
                     f"video deleted."
                 )
-        except _ffmpeg.Error as err:
-            stderr = getattr(err, "stderr", b"") or b""
-            if isinstance(stderr, (bytes, bytearray)):
-                stderr = stderr.decode("utf-8", errors="ignore")
+        except UploadTranscodeError as err:
             detail_prefix = (
                 "Failed to extract audio from video"
                 if is_video else f"Failed to decode {ext} audio"
             )
             raise HTTPException(
                 status_code=400,
-                detail=f"{detail_prefix}: {(stderr or str(err)).strip()[:300]}",
+                detail=f"{detail_prefix}: {(err.stderr or str(err)).strip()[:300]}",
             ) from err
         except Exception as err:
             raise HTTPException(
@@ -35062,27 +35076,30 @@ def delete_output(name: str):
 
 
 @api.post("/api/v1/upload")
-async def upload_image(request: Request, file: UploadFile = File(...)):
+async def upload_image(file: UploadFile = File(...)):
     """Upload an image or audio/video asset. Image was the original use;
     audio/video also flow through here when the frontend doesn't hit the
     dedicated /api/v1/upload-audio endpoint. Compressed audio formats get
     transcoded to wav so downstream libsndfile callers work."""
-    cl = request.headers.get("content-length")
-    if cl and cl.isdigit() and int(cl) > MAX_IMAGE_UPLOAD_BYTES:
+    if file.size is not None and file.size > MAX_IMAGE_UPLOAD_BYTES:
+        await file.close()
         raise HTTPException(status_code=413, detail="File too large (max 500 MB)")
 
     upload_dir = os.path.join(os.getcwd(), "uploads")
     os.makedirs(upload_dir, exist_ok=True)
 
     ext = os.path.splitext(file.filename or "img.png")[1].lower() or ".png"
-    unique_name = f"{uuid.uuid4().hex[:8]}{ext}"
+    unique_name = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(upload_dir, unique_name)
 
-    content = await file.read()
-    if len(content) > MAX_IMAGE_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 500 MB)")
-    with open(filepath, "wb") as f:
-        f.write(content)
+    try:
+        await _stream_upload(
+            file,
+            filepath,
+            max_bytes=MAX_IMAGE_UPLOAD_BYTES,
+        )
+    except UploadTooLargeError as err:
+        raise HTTPException(status_code=413, detail="File too large (max 500 MB)") from err
 
     # libsndfile-incompatible audio → transcode to wav so slice_audio_window
     # and friends can read it without a downstream crash. Mirrors the logic
@@ -35093,25 +35110,15 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
         compressed_original = filepath
         transcode_ok = False
         try:
-            import ffmpeg as _ffmpeg
-            (
-                _ffmpeg
-                .input(filepath)
-                .output(wav_path, acodec="pcm_s16le")
-                .overwrite_output()
-                .run(quiet=True)
-            )
+            await _transcode_upload(filepath, wav_path, is_video=False)
             transcode_ok = True
             os.remove(compressed_original)
             filepath = wav_path
             unique_name = wav_name
-        except _ffmpeg.Error as err:
-            stderr = getattr(err, "stderr", b"") or b""
-            if isinstance(stderr, (bytes, bytearray)):
-                stderr = stderr.decode("utf-8", errors="ignore")
+        except UploadTranscodeError as err:
             raise HTTPException(
                 status_code=400,
-                detail=f"Failed to decode {ext} audio: {(stderr or str(err)).strip()[:300]}",
+                detail=f"Failed to decode {ext} audio: {(err.stderr or str(err)).strip()[:300]}",
             ) from err
         except Exception as err:
             raise HTTPException(status_code=500, detail=f"Audio transcode failed: {err}") from err
