@@ -22,7 +22,7 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react'
-import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { ModalShell } from '../../components/common/ModalShell'
@@ -73,6 +73,17 @@ interface SequenceInterstitial {
   progress: number
 }
 
+interface PendingEditorSource {
+  name?: string
+  url: string
+}
+
+interface PendingEditorSequence {
+  projectName?: string
+  resolution?: ResolutionOption
+  clips?: Array<{ name?: string; url?: string }>
+}
+
 const RESOLUTIONS: ResolutionOption[] = [
   { label: 'Landscape 480p', width: 864, height: 480 },
   { label: 'Landscape 720p', width: 1280, height: 720 },
@@ -86,6 +97,8 @@ const RESOLUTIONS: ResolutionOption[] = [
 
 const VIDEO_ACCEPT = '.mp4,.webm,.mov,.mkv,.avi,.m4v'
 const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
+const VIDEO_EDITOR_PENDING_SOURCE_KEY = 'maestro-video-editor-pending-source'
+const VIDEO_EDITOR_PENDING_SEQUENCE_KEY = 'maestro-video-editor-pending-sequence'
 const MAESTRO_PICKER_PAGE_SIZE = 24
 const VIDEO_EDITOR_ACTIVE_STATUSES = new Set<api.VideoEditorExportJob['status']>([
   'queued',
@@ -601,13 +614,15 @@ function persistEditorDraft(
   projectName: string,
   resolution: ResolutionOption,
   fps: number,
-): void {
+): boolean {
   try {
     window.localStorage.setItem(VIDEO_EDITOR_DRAFT_KEY, JSON.stringify({
       clips, projectName, resolution, fps, savedAt: new Date().toISOString(),
     }))
+    return true
   } catch {
     // A full browser quota must not interrupt editing.
+    return false
   }
 }
 
@@ -661,6 +676,8 @@ export function VideoEditorPanel() {
   const [capturingFrame, setCapturingFrame] = useState(false)
   const [capturedFrame, setCapturedFrame] = useState<api.VideoEditorScreenshot | null>(null)
   const [preparingReplacement, setPreparingReplacement] = useState(false)
+  const [pendingHandoff, setPendingHandoff] = useState<'source' | 'sequence' | null>(null)
+  const handoffProcessingRef = useRef(false)
 
   const selected = clips.find(clip => clip.id === selectedId) || clips[0] || null
   const selectedIndex = selected ? clips.findIndex(clip => clip.id === selected.id) : -1
@@ -714,9 +731,14 @@ export function VideoEditorPanel() {
     setClips(current => current.map(clip => clip.id === id ? { ...clip, ...patch } : clip))
   }
 
-  const addSource = async (source: string, previewUrl: string, name: string, thumbnailUrl?: string | null) => {
+  const createClipFromSource = useCallback(async (
+    source: string,
+    previewUrl: string,
+    name: string,
+    thumbnailUrl?: string | null,
+  ): Promise<EditorClip> => {
     const media = await api.probeVideoEditorClip(source)
-    const clip: EditorClip = {
+    return {
       ...media,
       id: clipId(),
       name,
@@ -733,65 +755,108 @@ export function VideoEditorPanel() {
       transitionText: 'Momentos después…',
       transitionTextSize: 100,
     }
+  }, [])
+
+  const addSource = useCallback(async (
+    source: string,
+    previewUrl: string,
+    name: string,
+    thumbnailUrl?: string | null,
+  ) => {
+    const clip = await createClipFromSource(source, previewUrl, name, thumbnailUrl)
     setClips(current => [...current, clip])
     setSelectedId(clip.id)
-  }
+  }, [createClipFromSource])
+
+  const processPendingHandoff = useCallback(async (
+    kind: 'source' | 'sequence',
+    handoff: PendingEditorSource | PendingEditorSequence,
+  ) => {
+    if (handoffProcessingRef.current) return
+    const rawSources = kind === 'sequence' ? (handoff as PendingEditorSequence).clips || [] : null
+    const pendingSources = kind === 'sequence'
+      ? rawSources?.every(item => typeof item?.url === 'string' && item.url.trim())
+        ? rawSources as Array<{ name?: string; url: string }>
+        : []
+      : (typeof (handoff as PendingEditorSource).url === 'string'
+          && (handoff as PendingEditorSource).url.trim()
+        ? [{
+            name: (handoff as PendingEditorSource).name || 'comic animatic',
+            url: (handoff as PendingEditorSource).url,
+          }]
+        : [])
+    if (!pendingSources.length) {
+      setError('The editor hand-off does not contain any valid video sources. It is still available to retry.')
+      return
+    }
+
+    const sequence = kind === 'sequence' ? handoff as PendingEditorSequence : null
+    const requestedResolution = sequence && RESOLUTIONS.find(option =>
+      option.width === sequence.resolution?.width && option.height === sequence.resolution?.height)
+    const nextProjectName = sequence?.projectName || projectName
+    const nextResolution = requestedResolution || resolution
+    const nextClips: EditorClip[] = []
+
+    handoffProcessingRef.current = true
+    setAdding(true)
+    setError(null)
+    try {
+      for (let index = 0; index < pendingSources.length; index++) {
+        const item = pendingSources[index]
+        setAddProgress(kind === 'sequence'
+          ? `Opening Series shot ${index + 1}/${pendingSources.length}`
+          : `Opening ${item.name || 'comic animatic'}`)
+        nextClips.push(await createClipFromSource(item.url, item.url, item.name || `Series shot ${index + 1}`))
+      }
+
+      if (clips.length && !window.confirm(
+        kind === 'sequence'
+          ? `The editor already contains ${clips.length} clip${clips.length === 1 ? '' : 's'}. Replace this montage with the hand-off?`
+          : `The editor already contains ${clips.length} clip${clips.length === 1 ? '' : 's'}. Add the hand-off to this montage?`,
+      )) return
+
+      const committedClips = kind === 'sequence' ? nextClips : [...clips, ...nextClips]
+      if (!persistEditorDraft(committedClips, nextProjectName, nextResolution, fps)) {
+        throw new Error('The editor draft could not be saved. The hand-off was kept for Retry.')
+      }
+      setClips(committedClips)
+      setSelectedId((kind === 'sequence' ? committedClips[0] : nextClips[0])?.id || null)
+      if (sequence?.projectName) setProjectName(nextProjectName)
+      if (requestedResolution) setResolution(nextResolution)
+      window.localStorage.removeItem(
+        kind === 'sequence' ? VIDEO_EDITOR_PENDING_SEQUENCE_KEY : VIDEO_EDITOR_PENDING_SOURCE_KEY,
+      )
+      setPendingHandoff(null)
+      setError(null)
+    } catch (reason) {
+      setError(`Could not open the hand-off: ${(reason as Error).message}. The hand-off and current draft were kept; Retry when the source is available.`)
+    } finally {
+      handoffProcessingRef.current = false
+      setAdding(false)
+      setAddProgress('')
+    }
+  }, [clips, createClipFromSource, fps, projectName, resolution])
 
   useEffect(() => {
-    let pending: { name?: string; url?: string } | null = null
-    let pendingSequence: {
-      projectName?: string
-      resolution?: ResolutionOption
-      clips?: Array<{ name?: string; url?: string }>
-    } | null = null
+    let pending: PendingEditorSource | null = null
+    let pendingSequence: PendingEditorSequence | null = null
     try {
-      pending = JSON.parse(window.localStorage.getItem('maestro-video-editor-pending-source') || 'null')
-      if (pending?.url) window.localStorage.removeItem('maestro-video-editor-pending-source')
-      pendingSequence = JSON.parse(
-        window.localStorage.getItem('maestro-video-editor-pending-sequence') || 'null',
-      )
-      if (pendingSequence?.clips?.length) {
-        window.localStorage.removeItem('maestro-video-editor-pending-sequence')
-      }
+      pending = JSON.parse(window.localStorage.getItem(VIDEO_EDITOR_PENDING_SOURCE_KEY) || 'null')
+      pendingSequence = JSON.parse(window.localStorage.getItem(VIDEO_EDITOR_PENDING_SEQUENCE_KEY) || 'null')
     } catch {
       pending = null
       pendingSequence = null
     }
     if (pendingSequence?.clips?.length) {
-      const sources = pendingSequence.clips.filter(
-        (item): item is { name?: string; url: string } => Boolean(item?.url),
-      )
-      if (!sources.length) return
-      const requestedResolution = RESOLUTIONS.find(option =>
-        option.width === pendingSequence?.resolution?.width
-        && option.height === pendingSequence?.resolution?.height)
-      setClips([])
-      if (pendingSequence.projectName) setProjectName(pendingSequence.projectName)
-      if (requestedResolution) setResolution(requestedResolution)
-      setAdding(true)
-      void (async () => {
-        for (let index = 0; index < sources.length; index++) {
-          const item = sources[index]
-          setAddProgress(`Opening Series shot ${index + 1}/${sources.length}`)
-          await addSource(item.url, item.url, item.name || `Series shot ${index + 1}`)
-        }
-      })().catch(reason => setError((reason as Error).message)).finally(() => {
-        setAdding(false)
-        setAddProgress('')
-      })
+      setPendingHandoff('sequence')
+      void processPendingHandoff('sequence', pendingSequence)
       return
     }
-    if (!pending?.url) return
-    setAdding(true)
-    setAddProgress(`Opening ${pending.name || 'comic animatic'}`)
-    void addSource(pending.url, pending.url, pending.name || 'Comic animatic')
-      .catch(reason => setError((reason as Error).message))
-      .finally(() => {
-        setAdding(false)
-        setAddProgress('')
-      })
-    // The hand-off is intentionally consumed once when the editor mounts.
-  }, [])
+    if (pending?.url) {
+      setPendingHandoff('source')
+      void processPendingHandoff('source', pending)
+    }
+  }, [processPendingHandoff])
 
   useEffect(() => {
     const replacement = readVideoEditorReplacementResult()
@@ -2185,8 +2250,29 @@ export function VideoEditorPanel() {
                 </div>
               )}
               {error && (
-                <div className="whitespace-pre-wrap text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2">
-                  {error}
+                <div className="space-y-2">
+                  <div className="whitespace-pre-wrap text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2">
+                    {error}
+                  </div>
+                  {pendingHandoff && !adding && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          const key = pendingHandoff === 'sequence'
+                            ? VIDEO_EDITOR_PENDING_SEQUENCE_KEY
+                            : VIDEO_EDITOR_PENDING_SOURCE_KEY
+                          const handoff = JSON.parse(window.localStorage.getItem(key) || 'null')
+                          if (handoff) void processPendingHandoff(pendingHandoff, handoff)
+                        } catch (reason) {
+                          setError(`Could not retry the hand-off: ${(reason as Error).message}`)
+                        }
+                      }}
+                      className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded border border-red-500/30 text-[10px] text-red-300 hover:bg-red-500/10"
+                    >
+                      <RotateCcw size={11} /> Retry hand-off
+                    </button>
+                  )}
                 </div>
               )}
             </div>

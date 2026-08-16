@@ -42,7 +42,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | UI-WS-01 | completado | Epochs y AbortController aíslan outputs/metadata por workspace, invalidan listas y mutaciones tardías y pasan workspace explícito en todos los consumidores; 5 regresiones diferidas, 44 tests UI, lint y build verdes. |
 | UI-SEARCH-01 | completado | Input controlado; debounce cancelado al cerrar/desmontar y store limpiado sin búsqueda/carga fantasma; 35 tests UI + lint/build verdes |
 | UI-GEN-01 | completado | `deriveIsGenerating` es la única derivación del flag y sólo acepta queued/waiting/running/cancelling; todas las rutas migradas; historial terminal => false; 37 tests UI + lint/build verdes |
-| EDITOR-01 | pendiente | Revalidar contra `b6c741a` y `68aa157` |
+| EDITOR-01 | completado | El handoff prueba todas las fuentes en una colección temporal, confirma sobre montaje existente y sólo reemplaza estado/draft y consume la clave tras persistencia completa; fallo conserva montaje y ofrece Retry. Guardia evita doble consumo en StrictMode. 92 UI, lint y build verdes. |
 | EDITOR-02 | pendiente | — |
 | EDITOR-03 | completado | Normalizador único en carga y export exige fuente + duración finita, repara IDs únicos, metadata numérica, trims ordenados/acotados, volumen y enums, y descarta irreparables con aviso visible. Tabla NaN/strings/invertidos/ausentes/duplicados + 84 UI/lint/build verdes. |
 | PLAY-01 | completado | Cursor de reproducción por ID estable en Series y Stories: reordenar o reemplazar un intento conserva el clip activo y eliminarlo detiene Play all explícitamente; 39 tests UI, lint y build verdes. |
