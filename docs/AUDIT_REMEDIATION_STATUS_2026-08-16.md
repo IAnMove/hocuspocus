@@ -41,7 +41,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | STORY-04 | pendiente | — |
 | UI-WS-01 | pendiente | — |
 | UI-SEARCH-01 | completado | Input controlado; debounce cancelado al cerrar/desmontar y store limpiado sin búsqueda/carga fantasma; 35 tests UI + lint/build verdes |
-| UI-GEN-01 | pendiente | — |
+| UI-GEN-01 | completado | `deriveIsGenerating` es la única derivación del flag y sólo acepta queued/waiting/running/cancelling; todas las rutas migradas; historial terminal => false; 37 tests UI + lint/build verdes |
 | EDITOR-01 | pendiente | Revalidar contra `b6c741a` y `68aa157` |
 | EDITOR-02 | pendiente | — |
 | EDITOR-03 | pendiente | — |

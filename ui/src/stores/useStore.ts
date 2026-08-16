@@ -7,6 +7,7 @@ import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
 import { createActivityPublicationGate } from '../lib/activityPublication'
+import { deriveIsGenerating, isGenerationJobActive } from '../lib/generationJobState'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -16,17 +17,6 @@ let _civitDownloadPollRequested = false
 const _civitRefreshedCheckpointDownloads = new Set<string>()
 const DIRECTOR_REPAIR_POLL_MS = 2000
 const DIRECTOR_REPAIR_ACTIVE = new Set(['queued', 'running', 'cancelling'])
-const GENERATION_ACTIVE_STATUSES = new Set<GenerationJob['status']>([
-  'queued',
-  'waiting_resource',
-  'running',
-  'cancelling',
-])
-
-function _isGenerationJobActive(status: GenerationJob['status']): boolean {
-  return GENERATION_ACTIVE_STATUSES.has(status)
-}
-
 type DirectorRepairPoll = {
   operationId: string
   timer: number | null
@@ -4019,7 +4009,10 @@ export const useStore = create<AppState>((set, get) => ({
       phase: '', message: tool === 'upscale' ? 'Submitting upscale...' : 'Submitting revoice...',
       outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
     }
-    set(st => ({ isGenerating: true, jobs: [newJob, ...st.jobs] }))
+    set(st => {
+      const jobs = [newJob, ...st.jobs]
+      return { jobs, isGenerating: deriveIsGenerating(jobs) }
+    })
 
     try {
       const result = tool === 'upscale'
@@ -4048,12 +4041,12 @@ export const useStore = create<AppState>((set, get) => ({
             clearInterval(pollInterval)
             set(st => {
               const remaining = st.jobs.filter(j => j.id !== result.job_id)
-              return { jobs: remaining, isGenerating: remaining.some(j => _isGenerationJobActive(j.status)) }
+              return { jobs: remaining, isGenerating: deriveIsGenerating(remaining) }
             })
             get().loadOutputs()
           } else if (status.status === 'failed' || status.status === 'cancelled') {
             clearInterval(pollInterval)
-            set(st => ({ isGenerating: st.jobs.some(j => j.id !== result.job_id && _isGenerationJobActive(j.status)) }))
+            set(st => ({ isGenerating: deriveIsGenerating(st.jobs.filter(j => j.id !== result.job_id)) }))
           }
         } catch { /* ignore poll errors */ }
       }, 2000)
@@ -4061,7 +4054,7 @@ export const useStore = create<AppState>((set, get) => ({
       const msg = e instanceof Error ? e.message : (tool === 'upscale' ? 'Upscale failed' : 'Revoice failed')
       set(st => ({
         jobs: st.jobs.map(j => j === newJob ? { ...j, id: j.id || `tool-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-        isGenerating: st.jobs.some(j => j !== newJob && _isGenerationJobActive(j.status)),
+        isGenerating: deriveIsGenerating(st.jobs.filter(j => j !== newJob)),
       }))
       console.error(`Tool ${tool} failed:`, msg)
     }
@@ -4415,7 +4408,10 @@ export const useStore = create<AppState>((set, get) => ({
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
       phase: '', message: 'Submitting blend...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        const jobs = [newJob, ...s.jobs]
+        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+      })
 
       try {
         const result = await api.submitBlend({
@@ -4465,7 +4461,7 @@ export const useStore = create<AppState>((set, get) => ({
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return {
                   jobs: remaining,
-                  isGenerating: remaining.some(j => _isGenerationJobActive(j.status)),
+                  isGenerating: deriveIsGenerating(remaining),
                 }
               })
               get().loadOutputs()
@@ -4474,7 +4470,7 @@ export const useStore = create<AppState>((set, get) => ({
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
               set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && _isGenerationJobActive(j.status)),
+                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
               }))
             }
           } catch { /* ignore poll errors */ }
@@ -4486,7 +4482,7 @@ export const useStore = create<AppState>((set, get) => ({
         // the tile silently disappearing.
         set(s => ({
           jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: s.jobs.some(j => j !== newJob && _isGenerationJobActive(j.status)),
+          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
         }))
         console.error('Blend failed:', msg)
       }
@@ -4554,7 +4550,10 @@ export const useStore = create<AppState>((set, get) => ({
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
       phase: '', message: 'Submitting outpaint...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        const jobs = [newJob, ...s.jobs]
+        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+      })
 
       // Sliding window size: the Advanced Settings slider stores seconds.
       // Convert to frames using the loaded model's fps so the same value
@@ -4617,7 +4616,7 @@ export const useStore = create<AppState>((set, get) => ({
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return {
                   jobs: remaining,
-                  isGenerating: remaining.some(j => _isGenerationJobActive(j.status)),
+                  isGenerating: deriveIsGenerating(remaining),
                 }
               })
               get().loadOutputs()
@@ -4626,7 +4625,7 @@ export const useStore = create<AppState>((set, get) => ({
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
               set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && _isGenerationJobActive(j.status)),
+                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
               }))
             }
           } catch { /* ignore poll errors */ }
@@ -4638,7 +4637,7 @@ export const useStore = create<AppState>((set, get) => ({
         // the tile silently disappearing.
         set(s => ({
           jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: s.jobs.some(j => j !== newJob && _isGenerationJobActive(j.status)),
+          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
         }))
         console.error('Outpaint failed:', msg)
       }
@@ -4661,7 +4660,10 @@ export const useStore = create<AppState>((set, get) => ({
         id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
         phase: '', message: 'Submitting repaint...', outputFiles: [], error: null, oomInfo: null,
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        const jobs = [newJob, ...s.jobs]
+        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+      })
 
       try {
         const repaintModel = (state.params.model_type as string) || ''
@@ -4727,14 +4729,14 @@ export const useStore = create<AppState>((set, get) => ({
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return {
                   jobs: remaining,
-                  isGenerating: remaining.some(j => _isGenerationJobActive(j.status)),
+                  isGenerating: deriveIsGenerating(remaining),
                 }
               })
               get().loadOutputs()
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && _isGenerationJobActive(j.status)),
+                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
               }))
             }
           } catch { /* ignore poll errors */ }
@@ -4745,7 +4747,7 @@ export const useStore = create<AppState>((set, get) => ({
           jobs: s.jobs.map(j => j === newJob
             ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg }
             : j),
-          isGenerating: s.jobs.some(j => j !== newJob && _isGenerationJobActive(j.status)),
+          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
         }))
         console.error('Repaint failed:', msg)
       }
@@ -4765,7 +4767,10 @@ export const useStore = create<AppState>((set, get) => ({
         id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
         phase: '', message: 'Submitting recast...', outputFiles: [], error: null, oomInfo: null,
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        const jobs = [newJob, ...s.jobs]
+        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+      })
 
       try {
         // Honor the selector's Recast SCAIL-2 choice (dedicated Fast vs
@@ -4843,14 +4848,14 @@ export const useStore = create<AppState>((set, get) => ({
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return {
                   jobs: remaining,
-                  isGenerating: remaining.some(j => _isGenerationJobActive(j.status)),
+                  isGenerating: deriveIsGenerating(remaining),
                 }
               })
               get().loadOutputs()
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && _isGenerationJobActive(j.status)),
+                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
               }))
             }
           } catch { /* ignore poll errors */ }
@@ -4859,7 +4864,7 @@ export const useStore = create<AppState>((set, get) => ({
         const msg = e instanceof Error ? e.message : 'Recast failed'
         set(s => ({
           jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: s.jobs.some(j => j !== newJob && _isGenerationJobActive(j.status)),
+          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
         }))
         console.error('Recast failed:', msg)
       }
@@ -4876,7 +4881,10 @@ export const useStore = create<AppState>((set, get) => ({
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
       phase: '', message: 'Submitting...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        const jobs = [newJob, ...s.jobs]
+        return { jobs, isGenerating: deriveIsGenerating(jobs) }
+      })
 
       try {
         let result: { job_id: string }
@@ -4980,7 +4988,7 @@ export const useStore = create<AppState>((set, get) => ({
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return {
                   jobs: remaining,
-                  isGenerating: remaining.some(j => _isGenerationJobActive(j.status)),
+                  isGenerating: deriveIsGenerating(remaining),
                 }
               })
               get().loadOutputs()
@@ -4989,7 +4997,7 @@ export const useStore = create<AppState>((set, get) => ({
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
               set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && _isGenerationJobActive(j.status)),
+                isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== result.job_id)),
               }))
             }
           } catch { /* ignore poll errors */ }
@@ -5001,7 +5009,7 @@ export const useStore = create<AppState>((set, get) => ({
         // the tile silently disappearing.
         set(s => ({
           jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: s.jobs.some(j => j !== newJob && _isGenerationJobActive(j.status)),
+          isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
         }))
         console.error('Edit generation failed:', msg)
       }
@@ -5747,10 +5755,10 @@ export const useStore = create<AppState>((set, get) => ({
       generationDetails: _generationDetailsFromParams(params, state.models),
     }
 
-    set(s => ({
-      isGenerating: true,
-      jobs: [newJob, ...s.jobs],
-    }))
+    set(s => {
+      const jobs = [newJob, ...s.jobs]
+      return { jobs, isGenerating: deriveIsGenerating(jobs) }
+    })
 
     try {
       const { job_id, h3_window_plan } = await api.submitGeneration(params)
@@ -5818,7 +5826,7 @@ export const useStore = create<AppState>((set, get) => ({
               const remaining = s.jobs.filter(j => j.id !== job_id)
               return {
                 jobs: remaining,
-                isGenerating: remaining.some(j => _isGenerationJobActive(j.status)),
+                isGenerating: deriveIsGenerating(remaining),
               }
             })
             get().loadOutputs()
@@ -5828,7 +5836,7 @@ export const useStore = create<AppState>((set, get) => ({
             // card stays visible with the error message. User dismisses via
             // the X button on the tile.
             set(s => ({
-              isGenerating: s.jobs.some(j => j.id !== job_id && _isGenerationJobActive(j.status)),
+              isGenerating: deriveIsGenerating(s.jobs.filter(j => j.id !== job_id)),
             }))
           }
         } catch (e) {
@@ -5843,7 +5851,7 @@ export const useStore = create<AppState>((set, get) => ({
       // tile disappear and leaving them to wonder.
       set(s => ({
         jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-        isGenerating: s.jobs.some(j => j !== newJob && _isGenerationJobActive(j.status)),
+        isGenerating: deriveIsGenerating(s.jobs.filter(j => j !== newJob)),
       }))
     }
   },
@@ -5852,10 +5860,10 @@ export const useStore = create<AppState>((set, get) => ({
     const currentJobs = get().jobs
     const targetIds = jobId
       ? currentJobs
-          .filter(j => j.id === jobId && _isGenerationJobActive(j.status) && j.status !== 'cancelling')
+          .filter(j => j.id === jobId && isGenerationJobActive(j.status) && j.status !== 'cancelling')
           .map(j => j.id)
       : currentJobs
-          .filter(j => j.id && _isGenerationJobActive(j.status) && j.status !== 'cancelling')
+          .filter(j => j.id && isGenerationJobActive(j.status) && j.status !== 'cancelling')
           .map(j => j.id)
     if (targetIds.length === 0) return
     const previousStatuses = new Map(
@@ -5873,7 +5881,7 @@ export const useStore = create<AppState>((set, get) => ({
       jobs: s.jobs.map(j => targets.has(j.id)
         ? { ...j, status: 'cancelling', message: 'Cancelling…', phase: 'Cancelling' }
         : j),
-      isGenerating: s.jobs.some(j => _isGenerationJobActive(j.status)),
+      isGenerating: deriveIsGenerating(s.jobs),
     }))
     targetIds.forEach(id => {
       void api.cancelJob(id).catch(e => {
@@ -5902,7 +5910,7 @@ export const useStore = create<AppState>((set, get) => ({
       const remaining = s.jobs.filter(j => j.id !== jobId)
       return {
         jobs: remaining,
-        isGenerating: remaining.some(j => _isGenerationJobActive(j.status)),
+        isGenerating: deriveIsGenerating(remaining),
       }
     })
   },
@@ -5935,10 +5943,10 @@ export const useStore = create<AppState>((set, get) => ({
             generationDetails: j.generation_details,
           }))
         if (newJobs.length > 0) {
-          set(s => ({
-            jobs: [...s.jobs, ...newJobs],
-            isGenerating: true,
-          }))
+          set(s => {
+            const jobs = [...s.jobs, ...newJobs]
+            return { jobs, isGenerating: deriveIsGenerating(jobs) }
+          })
           // Start polling for each reconnected job
           newJobs.forEach(job => {
             const pollInterval = setInterval(async () => {
@@ -5965,7 +5973,7 @@ export const useStore = create<AppState>((set, get) => ({
                   clearInterval(pollInterval)
                   set(s => {
                     const remaining = s.jobs.filter(j => j.id !== job.id)
-                    return { jobs: remaining, isGenerating: remaining.length > 0 }
+                    return { jobs: remaining, isGenerating: deriveIsGenerating(remaining) }
                   })
                   get().loadOutputs()
                 }
@@ -5974,7 +5982,7 @@ export const useStore = create<AppState>((set, get) => ({
                 clearInterval(pollInterval)
                 set(s => {
                   const remaining = s.jobs.filter(j => j.id !== job.id)
-                  return { jobs: remaining, isGenerating: remaining.length > 0 }
+                  return { jobs: remaining, isGenerating: deriveIsGenerating(remaining) }
                 })
               }
             }, 2000)
