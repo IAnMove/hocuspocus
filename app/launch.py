@@ -239,18 +239,42 @@ def _safe_join(base: str, *parts: str) -> str | None:
     try:
         base_real = os.path.realpath(base)
         joined = os.path.realpath(os.path.join(base_real, *parts))
-        # On Windows, realpath is case-insensitive at the FS layer but
-        # commonpath is case-sensitive — normalize both sides.
-        if os.name == "nt":
-            if os.path.normcase(joined) != os.path.normcase(base_real) and \
-               not os.path.normcase(joined).startswith(os.path.normcase(base_real) + os.sep):
-                return None
-        else:
-            if joined != base_real and not joined.startswith(base_real + os.sep):
-                return None
+        # commonpath compares path components rather than string prefixes.
+        # normcase preserves correct behaviour on case-insensitive Windows
+        # filesystems and ValueError handles paths on different drives.
+        base_cmp = os.path.normcase(base_real)
+        joined_cmp = os.path.normcase(joined)
+        if os.path.commonpath((base_cmp, joined_cmp)) != base_cmp:
+            return None
         return joined
     except (ValueError, OSError):
         return None
+
+
+def _resolve_output_move_path(base: str, relative_name: str) -> str | None:
+    """Resolve one output path for a cross-workspace move.
+
+    The move endpoint accepts a path parameter, so it needs a stricter
+    contract than a generic join: only explicit relative components using
+    URL separators are accepted. Both source and destination are then
+    resolved through ``_safe_join`` so existing symlinks cannot escape their
+    workspace.
+    """
+    if not isinstance(relative_name, str):
+        return None
+    value = relative_name.strip()
+    if not value or "\x00" in value or "\\" in value:
+        return None
+    drive, _tail = os.path.splitdrive(value)
+    if drive or os.path.isabs(value):
+        return None
+    parts = value.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        return None
+    resolved = _safe_join(base, *parts)
+    if not resolved or resolved == os.path.realpath(base):
+        return None
+    return resolved
 
 # CORS — restricted to localhost (the Vite dev server + the bundled UI
 # served from the same FastAPI process + Pinokio's HTTPS proxy at
@@ -34864,15 +34888,18 @@ async def move_output(name: str, request: Request):
 
     src_dir = _workspace_dir()
     dst_dir = _workspace_dir(target_ws)
-    if src_dir == dst_dir:
+    if os.path.realpath(src_dir) == os.path.realpath(dst_dir):
         raise HTTPException(status_code=400, detail="Already in that workspace")
 
-    src_file = os.path.join(src_dir, name)
+    src_file = _resolve_output_move_path(src_dir, name)
+    dst_file = _resolve_output_move_path(dst_dir, name)
+    if not src_file or not dst_file:
+        raise HTTPException(status_code=400, detail="Invalid output path")
     if not os.path.isfile(src_file):
-        print(f"[Move] File not found: {src_file}")
+        print(f"[Move] File not found: {name}")
         raise HTTPException(status_code=404, detail="File not found")
 
-    dst_file = os.path.join(dst_dir, name)
+    os.makedirs(os.path.dirname(dst_file), exist_ok=True)
     print(f"[Move] {name} -> {target_ws}")
 
     try:
@@ -34915,10 +34942,12 @@ async def move_output(name: str, request: Request):
 
     # Move sidecar metadata and the 3D card preview image, when present
     for sidecar_name in (os.path.splitext(name)[0] + ".meta.json", os.path.splitext(name)[0] + ".preview.png"):
-        src_sidecar = os.path.join(src_dir, sidecar_name)
-        if os.path.isfile(src_sidecar):
+        src_sidecar = _resolve_output_move_path(src_dir, sidecar_name)
+        dst_sidecar = _resolve_output_move_path(dst_dir, sidecar_name)
+        if src_sidecar and dst_sidecar and os.path.isfile(src_sidecar):
             try:
-                shutil.move(src_sidecar, os.path.join(dst_dir, sidecar_name))
+                os.makedirs(os.path.dirname(dst_sidecar), exist_ok=True)
+                shutil.move(src_sidecar, dst_sidecar)
             except Exception:
                 pass
 
