@@ -76,7 +76,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | ARCH-03 | completado | Reducers inmutables de jobs centralizan prepend/update/remove/cancelling y derivan siempre `isGenerating`; el estado y setters locales de Director viven en una slice separada mientras `useStore` conserva su fachada pública y la orquestación async. Revisión corrigió retención de tiles terminales. Caracterización conductual de reducers, slice y fachada; 102 UI, lint, build y budget verdes. |
 | OBS-01 | pendiente | — |
 | PERF-01 | completado | `DirectorDashboard` se carga sólo al abrir y genera chunk propio de 34.408 B/8.840 B gzip; entry baja de ~303,05 KB a 294.452 B gzip. CI exige chunk lazy y presupuesto entry de 327.680 B; test DOM abre el diálogo sólo tras activar overlay. 98 UI, lint/build/budget verdes. |
-| DEPS-01 | pendiente | — |
+| DEPS-01 | completado | Eliminado el duplicado normalizado `vector_quantize_pytorch`/`vector-quantize-pytorch`; las dependencias directas restantes, incluidas ffmpeg/loguru/spaCy/G2P/iopath/pycocotools, quedan fijadas a versiones verificadas en el runtime. Parser PEP 508 confirma 80 requisitos únicos por nombre+marker y cero directos sin pin. |
 | DEPS-02 | pendiente | — |
 | DEPS-03 | pendiente | — |
 | DOC-01 | pendiente | — |
