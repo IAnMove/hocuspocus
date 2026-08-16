@@ -51,7 +51,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | ACT-01 | completado | Fallos cancel/resume/dismiss quedan por task ID en bloque `aria-live`, preservan la tarea y ofrecen Retry; éxito limpia el error; 34 tests UI + lint/build verdes |
 | UPLOAD-01 | completado | Ingesta en chunks de 1 MiB con límite acumulado y 413; publicación atómica, cleanup en error/cancelación, concurrencia acotada y transcode cancel-safe; 4 tests verdes |
 | CANCEL-01 | pendiente | — |
-| RES-01 | pendiente | — |
+| RES-01 | completado | Ticket monotónico + Condition por lane; sólo la cabeza adquiere, cancelación elimina/despierta; FIFO A/B/C validado 100 veces y B cancelado deja A/C; 17 tests verdes |
 | A11Y-01 | pendiente | — |
 | A11Y-02 | pendiente | — |
 | RESP-01 | pendiente | — |

@@ -259,3 +259,102 @@ def test_cancelled_nested_acquisition_never_enters_child_operation():
             raise AssertionError("cancelled nested acquisition entered child")
     assert entered == []
     assert coordinator.snapshot()[0]["active"] == 0
+
+
+def _wait_for_waiter(coordinator, task_id):
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
+        snapshot = coordinator.snapshot()[0]
+        if any(waiter["id"] == task_id for waiter in snapshot["waiters"]):
+            return
+        time.sleep(0.001)
+    raise AssertionError(f"{task_id} did not enter the resource lane queue")
+
+
+def test_resource_lane_fifo_is_stable_for_a_b_c_across_100_repetitions():
+    for _ in range(100):
+        coordinator = ResourceCoordinator()
+        lane = image_lane("local-image")
+        entered = []
+        entered_lock = threading.Lock()
+        first_entered = threading.Event()
+        release_first = threading.Event()
+
+        def worker(task_id):
+            with coordinator.acquire(lane, task_id=task_id, poll_interval=0.01):
+                with entered_lock:
+                    entered.append(task_id)
+                if task_id == "A":
+                    first_entered.set()
+                    release_first.wait(1)
+
+        first = threading.Thread(target=worker, args=("A",))
+        second = threading.Thread(target=worker, args=("B",))
+        third = threading.Thread(target=worker, args=("C",))
+        first.start()
+        assert first_entered.wait(1)
+        second.start()
+        _wait_for_waiter(coordinator, "B")
+        third.start()
+        _wait_for_waiter(coordinator, "C")
+        release_first.set()
+        first.join(1)
+        second.join(1)
+        third.join(1)
+
+        assert not first.is_alive()
+        assert not second.is_alive()
+        assert not third.is_alive()
+        assert entered == ["A", "B", "C"]
+
+
+def test_cancelling_middle_fifo_ticket_leaves_a_and_c():
+    coordinator = ResourceCoordinator()
+    lane = image_lane("local-image")
+    entered = []
+    cancelled = []
+    release_first = threading.Event()
+    first_entered = threading.Event()
+    cancel_second = threading.Event()
+
+    def first_worker():
+        with coordinator.acquire(lane, task_id="A", poll_interval=0.01):
+            entered.append("A")
+            first_entered.set()
+            release_first.wait(1)
+
+    def waiting_worker(task_id, cancel=None):
+        try:
+            with coordinator.acquire(
+                lane,
+                task_id=task_id,
+                cancelled=cancel.is_set if cancel is not None else None,
+                poll_interval=0.01,
+            ):
+                entered.append(task_id)
+        except ResourceAcquireCancelled:
+            cancelled.append(task_id)
+
+    first = threading.Thread(target=first_worker)
+    second = threading.Thread(
+        target=waiting_worker, args=("B", cancel_second),
+    )
+    third = threading.Thread(target=waiting_worker, args=("C",))
+    first.start()
+    assert first_entered.wait(1)
+    second.start()
+    _wait_for_waiter(coordinator, "B")
+    third.start()
+    _wait_for_waiter(coordinator, "C")
+
+    cancel_second.set()
+    second.join(1)
+    assert not second.is_alive()
+    assert cancelled == ["B"]
+    assert [waiter["id"] for waiter in coordinator.snapshot()[0]["waiters"]] == ["C"]
+
+    release_first.set()
+    first.join(1)
+    third.join(1)
+    assert entered == ["A", "C"]
+    assert coordinator.snapshot()[0]["waiting"] == 0
