@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, ListVi
 import * as api from '../api/client'
 import type { CanonicalTask } from '../api/client'
 import { applyCanonicalTaskEvent, canResumeCanonicalTask, canonicalTaskVisualState, reconcileCanonicalTaskSnapshot } from '../lib/canonicalTaskEvents'
+import { formatAppAction, formatAppTimestamp } from '../lib/locale'
 import { useStore } from '../stores/useStore'
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
@@ -320,6 +321,7 @@ export function ActivityFooter() {
               const recipe = generationRecipe(task)
               const visualState = canonicalTaskVisualState(task.status)
               const controlFailure = controlFailures[task.id]
+              const updatedAt = formatAppTimestamp(task.updated_at)
               return (
                 <div key={task.id} className="rounded-md border border-border bg-bg-primary p-2">
                   <div className="flex items-start gap-2">
@@ -334,7 +336,8 @@ export function ActivityFooter() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-medium text-text-primary">{task.title}</span>
                         <div className="flex items-center gap-2">
-                          <span className="tabular-nums text-text-muted">{elapsed(task, clock)}</span>
+                          <span className="tabular-nums text-text-muted" title={updatedAt ? `${formatAppAction('updated')}: ${updatedAt}` : undefined}>{elapsed(task, clock)}</span>
+                          {updatedAt && <span className="hidden md:inline text-text-muted">{updatedAt}</span>}
                           <span className="capitalize text-text-muted">{phaseLabel(task)}</span>
                           {active && task.cancelable && (
                             <button type="button" disabled={busyIds.has(task.id)} onClick={() => runControl(task, 'cancel')} className="rounded border border-red-400/40 px-1.5 py-0.5 text-[9px] text-red-300">

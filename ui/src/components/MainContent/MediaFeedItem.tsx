@@ -9,6 +9,7 @@ import { modelDisplayName } from '../../lib/modelDisplay'
 import { getOutputReference } from '../../lib/outputReference'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
+import { formatAppAction, formatAppTimestamp } from '../../lib/locale'
 import { useComicStore } from '../../features/comics/store'
 import {
   readVideoEditorReplacementTarget,
@@ -78,23 +79,6 @@ function RetryImage({ url, alt }: { url: string; alt: string }) {
       onLoad={handleLoad}
     />
   )
-}
-
-function formatCompletionTime(value: number | undefined): string | null {
-  if (!Number.isFinite(value) || !value || value <= 0) return null
-  // Backend timestamps are Unix seconds. Accept milliseconds too so imported
-  // metadata from browser/JS producers cannot accidentally render in 1970.
-  const milliseconds = value < 1_000_000_000_000 ? value * 1000 : value
-  const date = new Date(milliseconds)
-  if (Number.isNaN(date.getTime())) return null
-  return new Intl.DateTimeFormat(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(date)
 }
 
 export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, style }: Props) {
@@ -263,7 +247,8 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const generationBreakdown = formatGenerationBreakdown(meta?.generation_timings)
   const outputReference = getOutputReference(file)
   const metadataCompletedAt = meta?.completed_at ?? meta?.finished_at ?? meta?.created_at
-  const completionTime = formatCompletionTime(metadataCompletedAt ?? file.completed_at ?? file.created_at)
+  const completionTime = formatAppTimestamp(metadataCompletedAt ?? file.completed_at ?? file.created_at)
+  const completionLabel = formatAppAction(browsingUploads ? 'added' : 'finished')
   const completionTimeIsExact = metadataCompletedAt != null || file.completion_time_source === 'metadata'
 
   const multiClipInfo = params?.multi_clip_info as { group_id: string; index: number; total: number } | undefined
@@ -699,11 +684,11 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
           {completionTime && (
             <div
               className="mb-0.5 flex items-center gap-1 text-[10px] text-text-muted"
-              title={`${browsingUploads ? 'Added' : 'Generation finished'}: ${completionTime}${!browsingUploads && !completionTimeIsExact ? ' (file timestamp, approximate)' : ''}`}
+              title={`${completionLabel}: ${completionTime}${!browsingUploads && !completionTimeIsExact ? ' (file timestamp, approximate)' : ''}`}
             >
               <Clock3 size={10} className="shrink-0" aria-hidden="true" />
               <span className="truncate">
-                {browsingUploads ? 'Añadido' : 'Finalizado'} · {completionTime}
+                {completionLabel} · {completionTime}
                 {!browsingUploads && !completionTimeIsExact ? ' · aprox.' : ''}
               </span>
             </div>

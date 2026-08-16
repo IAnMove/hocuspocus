@@ -59,7 +59,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | RESP-03 | pendiente | — |
 | MEM-01 | pendiente | — |
 | STORAGE-01 | completado | Wrapper seguro para local/session storage con fallback en memoria sólo cuando persiste el fallo; Welcome/Preflight sobreviven SecurityError/cuota y una eliminación externa no resucita valores; tests UI + lint/build verdes. |
-| I18N-01 | pendiente | — |
+| I18N-01 | completado | Formatter central basado en locale de aplicación para timestamps de Media/Activity y glosario EN/ES de acciones; snapshots deterministas es-ES/en-US con UTC, lint y build verdes. |
 | TRAILER-01 | completado | Reset por proyecto separado de la sincronización de defaults; tipo/duración siguen al proyecto hasta la primera edición manual y después se preservan; tests de ambos estados + lint/build verdes. |
 | STYLE-01 | pendiente | — |
 | STYLE-02 | pendiente | — |
