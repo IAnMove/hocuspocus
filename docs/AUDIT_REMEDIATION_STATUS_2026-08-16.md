@@ -36,7 +36,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | SER-UI-03 | pendiente | — |
 | SER-03 | pendiente | — |
 | STORY-01 | pendiente | — |
-| STORY-02 | pendiente | — |
+| STORY-02 | completado | Resolver puro compartido conserva MiniMax, OpenAI, DeepSeek, OpenAI-compatible y Maestro con provider/model/base URL coherentes en UI, generación y reanudación; tabla de casos automatizada + lint/build verdes. |
 | STORY-03 | pendiente | — |
 | STORY-04 | pendiente | — |
 | UI-WS-01 | completado | Epochs y AbortController aíslan outputs/metadata por workspace, invalidan listas y mutaciones tardías y pasan workspace explícito en todos los consumidores; 5 regresiones diferidas, 44 tests UI, lint y build verdes. |

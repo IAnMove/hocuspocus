@@ -19,6 +19,7 @@ import { createStoryActivityLifecycle } from './activityLifecycle'
 import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
 import { syncTrailerDuration, trailerDurationForProject } from './trailerDefaults'
+import { resolveStoryWritingProvider } from './provider'
 import {
   buildComicAdaptation,
   buildMusicVideoAdaptation,
@@ -590,10 +591,8 @@ function ProviderPanel({
   const services = useStore(state => state.servicesConfig)
   const models = useStore(state => state.models)
   const profile = useStore(state => state.productionProfile)
-  const globalWritingProvider: StoryWritingProvider = profile.text.provider === 'minimax'
-    ? 'minimax' : profile.text.provider === 'openai' ? 'openai' : 'maestro'
-  const provider = project.provider.useGlobalProfile
-    ? globalWritingProvider : project.provider.writingProvider
+  const resolvedWriting = resolveStoryWritingProvider(profile, project)
+  const provider = resolvedWriting.provider
   const effectiveImageProvider = project.provider.useGlobalProfile && profile.image.provider === 'minimax'
     ? 'minimax' : project.provider.imageProvider
   const effectiveImageModel = project.provider.useGlobalProfile
@@ -638,7 +637,9 @@ function ProviderPanel({
       </div>
       {project.provider.useGlobalProfile && (
         <p className="text-[10px] text-emerald-300">
-          Global: {profile.text.provider} / {profile.text.model} · {profile.image.provider} / {profile.image.model}
+          Global: {resolvedWriting.provider} / {resolvedWriting.model}
+          {resolvedWriting.baseUrl && ` · ${resolvedWriting.baseUrl}`}
+          {' · '} {profile.image.provider} / {profile.image.model}
           {' · '}video {profile.video.model} · {profile.video.settings.resolution} {profile.video.settings.aspectRatio}
         </p>
       )}
@@ -1794,14 +1795,13 @@ export function StoryLabPanel() {
       generateImagesAfterApply: options.generateImages === true,
     }))
     try {
+      const resolvedWriting = resolveStoryWritingProvider(productionProfile, project)
       const effectiveProvider: StoryProject['provider'] = project.provider.useGlobalProfile
         ? {
             ...project.provider,
-            writingProvider: productionProfile.text.provider === 'minimax'
-              ? 'minimax' : productionProfile.text.provider === 'openai' ? 'openai' : 'maestro',
-            writingModel: productionProfile.text.model,
-            writingBaseUrl: productionProfile.text.provider === 'minimax'
-              ? 'https://api.minimax.io/v1' : project.provider.writingBaseUrl,
+            writingProvider: resolvedWriting.provider,
+            writingModel: resolvedWriting.model,
+            writingBaseUrl: resolvedWriting.baseUrl,
             imageProvider: productionProfile.image.provider === 'minimax' ? 'minimax' : 'maestro',
             imageModel: productionProfile.image.model,
           }
@@ -1892,6 +1892,10 @@ export function StoryLabPanel() {
     setBusy('all')
     setNotice(null)
     try {
+      const resolvedWriting = resolveStoryWritingProvider(
+        useStore.getState().productionProfile,
+        project,
+      )
       const { result } = await api.resumeStoryGeneration(recoveryJobId.trim(), progress => {
         activity.handoff(`Continuing as recoverable job ${progress.jobId}`)
         setJobProgress(`${progress.message} ${progress.total ? `${progress.current}/${progress.total}` : ''}`)
@@ -1902,9 +1906,9 @@ export function StoryLabPanel() {
           progress.total,
         )
       }, {
-        writingProvider: project.provider.writingProvider,
-        writingModel: project.provider.writingModel,
-        writingBaseUrl: project.provider.writingBaseUrl,
+        writingProvider: resolvedWriting.provider,
+        writingModel: resolvedWriting.model,
+        writingBaseUrl: resolvedWriting.baseUrl,
       })
       if (useStoryStore.getState().project.id !== sourceProjectId) return
       let generateImagesAfterApply = false
