@@ -1766,7 +1766,7 @@ export function VideoEditorPanel() {
           disabled={adding}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover disabled:opacity-50"
         >
-          <FolderOpen size={13} /> From Maestro
+          <FolderOpen size={13} /> From Loreframe Lab
         </button>
         <button
           onClick={startExport}
@@ -1920,7 +1920,7 @@ export function VideoEditorPanel() {
                 onClick={takeScreenshot}
                 disabled={!selected || capturingFrame}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-hover disabled:opacity-40"
-                title="Save the exact current source frame as a reusable PNG in Maestro Outputs"
+                title="Save the exact current source frame as a reusable PNG in Loreframe Lab Outputs"
               >
                 {capturingFrame
                   ? <Loader2 size={11} className="animate-spin" />
@@ -2535,7 +2535,7 @@ export function VideoEditorPanel() {
       {pickerOpen && (
         <ModalShell
           open
-          title="Add a Maestro video"
+          title="Add a Loreframe Lab video"
           onClose={() => setPickerOpen(false)}
           className="fixed inset-0 z-[80] bg-black/65 flex items-center justify-center p-4"
           onMouseDown={event => {
@@ -2545,11 +2545,11 @@ export function VideoEditorPanel() {
           <div className="w-full max-w-4xl max-h-[78vh] bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <FolderOpen size={15} className="text-accent-blue" />
-              <span className="text-sm font-medium">Add a Maestro video</span>
+              <span className="text-sm font-medium">Add a Loreframe Lab video</span>
               {maestroVideoTotal > 0 && (
                 <span className="text-[10px] text-text-muted">{maestroVideos.length} / {maestroVideoTotal}</span>
               )}
-              <button onClick={() => setPickerOpen(false)} aria-label="Close Maestro video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
+              <button onClick={() => setPickerOpen(false)} aria-label="Close Loreframe Lab video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
                 <X size={15} />
               </button>
             </div>

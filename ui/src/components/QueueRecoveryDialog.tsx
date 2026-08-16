@@ -75,7 +75,7 @@ export function QueueRecoveryDialog() {
               Hay una cola de generación por recuperar
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-text-muted">
-              Maestro guardó {jobs.length} {jobs.length === 1 ? 'trabajo' : 'trabajos'} antes de cerrarse. Puedes retomarlos en el mismo orden o descartarlos y arrancar con la cola vacía.
+              Loreframe Lab guardó {jobs.length} {jobs.length === 1 ? 'trabajo' : 'trabajos'} antes de cerrarse. Puedes retomarlos en el mismo orden o descartarlos y arrancar con la cola vacía.
             </p>
           </div>
         </div>

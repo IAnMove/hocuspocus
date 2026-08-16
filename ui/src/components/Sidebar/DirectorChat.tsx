@@ -679,7 +679,7 @@ export function DirectorChat() {
         {/* Welcome message */}
         <SystemBubble>
           <p className="text-xs text-text-secondary">
-            Welcome to Maestro Director. Choose a skill to get started.
+            Welcome to Loreframe Lab Director. Choose a skill to get started.
           </p>
         </SystemBubble>
 
@@ -1312,7 +1312,7 @@ function MusicVideoTreatmentEditor({
             <div>
               <p className="text-[10px] font-medium text-fuchsia-200">T2V puro · sin contaminación de imágenes</p>
               <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
-                Maestro repetirá este prompt maestro completo en cada clip. El LLM solo escribirá la situación concreta. No se generarán primeros fotogramas ni se enviarán referencias visuales a H3; los campos de estilo antiguos tampoco se mezclarán con este mundo.
+                Loreframe Lab repetirá este prompt maestro completo en cada clip. El LLM solo escribirá la situación concreta. No se generarán primeros fotogramas ni se enviarán referencias visuales a H3; los campos de estilo antiguos tampoco se mezclarán con este mundo.
               </p>
             </div>
             <label className="block text-[9px] text-text-muted">Prompt maestro inmutable

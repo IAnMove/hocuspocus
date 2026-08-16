@@ -314,7 +314,7 @@ export function Hunyuan3DPanel() {
       ) : !installed ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
           <p className="text-xs font-medium text-amber-300">Hunyuan3D runtime is not installed</p>
-          <p className="text-[10px] text-text-muted mt-1 leading-relaxed">Stop Maestro and run its standard <strong>Install</strong> or <strong>Update</strong> action. The runtime stays inside Maestro; model weights download on first use.</p>
+          <p className="text-[10px] text-text-muted mt-1 leading-relaxed">Stop Loreframe Lab and run its standard <strong>Install</strong> or <strong>Update</strong> action. The runtime stays inside Loreframe Lab; model weights download on first use.</p>
         </div>
       ) : (
         <>
@@ -404,7 +404,7 @@ export function Hunyuan3DPanel() {
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={compile} onChange={event => setCompile(event.target.checked)} /> Torch compile</label>
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={reduceFace} onChange={event => setReduceFace(event.target.checked)} /> Simplify mesh</label>
               </div>
-              <p className="text-[9px] text-text-muted">Higher octree/texture resolutions and PBR consume substantially more VRAM. CPU offload is recommended while other Maestro models are in use.</p>
+              <p className="text-[9px] text-text-muted">Higher octree/texture resolutions and PBR consume substantially more VRAM. CPU offload is recommended while other Loreframe Lab models are in use.</p>
             </div>
           )}
 

@@ -181,7 +181,7 @@ def installation_status() -> dict[str, Any]:
     installed = bool(python_path and INSTALL_MARKER.is_file() and WORKER_PATH.is_file())
     return {
         "installed": installed,
-        "install_hint": None if installed else "Run Maestro's standard Install or Update action (the rig worker shares the Hunyuan3D runtime).",
+        "install_hint": None if installed else "Run Loreframe Lab's standard Install or Update action (the rig worker shares the Hunyuan3D runtime).",
     }
 
 
@@ -264,7 +264,7 @@ def unirig_installation_status() -> dict[str, Any]:
     installed = bool(python_path and RIGGING_MARKER.is_file() and UNIRIG_WORKER_PATH.is_file() and UNIRIG_VENDOR_DIR.is_dir())
     return {
         "installed": installed,
-        "install_hint": None if installed else "Open the Maestro item in Pinokio and run 'Install AI Rigging (UniRig)'. Needs an NVIDIA GPU with 8GB+ VRAM; weights (~2GB) download on first use.",
+        "install_hint": None if installed else "Open Loreframe Lab in Pinokio and run 'Install AI Rigging (UniRig)'. Needs an NVIDIA GPU with 8GB+ VRAM; weights (~2GB) download on first use.",
     }
 
 

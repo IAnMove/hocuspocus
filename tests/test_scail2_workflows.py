@@ -3840,7 +3840,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("editRecastIsolateReference: true", store)
         self.assertIn("isolate_reference: true", store)
         self.assertNotIn("Isolate replacement from reference background", controls)
-        self.assertIn("Maestro isolates references", controls)
+        self.assertIn("Loreframe Lab isolates references", controls)
 
     def test_recast_uses_identity_latents_and_trims_motion_preroll(self):
         launch = _read(_LAUNCH_PATH)

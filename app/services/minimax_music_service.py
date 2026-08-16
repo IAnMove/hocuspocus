@@ -45,7 +45,7 @@ def _audio_bytes(response: dict[str, Any], session: requests.Session) -> bytes:
     if not audio:
         raise MiniMaxMusicError("MiniMax Music returned an empty audio file")
     if len(audio) > 100 * 1024 * 1024:
-        raise MiniMaxMusicError("MiniMax Music audio exceeds Maestro's 100 MB limit")
+        raise MiniMaxMusicError("MiniMax Music audio exceeds Loreframe Lab's 100 MB limit")
     return audio
 
 

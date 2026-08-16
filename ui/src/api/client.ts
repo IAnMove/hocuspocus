@@ -156,7 +156,7 @@ export async function fetchCanonicalTasks(
 ): Promise<{ workspace: string; tasks: CanonicalTask[]; latest_event_id: number }> {
   const query = new URLSearchParams({ workspace, status, limit: '300' })
   const res = await fetch(`${BASE}/api/v1/tasks?${query}`)
-  if (!res.ok) throw new Error('Failed to fetch Maestro tasks')
+  if (!res.ok) throw new Error('Failed to fetch Loreframe Lab tasks')
   return res.json()
 }
 
@@ -180,7 +180,7 @@ export async function upsertCanonicalClientTask(task: Record<string, unknown>): 
   const res = await fetch(`${BASE}/api/v1/tasks/upsert`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: canonicalTask }),
   })
-  if (!res.ok) throw new Error('Failed to publish Maestro activity')
+  if (!res.ok) throw new Error('Failed to publish Loreframe Lab activity')
   return res.json()
 }
 
@@ -220,7 +220,7 @@ export async function resumeCanonicalTask(taskId: string, workspace: string): Pr
 
 export async function dismissCanonicalTask(taskId: string, workspace: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}?workspace=${encodeURIComponent(workspace)}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('Failed to dismiss Maestro task')
+  if (!res.ok) throw new Error('Failed to dismiss Loreframe Lab task')
 }
 
 // --- Models & Families ---
@@ -3287,7 +3287,7 @@ async function getStoryGenerationStatusResilient(
       if (signal?.aborted) throw new DOMException('Story generation cancelled', 'AbortError')
       if (!isStoryStatusNetworkError(error)) throw error
       if (attempt >= STORY_STATUS_RETRY_DELAYS_MS.length) {
-        throw new Error(`Connection to Maestro is still unavailable. The job remains saved. Resume job: ${jobId}`)
+        throw new Error(`Connection to Loreframe Lab is still unavailable. The job remains saved. Resume job: ${jobId}`)
       }
       const delayMs = STORY_STATUS_RETRY_DELAYS_MS[attempt]
       onRetry?.(attempt + 1, delayMs)
@@ -3902,7 +3902,7 @@ export async function testLlmConnection(): Promise<{ ok: boolean; response: stri
   try {
     res = await fetch(`${BASE}/api/v1/llm/test`, { method: 'POST' })
   } catch {
-    throw new Error('Maestro backend is unreachable. Reopen the current WebUI from Pinokio and try again')
+    throw new Error('Loreframe Lab backend is unreachable. Reopen the current WebUI from Pinokio and try again')
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'LLM test failed' }))

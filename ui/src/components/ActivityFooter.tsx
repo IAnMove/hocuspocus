@@ -311,7 +311,7 @@ export function ActivityFooter() {
       {detailsOpen && roots.length > 0 && (
         <div className="absolute bottom-full left-3 mb-2 w-[min(48rem,calc(100vw-1.5rem))] max-h-80 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
           <div className="mb-1.5 flex items-center justify-between px-1">
-            <span className="font-semibold text-text-primary">Maestro tasks</span>
+            <span className="font-semibold text-text-primary">Loreframe Lab tasks</span>
             <span className="text-text-muted">{activeTasks.length} active · durable per workspace</span>
           </div>
           <div className="space-y-1.5">

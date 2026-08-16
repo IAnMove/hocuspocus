@@ -48,7 +48,7 @@ MODELS: list[dict[str, Any]] = [
         "turbo": True,
         "supports_text": True,
         "recommended_vram_gb": 6,
-        "description": "Fastest geometry model; best when sharing the GPU with other Maestro workloads.",
+        "description": "Fastest geometry model; best when sharing the GPU with other Loreframe Lab workloads.",
     },
     {
         "id": "hunyuan3d-2mini-fast",
@@ -272,7 +272,7 @@ def installation_status() -> dict[str, Any]:
         "v21_source": v21_source.is_dir(),
         "isolated_runtime": True,
         "releases_vram_after_job": True,
-        "install_hint": None if installed else "Run Maestro's standard Install or Update action.",
+        "install_hint": None if installed else "Run Loreframe Lab's standard Install or Update action.",
     }
 
 

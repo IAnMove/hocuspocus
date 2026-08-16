@@ -26,6 +26,8 @@ jobs:
         run: python scripts/check_dependency_contract.py
       - name: Documentation links and drift
         run: python scripts/check_documentation_links.py
+      - name: Visible brand and compatibility contract
+        run: python scripts/check_brand_contract.py
       - name: Python syntax check (our modules)
         # compileall only compiles (never imports), so it needs no deps and
         # skips heavy vendored model code. Covers the surface we edit.

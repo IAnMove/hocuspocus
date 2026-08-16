@@ -648,7 +648,7 @@ function ProviderPanel({
       <fieldset disabled={project.provider.useGlobalProfile} className="space-y-3 disabled:opacity-50">
       <label className="block text-[10px] text-text-muted">Writing LLM
         <select className={`${input} mt-1`} value={provider} onChange={event => setProvider(event.target.value as StoryWritingProvider)}>
-          <option value="maestro">Maestro internal · default</option>
+          <option value="maestro">Loreframe Lab internal · default</option>
           <option value="deepseek">DeepSeek</option>
           <option value="minimax">MiniMax</option>
           <option value="openai">OpenAI</option>
@@ -678,12 +678,12 @@ function ProviderPanel({
       )}
       <label className="block text-[10px] text-text-muted">Concept-art provider
         <select className={`${input} mt-1`} value={project.provider.imageProvider} onChange={event => patchProvider({ imageProvider: event.target.value as 'maestro' | 'minimax' })}>
-          <option value="maestro">Maestro local</option>
+          <option value="maestro">Loreframe Lab local</option>
           <option value="minimax">MiniMax Image</option>
         </select>
       </label>
       {project.provider.imageProvider === 'maestro' && (
-        <label className="block text-[10px] text-text-muted">Maestro image model
+        <label className="block text-[10px] text-text-muted">Loreframe Lab image model
           <select
             className={`${input} mt-1`}
             value={project.provider.imageModel}
@@ -703,7 +703,7 @@ function ProviderPanel({
             ? 'MiniMax Image is ready (fixed provider image model).' : 'Local image model is installed.'
           : project.provider.imageProvider === 'minimax'
             ? 'Add the MiniMax API key in Settings → Services.'
-            : 'Choose an installed Maestro image model.'}
+            : 'Choose an installed Loreframe Lab image model.'}
       </p>
       </fieldset>
     </div>
@@ -1220,7 +1220,7 @@ export function StoryLabPanel() {
     })
     const id = `${prefix}${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
     const writer = project.provider.writingProvider === 'maestro'
-      ? 'Maestro internal'
+      ? 'Loreframe Lab internal'
       : project.provider.writingModel || project.provider.writingProvider
     const title = `Story Lab · ${project.title.trim() || 'Untitled story'} · ${writer}`
     const lifecycle = createStoryActivityLifecycle({
@@ -2478,7 +2478,7 @@ export function StoryLabPanel() {
     setStyleModelDownloading(selectedStyleModel.model_type)
     try {
       await api.downloadModel(selectedStyleModel.model_type)
-      setNotice({ kind: 'ok', text: `Downloading ${selectedStyleModel.name}. You can keep using Maestro while it installs.` })
+      setNotice({ kind: 'ok', text: `Downloading ${selectedStyleModel.name}. You can keep using Loreframe Lab while it installs.` })
     } catch (error) {
       setStyleModelDownloading('')
       setStyleModelDownloadError((error as Error).message)
@@ -5125,7 +5125,7 @@ export function StoryLabPanel() {
                   </div>
                   <div className="rounded-md border border-border bg-bg-tertiary px-3 py-2 text-[10px] text-text-muted">
                     Analyzer: {project.provider.writingProvider === 'maestro'
-                      ? 'Maestro current LLM'
+                      ? 'Loreframe Lab current LLM'
                       : `${project.provider.writingProvider} · ${project.provider.writingModel || 'configured model'}`}
                   </div>
                 </div>
@@ -5161,7 +5161,7 @@ export function StoryLabPanel() {
                       placeholder="For example: photos of Córdoba for a contemporary mystery; the woman in red is the protagonist and the old station is the main location."
                     />
                     <p className="mt-2 text-[9px] text-text-muted">
-                      This context is sent once with the ordered image batch. Maestro proposes changes; you review every assignment below.
+                      This context is sent once with the ordered image batch. Loreframe Lab proposes changes; you review every assignment below.
                     </p>
                   </div>
                 </div>
@@ -5292,7 +5292,7 @@ export function StoryLabPanel() {
                           <optgroup label="External API">
                             <option value={MINIMAX_IMAGE_API_MODEL}>MiniMax Image-01 · characters only</option>
                           </optgroup>
-                          <optgroup label="Maestro local · true image editing">
+                          <optgroup label="Loreframe Lab local · true image editing">
                             {localStyleModels.map(model => (
                               <option key={model.model_type} value={model.model_type}>
                                 {model.name}{model.model_type === QWEN_STYLE_EDIT_MODEL ? ' · strict preservation' : model.model_type === FLUX_STYLE_EDIT_MODEL ? ' · fast 4-step edit' : ''}{model.is_downloaded ? ' · installed' : ' · not installed'}
@@ -5698,7 +5698,7 @@ export function StoryLabPanel() {
                                   <div className="flex items-start justify-between gap-2">
                                     <div>
                                       <h4 className="text-xs font-semibold text-pink-200">Exact MiniMax request · editable</h4>
-                                      <p className="mt-0.5 text-[9px] text-text-muted">Maestro sends style and lyrics as separate fields. Editing these fields changes the next request.</p>
+                                      <p className="mt-0.5 text-[9px] text-text-muted">Loreframe Lab sends style and lyrics as separate fields. Editing these fields changes the next request.</p>
                                     </div>
                                     <span className="shrink-0 rounded border border-pink-500/30 px-2 py-1 text-[9px] text-pink-200">{project.music.model}</span>
                                   </div>
@@ -5727,7 +5727,7 @@ export function StoryLabPanel() {
                                     </p>
                                   )}
                                   <details className="rounded border border-border bg-bg-tertiary/70 p-2">
-                                    <summary className="cursor-pointer text-[9px] text-text-secondary">Inspect the complete Maestro → MiniMax payload</summary>
+                                    <summary className="cursor-pointer text-[9px] text-text-secondary">Inspect the complete Loreframe Lab → MiniMax payload</summary>
                                     <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-[9px] text-text-muted">{miniMaxCuePayload(cue, project.music.model)}</pre>
                                   </details>
                                   <div className="grid sm:grid-cols-3 gap-2">
@@ -6035,7 +6035,7 @@ export function StoryLabPanel() {
                         <select className={`${input} mt-1`} value={filmImageModel} disabled={directVideo || directReferenceVideo} onChange={event => selectDirectorImageModel(event.target.value)}>
                           {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>}
                           <optgroup label="External API"><option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option></optgroup>
-                          <optgroup label="Maestro local">{selectableImageModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}</option>)}</optgroup>
+                          <optgroup label="Loreframe Lab local">{selectableImageModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}</option>)}</optgroup>
                         </select>
                       </label>
                       <label className="block text-[10px] text-text-muted">Modelo de vídeo
@@ -6176,7 +6176,7 @@ export function StoryLabPanel() {
                         <optgroup label="External API">
                           <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
                         </optgroup>
-                        <optgroup label="Maestro local">
+                        <optgroup label="Loreframe Lab local">
                           {selectableImageModels.map(model => (
                             <option key={model.model_type} value={model.model_type}>
                               {model.name}{model.is_downloaded === false ? ' · downloads on first use' : ''}
@@ -6191,7 +6191,7 @@ export function StoryLabPanel() {
                           ? filmImageReady
                             ? 'MiniMax Image-01 runs through the external API and does not use local VRAM. It is independent from the local H3 video model.'
                             : 'Add the MiniMax API key in Settings → Services before starting complete generation.'
-                          : 'Generates every shot frame locally with the selected Maestro image model.'}
+                          : 'Generates every shot frame locally with the selected Loreframe Lab image model.'}
                       </span>
                     </label>
                     <label className="block text-[10px] text-text-muted">Video model
@@ -6219,7 +6219,7 @@ export function StoryLabPanel() {
                           ? 'H3 Legacy Quality uses its 20-step ConvRot recipe. A 7–10s shot at 720p can take tens of minutes even on an RTX 4090; choose 540p/480p or a Turbo-capable H3 variant when speed matters.'
                           : filmVideoModel.startsWith('minimax_h3')
                           ? 'MiniMax H3 renders every planned shot locally at up to 768p with native stereo audio. Longer shots are continued and assembled automatically.'
-                          : 'LTX uses Maestro’s multi-shot Director pipeline and requires its bundled Gemma 3 12B text encoder. Gemma may download on first use; it is an LTX dependency, not a separate setting. This choice is saved only in this Story.'}
+                          : 'LTX uses Loreframe Lab’s multi-shot Director pipeline and requires its bundled Gemma 3 12B text encoder. Gemma may download on first use; it is an LTX dependency, not a separate setting. This choice is saved only in this Story.'}
                       </span>
                     </label>
                     <StoryVideoFormatControls
@@ -6396,7 +6396,7 @@ export function StoryLabPanel() {
                                 value={project.provider.writingProvider}
                                 onChange={event => setMusicWritingProvider(event.target.value as StoryWritingProvider)}
                               >
-                                <option value="maestro">Maestro internal</option>
+                                <option value="maestro">Loreframe Lab internal</option>
                                 <option value="deepseek">DeepSeek</option>
                                 <option value="minimax">MiniMax</option>
                                 <option value="openai">OpenAI</option>
@@ -6439,7 +6439,7 @@ export function StoryLabPanel() {
                                   <optgroup label="External API">
                                     <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
                                   </optgroup>
-                                  <optgroup label="Maestro local">
+                                  <optgroup label="Loreframe Lab local">
                                     {selectableImageModels.map(model => (
                                       <option key={model.model_type} value={model.model_type}>{model.name}</option>
                                     ))}
@@ -6494,10 +6494,10 @@ export function StoryLabPanel() {
                           <p className={`text-[9px] ${musicWritingReady && musicVideoImageReady && directVideoMasterReady && directReferenceVideoReady ? 'text-text-muted' : 'text-amber-300'}`}>
                             {musicWritingReady && musicVideoImageReady && directVideoMasterReady && directReferenceVideoReady
                               ? directMusicVideo
-                                ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · T2V without images · ${selectedFilmVideoModel?.name || filmVideoModel}`
+                                ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Loreframe Lab internal' : project.provider.writingModel} · T2V without images · ${selectedFilmVideoModel?.name || filmVideoModel}`
                                 : directReferenceVideo
-                                  ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · ${approvedVisualReferenceCount} approved references · ${selectedFilmVideoModel?.name || filmVideoModel}`
-                                : `Ready: ${project.provider.writingProvider === 'maestro' ? 'Maestro internal' : project.provider.writingModel} · ${selectedFilmImageModel?.name || filmImageModel} · ${selectedFilmVideoModel?.name || filmVideoModel}`
+                                  ? `Ready: ${project.provider.writingProvider === 'maestro' ? 'Loreframe Lab internal' : project.provider.writingModel} · ${approvedVisualReferenceCount} approved references · ${selectedFilmVideoModel?.name || filmVideoModel}`
+                                : `Ready: ${project.provider.writingProvider === 'maestro' ? 'Loreframe Lab internal' : project.provider.writingModel} · ${selectedFilmImageModel?.name || filmImageModel} · ${selectedFilmVideoModel?.name || filmVideoModel}`
                               : !musicWritingReady
                                 ? 'Configure the selected planning LLM in Settings → Services before generating.'
                                 : !directVideoMasterReady
@@ -6608,7 +6608,7 @@ export function StoryLabPanel() {
                   <div className="hidden" aria-hidden="true">
                     <Music size={26} className="text-pink-400" />
                     <h3 className="font-semibold text-text-primary">Musical trailer</h3>
-                    <p className="text-xs text-text-muted">Turns the Story into a song-led video. Maestro analyzes the selected track’s duration, BPM, sections and beats, then plans cuts to fit the complete song.</p>
+                    <p className="text-xs text-text-muted">Turns the Story into a song-led video. Loreframe Lab analyzes the selected track’s duration, BPM, sections and beats, then plans cuts to fit the complete song.</p>
                     <div className="grid grid-cols-2 gap-2">
                       <label className="block text-[10px] text-text-muted">Generation mode
                         <select className={`${input} mt-1`} value={project.music.mode}

@@ -97,7 +97,7 @@ def main() -> None:
     if not source.is_file():
         raise RuntimeError(f"Source model not found: {source}")
     if not VENDOR_DIR.is_dir():
-        raise RuntimeError("UniRig is not installed; run 'Install AI Rigging (UniRig)' from the Maestro menu")
+        raise RuntimeError("UniRig is not installed; run 'Install AI Rigging (UniRig)' from the Loreframe Lab menu")
     clip_ids = list(request.get("animations") or list(procedural_rig.CLIPS))
     seed = int(request.get("seed") or 12345)
 

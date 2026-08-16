@@ -42,15 +42,15 @@ Studio Video includes the open **MiniMax H3 Base** model through an isolated, qu
 - **FL2VA**: add a first frame, a last frame, or both.
 - **Ref2VA**: up to 9 images, 3 videos and 3 audio clips (12 files total). Video soundtracks are paired automatically. Audio-only references are not valid; include at least one image or video.
 
-H3 outputs 24 fps video with native 32 kHz stereo audio. The open Base release supports a canvas up to 768×1344 and 4–15 second clips. Maestro aligns duration to H3's `17k+5` frame grid. The RTX 4090 defaults are **960×544, 124 frames and 20 steps**; choose a larger canvas when quality matters more than turnaround. `H3-Regenerate-2K` is not part of the open checkpoint and therefore is not presented as a local option.
+H3 outputs 24 fps video with native 32 kHz stereo audio. The open Base release supports a canvas up to 768×1344 and 4–15 second clips. Loreframe Lab aligns duration to H3's `17k+5` frame grid. The RTX 4090 defaults are **960×544, 124 frames and 20 steps**; choose a larger canvas when quality matters more than turnaround. `H3-Regenerate-2K` is not part of the open checkpoint and therefore is not presented as a local option.
 
-The Advanced/Model Options panel exposes inference steps, seed, video sigma shift (default 12), audio sigma shift (default 3), an editable **Audio Direction**, resolution, reference-image sizing and two explicit conditioning contracts: **Exact frame · FL2VA** and **References · Ref2VA**. FL2VA is the default when Story has an approved shot frame; Ref2VA must be selected explicitly and composes a new opening from its references rather than promising an exact first frame. **Quality 4090** uses INT8 + INT8 by default. **Low VRAM fallback** uses INT4 + INT4 and is retried automatically only after an INT8 out-of-memory error; the old `balanced` setting remains a backwards-compatible INT8 alias. Maestro appends the audio direction as an `Audio:` clause when a Studio prompt does not already contain one. Reference prompts use `<Picture 1>`, `<Video 1>` and `<Audio 1>` tags.
+The Advanced/Model Options panel exposes inference steps, seed, video sigma shift (default 12), audio sigma shift (default 3), an editable **Audio Direction**, resolution, reference-image sizing and two explicit conditioning contracts: **Exact frame · FL2VA** and **References · Ref2VA**. FL2VA is the default when Story has an approved shot frame; Ref2VA must be selected explicitly and composes a new opening from its references rather than promising an exact first frame. **Quality 4090** uses INT8 + INT8 by default. **Low VRAM fallback** uses INT4 + INT4 and is retried automatically only after an INT8 out-of-memory error; the old `balanced` setting remains a backwards-compatible INT8 alias. Loreframe Lab appends the audio direction as an `Audio:` clause when a Studio prompt does not already contain one. Reference prompts use `<Picture 1>`, `<Video 1>` and `<Audio 1>` tags.
 
 Director → Short Film → Story defaults to FL2VA, sending only each approved shot/continuity frame to the video model; character and location artwork still guides creation of that composite frame without competing with it during video generation. Ref2VA is an explicit alternative: the main artwork and character references are passed as identity references, while each shot receives only its single exactly matched labelled location. The UI previews that per-shot reference manifest, and Productions stores the authoritative manifest with warnings for unmatched locations. Story targets 124-frame segments and divides long action prose into non-repeating temporal windows, so consecutive clips continue the sequence instead of replaying the full prompt. Structured ambience, effects, vocal style and dialogue are assigned to their relevant segment. Before releasing the writing model from memory, Director makes one additional structured H3 validation pass over the exact post-split prompts. It may improve motion and camera phrasing, but protected story beats, style contracts, quoted dialogue and the complete audio direction are validated and preserved; malformed or drifting output falls back automatically to the deterministic prompts. Productions shows both the validation result and the exact H3 segment prompts that were used.
 
 #### MiniMax H3 API
 
-All normal Maestro job/status/cancel endpoints apply. A complete text-to-video request with curl:
+All normal Loreframe Lab job/status/cancel endpoints apply. A complete text-to-video request with curl:
 
 ```bash
 curl -X POST "$MAESTRO_URL/api/v1/generate" \
@@ -113,13 +113,13 @@ Use `POST /api/v1/upload` first for local reference assets, then pass the return
 ### 📚 Story Lab — reusable stories, worlds and characters
 Story Lab is a production bible that sits before Comic Studio and Director. Write a premise once, then generate or manually edit the logline, synopsis, world rules, locations, character psychology and appearance, relationships, dramatic beats, and ending. Every generated field stays editable.
 
-For a screenshot-led, end-to-end walkthrough, see **[Maestro X / Experimental: Story → Comics → Video](docs/MAESTRO_X_STORY_COMICS_VIDEO.md)**. It also includes copy-ready captions for an X launch thread.
+For a screenshot-led, end-to-end walkthrough, see **[Loreframe Lab / Experimental: Story → Comics → Video](docs/MAESTRO_X_STORY_COMICS_VIDEO.md)**. It also includes copy-ready captions for an X launch thread.
 
 - **Guided mode** creates reviewable field-level drafts and locks production until the relevant story, world, cast identities, relationships, and structure are approved. **Automatic mode** runs the same checkpointed pipeline, then offers first-look world, location, and character concepts.
-- Choose Maestro internal, DeepSeek V4 Pro/Flash, MiniMax M3/M2.7/M2.7 Highspeed, OpenAI, or a custom compatible writing agent inside the story itself. Concept-art generation has its own independent Maestro/MiniMax selector.
+- Choose Loreframe Lab internal, DeepSeek V4 Pro/Flash, MiniMax M3/M2.7/M2.7 Highspeed, OpenAI, or a custom compatible writing agent inside the story itself. Concept-art generation has its own independent Loreframe Lab/MiniMax selector.
 - Character cards combine role, desire, need, flaw, arc, dialogue voice, wardrobe, visual invariants, negative prompts, multiple references, and a selected primary identity image.
 - Export/import a `.storypack` with the editable JSON and available visual assets. Each workspace has a multi-story autosaved library; generated plans and local concept jobs can resume from durable checkpoints after interruption.
-- **Productions** offers a review-first hand-off and a complete one-click generation for both media. Comic opens **Director → Comic** and creates a self-contained chapter rather than retelling the master plot; four pages remain the quick-test default, while page count and panels per page are configurable up to the Director limits. Short Film opens **Director → Short Film → Story** with an editable target duration and independently selectable image and video models, and inherits the Story project's selected writing provider instead of silently falling back to the global LLM. Its shot frames can use a local Maestro image model or the external MiniMax Image-01 API; the latter does not consume local VRAM and is distinct from the local MiniMax H3 video runtime. Both productions receive the full editable canon, structured cast, locations and labelled visual references. Character images remain attached through planning and MiniMax `image-01` uses the visually prioritised character as its single supported identity reference per request. Adaptation history preserves the selected models when reopening the staged target, or can restore its exact source as a new editable copy.
+- **Productions** offers a review-first hand-off and a complete one-click generation for both media. Comic opens **Director → Comic** and creates a self-contained chapter rather than retelling the master plot; four pages remain the quick-test default, while page count and panels per page are configurable up to the Director limits. Short Film opens **Director → Short Film → Story** with an editable target duration and independently selectable image and video models, and inherits the Story project's selected writing provider instead of silently falling back to the global LLM. Its shot frames can use a local Loreframe Lab image model or the external MiniMax Image-01 API; the latter does not consume local VRAM and is distinct from the local MiniMax H3 video runtime. Both productions receive the full editable canon, structured cast, locations and labelled visual references. Character images remain attached through planning and MiniMax `image-01` uses the visually prioritised character as its single supported identity reference per request. Adaptation history preserves the selected models when reopening the staged target, or can restore its exact source as a new editable copy.
 - **Tráiler cinematográfico** is a standalone Story Lab project type beside **Videoclip**, so movie trailers never require a song. Its four-stage planner creates the concept, protagonists, world and a 6–12-beat trailer arc, then opens the dedicated 15–180 second Trailer Creator. It exposes theatrical, teaser and character formats; narration, dialogue or visual-only storytelling; spoiler and intensity controls; optional minimal title cards; and an editable six-part timed arc from cold open to unresolved final hook. Visual generation can create start frames, route approved references directly through H3 Ref2VA, or run as pure text-to-video without generating or sending any image. A trailer can be reviewed in Director or generated as a recoverable ordered pipeline, then replayed, regenerated clip-by-clip and joined from Story Lab's Assembly view.
 
 ### 💬 Comic Studio — script, characters, pages, translation and animatics
@@ -127,12 +127,12 @@ Build a comic as an editable production rather than a single flattened generatio
 
 - **Characters** stores personality, motivation, dialogue voice, wardrobe, visual invariants, exclusions, and multiple generated or uploaded identity references.
 - **Quality** checks text density, duplicated lines, missing continuity notes, unknown characters, unapproved scripts, and missing references. Translation glossaries lock names and terminology across languages.
-- **Writing LLM override** keeps Maestro's internal model as the default, with separate DeepSeek, MiniMax, OpenAI, and custom-compatible profiles. DeepSeek offers V4 Pro or V4 Flash and automatically uses Flash for translation. MiniMax offers M3, M2.7, and M2.7 Highspeed, sharing its saved API key with image generation while keeping the writing and image model selectors independent. Provider keys remain in Settings and are never embedded in comic JSON.
+- **Writing LLM override** keeps Loreframe Lab's internal model as the default, with separate DeepSeek, MiniMax, OpenAI, and custom-compatible profiles. DeepSeek offers V4 Pro or V4 Flash and automatically uses Flash for translation. MiniMax offers M3, M2.7, and M2.7 Highspeed, sharing its saved API key with image generation while keeping the writing and image model selectors independent. Provider keys remain in Settings and are never embedded in comic JSON.
 - **Video** keeps the fast FFmpeg animatic path and adds a generative **Comic → AI film** path. The latter gives the LLM the master canon and every planned scene, captures clean artwork without lettering, and reuses each panel as that shot's actual I2V first frame; it spends video generation time/credits but does not regenerate comic artwork. Per-panel duration and camera movement remain editable.
 - Comic and Video Editor drafts autosave locally; saved comics remain backward-compatible with older version-2 project JSON.
 
 ### 🤖 Local LLM — built-in, no setup
-Maestro auto-downloads `llama-server` (~600 MB one-time) and your chosen GGUF model on first use. Defaults to **Gemma 4 4B (Recommended)** — fast, capable, and runs comfortably on smaller GPUs. Auto-detects CUDA and binds the LLM to GPU when available.
+Loreframe Lab auto-downloads `llama-server` (~600 MB one-time) and your chosen GGUF model on first use. Defaults to **Gemma 4 4B (Recommended)** — fast, capable, and runs comfortably on smaller GPUs. Auto-detects CUDA and binds the LLM to GPU when available.
 
 - Pre-curated registry: Gemma 4 (2B / 4B / 26B MoE / 31B) and Qwen3.6 27B — uncensored/abliterated instruct variants tuned for creative prompting
 - **External providers** also supported: OpenAI, Anthropic, custom OpenAI-compatible endpoints (currently experimental)
@@ -140,7 +140,7 @@ Maestro auto-downloads `llama-server` (~600 MB one-time) and your chosen GGUF mo
 - Auto-unloads after 60s idle to free VRAM for video gen
 
 ### 🛒 Built-in CivitAI LoRA browser
-- Search, filter, and one-click install any LoRA from CivitAI without leaving Maestro
+- Search, filter, and one-click install any LoRA from CivitAI without leaving Loreframe Lab
 - **LoRA update detection** — Check button refreshes from CivitAI, shows update badges on outdated LoRAs
 - **My LoRAs view** with filters for Updates and direct uninstall
 - **AI-generated LoRA prompting guides** Helps remove the guesswork from LoRAs. AI generates LoRA guides when LoRA is downloaded based on CIVITAI and HuggingFace repos. The guides explain what each LoRA does and how to use it, provide prompt examples, and recommend weight settings that are automatically applied when LoRA is selected.
@@ -159,7 +159,7 @@ Three themes, switchable in Settings → System:
 - **Edit Anything** — allows users to modify, add, or remove elements from existing videos using text prompts and In-Context LoRA (IC-LoRA) models
 
 ### 🧊 Native Hunyuan3D Studio
-Maestro includes an integrated **3D** section for text-to-3D, image-to-3D, and multi-image reconstruction. Hunyuan runs in an isolated environment inside Maestro, so its older Diffusers stack cannot conflict with the audio/video models. Each worker exits after export and releases its CUDA context and VRAM.
+Loreframe Lab includes an integrated **3D** section for text-to-3D, image-to-3D, and multi-image reconstruction. Hunyuan runs in an isolated environment inside Loreframe Lab, so its older Diffusers stack cannot conflict with the audio/video models. Each worker exits after export and releases its CUDA context and VRAM.
 
 Included geometry variants:
 
@@ -170,9 +170,9 @@ Included geometry variants:
 
 The advanced panel exposes inference steps, guidance, octree resolution, processing chunks, seed, texture model/resolution, CPU offload, FlashVDM, Torch compilation, DMC/Marching Cubes, mesh simplification, face target, and GLB/OBJ/PLY/STL export. Four presets provide sensible Low VRAM, Balanced, Quality/PBR, and Multi-view configurations.
 
-**Retexture GLB** applies Hunyuan Paint 2.0/Turbo or Hunyuan Paint 2.1 PBR to an existing static GLB using either a reference image or a text-described material. Maestro always saves a new GLB copy and leaves the source untouched. Rigged or animated inputs are rejected because Hunyuan rebuilds the UV layout; retexture the static base first, then rig the resulting copy.
+**Retexture GLB** applies Hunyuan Paint 2.0/Turbo or Hunyuan Paint 2.1 PBR to an existing static GLB using either a reference image or a text-described material. Loreframe Lab always saves a new GLB copy and leaves the source untouched. Rigged or animated inputs are rejected because Hunyuan rebuilds the UV layout; retexture the static base first, then rig the resulting copy.
 
-Hunyuan3D is part of Maestro's normal lifecycle: **Install** prepares its isolated runtime, **Update** keeps it current, and **Reset** removes it with the rest of Maestro. There is no separate 3D installer. Model weights are downloaded lazily from Tencent's official Hugging Face repositories the first time a variant is used.
+Hunyuan3D is part of Loreframe Lab's normal lifecycle: **Install** prepares its isolated runtime, **Update** keeps it current, and **Reset** removes it with the rest of Loreframe Lab. There is no separate 3D installer. Model weights are downloaded lazily from Tencent's official Hugging Face repositories the first time a variant is used.
 
 The cloned source code and downloaded weights remain subject to Tencent's Hunyuan license terms. Review the `LICENSE` files in the official checkouts before redistribution or commercial use.
 
@@ -192,7 +192,7 @@ curl -X POST "$MAESTRO_URL/api/v1/model3d/generate" \
   }'
 ```
 
-Multi-image requests use uploaded Maestro paths:
+Multi-image requests use uploaded Loreframe Lab paths:
 
 ```bash
 curl -X POST "$MAESTRO_URL/api/v1/model3d/generate" \
@@ -258,11 +258,11 @@ Multiple isolated output directories with a quick switcher in the sidebar. Usefu
 - **Experimental features gate** hides power-user toggles (external API keys, Voice Reference, Inpaint, Restyle, Wan2GP Enhancer) by default for a focused first-launch experience.
 
 ### 📊 Productions + global activity footer
-The persistent footer shows what Maestro is doing from every screen, including live sampling steps and a direct link to **Productions**. Productions keeps all past Director runs with their full state — clip plans, generated images, generated clips, and polish diffs — so interrupted work and individual clips can be recovered without re-running the whole pipeline.
+The persistent footer shows what Loreframe Lab is doing from every screen, including live sampling steps and a direct link to **Productions**. Productions keeps all past Director runs with their full state — clip plans, generated images, generated clips, and polish diffs — so interrupted work and individual clips can be recovered without re-running the whole pipeline.
 
 ## Updates
 
-The version you are running is shown next to the Maestro title in the UI. To update, use the launcher's Update button in Pinokio.
+The version you are running is shown next to the Loreframe Lab title in the UI. To update, use the launcher's Update button in Pinokio.
 
 ### v1.6.5 (2026-08-08)
 
@@ -359,7 +359,7 @@ The version you are running is shown next to the Maestro title in the UI. To upd
 | **12–16 GB** (3060 12GB / 4070 / 4080) | good — auto-tune picks an offload profile | ~4–10 min |
 | **6–8 GB** | works, but expect heavy offloading | slow; stick to short/low-res clips |
 
-The first video is always the slow one: install is ~10–20 min, then the first generation on each model downloads its weights (the default video model is ~18 GB). After that, weights are cached and only generation time applies. Maestro's auto-tune sizes the settings to your card on first launch so you don't have to.
+The first video is always the slow one: install is ~10–20 min, then the first generation on each model downloads its weights (the default video model is ~18 GB). After that, weights are cached and only generation time applies. Loreframe Lab's auto-tune sizes the settings to your card on first launch so you don't have to.
 
 > ⚠ **AMD GPUs and macOS are not currently supported.** The pipeline depends on CUDA and several NVIDIA-only kernels. MacOS support is in development.
 
@@ -411,9 +411,9 @@ curl -H "Authorization: Bearer $LOREFRAME_LAN_TOKEN" http://SERVER_IP:PORT/api/v
 
 ## Credits
 
-Maestro is built on top of, and indebted to, the following projects:
+Loreframe Lab builds on Maestro and is indebted to the following projects:
 
-- [**Wan2GP / WanGP**](https://github.com/deepbeepmeep/Wan2GP) by [@deepbeepmeep](https://github.com/deepbeepmeep) — the entire generation pipeline. Maestro inherits WanGP's non-commercial license.
+- [**Wan2GP / WanGP**](https://github.com/deepbeepmeep/Wan2GP) by [@deepbeepmeep](https://github.com/deepbeepmeep) — the generation pipeline inherited through Maestro. Loreframe Lab remains under WanGP's non-commercial license.
 - [**LTX-Video**](https://github.com/Lightricks/LTX-Video) by Lightricks — LTX-2 and LTX-2.3 distilled models.
 - [**Wan 2.1 / 2.2**](https://github.com/Wan-Video/Wan2.1) by Alibaba — text-to-video and image-to-video.
 - [**MiniMax H3**](https://huggingface.co/MiniMaxAI/MiniMax-H3) by MiniMax and its [ComfyUI implementation](https://github.com/Comfy-Org/ComfyUI/pull/15224) — omni-modal video generation with native stereo audio.
@@ -425,11 +425,11 @@ Maestro is built on top of, and indebted to, the following projects:
 - [**CivitAI**](https://civitai.com) — LoRA browser and weight recommendations.
 - [**llama.cpp**](https://github.com/ggml-org/llama.cpp) — local LLM inference engine.
 - [**Pinokio**](https://pinokio.computer) by [@cocktailpeanut](https://github.com/cocktailpeanut) — the launcher framework.
-- The original Pinokio Wan2GP launcher by [@cocktailpeanut](https://github.com/cocktailpeanut), which Maestro forks and extends.
+- The original Pinokio Wan2GP launcher by [@cocktailpeanut](https://github.com/cocktailpeanut), inherited through the Maestro fork lineage.
 
 ## License
 
-Maestro is released under the **WanGP Non-Commercial Evaluation License 1.1**, inherited from the upstream Wan2GP project. See [LICENSE](LICENSE) for the summary and [app/LICENSE.txt](app/LICENSE.txt) for the full text.
+Loreframe Lab is released under the **WanGP Non-Commercial Evaluation License 1.1**, inherited through Maestro from the upstream Wan2GP project. See [LICENSE](LICENSE) for the summary and [app/LICENSE.txt](app/LICENSE.txt) for the full text.
 
 **TL;DR**: free to use and modify for non-commercial purposes; the *outputs* you generate are yours to use commercially (with attribution); commercial use of the *software itself* (including hosted services and APIs) requires a separate commercial license from the WanGP licensor.
 

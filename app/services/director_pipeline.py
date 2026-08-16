@@ -1500,8 +1500,8 @@ def _normalize_interrupted_repair(state: dict, pid: str) -> bool:
         "status": "interrupted",
         "phase": "interrupted",
         "clip_index": None,
-        "message": "Repair was interrupted when Maestro stopped. Start Repair again to continue.",
-        "error": "Maestro stopped before the repair finished.",
+        "message": "Repair was interrupted when Loreframe Lab stopped. Start Repair again to continue.",
+        "error": "Loreframe Lab stopped before the repair finished.",
         "updated_at": now,
         "completed_at": now,
     })
@@ -5619,7 +5619,7 @@ def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
         "completed": "Director generation completed",
         "cancelled": "Director generation cancelled",
         "failed": "Director generation failed",
-        "crashed": "Director generation was interrupted when Maestro stopped",
+        "crashed": "Director generation was interrupted when Loreframe Lab stopped",
     }.get(saved_status, "Saved Director generation")
     return {
         "id": pid,
@@ -5646,7 +5646,7 @@ def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
         ],
         "output_files": saved.get("output_files", []) or [],
         "error": saved.get("error") or (
-            "Maestro no longer has a live worker for this Director run."
+            "Loreframe Lab no longer has a live worker for this Director run."
             if saved_status == "crashed" else None
         ),
         "pause_reason": None,
