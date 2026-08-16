@@ -3037,6 +3037,21 @@ export async function routeSeriesReferences(
   ), 'Could not route Series references')
 }
 
+export async function previewSeriesShotDuration(
+  workspace: string,
+  seriesId: string,
+  shot: import('../features/series/types').SeriesShot,
+  signal?: AbortSignal,
+): Promise<import('../features/series/types').SeriesShot> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/shots/duration/preview`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
+      body: JSON.stringify({ workspace, shot }),
+    },
+  ), 'Could not calculate Series dialogue duration')
+}
+
 export async function startSeriesRender(
   workspace: string,
   seriesId: string,

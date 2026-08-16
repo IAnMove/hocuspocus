@@ -112,7 +112,7 @@ export function SeriesEpisodePanel({
       {job && job.episodeId === episode.id && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3">
         <div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<Pill tone={job.status === 'completed' ? 'green' : job.status === 'failed' ? 'red' : 'violet'}>{job.status}</Pill><span>{job.message}</span><span className="ml-auto">{job.current}/{job.total}</span></div>
         {job.error && <p className="mt-2 text-[11px] text-red-300">{job.error}</p>}
-        {job.status === 'completed' && job.episodeResult && <SeriesEpisodeProposalReview key={job.jobId} currentEpisode={episode} proposal={job.episodeResult} series={series} busy={busy} onApply={apply} />}
+        {job.status === 'completed' && job.episodeResult && <SeriesEpisodeProposalReview key={job.jobId} workspace={workspace} currentEpisode={episode} proposal={job.episodeResult} series={series} busy={busy} onApply={apply} />}
         {(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} onClick={() => void api.resumeSeriesPlanJob(job.jobId).then(value => {
           if (episodeIdRef.current === episode.id && value.episodeId === episode.id) setJob(value)
         })}>Resume completed stages</button>}

@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Check, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { Pill, SeriesField } from './components'
+import { SeriesShotDurationControl } from './SeriesShotDurationControl'
 import { greenButton, inputClass, secondaryButton, textareaClass } from './styles'
 import type { SeriesEpisode, SeriesProject, SeriesScene, SeriesShot } from './types'
 
 const cloneEpisode = (episode: SeriesEpisode): SeriesEpisode => structuredClone(episode)
 
 export function SeriesEpisodeProposalReview({
-  currentEpisode, proposal, series, busy, onApply,
+  workspace, currentEpisode, proposal, series, busy, onApply,
 }: {
+  workspace: string
   currentEpisode: SeriesEpisode
   proposal: SeriesEpisode
   series: SeriesProject
@@ -88,7 +90,7 @@ export function SeriesEpisodeProposalReview({
           <div className="mb-3 flex flex-wrap items-center gap-2"><Pill tone="violet">Shot {shotIndex + 1}</Pill><Pill tone="blue">{shot.durationSeconds}s</Pill><span className="truncate text-[10px] text-text-muted">Scene {draft.script.findIndex(scene => scene.id === shot.sceneId) + 1}</span></div>
           <div className="grid gap-2 sm:grid-cols-3">
             <SeriesField label="Scene"><select className={inputClass} value={shot.sceneId} onChange={event => updateShot(shotIndex, item => ({ ...item, sceneId: event.target.value, locationId: draft.script.find(scene => scene.id === event.target.value)?.locationId || item.locationId }))}>{draft.script.map((scene, index) => <option key={scene.id} value={scene.id}>Scene {index + 1} · {scene.purpose.slice(0, 40)}</option>)}</select></SeriesField>
-            <SeriesField label="Duration"><select className={inputClass} value={shot.durationSeconds} onChange={event => updateShot(shotIndex, item => ({ ...item, durationSeconds: Number(event.target.value) }))}><option value={5}>5 seconds</option><option value={10}>10 seconds</option><option value={15}>15 seconds</option></select></SeriesField>
+            <SeriesShotDurationControl workspace={workspace} series={series} shot={shot} onChange={planned => updateShot(shotIndex, () => planned)} />
             <SeriesField label="Framing"><input className={inputClass} value={shot.framing} onChange={event => updateShot(shotIndex, item => ({ ...item, framing: event.target.value }))} /></SeriesField>
           </div>
           <div className="mt-2 grid gap-2 lg:grid-cols-2">

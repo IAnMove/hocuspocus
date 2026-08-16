@@ -29675,8 +29675,12 @@ def _prepare_edited_series_episode_proposal(stored: dict, edited: dict | None, s
             raise ValueError(f"Shot {shot['id']} uses an unknown scene")
         if shot.get("locationId") and shot.get("locationId") not in location_ids:
             raise ValueError(f"Shot {shot['id']} uses an unknown location")
-        if shot.get("durationSeconds") not in {5, 10, 15}:
-            raise ValueError(f"Shot {shot['id']} duration must be 5, 10, or 15 seconds")
+        try:
+            duration_value = float(shot.get("durationSeconds"))
+            if not math.isfinite(duration_value) or duration_value <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise ValueError(f"Shot {shot['id']} duration must be a positive number")
         continuity_id = str(shot.get("continuityFromShotId") or "")
         if continuity_id and continuity_id not in shot_ids:
             raise ValueError(f"Shot {shot['id']} references an unknown continuity shot")
@@ -29697,6 +29701,10 @@ def _prepare_edited_series_episode_proposal(stored: dict, edited: dict | None, s
         shot["visibleCharacterIds"] = visible
         shot["speakingCharacterIds"] = dialogue_speakers
         shot["primarySpeakerId"] = dialogue_speakers[0] if dialogue_speakers else ""
+
+    from services.series_render import apply_series_shot_duration
+    for shot in proposed["shots"]:
+        apply_series_shot_duration(series, shot)
 
     edited_delta = edited.get("proposedCanonDelta")
     stored_delta = stored.get("proposedCanonDelta")
@@ -29722,6 +29730,25 @@ def _prepare_edited_series_episode_proposal(stored: dict, edited: dict | None, s
     proposed["proposedCanonDelta"] = delta
     proposed["continuityIssues"] = copy.deepcopy(stored.get("continuityIssues"))
     return proposed
+
+
+@api.post("/api/v1/series/{series_id}/shots/duration/preview")
+def preview_series_shot_duration(series_id: str, body: dict):
+    """Preview the same authoritative duration contract used by save/render."""
+    from services.series_render import plan_series_shot_duration
+
+    workspace = _series_library_workspace(body.get("workspace"))
+    shot = body.get("shot")
+    if not isinstance(shot, dict):
+        raise HTTPException(status_code=400, detail="Series shot is required")
+    with _series_library_lock:
+        series = copy.deepcopy(_series_project_or_404(
+            _read_series_workspace(workspace), series_id,
+        ))
+    try:
+        return plan_series_shot_duration(series, shot)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @api.post("/api/v1/series/plan/jobs/{job_id}/apply")
@@ -30279,7 +30306,7 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
     from services.series_library import append_shot_render_attempt, series_for_episode_snapshot
     from services.series_reference_router import route_shot_references
     from services.series_render import (
-        model_for_manifest, normalize_series_resolution, normalize_series_shot_duration,
+        apply_series_shot_duration, model_for_manifest, normalize_series_resolution,
         quantize_h3_frames, series_dialogue_preflight_issues, shot_generation_prompt,
     )
 
@@ -30316,10 +30343,12 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
                     "Use ‘I understand · enable dialogue rendering’ in Shots or enable it in Series setup."
                 ),
             )
+        for shot in candidates:
+            apply_series_shot_duration(routing_series, shot)
         dialogue_issues = [
             (shot.get("order"), issue)
             for shot in candidates
-            for issue in series_dialogue_preflight_issues(shot)
+            for issue in series_dialogue_preflight_issues(shot, routing_series)
         ]
         if dialogue_issues:
             summary = "; ".join(
@@ -30365,13 +30394,16 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
                 )
             model = model_for_manifest(str(provider.get("videoModel") or "minimax_h3"), manifest)
             retry_count = len(shot.get("attempts", []))
-            shot["durationSeconds"] = normalize_series_shot_duration(
-                shot.get("durationSeconds"),
-            )
+            apply_series_shot_duration(routing_series, shot)
+            duration_contract = shot.get("dialogueDuration") \
+                if isinstance(shot.get("dialogueDuration"), dict) else {}
             shot_settings = {
                 **settings,
                 "requestedDurationSeconds": float(shot.get("durationSeconds") or 0),
-                "videoLengthFrames": quantize_h3_frames(
+                "dialogueDuration": copy.deepcopy(duration_contract),
+                "videoLengthFrames": int(duration_contract.get("effectiveFrames"))
+                if duration_contract.get("effectiveFrames") is not None
+                else quantize_h3_frames(
                     shot.get("durationSeconds"), reference_mode=manifest.get("strategy") == "references",
                 ),
             }

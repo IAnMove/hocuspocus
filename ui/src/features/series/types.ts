@@ -197,6 +197,25 @@ export interface SeriesShot {
   sceneId: string
   order: number
   durationSeconds: number
+  dialogueDuration?: {
+    model: string
+    durationMode: 'continuous' | 'discrete' | 'frame_lattice'
+    wordCount: number
+    syllableCount: number
+    secondsPerSyllable: number
+    segmentCount: number
+    spokenSeconds: number
+    estimatedVoiceSeconds: number
+    requestedClipSeconds: number
+    minimumLimited: boolean
+    requiresSplit: boolean
+    modelMinimumSeconds: number
+    modelMaximumSeconds: number
+    fps?: number
+    calculatedFrames?: number
+    effectiveFrames?: number
+    frameLattice?: string
+  }
   framing: string
   camera: string
   action: string

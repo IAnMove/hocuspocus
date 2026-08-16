@@ -57,7 +57,7 @@ test('Series Shots controls have programmatic names and selection state', async 
   assert.equal(selectShot.getAttribute('aria-pressed'), 'true')
   const selectAll = screen.getByRole('button', { name: 'Clear selection' })
   assert.equal(selectAll.getAttribute('aria-pressed'), 'true')
-  assert.ok(screen.getByRole('spinbutton', { name: 'Duration for shot 1' }))
+  assert.ok(screen.getByRole('combobox', { name: 'Clip solicitado para shot 1' }))
   assert.ok(screen.getByRole('combobox', { name: 'Render strategy for shot 1' }))
   assert.ok(screen.getByRole('textbox', { name: 'Prompt for shot 1' }))
   assert.ok(screen.getByRole('checkbox', { name: 'Include asset-1 in shot 1' }))

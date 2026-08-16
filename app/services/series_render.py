@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import re
 from typing import Any
 
@@ -19,22 +20,170 @@ H3_RESOLUTIONS = {
 }
 
 SERIES_SHOT_DURATIONS = (5, 10, 15)
+H3_DURATION_CAPABILITIES = {
+    "fps": 24.0,
+    "frames_minimum": 124,
+    "frames_maximum": 345,
+    "frame_alignment_modulus": 17,
+    "frame_alignment_remainder": 5,
+}
 
 
 def normalize_series_shot_duration(value: Any) -> int:
-    """Quantize Series clips to the supported 5/10/15-second contract."""
+    """Choose the first legacy Series duration at or above the request."""
     try:
         requested = float(value)
     except (TypeError, ValueError):
         requested = 10.0
-    return min(
-        SERIES_SHOT_DURATIONS,
-        key=lambda duration: (
-            abs(float(duration) - requested),
-            0 if duration == 10 else 1,
-            duration,
-        ),
+    if not math.isfinite(requested):
+        requested = 10.0
+    return next(
+        (duration for duration in SERIES_SHOT_DURATIONS if duration >= requested),
+        SERIES_SHOT_DURATIONS[-1],
     )
+
+
+def _dialogue_segments(series: dict, shot: dict) -> list[dict[str, str]]:
+    language_tag, _accent = _h3_spoken_language(series)
+    return [
+        {"language": language_tag, "text": str(beat.get("text") or "").strip()}
+        for beat in (
+            shot.get("dialogueBeats", [])
+            if isinstance(shot.get("dialogueBeats"), list) else []
+        )
+        if isinstance(beat, dict) and str(beat.get("text") or "").strip()
+    ]
+
+
+def _series_duration_capabilities(series: dict) -> dict[str, Any]:
+    provider = series.get("provider") if isinstance(series.get("provider"), dict) else {}
+    configured = (
+        provider.get("videoCapabilities")
+        if isinstance(provider.get("videoCapabilities"), dict) else {}
+    )
+    model = str(provider.get("videoModel") or "minimax_h3")
+    if model.replace("-", "_").startswith("minimax_h3"):
+        return {"mode": "frame_lattice", "model": model, **H3_DURATION_CAPABILITIES}
+    supported = configured.get("supportedDurationsSeconds")
+    if isinstance(supported, list):
+        values = sorted({
+            float(value) for value in supported
+            if isinstance(value, (int, float)) and math.isfinite(float(value)) and float(value) > 0
+        })
+        if values:
+            return {"mode": "discrete", "model": model, "supported_seconds": values}
+    return {
+        "mode": "continuous",
+        "model": model,
+        "minimum_seconds": max(0.1, float(configured.get("minimumDurationSeconds") or 0.1)),
+        "maximum_seconds": max(0.1, float(configured.get("maximumDurationSeconds") or 60.0)),
+    }
+
+
+def plan_series_shot_duration(series: dict, shot: dict) -> dict:
+    """Return one shot with the provider-supported dialogue duration contract.
+
+    Dialogue is authoritative: the estimate is computed once in the backend,
+    then rounded only upward to the provider's real duration lattice. Silent
+    legacy shots retain the explicit 5/10/15 selector contract.
+    """
+    from .minimax_h3_duration import (
+        apply_h3_dialogue_duration,
+        estimate_h3_dialogue_seconds,
+    )
+
+    updated = copy.deepcopy(shot)
+    segments = _dialogue_segments(series, updated)
+    if not segments:
+        updated["durationSeconds"] = float(normalize_series_shot_duration(
+            updated.get("durationSeconds")
+        ))
+        updated.pop("dialogueDuration", None)
+        return updated
+
+    estimate = estimate_h3_dialogue_seconds(segments)
+    capabilities = _series_duration_capabilities(series)
+    mode = str(capabilities["mode"])
+    estimated_seconds = float(estimate["estimated_seconds"])
+    requires_split = False
+    minimum_limited = False
+    calculated_frames: int | None = None
+    effective_frames: int | None = None
+    fps: float | None = None
+    frame_lattice: str | None = None
+
+    if mode == "frame_lattice":
+        native_params: dict[str, Any] = {
+            "prompt": " ".join(
+                f"<d>[{segment['language']}] {segment['text']}</d>"
+                for segment in segments
+            ),
+            "video_length": round(float(updated.get("durationSeconds") or 0) * 24),
+        }
+        native = apply_h3_dialogue_duration(native_params, capabilities)
+        if not native:  # Segments above guarantee this, but keep the boundary explicit.
+            raise ValueError("Could not calculate MiniMax H3 dialogue duration")
+        estimated_seconds = float(native["estimated_seconds"])
+        fps = float(native["fps"])
+        calculated_frames = int(native["calculated_frames"])
+        effective_frames = int(native["effective_frames"])
+        effective_seconds = float(native["effective_seconds"])
+        minimum_limited = bool(native["minimum_limited"])
+        requires_split = bool(native["requires_split"])
+        frame_lattice = str(native["frame_lattice"])
+        minimum_seconds = round(int(native["model_minimum_frames"]) / fps, 3)
+        maximum_seconds = round(int(native["model_maximum_frames"]) / fps, 3)
+    elif mode == "discrete":
+        supported = capabilities["supported_seconds"]
+        effective_seconds = next(
+            (value for value in supported if value >= estimated_seconds), supported[-1],
+        )
+        requires_split = estimated_seconds > supported[-1]
+        minimum_limited = estimated_seconds < supported[0]
+        minimum_seconds = supported[0]
+        maximum_seconds = supported[-1]
+    else:
+        minimum_seconds = float(capabilities["minimum_seconds"])
+        maximum_seconds = max(minimum_seconds, float(capabilities["maximum_seconds"]))
+        minimum_limited = estimated_seconds < minimum_seconds
+        requires_split = estimated_seconds > maximum_seconds
+        effective_seconds = round(
+            max(minimum_seconds, min(maximum_seconds, estimated_seconds)), 3,
+        )
+
+    contract = {
+        "model": capabilities["model"],
+        "durationMode": mode,
+        "wordCount": int(estimate["word_count"]),
+        "syllableCount": int(estimate["syllable_count"]),
+        "secondsPerSyllable": float(estimate["seconds_per_syllable"]),
+        "segmentCount": int(estimate["segment_count"]),
+        "spokenSeconds": float(estimate["spoken_seconds"]),
+        "estimatedVoiceSeconds": estimated_seconds,
+        "requestedClipSeconds": effective_seconds,
+        "minimumLimited": minimum_limited,
+        "requiresSplit": requires_split,
+        "modelMinimumSeconds": minimum_seconds,
+        "modelMaximumSeconds": maximum_seconds,
+    }
+    if fps is not None:
+        contract.update({
+            "fps": fps,
+            "calculatedFrames": calculated_frames,
+            "effectiveFrames": effective_frames,
+            "frameLattice": frame_lattice,
+        })
+    updated["durationSeconds"] = effective_seconds
+    updated["dialogueDuration"] = contract
+    return updated
+
+
+def apply_series_shot_duration(series: dict, shot: dict) -> dict:
+    """Mutate a persisted/rendered shot to the authoritative duration plan."""
+    planned = plan_series_shot_duration(series, shot)
+    shot.clear()
+    shot.update(planned)
+    return shot
 
 
 def normalize_series_resolution(
@@ -68,14 +217,21 @@ def normalize_series_resolution(
 
 
 def quantize_h3_frames(duration_seconds: Any, *, reference_mode: bool) -> int:
-    requested = round(normalize_series_shot_duration(duration_seconds) * 24)
+    try:
+        seconds = float(duration_seconds)
+    except (TypeError, ValueError):
+        seconds = 10.0
+    if not math.isfinite(seconds):
+        seconds = 10.0
+    requested = max(1, math.ceil(seconds * 24))
     # H3 pixel frames use 17*n+5. FL2VA can continue through sliding windows;
     # Omni is one native request and therefore caps at its 345-frame window.
     # Apply the same ceiling to every Series path: the next lattice point is
     # 362 frames (15.08s at 24fps), which would violate the hard 15-second
     # per-video contract even though the requested duration was nominally 15.
-    requested = min(requested, 345) if reference_mode else requested
-    return min(345, max(107, round((requested - 5) / 17) * 17 + 5))
+    del reference_mode  # Every current Series H3 strategy shares this native lattice.
+    aligned = 5 + max(0, math.ceil((requested - 5) / 17)) * 17
+    return min(345, max(124, aligned))
 
 
 def _h3_spoken_language(series: dict) -> tuple[str, str]:
@@ -153,7 +309,11 @@ def _h3_dialogue_description(series: dict, shot: dict, character_names: dict[str
     if not beats:
         return ""
 
-    duration = normalize_series_shot_duration(shot.get("durationSeconds"))
+    try:
+        duration = float(shot.get("durationSeconds") or 0)
+    except (TypeError, ValueError):
+        duration = 0.0
+    duration = max(0.0, duration)
     word_count = sum(
         len(re.findall(r"\b[\w’'-]+\b", str(beat.get("text") or ""), flags=re.UNICODE))
         for beat in beats
@@ -177,7 +337,7 @@ def _h3_dialogue_description(series: dict, shot: dict, character_names: dict[str
     return " ".join(lines)
 
 
-def series_dialogue_preflight_issues(shot: dict) -> list[str]:
+def series_dialogue_preflight_issues(shot: dict, series: dict | None = None) -> list[str]:
     """Return deterministic issues that would make native H3 speech unreliable."""
     beats = [
         beat for beat in (
@@ -186,18 +346,20 @@ def series_dialogue_preflight_issues(shot: dict) -> list[str]:
         if isinstance(beat, dict) and str(beat.get("text") or "").strip()
     ]
     issues: list[str] = []
-    words = 0
     for beat in beats:
         dialogue = str(beat.get("text") or "").strip()
         if re.search(r"</?d(?:\s|>)", dialogue, flags=re.IGNORECASE):
             issues.append("dialogue contains the reserved <d> control tag")
-        words += len(re.findall(r"\b[\w’'-]+\b", dialogue, flags=re.UNICODE))
-    duration = normalize_series_shot_duration(shot.get("durationSeconds"))
-    budget = duration * 2
-    if words > budget:
-        issues.append(
-            f"dialogue has {words} words but a {duration}s H3 shot supports about {budget}"
-        )
+    if beats:
+        planned = plan_series_shot_duration(series or {}, shot)
+        contract = planned.get("dialogueDuration") or {}
+        if contract.get("requiresSplit"):
+            issues.append(
+                "dialogue needs about "
+                f"{contract.get('estimatedVoiceSeconds')}s for "
+                f"{contract.get('syllableCount')} syllables, beyond the model's "
+                f"{contract.get('modelMaximumSeconds')}s single-clip limit; split it across shots"
+            )
     return issues
 
 

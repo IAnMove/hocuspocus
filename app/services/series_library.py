@@ -862,8 +862,33 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "createdAt": _text(project.get("createdAt"), now),
         "updatedAt": _text(project.get("updatedAt"), now),
     })
+    synchronize_series_project_durations(project)
     _validate_project_graph_ids(project)
     return project
+
+
+def synchronize_series_project_durations(
+    series: dict,
+    episode: dict | None = None,
+) -> dict:
+    """Recalculate every editable dialogue shot from the series provider contract."""
+    from .series_render import apply_series_shot_duration
+
+    episodes = [episode] if isinstance(episode, dict) else [
+        item for item in (
+            series.get("episodesById", {}).values()
+            if isinstance(series.get("episodesById"), dict) else []
+        )
+        if isinstance(item, dict)
+    ]
+    for current_episode in episodes:
+        for shot in (
+            current_episode.get("shots", [])
+            if isinstance(current_episode.get("shots"), list) else []
+        ):
+            if isinstance(shot, dict):
+                apply_series_shot_duration(series, shot)
+    return series
 
 
 def normalize_series_library(value: Any, workspace_id: str | None = None) -> dict[str, Any]:
@@ -1367,6 +1392,8 @@ def update_series_episode(
             merged[key] = copy.deepcopy(patch[key])
     if "shots" in patch:
         merged["shots"] = _merge_episode_shot_patch(current.get("shots"), patch["shots"])
+
+    synchronize_series_project_durations(updated, merged)
 
     # Every non-editor field remains authoritative, including status,
     # production/assembly assets, immutable canon and all unknown runtime data.

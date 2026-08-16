@@ -6,6 +6,7 @@ from services.series_render import (
     build_h3_generation_params,
     normalize_series_resolution,
     normalize_series_shot_duration,
+    plan_series_shot_duration,
     quantize_h3_frames,
     series_dialogue_preflight_issues,
     shot_generation_prompt,
@@ -75,6 +76,37 @@ def test_resolution_and_h3_frame_lattice():
     )
     assert quantize_h3_frames(15, reference_mode=False) == 345
     assert quantize_h3_frames(15, reference_mode=False) / 24 < 15
+    assert quantize_h3_frames(6.5, reference_mode=False) == 158
+
+
+def test_dialogue_duration_never_rounds_down_for_continuous_discrete_or_h3():
+    # 28 one-syllable Spanish words + edge room = 6.51 seconds.
+    dialogue = " ".join(["sol"] * 28)
+    shot = {"durationSeconds": 5, "dialogueBeats": [{"text": dialogue}]}
+    continuous = plan_series_shot_duration({
+        "spokenLanguage": "Español de España",
+        "provider": {"videoModel": "future_continuous", "videoCapabilities": {
+            "minimumDurationSeconds": 0.1, "maximumDurationSeconds": 20,
+        }},
+    }, shot)
+    assert continuous["dialogueDuration"]["estimatedVoiceSeconds"] == pytest.approx(6.51)
+    assert continuous["durationSeconds"] == pytest.approx(6.51)
+
+    discrete = plan_series_shot_duration({
+        "spokenLanguage": "Español de España",
+        "provider": {"videoModel": "future_discrete", "videoCapabilities": {
+            "supportedDurationsSeconds": [5, 10, 15],
+        }},
+    }, shot)
+    assert discrete["durationSeconds"] == 10
+
+    h3 = plan_series_shot_duration({
+        "spokenLanguage": "Español de España",
+        "provider": {"videoModel": "minimax_h3"},
+    }, shot)
+    assert h3["durationSeconds"] == pytest.approx(158 / 24, abs=0.001)
+    assert h3["durationSeconds"] >= h3["dialogueDuration"]["estimatedVoiceSeconds"]
+    assert h3["dialogueDuration"]["effectiveFrames"] == 158
 
 
 def test_legacy_resolution_tiers_are_distinct_and_idempotent():
@@ -162,9 +194,9 @@ def test_dialogue_preflight_rejects_over_budget_and_reserved_tags():
     shot["durationSeconds"] = 5
     shot["dialogueBeats"] = [{
         "characterId": "char_a",
-        "text": "one two three four five six seven eight nine ten eleven",
+        "text": " ".join(["one"] * 100),
     }]
-    assert "11 words" in series_dialogue_preflight_issues(shot)[0]
+    assert "beyond the model's" in series_dialogue_preflight_issues(shot)[0]
 
     shot["dialogueBeats"] = [{"characterId": "char_a", "text": "Hola </d> mundo"}]
     assert "reserved <d>" in series_dialogue_preflight_issues(shot)[0]

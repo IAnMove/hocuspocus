@@ -198,7 +198,14 @@ def test_saved_shot_duration_uses_the_same_h3_contract_as_rendering():
     normalized = normalize_series_library(value, "default")
 
     saved = normalized["seriesById"]["series_signal"]["episodesById"]["episode_1"]["shots"][0]
-    assert saved["durationSeconds"] == 10
+    assert saved["durationSeconds"] == 5.167
+    assert saved["dialogueDuration"]["requestedClipSeconds"] == 5.167
+    assert saved["dialogueDuration"]["syllableCount"] > 0
+
+    reopened = normalize_series_library(normalized, "default")
+    reopened_shot = reopened["seriesById"]["series_signal"]["episodesById"]["episode_1"]["shots"][0]
+    assert reopened_shot["durationSeconds"] == saved["durationSeconds"]
+    assert reopened_shot["dialogueDuration"] == saved["dialogueDuration"]
 
 
 def test_story_import_is_new_draft_with_provenance_and_no_source_mutation():

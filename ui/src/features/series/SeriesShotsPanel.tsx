@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { CheckSquare, Info, RefreshCw, Square, Upload } from 'lucide-react'
 import * as api from '../../api/client'
 import { Pill, SectionCard } from './components'
-import { inputClass, primaryButton, secondaryButton, selectClass, textareaClass } from './styles'
+import { SeriesShotDurationControl } from './SeriesShotDurationControl'
+import { primaryButton, secondaryButton, selectClass, textareaClass } from './styles'
 import type { SeriesEpisode, SeriesProject, SeriesShot } from './types'
 
 export function SeriesShotsPanel({
@@ -99,7 +100,7 @@ export function SeriesShotsPanel({
         <button className={primaryButton} disabled={!selectedCount || (hasDialogueShots && !series.bestEffortLipSyncAcknowledged)} onClick={() => onRender('selected', selectableShotIds.filter(id => selected.has(id)))}><CheckSquare size={13} />Render selected ({selectedCount})</button>
         <button className={secondaryButton} disabled={hasDialogueShots && !series.bestEffortLipSyncAcknowledged} onClick={() => onRender('missing')}>Render missing</button><button className={secondaryButton} disabled={hasDialogueShots && !series.bestEffortLipSyncAcknowledged} onClick={() => onRender('failed')}>Retry failed</button><button className={secondaryButton} disabled={hasDialogueShots && !series.bestEffortLipSyncAcknowledged} onClick={() => onRender('all')}>Render all unapproved</button>
       </div>
-      {!episode.shots.length && <p className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-4 text-xs text-violet-200">Generate and apply an episode proposal to create enough 5/10/15-second shots for the target runtime.</p>}
+      {!episode.shots.length && <p className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-4 text-xs text-violet-200">Generate and apply an episode proposal to create enough shots for the target runtime. Dialogue duration is calculated from syllables.</p>}
       <div className="space-y-3">{episode.shots.map(shot => {
         const manifest = shot.referenceManifest
         const approved = shot.attempts.find(item => item.id === shot.approvedAttemptId)
@@ -128,7 +129,7 @@ export function SeriesShotsPanel({
             <button className={`ml-auto ${secondaryButton}`} disabled={routing} onClick={() => void routeOne(shot.id)}><RefreshCw size={12} />Re-route</button>
           </div>
           <div className="mt-3 grid gap-2 lg:grid-cols-[120px_120px_1fr]">
-            <input aria-label={`Duration for shot ${shot.order}`} className={inputClass} type="number" min={5} max={15} step={5} value={shot.durationSeconds} onChange={event => patchShot(shot.id, current => ({ ...current, durationSeconds: Math.max(5, Math.min(15, Math.round(Number(event.target.value) / 5) * 5)), referenceManifest: undefined }))} />
+            <SeriesShotDurationControl workspace={workspace} series={series} shot={shot} onChange={planned => patchShot(shot.id, () => planned)} />
             <select aria-label={`Render strategy for shot ${shot.order}`} className={selectClass} value={shot.renderStrategy} onChange={event => patchShot(shot.id, current => ({ ...current, renderStrategy: event.target.value as SeriesShot['renderStrategy'], referenceManifest: undefined }))}><option value="auto">Auto</option><option value="direct">Direct T2V</option><option value="references">References</option><option value="first_frame">First frame</option><option value="first_last">First + last</option></select>
             <textarea aria-label={`Prompt for shot ${shot.order}`} className={textareaClass} value={shot.prompt} onChange={event => patchShot(shot.id, current => ({ ...current, prompt: event.target.value }))} />
           </div>

@@ -131,7 +131,13 @@ def planning_schema(stage: str, episode: dict | None = None) -> dict:
             "type": "object",
             "properties": {
                 "id": string, "sceneId": string, "order": {"type": "integer"},
-                "durationSeconds": {"type": "number", "enum": list(SERIES_SHOT_DURATIONS)},
+                "durationSeconds": {
+                    "type": "number", "minimum": 0.1, "maximum": 60,
+                    "description": (
+                        "Visual pacing hint only. Dialogue duration is recalculated "
+                        "from syllables and rounded upward to model capabilities."
+                    ),
+                },
                 "framing": string, "camera": string,
                 "action": string,
                 "dialogueBeats": {"type": "array", "items": dialogue, "maxItems": 4},
@@ -833,7 +839,8 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
         "shots": (
             f"Create about {int(shot_profile['ideal'])} shots (valid range "
             f"{int(shot_profile['minimum'])}–{int(shot_profile['maximum'])}) for the "
-            f"{float(shot_profile['target']):g}-second target. Use only 5, 10, or 15 seconds per shot: "
+            f"{float(shot_profile['target']):g}-second target. For silent coverage, use a 5, 10, "
+            "or 15 second pacing hint; dialogue clips are recalculated by syllable count and model capabilities: "
             "prefer 10 seconds, use 5 when the visible action or spoken line comfortably fits, and never exceed "
             "15 seconds. Add shots to cover runtime; never make a clip longer to fill the episode. "
             "Set every sceneId by copying one exact ID from episode.script; never rename or describe a scene. "
@@ -1208,6 +1215,9 @@ def normalize_planning_result(stage: str, result: Any, series: dict, episode: di
             }
             shot["attempts"] = []
         _assign_series_shot_durations(shots, float(profile["target"]))
+        from .series_render import apply_series_shot_duration
+        for shot in shots:
+            apply_series_shot_duration(series, shot)
         return {"shots": shots}
     if stage == "canon_validation":
         issues = normalized.get("issues")

@@ -69,7 +69,9 @@ def test_scopes_and_schemas_are_bounded():
     shot_schema = planning_schema("shots")["properties"]["shots"]
     assert shot_schema["minItems"] == 5
     assert shot_schema["maxItems"] == 15
-    assert shot_schema["items"]["properties"]["durationSeconds"]["enum"] == [5, 10, 15]
+    duration_schema = shot_schema["items"]["properties"]["durationSeconds"]
+    assert "enum" not in duration_schema
+    assert "recalculated" in duration_schema["description"]
     assert shot_schema["items"]["properties"]["speakingCharacterIds"]["maxItems"] == 1
     long_episode = {"targetDurationSeconds": 600}
     assert series_shot_count_profile(long_episode) == {
