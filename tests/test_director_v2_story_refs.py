@@ -25,7 +25,7 @@ from app.services.director_video_strategy import SHOT_IMAGE_PROMPT_ONLY
 
 
 def _load_planner_kwargs():
-    source = Path(__file__).parents[1].joinpath("app", "launch.py").read_text(encoding="utf-8")
+    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     selected = []
     for node in tree.body:
@@ -37,7 +37,7 @@ def _load_planner_kwargs():
         if isinstance(node, ast.FunctionDef) and node.name == "_director_v2_planner_kwargs":
             selected.append(node)
     namespace: dict = {}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "launch.py", "exec"), namespace)
+    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
     return namespace["_director_v2_planner_kwargs"]
 
 

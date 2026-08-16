@@ -11,7 +11,7 @@ from fastapi import HTTPException, Request as FastAPIRequest
 
 
 ROOT = Path(__file__).parents[1]
-LAUNCH = ROOT / "app" / "launch.py"
+LAUNCH = ROOT / "app" / "_launch_runtime.py"
 
 
 def load_functions(names: list[str], namespace: dict) -> None:

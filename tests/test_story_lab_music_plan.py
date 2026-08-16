@@ -10,14 +10,14 @@ from pathlib import Path
 
 
 def _load_functions(*names: str):
-    source = Path(__file__).parents[1].joinpath("app", "launch.py").read_text(encoding="utf-8")
+    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     selected = [
         node for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name in names
     ]
     namespace = {"copy": copy, "re": re}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "launch.py", "exec"), namespace)
+    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
     return tuple(namespace[name] for name in names)
 
 

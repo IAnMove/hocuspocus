@@ -16,7 +16,7 @@ _APP = _ROOT / "app"
 _SERVICE_PATH = _APP / "services" / "managed_preprocessors.py"
 _FILES_LOCATOR_PATH = _APP / "shared" / "utils" / "files_locator.py"
 _WGP_PATH = _APP / "wgp.py"
-_LAUNCH_PATH = _APP / "launch.py"
+_LAUNCH_PATH = _APP / "_launch_runtime.py"
 _GITIGNORE_PATH = _ROOT / ".gitignore"
 _VENDOR_ROOT = _APP / "preprocessing" / "video_depth_anything"
 

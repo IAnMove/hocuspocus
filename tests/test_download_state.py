@@ -15,7 +15,7 @@ import zipfile
 
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_LAUNCH_PATH = os.path.join(_ROOT, "app", "launch.py")
+_LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
 _UI_STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
 _MODEL_DETAIL_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "LoraBrowser", "ModelDetail.tsx",
@@ -25,7 +25,7 @@ _MODEL_DETAIL_PATH = os.path.join(
 def _parse_launch() -> tuple[ast.Module, str]:
     with open(_LAUNCH_PATH, "r", encoding="utf-8") as handle:
         source = handle.read()
-    return ast.parse(source, filename="app/launch.py"), source
+    return ast.parse(source, filename="app/_launch_runtime.py"), source
 
 
 def _function(tree: ast.AST, name: str):
@@ -61,7 +61,7 @@ def _load_helpers(tree: ast.Module, names: tuple[str, ...]) -> dict:
         "_lora_guide_scans": {},
         "_lora_guide_scan_lock": threading.Lock(),
     }
-    exec(compile(module, "app/launch.py", "exec"), namespace)
+    exec(compile(module, "app/_launch_runtime.py", "exec"), namespace)
     return namespace
 
 

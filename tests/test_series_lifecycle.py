@@ -16,7 +16,7 @@ from services.series_lifecycle import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "launch.py"
+LAUNCH = ROOT / "app" / "_launch_runtime.py"
 
 
 def _save_job(tmp_path, kind: str, status: str, *, job_id: str | None = None, episode_id: str = "episode-1"):

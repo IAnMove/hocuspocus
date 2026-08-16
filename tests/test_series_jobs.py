@@ -1,6 +1,7 @@
 import ast
 import copy
 import json
+import math
 import sys
 import threading
 import time
@@ -11,7 +12,7 @@ from services.series_jobs import SeriesJobStore
 
 
 _ROOT = Path(__file__).parents[1]
-_LAUNCH = _ROOT / "app" / "launch.py"
+_LAUNCH = _ROOT / "app" / "_launch_runtime.py"
 
 
 def _load_launch_functions(*names: str, namespace: dict) -> None:
@@ -391,7 +392,7 @@ def _editable_episode_fixture():
 
 
 def test_manual_episode_proposal_edits_preserve_protected_ids():
-    namespace = {"copy": copy}
+    namespace = {"copy": copy, "math": math}
     _load_launch_functions("_prepare_edited_series_episode_proposal", namespace=namespace)
     stored = _editable_episode_fixture()
     edited = copy.deepcopy(stored)

@@ -12,7 +12,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_adapter():
-    source_path = _ROOT / "app" / "launch.py"
+    source_path = _ROOT / "app" / "_launch_runtime.py"
     tree = ast.parse(source_path.read_text(encoding="utf-8"))
     wanted = {
         "_task_status",

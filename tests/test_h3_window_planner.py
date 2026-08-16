@@ -380,7 +380,7 @@ class H3WindowPlannerTests(unittest.TestCase):
 
     def test_ui_and_runtime_use_explicit_prompt_arrays(self):
         handler = (APP / "wgp.py").read_text(encoding="utf-8")
-        launch = (APP / "launch.py").read_text(encoding="utf-8")
+        launch = (APP / "_launch_runtime.py").read_text(encoding="utf-8")
         store = (ROOT / "ui" / "src" / "stores" / "useStore.ts").read_text(encoding="utf-8")
         advanced = (ROOT / "ui" / "src" / "components" / "Sidebar" / "AdvancedSettings.tsx").read_text(encoding="utf-8")
         prompt_input = (ROOT / "ui" / "src" / "components" / "Sidebar" / "PromptInput.tsx").read_text(encoding="utf-8")

@@ -260,7 +260,7 @@ def test_unauthenticated_classic_websocket_is_closed(monkeypatch) -> None:
 
 
 def test_launch_installs_auth_middleware_router_and_startup_notice() -> None:
-    tree = ast.parse((ROOT / "app" / "launch.py").read_text(encoding="utf-8"))
+    tree = ast.parse((ROOT / "app" / "_launch_runtime.py").read_text(encoding="utf-8"))
     calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
 
     assert any(

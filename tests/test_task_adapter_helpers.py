@@ -15,7 +15,7 @@ from routers.canonical_tasks import task_event_cursor
 
 
 ROOT = Path(__file__).parents[1]
-LAUNCH_PATH = ROOT / "app" / "launch.py"
+LAUNCH_PATH = ROOT / "app" / "_launch_runtime.py"
 SOURCE = LAUNCH_PATH.read_text(encoding="utf-8")
 TREE = ast.parse(SOURCE, filename=str(LAUNCH_PATH))
 

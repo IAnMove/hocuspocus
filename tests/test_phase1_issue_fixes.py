@@ -12,7 +12,7 @@ from unittest import mock
 
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_LAUNCH_PATH = os.path.join(_ROOT, "app", "launch.py")
+_LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _LTX2_PATH = os.path.join(_ROOT, "app", "models", "ltx2", "ltx2.py")
 _LTX2_INPAINT_PATH = os.path.join(

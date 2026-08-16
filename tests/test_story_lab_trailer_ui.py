@@ -24,7 +24,7 @@ def test_trailer_is_a_standalone_story_project_type_without_music():
     types = TYPES.read_text(encoding="utf-8")
     model = MODEL.read_text(encoding="utf-8")
     panel = PANEL.read_text(encoding="utf-8")
-    backend = ROOT.joinpath("app", "launch.py").read_text(encoding="utf-8")
+    backend = ROOT.joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
 
     assert "'full_story' | 'music_video' | 'trailer' | 'quick_video'" in types
     assert "projectType === 'trailer' ? 60" in model

@@ -12,7 +12,7 @@ from services import director_pipeline
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "launch.py"
+LAUNCH = ROOT / "app" / "_launch_runtime.py"
 
 
 def _load_endpoint(namespace: dict):

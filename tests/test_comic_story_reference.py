@@ -28,7 +28,7 @@ class HTTPException(Exception):
 
 
 def _load_launch_functions(*names: str, namespace: dict | None = None) -> dict:
-    launch_path = os.path.join(os.path.dirname(__file__), "..", "app", "launch.py")
+    launch_path = os.path.join(os.path.dirname(__file__), "..", "app", "_launch_runtime.py")
     with open(launch_path, "r", encoding="utf-8") as handle:
         tree = ast.parse(handle.read())
     selected = []
@@ -38,7 +38,7 @@ def _load_launch_functions(*names: str, namespace: dict | None = None) -> dict:
             node.decorator_list = []
             selected.append(node)
     scope = dict(namespace or {})
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "launch.py", "exec"), scope)
+    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), scope)
     return scope
 
 

@@ -7,7 +7,7 @@ import unittest
 
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-LAUNCH_PATH = os.path.join(ROOT, "app", "launch.py")
+LAUNCH_PATH = os.path.join(ROOT, "app", "_launch_runtime.py")
 CLIENT_PATH = os.path.join(ROOT, "ui", "src", "api", "client.ts")
 STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
 STORY_PATH = os.path.join(

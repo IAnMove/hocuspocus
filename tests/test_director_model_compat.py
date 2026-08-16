@@ -1770,7 +1770,7 @@ class TestDirectorUICatalogContract(unittest.TestCase):
             "SettingsDrawer",
             "DirectorLoraSelector.tsx",
         )
-        launch_path = os.path.join(_APP_DIR, "launch.py")
+        launch_path = os.path.join(_APP_DIR, "_launch_runtime.py")
         pipeline_path = os.path.join(_APP_DIR, "services", "director_pipeline.py")
         with open(client_path, encoding="utf-8") as handle:
             client = handle.read()

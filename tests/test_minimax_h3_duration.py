@@ -22,7 +22,7 @@ MODEL = {
 
 
 def test_every_h3_job_crosses_the_mandatory_duration_gate():
-    launch = (Path(__file__).parents[1] / "app" / "launch.py").read_text(encoding="utf-8")
+    launch = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(encoding="utf-8")
     job_factory = launch[launch.index("def _new_generation_job("):]
     job_factory = job_factory[:job_factory.index("def _register_manual_generation_job(")]
     assert "apply_h3_dialogue_duration(frozen_params, duration_model_def)" in job_factory

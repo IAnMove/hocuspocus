@@ -7,7 +7,7 @@ from services.media_paths import MediaPathNotAllowed, resolve_permitted_media_pa
 
 
 ROOT = Path(__file__).parents[1]
-LAUNCH = ROOT / "app" / "launch.py"
+LAUNCH = ROOT / "app" / "_launch_runtime.py"
 
 
 def test_permitted_media_path_accepts_upload_and_current_workspace(tmp_path):

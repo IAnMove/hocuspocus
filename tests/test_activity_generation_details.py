@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "launch.py"
+LAUNCH = ROOT / "app" / "_launch_runtime.py"
 CLIENT = ROOT / "ui" / "src" / "api" / "client.ts"
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 ACTIVITY = ROOT / "ui" / "src" / "components" / "ActivityFooter.tsx"

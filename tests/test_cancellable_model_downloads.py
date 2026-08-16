@@ -73,7 +73,7 @@ class TestCancellableDownloads(unittest.TestCase):
             bar.close()
 
     def test_generation_worker_and_ui_are_wired_to_cooperative_cancel(self):
-        with open(os.path.join(APP, "launch.py"), "r", encoding="utf-8") as handle:
+        with open(os.path.join(APP, "_launch_runtime.py"), "r", encoding="utf-8") as handle:
             launch = handle.read()
         with open(
             os.path.join(ROOT, "ui", "src", "stores", "useStore.ts"),

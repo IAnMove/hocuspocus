@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 
 ROOT = Path(__file__).parents[1]
-LAUNCH = ROOT / "app" / "launch.py"
+LAUNCH = ROOT / "app" / "_launch_runtime.py"
 
 
 class _HTTPException(Exception):
@@ -67,7 +67,7 @@ def _function(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
             selected = copy.deepcopy(node)
             selected.decorator_list = []
             return selected
-    raise AssertionError(f"Function {name!r} not found in app/launch.py")
+    raise AssertionError(f"Function {name!r} not found in app/_launch_runtime.py")
 
 
 def _load(*names: str, namespace: dict) -> dict:

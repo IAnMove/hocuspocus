@@ -23,7 +23,7 @@ class _HTTPException(Exception):
 
 
 def _load_stop_endpoint():
-    source_path = _ROOT / "app" / "launch.py"
+    source_path = _ROOT / "app" / "_launch_runtime.py"
     tree = ast.parse(source_path.read_text(encoding="utf-8"))
     node = next(
         copy.deepcopy(candidate)
