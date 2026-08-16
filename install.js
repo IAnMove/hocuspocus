@@ -1,3 +1,6 @@
+const vendors = require("./vendor_revisions")
+const hunyuan3d2 = vendors.hunyuan3d2
+
 module.exports = {
   requires: {
     bundle: "ai"
@@ -63,18 +66,25 @@ module.exports = {
     // official stack conflicts with Maestro's audio/video Python packages;
     // from the user's perspective this is part of the normal Maestro install.
     {
-      when: "{{!exists('app/services/hunyuan3d/vendor/Hunyuan3D-2')}}",
+      when: "{{!exists('" + hunyuan3d2.path + "')}}",
       method: "shell.run",
       params: {
-        message: "git clone --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2 app/services/hunyuan3d/vendor/Hunyuan3D-2"
+        message: [
+          "git clone --depth 1 " + hunyuan3d2.url + " " + hunyuan3d2.path,
+          "git -C " + hunyuan3d2.path + " fetch --depth 1 origin " + hunyuan3d2.revision,
+          "git -C " + hunyuan3d2.path + " checkout --detach " + hunyuan3d2.revision
+        ]
       }
     },
     {
-      when: "{{exists('app/services/hunyuan3d/vendor/Hunyuan3D-2/.git')}}",
+      when: "{{exists('" + hunyuan3d2.path + "/.git')}}",
       method: "shell.run",
       params: {
-        path: "app/services/hunyuan3d/vendor/Hunyuan3D-2",
-        message: "git pull --ff-only"
+        path: hunyuan3d2.path,
+        message: [
+          "git fetch --depth 1 origin " + hunyuan3d2.revision,
+          "git checkout --detach " + hunyuan3d2.revision
+        ]
       }
     },
     {
@@ -172,6 +182,13 @@ module.exports = {
       params: {
         path: "app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed",
         text: "ok"
+      }
+    },
+    {
+      method: "fs.write",
+      params: {
+        path: hunyuan3d2.marker,
+        text: "repository=" + hunyuan3d2.url + "\nrevision=" + hunyuan3d2.revision + "\n"
       }
     },
     // MiniMax H3 runs in an isolated ComfyUI checkout because its quantized

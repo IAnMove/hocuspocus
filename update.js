@@ -1,3 +1,6 @@
+const vendors = require("./vendor_revisions")
+const hunyuan3d2 = vendors.hunyuan3d2
+
 module.exports = {
   run: [{
     // Never let Update merge around uncommitted work. shell.run returns the
@@ -43,7 +46,7 @@ module.exports = {
     // never a wrongly-skipped rebuild.
     method: "jump",
     params: {
-      id: "{{/(?:fatal:|error:|aborting|no tracking information|specify which branch)/i.test(input.stdout) ? 'pull_failed' : (/already up[- ]to[- ]date/i.test(input.stdout) && exists('app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1') && exists('app/services/minimax_h3/env/.maestro_minimax_h3_v2.installed') && exists('app/services/minimax_h3/vendor/ComfyUI/main.py') && exists('app/postprocessing/seedvc/__init__.py') ? 'uptodate' : 'build')}}"
+      id: "{{/(?:fatal:|error:|aborting|no tracking information|specify which branch)/i.test(input.stdout) ? 'pull_failed' : (/already up[- ]to[- ]date/i.test(input.stdout) && exists('app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed') && exists('" + hunyuan3d2.marker + "') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2') && exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1') && exists('app/services/minimax_h3/env/.maestro_minimax_h3_v2.installed') && exists('app/services/minimax_h3/vendor/ComfyUI/main.py') && exists('app/postprocessing/seedvc/__init__.py') ? 'uptodate' : 'build')}}"
     }
   }, {
     id: "pull_failed",
@@ -191,17 +194,24 @@ module.exports = {
       message: "git clone --depth 1 --branch v1.0.0 https://github.com/Blizaine/maestro-seedvc app/postprocessing/seedvc"
     }
   }, {
-    when: "{{!exists('app/services/hunyuan3d/vendor/Hunyuan3D-2')}}",
+    when: "{{!exists('" + hunyuan3d2.path + "')}}",
     method: "shell.run",
     params: {
-      message: "git clone --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2 app/services/hunyuan3d/vendor/Hunyuan3D-2"
+      message: [
+        "git clone --depth 1 " + hunyuan3d2.url + " " + hunyuan3d2.path,
+        "git -C " + hunyuan3d2.path + " fetch --depth 1 origin " + hunyuan3d2.revision,
+        "git -C " + hunyuan3d2.path + " checkout --detach " + hunyuan3d2.revision
+      ]
     }
   }, {
-    when: "{{exists('app/services/hunyuan3d/vendor/Hunyuan3D-2/.git')}}",
+    when: "{{exists('" + hunyuan3d2.path + "/.git')}}",
     method: "shell.run",
     params: {
-      path: "app/services/hunyuan3d/vendor/Hunyuan3D-2",
-      message: "git pull --ff-only"
+      path: hunyuan3d2.path,
+      message: [
+        "git fetch --depth 1 origin " + hunyuan3d2.revision,
+        "git checkout --detach " + hunyuan3d2.revision
+      ]
     }
   }, {
     when: "{{!exists('app/services/hunyuan3d/vendor/Hunyuan3D-2.1')}}",
@@ -286,6 +296,12 @@ module.exports = {
     params: {
       path: "app/services/hunyuan3d/env/.maestro_hunyuan3d_v1.installed",
       text: "ok"
+    }
+  }, {
+    method: "fs.write",
+    params: {
+      path: hunyuan3d2.marker,
+      text: "repository=" + hunyuan3d2.url + "\nrevision=" + hunyuan3d2.revision + "\n"
     }
   }]
 }
