@@ -14,7 +14,7 @@ def test_selected_montage_clip_can_be_opened_in_video_creation():
     editor = EDITOR.read_text(encoding="utf-8")
 
     assert "Rehacer en Creación de vídeo" in editor
-    assert "fetchOutputMetadata(outputName)" in editor
+    assert "fetchOutputMetadata(outputName, activeWorkspace)" in editor
     assert "loadSettingsFromOutput()" in editor
     assert "writeVideoEditorReplacementTarget" in editor
     assert "setMediaFilter('videos')" in editor
