@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from PIL import Image
 
@@ -16,6 +16,37 @@ from app.services import minimax_h3_service as h3
 
 
 class TestMiniMaxH3Workflow(unittest.TestCase):
+    def test_local_sidecar_http_ignores_ambient_proxy_state(self):
+        response = Mock()
+
+        class FakeSession:
+            trust_env = True
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def request(self, method, url, **kwargs):
+                self.request_args = (method, url, kwargs)
+                self.trust_env_at_request = self.trust_env
+                return response
+
+        session = FakeSession()
+        with patch.object(h3.requests, "Session", return_value=session):
+            result = h3._local_http_request(
+                "GET", "http://127.0.0.1:43123/history/example", timeout=60,
+            )
+
+        self.assertIs(result, response)
+        self.assertFalse(session.trust_env_at_request)
+        self.assertEqual(session.request_args, (
+            "GET",
+            "http://127.0.0.1:43123/history/example",
+            {"timeout": 60},
+        ))
+
     def test_legacy_options_publish_ref2va_image_limit(self):
         self.assertEqual(h3.MODEL_OPTIONS["max_image_refs"], 9)
 

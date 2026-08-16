@@ -6,6 +6,10 @@ import { MediaFeedItem } from './MediaFeedItem'
 import { useStore } from '../../stores/useStore'
 import type { GenerationJob } from '../../types'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
+import {
+  clearVideoEditorReplacementTarget,
+  readVideoEditorReplacementTarget,
+} from '../../features/video-editor/replacementHandoff'
 
 const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
   .then(module => ({ default: module.SceneAnimatorPanel })))
@@ -657,6 +661,11 @@ export function MainContent() {
     return items
   }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets])
   const mediaFilter = useStore(s => s.mediaFilter)
+  const [replacementTarget, setReplacementTarget] = useState(readVideoEditorReplacementTarget)
+
+  useEffect(() => {
+    setReplacementTarget(mediaFilter !== 'videoeditor' ? readVideoEditorReplacementTarget() : null)
+  }, [mediaFilter])
 
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden">
@@ -734,6 +743,25 @@ export function MainContent() {
         >
           {/* Pipeline + Job placeholders at top (not virtualized — small count) */}
           <div className="space-y-3 mb-3">
+            {replacementTarget && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                <Film size={14} className="shrink-0" />
+                <span className="min-w-0 flex-1">
+                  Rehaciendo la posición {replacementTarget.clipIndex + 1} del montaje: <strong>{replacementTarget.originalName}</strong>.
+                  Genera un vídeo nuevo y después pulsa “Usar en posición {replacementTarget.clipIndex + 1}”.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearVideoEditorReplacementTarget()
+                    setReplacementTarget(null)
+                  }}
+                  className="rounded border border-emerald-400/30 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-500/20"
+                >
+                  Cancelar reemplazo
+                </button>
+              </div>
+            )}
             <PipelinePlaceholder />
             {jobs.map((j, i) => (
               <JobPlaceholder

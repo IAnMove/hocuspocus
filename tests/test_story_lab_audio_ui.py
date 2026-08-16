@@ -12,6 +12,7 @@ STORY_ADAPTATIONS = ROOT / "ui" / "src" / "features" / "stories" / "adaptations.
 STORY_ACTIVITY = ROOT / "ui" / "src" / "features" / "stories" / "activityLifecycle.ts"
 IMAGE_GENERATION = ROOT / "ui" / "src" / "lib" / "imageGeneration.ts"
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
+API_CLIENT = ROOT / "ui" / "src" / "api" / "client.ts"
 
 
 def test_lyria_prompt_does_not_require_an_optional_reference_song():
@@ -93,6 +94,17 @@ def test_story_lab_refresh_recovers_the_backend_job_without_opening_a_client_roo
     assert "beginStoryActivity" not in refresh
 
 
+def test_story_lab_status_polling_survives_transient_mobile_disconnects():
+    source = API_CLIENT.read_text(encoding="utf-8")
+
+    assert "STORY_STATUS_RETRY_DELAYS_MS" in source
+    assert "getStoryGenerationStatusResilient" in source
+    assert "isStoryStatusNetworkError(error)" in source
+    assert "Mobile connection interrupted; retrying" in source
+    assert "The job remains saved. Resume job: ${jobId}" in source
+    assert "getStoryGenerationStatus(jobId, signal)" in source
+
+
 def test_music_video_confirmation_names_the_frozen_video_model():
     source = STORY.read_text(encoding="utf-8")
 
@@ -143,6 +155,21 @@ def test_story_library_can_bulk_remove_only_selected_drafts():
     assert "Delete selected Draft" in panel
     assert "visualAssetsNewestFirst" in panel
     assert "Newest images appear first" in panel
+
+
+def test_story_reference_images_confirm_removal_and_open_in_a_modal():
+    panel = STORY.read_text(encoding="utf-8")
+    gallery = panel.split("function ReferenceGallery", 1)[1].split(
+        "function SectionHeader", 1,
+    )[0]
+
+    assert "window.confirm(" in gallery
+    assert "createPortal(" in gallery
+    assert "Maximize2" in gallery
+    assert 'role="dialog"' in gallery
+    assert 'aria-modal="true"' in gallery
+    assert "event.key === 'Escape'" in gallery
+    assert "onClick={() => setPreviewId(null)}" in gallery
 
 
 def test_story_style_converter_warns_about_photo_to_photo_noops_and_honors_requested_text():

@@ -107,6 +107,27 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         }
         self.assertFalse(director_pipeline._has_visual_references(params))
 
+    def test_story_trailer_direct_video_is_text_only_too(self):
+        params = {
+            "pipeline_type": "short_film_story",
+            "music_video_treatment": {
+                "generation_mode": "direct_video",
+                "direct_video_master_prompt": "Immutable cinematic supermarket world.",
+            },
+            "reference_image_path": "/tmp/ignored-world.png",
+            "character_ref_paths": ["/tmp/ignored-character.png"],
+        }
+
+        enabled, master_prompt = director_pipeline._direct_video_settings(params)
+
+        self.assertTrue(enabled)
+        self.assertEqual(master_prompt, "Immutable cinematic supermarket world.")
+        self.assertFalse(director_pipeline._has_visual_references(params))
+        self.assertEqual(
+            director_pipeline._director_effective_shot_image_policy(params),
+            SHOT_IMAGE_PROMPT_ONLY,
+        )
+
     def test_direct_video_overrides_stale_saved_image_policy(self):
         params = {
             "pipeline_type": "music_video",
@@ -155,12 +176,49 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertTrue(prompt.startswith("IMMUTABLE PAINTED WORLD."))
         self.assertIn("Scene overview: Reveal the alien citadel", prompt)
         self.assertIn("A lone warrior raises", prompt)
-        self.assertIn("non_diegetic_music: none", prompt)
+        self.assertIn("non_diegetic_music: N/A", prompt)
         self.assertEqual(plans[0]["image_prompt"], "")
         self.assertEqual(plans[0]["image_source"], "none")
         self.assertEqual(plans[0]["keyframe_prompts"], [])
         self.assertEqual(plans[0]["h3_segment_prompts"], [])
         self.assertIn("VISIBLE TEXT LOCK", prompt)
+
+    def test_direct_video_preflight_preserves_authored_audio_and_music(self):
+        source = (
+            'SPOKEN LANGUAGE CONTRACT: Spanish. '
+            '{"integrated_multimodal_description":"A woman crosses a stormy plaza.",'
+            '"overall_soundscape":"Rain, thunder and hurried footsteps.",'
+            '"non_diegetic_music":"Low strings rise into a sharp brass hit."}'
+        )
+        plans = [{
+            "scene_goal": "Reveal the threat",
+            "environment": "a stormy plaza",
+            "video_prompt": source,
+            "_director_audio_plan": {"mode": "music_driven"},
+        }]
+
+        enforce_direct_video_on_clip_plans(
+            plans,
+            "IMMUTABLE NOIR WORLD.",
+        )
+
+        self.assertIn("Shot 1: A woman crosses a stormy plaza", plans[0]["video_prompt"])
+        self.assertNotIn('{"integrated_multimodal_description"', plans[0]["video_prompt"])
+        self.assertIn("Rain, thunder and hurried footsteps", plans[0]["video_prompt"])
+        self.assertIn("Low strings rise into a sharp brass hit", plans[0]["video_prompt"])
+        self.assertEqual(
+            plans[0]["_director_h3_source_prompt"], plans[0]["video_prompt"],
+        )
+
+        director_pipeline._preflight_h3_director_prompts(
+            "minimax_h3_legacy", plans,
+        )
+        compiled = plans[0]["video_prompt"]
+        self.assertEqual(compiled.count("overall_soundscape:"), 1)
+        self.assertEqual(compiled.count("non_diegetic_music:"), 1)
+        self.assertIn("Rain, thunder and hurried footsteps", compiled)
+        self.assertIn("Low strings rise into a sharp brass hit", compiled)
+        self.assertNotIn("Natural scene-appropriate stereo ambience", compiled)
 
     def test_choruses_reuse_signature_set_with_controlled_coverage(self):
         clips = [

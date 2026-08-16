@@ -2556,28 +2556,32 @@ export async function generateStorySection(params: {
         }, 1000)
         signal?.addEventListener('abort', onAbort, { once: true })
       })
-      const statusResponse = await fetch(
-        `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(accepted.jobId)}`,
-        { signal },
+      const status = await getStoryGenerationStatusResilient(
+        accepted.jobId,
+        signal,
+        (attempt, delayMs) => onProgress?.({
+          ...accepted,
+          status: 'running',
+          stage: 'reconnecting',
+          message: `Mobile connection interrupted; retrying in ${Math.round(delayMs / 1000)}s (attempt ${attempt})…`,
+          current: 0,
+          total: 0,
+        }),
       )
-      if (!statusResponse.ok) {
-        const err = await statusResponse.json().catch(() => ({ detail: 'Could not read Story Lab job' }))
-        throw new Error(err.detail || 'Could not read Story Lab job')
-      }
-      const status = await statusResponse.json()
       onProgress?.(status)
       if (status.status === 'failed' || status.status === 'cancelled') {
         throw new Error(`${status.error || status.message} Resume job: ${accepted.jobId}`)
       }
       if (status.status === 'completed') {
-        if (!status.result?.result) throw new Error('Story Lab job completed without a draft')
+        const result = status.result?.result
+        if (!result) throw new Error('Story Lab job completed without a draft')
         window.localStorage.setItem('maestro-last-story-plan-result', JSON.stringify({
           jobId: accepted.jobId,
           projectId: params.project.id,
           scope: params.scope,
-          result: status.result.result,
+          result,
         }))
-        return status.result
+        return { result }
       }
     }
   } finally {
@@ -3031,15 +3035,64 @@ export interface StoryGenerationStatus {
   result?: { result?: Record<string, unknown> } | null
 }
 
-export async function getStoryGenerationStatus(jobId: string): Promise<StoryGenerationStatus> {
+const STORY_STATUS_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 15_000, 15_000, 15_000]
+
+function isStoryStatusNetworkError(error: unknown): boolean {
+  return error instanceof TypeError || (error instanceof Error && error.name === 'TypeError')
+}
+
+function waitForStoryStatusRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Story generation cancelled', 'AbortError'))
+      return
+    }
+    const onAbort = () => {
+      window.clearTimeout(timer)
+      reject(new DOMException('Story generation cancelled', 'AbortError'))
+    }
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, delayMs)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+export async function getStoryGenerationStatus(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<StoryGenerationStatus> {
   const response = await fetch(
     `${BASE}/api/v1/stories/generate/status/${encodeURIComponent(jobId)}`,
+    { signal },
   )
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Could not read Story Lab job' }))
     throw new Error(error.detail || 'Could not read Story Lab job')
   }
   return response.json()
+}
+
+async function getStoryGenerationStatusResilient(
+  jobId: string,
+  signal?: AbortSignal,
+  onRetry?: (attempt: number, delayMs: number) => void,
+): Promise<StoryGenerationStatus> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await getStoryGenerationStatus(jobId, signal)
+    } catch (error) {
+      if (signal?.aborted) throw new DOMException('Story generation cancelled', 'AbortError')
+      if (!isStoryStatusNetworkError(error)) throw error
+      if (attempt >= STORY_STATUS_RETRY_DELAYS_MS.length) {
+        throw new Error(`Connection to Maestro is still unavailable. The job remains saved. Resume job: ${jobId}`)
+      }
+      const delayMs = STORY_STATUS_RETRY_DELAYS_MS[attempt]
+      onRetry?.(attempt + 1, delayMs)
+      await waitForStoryStatusRetry(delayMs, signal)
+    }
+  }
 }
 
 export async function resumeStoryGeneration(
@@ -3072,7 +3125,18 @@ export async function resumeStoryGeneration(
   }
   for (;;) {
     await new Promise(resolve => window.setTimeout(resolve, 1000))
-    const status = await getStoryGenerationStatus(jobId)
+    const status = await getStoryGenerationStatusResilient(
+      jobId,
+      undefined,
+      (attempt, delayMs) => onProgress?.({
+        jobId,
+        status: 'running',
+        stage: 'reconnecting',
+        message: `Mobile connection interrupted; retrying in ${Math.round(delayMs / 1000)}s (attempt ${attempt})…`,
+        current: 0,
+        total: 0,
+      }),
+    )
     onProgress?.(status)
     if (status.status === 'failed' || status.status === 'cancelled') {
       throw new Error(status.error || status.message)

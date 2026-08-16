@@ -402,13 +402,7 @@ def _saved_pipeline_shot_image_policy(state: dict) -> str:
     """Read a persisted policy; pre-feature projects required start images."""
 
     snapshot = state.get("_params_snapshot") or {}
-    if (
-        (
-            state.get("pipeline_type") == "music_video"
-            and state.get("generation_mode") == "direct_video"
-        )
-        or _direct_video_settings(snapshot)[0]
-    ):
+    if state.get("generation_mode") == "direct_video" or _direct_video_settings(snapshot)[0]:
         return SHOT_IMAGE_PROMPT_ONLY
 
     saved = str(state.get("shot_image_policy") or "").strip()
@@ -3484,6 +3478,10 @@ def rerun_h3_segment(
                     audio_direction=str(video_params.get("h3_audio_prompt") or ""),
                 )
             prompt = _saved_prompt_contract(state, prompt, "video")
+            prompt = _h3_apply_portrait_composition_contract(
+                prompt,
+                str(video_params.get("resolution") or "960x544"),
+            )
             gen_params = {
                 "model_type": str(state.get("video_model") or "minimax_h3"),
                 "prompt": prompt,
@@ -7476,6 +7474,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                 "workflow_parallelism_enabled", True
             )
             and auto_mode
+            and requires_shot_images
             and not direct_video
             and not resume_images
             and not provided_clip_image_paths
@@ -8350,7 +8349,9 @@ def _has_visual_references(params: dict) -> bool:
 
 def _direct_video_settings(params: dict) -> tuple[bool, str]:
     """Return the normalized direct-video flag and immutable master prompt."""
-    if str(params.get("pipeline_type") or "music_video") != "music_video":
+    if str(params.get("pipeline_type") or "music_video") not in {
+        "music_video", "short_film_story",
+    }:
         return False, ""
     try:
         from services.director.planners.music_video import normalize_music_video_treatment
@@ -11753,6 +11754,35 @@ def _h3_apply_identity_contract(prompt: str) -> str:
     return f"{text} {identity}".strip()
 
 
+def _h3_apply_portrait_composition_contract(prompt: str, resolution: str) -> str:
+    """Tell H3 to compose for the actual tall canvas instead of letterboxing."""
+    text = str(prompt or "").strip()
+    try:
+        width, height = (
+            int(value) for value in str(resolution or "").lower().split("x", 1)
+        )
+    except (TypeError, ValueError):
+        return text
+    marker = "PORTRAIT COMPOSITION LOCK:"
+    if height <= width or marker.casefold() in text.casefold():
+        return text
+    contract = (
+        f"{marker} Compose natively for the full {width}x{height} vertical portrait "
+        "canvas. Stage subjects and camera movement for the tall frame; never place "
+        "a horizontal landscape frame, letterbox bars, rotated image, or sideways "
+        "composition inside it."
+    )
+    parts = re.split(
+        r"(?im)^\s*overall_soundscape\s*:", text, maxsplit=1,
+    )
+    if len(parts) == 2:
+        return (
+            f"{parts[0].rstrip()} {contract}\n\n"
+            f"overall_soundscape: {parts[1].lstrip()}"
+        )
+    return f"{text} {contract}".strip()
+
+
 def _h3_authored_segment_windows(prompts: list[str], segment_count: int) -> list[str]:
     """Split authored windows across H3 segments without replaying whole windows."""
     if not prompts:
@@ -11826,6 +11856,7 @@ def _minimax_h3_segment_prompt(
             plan=plan,
             audio_direction=global_audio_direction,
             allow_clip_text=allow_clip_text,
+            audio_source_prompt=plan.get("video_prompt"),
         )
 
     try:
@@ -12099,6 +12130,8 @@ def _run_minimax_h3_story_video(
     fps = 24
     video_model = str(params.get("video_model") or "minimax_h3")
     direct_video, direct_video_master_prompt = _direct_video_settings(params)
+    shot_image_policy = _director_effective_shot_image_policy(params)
+    uses_shot_images = shot_images_required(shot_image_policy)
     reference_mode = str(
         video_params.get("h3_reference_mode") or "first_frame"
     ).strip().lower()
@@ -12285,7 +12318,7 @@ def _run_minimax_h3_story_video(
                 raise PipelineCancelled("Director pipeline was cancelled.")
 
             if shot_index != current_shot:
-                if clip_ready_events and shot_index < len(clip_ready_events):
+                if uses_shot_images and clip_ready_events and shot_index < len(clip_ready_events):
                     _update_pipeline(
                         pid,
                         progress={
@@ -12362,9 +12395,15 @@ def _run_minimax_h3_story_video(
                 continue
             reuse_prefix = False
 
+            render_prompt = (
+                prompt if direct_video else _h3_apply_identity_contract(prompt)
+            )
+            render_prompt = _h3_apply_portrait_composition_contract(
+                render_prompt, resolution,
+            )
             gen_params: dict = {
                 "model_type": video_model,
-                "prompt": prompt if direct_video else _h3_apply_identity_contract(prompt),
+                "prompt": render_prompt,
                 "image_mode": 0,
                 "image_prompt_type": "" if direct_video else "S" if segment_start else "",
                 "num_inference_steps": video_params.get("num_inference_steps", 20),

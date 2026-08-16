@@ -10389,11 +10389,8 @@ async def director_v2_plan(request: Request):
         normalized_treatment = normalize_music_video_treatment(
             body.get("music_video_treatment")
         )
-        direct_video = (
-            skill_type == "music_video"
-            and normalized_treatment.get("generation_mode") == "direct_video"
-        )
-        if skill_type == "music_video":
+        direct_video = normalized_treatment.get("generation_mode") == "direct_video"
+        if skill_type == "music_video" or direct_video:
             body["music_video_treatment"] = normalized_treatment
         planner_kwargs = _director_v2_planner_kwargs(body)
 
@@ -27328,7 +27325,7 @@ def _story_lab_schema(scope: str, project_type: str = "full_story") -> dict:
         "additionalProperties": False,
     }
     beat_minimum = 3 if project_type == "quick_video" else 4 if project_type == "music_video" else 6
-    beat_maximum = 8 if project_type == "quick_video" else 10 if project_type == "music_video" else 14
+    beat_maximum = 8 if project_type == "quick_video" else 10 if project_type == "music_video" else 12 if project_type == "trailer" else 14
     music_minimum = 1 if project_type == "music_video" else 4
     music_maximum = 1 if project_type == "music_video" else 16
     creative_brief = {
@@ -27951,6 +27948,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
         "structure": (
             (3, 8) if project_type == "quick_video"
             else (4, 10) if project_type == "music_video"
+            else (6, 12) if project_type == "trailer"
             else (6, 14)
         ),
     }
@@ -30581,7 +30579,7 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     premise = str(body.get("premise") or "").strip()
     project = body.get("project") if isinstance(body.get("project"), dict) else {}
     project_type = str(project.get("projectType") or "full_story").strip().lower()
-    if project_type not in {"full_story", "music_video", "quick_video"}:
+    if project_type not in {"full_story", "music_video", "trailer", "quick_video"}:
         project_type = "full_story"
     creative_brief = project.get("creativeBrief") if isinstance(project.get("creativeBrief"), dict) else {}
     general_idea = str(creative_brief.get("generalIdea") or "").strip()[:12000]
@@ -30659,6 +30657,17 @@ Music-specific contract:
 This is a compact music-first story, not a complete franchise bible. Build a coherent visual
 arc around the performer and the song. Context: {str(creative_brief.get('context') or premise)[:3000]}.
 Use 4–10 beats that can become videoclip shots and keep locations/cast deliberately small.
+"""
+    elif project_type == "trailer":
+        narrative_direction = f"""
+This is a cinematic movie-trailer project, not a videoclip and not a complete short film.
+Film context: {str(creative_brief.get('context') or premise)[:3000]}.
+Protagonists: {str(creative_brief.get('subjects') or 'not specified')[:1500]}.
+World and locations: {str(creative_brief.get('setting') or 'not specified')[:1500]}.
+Core conflict and trailer promise: {str(creative_brief.get('action') or premise)[:3000]}.
+Target duration: {max(15, min(180, brief_duration or 60))} seconds. Use 6–12 concise,
+shootable beats covering cold open, promise, disruption, escalation, a breath and a final
+unresolved hook. Never require a song and never reveal or resolve the source story ending.
 """
     elif project_type == "quick_video":
         narrative_direction = f"""
@@ -30924,7 +30933,7 @@ def _run_story_plan_job_inner(job_id: str) -> None:
         ["overview", "characters", "world", "structure", "music"]
         if project_type == "music_video"
         else ["overview", "characters", "world", "structure"]
-        if project_type == "quick_video"
+        if project_type in {"trailer", "quick_video"}
         else ["overview", "characters", "world", "relationships", "structure", "music"]
     )
     stages = all_stages if requested_scope == "all" else [requested_scope]
@@ -31699,7 +31708,7 @@ def start_story_lab_generation(body: dict):
         raise HTTPException(status_code=400, detail="Write a premise before generating the story")
     project = body.get("project") if isinstance(body.get("project"), dict) else {}
     project_type = str(project.get("projectType") or "full_story").strip().lower()
-    stage_total = 5 if project_type == "music_video" else 4 if project_type == "quick_video" else 6
+    stage_total = 5 if project_type == "music_video" else 4 if project_type in {"trailer", "quick_video"} else 6
     job_id = f"story-plan-{uuid.uuid4().hex[:12]}"
     task_id = f"task-story-plan-{job_id}"
     job = {

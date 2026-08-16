@@ -25,6 +25,13 @@ import {
 import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
+import {
+  clearVideoEditorReplacementResult,
+  clearVideoEditorReplacementTarget,
+  outputNameFromEditorClip,
+  readVideoEditorReplacementResult,
+  writeVideoEditorReplacementTarget,
+} from './replacementHandoff'
 
 type ClipFit = 'fit' | 'fill'
 type Transition =
@@ -623,6 +630,21 @@ function loadEditorDraft(): {
   }
 }
 
+function persistEditorDraft(
+  clips: EditorClip[],
+  projectName: string,
+  resolution: ResolutionOption,
+  fps: number,
+): void {
+  try {
+    window.localStorage.setItem(VIDEO_EDITOR_DRAFT_KEY, JSON.stringify({
+      clips, projectName, resolution, fps, savedAt: new Date().toISOString(),
+    }))
+  } catch {
+    // A full browser quota must not interrupt editing.
+  }
+}
+
 export function VideoEditorPanel() {
   const [draft] = useState(loadEditorDraft)
   const refreshOutputs = useStore(s => s.refreshOutputs)
@@ -672,6 +694,7 @@ export function VideoEditorPanel() {
   const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(null)
   const [capturingFrame, setCapturingFrame] = useState(false)
   const [capturedFrame, setCapturedFrame] = useState<api.VideoEditorScreenshot | null>(null)
+  const [preparingReplacement, setPreparingReplacement] = useState(false)
 
   const selected = clips.find(clip => clip.id === selectedId) || clips[0] || null
   const selectedIndex = selected ? clips.findIndex(clip => clip.id === selected.id) : -1
@@ -697,13 +720,7 @@ export function VideoEditorPanel() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      try {
-        window.localStorage.setItem(VIDEO_EDITOR_DRAFT_KEY, JSON.stringify({
-          clips, projectName, resolution, fps, savedAt: new Date().toISOString(),
-        }))
-      } catch {
-        // A full browser quota must not interrupt editing.
-      }
+      persistEditorDraft(clips, projectName, resolution, fps)
     }, 600)
     return () => window.clearTimeout(timer)
   }, [clips, projectName, resolution, fps])
@@ -809,6 +826,87 @@ export function VideoEditorPanel() {
       })
     // The hand-off is intentionally consumed once when the editor mounts.
   }, [])
+
+  useEffect(() => {
+    const replacement = readVideoEditorReplacementResult()
+    if (!replacement) return
+    const target = clips.find(clip => clip.id === replacement.clipId)
+    if (!target) {
+      clearVideoEditorReplacementResult()
+      clearVideoEditorReplacementTarget()
+      setError(`La posición original ${replacement.clipIndex + 1} ya no está disponible en el montaje.`)
+      return
+    }
+
+    setAdding(true)
+    setAddProgress(`Reemplazando clip ${replacement.clipIndex + 1}: ${target.name}`)
+    void api.probeVideoEditorClip(replacement.source)
+      .then(media => {
+        setClips(current => {
+          const next = current.map(clip => clip.id === replacement.clipId
+            ? {
+                ...clip,
+                ...media,
+                name: replacement.outputName,
+                source: replacement.source,
+                previewUrl: replacement.source,
+                thumbnailUrl: api.getVideoEditorThumbnailUrl(replacement.source),
+                trimStart: 0,
+                trimEnd: media.duration,
+              }
+            : clip)
+          persistEditorDraft(next, projectName, resolution, fps)
+          return next
+        })
+        clearVideoEditorReplacementResult()
+        clearVideoEditorReplacementTarget()
+        setSelectedId(replacement.clipId)
+        setError(null)
+      })
+      .catch(reason => setError(`No se pudo reemplazar el clip ${replacement.clipIndex + 1}: ${(reason as Error).message}`))
+      .finally(() => {
+        setAdding(false)
+        setAddProgress('')
+      })
+    // Keep a failed result available for another mount; clear it only after
+    // the replacement is safely persisted into the editor draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const openSelectedInVideoCreation = async () => {
+    if (!selected || selectedIndex < 0 || preparingReplacement) return
+    setPreparingReplacement(true)
+    setError(null)
+    setSequencePlaying(false)
+    videoRef.current?.pause()
+
+    const outputName = outputNameFromEditorClip(selected.source, selected.name)
+    try {
+      const metadata = await api.fetchOutputMetadata(outputName)
+      if (!metadata.params) throw new Error('Este clip no conserva ajustes de generación reutilizables.')
+
+      const store = useStore.getState()
+      store.setSidebarMode('studio')
+      store.setGenerationMode('video')
+      useStore.setState({ selectedOutputMeta: metadata, metadataLoading: false })
+      await useStore.getState().loadSettingsFromOutput()
+      useStore.getState().setGenerationMode('video')
+      useStore.getState().setSidebarMode('studio')
+
+      persistEditorDraft(clips, projectName, resolution, fps)
+      writeVideoEditorReplacementTarget({
+        clipId: selected.id,
+        clipIndex: selectedIndex,
+        originalName: selected.name,
+        outputName,
+        requestedAt: Date.now(),
+      })
+      useStore.getState().setMediaFilter('videos')
+    } catch (reason) {
+      setError(`No se pudo abrir el clip en Creación de vídeo: ${(reason as Error).message}`)
+      setPreparingReplacement(false)
+    }
+  }
 
   const addFiles = async (files: File[]) => {
     const videos = files.filter(file => file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v)$/i.test(file.name))
@@ -1925,6 +2023,19 @@ export function VideoEditorPanel() {
                   <Trash2 size={12} /> Remove
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={() => void openSelectedInVideoCreation()}
+                disabled={preparingReplacement}
+                className="mb-3 flex w-full items-center justify-center gap-1.5 rounded border border-accent-blue/40 bg-accent-blue/10 px-2 py-2 text-[10px] font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
+                title="Carga el prompt, modelo, duración y formato de este clip en Creación de vídeo para elegir después su reemplazo"
+              >
+                {preparingReplacement
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <Film size={12} />}
+                {preparingReplacement ? 'Cargando ajustes de generación…' : 'Rehacer en Creación de vídeo'}
+              </button>
 
               <ClipTrimBar
                 duration={selected.duration}

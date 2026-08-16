@@ -10,6 +10,10 @@ import { getOutputReference } from '../../lib/outputReference'
 import { stageSceneForEditor } from '../../lib/sceneOutput'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
 import { useComicStore } from '../../features/comics/store'
+import {
+  readVideoEditorReplacementTarget,
+  writeVideoEditorReplacementResult,
+} from '../../features/video-editor/replacementHandoff'
 
 interface Props {
   file: OutputFile
@@ -136,6 +140,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const moveRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const editorReplacementTarget = readVideoEditorReplacementTarget()
 
   const releaseVideo = useCallback(() => {
     const video = videoRef.current
@@ -279,6 +284,19 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
     setSelectedOutput(index)
     setTimeout(() => rerollGeneration(), 50)
   }, [index, setSelectedOutput, rerollGeneration])
+
+  const handleUseAsEditorReplacement = useCallback(() => {
+    const target = readVideoEditorReplacementTarget()
+    if (!target || file.type !== 'video') return
+    writeVideoEditorReplacementResult({
+      clipId: target.clipId,
+      clipIndex: target.clipIndex,
+      outputName: file.name,
+      source: getFileUrl(file.name),
+      selectedAt: Date.now(),
+    })
+    setMediaFilter('videoeditor')
+  }, [file.name, file.type, setMediaFilter])
 
   const handleCopyPrompt = () => {
     if (!prompt) return
@@ -683,6 +701,16 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
 
         {/* Action buttons */}
         <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+          {file.type === 'video' && editorReplacementTarget && (
+            <button
+              onClick={handleUseAsEditorReplacement}
+              className="flex items-center gap-1 rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-2 py-1.5 text-[10px] font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 hover:text-emerald-200"
+              title={`Usar este vídeo en la posición ${editorReplacementTarget.clipIndex + 1} del montaje`}
+            >
+              <FolderInput size={13} />
+              Usar en posición {editorReplacementTarget.clipIndex + 1}
+            </button>
+          )}
           {params && (
             <>
               <button

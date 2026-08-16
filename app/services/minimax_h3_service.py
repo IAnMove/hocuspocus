@@ -116,6 +116,20 @@ DEFAULTS = {
 }
 
 
+def _local_http_request(method: str, url: str, **kwargs) -> requests.Response:
+    """Call the local H3 sidecar without consulting ambient proxy state.
+
+    The ComfyUI runtime always binds to loopback.  Letting Requests merge
+    process-wide proxy settings is unnecessary and can also fail when another
+    library temporarily exposes malformed proxy state while a long Director
+    batch is running.  A short-lived session keeps the request isolated and
+    the response body is already buffered before the session closes.
+    """
+    with requests.Session() as session:
+        session.trust_env = False
+        return session.request(method, url, **kwargs)
+
+
 def prepare_extend_anchor(
     params: dict,
     job_id: str,
@@ -462,7 +476,7 @@ def ensure_runtime(
             if _process.poll() is not None:
                 raise RuntimeError(f"MiniMax H3 runtime exited with code {_process.returncode}")
             try:
-                if requests.get(f"{base_url}/system_stats", timeout=2).ok:
+                if _local_http_request("GET", f"{base_url}/system_stats", timeout=2).ok:
                     return base_url
             except requests.RequestException:
                 pass
@@ -544,7 +558,7 @@ def cancel() -> None:
     if _port is None:
         return
     try:
-        requests.post(f"http://127.0.0.1:{_port}/interrupt", timeout=3)
+        _local_http_request("POST", f"http://127.0.0.1:{_port}/interrupt", timeout=3)
     except requests.RequestException:
         pass
 
@@ -870,7 +884,8 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
     )
     progress("Loading MiniMax H3 and generating native video + stereo audio…", 10, 0, 0)
     client_id = f"maestro-{job_id}"
-    response = requests.post(
+    response = _local_http_request(
+        "POST",
         f"{base_url}/prompt", json={"prompt": workflow, "client_id": client_id}, timeout=30
     )
     response.raise_for_status()
@@ -920,7 +935,9 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
                 # when ComfyUI receives this status request.  Ten seconds is
                 # too short on large local renders and incorrectly reports a
                 # completed prompt as failed.
-                result = requests.get(f"{base_url}/history/{prompt_id}", timeout=60).json()
+                result = _local_http_request(
+                    "GET", f"{base_url}/history/{prompt_id}", timeout=60,
+                ).json()
                 last_history_poll = now
                 if prompt_id in result:
                     history = result[prompt_id]

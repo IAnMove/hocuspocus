@@ -473,7 +473,7 @@ export function DirectorChat() {
   const isShortFilm = skill === 'short_film'
   const isStoryPath = isShortFilm && shortFilmPath === 'story'
   const isMusicVideo = !!skill && !isShortFilm
-  const isDirectVideo = isMusicVideo && musicVideoTreatment.generation_mode === 'direct_video'
+  const isDirectVideo = musicVideoTreatment.generation_mode === 'direct_video'
   // Music Video "Generate a track" setup: the bottom chat IS the song
   // description, and Send kicks off the whole write-song → render → video chain.
   const isMvGenerate = isMusicVideo && musicSource === 'generate'

@@ -6,6 +6,7 @@ here as structured data + helper functions that renderers and validators consume
 """
 
 from __future__ import annotations
+import json
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -43,6 +44,47 @@ DIRECT_VIDEO_SCENE_MARKER = "Scene overview:"
 DIRECT_VIDEO_SHOT_MARKER = "Shot 1:"
 DIRECT_VIDEO_SOUND_MARKER = "overall_soundscape:"
 DIRECT_VIDEO_MUSIC_MARKER = "non_diegetic_music:"
+
+
+def _direct_video_json_field(prompt: object, field: str) -> str:
+    """Read a JSON string field embedded in an LLM-authored H3 prompt."""
+    match = re.search(
+        rf'"{re.escape(field)}"\s*:\s*("(?:\\.|[^"\\])*")',
+        str(prompt or ""),
+        flags=re.I,
+    )
+    if not match:
+        return ""
+    try:
+        value = json.loads(match.group(1))
+    except (TypeError, json.JSONDecodeError):
+        return ""
+    return " ".join(str(value or "").split()).strip()
+
+
+def _direct_video_audio_fields(prompt: object) -> tuple[str, str]:
+    """Recover authored H3 sound fields before the visual prompt is segmented."""
+    text = str(prompt or "")
+    json_sound = _direct_video_json_field(text, "overall_soundscape")
+    json_music = _direct_video_json_field(text, "non_diegetic_music")
+    if json_sound or json_music:
+        return json_sound, json_music
+
+    def official(field: str, following: str | None = None) -> str:
+        boundary = (
+            rf"(?=\n\s*{re.escape(following)}\s*:|\Z)"
+            if following else r"\Z"
+        )
+        match = re.search(
+            rf"(?ims)^\s*{re.escape(field)}\s*:\s*(.*?){boundary}",
+            text,
+        )
+        return " ".join(match.group(1).split()).strip(" .") if match else ""
+
+    return (
+        official("overall_soundscape", "non_diegetic_music"),
+        official("non_diegetic_music"),
+    )
 
 
 # ── Anti-Pattern Definitions ─────────────────────────────────────────
@@ -709,7 +751,12 @@ def direct_video_situation(prompt: object) -> str:
     text = str(prompt or "").strip()
     if not text:
         return ""
-    if DIRECT_VIDEO_SHOT_MARKER.casefold() in text.casefold():
+    embedded_description = _direct_video_json_field(
+        text, "integrated_multimodal_description",
+    ) or _direct_video_json_field(text, "detailed_description")
+    if embedded_description:
+        text = embedded_description
+    elif DIRECT_VIDEO_SHOT_MARKER.casefold() in text.casefold():
         text = re.split(
             re.escape(DIRECT_VIDEO_SHOT_MARKER),
             text,
@@ -759,6 +806,7 @@ def compose_direct_video_prompt(
     plan: Optional[dict] = None,
     audio_direction: object = "",
     allow_clip_text: bool = True,
+    audio_source_prompt: object | None = None,
 ) -> str:
     """Compose one self-contained text-only video prompt.
 
@@ -768,6 +816,9 @@ def compose_direct_video_prompt(
     conditioning at any stage.
     """
     master = " ".join(str(master_prompt or "").split()).strip()
+    authored_soundscape, authored_music = _direct_video_audio_fields(
+        situation_prompt if audio_source_prompt is None else audio_source_prompt,
+    )
     situation = direct_video_situation(situation_prompt)
     shot = plan if isinstance(plan, dict) else {}
 
@@ -792,29 +843,47 @@ def compose_direct_video_prompt(
     if not allow_clip_text:
         situation = apply_no_visible_text_lock(situation, mode="video")
 
-    audio = shot.get("audio_plan") if isinstance(shot.get("audio_plan"), dict) else {}
+    audio = (
+        shot.get("_director_audio_plan")
+        if isinstance(shot.get("_director_audio_plan"), dict)
+        else shot.get("audio_plan")
+        if isinstance(shot.get("audio_plan"), dict)
+        else {}
+    )
     sound_parts: list[str] = []
-    ambience = " ".join(str(audio.get("ambience") or "").split()).strip(" .")
-    if ambience:
-        sound_parts.append(ambience)
-    effects = audio.get("effects")
-    if isinstance(effects, list):
-        clean_effects = [" ".join(str(item).split()).strip(" .") for item in effects]
-        clean_effects = [item for item in clean_effects if item]
-        if clean_effects:
-            sound_parts.append("Synchronized effects: " + ", ".join(clean_effects))
+    if authored_soundscape:
+        sound_parts.append(authored_soundscape.strip(" ."))
+    else:
+        ambience = " ".join(str(audio.get("ambience") or "").split()).strip(" .")
+        if ambience:
+            sound_parts.append(ambience)
+        effects = audio.get("effects")
+        if isinstance(effects, list):
+            clean_effects = [" ".join(str(item).split()).strip(" .") for item in effects]
+            clean_effects = [item for item in clean_effects if item]
+            if clean_effects:
+                sound_parts.append("Synchronized effects: " + ", ".join(clean_effects))
     direction = " ".join(str(audio_direction or "").split()).strip(" .")
-    if direction:
+    if direction and not authored_soundscape:
         sound_parts.append(direction)
     if not sound_parts:
         sound_parts.append("Natural synchronized ambience and effects matching the visible action")
+    music = authored_music.strip(" .")
+    if not music:
+        music = " ".join(str(audio.get("music") or "").split()).strip(" .")
+    if not music and str(audio.get("mode") or "").strip().lower() in {
+        "music_driven", "audio_driven",
+    }:
+        music = "Follow the selected song section as the musical and timing anchor"
+    if not music or music.casefold() in {"none", "n/a", "no music"}:
+        music = "N/A"
 
     return "\n".join((
         master,
         f"{DIRECT_VIDEO_SCENE_MARKER} {overview}.",
         f"{DIRECT_VIDEO_SHOT_MARKER} {situation}.",
         f"{DIRECT_VIDEO_SOUND_MARKER} {'; '.join(sound_parts)}.",
-        f"{DIRECT_VIDEO_MUSIC_MARKER} none",
+        f"{DIRECT_VIDEO_MUSIC_MARKER} {music}",
     )).strip()
 
 
@@ -840,6 +909,11 @@ def enforce_direct_video_on_clip_plans(
             audio_direction=audio_direction,
             allow_clip_text=allow_clip_text,
         )
+        # Direct T2VA has no later visual-conditioning conversion. Make the
+        # composed prompt the immutable H3 source so official preflight keeps
+        # its authored soundscape/music instead of recompiling stale planner
+        # JSON into generic ambience plus N/A.
+        plan["_director_h3_source_prompt"] = plan["video_prompt"]
         windows = plan.get("window_prompts")
         if isinstance(windows, list):
             plan["window_prompts"] = [

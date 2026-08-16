@@ -330,7 +330,7 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
       setting: '',
       action: '',
       quickFormat: 'dialogue',
-      durationSeconds: projectType === 'quick_video' ? 15 : 90,
+      durationSeconds: projectType === 'quick_video' ? 15 : projectType === 'trailer' ? 60 : 90,
     },
     language: 'Español',
     spokenLanguage: 'Español de España',
@@ -487,7 +487,10 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     sectionVersions,
     title: text(project.title, fallback.title),
     projectType: project.projectType === 'music_video'
-      ? 'music_video' : project.projectType === 'quick_video' ? 'quick_video' : 'full_story',
+      ? 'music_video'
+      : project.projectType === 'trailer'
+        ? 'trailer'
+        : project.projectType === 'quick_video' ? 'quick_video' : 'full_story',
     creativeBrief: {
       generalIdea: text(creativeBrief.generalIdea),
       context: text(creativeBrief.context),
@@ -501,7 +504,8 @@ export function normalizeStoryProject(value: unknown): StoryProject {
         .includes(text(creativeBrief.quickFormat))
         ? creativeBrief.quickFormat : 'dialogue',
       durationSeconds: Math.max(5, Math.min(360,
-        Number(creativeBrief.durationSeconds) || (project.projectType === 'quick_video' ? 15 : 90))),
+        Number(creativeBrief.durationSeconds)
+        || (project.projectType === 'quick_video' ? 15 : project.projectType === 'trailer' ? 60 : 90))),
     },
     language: text(project.language, fallback.language),
     spokenLanguage: text(project.spokenLanguage, text(project.language, fallback.spokenLanguage)),

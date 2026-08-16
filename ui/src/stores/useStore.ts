@@ -10227,10 +10227,7 @@ export const useStore = create<AppState>((set, get) => ({
   // ── Director Pipeline (server-side) ──────────────────────────────
   startDirectorPipeline: async (useCurrentPlans = false) => {
     const state = get()
-    const directVideo = (
-      state.directorSkill === 'music_video'
-      && state.directorMusicVideoTreatment.generation_mode === 'direct_video'
-    )
+    const directVideo = state.directorMusicVideoTreatment.generation_mode === 'direct_video'
     const { directorPlannedClips, directorSceneDescription,
             directorAudioPath, directorAnalysis, directorReferenceImagePath,
             directorAutoMode, directorSeamless, directorShotImageGuidance,
@@ -10457,7 +10454,7 @@ export const useStore = create<AppState>((set, get) => ({
       preserve_visual_style: shortFilmPreserveVisualStyle,
       character_visual_style: directorCharacterVisualStyle || undefined,
       allow_clip_text: directorAllowClipText,
-      music_video_treatment: pipelineType === 'music_video'
+      music_video_treatment: pipelineType === 'music_video' || directVideo
         ? state.directorMusicVideoTreatment
         : undefined,
 
