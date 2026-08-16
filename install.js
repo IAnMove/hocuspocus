@@ -224,7 +224,7 @@ module.exports = {
       params: {
         path: "ui",
         message: [
-          "npm install",
+          "npm ci",
           "npm run build"
         ]
       }

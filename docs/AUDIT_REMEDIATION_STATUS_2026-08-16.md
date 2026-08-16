@@ -77,7 +77,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | OBS-01 | pendiente | — |
 | PERF-01 | completado | `DirectorDashboard` se carga sólo al abrir y genera chunk propio de 34.408 B/8.840 B gzip; entry baja de ~303,05 KB a 294.452 B gzip. CI exige chunk lazy y presupuesto entry de 327.680 B; test DOM abre el diálogo sólo tras activar overlay. 98 UI, lint/build/budget verdes. |
 | DEPS-01 | completado | Eliminado el duplicado normalizado `vector_quantize_pytorch`/`vector-quantize-pytorch`; las dependencias directas restantes, incluidas ffmpeg/loguru/spaCy/G2P/iopath/pycocotools, quedan fijadas a versiones verificadas en el runtime. Parser PEP 508 confirma 80 requisitos únicos por nombre+marker y cero directos sin pin. |
-| DEPS-02 | pendiente | — |
+| DEPS-02 | completado | Install y Update usan el mismo resolver UV (`--index-strategy unsafe-best-match`) y ambos construyen UI con `npm ci`; CI ejecuta un smoke offline de duplicados, paridad del resolver y coherencia package/lock. `node --check`, smoke normal y `npm ci --dry-run --ignore-scripts` verdes. Checklist Pinokio: destino `/home/ina/pinokio/api/Maestro-next.git`, paths relativos/venv/API conservados y referencia `system/examples/comfy/{install,update}.js`. |
 | DEPS-03 | pendiente | — |
 | DOC-01 | pendiente | — |
 | BRAND-01 | pendiente | Sustituir nombre visible Maestro por Loreframe Lab; conservar atribución del fork |

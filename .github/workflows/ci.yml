@@ -22,6 +22,8 @@ jobs:
           python-version: "3.10"
       - name: Clean-repo boundary guard
         run: python scripts/verify_clean_repo.py
+      - name: Dependency install/update contract smoke
+        run: python scripts/check_dependency_contract.py
       - name: Python syntax check (our modules)
         # compileall only compiles (never imports), so it needs no deps and
         # skips heavy vendored model code. Covers the surface we edit.

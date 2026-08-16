@@ -76,7 +76,7 @@ module.exports = {
     params: {
       venv: "env",
       path: "app",
-      message: "uv pip install -r requirements.txt"
+      message: "uv pip install -r requirements.txt --index-strategy unsafe-best-match"
     }
   }, {
     // Skip torch.js when the marker file written by torch.js's last
@@ -122,7 +122,7 @@ module.exports = {
     params: {
       path: "ui",
       message: [
-        "npm install",
+        "npm ci",
         "npm run build"
       ]
     }
