@@ -66,6 +66,30 @@ _gen_lock = None            # reference to launch._gen_lock
 _active_gen_states = None   # reference to launch._active_gen_states (abort signaling)
 _pipeline_state_observer: Optional[Callable[[dict, str], Optional[dict]]] = None
 
+
+def _workspace_output_dir(workspace: str) -> str:
+    """Resolve a Director workspace without importing the HTTP launcher.
+
+    The runtime launcher owns ``_workspace_dir``; importing ``launch`` here
+    breaks the deferred Loreframe entrypoint because ``launch.py`` is only the
+    compatibility application module.  Director is also used from a worker,
+    so it should resolve the same configured output root locally.
+    """
+    name = str(workspace or "default")
+    if not re.fullmatch(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)", name):
+        raise ValueError("Invalid workspace name")
+    if _wgp is None:
+        raise RuntimeError("Director runtime is not initialized")
+    base = os.path.realpath(os.path.abspath(
+        _wgp.server_config.get("save_path", "outputs")
+    ))
+    output_dir = base if name == "default" else os.path.realpath(os.path.join(base, name))
+    if os.path.commonpath((base, output_dir)) != base:
+        raise ValueError("Invalid workspace path")
+    if name != "default":
+        os.makedirs(output_dir, exist_ok=True)
+    return output_dir
+
 _LOGGER = logging.getLogger("loreframe.operations.director")
 
 _pipelines: dict = {}
@@ -5332,8 +5356,7 @@ def start_pipeline(params: dict) -> str:
     workspace = params.pop("workspace", None)
     if workspace:
         # Resolve the output directory now, while we know the intended workspace
-        from launch import _workspace_dir
-        out_dir = _workspace_dir(workspace)
+        out_dir = _workspace_output_dir(workspace)
         print(f"[Pipeline] Workspace={workspace}, out_dir={out_dir}, wgp.save_path={_wgp.save_path}")
     else:
         out_dir = _wgp.save_path

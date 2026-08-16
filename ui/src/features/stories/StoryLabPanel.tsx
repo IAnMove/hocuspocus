@@ -6152,10 +6152,20 @@ export function StoryLabPanel() {
                           <span>Direct approved references</span>
                           <span className="text-[9px] text-text-muted">H3 Ref2VA · no start images</span>
                         </button>
+                        <button
+                          type="button"
+                          className={`${button} flex-col ${directVideo ? 'border-fuchsia-400/70 bg-fuchsia-500/10 text-fuchsia-200' : ''}`}
+                          onClick={() => patch({ musicVideoGenerationMode: 'direct_video', protagonistConsistency: false })}
+                        >
+                          <span>Direct video</span>
+                          <span className="text-[9px] text-text-muted">T2V · no references or start images</span>
+                        </button>
                       </div>
-                      {directReferenceVideo && (
+                      {(directReferenceVideo || directVideo) && (
                         <p className={`text-[9px] ${directReferenceVideoReady ? 'text-emerald-200' : 'text-amber-300'}`}>
-                          {directReferenceVideoReady
+                          {directVideo
+                            ? 'Text-to-video mode: no image model, start image or visual reference is required.'
+                            : directReferenceVideoReady
                             ? `${approvedVisualReferenceCount} approved reference${approvedVisualReferenceCount === 1 ? '' : 's'} ready for H3.`
                             : directReferenceVideoSupported
                               ? 'Approve at least one image in Imágenes.'
@@ -6167,7 +6177,7 @@ export function StoryLabPanel() {
                       <select
                         className={`${input} mt-1`}
                         value={filmImageModel}
-                        disabled={directReferenceVideo}
+                        disabled={directReferenceVideo || directVideo}
                         onChange={event => selectDirectorImageModel(event.target.value)}
                       >
                         {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
@@ -6185,7 +6195,9 @@ export function StoryLabPanel() {
                         </optgroup>
                       </select>
                       <span className={`mt-1 block text-[9px] leading-relaxed ${filmImageReady ? 'text-text-muted' : 'text-amber-300'}`}>
-                        {directReferenceVideo
+                        {directVideo
+                          ? 'Not used in direct-video mode; the clip is generated from the text prompt alone.'
+                          : directReferenceVideo
                           ? 'Not used in direct-reference mode; approved Story images go straight to H3 Ref2VA.'
                           : filmImageModel === MINIMAX_IMAGE_API_MODEL
                           ? filmImageReady
