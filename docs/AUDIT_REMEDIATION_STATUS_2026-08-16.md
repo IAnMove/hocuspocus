@@ -31,7 +31,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | SER-01 | pendiente | — |
 | SER-02 | pendiente | — |
 | SER-UI-01 | pendiente | — |
-| SER-UI-02 | pendiente | — |
+| SER-UI-02 | completado | Cambio de `episode.id` pausa el último reproductor y reinicia error, decisiones, aprobación, cursor/Play all, foco, preview, edición, seed/busy, assembly y subvista; el efecto de playback ignora el render transitorio stale. Prueba E1→E2 funcional + 80 UI, lint/build verdes. |
 | DUR-01 | pendiente | Revalidar contra `c2da86c` |
 | SER-UI-03 | pendiente | — |
 | SER-03 | pendiente | — |

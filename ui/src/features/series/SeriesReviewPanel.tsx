@@ -53,11 +53,34 @@ export function SeriesReviewPanel({
   const [assemblyJob, setAssemblyJob] = useState<SeriesAssemblyJob | null>(null)
   const [reviewView, setReviewView] = useState<'assembly' | 'history' | 'finish'>('assembly')
   const playerRef = useRef<HTMLVideoElement>(null)
+  const lastPlayerRef = useRef<HTMLVideoElement>(null)
   const activeJobId = job?.jobId
   const activeJobStatus = job?.status
   const activeJobCurrent = job?.current
   const assemblyJobId = assemblyJob?.jobId
   const assemblyJobStatus = assemblyJob?.status
+  const previousEpisodeId = useRef(episode.id)
+  const episodeChanged = previousEpisodeId.current !== episode.id
+  useEffect(() => {
+    if (!episodeChanged) return
+    previousEpisodeId.current = episode.id
+    const activePlayer = playerRef.current || lastPlayerRef.current
+    activePlayer?.pause()
+    lastPlayerRef.current = null
+    setError(null)
+    setDecisions({})
+    setApprovalProgress(null)
+    setPlaybackShotId(null)
+    setPlayingAll(false)
+    setFocusShotId(episode.shots[0]?.id || '')
+    setPreviewAttemptByShot({})
+    setEditingShotId(null)
+    setEditDraft(null)
+    setEditSeed('')
+    setEditBusy(false)
+    setAssemblyJob(null)
+    setReviewView('assembly')
+  }, [episode.id, episode.shots, episodeChanged])
   useEffect(() => {
     if (!activeJobId || !activeJobStatus || !['queued', 'running', 'cancelling'].includes(activeJobStatus)) return
     let active = true
@@ -126,6 +149,7 @@ export function SeriesReviewPanel({
   const displayPlayback = playingAll ? currentPlayback : focusedPlayback
   const currentPlaybackAttemptId = displayPlayback?.attempt.id
   useEffect(() => {
+    if (episodeChanged) return
     if (!playingAll) return
     if (playbackCursor.outcome === 'stop' || !currentPlaybackAttemptId) {
       setPlayingAll(false)
@@ -139,7 +163,7 @@ export function SeriesReviewPanel({
       setPlayingAll(false)
       setError(`Play all could not continue: ${(reason as Error).message}`)
     })
-  }, [currentPlaybackAttemptId, playbackCursor.outcome, playingAll])
+  }, [currentPlaybackAttemptId, episodeChanged, playbackCursor.outcome, playingAll])
   useEffect(() => {
     if (!focusShotId && sortedShots[0]) setFocusShotId(sortedShots[0].id)
   }, [focusShotId, sortedShots])
@@ -299,7 +323,10 @@ export function SeriesReviewPanel({
       {displayPlayback ? <div className="min-w-0 bg-black">
         <video
           key={displayPlayback.attempt.id}
-          ref={playerRef}
+          ref={node => {
+            playerRef.current = node
+            if (node) lastPlayerRef.current = node
+          }}
           className="max-h-[70vh] w-full bg-black"
           src={api.getFileUrl(displayPlayback.asset.uri.replace(/^outputs\//, ''), displayPlayback.asset.workspaceId)}
           controls
