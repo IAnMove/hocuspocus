@@ -28721,6 +28721,22 @@ _series_plan_jobs_lock = threading.RLock()
 _series_plan_active_jobs: set[str] = set()
 
 
+def _llm_abort_outcome(exc: Exception) -> bool | None:
+    """Return whether a cancellation closed the active provider response."""
+    value = getattr(exc, "abort_supported", None)
+    return bool(value) if isinstance(value, bool) else None
+
+
+def _planning_cancel_message(subject: str, abort_supported: bool | None) -> str:
+    if abort_supported is True:
+        outcome = "the active LLM response was closed immediately"
+    elif abort_supported is False:
+        outcome = "the provider could not abort its active response, so it stopped at the next safe boundary"
+    else:
+        outcome = "the active request was aborted where supported and otherwise stopped at the next safe boundary"
+    return f"{subject} cancelled: {outcome}. Completed stages remain recoverable."
+
+
 def _series_plan_store(workspace: str):
     from services.series_jobs import SeriesJobStore
 
@@ -28946,6 +28962,14 @@ def _run_series_plan_job_inner(job_id: str) -> None:
     except Exception as exc:
         latest = _load_series_plan_job(job_id)
         if latest and latest.get("status") in {"cancelling", "cancelled"}:
+            outcome = _llm_abort_outcome(exc)
+            if latest.get("status") == "cancelling" and outcome is not None:
+                _series_plan_update(
+                    job_id,
+                    status="cancelling",
+                    cancellationAbortSupported=outcome,
+                    message=_planning_cancel_message("Series planning", outcome),
+                )
             return
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
         _series_plan_update(
@@ -29072,6 +29096,14 @@ def _run_series_canon_plan_job_inner(job_id: str) -> None:
     except Exception as exc:
         latest = _load_series_plan_job(job_id)
         if latest and latest.get("status") in {"cancelling", "cancelled"}:
+            outcome = _llm_abort_outcome(exc)
+            if latest.get("status") == "cancelling" and outcome is not None:
+                _series_plan_update(
+                    job_id,
+                    status="cancelling",
+                    cancellationAbortSupported=outcome,
+                    message=_planning_cancel_message("Canon preparation", outcome),
+                )
             return
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
         _series_plan_update(
@@ -29113,9 +29145,11 @@ def _run_series_plan_job(job_id: str) -> None:
                 status="cancelled",
                 stage="cancelled",
                 finishedAt=time.time(),
-                message=(
-                    "Series planning cancelled after the active LLM call "
-                    "reached a safe boundary. Completed stages remain recoverable."
+                message=_planning_cancel_message(
+                    "Series planning",
+                    settling.get("cancellationAbortSupported")
+                    if isinstance(settling.get("cancellationAbortSupported"), bool)
+                    else None,
                 ),
             )
 
@@ -29275,8 +29309,8 @@ def cancel_series_episode_plan(job_id: str):
         stage="cancelling" if worker_active else "cancelled",
         finishedAt=None if worker_active else time.time(),
         message=(
-            "Series planning cancellation requested; waiting for the active "
-            "LLM call to reach a safe boundary."
+            "Series planning cancellation requested; aborting the active LLM "
+            "response where supported, otherwise waiting for its safe boundary."
             if worker_active else
             "Series planning cancelled before an LLM call started."
         ),
@@ -31090,6 +31124,17 @@ def _run_story_plan_job_inner(job_id: str) -> None:
             error=None,
         )
     except Exception as exc:
+        latest = _load_story_plan_job(job_id)
+        if latest and latest.get("status") in {"cancelling", "cancelled"}:
+            outcome = _llm_abort_outcome(exc)
+            if latest.get("status") == "cancelling" and outcome is not None:
+                _story_job_update(
+                    job_id,
+                    status="cancelling",
+                    cancellationAbortSupported=outcome,
+                    message=_planning_cancel_message("Story generation", outcome),
+                )
+            return
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
         _story_job_update(
             job_id,
@@ -31126,9 +31171,11 @@ def _run_story_plan_job(job_id: str) -> None:
                 job_id,
                 status="cancelled",
                 stage="cancelled",
-                message=(
-                    "Story generation cancelled after the active LLM call "
-                    "reached a safe boundary. Completed stages remain recoverable."
+                message=_planning_cancel_message(
+                    "Story generation",
+                    settling.get("cancellationAbortSupported")
+                    if isinstance(settling.get("cancellationAbortSupported"), bool)
+                    else None,
                 ),
                 finishedAt=time.time(),
             )
@@ -31922,8 +31969,8 @@ def cancel_story_lab_generation(job_id: str):
         status="cancelling" if worker_active else "cancelled",
         stage="cancelling" if worker_active else "cancelled",
         message=(
-            "Story generation cancellation requested; waiting for the active "
-            "LLM call to reach a safe boundary."
+            "Story generation cancellation requested; aborting the active LLM "
+            "response where supported, otherwise waiting for its safe boundary."
             if worker_active else
             "Story generation cancelled before an LLM call started."
         ),

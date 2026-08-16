@@ -1754,6 +1754,10 @@ def _image_to_data_url(image_path: str, max_size: int = 768) -> Optional[str]:
 def _current_task_cancel_callback():
     """Return a cheap cancellation probe for the active canonical task."""
     try:
+        from .task_manager import current_task_cancellation_token
+        token = current_task_cancellation_token()
+        if token is not None:
+            return token.is_cancelled
         from .task_manager import current_task_context, get_task_registry
         context = current_task_context()
         parent_task_id = str(context.get("task_id") or "")
@@ -1777,6 +1781,89 @@ def _current_task_cancel_callback():
         )
 
     return cancelled
+
+
+class LLMRequestCancelled(InterruptedError):
+    """Raised when one job's active provider request is cancelled."""
+
+    def __init__(self, provider: str, *, abort_supported: bool) -> None:
+        self.provider = str(provider or "LLM")
+        self.abort_supported = bool(abort_supported)
+        capability = "aborted" if self.abort_supported else "could not be aborted"
+        super().__init__(
+            f"{self.provider} request cancelled ({capability}); "
+            "completed stages remain recoverable"
+        )
+
+
+def _resolve_cancellation_token(token=None):
+    """Use an explicit token or resolve the current canonical task token."""
+    if token is not None:
+        return token
+    try:
+        from .task_manager import current_task_cancellation_token
+        return current_task_cancellation_token()
+    except Exception:
+        return None
+
+
+def _token_cancelled(token) -> bool:
+    if token is None:
+        return False
+    try:
+        probe = getattr(token, "is_cancelled", None)
+        if callable(probe):
+            return bool(probe())
+        probe = getattr(token, "is_set", None)
+        if callable(probe):
+            return bool(probe())
+    except Exception:
+        return False
+    return False
+
+
+def _watch_response_for_cancellation(response, token, provider: str):
+    """Close one response when its job token fires, without touching others."""
+    if token is None:
+        return None
+    close = getattr(response, "close", None)
+    abort_supported = callable(close)
+    stopped = threading.Event()
+    state = {"abort_supported": abort_supported, "cancelled": False}
+
+    def watch() -> None:
+        while not stopped.wait(0.05):
+            if not _token_cancelled(token):
+                continue
+            state["cancelled"] = True
+            if abort_supported:
+                try:
+                    close()
+                except Exception:
+                    state["abort_supported"] = False
+            return
+
+    watcher = threading.Thread(
+        target=watch,
+        name=f"llm-cancel-{str(provider or 'provider').lower()[:16]}",
+        daemon=True,
+    )
+    watcher.start()
+    return stopped, watcher, state
+
+
+def _stop_response_cancellation_watcher(watcher) -> None:
+    if watcher is None:
+        return
+    stopped, thread, _state = watcher
+    stopped.set()
+    if thread is not threading.current_thread():
+        thread.join(timeout=0.25)
+
+
+def _raise_if_token_cancelled(token, provider: str, *, abort_supported: bool = True) -> None:
+    if _token_cancelled(token):
+        raise LLMRequestCancelled(provider, abort_supported=abort_supported)
 
 
 @contextmanager
@@ -2087,6 +2174,7 @@ def generate_openai_compatible(
     presence_penalty: float = 0.0,
     json_schema: Optional[dict] = None,
     image_paths: Optional[list[str]] = None,
+    cancellation_token=None,
 ) -> str:
     """Run one isolated OpenAI-compatible text request.
 
@@ -2095,6 +2183,7 @@ def generate_openai_compatible(
     overrides such as asking DeepSeek to revise one comic while keeping the
     application's normal internal LLM active.
     """
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
     model_id = (model_id or "").strip()
     base_url = (base_url or "").strip().rstrip("/")
     if not model_id:
@@ -2243,6 +2332,7 @@ def generate_openai_compatible(
 
     for content_attempt in range(attempts):
         request_payload = dict(payload)
+        response_watcher = None
         if is_minimax and content_attempt > 0:
             request_payload["max_completion_tokens"] = max(
                 int(request_payload["max_completion_tokens"]) * 2,
@@ -2275,23 +2365,72 @@ def generate_openai_compatible(
                         acquired_resources=[request_lane.key],
                         event_type="operation.started", force=True,
                     )
+                _raise_if_token_cancelled(cancellation_token, provider_name)
                 response = requests.post(
-                    endpoint, json=request_payload, headers=headers, timeout=(10, 600),
+                    endpoint,
+                    json=request_payload,
+                    headers=headers,
+                    timeout=(10, 600),
+                    stream=bool(cancellation_token),
+                )
+                response_watcher = _watch_response_for_cancellation(
+                    response, cancellation_token, provider_name,
+                )
+                _raise_if_token_cancelled(
+                    cancellation_token,
+                    provider_name,
+                    abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
                 )
                 # Some otherwise-compatible APIs do not implement OpenAI's
                 # structured response envelope. Retry once without it; Maestro
                 # still validates and repairs the returned JSON locally.
                 if response.status_code in (400, 422) and "response_format" in request_payload:
+                    _stop_response_cancellation_watcher(response_watcher)
+                    response_watcher = None
+                    try:
+                        response.close()
+                    except Exception:
+                        pass
                     fallback_payload = dict(request_payload)
                     fallback_payload.pop("response_format", None)
                     response = requests.post(
-                        endpoint, json=fallback_payload, headers=headers, timeout=(10, 600),
+                        endpoint,
+                        json=fallback_payload,
+                        headers=headers,
+                        timeout=(10, 600),
+                        stream=bool(cancellation_token),
+                    )
+                    response_watcher = _watch_response_for_cancellation(
+                        response, cancellation_token, provider_name,
                     )
                 response.raise_for_status()
+                _raise_if_token_cancelled(
+                    cancellation_token,
+                    provider_name,
+                    abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+                )
+        except LLMRequestCancelled as exc:
+            _stop_response_cancellation_watcher(response_watcher)
+            finish_operation(
+                "cancelled",
+                "Provider request cancelled",
+                error=str(exc),
+            )
+            raise
         except resource_scheduler.ResourceAcquireCancelled as exc:
+            _stop_response_cancellation_watcher(response_watcher)
             finish_operation("cancelled", "Provider call cancelled before it started")
             raise InterruptedError(str(exc)) from exc
         except requests.exceptions.RequestException as exc:
+            abort_supported = bool(
+                response_watcher and response_watcher[2].get("abort_supported")
+            )
+            _stop_response_cancellation_watcher(response_watcher)
+            if _token_cancelled(cancellation_token):
+                raise LLMRequestCancelled(
+                    provider_name,
+                    abort_supported=abort_supported,
+                ) from exc
             detail = ""
             if getattr(exc, "response", None) is not None:
                 detail = str(exc.response.text or "")[:500]
@@ -2300,6 +2439,11 @@ def generate_openai_compatible(
             raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
 
         try:
+            _raise_if_token_cancelled(
+                cancellation_token,
+                provider_name,
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
             response_data = response.json()
             base_response = response_data.get("base_resp") or {}
             if base_response.get("status_code") not in (None, 0):
@@ -2310,9 +2454,21 @@ def generate_openai_compatible(
             message = choice["message"]
             content = _strip_thinking_tags(str(message.get("content") or "")).strip()
         except (KeyError, IndexError, TypeError, ValueError) as exc:
+            abort_supported = bool(
+                response_watcher and response_watcher[2].get("abort_supported")
+            )
+            _stop_response_cancellation_watcher(response_watcher)
+            response_watcher = None
+            if _token_cancelled(cancellation_token):
+                raise LLMRequestCancelled(
+                    provider_name,
+                    abort_supported=abort_supported,
+                ) from exc
             finish_operation("failed", "Provider response was invalid", error="OpenAI-compatible provider returned an invalid response")
             raise RuntimeError("OpenAI-compatible provider returned an invalid response") from exc
         if content:
+            _stop_response_cancellation_watcher(response_watcher)
+            response_watcher = None
             response_usage = response_data.get("usage") or {}
             _record_activity_usage(response_usage)
             finish_operation("completed", "Provider response received and parsed", response_usage)
@@ -2330,7 +2486,10 @@ def generate_openai_compatible(
             "; retrying once with more output headroom" if content_attempt + 1 < attempts else "",
         )
         if content_attempt + 1 < attempts:
+            _stop_response_cancellation_watcher(response_watcher)
+            response_watcher = None
             time.sleep(0.4)
+    _stop_response_cancellation_watcher(response_watcher)
     finish_operation("failed", "Provider returned empty content", error=f"{provider_name} returned empty content")
     raise RuntimeError(
         f"{provider_name} returned empty content after {attempts} "
@@ -2359,6 +2518,7 @@ def generate_streaming(
     frequency_penalty: float = 0.0,
     presence_penalty: float = 0.0,
     json_schema: Optional[dict] = None,
+    cancellation_token=None,
 ) -> str:
     """Generate text using SSE streaming, populating the stream buffer in real-time.
 
@@ -2375,6 +2535,9 @@ def generate_streaming(
     """
     global _stream_buffer, _stream_done, _last_system_prompt, _last_user_prompt, _last_thinking_text
     import re as _re
+
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, _provider)
 
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
@@ -2522,12 +2685,16 @@ def generate_streaming(
         pass
 
     if _provider == "anthropic":
-        return _generate_streaming_anthropic(messages, total_tokens, max(temperature, 0.01), top_p)
+        return _generate_streaming_anthropic(
+            messages, total_tokens, max(temperature, 0.01), top_p,
+            cancellation_token=cancellation_token,
+        )
 
     raw_content = ""
     reasoning_content = ""
     stream_usage = {}
     in_reasoning = False
+    response_watcher = None
     try:
         resp = requests.post(
             f"{_server_url()}/v1/chat/completions",
@@ -2537,6 +2704,9 @@ def generate_streaming(
             stream=True,
         )
         resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, _provider,
+        )
         # Ollama commonly serves SSE as ``text/event-stream`` without an
         # explicit charset. requests then falls back to ISO-8859-1, turning
         # UTF-8 Spanish such as "océano" into "ocÃ©ano". SSE JSON is UTF-8
@@ -2545,6 +2715,10 @@ def generate_streaming(
 
         import json as _json_mod
         for line in resp.iter_lines(decode_unicode=True):
+            _raise_if_token_cancelled(
+                cancellation_token, _provider,
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
             if not line or not line.startswith("data: "):
                 continue
             data_str = line[6:]  # strip "data: "
@@ -2580,17 +2754,35 @@ def generate_streaming(
                     _record_activity_stream(display, False)
             except Exception:
                 continue
+        _raise_if_token_cancelled(
+            cancellation_token,
+            _provider,
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
 
+    except LLMRequestCancelled:
+        with _stream_lock:
+            _stream_done = True
+        raise
     except requests.exceptions.RequestException as e:
         # Server socket died mid-stream (common: subprocess crash). Surface
         # the real cause so the Director run reports it instead of hanging.
         with _stream_lock:
             _stream_done = True
+        if _token_cancelled(cancellation_token):
+            raise LLMRequestCancelled(
+                _provider,
+                abort_supported=bool(
+                    response_watcher and response_watcher[2].get("abort_supported")
+                ),
+            ) from e
         raise _diagnose_llm_request_failure(e) from e
     except Exception:
         with _stream_lock:
             _stream_done = True
         raise
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     # Capture thinking text for the pipeline dashboard. Two sources:
     #   1. reasoning_content — populated by chat templates that emit
@@ -2674,7 +2866,14 @@ def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top
     return content.strip()
 
 
-def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: float, top_p: float) -> str:
+def _generate_streaming_anthropic(
+    messages: list,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    *,
+    cancellation_token=None,
+) -> str:
     """Streaming generation via Anthropic Messages API with SSE."""
     global _stream_buffer, _stream_done
     import re as _re
@@ -2700,6 +2899,9 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
 
     raw_content = ""
     stream_usage = {}
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, "Anthropic")
+    response_watcher = None
     try:
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -2709,9 +2911,17 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
             stream=True,
         )
         resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, "Anthropic",
+        )
 
         import json
         for line in resp.iter_lines():
+            _raise_if_token_cancelled(
+                cancellation_token,
+                "Anthropic",
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
             if not line:
                 continue
             line_str = line.decode("utf-8", errors="replace")
@@ -2739,12 +2949,33 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
                         _stream_buffer = raw_content
                     _record_activity_stream(raw_content, False)
 
+    except LLMRequestCancelled:
+        with _stream_lock:
+            _stream_done = True
+        raise
+    except requests.exceptions.RequestException as e:
+        if _token_cancelled(cancellation_token):
+            with _stream_lock:
+                _stream_done = True
+            raise LLMRequestCancelled(
+                "Anthropic",
+                abort_supported=bool(
+                    response_watcher and response_watcher[2].get("abort_supported")
+                ),
+            ) from e
+        print(f"[LLM/Anthropic] Streaming error: {e}")
+        with _stream_lock:
+            _stream_buffer = raw_content or f"Error: {e}"
+            _stream_done = True
+        return ""
     except Exception as e:
         print(f"[LLM/Anthropic] Streaming error: {e}")
         with _stream_lock:
             _stream_buffer = raw_content or f"Error: {e}"
             _stream_done = True
         return ""
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     content = _strip_thinking_tags(raw_content)
 

@@ -44,6 +44,88 @@ _VOLATILE_UPDATE_FIELDS = frozenset({"updated_at"})
 _registry_lock = threading.RLock()
 _registries: dict[str, "TaskRegistry"] = {}
 _context = threading.local()
+_cancellation_tokens_lock = threading.RLock()
+_cancellation_tokens: dict[tuple[str, str], "CancellationToken"] = {}
+
+
+class CancellationToken:
+    """A per-task cancellation signal shared by workers and provider clients.
+
+    The task registry remains the durable source of truth, while this in-memory
+    event gives an active HTTP stream a prompt, job-scoped wake-up.  Tokens are
+    deliberately keyed by workspace and task id so cancelling one job cannot
+    interrupt a concurrent job using the same provider.
+    """
+
+    def __init__(self) -> None:
+        self._event = threading.Event()
+        self._lock = threading.RLock()
+        self._reason = ""
+
+    def cancel(self, reason: str = "") -> None:
+        with self._lock:
+            if reason and not self._reason:
+                self._reason = str(reason)
+            self._event.set()
+
+    def reset(self) -> None:
+        with self._lock:
+            self._reason = ""
+            self._event.clear()
+
+    def is_cancelled(self) -> bool:
+        return self._event.is_set()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        return self._event.wait(timeout)
+
+    @property
+    def reason(self) -> str:
+        with self._lock:
+            return self._reason
+
+
+def _cancellation_token_key(workspace_dir: str, task_id: str) -> tuple[str, str]:
+    return (os.path.realpath(os.path.abspath(str(workspace_dir))), str(task_id))
+
+
+def get_cancellation_token(workspace_dir: str, task_id: str) -> CancellationToken:
+    """Return the stable cancellation token for one canonical task."""
+    key = _cancellation_token_key(workspace_dir, task_id)
+    with _cancellation_tokens_lock:
+        return _cancellation_tokens.setdefault(key, CancellationToken())
+
+
+def current_task_cancellation_token() -> CancellationToken | None:
+    """Resolve the token associated with the task in the current worker."""
+    context = current_task_context()
+    task_id = str(context.get("task_id") or "")
+    workspace_dir = str(context.get("workspace_dir") or "")
+    if not task_id or not workspace_dir:
+        return None
+    return get_cancellation_token(workspace_dir, task_id)
+
+
+def _update_cancellation_token(workspace_dir: str, task_id: str, **changes: Any) -> None:
+    """Mirror durable task transitions into the active worker's Event."""
+    key = _cancellation_token_key(workspace_dir, task_id)
+    status = str(changes.get("status") or "").lower()
+    phase = str(changes.get("phase") or "").lower()
+    should_cancel = status in {"cancelled", "interrupted"} or phase == "cancelling"
+    with _cancellation_tokens_lock:
+        token = _cancellation_tokens.get(key)
+        if should_cancel and token is None:
+            token = _cancellation_tokens.setdefault(key, CancellationToken())
+        elif status in {"completed", "failed"}:
+            # Successful/failed workers no longer need an in-memory signal.
+            # The durable task snapshot remains the source of history.
+            _cancellation_tokens.pop(key, None)
+            return
+    if should_cancel and token is not None:
+        token.cancel(f"Task {task_id} cancellation requested")
+    elif status == "queued" and phase != "cancelling" and token is not None:
+        # Resume explicitly reopens the canonical task and gets a fresh signal.
+        token.reset()
 
 
 class TokenUsage(TypedDict):
@@ -392,6 +474,7 @@ class TaskRegistry:
             )
             self._append_event(connection, task, "task.created", task)
             connection.commit()
+        _update_cancellation_token(self.workspace_dir, task_id, status=status, phase=task["phase"])
         self._notify()
         return copy.deepcopy(task)
 
@@ -471,6 +554,15 @@ class TaskRegistry:
             }
             if not changed_patch:
                 connection.rollback()
+                # A process-local token may have been recreated after the
+                # durable snapshot reached ``cancelling``. Mirror that state
+                # even though it must not append another durable event.
+                _update_cancellation_token(
+                    self.workspace_dir,
+                    task_id,
+                    status=task.get("status"),
+                    phase=task.get("phase"),
+                )
                 return copy.deepcopy(task)
 
             task.update(changed_patch)
@@ -485,6 +577,7 @@ class TaskRegistry:
             )
             self._append_event(connection, task, event_type, changed_patch)
             connection.commit()
+        _update_cancellation_token(self.workspace_dir, task_id, **patch)
         self._notify()
         return copy.deepcopy(task)
 
@@ -682,3 +775,6 @@ def forget_task_registry(workspace_dir: str) -> None:
     path = os.path.realpath(os.path.abspath(workspace_dir))
     with _registry_lock:
         _registries.pop(path, None)
+    with _cancellation_tokens_lock:
+        for key in [candidate for candidate in _cancellation_tokens if candidate[0] == path]:
+            _cancellation_tokens.pop(key, None)
