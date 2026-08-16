@@ -17,7 +17,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | SEC-03 | completado | Token bearer + cookie de sesión para LAN; loopback libre; UI, API y `/classic` cubiertos |
 | TASK-01 | completado | Namespace `task-client-*` exacto en backend y UI; root externo eliminado/ignorado; tarea backend homónima conserva snapshot/eventos; 37 tests Python + 27 UI verdes |
 | TASK-02 | pendiente | — |
-| TASK-03 | pendiente | — |
+| TASK-03 | completado | Hash semántico sin `updatedAt`, dedupe y coalescing a 1,5 s; terminal/error inmediato; 100 polls iguales => 1 publicación; 30 tests UI verdes |
 | TASK-04 | pendiente | — |
 | TASK-05 | pendiente | — |
 | TASK-06 | pendiente | — |

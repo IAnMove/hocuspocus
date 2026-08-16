@@ -6,6 +6,7 @@ import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type Th
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
+import { createActivityPublicationGate } from '../lib/activityPublication'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -1861,6 +1862,7 @@ const CLIENT_ACTIVITY_TERMINAL_STATUSES = new Set<ForegroundActivity['status']>(
   'cancelled',
 ])
 const _canonicalClientTaskWrites = createKeyedWriteSequencer()
+const _activityPublicationGate = createActivityPublicationGate<ForegroundActivity>()
 
 function beginAppActivity(
   get: () => AppState,
@@ -7223,9 +7225,11 @@ export const useStore = create<AppState>((set, get) => ({
     // Keep each client root's running -> terminal -> dismissal writes ordered.
     // Different activities still publish concurrently, and observability never
     // blocks the foreground operation.
-    void _canonicalClientTaskWrites.enqueue(activity.id, async () => {
-      await api.upsertCanonicalClientTask(published as unknown as Record<string, unknown>)
-    }).catch(() => undefined)
+    _activityPublicationGate.publish(published, latest => {
+      void _canonicalClientTaskWrites.enqueue(activity.id, async () => {
+        await api.upsertCanonicalClientTask(latest as unknown as Record<string, unknown>)
+      }).catch(() => undefined)
+    })
     set(state => ({
       activities: { ...state.activities, [activity.id]: published },
     }))
@@ -7237,6 +7241,7 @@ export const useStore = create<AppState>((set, get) => ({
     void _canonicalClientTaskWrites.enqueue(activityId, async () => {
       await api.dismissCanonicalTask(api.canonicalClientTaskId(activityId), workspace)
     }).catch(() => undefined)
+    _activityPublicationGate.clear(activityId)
     set(state => {
       if (!state.activities[activityId]) return {}
       const activities = { ...state.activities }
