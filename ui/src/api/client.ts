@@ -168,11 +168,29 @@ export function subscribeCanonicalTaskEvents(
 }
 
 export async function upsertCanonicalClientTask(task: Record<string, unknown>): Promise<CanonicalTask> {
+  const clientTaskId = canonicalClientTaskId(task.id)
+  const canonicalTask: Record<string, unknown> = { ...task, id: clientTaskId }
+  delete canonicalTask.root_id
+  delete canonicalTask.rootId
   const res = await fetch(`${BASE}/api/v1/tasks/upsert`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: canonicalTask }),
   })
   if (!res.ok) throw new Error('Failed to publish Maestro activity')
   return res.json()
+}
+
+/** Keep frontend activity ids inside the namespace reserved for client tasks. */
+export function canonicalClientTaskId(value: unknown): string {
+  let normalized = String(value ?? '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+  while (normalized.startsWith('task-client-')) {
+    normalized = normalized.slice('task-client-'.length).replace(/^-+/, '')
+  }
+  if (!normalized) {
+    const uniquePart = globalThis.crypto?.randomUUID?.()
+      || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    normalized = `activity-${uniquePart}`
+  }
+  return `task-client-${normalized.slice(0, 160)}`
 }
 
 export async function cancelCanonicalTask(taskId: string, workspace: string): Promise<CanonicalTask> {

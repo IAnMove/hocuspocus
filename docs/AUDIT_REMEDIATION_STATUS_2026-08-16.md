@@ -15,7 +15,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | SEC-01 | completado | Tests de move válido, traversal, absoluta y symlink de escape |
 | SEC-02 | completado | Resolver común para trim/análisis; uploads/workspace válidos, externos y symlinks rechazados |
 | SEC-03 | completado | Token bearer + cookie de sesión para LAN; loopback libre; UI, API y `/classic` cubiertos |
-| TASK-01 | pendiente | — |
+| TASK-01 | completado | Namespace `task-client-*` exacto en backend y UI; root externo eliminado/ignorado; tarea backend homónima conserva snapshot/eventos; 37 tests Python + 27 UI verdes |
 | TASK-02 | pendiente | — |
 | TASK-03 | pendiente | — |
 | TASK-04 | pendiente | — |

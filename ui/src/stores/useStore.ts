@@ -7233,10 +7233,9 @@ export const useStore = create<AppState>((set, get) => ({
   removeActivity: (activityId) => {
     const activity = get().activities[activityId]
     if (!activity || !CLIENT_ACTIVITY_TERMINAL_STATUSES.has(activity.status)) return
-    const clientId = activityId.replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 160)
     const workspace = get().activeWorkspace
     void _canonicalClientTaskWrites.enqueue(activityId, async () => {
-      await api.dismissCanonicalTask(`task-client-${clientId}`, workspace)
+      await api.dismissCanonicalTask(api.canonicalClientTaskId(activityId), workspace)
     }).catch(() => undefined)
     set(state => {
       if (!state.activities[activityId]) return {}

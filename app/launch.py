@@ -113,6 +113,7 @@ from routers.lan_auth import create_lan_auth_router
 from services.durable_generation_queue import DurableGenerationQueue
 from services.lan_auth import LanAuthMiddleware, describe_lan_auth_startup
 from services.media_paths import MediaPathNotAllowed, resolve_permitted_media_path
+from services.task_identity import canonical_client_task_identity
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 from models.minimax_h3.turbo import (
@@ -35680,11 +35681,10 @@ def upsert_client_task(body: dict):
     raw = body.get("task") if isinstance(body.get("task"), dict) else body
     workspace = raw.get("workspace") if "workspace" in raw else _get_active_workspace()
     _workspace_dir(workspace)
-    client_id = re.sub(r"[^A-Za-z0-9_-]+", "-", str(raw.get("id") or uuid.uuid4().hex))[:160]
-    task_id = client_id if client_id.startswith("task-") else f"task-client-{client_id}"
+    task_id, root_id = canonical_client_task_identity(raw)
     status = _task_status(raw.get("status"))
     task = _upsert_canonical_task(
-        workspace, task_id, root_id=task_id,
+        workspace, task_id, root_id=root_id,
         kind=str(raw.get("kind") or "foreground"), workflow="frontend",
         title=str(raw.get("title") or "Maestro activity"), status=status,
         phase=str(raw.get("phase") or status),
@@ -35696,7 +35696,7 @@ def upsert_client_task(body: dict):
                     float(raw.get("startedAt") or time.time())),
         cancelable=False,
         error=({"message": str(raw.get("error")), "retryable": False} if raw.get("error") else None),
-        metadata={"adapter": "frontend", "client_activity_id": client_id,
+        metadata={"adapter": "frontend", "client_activity_id": str(raw.get("id") or ""),
                   "generation_details": raw.get("generationDetails") or {},
                   "token_usage": raw.get("tokenUsage") or {}},
     )
