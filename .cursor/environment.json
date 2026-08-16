@@ -1,0 +1,14 @@
+{
+  "name": "Loreframe Lab (CPU dev)",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "ui-dev-server",
+      "command": "cd ui && npm run dev -- --host 0.0.0.0",
+      "description": "Vite dev server for the React UI on http://localhost:3000. It proxies /api and /classic to the GPU generation backend on 127.0.0.1:7860, which requires NVIDIA CUDA and is not run in Cloud Agents."
+    }
+  ],
+  "ports": [
+    { "name": "ui", "port": 3000 }
+  ]
+}
