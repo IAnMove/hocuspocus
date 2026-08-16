@@ -55,7 +55,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | A11Y-01 | completado | `ModalShell` aporta nombre, `role=dialog`, `aria-modal`, foco inicial/restaurado, Escape y trap Tab/Shift+Tab; migrados Director Dashboard y picker del editor; tests RTL + lint/build verdes. |
 | A11Y-02 | pendiente | — |
 | RESP-01 | completado | Series Lab usa selector horizontal y layout full-width bajo `md`, rail vertical en desktop, header con wrap y contenedor principal `min-h-0`; prueba RTL monta y consulta la estructura accesible; lint/build verdes. |
-| RESP-02 | pendiente | — |
+| RESP-02 | completado | Bajo `md`, Story Lab usa navegación horizontal desplazable con indicador visible y contenido a ancho completo; escritorio conserva rail vertical y notas. Prueba RTL real + 66 tests UI, lint/build verdes. |
 | RESP-03 | pendiente | — |
 | MEM-01 | pendiente | — |
 | STORAGE-01 | completado | Wrapper seguro para local/session storage con fallback en memoria sólo cuando persiste el fallo; Welcome/Preflight sobreviven SecurityError/cuota y una eliminación externa no resucita valores; tests UI + lint/build verdes. |

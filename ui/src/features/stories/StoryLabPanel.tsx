@@ -13,6 +13,7 @@ import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/exte
 import { getOutputReference } from '../../lib/outputReference'
 import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
 import { StoryProductionTimeline } from './StoryProductionTimeline'
+import { StoryLabNavigation } from './StoryLabNavigation'
 import { readDirectorClipReplacementResult } from './directorClipHandoff'
 import { AudioRangeSelector } from './AudioRangeSelector'
 import { createStoryActivityLifecycle } from './activityLifecycle'
@@ -4681,29 +4682,25 @@ export function StoryLabPanel() {
           {notice.text}
         </div>
       )}
-      <div className="flex-1 min-h-0 flex">
-        <nav className="w-36 md:w-48 shrink-0 border-r border-border bg-bg-secondary p-2 overflow-y-auto">
-          {tabs.map(item => (
-            <button key={item.id} onClick={() => setTab(item.id)} className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs mb-1 ${tab === item.id ? 'bg-accent-blue/15 text-accent-blue' : 'text-text-muted hover:bg-bg-hover hover:text-text-primary'}`}>
-              <item.icon size={14} /> {item.label}
-            </button>
-          ))}
-          <div className="mt-4 border-t border-border pt-3 text-[9px] text-text-muted space-y-1.5">
-            {project.projectType === 'full_story' ? (
-              <>
-                <p>Manual edits are always authoritative.</p>
-                <p>Regeneration preserves existing reference images.</p>
-                <p>Adaptations remember the source revision.</p>
-              </>
-            ) : (
-              <>
-                <p>Concepto, imágenes y secuencia viven juntos.</p>
-                <p>Las referencias aprobadas pasan a Director.</p>
-                <p>Puedes editar cualquier resultado antes de generar.</p>
-              </>
-            )}
-          </div>
-        </nav>
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <StoryLabNavigation
+          tabs={tabs}
+          activeTab={tab}
+          onChange={setTab}
+          notes={project.projectType === 'full_story' ? (
+            <>
+              <p>Manual edits are always authoritative.</p>
+              <p>Regeneration preserves existing reference images.</p>
+              <p>Adaptations remember the source revision.</p>
+            </>
+          ) : (
+            <>
+              <p>Concepto, imágenes y secuencia viven juntos.</p>
+              <p>Las referencias aprobadas pasan a Director.</p>
+              <p>Puedes editar cualquier resultado antes de generar.</p>
+            </>
+          )}
+        />
 
         <div className="flex-1 min-w-0 overflow-y-auto p-3 md:p-5">
           <div className="max-w-[1500px] mx-auto">
