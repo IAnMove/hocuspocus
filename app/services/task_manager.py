@@ -11,6 +11,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 import copy
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -18,6 +19,11 @@ import threading
 import time
 import uuid
 from typing import Any, Iterator, TypedDict
+
+from services.operation_logging import log_operation
+
+
+_LOGGER = logging.getLogger("loreframe.operations.tasks")
 
 
 TASK_DB_NAME = ".maestro-tasks-v1.sqlite3"
@@ -849,7 +855,17 @@ class TaskRegistry:
                     event_type="task.interrupted", force=True,
                 )
                 interrupted += 1
-            except (KeyError, ValueError, OSError, sqlite3.Error):
+            except (KeyError, ValueError, OSError, sqlite3.Error) as exc:
+                log_operation(
+                    _LOGGER,
+                    logging.ERROR,
+                    "task.interrupt_failed",
+                    "Could not mark an unfinished task as interrupted",
+                    error=exc,
+                    task_id=str(task.get("id") or ""),
+                    activity_id=str(task.get("root_id") or task.get("id") or ""),
+                    workspace=str(task.get("workspace") or ""),
+                )
                 continue
         return interrupted
 

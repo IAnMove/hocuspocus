@@ -14,6 +14,7 @@ import os
 import re
 import time
 import json
+import logging
 import uuid
 import math
 import threading
@@ -34,6 +35,7 @@ from services.job_lifecycle import (
     request_cancel,
     snapshot_job,
 )
+from services.operation_logging import log_operation, operation_scope
 from services.director_model_compat import (
     DIRECTOR_PIPELINE_TYPES,
     assess_director_model,
@@ -63,6 +65,8 @@ _wgp = None                 # reference to wgp module
 _gen_lock = None            # reference to launch._gen_lock
 _active_gen_states = None   # reference to launch._active_gen_states (abort signaling)
 _pipeline_state_observer: Optional[Callable[[dict, str], Optional[dict]]] = None
+
+_LOGGER = logging.getLogger("loreframe.operations.director")
 
 _pipelines: dict = {}
 _pipeline_lock = threading.Lock()
@@ -2390,8 +2394,18 @@ def _delete_pipeline_locked(out_dir: str, pid: str) -> dict:
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             state = _backfill_clip_video_filenames(json.load(f), pipeline_dir)
-    except Exception:
-        pass
+    except Exception as exc:
+        log_operation(
+            _LOGGER,
+            logging.WARNING,
+            "director.delete_state_read_failed",
+            "Could not read pipeline state before deleting derived media",
+            error=exc,
+            pipeline_id=pid,
+            activity_id=f"task-director-{pid}",
+            workspace=os.path.basename(os.path.realpath(out_dir)) or "default",
+            state_path=filepath,
+        )
 
     names = set()
     if state:
@@ -7203,7 +7217,26 @@ def _director_trace_context(function):
     @wraps(function)
     def wrapped(pid: str, resume: bool = False):
         from . import debug_trace
-        with debug_trace.context_scope(pipeline_id=pid, workflow="director"):
+        with _pipeline_lock:
+            pipeline = _pipelines.get(pid) or {}
+            workspace = str(pipeline.get("workspace") or "default")
+            task_id = str(pipeline.get("task_id") or f"task-director-{pid}")
+            activity_id = str(pipeline.get("root_task_id") or task_id)
+        with (
+            debug_trace.context_scope(
+                activity_id=activity_id,
+                pipeline_id=pid,
+                task_id=task_id,
+                workspace=workspace,
+                workflow="director",
+            ),
+            operation_scope(
+                activity_id=activity_id,
+                pipeline_id=pid,
+                task_id=task_id,
+                workspace=workspace,
+            ),
+        ):
             return function(pid, resume=resume)
     return wrapped
 
