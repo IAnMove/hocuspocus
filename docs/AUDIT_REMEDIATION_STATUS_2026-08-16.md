@@ -18,7 +18,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | TASK-01 | completado | Namespace `task-client-*` exacto en backend y UI; root externo eliminado/ignorado; tarea backend homónima conserva snapshot/eventos; 37 tests Python + 27 UI verdes |
 | TASK-02 | pendiente | — |
 | TASK-03 | completado | Hash semántico sin `updatedAt`, dedupe y coalescing a 1,5 s; terminal/error inmediato; 100 polls iguales => 1 publicación; 30 tests UI verdes |
-| TASK-04 | pendiente | — |
+| TASK-04 | completado | Snapshot devuelve cursor bajo frontera atómica; Activity espera snapshot y abre SSE desde high-water mark; carrera concurrente + 10.000 eventos históricos cubiertos |
 | TASK-05 | pendiente | — |
 | TASK-06 | pendiente | — |
 | TASK-07 | pendiente | — |

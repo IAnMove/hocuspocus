@@ -151,7 +151,7 @@ export interface CanonicalTask {
 export async function fetchCanonicalTasks(
   workspace: string,
   status: 'active' | 'all' = 'all',
-): Promise<{ workspace: string; tasks: CanonicalTask[] }> {
+): Promise<{ workspace: string; tasks: CanonicalTask[]; latest_event_id: number }> {
   const query = new URLSearchParams({ workspace, status, limit: '300' })
   const res = await fetch(`${BASE}/api/v1/tasks?${query}`)
   if (!res.ok) throw new Error('Failed to fetch Maestro tasks')
@@ -163,8 +163,11 @@ export function subscribeCanonicalTaskEvents(
   onEvent: (event: CanonicalTaskEvent) => void,
   onError?: () => void,
   onStateChange?: (state: CanonicalTaskStreamState) => void,
+  initialEventId = 0,
 ): () => void {
-  return openCanonicalTaskEventStream(BASE, workspace, onEvent, onError, onStateChange)
+  return openCanonicalTaskEventStream(BASE, workspace, onEvent, onError, onStateChange, {
+    initialEventId,
+  })
 }
 
 export async function upsertCanonicalClientTask(task: Record<string, unknown>): Promise<CanonicalTask> {

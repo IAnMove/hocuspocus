@@ -166,3 +166,48 @@ test('builds a replay URL only when a cursor exists', () => {
   assert.equal(canonicalTaskEventUrl('', 'default'), '/api/v1/tasks/events?workspace=default')
   assert.equal(canonicalTaskEventUrl('', 'default', 12), '/api/v1/tasks/events?workspace=default&after=12')
 })
+
+test('starts after a 10,000-event snapshot and still receives the concurrent change', () => {
+  const sources = []
+  const received = []
+  const scheduled = []
+
+  class FakeEventSource {
+    constructor(url) {
+      this.url = url
+      this.onopen = null
+      this.onerror = null
+      this.listeners = new Map()
+      sources.push(this)
+    }
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener)
+    }
+
+    close() {}
+
+    emit(payload, lastEventId) {
+      this.listeners.get('task')?.({ data: JSON.stringify(payload), lastEventId })
+    }
+  }
+
+  const close = openCanonicalTaskEventStream('', 'default', value => received.push(value), undefined, undefined, {
+    initialEventId: 10_000,
+    eventSourceFactory: url => new FakeEventSource(url),
+    scheduleRetry: callback => {
+      scheduled.push(callback)
+      return scheduled.length
+    },
+  })
+
+  assert.equal(sources[0].url, '/api/v1/tasks/events?workspace=default&after=10000')
+  sources[0].emit(event({ event_id: 9_999 }), '9999')
+  sources[0].emit(event({ event_id: 10_001, timestamp: 201 }), '10001')
+  assert.deepEqual(received.map(item => item.event_id), [10_001])
+
+  sources[0].onerror?.({})
+  scheduled[0]()
+  assert.equal(sources[1].url, '/api/v1/tasks/events?workspace=default&after=10001')
+  close()
+})

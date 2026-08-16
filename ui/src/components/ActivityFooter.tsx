@@ -145,8 +145,8 @@ export function ActivityFooter() {
       tasksRef.current = next
       setTasks(next)
     }
-    const refresh = async () => {
-      if (refreshPending) return
+    const refresh = async (): Promise<number | null> => {
+      if (refreshPending) return null
       refreshPending = true
       try {
         const result = await api.fetchCanonicalTasks(activeWorkspace, 'all')
@@ -162,8 +162,9 @@ export function ActivityFooter() {
             snapshotBoundary,
           ))
         }
+        return Number(result.latest_event_id || 0)
       } catch {
-        // Adaptive polling below remains the fallback during a restart.
+        return null
       } finally {
         refreshPending = false
       }
@@ -179,10 +180,19 @@ export function ActivityFooter() {
       }, streamConnected ? CONNECTED_RECONCILE_MS : DISCONNECTED_POLL_MS)
     }
 
-    tasksRef.current = []
-    setTasks([])
-    void refresh().finally(() => {
+    const connectAfterSnapshot = async () => {
+      const initialEventId = await refresh()
       if (!mounted) return
+      // Never replay from zero after a failed snapshot. Retrying the small
+      // snapshot request first is bounded; opening SSE without its cursor is
+      // not bounded on a long-lived workspace.
+      if (initialEventId === null) {
+        pollTimer = window.setTimeout(() => {
+          pollTimer = null
+          void connectAfterSnapshot()
+        }, DISCONNECTED_POLL_MS)
+        return
+      }
       closeEvents = api.subscribeCanonicalTaskEvents(
         activeWorkspace,
         event => {
@@ -196,9 +206,14 @@ export function ActivityFooter() {
           streamConnected = state === 'open'
           schedulePoll()
         },
+        initialEventId,
       )
       schedulePoll()
-    })
+    }
+
+    tasksRef.current = []
+    setTasks([])
+    void connectAfterSnapshot()
     return () => {
       mounted = false
       closeEvents()

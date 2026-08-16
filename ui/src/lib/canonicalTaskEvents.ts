@@ -38,6 +38,7 @@ interface TaskEventStreamOptions {
   cancelRetry?: (handle: RetryHandle) => void
   initialRetryMs?: number
   maximumRetryMs?: number
+  initialEventId?: number
 }
 
 const RESUMABLE_STATUSES = new Set(['failed', 'cancelled', 'interrupted'])
@@ -179,7 +180,7 @@ export function openCanonicalTaskEventStream(
   let source: TaskEventSource | null = null
   let reconnectTimer: RetryHandle | null = null
   let retryMs = initialRetryMs
-  let lastEventId = 0
+  let lastEventId = positiveInteger(options.initialEventId)
   let closed = false
 
   const connect = () => {

@@ -35671,9 +35671,10 @@ def list_canonical_tasks(
     statuses = set(ACTIVE_STATUSES) if status == "active" else (
         set(ALL_STATUSES) if status in {"", "all"} else {item.strip() for item in status.split(",")}
     )
-    return {"workspace": target, "tasks": _task_registry(target).list(
+    tasks, latest_event_id = _task_registry(target).snapshot(
         statuses=statuses, root_id=root_id, limit=limit,
-    )}
+    )
+    return {"workspace": target, "tasks": tasks, "latest_event_id": latest_event_id}
 
 
 @api.post("/api/v1/tasks/upsert")

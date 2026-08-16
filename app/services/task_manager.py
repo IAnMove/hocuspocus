@@ -545,6 +545,24 @@ class TaskRegistry:
             row = connection.execute("SELECT COALESCE(MAX(event_id), 0) AS value FROM task_events").fetchone()
         return int(row["value"] if row else 0)
 
+    def snapshot(
+        self,
+        *,
+        statuses: set[str] | None = None,
+        root_id: str = "",
+        limit: int = 200,
+    ) -> tuple[list[dict], int]:
+        """Read tasks and their event high-water mark without a writer gap.
+
+        Every production mutation uses this registry's write lock. Holding it
+        across both reads guarantees that an event committed after the task
+        snapshot has an id greater than the returned cursor and will therefore
+        be replayed by SSE.
+        """
+        with self._write_lock:
+            tasks = self.list(statuses=statuses, root_id=root_id, limit=limit)
+            return tasks, self.latest_event_id()
+
     def _notify(self) -> None:
         with self._condition:
             self._condition.notify_all()
