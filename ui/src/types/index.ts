@@ -1275,7 +1275,7 @@ export interface DirectorClipImage {
   clipIndex: number
   shotId?: string
   prompt: string
-  file: File
+  file: File | null
   filename: string
 }
 

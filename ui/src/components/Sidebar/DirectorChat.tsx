@@ -1,13 +1,14 @@
 import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen, Zap } from 'lucide-react'
 import { useStore, getFamiliesForMode, getModelsForFamily, resolveResolution } from '../../stores/useStore'
-import { fetchModelOptions, getFileUrl } from '../../api/client'
+import { fetchModelOptions } from '../../api/client'
 import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
 import { DirectorSongSetup } from './DirectorSongSetup'
 import { InfoTooltip } from './InfoTooltip'
 import type { DirectorPipelineType, DirectorShotImageGuidance, DirectorSkill, ModelOptions, MusicVideoTreatment, ShortFilmCharacter, ShortFilmPath } from '../../types'
 import { formatSeconds, recommendedWindowProfile } from './DurationSlider'
+import { DirectorClipImagePreview } from './DirectorClipImagePreview'
 
 const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
   .then(module => ({ default: module.ComicDirectorPanel })))
@@ -3300,8 +3301,8 @@ function ImageGenView({
         <div className="grid grid-cols-3 gap-1.5">
           {clipImages.map((img, i) => (
             <div key={i} className="relative">
-              <img
-                src={img.file ? URL.createObjectURL(img.file) : getFileUrl(img.filename)}
+              <DirectorClipImagePreview
+                image={img}
                 alt={`Clip ${img.clipIndex + 1}`}
                 className="w-full aspect-square object-cover rounded-lg border border-border"
               />
@@ -3379,8 +3380,8 @@ function VideoPromptsReview({
         <div className="grid grid-cols-5 gap-1 mb-1">
           {clipImages.map((img, i) => (
             <div key={i} className="relative">
-              <img
-                src={img.file ? URL.createObjectURL(img.file) : getFileUrl(img.filename)}
+              <DirectorClipImagePreview
+                image={img}
                 alt={`Clip ${img.clipIndex + 1}`}
                 className="w-full aspect-square object-cover rounded border border-border"
               />

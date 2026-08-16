@@ -23,7 +23,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | TASK-06 | pendiente | — |
 | TASK-07 | pendiente | — |
 | DIR-01 | completado | Helper compartido mapea antes de filtrar, conserva índices originales/explicitos y prioriza `shotId`; huecos `[∅,b,∅,d] => [1,3]`, null y plan reordenado cubiertos; 49 tests UI + lint/build verdes. |
-| DIR-02 | pendiente | — |
+| DIR-02 | completado | `DirectorClipImage.file` es nullable; previews recuperadas resuelven filename backend sin `createObjectURL(null)` y los blobs locales se revocan al reemplazar/desmontar; tests UI + lint/build verdes. |
 | PLAN-01 | pendiente | — |
 | PLAN-02 | pendiente | — |
 | PLAN-03 | pendiente | — |

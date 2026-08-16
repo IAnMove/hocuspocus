@@ -2505,7 +2505,7 @@ export function ComicVideoPreflightPanel({
       directorClipImages: clips.map((clip, index) => ({
         clipIndex: index,
         prompt: '',
-        file: null as unknown as File,
+        file: null,
         filename: clip.image_filename,
       })),
       directorAutoMode: true,

@@ -40,7 +40,7 @@ export function mapDirectorClipImages(
   })
 
   return entries
-    .map((raw, originalIndex) => {
+    .map<DirectorClipImage | null>((raw, originalIndex) => {
       const source = typeof raw === 'string' ? { filename: raw } : (raw || {})
       const filename = typeof source.filename === 'string' ? source.filename.trim() : ''
       if (!filename) return null
@@ -60,7 +60,7 @@ export function mapDirectorClipImages(
         clipIndex,
         ...(shotId ? { shotId } : {}),
         prompt: source.prompt || source.image_prompt || plan?.image_prompt || '',
-        file: null as unknown as File,
+        file: null,
         filename,
       }
     })

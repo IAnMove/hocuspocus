@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
 import { Upload, Loader2, Music, Zap, RotateCcw, X, ChevronRight, ChevronDown, ImageIcon, Play } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { DirectorClipImagePreview } from './DirectorClipImagePreview'
 const AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a'
 const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.bmp'
 
@@ -675,8 +676,8 @@ export function DirectorPanel() {
             <div className="grid grid-cols-3 gap-1.5 max-h-[300px] overflow-y-auto">
               {clipImages.map((img, i) => (
                 <div key={i} className="relative">
-                  <img
-                    src={URL.createObjectURL(img.file)}
+                  <DirectorClipImagePreview
+                    image={img}
                     alt={`Clip ${img.clipIndex + 1}`}
                     className="w-full aspect-square object-cover rounded-lg border border-border"
                   />
@@ -719,8 +720,8 @@ export function DirectorPanel() {
             <div className="grid grid-cols-5 gap-1 mb-1">
               {clipImages.map((img, i) => (
                 <div key={i} className="relative">
-                  <img
-                    src={URL.createObjectURL(img.file)}
+                  <DirectorClipImagePreview
+                    image={img}
                     alt={`Clip ${img.clipIndex + 1}`}
                     className="w-full aspect-square object-cover rounded border border-border"
                   />
