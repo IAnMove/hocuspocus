@@ -10150,6 +10150,29 @@ async def tag_pipeline_clip(pid: str, clip_index: int, request: Request):
     return {"status": "ok"}
 
 
+@api.put("/api/v1/director/pipelines/{pid}/clips/{clip_index}/video-selection")
+async def select_pipeline_clip_video(pid: str, clip_index: int, request: Request):
+    """Select one historical/Studio video as the authoritative slot take."""
+
+    from services.director_pipeline import (
+        PipelineBusyError,
+        select_clip_video_attempt,
+    )
+    body = await request.json()
+    base = wgp.server_config.get("save_path", "outputs")
+    try:
+        return select_clip_video_attempt(
+            base,
+            pid,
+            clip_index,
+            body.get("filename"),
+        )
+    except PipelineBusyError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
 # ── Director Pipeline Re-run ──────────────────────────────────────────────
 
 @api.post("/api/v1/director/pipelines/{pid}/repair")

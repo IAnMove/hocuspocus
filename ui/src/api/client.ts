@@ -843,12 +843,18 @@ export async function fetchStoredAsset(pathOrFilename: string): Promise<Response
   return fetch(fallback)
 }
 
-export async function fetchOutputMetadata(name: string): Promise<import('../types').OutputMetadata> {
+export async function fetchOutputMetadata(
+  name: string,
+  workspace?: string,
+): Promise<import('../types').OutputMetadata> {
   // Retry with a per-attempt timeout. On a slow/high-latency link (e.g. the user
   // is remote over VPN) the request can stall long enough that a single attempt
   // hangs or is dropped by an intermediary; the old single-shot fetch then left
   // the caller with no metadata and the "Load Settings" button a silent no-op.
-  const url = `${BASE}/api/v1/outputs/${encodeURIComponent(name)}/metadata`
+  const workspaceQuery = workspace
+    ? `?workspace=${encodeURIComponent(workspace)}`
+    : ''
+  const url = `${BASE}/api/v1/outputs/${encodeURIComponent(name)}/metadata${workspaceQuery}`
   const ATTEMPTS = 3
   const PER_ATTEMPT_MS = 30000  // generous: the server may read embedded video metadata to recover a seed
   let lastErr: unknown = null
@@ -1607,6 +1613,28 @@ export async function tagPipelineClip(pid: string, clipIndex: number, tag: strin
     body: JSON.stringify({ tag }),
   })
   if (!res.ok) throw new Error('Failed to tag clip')
+}
+
+export async function selectPipelineClipVideo(
+  pid: string,
+  clipIndex: number,
+  filename: string,
+): Promise<{
+  pipeline_id: string
+  clip_index: number
+  filename: string
+  attempt: import('../types').PipelineVideoAttempt
+}> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/clips/${clipIndex}/video-selection`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Clip selection failed' }))
+    throw new Error(err.error || err.detail || 'Could not select this clip version')
+  }
+  return res.json()
 }
 
 export async function startPipelineRepair(pid: string): Promise<{

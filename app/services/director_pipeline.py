@@ -1251,6 +1251,7 @@ def _save_pipeline_state_locked(pid: str) -> bool:
 
     clips = []
     for i, plan in enumerate(clip_plans):
+        clip_video = clip_videos[i] if i < len(clip_videos) else None
         clip_state = {
             "index": i,
             "planned_clip": p.get("_planned_clips", [{}] * (i + 1))[i] if i < len(p.get("_planned_clips", [])) else None,
@@ -1303,7 +1304,27 @@ def _save_pipeline_state_locked(pid: str) -> bool:
             ),
             "end_image_filename": clip_end_images[i] if i < len(clip_end_images) else None,
             "keyframe_filenames": (p.get("_clip_keyframes", []) or [])[i] if i < len(p.get("_clip_keyframes", [])) else [],
-            "video_filename": clip_videos[i] if i < len(clip_videos) else None,
+            "video_filename": clip_video,
+            # Attempts are append-only. ``video_filename`` remains the active
+            # compatibility field, while this list lets Montage expose every
+            # version ever rendered for the same ordered slot.
+            "video_attempts": ([{
+                "id": clip_video,
+                "filename": clip_video,
+                "created_at": p.get("_completed_at") or time.time(),
+                "seed": _comic_shot_seed(params, i, plan),
+                "prompt": plan.get("video_prompt", ""),
+                "model_type": params.get("video_model", ""),
+                "resolution": (params.get("video_params") or {}).get(
+                    "resolution", "",
+                ),
+                "video_length": plan.get("duration_frames"),
+                "source": "original",
+            }] if clip_video else []),
+            # This is intentionally empty for legacy checkpoints. Their
+            # current video_filename is the implicit selection; the explicit
+            # field is written only after the user chooses a historical take.
+            "selected_video_filename": None,
             "video_stale": False,
             "tag": (p.get("_clip_tags", []) or [])[i] if i < len(p.get("_clip_tags", [])) else None,
             "image_gen_time_sec": clip_timings.get(f"image_{i}"),
@@ -1818,18 +1839,236 @@ def _backfill_clip_video_filenames(state: dict, state_dir: str) -> dict:
         filename for filename in (state.get("output_files") or [])
         if "_multiclip" not in os.path.splitext(filename)[0].lower()
     ]
-    if not clips or len(outputs) != len(clips):
-        return state
-    for i, clip in enumerate(clips):
-        if not clip.get("video_filename") and os.path.isfile(os.path.join(state_dir, outputs[i])):
-            clip["video_filename"] = outputs[i]
-    return state
+    if clips and len(outputs) == len(clips):
+        for i, clip in enumerate(clips):
+            if not clip.get("video_filename") and os.path.isfile(os.path.join(state_dir, outputs[i])):
+                clip["video_filename"] = outputs[i]
+    return _backfill_clip_video_attempts(state, state_dir)
 
 
 _SAVED_MEDIA_EXTENSIONS = {
     "image": {".jpg", ".jpeg", ".png", ".webp"},
     "video": {".mkv", ".mov", ".mp4", ".webm"},
 }
+_clip_attempt_sidecar_cache: dict[
+    str,
+    tuple[int, dict[str, list[tuple[str, dict]]]],
+] = {}
+
+
+def _backfill_clip_video_attempts(state: dict, state_dir: str) -> dict:
+    """Recover append-only video histories from state and owned sidecars.
+
+    Old checkpoints retained superseded media in ``output_files`` and on disk,
+    but only remembered the latest filename per clip. Modern sidecars carry a
+    stable ``director_clip_index``. Reconcile both forms without guessing from
+    file order, and keep explicitly persisted Studio selections authoritative.
+    """
+
+    clips = state.get("clips") if isinstance(state.get("clips"), list) else []
+    if not clips:
+        return state
+    pid = str(state.get("pipeline_id") or "")
+    video_extensions = _SAVED_MEDIA_EXTENSIONS["video"]
+
+    attempts_by_clip: list[dict[str, dict]] = []
+    for clip in clips:
+        attempts: dict[str, dict] = {}
+        raw_attempts = (
+            clip.get("video_attempts")
+            if isinstance(clip.get("video_attempts"), list)
+            else []
+        )
+        for raw in raw_attempts:
+            if not isinstance(raw, dict):
+                continue
+            filename = str(raw.get("filename") or "").strip()
+            if (
+                not filename
+                or os.path.basename(filename) != filename
+                or os.path.splitext(filename)[1].lower() not in video_extensions
+                or not os.path.isfile(os.path.join(state_dir, filename))
+            ):
+                continue
+            attempts[filename] = {
+                **raw,
+                "id": str(raw.get("id") or filename),
+                "filename": filename,
+            }
+
+        current = str(clip.get("video_filename") or "").strip()
+        segments = clip.get("h3_segments") if isinstance(clip.get("h3_segments"), list) else []
+        if not current and len(segments) == 1:
+            current = str((segments[0] or {}).get("filename") or "").strip()
+            if current:
+                clip["video_filename"] = current
+        if (
+            current
+            and os.path.basename(current) == current
+            and os.path.isfile(os.path.join(state_dir, current))
+            and current not in attempts
+        ):
+            try:
+                created_at = os.path.getmtime(os.path.join(state_dir, current))
+            except OSError:
+                created_at = 0
+            segment = next(
+                (
+                    item for item in segments
+                    if isinstance(item, dict) and item.get("filename") == current
+                ),
+                {},
+            )
+            attempts[current] = {
+                "id": current,
+                "filename": current,
+                "created_at": created_at,
+                "seed": segment.get("seed", clip.get("seed")),
+                "prompt": segment.get("prompt") or clip.get("video_prompt", ""),
+                "model_type": state.get("video_model", ""),
+                "resolution": (state.get("video_params") or {}).get(
+                    "resolution", "",
+                ),
+                "video_length": segment.get("frames"),
+                "source": "recovered",
+            }
+        attempts_by_clip.append(attempts)
+
+    cache_key = os.path.realpath(state_dir)
+    try:
+        directory_revision = os.stat(state_dir).st_mtime_ns
+    except OSError:
+        directory_revision = 0
+    cached = _clip_attempt_sidecar_cache.get(cache_key)
+    if cached and cached[0] == directory_revision:
+        sidecars = cached[1].get(pid, [])
+    else:
+        sidecars_by_pipeline: dict[str, list[tuple[str, dict]]] = {}
+        try:
+            sidecar_names = [
+                name for name in os.listdir(state_dir) if name.endswith(".meta.json")
+            ]
+        except OSError:
+            sidecar_names = []
+        for sidecar_name in sidecar_names:
+            sidecar_path = os.path.join(state_dir, sidecar_name)
+            try:
+                with open(sidecar_path, "r", encoding="utf-8") as handle:
+                    metadata = json.load(handle)
+            except Exception:
+                continue
+            if not isinstance(metadata, dict):
+                continue
+            sidecar_params = metadata.get("params") if isinstance(metadata.get("params"), dict) else {}
+            owner = str(
+                metadata.get("director_pipeline_id")
+                or sidecar_params.get("_director_pipeline_id")
+                or ""
+            )
+            if owner:
+                sidecars_by_pipeline.setdefault(owner, []).append(
+                    (sidecar_name, metadata)
+                )
+        _clip_attempt_sidecar_cache[cache_key] = (
+            directory_revision,
+            sidecars_by_pipeline,
+        )
+        sidecars = sidecars_by_pipeline.get(pid, [])
+
+    for sidecar_name, metadata in sidecars:
+        params = metadata.get("params") if isinstance(metadata.get("params"), dict) else {}
+        raw_index = metadata.get("director_clip_index")
+        if raw_index is None:
+            raw_index = params.get("_director_clip_index")
+        if raw_index is None:
+            # Older H3 outputs predate the explicit sidecar index, but their
+            # durable progress label still names the ordered slot. Recover it
+            # so pre-upgrade projects also receive their existing histories.
+            legacy_label = str(params.get("_director_progress_label") or "")
+            legacy_match = re.search(r"\bclip\s+(\d+)(?:/\d+)?\b", legacy_label, re.I)
+            if legacy_match:
+                raw_index = int(legacy_match.group(1)) - 1
+        try:
+            clip_index = int(raw_index)
+        except (TypeError, ValueError):
+            continue
+        if clip_index < 0 or clip_index >= len(clips):
+            continue
+
+        filename = str(metadata.get("output_filename") or "").strip()
+        if not filename:
+            media_stem = sidecar_name[: -len(".meta.json")]
+            matches = [
+                media_stem + extension
+                for extension in video_extensions
+                if os.path.isfile(os.path.join(state_dir, media_stem + extension))
+            ]
+            if len(matches) == 1:
+                filename = matches[0]
+        if (
+            not filename
+            or os.path.basename(filename) != filename
+            or os.path.splitext(filename)[1].lower() not in video_extensions
+            or not os.path.isfile(os.path.join(state_dir, filename))
+        ):
+            continue
+
+        clip = clips[clip_index]
+        segments = clip.get("h3_segments") if isinstance(clip.get("h3_segments"), list) else []
+        segment = next(
+            (
+                item for item in segments
+                if isinstance(item, dict) and item.get("filename") == filename
+            ),
+            {},
+        )
+        # A multi-segment H3 shot is one Montage slot but each sidecar is only
+        # a continuation fragment, not a complete alternative for that slot.
+        # Whole-shot Studio selections are persisted explicitly by the API.
+        if len(segments) > 1 and (
+            params.get("_director_h3_segment_index") is not None or segment
+        ):
+            continue
+        standalone = params.get("_director_clip_index") is not None
+        attempts_by_clip[clip_index][filename] = {
+            **attempts_by_clip[clip_index].get(filename, {}),
+            "id": filename,
+            "filename": filename,
+            "created_at": metadata.get("created_at")
+            or attempts_by_clip[clip_index].get(filename, {}).get("created_at")
+            or 0,
+            "seed": params.get("seed", segment.get("seed", clip.get("seed"))),
+            "prompt": (
+                params.get("prompt")
+                if standalone and params.get("prompt")
+                else segment.get("prompt") or clip.get("video_prompt", "")
+            ),
+            "model_type": params.get("model_type") or state.get("video_model", ""),
+            "resolution": params.get("resolution")
+            or (state.get("video_params") or {}).get("resolution", ""),
+            "video_length": segment.get("frames")
+            or (params.get("video_length") if standalone else None),
+            "source": (
+                "studio"
+                if params.get("_director_external_selection")
+                else "regenerated" if params.get("_director_detached_operation")
+                else "original"
+            ),
+        }
+
+    for index, clip in enumerate(clips):
+        selected = str(clip.get("selected_video_filename") or "").strip()
+        if selected and selected not in attempts_by_clip[index]:
+            selected = ""
+        clip["selected_video_filename"] = selected or None
+        if selected:
+            clip["video_filename"] = selected
+            clip["video_stale"] = False
+        clip["video_attempts"] = sorted(
+            attempts_by_clip[index].values(),
+            key=lambda item: (float(item.get("created_at") or 0), item["filename"]),
+        )
+    return state
 
 
 def _invalid_saved_media_numbers(
@@ -1949,6 +2188,103 @@ def _update_clip_tag_locked(out_dir: str, pid: str, clip_index: int, tag: Option
             _write_pipeline_json_unlocked(filepath, state)
             return True
     return False
+
+
+@_exclusive_pipeline_operation
+def select_clip_video_attempt(
+    out_dir: str,
+    pid: str,
+    clip_index: int,
+    filename: str,
+) -> dict:
+    """Make one historical/rendered video authoritative for an ordered slot."""
+
+    pipeline_file = _find_pipeline_file(out_dir, pid)
+    if not pipeline_file:
+        raise ValueError(f"Pipeline {pid} not found")
+    pipeline_dir = os.path.dirname(pipeline_file)
+    filename = str(filename or "").strip()
+    if (
+        not filename
+        or os.path.basename(filename) != filename
+        or os.path.splitext(filename)[1].lower()
+            not in _SAVED_MEDIA_EXTENSIONS["video"]
+    ):
+        raise ValueError("Select one valid video filename from this workspace")
+    if _invalid_saved_media_numbers([filename], 1, pipeline_dir, "video"):
+        raise ValueError("The selected video is missing, empty, or outside this workspace")
+
+    state = load_pipeline_state(out_dir, pid)
+    clips = state.get("clips", []) if state else []
+    if clip_index < 0 or clip_index >= len(clips):
+        raise ValueError(
+            f"Clip index {clip_index} out of range (0-{len(clips) - 1})"
+        )
+    clip = clips[clip_index]
+    attempt = next(
+        (
+            item for item in (clip.get("video_attempts") or [])
+            if isinstance(item, dict) and item.get("filename") == filename
+        ),
+        None,
+    )
+    if attempt is None:
+        metadata = {}
+        meta_path = os.path.join(
+            pipeline_dir,
+            os.path.splitext(filename)[0] + ".meta.json",
+        )
+        if os.path.isfile(meta_path):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as handle:
+                    loaded = json.load(handle)
+                if isinstance(loaded, dict):
+                    metadata = loaded
+            except Exception:
+                metadata = {}
+        params = metadata.get("params") if isinstance(metadata.get("params"), dict) else {}
+        try:
+            created_at = float(
+                metadata.get("created_at")
+                or os.path.getmtime(os.path.join(pipeline_dir, filename))
+            )
+        except (OSError, TypeError, ValueError):
+            created_at = time.time()
+        attempt = {
+            "id": filename,
+            "filename": filename,
+            "created_at": created_at,
+            "seed": params.get("seed", clip.get("seed")),
+            "prompt": params.get("prompt") or clip.get("video_prompt", ""),
+            "model_type": params.get("model_type") or state.get("video_model", ""),
+            "resolution": params.get("resolution")
+            or (state.get("video_params") or {}).get("resolution", ""),
+            "video_length": params.get("video_length"),
+            "source": "studio",
+        }
+        clip.setdefault("video_attempts", []).append(attempt)
+
+    clip["selected_video_filename"] = filename
+    clip["video_filename"] = filename
+    clip["video_stale"] = False
+    segments = clip.get("h3_segments") if isinstance(clip.get("h3_segments"), list) else []
+    if len(segments) == 1:
+        segments[0]["filename"] = filename
+        segments[0]["prompt"] = attempt.get("prompt") or segments[0].get("prompt", "")
+        segments[0]["seed"] = attempt.get("seed", segments[0].get("seed"))
+        if attempt.get("video_length"):
+            segments[0]["frames"] = attempt["video_length"]
+        segments[0]["stale"] = False
+        segments[0]["updated_at"] = time.time()
+    if filename not in state.get("output_files", []):
+        state.setdefault("output_files", []).append(filename)
+    _replace_saved_pipeline(out_dir, pid, state)
+    return {
+        "pipeline_id": pid,
+        "clip_index": clip_index,
+        "filename": filename,
+        "attempt": attempt,
+    }
 
 
 def _find_pipeline_file(out_dir: str, pid: str) -> Optional[str]:
@@ -3092,6 +3428,9 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
             m.split(";")[0] for m in (video_loras.get("loras_multipliers", "") or "").split(" ") if m
         ),
         "_director_pipeline_id": pid,
+        # Persisted into the output sidecar so superseded reruns can always be
+        # recovered into the correct Montage slot after a restart.
+        "_director_clip_index": clip_index,
         "_director_detached_operation": True,
         "_director_video_execution_profile": execution_profile,
         "minimax_h3_turbo_mode": bool(
@@ -3296,10 +3635,28 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
         )
 
     def _update(s):
-        s["clips"][clip_index]["video_filename"] = new_filename
-        s["clips"][clip_index]["video_stale"] = False
-        s["clips"][clip_index]["video_prompt"] = prompt
-        s["clips"][clip_index]["_director_vocal_contract"] = (
+        saved_clip = s["clips"][clip_index]
+        saved_clip["video_filename"] = new_filename
+        saved_clip["selected_video_filename"] = new_filename
+        saved_clip["video_stale"] = False
+        saved_clip["video_prompt"] = prompt
+        attempts = [
+            item for item in (saved_clip.get("video_attempts") or [])
+            if isinstance(item, dict) and item.get("filename") != new_filename
+        ]
+        attempts.append({
+            "id": new_filename,
+            "filename": new_filename,
+            "created_at": time.time(),
+            "seed": gen_params.get("seed"),
+            "prompt": prompt,
+            "model_type": video_model,
+            "resolution": gen_params.get("resolution"),
+            "video_length": gen_params.get("video_length"),
+            "source": "regenerated",
+        })
+        saved_clip["video_attempts"] = attempts
+        saved_clip["_director_vocal_contract"] = (
             prompt_plan.get("_director_vocal_contract")
         )
         for key in (
@@ -3314,7 +3671,7 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
             "_director_audio_plan",
         ):
             if prompt_plan.get(key) is not None:
-                s["clips"][clip_index][key] = prompt_plan.get(key)
+                saved_clip[key] = prompt_plan.get(key)
         if new_filename not in s.get("output_files", []):
             s.setdefault("output_files", []).append(new_filename)
         s["video_execution_profile"] = execution_profile
@@ -3418,6 +3775,11 @@ def rerun_h3_segment(
         segment_index
         if direct_video else len(segments) - 1 if cascade else segment_index
     )
+    if len(segments) > 1:
+        # Editing one native segment opts back into the segment sequence; a
+        # previously selected whole-shot Studio override must no longer mask
+        # the newly regenerated continuation chain during rejoin.
+        clip["selected_video_filename"] = None
     for record in segments[segment_index:]:
         record["stale"] = True
     _replace_saved_pipeline(out_dir, pid, state)
@@ -3503,6 +3865,9 @@ def rerun_h3_segment(
                 "h3_model_profile": video_params.get("h3_model_profile", "quality"),
                 "h3_reference_mode": segment_mode,
                 "_director_pipeline_id": pid,
+                "_director_clip_index": clip_index,
+                "_director_h3_segment_index": index,
+                "_director_detached_operation": True,
             }
             if not direct_video and segment_mode == "references":
                 gen_params["image_refs"] = [start_path, *image_refs]
@@ -3536,6 +3901,26 @@ def rerun_h3_segment(
                 output_files.append(new_name)
             state["output_files"] = output_files
             regenerated.append(new_name)
+            if len(segments) == 1:
+                clip["video_filename"] = new_name
+                clip["selected_video_filename"] = new_name
+                clip["video_stale"] = False
+                attempts = [
+                    item for item in (clip.get("video_attempts") or [])
+                    if isinstance(item, dict) and item.get("filename") != new_name
+                ]
+                attempts.append({
+                    "id": new_name,
+                    "filename": new_name,
+                    "created_at": time.time(),
+                    "seed": gen_params.get("seed"),
+                    "prompt": prompt,
+                    "model_type": gen_params.get("model_type"),
+                    "resolution": gen_params.get("resolution"),
+                    "video_length": gen_params.get("video_length"),
+                    "source": "regenerated",
+                })
+                clip["video_attempts"] = attempts
             _replace_saved_pipeline(out_dir, pid, state)
     finally:
         for path in temporary_frames:
@@ -3577,6 +3962,23 @@ def _rejoin_clips_impl(out_dir: str, pid: str) -> dict:
     if legacy_h3_segments:
         stale = []
         for clip in clips:
+            selected_override = str(
+                clip.get("selected_video_filename") or ""
+            ).strip()
+            if selected_override:
+                if _invalid_saved_media_numbers(
+                    [selected_override], 1, clip_out_dir, "video",
+                ):
+                    raise ValueError(
+                        "The selected historical video for clip "
+                        f"{int(clip.get('index', 0)) + 1} is missing or invalid."
+                    )
+                # An explicit whole-slot selection is authoritative. Ignore
+                # every older H3 segment version for this position.
+                video_files.append(
+                    os.path.join(clip_out_dir, selected_override)
+                )
+                continue
             for segment in (clip.get("h3_segments") or []):
                 if segment.get("stale"):
                     stale.append((clip.get("index", 0), segment.get("index", 0)))

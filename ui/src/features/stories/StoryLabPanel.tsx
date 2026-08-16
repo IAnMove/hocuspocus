@@ -13,6 +13,7 @@ import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/exte
 import { getOutputReference } from '../../lib/outputReference'
 import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
 import { StoryProductionTimeline } from './StoryProductionTimeline'
+import { readDirectorClipReplacementResult } from './directorClipHandoff'
 import { AudioRangeSelector } from './AudioRangeSelector'
 import { createStoryActivityLifecycle } from './activityLifecycle'
 import { useComicStore } from '../comics/store'
@@ -926,7 +927,9 @@ export function StoryLabPanel() {
     && storyVideoOptionsState.settled
   const storyVideoConfigurationReady = storyVideoOptionsReady
     && (project.provider.useGlobalProfile || !legacyVideoOverridePending)
-  const [tab, setTab] = useState<StoryTab>('overview')
+  const [tab, setTab] = useState<StoryTab>(() => (
+    readDirectorClipReplacementResult() ? 'assembly' : 'overview'
+  ))
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
   const [imageBusy, setImageBusy] = useState('')
   const [referenceBatchBusy, setReferenceBatchBusy] = useState(false)

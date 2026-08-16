@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useCallback, useState, useEffect, useMemo, type JSX } from 'react'
-import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked, Upload, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Film, Play, Square, FolderOpen, Plus, Check, Loader2, X, BookMarked, Upload, Trash2, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { TabFilter } from './TabFilter'
 import { ThumbnailGallery } from './ThumbnailGallery'
 import { MediaFeedItem } from './MediaFeedItem'
@@ -10,6 +10,10 @@ import {
   clearVideoEditorReplacementTarget,
   readVideoEditorReplacementTarget,
 } from '../../features/video-editor/replacementHandoff'
+import {
+  clearDirectorClipReplacementTarget,
+  readDirectorClipReplacementTarget,
+} from '../../features/stories/directorClipHandoff'
 
 const SceneAnimatorPanel = lazy(() => import('../Sidebar/SceneAnimatorPanel')
   .then(module => ({ default: module.SceneAnimatorPanel })))
@@ -662,9 +666,11 @@ export function MainContent() {
   }, [startIndex, endIndex, outputs, activeIndex, handleItemVisible, handleItemMeasured, itemOffsets])
   const mediaFilter = useStore(s => s.mediaFilter)
   const [replacementTarget, setReplacementTarget] = useState(readVideoEditorReplacementTarget)
+  const [directorReplacementTarget, setDirectorReplacementTarget] = useState(readDirectorClipReplacementTarget)
 
   useEffect(() => {
     setReplacementTarget(mediaFilter !== 'videoeditor' ? readVideoEditorReplacementTarget() : null)
+    setDirectorReplacementTarget(mediaFilter !== 'stories' ? readDirectorClipReplacementTarget() : null)
   }, [mediaFilter])
 
   return (
@@ -757,6 +763,25 @@ export function MainContent() {
                     setReplacementTarget(null)
                   }}
                   className="rounded border border-emerald-400/30 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-500/20"
+                >
+                  Cancelar reemplazo
+                </button>
+              </div>
+            )}
+            {directorReplacementTarget && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-100">
+                <RefreshCw size={14} className="shrink-0" />
+                <span className="min-w-0 flex-1">
+                  Rehaciendo el clip {directorReplacementTarget.clipIndex + 1} de Montaje.
+                  Ajusta sus datos, genera una o varias versiones y pulsa “Usar en Montaje · clip {directorReplacementTarget.clipIndex + 1}” en la que quieras conservar.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearDirectorClipReplacementTarget()
+                    setDirectorReplacementTarget(null)
+                  }}
+                  className="rounded border border-violet-400/30 px-2 py-1 text-[10px] text-violet-100 hover:bg-violet-500/20"
                 >
                   Cancelar reemplazo
                 </button>

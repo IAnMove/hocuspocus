@@ -3,7 +3,7 @@ import { Play, Pencil, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, 
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { useStore } from '../../stores/useStore'
-import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject } from '../../api/client'
+import { getStoredAssetUrl, fetchOutputMetadata, getFileUrl, moveOutput, uploadImage, loadComicProject, selectPipelineClipVideo } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
 import { modelDisplayName } from '../../lib/modelDisplay'
 import { getOutputReference } from '../../lib/outputReference'
@@ -14,6 +14,10 @@ import {
   readVideoEditorReplacementTarget,
   writeVideoEditorReplacementResult,
 } from '../../features/video-editor/replacementHandoff'
+import {
+  readDirectorClipReplacementTarget,
+  writeDirectorClipReplacementResult,
+} from '../../features/stories/directorClipHandoff'
 
 interface Props {
   file: OutputFile
@@ -137,10 +141,13 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const [sentToInput, setSentToInput] = useState(false)
   const [showMoveMenu, setShowMoveMenu] = useState(false)
   const [moving, setMoving] = useState(false)
+  const [selectingForMontage, setSelectingForMontage] = useState(false)
+  const [montageSelectionError, setMontageSelectionError] = useState('')
   const moveRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const editorReplacementTarget = readVideoEditorReplacementTarget()
+  const directorReplacementTarget = readDirectorClipReplacementTarget()
 
   const releaseVideo = useCallback(() => {
     const video = videoRef.current
@@ -297,6 +304,26 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
     })
     setMediaFilter('videoeditor')
   }, [file.name, file.type, setMediaFilter])
+
+  const handleUseAsDirectorReplacement = useCallback(async () => {
+    const target = readDirectorClipReplacementTarget()
+    if (!target || file.type !== 'video' || selectingForMontage) return
+    setSelectingForMontage(true)
+    setMontageSelectionError('')
+    try {
+      await selectPipelineClipVideo(target.pipelineId, target.clipIndex, file.name)
+      writeDirectorClipReplacementResult({
+        pipelineId: target.pipelineId,
+        clipIndex: target.clipIndex,
+        filename: file.name,
+        selectedAt: Date.now(),
+      })
+      setMediaFilter('stories')
+    } catch (reason) {
+      setMontageSelectionError((reason as Error).message)
+      setSelectingForMontage(false)
+    }
+  }, [file.name, file.type, selectingForMontage, setMediaFilter])
 
   const handleCopyPrompt = () => {
     if (!prompt) return
@@ -701,6 +728,17 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
 
         {/* Action buttons */}
         <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+          {file.type === 'video' && directorReplacementTarget && (
+            <button
+              onClick={() => void handleUseAsDirectorReplacement()}
+              disabled={selectingForMontage}
+              className="flex items-center gap-1 rounded-lg border border-violet-500/40 bg-violet-500/10 px-2 py-1.5 text-[10px] font-medium text-violet-200 transition-colors hover:bg-violet-500/20 disabled:opacity-50"
+              title={`Elegir este vídeo como versión activa del clip ${directorReplacementTarget.clipIndex + 1}; las demás versiones se conservarán en su historial`}
+            >
+              {selectingForMontage ? <Loader2 size={13} className="animate-spin" /> : <FolderInput size={13} />}
+              Usar en Montaje · clip {directorReplacementTarget.clipIndex + 1}
+            </button>
+          )}
           {file.type === 'video' && editorReplacementTarget && (
             <button
               onClick={handleUseAsEditorReplacement}
@@ -711,6 +749,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
               Usar en posición {editorReplacementTarget.clipIndex + 1}
             </button>
           )}
+          {montageSelectionError && <span className="max-w-40 truncate text-[9px] text-red-400" title={montageSelectionError}>{montageSelectionError}</span>}
           {params && (
             <>
               <button

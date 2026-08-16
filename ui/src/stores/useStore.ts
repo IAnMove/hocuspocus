@@ -9604,6 +9604,19 @@ export const useStore = create<AppState>((set, get) => ({
     newParams.h3_audio_prompt = (p.h3_audio_prompt as string) || undefined
     newParams.h3_ref_image_size = (p.h3_ref_image_size as 'match' | 'max') ?? undefined
     newParams.h3_reference_mode = (p.h3_reference_mode as 'first_frame' | 'references') ?? undefined
+    newParams.h3_model_profile = (
+      p.h3_model_profile as GenerateParams['h3_model_profile']
+    ) ?? undefined
+    newParams.minimax_h3_references = Array.isArray(p.minimax_h3_references)
+      ? p.minimax_h3_references as GenerateParams['minimax_h3_references']
+      : []
+    newParams.minimax_h3_reference_detail = (
+      p.minimax_h3_reference_detail as GenerateParams['minimax_h3_reference_detail']
+    ) ?? undefined
+    newParams.minimax_h3_text_encoder = (
+      p.minimax_h3_text_encoder as GenerateParams['minimax_h3_text_encoder']
+    ) ?? undefined
+    newParams.minimax_h3_turbo_mode = Boolean(p.minimax_h3_turbo_mode)
     newParams.self_refiner_setting = (p.self_refiner_setting as number) ?? undefined
     newParams.audio_guide = (p.audio_guide as string) || ''
     newParams.audio_guide2 = (p.audio_guide2 as string) || ''

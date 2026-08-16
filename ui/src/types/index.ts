@@ -1404,6 +1404,18 @@ export interface DirectorV2PlanResponse {
 
 // ── Director Pipeline Dashboard ──────────────────────────────────────────
 
+export interface PipelineVideoAttempt {
+  id: string
+  filename: string
+  created_at: number
+  seed?: number | null
+  prompt?: string
+  model_type?: string
+  resolution?: string
+  video_length?: number | null
+  source?: 'original' | 'regenerated' | 'studio' | 'recovered' | string
+}
+
 export interface PipelineClipState {
   index: number
   shot_id?: string
@@ -1422,6 +1434,9 @@ export interface PipelineClipState {
   start_image_filename: string | null
   keyframe_filenames: string[]
   video_filename: string | null
+  video_attempts?: PipelineVideoAttempt[]
+  /** Explicit user choice. Legacy checkpoints use video_filename implicitly. */
+  selected_video_filename?: string | null
   video_stale?: boolean
   tag: 'good' | 'needs_work' | null
   image_gen_time_sec: number | null
@@ -1521,6 +1536,7 @@ export interface SavedPipelineState {
   seamless: boolean
   image_model: string
   video_model: string
+  video_params?: Record<string, unknown>
   h3_reference_manifest?: H3ShotReferenceManifest[]
   h3_prompt_validation?: {
     status: 'optimized' | 'deterministic_fallback' | 'direct_video_contract'
