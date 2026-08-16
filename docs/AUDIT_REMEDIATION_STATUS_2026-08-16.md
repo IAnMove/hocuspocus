@@ -65,7 +65,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | STYLE-02 | pendiente | — |
 | TEST-01 | completado | 1.278 tests coleccionados desde raíz con `PYTHONPATH` eliminado |
 | TEST-02 | completado | Harness actualizado para el contrato de duración H3 posterior a la auditoría; 4 tests verdes |
-| CI-01 | delegado | Worker Luna high, worktree aislado |
+| CI-01 | completado | CI instala runtime CPU reproducible, colecciona 1.278 tests y ejecuta la suite completa: 1.270 pass + 8 skip en entorno limpio; 1.278 pass en el entorno de la app |
 | CI-02 | delegado | Worker Luna high, worktree aislado |
 | TEST-UI-01 | delegado | Worker Luna high, worktree aislado |
 | TEST-UI-02 | delegado | Worker Luna high, worktree aislado |
