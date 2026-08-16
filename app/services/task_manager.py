@@ -27,7 +27,9 @@ TASK_RETENTION_MAX_EVENTS_ENV = "LOREFRAME_TASK_RETENTION_MAX_EVENTS"
 DEFAULT_TASK_RETENTION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 DEFAULT_TASK_RETENTION_MAX_TERMINAL_TASKS = 1_000
 DEFAULT_TASK_RETENTION_MAX_EVENTS = 10_000
+TASK_SCHEMA_VERSION = 2
 _PRUNED_THROUGH_META_KEY = "events_pruned_through"
+_SCHEMA_VERSION_META_KEY = "schema_version"
 ACTIVE_STATUSES = frozenset({"created", "queued", "waiting_resource", "running"})
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "interrupted"})
 ALL_STATUSES = ACTIVE_STATUSES | TERMINAL_STATUSES
@@ -338,6 +340,30 @@ class TaskRegistry:
                 );
             """)
             self._migrate_task_events_to_durable_log(connection)
+            self._record_schema_version(connection)
+
+    @staticmethod
+    def _record_schema_version(connection: sqlite3.Connection) -> None:
+        row = connection.execute(
+            "SELECT value FROM task_registry_meta WHERE key = ?",
+            (_SCHEMA_VERSION_META_KEY,),
+        ).fetchone()
+        try:
+            existing = max(0, int(row["value"])) if row else 0
+        except (TypeError, ValueError, OverflowError):
+            existing = 0
+        if existing > TASK_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"Task database schema {existing} is newer than supported version "
+                f"{TASK_SCHEMA_VERSION}"
+            )
+        if existing == TASK_SCHEMA_VERSION:
+            return
+        connection.execute(
+            """INSERT INTO task_registry_meta(key, value) VALUES (?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+            (_SCHEMA_VERSION_META_KEY, str(TASK_SCHEMA_VERSION)),
+        )
 
     @staticmethod
     def _migrate_task_events_to_durable_log(connection: sqlite3.Connection) -> None:
@@ -699,6 +725,10 @@ class TaskRegistry:
             int(row["value"] if row else 0),
             int(sequence["value"] if sequence else 0),
         )
+
+    def schema_version(self) -> int:
+        with self._connect() as connection:
+            return self._meta_int(connection, _SCHEMA_VERSION_META_KEY)
 
     @staticmethod
     def _meta_int(connection: sqlite3.Connection, key: str, default: int = 0) -> int:

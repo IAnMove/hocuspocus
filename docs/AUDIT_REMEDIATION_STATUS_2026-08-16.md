@@ -20,7 +20,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | TASK-03 | completado | Hash semántico sin `updatedAt`, dedupe y coalescing a 1,5 s; terminal/error inmediato; 100 polls iguales => 1 publicación; 30 tests UI verdes |
 | TASK-04 | completado | Snapshot devuelve cursor bajo frontera atómica; Activity espera snapshot y abre SSE desde high-water mark; carrera concurrente + 10.000 eventos históricos cubiertos |
 | TASK-05 | completado | Retención configurable por edad/cantidad conserva activos y terminal más reciente, mantiene tombstones, persiste frontera de cursor y emite `resync_required`; dry-run, reinicio y continuación desde cursor reciente cubiertos. |
-| TASK-06 | pendiente | — |
+| TASK-06 | completado | Versión de esquema idempotente; CLI dry-run sobre copia temporal, backup/restore validados y compactación sólo con backend detenido. Dry-run real: 266.469.376 B, 557.376 eventos, retiraría 547.376/0 tareas y `source_unchanged=true`; 44 tests focalizados. |
 | TASK-07 | pendiente | — |
 | DIR-01 | completado | Helper compartido mapea antes de filtrar, conserva índices originales/explicitos y prioriza `shotId`; huecos `[∅,b,∅,d] => [1,3]`, null y plan reordenado cubiertos; 49 tests UI + lint/build verdes. |
 | DIR-02 | completado | `DirectorClipImage.file` es nullable; previews recuperadas resuelven filename backend sin `createObjectURL(null)` y los blobs locales se revocan al reemplazar/desmontar; tests UI + lint/build verdes. |

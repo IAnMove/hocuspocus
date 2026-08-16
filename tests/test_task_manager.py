@@ -2,7 +2,12 @@ import sqlite3
 import json
 import time
 
-from services.task_manager import TaskRegistry, redact_sensitive_data, task_context_scope
+from services.task_manager import (
+    TASK_SCHEMA_VERSION,
+    TaskRegistry,
+    redact_sensitive_data,
+    task_context_scope,
+)
 
 
 def test_identical_syncs_are_semantic_noops_and_terminal_transition_is_once(
@@ -280,11 +285,29 @@ def test_existing_foreign_key_event_log_is_migrated_without_changing_cursors(tmp
     reloaded = TaskRegistry(str(tmp_path), interrupt_stale=False)
     with sqlite3.connect(reloaded.path) as connection:
         assert connection.execute("PRAGMA foreign_key_list(task_events)").fetchall() == []
+        first_schema = connection.execute(
+            "SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name"
+        ).fetchall()
+        first_metadata = connection.execute(
+            "SELECT key, value FROM task_registry_meta ORDER BY key"
+        ).fetchall()
     assert reloaded.events("task-legacy") == original_events
     assert reloaded.latest_event_id() == original_cursor
+    assert reloaded.schema_version() == TASK_SCHEMA_VERSION
 
-    assert reloaded.delete("task-legacy") is True
-    tombstones = reloaded.events(after=original_cursor)
+    migrated_twice = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    with sqlite3.connect(migrated_twice.path) as connection:
+        assert connection.execute(
+            "SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name"
+        ).fetchall() == first_schema
+        assert connection.execute(
+            "SELECT key, value FROM task_registry_meta ORDER BY key"
+        ).fetchall() == first_metadata
+    assert migrated_twice.events("task-legacy") == original_events
+    assert migrated_twice.latest_event_id() == original_cursor
+
+    assert migrated_twice.delete("task-legacy") is True
+    tombstones = migrated_twice.events(after=original_cursor)
     assert [event["type"] for event in tombstones] == ["task.deleted"]
 
     restarted = TaskRegistry(str(tmp_path), interrupt_stale=False)
