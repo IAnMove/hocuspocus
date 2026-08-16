@@ -3,6 +3,98 @@ import sqlite3
 from services.task_manager import TaskRegistry, redact_sensitive_data, task_context_scope
 
 
+def test_identical_syncs_are_semantic_noops_and_terminal_transition_is_once(
+    tmp_path, monkeypatch,
+):
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    task = registry.create(
+        id="task-idempotent", kind="video", title="Render", status="queued",
+        current=0, total=1,
+    )
+    # Keep the acceptance loop focused on idempotency rather than paying the
+    # cost of opening a fresh SQLite handle for every one of 10,000 no-ops.
+    connection = sqlite3.connect(registry.path, isolation_level=None)
+    connection.row_factory = sqlite3.Row
+    # This test asserts event/write cardinality, not SQLite durability. Avoid
+    # paying filesystem fsync latency 10,000 times in the acceptance loop.
+    connection.execute("PRAGMA synchronous=OFF")
+    monkeypatch.setattr(registry, "_connect", lambda: connection)
+    notifications = []
+    monkeypatch.setattr(registry, "_notify", lambda: notifications.append(True))
+    before_sync = registry.latest_event_id()
+
+    running_patch = {
+        "status": "running",
+        "phase": "rendering",
+        "current": 1,
+        "total": 1,
+        "updated_at": 123.0,
+    }
+    for _ in range(10_000):
+        registry.update(
+            task["id"],
+            event_type="adapter.synced",
+            force=True,
+            **running_patch,
+        )
+
+    running_events = registry.events(task["id"])
+    assert [event["sequence"] for event in running_events] == [1, 2]
+    assert running_events[-1]["type"] == "adapter.synced"
+    assert registry.latest_event_id() == before_sync + 1
+    assert len(notifications) == 1
+
+    registry.update(
+        task["id"],
+        status="completed",
+        phase="completed",
+        current=1,
+        total=1,
+        event_type="task.finished",
+        force=True,
+    )
+    # A repeated terminal sync must not refresh completed_at or append a
+    # second transition event.
+    registry.update(
+        task["id"],
+        status="completed",
+        phase="completed",
+        current=1,
+        total=1,
+        event_type="adapter.synced",
+        force=True,
+    )
+
+    events = registry.events(task["id"])
+    assert [event["sequence"] for event in events] == [1, 2, 3]
+    assert events[-1]["type"] == "task.finished"
+    completed = registry.get(task["id"])
+    assert completed["status"] == "completed"
+    assert completed["completed_at"] == events[-1]["changes"]["completed_at"]
+    assert len(notifications) == 2
+    connection.close()
+
+
+def test_updated_at_only_patch_returns_existing_snapshot_without_event_or_notify(
+    tmp_path, monkeypatch,
+):
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    task = registry.create(id="task-volatile", kind="llm", title="Plan", status="running")
+    before = registry.get(task["id"])
+    before_events = registry.events(task["id"])
+    notifications = []
+    monkeypatch.setattr(registry, "_notify", lambda: notifications.append(True))
+
+    returned = registry.update(
+        task["id"], updated_at=999_999.0, event_type="adapter.synced", force=True,
+    )
+
+    assert returned == before
+    assert registry.get(task["id"]) == before
+    assert registry.events(task["id"]) == before_events
+    assert notifications == []
+
+
 def test_task_registry_persists_ordered_events_and_transitions(tmp_path):
     registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
     task = registry.create(

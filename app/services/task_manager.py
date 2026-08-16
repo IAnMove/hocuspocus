@@ -35,6 +35,12 @@ _ALLOWED_TRANSITIONS = {
     "completed": set(),
 }
 
+# These fields are maintained by the registry itself and must not turn an
+# otherwise identical adapter sync into a new semantic task update.  The
+# persisted ``updated_at`` is only a change-ordering/index field; it is not
+# part of the task state delivered by an adapter.
+_VOLATILE_UPDATE_FIELDS = frozenset({"updated_at"})
+
 _registry_lock = threading.RLock()
 _registries: dict[str, "TaskRegistry"] = {}
 _context = threading.local()
@@ -422,6 +428,8 @@ class TaskRegistry:
             if next_status not in ALL_STATUSES:
                 connection.rollback()
                 raise ValueError(f"Unsupported task status: {next_status}")
+            if "status" in patch:
+                patch["status"] = next_status
             if next_status != task["status"] and not force:
                 if next_status not in _ALLOWED_TRANSITIONS.get(task["status"], set()):
                     connection.rollback()
@@ -431,7 +439,9 @@ class TaskRegistry:
                 patch.setdefault("queued_at", now)
             if next_status == "running" and not task.get("started_at"):
                 patch.setdefault("started_at", now)
-            if next_status in TERMINAL_STATUSES:
+            if next_status in TERMINAL_STATUSES and (
+                task.get("status") not in TERMINAL_STATUSES or not task.get("completed_at")
+            ):
                 patch.setdefault("completed_at", now)
             elif next_status in ACTIVE_STATUSES:
                 patch.setdefault("completed_at", None)
@@ -444,8 +454,27 @@ class TaskRegistry:
                     patch["progress"] = max(0.0, min(1.0, float(patch["progress"])))
                 except (TypeError, ValueError):
                     patch["progress"] = task.get("progress", 0.0)
-            patch["updated_at"] = now
-            task.update(patch)
+
+            # Compare the normalized patch with the current snapshot before
+            # touching timestamps or the append-only log.  Adapter callers
+            # can include registry-owned fields such as updated_at, and a
+            # forced/event-typed sync is still a no-op when no semantic field
+            # changed.  This keeps force useful for transition validation
+            # without making it an unconditional event switch.
+            semantic_patch = {
+                key: value for key, value in patch.items()
+                if key not in _VOLATILE_UPDATE_FIELDS
+            }
+            changed_patch = {
+                key: value for key, value in semantic_patch.items()
+                if task.get(key) != value
+            }
+            if not changed_patch:
+                connection.rollback()
+                return copy.deepcopy(task)
+
+            task.update(changed_patch)
+            task["updated_at"] = now
             connection.execute(
                 """UPDATE tasks SET root_id=?, parent_id=?, workspace=?, status=?, kind=?, workflow=?,
                    updated_at=?, snapshot=? WHERE id=?""",
@@ -454,7 +483,7 @@ class TaskRegistry:
                     task["kind"], task["workflow"], now, _json(task), task["id"],
                 ),
             )
-            self._append_event(connection, task, event_type, patch)
+            self._append_event(connection, task, event_type, changed_patch)
             connection.commit()
         self._notify()
         return copy.deepcopy(task)

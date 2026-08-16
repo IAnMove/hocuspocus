@@ -16,7 +16,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | SEC-02 | completado | Resolver común para trim/análisis; uploads/workspace válidos, externos y symlinks rechazados |
 | SEC-03 | completado | Token bearer + cookie de sesión para LAN; loopback libre; UI, API y `/classic` cubiertos |
 | TASK-01 | completado | Namespace `task-client-*` exacto en backend y UI; root externo eliminado/ignorado; tarea backend homónima conserva snapshot/eventos; 37 tests Python + 27 UI verdes |
-| TASK-02 | pendiente | — |
+| TASK-02 | completado | Comparación semántica normalizada antes de timestamp/evento: 10.000 syncs idénticas => 1 cambio, transiciones reales/terminales => 1 cada una, sin notify ni renovación de `completed_at`; 16 tests verdes. |
 | TASK-03 | completado | Hash semántico sin `updatedAt`, dedupe y coalescing a 1,5 s; terminal/error inmediato; 100 polls iguales => 1 publicación; 30 tests UI verdes |
 | TASK-04 | completado | Snapshot devuelve cursor bajo frontera atómica; Activity espera snapshot y abre SSE desde high-water mark; carrera concurrente + 10.000 eventos históricos cubiertos |
 | TASK-05 | pendiente | — |
