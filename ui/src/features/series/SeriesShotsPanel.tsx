@@ -31,9 +31,12 @@ export function SeriesShotsPanel({
   const allSelected = selectableShotIds.length > 0 && selectedCount === selectableShotIds.length
   const hasDialogueShots = episode.shots.some(shot => shot.dialogueBeats.length > 0)
   useEffect(() => {
-    const validIds = new Set(episode.shots.map(shot => shot.id))
-    setSelected(current => new Set([...current].filter(id => validIds.has(id))))
-  }, [episode.id, episode.shots])
+    const selectableIds = new Set(selectableShotIds)
+    setSelected(current => {
+      const next = new Set([...current].filter(id => selectableIds.has(id)))
+      return next.size === current.size && [...next].every(id => current.has(id)) ? current : next
+    })
+  }, [episode.id, selectableShotIds])
   const patchShot = (shotId: string, updater: (shot: SeriesShot) => SeriesShot) => updateEpisode(current => ({
     ...current, shots: current.shots.map(shot => shot.id === shotId ? updater(shot) : shot),
   }))
@@ -100,10 +103,24 @@ export function SeriesShotsPanel({
       <div className="space-y-3">{episode.shots.map(shot => {
         const manifest = shot.referenceManifest
         const approved = shot.attempts.find(item => item.id === shot.approvedAttemptId)
+        const selectable = !shot.approvedAttemptId
+        const isSelected = selectable && selected.has(shot.id)
         return <article key={shot.id} id={`series-shot-${shot.id}`} className="rounded-xl border border-border bg-bg-primary p-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded border border-dashed border-border bg-bg-tertiary text-[8px] uppercase text-text-muted">Shot {shot.order}<br />poster</div>
-            <button onClick={() => setSelected(current => { const next = new Set(current); if (next.has(shot.id)) next.delete(shot.id); else next.add(shot.id); return next })}>{selected.has(shot.id) ? <CheckSquare size={16} className="text-violet-400" /> : <Square size={16} className="text-text-muted" />}</button>
+            <button
+              type="button"
+              disabled={!selectable}
+              aria-pressed={isSelected}
+              aria-label={selectable ? `${isSelected ? 'Deselect' : 'Select'} shot ${shot.order} for rendering` : `Shot ${shot.order} is approved`}
+              className="disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => setSelected(current => {
+                if (!selectable) return current
+                const next = new Set(current)
+                if (next.has(shot.id)) next.delete(shot.id); else next.add(shot.id)
+                return next
+              })}
+            >{isSelected ? <CheckSquare size={16} className="text-violet-400" /> : <Square size={16} className="text-text-muted" />}</button>
             <Pill tone="blue">#{shot.order}</Pill><strong className="text-xs text-text-primary">{shot.framing || 'Shot'}</strong><Pill>{shot.durationSeconds}s</Pill>
             {shot.primarySpeakerId && <Pill tone="violet">Speaker · {characters[shot.primarySpeakerId] || shot.primarySpeakerId}</Pill>}
             {shot.locationId && <Pill>{locations[shot.locationId] || shot.locationId}</Pill>}

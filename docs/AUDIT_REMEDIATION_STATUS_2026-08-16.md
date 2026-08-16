@@ -33,7 +33,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | SER-UI-01 | pendiente | — |
 | SER-UI-02 | completado | Cambio de `episode.id` pausa el último reproductor y reinicia error, decisiones, aprobación, cursor/Play all, foco, preview, edición, seed/busy, assembly y subvista; el efecto de playback ignora el render transitorio stale. Prueba E1→E2 funcional + 80 UI, lint/build verdes. |
 | DUR-01 | pendiente | Revalidar contra `c2da86c` |
-| SER-UI-03 | pendiente | — |
+| SER-UI-03 | completado | Selección se poda contra `selectableShotIds`; aprobado queda desmarcado y con control deshabilitado/nombre explícito, contador y Render selected caen a cero, y desaprobar no resucita selección stale. Prueba RTL E1 seleccionada→aprobada→desaprobada + 81 UI/lint/build verdes. |
 | SER-03 | pendiente | — |
 | STORY-01 | pendiente | — |
 | STORY-02 | completado | Resolver puro compartido conserva MiniMax, OpenAI, DeepSeek, OpenAI-compatible y Maestro con provider/model/base URL coherentes en UI, generación y reanudación; tabla de casos automatizada + lint/build verdes. |
