@@ -1156,8 +1156,22 @@ Return exactly one object for every clip requested in the current batch. Preserv
         if not image_paths:
             image_paths = None
         per_clip_tokens = 700 if uses_generated_images else 520
-        slots: dict[int, dict] = {}
+        completed_shot_plans = kwargs.get("completed_shot_plans") or []
+        if not isinstance(completed_shot_plans, list):
+            raise ValueError("completed_shot_plans must be a list")
+        slots, _resume_missing, resume_alternatives = self._partition_shot_plans(
+            completed_shot_plans,
+            len(clips),
+            require_image=uses_generated_images,
+        )
+        if resume_alternatives:
+            raise ValueError("Saved Director plan checkpoint contains duplicate or invalid clip indexes")
         alternatives: list[dict] = []
+        batch_checkpoint = kwargs.get("batch_checkpoint")
+
+        def notify_checkpoint(event: dict) -> None:
+            if callable(batch_checkpoint):
+                batch_checkpoint(event)
 
         def repair_system_for(shot_schema: dict) -> str:
             return f"""You repair missing music-video shot plans.
@@ -1176,9 +1190,21 @@ Required object schema:
                 batch_start,
                 min(batch_start + self.PLAN_BATCH_SIZE, len(clips)),
             ))
-            requested_numbers = [index + 1 for index in batch_indices]
+            batch_slots = {
+                index: slots[index]
+                for index in batch_indices
+                if index in slots
+            }
+            pending_indices = [index for index in batch_indices if index not in slots]
+            if not pending_indices:
+                print(
+                    "[MusicVideoPlanner] Reusing durable batch for clip indexes "
+                    f"{[index + 1 for index in batch_indices]}."
+                )
+                continue
+            requested_numbers = [index + 1 for index in pending_indices]
             batch_schema = self._batch_response_schema(
-                batch_indices,
+                pending_indices,
                 include_image_fields=uses_generated_images,
             )
             batch_prompt = f"""Scene Concept: {scene_description}
@@ -1186,32 +1212,38 @@ Song tempo: {bpm:.0f} BPM
 Requested clip indexes: {', '.join(map(str, requested_numbers))}
 
 Clips:
-{chr(10).join(clip_contexts[index] for index in batch_indices)}
+{chr(10).join(clip_contexts[index] for index in pending_indices)}
 
-Write exactly {len(batch_indices)} structured shot plans for only the requested clip indexes. Go:"""
+Write exactly {len(pending_indices)} structured shot plans for only the requested clip indexes. Go:"""
             batch_system = f"""{system_prompt}
 
 CURRENT BATCH CONTRACT:
 - Requested clip indexes: {', '.join(map(str, requested_numbers))}.
-- Return exactly {len(batch_indices)} objects and no other timeline indexes.
+- Return exactly {len(pending_indices)} objects and no other timeline indexes.
 - Preserve these one-based clip_index values exactly."""
             print(
                 "[MusicVideoPlanner] Planning bounded batch for clip indexes "
                 f"{requested_numbers}."
             )
+            notify_checkpoint({
+                "event": "call_started",
+                "phase": "batch",
+                "indices": requested_numbers,
+            })
             candidates = self._call_llm_json(
                 user_prompt=batch_prompt,
                 system_prompt=batch_system,
-                max_tokens=max(2048, len(batch_indices) * per_clip_tokens + 768),
+                max_tokens=max(2048, len(pending_indices) * per_clip_tokens + 768),
                 image_paths=image_paths,
                 json_schema=batch_schema,
             )
-            batch_slots, missing, batch_alternatives = self._partition_batch_shot_plans(
+            new_slots, missing, batch_alternatives = self._partition_batch_shot_plans(
                 candidates,
                 len(clips),
-                batch_indices,
+                pending_indices,
                 require_image=uses_generated_images,
             )
+            batch_slots.update(new_slots)
             alternatives.extend(batch_alternatives)
 
             if missing:
@@ -1233,6 +1265,11 @@ Return only these {len(missing)} missing shot plans."""
                     "[MusicVideoPlanner] Requesting one compact repair for missing "
                     f"clip indexes {missing_numbers}."
                 )
+                notify_checkpoint({
+                    "event": "call_started",
+                    "phase": "repair",
+                    "indices": missing_numbers,
+                })
                 repaired = self._call_llm_json(
                     user_prompt=repair_prompt,
                     system_prompt=repair_system_for(repair_schema["items"]),
@@ -1272,6 +1309,11 @@ Return exactly this one missing shot plan."""
                     "[MusicVideoPlanner] Requesting individual fallback for clip "
                     f"index {individual_number}."
                 )
+                notify_checkpoint({
+                    "event": "call_started",
+                    "phase": "individual_fallback",
+                    "indices": [individual_number],
+                })
                 individual = self._call_llm_json(
                     user_prompt=individual_prompt,
                     system_prompt=repair_system_for(individual_schema["items"]),
@@ -1300,10 +1342,15 @@ Return exactly this one missing shot plan."""
                     "No images were queued."
                 )
 
+            notify_checkpoint({
+                "event": "batch_completed",
+                "indices": [index + 1 for index in batch_indices],
+                "shot_plans": [batch_slots[index] for index in batch_indices],
+            })
             for index in batch_indices:
-                if index in slots:
+                if index in slots and slots[index] != batch_slots[index]:
                     raise RuntimeError(
-                        "Music-video planning produced a duplicate completed timeline "
+                        "Music-video planning produced a conflicting completed timeline "
                         f"slot for clip index {index + 1}. No images were queued."
                     )
                 slots[index] = batch_slots[index]

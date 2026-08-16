@@ -25,7 +25,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | DIR-01 | completado | Helper compartido mapea antes de filtrar, conserva índices originales/explicitos y prioriza `shotId`; huecos `[∅,b,∅,d] => [1,3]`, null y plan reordenado cubiertos; 49 tests UI + lint/build verdes. |
 | DIR-02 | completado | `DirectorClipImage.file` es nullable; previews recuperadas resuelven filename backend sin `createObjectURL(null)` y los blobs locales se revocan al reemplazar/desmontar; tests UI + lint/build verdes. |
 | PLAN-01 | completado | Planificación determinista en lotes máximos de 8; schema restringido a índices del lote, merge ordenado sin overwrite, reparación compacta sólo de huecos y fallback individual. Fake que trunca >8 produce 41/41 únicos en 6 llamadas; 31 tests focalizados verdes. |
-| PLAN-02 | pendiente | — |
+| PLAN-02 | completado | Job JSON atómico por workspace persiste índices/planes tras cada lote, lote activo, llamadas y tokens; status/list/resume públicos y claim único. Reinicio simulado tras lote 3 recupera 1–24 y sólo llama 25–41; 84 tests backend + 68 UI/lint/build verdes. |
 | PLAN-03 | pendiente | — |
 | DIR-03 | pendiente | — |
 | SER-01 | pendiente | — |

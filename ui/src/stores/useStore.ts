@@ -8201,6 +8201,7 @@ export const useStore = create<AppState>((set, get) => ({
         try {
           result = await api.directorV2Plan({
             activity_id: activity.id,
+            workspace: get().activeWorkspace,
             skill_type: 'music_video',
             clips: directorPlannedClips,
             scene_description: directorSceneDescription,
@@ -8966,6 +8967,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (useV2) {
         const result = await api.directorV2Plan({
+          workspace: get().activeWorkspace,
           skill_type: 'short_film',
           clips: directorPlannedClips,
           scene_description: directorSceneDescription,
@@ -9123,6 +9125,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (useV2) {
         const result = await api.directorV2Plan({
+          workspace: get().activeWorkspace,
           skill_type: 'short_film',
           scene_description: directorSceneDescription,
           story_description: directorSceneDescription,

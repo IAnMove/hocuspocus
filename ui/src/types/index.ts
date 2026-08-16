@@ -1407,6 +1407,8 @@ export interface ProductionPlan {
 export interface DirectorV2PlanRequest {
   skill_type: DirectorSkill
   activity_id?: string
+  workspace?: string
+  plan_job_id?: string
   scene_description?: string
   story_description?: string
   clips?: unknown[]
@@ -1465,6 +1467,33 @@ export interface DirectorV2PlanResponse {
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
   production_plan: ProductionPlan
   skill_type: DirectorSkill
+  plan_job_id?: string
+}
+
+export interface DirectorV2PlanJob {
+  jobId: string
+  workspace: string
+  skillType: DirectorSkill
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  phase: string
+  message: string
+  total: number
+  completedIndices: number[]
+  missingIndices: number[]
+  completedBatches: Array<{ indices: number[]; completedAt: number }>
+  activeBatch: number[]
+  calls: number
+  usage: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    calls?: number
+  }
+  error?: string | null
+  result?: DirectorV2PlanResponse | null
+  createdAt: number
+  updatedAt: number
+  finishedAt?: number | null
 }
 
 /** Runtime boundary for the Director v2 response returned by the backend. */
@@ -1483,6 +1512,7 @@ export function isDirectorV2PlanResponse(value: unknown): value is DirectorV2Pla
       return typeof item.video_prompt === 'string' && typeof item.image_prompt === 'string'
     })
     && Array.isArray(plan.shots)
+    && (response.plan_job_id === undefined || typeof response.plan_job_id === 'string')
 }
 
 // ── Director Pipeline Dashboard ──────────────────────────────────────────

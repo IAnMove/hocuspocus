@@ -10444,13 +10444,13 @@ def _director_v2_planner_kwargs(body: dict) -> dict:
     """Keep every supported Director input, including Story Lab visual refs."""
     return {key: body[key] for key in _DIRECTOR_V2_PLANNER_KEYS if key in body}
 
-@api.post("/api/v1/director/v2/plan")
-async def director_v2_plan(request: Request):
+async def _director_v2_plan_body(body: dict):
     """Plan using the new Director v2 architecture (planners + renderers + validators).
 
     Returns structured ProductionPlan + rendered clip_plans.
     """
-    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Director plan request must be an object")
     skill_type = body.get("skill_type", body.get("pipeline_type", "music_video"))
     tracking_id = str(body.get("activity_id") or "").strip()[:160]
     from services import llm_service
@@ -10473,6 +10473,77 @@ async def director_v2_plan(request: Request):
         "viral_video": "viral_video",
     }
     skill_type = skill_map.get(skill_type, skill_type)
+
+    plan_job_store = None
+    plan_job = None
+    plan_job_id = ""
+    workspace = str(body.get("workspace") or _get_active_workspace())
+    if skill_type == "music_video":
+        from services.director_plan_jobs import (
+            DirectorPlanJobStore,
+            claim_director_plan_job,
+        )
+
+        plan_job_store = DirectorPlanJobStore(_workspace_dir(workspace))
+        requested_job_id = str(body.get("plan_job_id") or "").strip()
+        if requested_job_id:
+            plan_job = plan_job_store.load(requested_job_id)
+            if plan_job is None:
+                raise HTTPException(status_code=404, detail="Director plan job not found")
+            if str(plan_job.get("workspace") or "default") != workspace:
+                raise HTTPException(status_code=409, detail="Director plan job belongs to another workspace")
+            if str(plan_job.get("skillType") or "") != skill_type:
+                raise HTTPException(status_code=409, detail="Director plan job uses another skill")
+            if plan_job.get("status") == "completed" and isinstance(plan_job.get("result"), dict):
+                return copy.deepcopy(plan_job["result"])
+            saved_request = copy.deepcopy(plan_job.get("request") or {})
+            if not isinstance(saved_request, dict):
+                raise HTTPException(status_code=409, detail="Director plan job request is unavailable")
+            if tracking_id:
+                saved_request["activity_id"] = tracking_id
+            saved_request["workspace"] = workspace
+            saved_request["plan_job_id"] = requested_job_id
+            body = saved_request
+            plan_job_id = requested_job_id
+            if not claim_director_plan_job(plan_job_id):
+                raise HTTPException(status_code=409, detail="Director plan job is already running")
+            try:
+                plan_job = plan_job_store.update(
+                    plan_job_id,
+                    status="running",
+                    phase="resuming",
+                    message="Resuming missing music-video clip plans",
+                    error=None,
+                    finishedAt=None,
+                )
+            except Exception:
+                from services.director_plan_jobs import release_director_plan_job
+                release_director_plan_job(plan_job_id)
+                raise
+        else:
+            durable_request = copy.deepcopy(body)
+            durable_request.pop("plan_job_id", None)
+            durable_request["workspace"] = workspace
+            plan_job = plan_job_store.create(
+                durable_request,
+                workspace=workspace,
+                skill_type=skill_type,
+                total=len(body.get("clips") or []),
+            )
+            plan_job_id = str(plan_job["jobId"])
+            if not claim_director_plan_job(plan_job_id):
+                raise HTTPException(status_code=409, detail="Director plan job is already running")
+            try:
+                plan_job = plan_job_store.update(
+                    plan_job_id,
+                    status="running",
+                    phase="starting",
+                    message="Starting durable music-video planning",
+                )
+            except Exception:
+                from services.director_plan_jobs import release_director_plan_job
+                release_director_plan_job(plan_job_id)
+                raise
 
     try:
         _ensure_llm_loaded()
@@ -10500,6 +10571,53 @@ async def director_v2_plan(request: Request):
         services = wgp.server_config.get("services", {})
         provider = _effective_llm_routing(services)[0]
         planner_kwargs["nsfw"] = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
+
+        if plan_job_store is not None and plan_job is not None:
+            planner_kwargs["completed_shot_plans"] = copy.deepcopy(
+                plan_job.get("completedShotPlans") or []
+            )
+
+            def _checkpoint_music_plan_batch(event: dict) -> None:
+                usage = (
+                    llm_service.get_activity_tracking(tracking_id).get("usage")
+                    if tracking_id else {}
+                ) or {}
+                event_type = str(event.get("event") or "")
+                indices = [
+                    int(value) for value in event.get("indices") or []
+                    if isinstance(value, int) or str(value).isdigit()
+                ]
+                if event_type == "call_started":
+                    plan_job_store.begin_call(
+                        plan_job_id,
+                        indices=indices,
+                        phase=str(event.get("phase") or "planning"),
+                        usage=usage,
+                    )
+                    llm_service.update_activity_tracking(
+                        tracking_id,
+                        phase=f"planning_{event.get('phase') or 'batch'}",
+                        current=len((plan_job_store.load(plan_job_id) or {}).get("completedIndices") or []),
+                        total=len(body.get("clips") or []),
+                        detail=f"Planning clip indexes {', '.join(map(str, indices))}…",
+                    )
+                elif event_type == "batch_completed":
+                    shot_plans = event.get("shot_plans") or []
+                    plan_job_store.record_batch(
+                        plan_job_id,
+                        indices=indices,
+                        shot_plans=shot_plans,
+                        usage=usage,
+                    )
+                    llm_service.update_activity_tracking(
+                        tracking_id,
+                        phase="batch_completed",
+                        current=len((plan_job_store.load(plan_job_id) or {}).get("completedIndices") or []),
+                        total=len(body.get("clips") or []),
+                        detail=f"Saved clip indexes {', '.join(map(str, indices))}.",
+                    )
+
+            planner_kwargs["batch_checkpoint"] = _checkpoint_music_plan_batch
 
         # Prompt polish mode: off | full_guide | light_guide | third_pass.
         # The default third pass is model-aware; native H3 prompts retain
@@ -10637,19 +10755,105 @@ async def director_v2_plan(request: Request):
             total=len(clip_plans),
             detail=f"{len(clip_plans)} visual shot plans ready for review.",
         )
-        return {
+        result = {
             "clip_plans": clip_plans,
             "production_plan": plan.to_dict(),
             "skill_type": skill_type,
         }
+        if plan_job_store is not None and plan_job_id:
+            result["plan_job_id"] = plan_job_id
+            plan_job_store.update(
+                plan_job_id,
+                status="completed",
+                phase="completed",
+                message=f"{len(clip_plans)} visual shot plans ready for review",
+                activeBatch=[],
+                result=copy.deepcopy(result),
+                error=None,
+                finishedAt=time.time(),
+            )
+        return result
 
     except Exception as e:
         import traceback
         traceback.print_exc()
+        if plan_job_store is not None and plan_job_id:
+            try:
+                plan_job_store.update(
+                    plan_job_id,
+                    status="failed",
+                    phase="failed",
+                    message="Music-video planning stopped; completed batches are recoverable",
+                    activeBatch=[],
+                    error=str(e),
+                    finishedAt=time.time(),
+                )
+            except Exception as checkpoint_error:
+                print(f"[DirectorPlanJob] Could not persist failure state: {checkpoint_error}")
         llm_service.update_activity_tracking(
             tracking_id, status="failed", detail=str(e), error=str(e)
         )
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if plan_job_id:
+            from services.director_plan_jobs import release_director_plan_job
+            release_director_plan_job(plan_job_id)
+
+
+@api.post("/api/v1/director/v2/plan")
+async def director_v2_plan(request: Request):
+    """Run a Director plan while checkpointing bounded music-video batches."""
+    return await _director_v2_plan_body(await request.json())
+
+
+def _director_plan_job_store(workspace: str):
+    from services.director_plan_jobs import DirectorPlanJobStore
+    return DirectorPlanJobStore(_workspace_dir(workspace))
+
+
+@api.get("/api/v1/director/v2/plan/jobs")
+def list_director_v2_plan_jobs(workspace: str = "default"):
+    """List durable Director planning checkpoints without exposing prompts."""
+    store = _director_plan_job_store(workspace)
+    return {
+        "jobs": [store.public_snapshot(job) for job in store.list()],
+    }
+
+
+@api.get("/api/v1/director/v2/plan/jobs/{job_id}")
+def get_director_v2_plan_job(job_id: str, workspace: str = "default"):
+    store = _director_plan_job_store(workspace)
+    job = store.load(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Director plan job not found")
+    return store.public_snapshot(job)
+
+
+@api.post("/api/v1/director/v2/plan/jobs/{job_id}/resume")
+async def resume_director_v2_plan_job(
+    job_id: str,
+    request: Request,
+    workspace: str = "default",
+):
+    """Resume only the missing indexes from a durable planning checkpoint."""
+    store = _director_plan_job_store(workspace)
+    job = store.load(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Director plan job not found")
+    if job.get("status") == "completed" and isinstance(job.get("result"), dict):
+        return copy.deepcopy(job["result"])
+    body = copy.deepcopy(job.get("request") or {})
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=409, detail="Director plan job request is unavailable")
+    try:
+        override = await request.json()
+    except Exception:
+        override = {}
+    if isinstance(override, dict) and str(override.get("activity_id") or "").strip():
+        body["activity_id"] = str(override["activity_id"]).strip()[:160]
+    body["workspace"] = workspace
+    body["plan_job_id"] = job_id
+    return await _director_v2_plan_body(body)
 
 
 @api.get("/api/v1/director/v2/plan/progress/{activity_id}")

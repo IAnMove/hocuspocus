@@ -2,7 +2,7 @@ import { rememberPrompt } from '../lib/promptHistory'
 import { openCanonicalTaskEventStream } from '../lib/canonicalTaskEvents'
 import type { CanonicalTaskEvent, CanonicalTaskStreamState } from '../lib/canonicalTaskEvents'
 import { isDirectorV2PlanResponse } from '../types'
-import type { DirectorModelCompatibility, DirectorV2PlanProgress, DirectorV2PlanRequest, DirectorV2PlanResponse, GenerationDetails, H3WindowPlan, ScailResolutionProfile } from '../types'
+import type { DirectorModelCompatibility, DirectorV2PlanJob, DirectorV2PlanProgress, DirectorV2PlanRequest, DirectorV2PlanResponse, GenerationDetails, H3WindowPlan, ScailResolutionProfile } from '../types'
 
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
 
@@ -1785,6 +1785,40 @@ export async function getDirectorV2PlanProgress(activityId: string): Promise<Dir
   if (res.status === 404) return null
   if (!res.ok) throw new Error('Could not read Director planning progress')
   return res.json()
+}
+
+export async function listDirectorV2PlanJobs(workspace = 'default'): Promise<DirectorV2PlanJob[]> {
+  const res = await fetch(`${BASE}/api/v1/director/v2/plan/jobs?workspace=${encodeURIComponent(workspace)}`)
+  if (!res.ok) throw new Error('Failed to list Director plan jobs')
+  const payload = await res.json()
+  return Array.isArray(payload?.jobs) ? payload.jobs : []
+}
+
+export async function getDirectorV2PlanJob(jobId: string, workspace = 'default'): Promise<DirectorV2PlanJob> {
+  const res = await fetch(`${BASE}/api/v1/director/v2/plan/jobs/${encodeURIComponent(jobId)}?workspace=${encodeURIComponent(workspace)}`)
+  if (!res.ok) throw new Error('Director plan job not found')
+  return res.json()
+}
+
+export async function resumeDirectorV2PlanJob(
+  jobId: string,
+  workspace = 'default',
+  activityId?: string,
+): Promise<DirectorV2PlanResponse> {
+  const res = await fetch(`${BASE}/api/v1/director/v2/plan/jobs/${encodeURIComponent(jobId)}/resume?workspace=${encodeURIComponent(workspace)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(activityId ? { activity_id: activityId } : {}),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Director plan resume failed' }))
+    throw new Error(error.detail || 'Director plan resume failed')
+  }
+  const payload: unknown = await res.json()
+  if (!isDirectorV2PlanResponse(payload)) {
+    throw new Error('Director v2 returned an invalid resumed plan contract')
+  }
+  return payload
 }
 
 // --- Presets ---
