@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, FileText, Loader2, Play, Square } from 'lucide-react'
 import * as api from '../../api/client'
 import { Pill, SectionCard, SeriesField } from './components'
@@ -20,39 +20,71 @@ export function SeriesEpisodePanel({
   const [job, setJob] = useState<SeriesJobStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const episodeIdRef = useRef(episode.id)
 
   useEffect(() => {
-    if (!job || !['queued', 'running', 'cancelling'].includes(job.status)) return
+    episodeIdRef.current = episode.id
+    setJob(current => current?.episodeId === episode.id ? current : null)
+    setBusy(false)
+    setError(null)
+  }, [episode.id])
+
+  useEffect(() => {
+    if (
+      !job
+      || job.episodeId !== episode.id
+      || !['queued', 'running', 'cancelling'].includes(job.status)
+    ) return
     let active = true
     const timer = window.setInterval(() => {
       void api.fetchSeriesPlanJob(job.jobId).then(value => {
-        if (active) setJob(value)
+        if (
+          active
+          && episodeIdRef.current === episode.id
+          && value.jobId === job.jobId
+          && value.episodeId === episode.id
+        ) setJob(value)
       }).catch(reason => {
-        if (active) setError((reason as Error).message)
+        if (active && episodeIdRef.current === episode.id) setError((reason as Error).message)
       })
     }, 1000)
     return () => { active = false; window.clearInterval(timer) }
-  }, [job])
+  }, [episode.id, job])
 
   const start = async (scope: 'outline' | 'script' | 'shots' | 'complete') => {
+    const episodeId = episode.id
     setBusy(true); setError(null)
     try {
       await saveNow()
-      setJob(await api.startSeriesPlan(workspace, series.id, episode.id, {
+      const started = await api.startSeriesPlan(workspace, series.id, episodeId, {
         scope, instruction,
         writingProvider: series.provider.writingProvider,
         writingModel: series.provider.writingModel,
         writingBaseUrl: series.provider.writingBaseUrl,
-      }))
-    } catch (reason) { setError((reason as Error).message) }
-    finally { setBusy(false) }
+      })
+      if (episodeIdRef.current === episodeId && started.episodeId === episodeId) setJob(started)
+    } catch (reason) {
+      if (episodeIdRef.current === episodeId) setError((reason as Error).message)
+    }
+    finally {
+      if (episodeIdRef.current === episodeId) setBusy(false)
+    }
   }
   const apply = async (proposal: SeriesEpisode) => {
-    if (!job) return
+    if (!job || job.episodeId !== episode.id || proposal.id !== episode.id) return
+    const episodeId = episode.id
     setBusy(true); setError(null)
-    try { await api.applySeriesPlanJob(job.jobId, proposal); await reload(); setJob(null) }
-    catch (reason) { setError((reason as Error).message) }
-    finally { setBusy(false) }
+    try {
+      await api.applySeriesPlanJob(job.jobId, proposal)
+      await reload()
+      if (episodeIdRef.current === episodeId) setJob(null)
+    }
+    catch (reason) {
+      if (episodeIdRef.current === episodeId) setError((reason as Error).message)
+    }
+    finally {
+      if (episodeIdRef.current === episodeId) setBusy(false)
+    }
   }
 
   return <div className="space-y-4 pb-10">
@@ -72,13 +104,17 @@ export function SeriesEpisodePanel({
         <button className={secondaryButton} disabled={busy || Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))} onClick={() => void start('outline')}><FileText size={13} />Generate outline only</button>
         <button className={primaryButton} disabled={busy || Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))} onClick={() => void start('complete')}><Play size={13} />Generate script + timed shots</button>
         <button className={secondaryButton} disabled={busy || !episode.script.length || Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))} onClick={() => void start('shots')}><Play size={13} />Regenerate shot proposal only</button>
-        {job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesPlanJob(job.jobId).then(setJob)}><Square size={13} />Cancel after current LLM call</button>}
+        {job && job.episodeId === episode.id && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesPlanJob(job.jobId).then(value => {
+          if (episodeIdRef.current === episode.id && value.episodeId === episode.id) setJob(value)
+        })}><Square size={13} />Cancel after current LLM call</button>}
       </div>
-      {job && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3">
+      {job && job.episodeId === episode.id && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3">
         <div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<Pill tone={job.status === 'completed' ? 'green' : job.status === 'failed' ? 'red' : 'violet'}>{job.status}</Pill><span>{job.message}</span><span className="ml-auto">{job.current}/{job.total}</span></div>
         {job.error && <p className="mt-2 text-[11px] text-red-300">{job.error}</p>}
         {job.status === 'completed' && job.episodeResult && <SeriesEpisodeProposalReview key={job.jobId} currentEpisode={episode} proposal={job.episodeResult} series={series} busy={busy} onApply={apply} />}
-        {(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} onClick={() => void api.resumeSeriesPlanJob(job.jobId).then(setJob)}>Resume completed stages</button>}
+        {(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} onClick={() => void api.resumeSeriesPlanJob(job.jobId).then(value => {
+          if (episodeIdRef.current === episode.id && value.episodeId === episode.id) setJob(value)
+        })}>Resume completed stages</button>}
       </div>}
     </SectionCard>
 
