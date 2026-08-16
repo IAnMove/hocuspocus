@@ -12,6 +12,31 @@ export interface TimelineShotLike<TAttempt extends TimelineAttemptLike = Timelin
   attempts: TAttempt[]
 }
 
+export interface PlaybackSlotLike {
+  shotId: string
+}
+
+export interface PlaybackCursor {
+  index: number
+  shotId: string | null
+  outcome: 'start' | 'keep' | 'stop'
+}
+
+/** Reconcile ordered playback by stable slot identity, never array position. */
+export function reconcilePlaybackCursor(
+  previousShotId: string | null | undefined,
+  playable: ReadonlyArray<PlaybackSlotLike>,
+): PlaybackCursor {
+  if (!playable.length) return { index: -1, shotId: null, outcome: 'stop' }
+  if (!previousShotId) {
+    return { index: 0, shotId: playable[0].shotId, outcome: 'start' }
+  }
+  const index = playable.findIndex(item => item.shotId === previousShotId)
+  return index >= 0
+    ? { index, shotId: previousShotId, outcome: 'keep' }
+    : { index: -1, shotId: null, outcome: 'stop' }
+}
+
 export function orderedTimelineShots<T extends { id: string; order: number }>(shots: T[]): T[] {
   return [...shots].sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
 }

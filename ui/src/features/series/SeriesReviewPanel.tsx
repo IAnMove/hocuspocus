@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Download, Edit3, ExternalLink, Film, Loader2, Play, RotateCcw, Save, Square, X } from 'lucide-react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
-import { orderedTimelineShots, safeTimelineAttempt, seriesEditorCanvas } from '../../lib/orderedClipTimeline'
+import { orderedTimelineShots, reconcilePlaybackCursor, safeTimelineAttempt, seriesEditorCanvas } from '../../lib/orderedClipTimeline'
 import { Pill, SectionCard } from './components'
 import { greenButton, primaryButton, secondaryButton } from './styles'
 import type { SeriesAssemblyJob, SeriesEpisode, SeriesJobStatus, SeriesProject, SeriesRenderAttempt, SeriesShot } from './types'
@@ -40,7 +40,7 @@ export function SeriesReviewPanel({
   const [error, setError] = useState<string | null>(null)
   const [decisions, setDecisions] = useState<Record<string, 'pending' | 'accepted' | 'rejected'>>({})
   const [approvalProgress, setApprovalProgress] = useState<{ current: number; total: number } | null>(null)
-  const [playIndex, setPlayIndex] = useState(0)
+  const [playbackShotId, setPlaybackShotId] = useState<string | null>(null)
   const [playingAll, setPlayingAll] = useState(false)
   const [focusShotId, setFocusShotId] = useState(episode.shots[0]?.id || '')
   const [previewAttemptByShot, setPreviewAttemptByShot] = useState<Record<string, string>>({})
@@ -94,7 +94,7 @@ export function SeriesReviewPanel({
     .flatMap(shot => {
       const selected = safeTimelineAttempt(shot, id => Boolean(series.assets[id]))
       const asset = selected?.outputAssetIds.map(id => series.assets[id]).find(Boolean)
-      return selected && asset ? [{ shot, attempt: selected, asset }] : []
+      return selected && asset ? [{ shotId: shot.id, shot, attempt: selected, asset }] : []
     }), [episode.shots, series.assets])
   const approvable = useMemo(() => episode.shots
     .slice()
@@ -108,7 +108,9 @@ export function SeriesReviewPanel({
       return attempt && attempt.id !== shot.approvedAttemptId
         ? [{ shotId: shot.id, attemptId: attempt.id }] : []
     }), [episode.shots, series.assets])
-  const currentPlayback = playable[playIndex]
+  const playbackCursor = reconcilePlaybackCursor(playbackShotId, playable)
+  const playIndex = playbackCursor.index
+  const currentPlayback = playIndex >= 0 ? playable[playIndex] : undefined
   const sortedShots = useMemo(() => orderedTimelineShots(episode.shots), [episode.shots])
   const focusShot = sortedShots.find(shot => shot.id === focusShotId) || sortedShots[0]
   const focusAttempt = focusShot && (
@@ -124,13 +126,20 @@ export function SeriesReviewPanel({
   const displayPlayback = playingAll ? currentPlayback : focusedPlayback
   const currentPlaybackAttemptId = displayPlayback?.attempt.id
   useEffect(() => {
-    if (!playingAll || !currentPlaybackAttemptId || !playerRef.current) return
+    if (!playingAll) return
+    if (playbackCursor.outcome === 'stop' || !currentPlaybackAttemptId) {
+      setPlayingAll(false)
+      setPlaybackShotId(null)
+      setError('Play all stopped because the active shot is no longer playable.')
+      return
+    }
+    if (!playerRef.current) return
     playerRef.current.currentTime = 0
     void playerRef.current.play().catch(reason => {
       setPlayingAll(false)
       setError(`Play all could not continue: ${(reason as Error).message}`)
     })
-  }, [currentPlaybackAttemptId, playingAll])
+  }, [currentPlaybackAttemptId, playbackCursor.outcome, playingAll])
   useEffect(() => {
     if (!focusShotId && sortedShots[0]) setFocusShotId(sortedShots[0].id)
   }, [focusShotId, sortedShots])
@@ -171,12 +180,12 @@ export function SeriesReviewPanel({
   const stopPlayAll = () => {
     playerRef.current?.pause()
     setPlayingAll(false)
-    setPlayIndex(0)
+    setPlaybackShotId(null)
   }
   const startPlayAll = () => {
     if (!playable.length || playingAll) return
     setError(null)
-    setPlayIndex(0)
+    setPlaybackShotId(playable[0].shotId)
     setPlayingAll(true)
     if (playerRef.current) {
       playerRef.current.currentTime = 0
@@ -188,17 +197,16 @@ export function SeriesReviewPanel({
   }
   const advancePlayAll = () => {
     if (playIndex + 1 < playable.length) {
-      setPlayIndex(current => current + 1)
+      setPlaybackShotId(playable[playIndex + 1].shotId)
       return
     }
     setPlayingAll(false)
-    setPlayIndex(0)
+    setPlaybackShotId(null)
   }
   const focusSlot = (shotId: string) => {
     setPlayingAll(false)
     setFocusShotId(shotId)
-    const index = playable.findIndex(item => item.shot.id === shotId)
-    if (index >= 0) setPlayIndex(index)
+    if (playable.some(item => item.shotId === shotId)) setPlaybackShotId(shotId)
   }
   const beginEdit = (shot: SeriesShot) => {
     setEditingShotId(shot.id)

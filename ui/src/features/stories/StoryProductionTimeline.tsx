@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Combine, ExternalLink, Film, History, Loader2, Play, RefreshCw, Square } from 'lucide-react'
 import * as api from '../../api/client'
+import { reconcilePlaybackCursor } from '../../lib/orderedClipTimeline'
 import { useStore } from '../../stores/useStore'
 import type { PipelineClipState, PipelineVideoAttempt, SavedPipelineState } from '../../types'
 import type { StoryProduction } from './types'
@@ -58,7 +59,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
   const [pipeline, setPipeline] = useState<SavedPipelineState | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [playIndex, setPlayIndex] = useState(0)
+  const [playbackShotId, setPlaybackShotId] = useState<string | null>(null)
   const [playingAll, setPlayingAll] = useState(false)
   const [selectingAttempt, setSelectingAttempt] = useState<string | null>(null)
   const [preparingCreator, setPreparingCreator] = useState(false)
@@ -74,17 +75,32 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
   const playable = useMemo(() => orderedClips.flatMap(clip => {
     const attempt = selectedAttempt(clip)
     if (!attempt || clip.video_stale) return []
-    return [{ clip, attempt, video_filename: attempt.filename, index: clip.index }]
+    return [{
+      shotId: clip.shot_id || `clip-index-${clip.index}`,
+      clip,
+      attempt,
+      video_filename: attempt.filename,
+      index: clip.index,
+    }]
   }), [orderedClips])
-  const current = playable[playIndex]
+  const playbackCursor = reconcilePlaybackCursor(playbackShotId, playable)
+  const playIndex = playbackCursor.index
+  const current = playIndex >= 0 ? playable[playIndex] : undefined
 
   useEffect(() => {
-    if (!playingAll || !current?.video_filename || !playerRef.current) return
+    if (!playingAll) return
+    if (playbackCursor.outcome === 'stop' || !current?.video_filename) {
+      setPlayingAll(false)
+      setPlaybackShotId(null)
+      setError('Play all stopped because the active clip is no longer playable.')
+      return
+    }
+    if (!playerRef.current) return
     playerRef.current.currentTime = 0
     void playerRef.current.play().catch(reason => {
       setPlayingAll(false); setError((reason as Error).message)
     })
-  }, [current?.video_filename, playingAll])
+  }, [current?.video_filename, playbackCursor.outcome, playingAll])
 
   useEffect(() => {
     if (!open || !pipelineId) return
@@ -120,11 +136,13 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
           else scheduleNext()
           const returned = returnedSelection.current
           if (returned?.pipelineId === pipelineId) {
-            const next = [...value.clips]
+            const matchingClip = [...value.clips]
               .sort((left, right) => left.index - right.index)
               .filter(clip => Boolean(selectedAttempt(clip)) && !clip.video_stale)
-              .findIndex(item => item.index === returned.clipIndex)
-            if (next >= 0) setPlayIndex(next)
+              .find(item => item.index === returned.clipIndex)
+            if (matchingClip) {
+              setPlaybackShotId(matchingClip.shot_id || `clip-index-${matchingClip.index}`)
+            }
             returnedSelection.current = null
             clearDirectorClipReplacementResult()
           }
@@ -149,12 +167,6 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
     }
   }, [open, pipelineId])
 
-  useEffect(() => {
-    if (playIndex >= playable.length && playable.length > 0) {
-      setPlayIndex(playable.length - 1)
-    }
-  }, [playIndex, playable.length])
-
   const chooseAttempt = async (clip: PipelineClipState, attempt: PipelineVideoAttempt) => {
     if (!pipeline || selectingAttempt) return
     setSelectingAttempt(attempt.filename)
@@ -165,11 +177,13 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
       await api.selectPipelineClipVideo(pipeline.pipeline_id, clip.index, attempt.filename)
       const refreshed = await api.fetchSavedPipeline(pipeline.pipeline_id)
       setPipeline(refreshed)
-      const next = [...refreshed.clips]
+      const matchingClip = [...refreshed.clips]
         .sort((left, right) => left.index - right.index)
         .filter(item => Boolean(selectedAttempt(item)) && !item.video_stale)
-        .findIndex(item => item.index === clip.index)
-      if (next >= 0) setPlayIndex(next)
+        .find(item => item.index === clip.index)
+      if (matchingClip) {
+        setPlaybackShotId(matchingClip.shot_id || `clip-index-${matchingClip.index}`)
+      }
     } catch (reason) {
       setError((reason as Error).message)
     } finally {
@@ -234,8 +248,8 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="text-[10px] text-text-muted">Pipeline {pipelineId} · {playable.length}/{pipeline?.clips.length || 0} playable</span>
         <button className={control} disabled={loading || refreshing} onClick={() => refreshRef.current?.()}>{refreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}Refresh timeline</button>
-        <button className={control} disabled={!playable.length || playingAll} onClick={() => { setPlayIndex(0); setPlayingAll(true) }}><Play size={11} />Play all</button>
-        {playingAll && <button className={control} onClick={() => { playerRef.current?.pause(); setPlayingAll(false); setPlayIndex(0) }}><Square size={11} />Stop</button>}
+        <button className={control} disabled={!playable.length || playingAll} onClick={() => { setPlaybackShotId(playable[0].shotId); setPlayingAll(true) }}><Play size={11} />Play all</button>
+        {playingAll && <button className={control} onClick={() => { playerRef.current?.pause(); setPlayingAll(false); setPlaybackShotId(null) }}><Square size={11} />Stop</button>}
         <button className={control} disabled={playable.length < 2 || loading} onClick={() => { setLoading(true); setError(null); void rejoinPipelineClips(pipelineId).then(() => api.fetchSavedPipeline(pipelineId)).then(setPipeline).catch(reason => setError((reason as Error).message)).finally(() => setLoading(false)) }}>{loading ? <Loader2 size={11} className="animate-spin" /> : <Combine size={11} />}Join clips</button>
         <button className={control} onClick={() => setDashboardOpen(true, pipelineId)}><ExternalLink size={11} />Edit/regenerate clips</button>
         {finalOutput && <a className={control} href={api.getFileUrl(finalOutput, pipeline?.workspace)} target="_blank" rel="noreferrer">Open joined video</a>}
@@ -246,7 +260,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
         <div className="max-h-[40rem] overflow-y-auto border-b border-border p-2 lg:border-b-0 lg:border-r">{orderedClips.map(clip => {
           const attempt = selectedAttempt(clip)
           const attemptCount = attemptsForClip(clip).length
-          return <button key={clip.shot_id || clip.index} className={`mb-1.5 w-full rounded border p-2 text-left ${current?.index === clip.index ? 'border-violet-400 bg-violet-500/15' : 'border-border bg-bg-primary'}`} onClick={() => { const next = playable.findIndex(value => value.index === clip.index); if (next >= 0) { setPlayingAll(false); setPlayIndex(next) } }}>
+          return <button key={clip.shot_id || clip.index} className={`mb-1.5 w-full rounded border p-2 text-left ${current?.index === clip.index ? 'border-violet-400 bg-violet-500/15' : 'border-border bg-bg-primary'}`} onClick={() => { const next = playable.find(value => value.index === clip.index); if (next) { setPlayingAll(false); setPlaybackShotId(next.shotId) } }}>
             <span className="text-[10px] font-medium text-text-primary">Clip {clip.index + 1}</span>
             <span className="ml-2 text-[9px] text-text-muted">{attempt ? clip.video_stale ? 'stale' : 'ready' : 'missing'}</span>
             <span className="ml-2 text-[9px] text-violet-300">{attemptCount} {attemptCount === 1 ? 'versión' : 'versiones'}</span>
@@ -255,7 +269,7 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
           </button>
         })}</div>
         {current?.video_filename ? <div className="min-w-0 bg-bg-primary">
-          <div className="bg-black"><video key={current.video_filename} ref={playerRef} className="max-h-[28rem] w-full bg-black" src={api.getFileUrl(current.video_filename, pipeline.workspace)} controls autoPlay={playingAll} onEnded={() => { if (!playingAll) return; if (playIndex + 1 < playable.length) setPlayIndex(value => value + 1); else { setPlayingAll(false); setPlayIndex(0) } }} /></div>
+          <div className="bg-black"><video key={current.video_filename} ref={playerRef} className="max-h-[28rem] w-full bg-black" src={api.getFileUrl(current.video_filename, pipeline.workspace)} controls autoPlay={playingAll} onEnded={() => { if (!playingAll) return; if (playIndex + 1 < playable.length) setPlaybackShotId(playable[playIndex + 1].shotId); else { setPlayingAll(false); setPlaybackShotId(null) } }} /></div>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
             <span className="mr-auto text-[10px] text-text-muted">Clip {current.index + 1} · seed {current.attempt.seed ?? current.clip.seed ?? '—'} · {current.clip.duration_seconds || 0}s</span>
             <button className="inline-flex items-center gap-1 rounded border border-violet-400/50 bg-violet-500/15 px-2.5 py-1.5 text-[10px] font-medium text-violet-200 hover:bg-violet-500/25 disabled:opacity-40" disabled={preparingCreator || Boolean(selectingAttempt)} onClick={() => void remakeCurrentClip()}>

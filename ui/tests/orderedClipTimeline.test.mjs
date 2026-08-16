@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   orderedTimelineShots,
+  reconcilePlaybackCursor,
   safeTimelineAttempt,
   seriesEditorCanvas,
 } from '../src/lib/orderedClipTimeline.ts'
@@ -31,6 +32,28 @@ test('a completed regeneration replaces the visible slot without erasing the app
     ],
   }
   assert.equal(safeTimelineAttempt(shot, () => true)?.id, 'new')
+})
+
+test('playback cursor follows stable shot identity across reorder and attempt replacement', () => {
+  assert.deepEqual(
+    reconcilePlaybackCursor('shot-2', [
+      { shotId: 'shot-3', attemptId: 'attempt-3' },
+      { shotId: 'shot-2', attemptId: 'replacement-attempt' },
+      { shotId: 'shot-1', attemptId: 'attempt-1' },
+    ]),
+    { index: 1, shotId: 'shot-2', outcome: 'keep' },
+  )
+})
+
+test('playback cursor stops explicitly when its slot disappears or no clips remain', () => {
+  assert.deepEqual(
+    reconcilePlaybackCursor('shot-2', [{ shotId: 'shot-1' }, { shotId: 'shot-3' }]),
+    { index: -1, shotId: null, outcome: 'stop' },
+  )
+  assert.deepEqual(
+    reconcilePlaybackCursor('shot-2', []),
+    { index: -1, shotId: null, outcome: 'stop' },
+  )
 })
 
 test('video editor canvases preserve every native Series tier and orientation', () => {

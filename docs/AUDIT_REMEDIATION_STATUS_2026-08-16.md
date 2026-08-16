@@ -45,7 +45,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | EDITOR-01 | pendiente | Revalidar contra `b6c741a` y `68aa157` |
 | EDITOR-02 | pendiente | — |
 | EDITOR-03 | pendiente | — |
-| PLAY-01 | pendiente | Revalidar contra `68aa157` |
+| PLAY-01 | completado | Cursor de reproducción por ID estable en Series y Stories: reordenar o reemplazar un intento conserva el clip activo y eliminarlo detiene Play all explícitamente; 39 tests UI, lint y build verdes. |
 | POLL-01 | pendiente | — |
 | TIMELINE-01 | completado | Poll serial de Story timeline se detiene en estados terminales; Refresh manual recupera/reanuda y un éxito limpia el error; 33 tests UI + lint/build verdes |
 | ACT-01 | completado | Fallos cancel/resume/dismiss quedan por task ID en bloque `aria-live`, preservan la tarea y ofrecen Retry; éxito limpia el error; 34 tests UI + lint/build verdes |
