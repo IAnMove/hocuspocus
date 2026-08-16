@@ -67,7 +67,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | TEST-02 | completado | Harness actualizado para el contrato de duración H3 posterior a la auditoría; 4 tests verdes |
 | CI-01 | completado | CI instala runtime CPU reproducible, colecciona 1.278 tests y ejecuta la suite completa: 1.270 pass + 8 skip en entorno limpio; 1.278 pass en el entorno de la app |
 | CI-02 | completado | Node 20 fijado en CI; `npm ci`, 21 tests, lint con cero warnings, type-check y build verificados también con Node 20.20.2 |
-| TEST-UI-01 | delegado | Worker Luna high, worktree aislado |
+| TEST-UI-01 | completado | RTL/jsdom cubre interacciones reales de recovery Director, Approve all, Play all y edición/aplicación de propuesta; 26 tests verdes en Node 20 |
 | TEST-UI-02 | delegado | Worker Luna high, worktree aislado |
 | API-01 | pendiente | — |
 | API-02 | pendiente | — |
