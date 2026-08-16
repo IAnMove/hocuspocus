@@ -1286,7 +1286,14 @@ export interface DirectorImageGenProgress {
   status: 'generating' | 'polling' | 'downloading' | 'done' | 'error'
 }
 
-export type DirectorSkill = 'music_video' | 'short_film' | 'podcast' | 'viral_video' | 'comic'
+// `comic` is the UI workflow selector; `comic_movie` is the canonical
+// Director V2 planner value returned by the backend.
+export const DIRECTOR_SKILLS = ['music_video', 'short_film', 'podcast', 'viral_video', 'comic', 'comic_movie'] as const
+export type DirectorSkill = typeof DIRECTOR_SKILLS[number]
+
+export function isDirectorSkill(value: unknown): value is DirectorSkill {
+  return typeof value === 'string' && (DIRECTOR_SKILLS as readonly string[]).includes(value)
+}
 export type ShortFilmPath = 'audio' | 'story'
 
 export interface ShortFilmCharacter {
@@ -1397,10 +1404,85 @@ export interface ProductionPlan {
   continuity_notes?: string[]
 }
 
+export interface DirectorV2PlanRequest {
+  skill_type: DirectorSkill
+  activity_id?: string
+  scene_description?: string
+  story_description?: string
+  clips?: unknown[]
+  lyrics?: unknown[]
+  bpm?: number
+  reference_image_path?: string
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
+  speaker_mappings?: Record<string, unknown>
+  characters?: Array<{ name: string; description: string }>
+  audio_path?: string
+  target_duration?: number
+  target_scenes?: number
+  narrative_mode?: boolean
+  fps?: number
+  frames_steps?: number
+  frames_minimum?: number
+  concept?: string
+  visual_style?: string
+  preserve_visual_style?: boolean
+  character_visual_style?: string
+  allow_clip_text?: boolean
+  platform?: string
+  style?: string
+  prompt_type?: string
+  image_model?: string
+  video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
+  seamless?: boolean
+  multishot_lora_mode?: boolean
+  music_video_treatment?: MusicVideoTreatment
+  director_flags?: Record<string, boolean>
+}
+
+export interface DirectorV2PlanProgress {
+  id: string
+  status: 'running' | 'completed' | 'failed'
+  phase: string
+  current: number
+  total: number
+  detail: string
+  stream_text?: string
+  stream_done?: boolean
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    calls?: number
+  }
+}
+
 export interface DirectorV2PlanResponse {
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
   production_plan: ProductionPlan
   skill_type: DirectorSkill
+}
+
+/** Runtime boundary for the Director v2 response returned by the backend. */
+export function isDirectorV2PlanResponse(value: unknown): value is DirectorV2PlanResponse {
+  if (!value || typeof value !== 'object') return false
+  const response = value as Record<string, unknown>
+  const productionPlan = response.production_plan
+  if (!productionPlan || typeof productionPlan !== 'object') return false
+  const plan = productionPlan as Record<string, unknown>
+  return isDirectorSkill(response.skill_type)
+    && isDirectorSkill(plan.skill_type)
+    && Array.isArray(response.clip_plans)
+    && response.clip_plans.every(clip => {
+      if (!clip || typeof clip !== 'object') return false
+      const item = clip as Record<string, unknown>
+      return typeof item.video_prompt === 'string' && typeof item.image_prompt === 'string'
+    })
+    && Array.isArray(plan.shots)
 }
 
 // ── Director Pipeline Dashboard ──────────────────────────────────────────

@@ -1,7 +1,8 @@
 import { rememberPrompt } from '../lib/promptHistory'
 import { openCanonicalTaskEventStream } from '../lib/canonicalTaskEvents'
 import type { CanonicalTaskEvent, CanonicalTaskStreamState } from '../lib/canonicalTaskEvents'
-import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ProductionPlan, ScailResolutionProfile } from '../types'
+import { isDirectorV2PlanResponse } from '../types'
+import type { DirectorModelCompatibility, DirectorV2PlanProgress, DirectorV2PlanRequest, DirectorV2PlanResponse, GenerationDetails, H3WindowPlan, ScailResolutionProfile } from '../types'
 
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
 
@@ -1762,69 +1763,6 @@ export async function deletePipeline(pid: string): Promise<{ media_deleted: numb
 
 // --- Director v2 ---
 
-export interface DirectorV2PlanRequest {
-  skill_type: string
-  activity_id?: string
-  scene_description?: string
-  story_description?: string
-  clips?: unknown[]
-  lyrics?: unknown[]
-  bpm?: number
-  reference_image_path?: string
-  character_ref_paths?: string[]
-  character_ref_labels?: string[]
-  location_ref_paths?: string[]
-  location_ref_labels?: string[]
-  speaker_mappings?: Record<string, unknown>
-  characters?: Array<{ name: string; description: string }>
-  audio_path?: string
-  target_duration?: number
-  target_scenes?: number
-  narrative_mode?: boolean
-  fps?: number
-  frames_steps?: number
-  frames_minimum?: number
-  concept?: string
-  visual_style?: string
-  preserve_visual_style?: boolean
-  character_visual_style?: string
-  allow_clip_text?: boolean
-  platform?: string
-  style?: string
-  prompt_type?: string
-  image_model?: string
-  video_model?: string
-  h3_reference_mode?: 'first_frame' | 'references'
-  h3_audio_prompt?: string
-  seamless?: boolean
-  multishot_lora_mode?: boolean
-  music_video_treatment?: import('../types').MusicVideoTreatment
-  director_flags?: Record<string, boolean>
-}
-
-export interface DirectorV2PlanProgress {
-  id: string
-  status: 'running' | 'completed' | 'failed'
-  phase: string
-  current: number
-  total: number
-  detail: string
-  stream_text?: string
-  stream_done?: boolean
-  usage?: {
-    prompt_tokens?: number
-    completion_tokens?: number
-    total_tokens?: number
-    calls?: number
-  }
-}
-
-export interface DirectorV2PlanResponse {
-  clip_plans: Array<{ video_prompt: string; image_prompt: string }>
-  production_plan: ProductionPlan
-  skill_type: string
-}
-
 export async function directorV2Plan(params: DirectorV2PlanRequest): Promise<DirectorV2PlanResponse> {
   const res = await fetch(`${BASE}/api/v1/director/v2/plan`, {
     method: 'POST',
@@ -1835,7 +1773,11 @@ export async function directorV2Plan(params: DirectorV2PlanRequest): Promise<Dir
     const err = await res.json().catch(() => ({ detail: 'Plan failed' }))
     throw new Error(err.detail || 'Director v2 plan failed')
   }
-  return res.json()
+  const payload: unknown = await res.json()
+  if (!isDirectorV2PlanResponse(payload)) {
+    throw new Error('Director v2 returned an invalid plan contract')
+  }
+  return payload
 }
 
 export async function getDirectorV2PlanProgress(activityId: string): Promise<DirectorV2PlanProgress | null> {
