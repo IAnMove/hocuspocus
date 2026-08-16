@@ -1,6 +1,7 @@
 import { rememberPrompt } from '../lib/promptHistory'
 import { openCanonicalTaskEventStream } from '../lib/canonicalTaskEvents'
 import type { CanonicalTaskEvent, CanonicalTaskStreamState } from '../lib/canonicalTaskEvents'
+import type { SeriesAssemblyJob, SeriesAssemblyStartRequest } from '../features/series/assemblyContract'
 import { isDirectorV2PlanFailureDetail, isDirectorV2PlanResponse } from '../types'
 import type { DirectorModelCompatibility, DirectorV2PlanFailureDetail, DirectorV2PlanJob, DirectorV2PlanProgress, DirectorV2PlanRequest, DirectorV2PlanResponse, GenerationDetails, H3WindowPlan, ScailResolutionProfile } from '../types'
 
@@ -3110,19 +3111,20 @@ export async function approveSeriesAttemptsBulk(
 
 export async function startSeriesEpisodeAssembly(
   workspace: string, seriesId: string, episodeId: string,
-): Promise<import('../features/series/types').SeriesAssemblyJob> {
+): Promise<SeriesAssemblyJob> {
+  const payload: SeriesAssemblyStartRequest = { workspace }
   return seriesResponse(fetch(
     `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/assembly/start`,
     {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace }),
+      body: JSON.stringify(payload),
     },
   ), 'Could not start Series episode assembly')
 }
 
 export async function fetchSeriesEpisodeAssembly(
   jobId: string,
-): Promise<import('../features/series/types').SeriesAssemblyJob> {
+): Promise<SeriesAssemblyJob> {
   return seriesResponse(fetch(
     `${BASE}/api/v1/series/assembly/jobs/${encodeURIComponent(jobId)}`,
   ), 'Could not read Series episode assembly')

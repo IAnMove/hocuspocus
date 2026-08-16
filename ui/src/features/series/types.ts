@@ -371,20 +371,9 @@ export interface SeriesJobStatus {
   finishedAt?: number
 }
 
-export interface SeriesAssemblyJob {
-  jobId: string
-  workspace: string
-  seriesId: string
-  episodeId: string
-  status: 'queued' | 'running' | 'completed' | 'failed'
-  stage: string
-  current: number
-  total: number
-  message: string
-  error?: string | null
-  assetId?: string | null
-  filename?: string | null
-  createdAt?: number
-  updatedAt?: number
-  finishedAt?: number
-}
+export type {
+  SeriesAssemblyJob,
+  SeriesAssemblyJobResponse,
+  SeriesAssemblyStartRequest,
+  SeriesAssemblyStatus,
+} from './assemblyContract'

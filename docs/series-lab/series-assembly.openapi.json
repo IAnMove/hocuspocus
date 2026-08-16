@@ -1,0 +1,177 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Series Assembly Contract Fixture",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start": {
+      "post": {
+        "operationId": "start_api_v1_series__series_id__episodes__episode_id__assembly_start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": { "title": "Series Id", "type": "string" }
+          },
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": { "title": "Episode Id", "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesAssemblyStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesAssemblyJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/series/assembly/jobs/{job_id}": {
+      "get": {
+        "operationId": "status_api_v1_series_assembly_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesAssemblyJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SeriesAssemblyStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 200 },
+              { "type": "null" }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "SeriesAssemblyJobResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "jobId": { "type": "string" },
+          "workspace": { "type": "string" },
+          "seriesId": { "type": "string" },
+          "episodeId": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "running", "completed", "failed"]
+          },
+          "stage": { "type": "string" },
+          "current": { "type": "integer", "minimum": 0 },
+          "total": { "type": "integer", "minimum": 0 },
+          "message": { "type": "string" },
+          "error": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "assetId": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "filename": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "createdAt": {
+            "anyOf": [{ "type": "number" }, { "type": "null" }]
+          },
+          "updatedAt": {
+            "anyOf": [{ "type": "number" }, { "type": "null" }]
+          },
+          "finishedAt": {
+            "anyOf": [{ "type": "number" }, { "type": "null" }]
+          }
+        },
+        "required": [
+          "jobId", "workspace", "seriesId", "episodeId", "status",
+          "stage", "current", "total", "message"
+        ],
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ValidationError" }
+          }
+        },
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "type": "array",
+            "items": { "anyOf": [{ "type": "string" }, { "type": "integer" }] }
+          },
+          "msg": { "type": "string" },
+          "type": { "type": "string" },
+          "input": {},
+          "ctx": { "type": "object" }
+        },
+        "required": ["loc", "msg", "type"],
+        "type": "object"
+      }
+    }
+  }
+}

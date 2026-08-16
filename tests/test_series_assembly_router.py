@@ -7,7 +7,7 @@ import time
 import pytest
 from fastapi import HTTPException
 
-from routers.series_assembly import create_series_assembly_router
+from routers.series_assembly import SeriesAssemblyStartRequest, create_series_assembly_router
 
 
 def _episode_library():
@@ -101,7 +101,7 @@ def test_router_joins_in_episode_order_and_persists_episode_asset(tmp_path):
     endpoints, library = _client(tmp_path, concatenate)
     start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
     get_status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
-    response = start("series-1", "episode-1", {"workspace": "default"})
+    response = start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))
     status = _wait_for_terminal(get_status, response["jobId"])
 
     assert status["status"] == "completed"
@@ -125,10 +125,10 @@ def test_router_rejects_a_second_live_assembly_for_the_episode(tmp_path):
     endpoints, _library = _client(tmp_path, concatenate)
     start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
     get_status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
-    first = start("series-1", "episode-1", {"workspace": "default"})
+    first = start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))
     assert entered.wait(timeout=1)
     with pytest.raises(HTTPException) as captured:
-        start("series-1", "episode-1", {"workspace": "default"})
+        start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))
     assert captured.value.status_code == 409
     release.set()
     assert _wait_for_terminal(get_status, first["jobId"])["status"] == "completed"

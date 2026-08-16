@@ -13,9 +13,10 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterable
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
 from services.series_assembly import episode_assembly_plan
 from services.series_jobs import SeriesJobStore
@@ -38,6 +39,36 @@ PUBLIC_JOB_KEYS = (
     "updatedAt",
     "finishedAt",
 )
+
+
+class SeriesAssemblyStartRequest(BaseModel):
+    """Stable request contract for starting one episode assembly."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class SeriesAssemblyJobResponse(BaseModel):
+    """Public, persisted-safe view of an episode assembly job."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    jobId: str
+    workspace: str
+    seriesId: str
+    episodeId: str
+    status: Literal["queued", "running", "completed", "failed"]
+    stage: str
+    current: int = Field(ge=0)
+    total: int = Field(ge=0)
+    message: str
+    error: str | None = None
+    assetId: str | None = None
+    filename: str | None = None
+    createdAt: float | None = None
+    updatedAt: float | None = None
+    finishedAt: float | None = None
 
 
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -238,9 +269,12 @@ def create_series_assembly_router(
             with jobs_lock:
                 active_job_ids.discard(job_id)
 
-    @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start")
-    def start(series_id: str, episode_id: str, body: dict[str, Any]):
-        workspace = resolve_workspace(body.get("workspace"))
+    @router.post(
+        "/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start",
+        response_model=SeriesAssemblyJobResponse,
+    )
+    def start(series_id: str, episode_id: str, payload: SeriesAssemblyStartRequest):
+        workspace = resolve_workspace(payload.workspace)
         with library_lock:
             library = read_library(workspace)
             series = copy.deepcopy(find_series(library, series_id))
@@ -310,7 +344,10 @@ def create_series_assembly_router(
         ).start()
         return _public_job(job)
 
-    @router.get("/api/v1/series/assembly/jobs/{job_id}")
+    @router.get(
+        "/api/v1/series/assembly/jobs/{job_id}",
+        response_model=SeriesAssemblyJobResponse,
+    )
     def status(job_id: str):
         job = load(job_id)
         if not job:

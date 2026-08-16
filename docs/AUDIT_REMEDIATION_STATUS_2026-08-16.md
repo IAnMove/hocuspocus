@@ -69,7 +69,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | CI-02 | completado | Node 20 fijado en CI; `npm ci`, 21 tests, lint con cero warnings, type-check y build verificados también con Node 20.20.2 |
 | TEST-UI-01 | completado | RTL/jsdom cubre interacciones reales de recovery Director, Approve all, Play all y edición/aplicación de propuesta; 26 tests verdes en Node 20 |
 | TEST-UI-02 | completado | Primer flujo migrado por commit: recuperación/identidad MiniMax prueba llamadas y estado runtime, sin leer ni partir TSX; 25 tests + lint verde |
-| API-01 | pendiente | — |
+| API-01 | completado | Assembly usa contratos Pydantic request/response y `response_model`; fixture OpenAPI acotada genera el contrato TypeScript y un detector bloquea drift. Payload inválido devuelve 422 estructurado; 8 tests backend, 88 UI, lint y build verdes. |
 | API-02 | completado | Request/progress/response de Director V2 viven en un único módulo de contratos; guard runtime rechaza drift y reconoce el `comic_movie` canónico del backend además del selector UI. Test TypeScript de consumidores + suite/lint/build verdes. |
 | ARCH-01 | pendiente | — |
 | ARCH-02 | pendiente | — |
