@@ -53,7 +53,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | CANCEL-01 | completado | Token por job/workspace cierra únicamente la respuesta HTTP activa en streaming local/OpenAI-compatible/Anthropic; fallback informa safe boundary, stages se preservan y tokens se limpian; 115 tests focalizados verdes. |
 | RES-01 | completado | Ticket monotónico + Condition por lane; sólo la cabeza adquiere, cancelación elimina/despierta; FIFO A/B/C validado 100 veces y B cancelado deja A/C; 17 tests verdes |
 | A11Y-01 | completado | `ModalShell` aporta nombre, `role=dialog`, `aria-modal`, foco inicial/restaurado, Escape y trap Tab/Shift+Tab; migrados Director Dashboard y picker del editor; tests RTL + lint/build verdes. |
-| A11Y-02 | pendiente | — |
+| A11Y-02 | completado | Series Shots expone nombres programáticos para selección, duración, estrategia, prompt, referencias y uploads; estados de selección usan `aria-pressed` e iconos decorativos quedan ocultos. Test DOM por roles; 89 UI, lint y build verdes. |
 | RESP-01 | completado | Series Lab usa selector horizontal y layout full-width bajo `md`, rail vertical en desktop, header con wrap y contenedor principal `min-h-0`; prueba RTL monta y consulta la estructura accesible; lint/build verdes. |
 | RESP-02 | completado | Bajo `md`, Story Lab usa navegación horizontal desplazable con indicador visible y contenido a ancho completo; escritorio conserva rail vertical y notas. Prueba RTL real + 66 tests UI, lint/build verdes. |
 | RESP-03 | completado | Video Editor elimina altura mínima rígida, toolbar hace wrap y el cuerpo móvil desplaza inspector/timeline sin alterar grid desktop; regiones accesibles exponen Import, Export y trim. Prueba RTL responsive + lint/build verdes. |
