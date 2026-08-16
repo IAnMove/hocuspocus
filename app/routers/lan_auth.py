@@ -10,6 +10,7 @@ from services.lan_auth import (
     LanLoginAttemptLimiter,
     create_session_credential,
     get_lan_token,
+    lan_auth_enabled,
     lan_share_enabled,
     remote_lan_auth_required,
     request_has_valid_lan_auth,
@@ -30,7 +31,8 @@ def create_lan_auth_router() -> APIRouter:
     def status(request: Request):
         required = remote_lan_auth_required(request)
         return {
-            "enabled": lan_share_enabled(),
+            "enabled": lan_auth_enabled(),
+            "sharing": lan_share_enabled(),
             "required": required,
             "authenticated": not required or request_has_valid_lan_auth(request),
         }

@@ -24,6 +24,7 @@ from starlette.responses import JSONResponse
 
 LAN_AUTH_COOKIE_NAME = "loreframe_lan_session"
 LAN_AUTH_TOKEN_ENV = "LOREFRAME_LAN_TOKEN"
+LAN_AUTH_ENABLED_ENV = "LOREFRAME_LAN_AUTH"
 LAN_AUTH_TOKEN_MIN_LENGTH = 24
 LAN_LOGIN_ATTEMPT_LIMIT = 8
 LAN_LOGIN_WINDOW_SECONDS = 60
@@ -95,6 +96,12 @@ def configured_lan_token(environ: Mapping[str, str] | None = None) -> str:
     return value
 
 
+def lan_auth_enabled(environ: Mapping[str, str] | None = None) -> bool:
+    """Return whether the optional LAN token gate is explicitly enabled."""
+    value = str(_environment(environ).get(LAN_AUTH_ENABLED_ENV) or "").strip().casefold()
+    return value in _TRUE_VALUES
+
+
 def get_lan_token(environ: Mapping[str, str] | None = None) -> str:
     """Return a configured token or one stable random token for this process."""
     explicit = configured_lan_token(environ)
@@ -150,7 +157,7 @@ def remote_lan_auth_required(
     request: HTTPConnection,
     environ: Mapping[str, str] | None = None,
 ) -> bool:
-    return lan_share_enabled(environ) and not request_is_local(request)
+    return lan_auth_enabled(environ) and lan_share_enabled(environ) and not request_is_local(request)
 
 
 def request_requires_lan_auth(
@@ -209,7 +216,7 @@ class LanAuthMiddleware:
 
 def describe_lan_auth_startup(environ: Mapping[str, str] | None = None) -> list[str]:
     """Build one-time startup messages; only generated tokens are printed."""
-    if not lan_share_enabled(environ):
+    if not lan_auth_enabled(environ) or not lan_share_enabled(environ):
         return []
     explicit = configured_lan_token(environ)
     if explicit:

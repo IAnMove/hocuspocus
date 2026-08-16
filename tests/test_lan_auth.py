@@ -24,6 +24,7 @@ ROOT = Path(__file__).parents[1]
 
 def _configure_share(monkeypatch, *, enabled: bool = True) -> None:
     monkeypatch.setenv("PINOKIO_SHARE_LOCAL", "true" if enabled else "false")
+    monkeypatch.setenv("LOREFRAME_LAN_AUTH", "true")
     monkeypatch.setenv("LOREFRAME_LAN_TOKEN", TEST_TOKEN)
     monkeypatch.delenv("SERVER_NAME", raising=False)
 
@@ -103,6 +104,7 @@ def test_login_sets_hardened_session_cookie_and_unlocks_ui(monkeypatch) -> None:
     status_endpoint = _route_endpoint("/status")
     assert status_endpoint(_request("/api/v1/auth/lan/status")) == {
         "enabled": True,
+        "sharing": True,
         "required": True,
         "authenticated": False,
     }
@@ -163,6 +165,15 @@ def test_loopback_only_mode_remains_credential_free(monkeypatch) -> None:
     _configure_share(monkeypatch, enabled=False)
     assert _middleware_status(_request("/api/v1/probe"))[0] == 200
     assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 200
+
+
+def test_lan_sharing_is_credential_free_by_default(monkeypatch) -> None:
+    monkeypatch.setenv("PINOKIO_SHARE_LOCAL", "true")
+    monkeypatch.delenv("LOREFRAME_LAN_AUTH", raising=False)
+    monkeypatch.delenv("LOREFRAME_LAN_TOKEN", raising=False)
+    assert _middleware_status(_request("/api/v1/probe"))[0] == 200
+    assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 200
+    assert describe_lan_auth_startup() == []
 
 
 def test_local_loopback_client_is_exempt_even_while_sharing(monkeypatch) -> None:

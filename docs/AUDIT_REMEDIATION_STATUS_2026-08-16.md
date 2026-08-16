@@ -14,7 +14,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | --- | --- | --- |
 | SEC-01 | completado | Tests de move válido, traversal, absoluta y symlink de escape |
 | SEC-02 | completado | Resolver común para trim/análisis; uploads/workspace válidos, externos y symlinks rechazados |
-| SEC-03 | completado | Token bearer + cookie de sesión para LAN; loopback libre; UI, API y `/classic` cubiertos |
+| SEC-03 | completado | Token bearer + cookie de sesión para LAN como opt-in (`LOREFRAME_LAN_AUTH=true`); QR/LAN libre por defecto; loopback libre; UI, API y `/classic` cubiertos |
 | TASK-01 | completado | Namespace `task-client-*` exacto en backend y UI; root externo eliminado/ignorado; tarea backend homónima conserva snapshot/eventos; 37 tests Python + 27 UI verdes |
 | TASK-02 | completado | Comparación semántica normalizada antes de timestamp/evento: 10.000 syncs idénticas => 1 cambio, transiciones reales/terminales => 1 cada una, sin notify ni renovación de `completed_at`; 16 tests verdes. |
 | TASK-03 | completado | Hash semántico sin `updatedAt`, dedupe y coalescing a 1,5 s; terminal/error inmediato; 100 polls iguales => 1 publicación; 30 tests UI verdes |
