@@ -4,7 +4,11 @@ import pytest
 from fastapi import HTTPException
 
 from routers.style_library import create_style_library_router
-from services.style_library import MINIMAX_H3_1K_SOURCE, StyleLibrary
+from services.style_library import (
+    MINIMAX_H3_1K_SOURCE,
+    StyleLibrary,
+    StyleManifestDegradedError,
+)
 
 
 def _seed_library(tmp_path):
@@ -97,3 +101,35 @@ def test_delete_endpoint_requires_explicit_confirmation(tmp_path):
 
     assert captured.value.status_code == 400
     assert delete_endpoint("minimax-h3-1k-000001", True)["deleted"] is True
+
+
+def test_corrupt_manifest_is_quarantined_read_only_and_recovers_tombstones(tmp_path):
+    library = _seed_library(tmp_path)
+    deleted_id = "minimax-h3-1k-000002"
+    library.delete_style(deleted_id)
+    assert library.manifest_backup_dir.is_dir()
+    corrupt = "{this is not valid json"
+    library.manifest_path.write_text(corrupt, encoding="utf-8")
+
+    [status] = library.source_status()
+    assert status["status"] == "degraded"
+    assert status["degraded"] is True
+    assert status["recoveryAvailable"] is True
+    assert status["styleCount"] == 2
+    assert library.list_styles()["total"] == 2
+    assert deleted_id not in {item["id"] for item in library.list_styles()["styles"]}
+    assert library.manifest_path.read_text(encoding="utf-8") == corrupt
+    assert list(library.manifest_quarantine_dir.glob("*.corrupt.json"))
+
+    with pytest.raises(StyleManifestDegradedError, match="recover"):
+        library.start_minimax_import()
+    with pytest.raises(StyleManifestDegradedError, match="recover"):
+        library.delete_style("minimax-h3-1k-000001")
+    assert library.manifest_path.read_text(encoding="utf-8") == corrupt
+
+    recovered = library.recover_manifest()
+    assert recovered["recovered"] is True
+    restored = json.loads(library.manifest_path.read_text(encoding="utf-8"))
+    assert deleted_id in restored["deletedIds"]
+    assert library.source_status()[0]["status"] == "healthy"
+    assert library.list_styles()["total"] == 2

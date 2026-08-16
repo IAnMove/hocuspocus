@@ -6,6 +6,7 @@ import copy
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -35,6 +36,11 @@ MINIMAX_H3_1K_SOURCE = {
 }
 
 _STYLE_ID = re.compile(r"minimax-h3-1k-(\d{6})$")
+MAX_MANIFEST_BACKUPS = 10
+
+
+class StyleManifestDegradedError(RuntimeError):
+    """Raised when writes are blocked until a corrupt manifest is recovered."""
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -71,10 +77,14 @@ class StyleLibrary:
         self.raw_dir = self.source_root / "raw"
         self.preview_dir = self.source_root / "previews"
         self.manifest_path = self.source_root / "manifest.json"
+        self.manifest_backup_dir = self.source_root / "manifest-backups"
+        self.manifest_quarantine_dir = self.source_root / "manifest-quarantine"
         self.job_path = self.source_root / "import-job.json"
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
         self._active_job_id: str | None = None
+        self._manifest_error: str | None = None
+        self._quarantined_manifest: str | None = None
         self._recover_job()
 
     def _recover_job(self) -> None:
@@ -96,30 +106,129 @@ class StyleLibrary:
             _atomic_json(self.job_path, job)
         self._jobs[str(job["jobId"])] = job
 
+    @staticmethod
+    def _empty_manifest() -> dict[str, Any]:
+        return {
+            "version": 1,
+            "source": copy.deepcopy(MINIMAX_H3_1K_SOURCE),
+            "styles": [],
+            "deletedIds": [],
+            "updatedAt": None,
+        }
+
+    @staticmethod
+    def _validate_manifest(payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise ValueError("Style manifest must be an object")
+        if not isinstance(payload.get("styles"), list):
+            raise ValueError("Style manifest styles must be a list")
+        if not isinstance(payload.get("deletedIds"), list):
+            raise ValueError("Style manifest deletedIds must be a list")
+        if not isinstance(payload.get("source"), dict):
+            raise ValueError("Style manifest source must be an object")
+        return payload
+
+    def _valid_backups(self) -> list[tuple[Path, dict[str, Any]]]:
+        if not self.manifest_backup_dir.is_dir():
+            return []
+        backups: list[tuple[Path, dict[str, Any]]] = []
+        for path in sorted(self.manifest_backup_dir.glob("manifest-*.json"), reverse=True):
+            try:
+                payload = self._validate_manifest(json.loads(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            backups.append((path, payload))
+        return backups
+
+    def _quarantine_corrupt_manifest(self, error: Exception) -> dict[str, Any] | None:
+        self._manifest_error = str(error)
+        if self._quarantined_manifest is None and self.manifest_path.is_file():
+            try:
+                self.manifest_quarantine_dir.mkdir(parents=True, exist_ok=True)
+                destination = self.manifest_quarantine_dir / (
+                    f"manifest-{time.time_ns()}-{uuid.uuid4().hex[:8]}.corrupt.json"
+                )
+                shutil.copy2(self.manifest_path, destination)
+                self._quarantined_manifest = destination.name
+            except OSError:
+                self._quarantined_manifest = "quarantine-copy-failed"
+        backups = self._valid_backups()
+        return copy.deepcopy(backups[0][1]) if backups else None
+
     def _manifest(self) -> dict[str, Any]:
         if not self.manifest_path.is_file():
-            return {
-                "version": 1,
-                "source": copy.deepcopy(MINIMAX_H3_1K_SOURCE),
-                "styles": [],
-                "deletedIds": [],
-                "updatedAt": None,
-            }
+            self._manifest_error = None
+            self._quarantined_manifest = None
+            return self._empty_manifest()
         try:
-            payload = json.loads(self.manifest_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, json.JSONDecodeError):
+            payload = self._validate_manifest(
+                json.loads(self.manifest_path.read_text(encoding="utf-8")),
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            backup = self._quarantine_corrupt_manifest(exc)
+            if backup is not None:
+                return backup
+            raise StyleManifestDegradedError(
+                f"Style manifest is corrupt and no valid backup is available: {exc}"
+            ) from exc
+        self._manifest_error = None
+        self._quarantined_manifest = None
+        return payload
+
+    def _require_writable_manifest(self) -> dict[str, Any]:
+        manifest = self._manifest()
+        if self._manifest_error:
+            raise StyleManifestDegradedError(
+                "Style manifest is degraded; recover its backup before importing or deleting styles"
+            )
+        return manifest
+
+    def _write_manifest(self, payload: dict[str, Any]) -> None:
+        self._require_writable_manifest()
+        valid = self._validate_manifest(copy.deepcopy(payload))
+        self.manifest_backup_dir.mkdir(parents=True, exist_ok=True)
+        backup = self.manifest_backup_dir / (
+            f"manifest-{time.time_ns()}-{uuid.uuid4().hex[:8]}.json"
+        )
+        _atomic_json(backup, valid)
+        _atomic_json(self.manifest_path, valid)
+        for stale, _ in self._valid_backups()[MAX_MANIFEST_BACKUPS:]:
+            try:
+                stale.unlink()
+            except OSError:
+                pass
+
+    def recover_manifest(self) -> dict[str, Any]:
+        """Explicitly restore the newest valid generation after quarantine."""
+        with self._lock:
+            try:
+                self._manifest()
+            except StyleManifestDegradedError:
+                pass
+            if not self._manifest_error:
+                return {"recovered": False, "status": "healthy", "message": "Manifest is already healthy"}
+            backups = self._valid_backups()
+            if not backups:
+                raise StyleManifestDegradedError("No valid style manifest backup is available")
+            backup_path, payload = backups[0]
+            _atomic_json(self.manifest_path, payload)
+            self._manifest_error = None
+            quarantine = self._quarantined_manifest
+            self._quarantined_manifest = None
             return {
-                "version": 1,
-                "source": copy.deepcopy(MINIMAX_H3_1K_SOURCE),
-                "styles": [],
-                "deletedIds": [],
-                "updatedAt": None,
+                "recovered": True,
+                "status": "healthy",
+                "backup": backup_path.name,
+                "quarantine": quarantine,
+                "deletedIds": copy.deepcopy(payload.get("deletedIds") or []),
             }
-        return payload if isinstance(payload, dict) else {}
 
     def source_status(self) -> list[dict[str, Any]]:
         with self._lock:
-            manifest = self._manifest()
+            try:
+                manifest = self._manifest()
+            except StyleManifestDegradedError:
+                manifest = self._empty_manifest()
             deleted = set(manifest.get("deletedIds") or [])
             styles = [
                 item for item in manifest.get("styles", [])
@@ -136,6 +245,11 @@ class StyleLibrary:
                 "downloadedFiles": files,
                 "downloadedBytes": downloaded_bytes,
                 "activeJob": copy.deepcopy(active) if active else None,
+                "status": "degraded" if self._manifest_error else "healthy",
+                "degraded": bool(self._manifest_error),
+                "manifestError": self._manifest_error,
+                "recoveryAvailable": bool(self._valid_backups()),
+                "quarantine": self._quarantined_manifest,
             })
             return [source]
 
@@ -201,10 +315,18 @@ class StyleLibrary:
             "collections": sorted({str(item.get("collection")) for item in items if item.get("collection")}),
             "groups": sorted({str(item.get("group")) for item in items if item.get("group")}),
         }
-        return {"styles": page, "total": total, "offset": offset, "limit": limit, "facets": facets}
+        return {
+            "styles": page,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "facets": facets,
+            "status": "degraded" if self._manifest_error else "healthy",
+        }
 
     def start_minimax_import(self) -> dict[str, Any]:
         with self._lock:
+            self._require_writable_manifest()
             if self._active_job_id:
                 active = self._jobs.get(self._active_job_id)
                 if active and active.get("status") in {"queued", "running"}:
@@ -271,7 +393,7 @@ class StyleLibrary:
         try:
             self.raw_dir.mkdir(parents=True, exist_ok=True)
             self.preview_dir.mkdir(parents=True, exist_ok=True)
-            existing = self._manifest()
+            existing = self._require_writable_manifest()
             deleted_ids = set(existing.get("deletedIds") or [])
             ignored: list[str] = []
             for style_id in deleted_ids:
@@ -361,7 +483,7 @@ class StyleLibrary:
                 "deletedIds": sorted(deleted_ids),
                 "updatedAt": time.time(),
             }
-            _atomic_json(self.manifest_path, manifest)
+            self._write_manifest(manifest)
 
             self._update_job(
                 job_id,
@@ -496,13 +618,14 @@ class StyleLibrary:
 
     def delete_style(self, style_id: str) -> dict[str, Any]:
         with self._lock:
+            self._require_writable_manifest()
             record = self._style_record(style_id)
             manifest = self._manifest()
             deleted = set(manifest.get("deletedIds") or [])
             deleted.add(style_id)
             manifest["deletedIds"] = sorted(deleted)
             manifest["updatedAt"] = time.time()
-            _atomic_json(self.manifest_path, manifest)
+            self._write_manifest(manifest)
             paths = [
                 self.raw_dir / str(record.get("sourceFilename") or ""),
                 self.raw_dir / str(record.get("videoFilename") or ""),

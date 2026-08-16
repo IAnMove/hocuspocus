@@ -62,7 +62,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | I18N-01 | completado | Formatter central basado en locale de aplicación para timestamps de Media/Activity y glosario EN/ES de acciones; snapshots deterministas es-ES/en-US con UTC, lint y build verdes. |
 | TRAILER-01 | completado | Reset por proyecto separado de la sincronización de defaults; tipo/duración siguen al proyecto hasta la primera edición manual y después se preservan; tests de ambos estados + lint/build verdes. |
 | STYLE-01 | pendiente | — |
-| STYLE-02 | pendiente | — |
+| STYLE-02 | completado | Manifest validado con backups generacionales y copia quarantine; corrupción conserva snapshot/tombstones en lectura, status `degraded` y bloquea import/delete hasta recuperación explícita. Recovery restaura último backup sin reintroducir borrados; 4 tests focalizados verdes. |
 | TEST-01 | completado | 1.278 tests coleccionados desde raíz con `PYTHONPATH` eliminado |
 | TEST-02 | completado | Harness actualizado para el contrato de duración H3 posterior a la auditoría; 4 tests verdes |
 | CI-01 | completado | CI instala runtime CPU reproducible, colecciona 1.278 tests y ejecuta la suite completa: 1.270 pass + 8 skip en entorno limpio; 1.278 pass en el entorno de la app |

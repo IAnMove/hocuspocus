@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from services.style_library import StyleLibrary
+from services.style_library import StyleLibrary, StyleManifestDegradedError
 
 
 def create_style_library_router(library: StyleLibrary) -> APIRouter:
@@ -26,20 +26,33 @@ def create_style_library_router(library: StyleLibrary) -> APIRouter:
         offset: int = 0,
         limit: int = 60,
     ):
-        return library.list_styles(
-            model_family=model_family,
-            source_id=source_id,
-            collection=collection,
-            group=group,
-            query=q,
-            sort=sort,
-            offset=offset,
-            limit=limit,
-        )
+        try:
+            return library.list_styles(
+                model_family=model_family,
+                source_id=source_id,
+                collection=collection,
+                group=group,
+                query=q,
+                sort=sort,
+                offset=offset,
+                limit=limit,
+            )
+        except StyleManifestDegradedError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @router.post("/imports/minimax-h3-1k")
     def import_minimax_h3_1k():
-        return library.start_minimax_import()
+        try:
+            return library.start_minimax_import()
+        except StyleManifestDegradedError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @router.post("/manifest/recover")
+    def recover_manifest():
+        try:
+            return library.recover_manifest()
+        except StyleManifestDegradedError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @router.get("/imports/{job_id}")
     def import_status(job_id: str):
@@ -72,6 +85,8 @@ def create_style_library_router(library: StyleLibrary) -> APIRouter:
             raise HTTPException(status_code=400, detail="Deletion requires confirm=true")
         try:
             return library.delete_style(style_id)
+        except StyleManifestDegradedError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except KeyError:
             raise HTTPException(status_code=404, detail="Style not found")
 
