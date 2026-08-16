@@ -46,7 +46,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | EDITOR-02 | pendiente | — |
 | EDITOR-03 | completado | Normalizador único en carga y export exige fuente + duración finita, repara IDs únicos, metadata numérica, trims ordenados/acotados, volumen y enums, y descarta irreparables con aviso visible. Tabla NaN/strings/invertidos/ausentes/duplicados + 84 UI/lint/build verdes. |
 | PLAY-01 | completado | Cursor de reproducción por ID estable en Series y Stories: reordenar o reemplazar un intento conserva el clip activo y eliminarlo detiene Play all explícitamente; 39 tests UI, lint y build verdes. |
-| POLL-01 | pendiente | — |
+| POLL-01 | completado | Hook `useSerializedPoll` encadena `setTimeout` tras resolver, aborta y cambia epoch por owner/unmount; SeriesEpisodePanel es la primera migración y el cliente propaga AbortSignal. Tests de concurrencia 1, respuesta stale y unmount; 95 UI, lint y build verdes. |
 | TIMELINE-01 | completado | Poll serial de Story timeline se detiene en estados terminales; Refresh manual recupera/reanuda y un éxito limpia el error; 33 tests UI + lint/build verdes |
 | ACT-01 | completado | Fallos cancel/resume/dismiss quedan por task ID en bloque `aria-live`, preservan la tarea y ofrecen Retry; éxito limpia el error; 34 tests UI + lint/build verdes |
 | UPLOAD-01 | completado | Ingesta en chunks de 1 MiB con límite acumulado y 413; publicación atómica, cleanup en error/cancelación, concurrencia acotada y transcode cancel-safe; 4 tests verdes |

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, FileText, Loader2, Play, Square } from 'lucide-react'
 import * as api from '../../api/client'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { Pill, SectionCard, SeriesField } from './components'
 import { SeriesEpisodeProposalReview } from './SeriesEpisodeProposalReview'
 import { inputClass, primaryButton, secondaryButton, textareaClass } from './styles'
@@ -21,6 +22,10 @@ export function SeriesEpisodePanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const episodeIdRef = useRef(episode.id)
+  const activeJob = job
+    && job.episodeId === episode.id
+    && ['queued', 'running', 'cancelling'].includes(job.status)
+    ? job : null
 
   useEffect(() => {
     episodeIdRef.current = episode.id
@@ -29,27 +34,23 @@ export function SeriesEpisodePanel({
     setError(null)
   }, [episode.id])
 
-  useEffect(() => {
-    if (
-      !job
-      || job.episodeId !== episode.id
-      || !['queued', 'running', 'cancelling'].includes(job.status)
-    ) return
-    let active = true
-    const timer = window.setInterval(() => {
-      void api.fetchSeriesPlanJob(job.jobId).then(value => {
-        if (
-          active
-          && episodeIdRef.current === episode.id
-          && value.jobId === job.jobId
-          && value.episodeId === episode.id
-        ) setJob(value)
-      }).catch(reason => {
-        if (active && episodeIdRef.current === episode.id) setError((reason as Error).message)
-      })
-    }, 1000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [episode.id, job])
+  useSerializedPoll({
+    enabled: Boolean(activeJob),
+    intervalMs: 1000,
+    ownerKey: activeJob ? `${episode.id}:${activeJob.jobId}` : null,
+    immediate: false,
+    poll: signal => api.fetchSeriesPlanJob(activeJob?.jobId || '', signal),
+    onValue: value => {
+      if (
+        episodeIdRef.current === episode.id
+        && value.jobId === activeJob?.jobId
+        && value.episodeId === episode.id
+      ) setJob(value)
+    },
+    onError: reason => {
+      if (episodeIdRef.current === episode.id) setError((reason as Error).message)
+    },
+  })
 
   const start = async (scope: 'outline' | 'script' | 'shots' | 'complete') => {
     const episodeId = episode.id

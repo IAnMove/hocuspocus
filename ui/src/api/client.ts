@@ -2956,9 +2956,13 @@ export async function startSeriesCanonPreparation(
   ), 'Could not prepare Series canon')
 }
 
-export async function fetchSeriesPlanJob(jobId: string): Promise<import('../features/series/types').SeriesJobStatus> {
+export async function fetchSeriesPlanJob(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<import('../features/series/types').SeriesJobStatus> {
   return seriesResponse(fetch(
     `${BASE}/api/v1/series/plan/jobs/${encodeURIComponent(jobId)}`,
+    signal ? { signal } : undefined,
   ), 'Could not read Series planning job')
 }
 
