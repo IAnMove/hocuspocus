@@ -20,5 +20,11 @@ module.exports = Object.freeze({
     path: "app/services/sam/sam3",
     revision: "8f0b7f4d4e7eda2ed606ebde6702c93359ad01da",
     marker: "app/services/sam/env/.maestro_sam3_8f0b7f4d4e7eda2ed606ebde6702c93359ad01da.installed"
+  }),
+  unirig: Object.freeze({
+    url: "https://github.com/VAST-AI-Research/UniRig",
+    path: "app/services/rigging/vendor/UniRig",
+    revision: "6793c6640ff01c8fb389f3993434124bb43d2933",
+    marker: "app/services/rigging/env/.maestro_unirig_6793c6640ff01c8fb389f3993434124bb43d2933.installed"
   })
 })

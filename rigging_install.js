@@ -4,6 +4,9 @@
 // for the AI engine in the Animate tab; the procedural engine ships with the
 // normal Maestro install. Model weights (~2GB, VAST-AI/UniRig) download on
 // first use. Referenced from pinokio.js like sam_install.js.
+const vendors = require("./vendor_revisions")
+const unirig = vendors.unirig
+
 module.exports = {
   requires: {
     bundle: "ai"
@@ -11,19 +14,26 @@ module.exports = {
   run: [
     // Step 1: Clone UniRig if not already present
     {
-      when: "{{!exists('app/services/rigging/vendor/UniRig')}}",
+      when: "{{!exists('" + unirig.path + "')}}",
       method: "shell.run",
       params: {
-        message: "git clone --depth 1 https://github.com/VAST-AI-Research/UniRig app/services/rigging/vendor/UniRig"
+        message: [
+          "git clone --depth 1 " + unirig.url + " " + unirig.path,
+          "git -C " + unirig.path + " fetch --depth 1 origin " + unirig.revision,
+          "git -C " + unirig.path + " checkout --detach " + unirig.revision
+        ]
       }
     },
-    // Step 1b: Pull latest if repo already exists
+    // Step 1b: Re-select the declared revision if repo already exists.
     {
-      when: "{{exists('app/services/rigging/vendor/UniRig/.git')}}",
+      when: "{{exists('" + unirig.path + "/.git')}}",
       method: "shell.run",
       params: {
-        path: "app/services/rigging/vendor/UniRig",
-        message: "git pull --ff-only"
+        path: unirig.path,
+        message: [
+          "git fetch --depth 1 origin " + unirig.revision,
+          "git checkout --detach " + unirig.revision
+        ]
       }
     },
     // Step 2: PyTorch (CUDA 12.8) in a dedicated Python 3.11 conda env —
@@ -95,6 +105,13 @@ module.exports = {
       params: {
         path: "app/services/rigging/env/.maestro_rigging_v1.installed",
         text: "ok"
+      }
+    },
+    {
+      method: "fs.write",
+      params: {
+        path: unirig.marker,
+        text: "repository=" + unirig.url + "\nrevision=" + unirig.revision + "\n"
       }
     }
   ]
