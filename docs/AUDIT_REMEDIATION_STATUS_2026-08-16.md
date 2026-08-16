@@ -24,7 +24,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | TASK-07 | completado | Stream LLM visible como tail normalizado de 400 caracteres sólo en snapshot; 500 actualizaciones no añaden eventos ni mueven `updated_at`, y terminal limpia preview conservando transición durable; contrato documentado. |
 | DIR-01 | completado | Helper compartido mapea antes de filtrar, conserva índices originales/explicitos y prioriza `shotId`; huecos `[∅,b,∅,d] => [1,3]`, null y plan reordenado cubiertos; 49 tests UI + lint/build verdes. |
 | DIR-02 | completado | `DirectorClipImage.file` es nullable; previews recuperadas resuelven filename backend sin `createObjectURL(null)` y los blobs locales se revocan al reemplazar/desmontar; tests UI + lint/build verdes. |
-| PLAN-01 | pendiente | — |
+| PLAN-01 | completado | Planificación determinista en lotes máximos de 8; schema restringido a índices del lote, merge ordenado sin overwrite, reparación compacta sólo de huecos y fallback individual. Fake que trunca >8 produce 41/41 únicos en 6 llamadas; 31 tests focalizados verdes. |
 | PLAN-02 | pendiente | — |
 | PLAN-03 | pendiente | — |
 | DIR-03 | pendiente | — |

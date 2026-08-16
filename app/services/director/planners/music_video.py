@@ -357,6 +357,7 @@ def _parse_performer_map(scene_description: str) -> dict[str, str]:
 
 class MusicVideoPlanner(BasePlanner):
     skill_type = "music_video"
+    PLAN_BATCH_SIZE = 8
 
     def plan(
         self,
@@ -677,6 +678,87 @@ class MusicVideoPlanner(BasePlanner):
                 alternatives.append(dict(candidate))
         missing = [index for index in range(expected) if index not in slots]
         return slots, missing, alternatives
+
+    @classmethod
+    def _partition_batch_shot_plans(
+        cls,
+        candidates: list[dict],
+        expected: int,
+        batch_indices: list[int],
+        positional_indices: Optional[list[int]] = None,
+        *,
+        require_image: bool = True,
+    ) -> tuple[dict[int, dict], list[int], list[dict]]:
+        """Map one bounded response only onto the slots requested by its batch.
+
+        Explicit indexes that belong to another timeline batch are rejected so
+        they cannot pre-fill or overwrite later work. Duplicate indexes are
+        also rejected rather than being retained as ambiguous alternatives.
+        Only genuinely surplus indexes outside the timeline are preserved as
+        creative alternatives, matching the historical two-slot behaviour.
+        """
+        allowed = set(batch_indices)
+        positional = positional_indices if positional_indices is not None else batch_indices
+        slots: dict[int, dict] = {}
+        alternatives: list[dict] = []
+        for position, candidate in enumerate(candidates):
+            if not cls._shot_is_complete(candidate, require_image=require_image):
+                continue
+            raw_index = candidate.get("clip_index") if isinstance(candidate, dict) else None
+            try:
+                if raw_index not in (None, ""):
+                    index = int(raw_index) - 1
+                elif position < len(positional):
+                    index = positional[position]
+                else:
+                    continue
+            except (TypeError, ValueError):
+                if position >= len(positional):
+                    continue
+                index = positional[position]
+
+            if index in allowed:
+                if index in slots:
+                    print(
+                        "[MusicVideoPlanner] Rejecting duplicate shot plan for "
+                        f"clip index {index + 1}."
+                    )
+                    continue
+                normalized = dict(candidate)
+                normalized["clip_index"] = index + 1
+                slots[index] = normalized
+            elif index < 0 or index >= expected:
+                alternatives.append(dict(candidate))
+            else:
+                print(
+                    "[MusicVideoPlanner] Rejecting out-of-batch shot plan for "
+                    f"clip index {index + 1}."
+                )
+
+        missing = [index for index in batch_indices if index not in slots]
+        return slots, missing, alternatives
+
+    @staticmethod
+    def _batch_response_schema(
+        indices: list[int],
+        *,
+        include_image_fields: bool,
+    ) -> dict:
+        """Build a closed schema whose clip indexes are limited to one batch."""
+        response_schema = _music_shot_schema(
+            len(indices),
+            include_image_fields=include_image_fields,
+        )
+        shot_schema = response_schema["items"]
+        shot_schema["properties"] = {
+            "clip_index": {
+                "type": "integer",
+                "enum": [index + 1 for index in indices],
+            },
+            **shot_schema["properties"],
+        }
+        shot_schema["required"] = ["clip_index", *shot_schema["required"]]
+        return response_schema
 
     @staticmethod
     def _compact_repair_context(value: str, limit: int = 7000) -> str:
@@ -1047,7 +1129,7 @@ For each scene, the music drives the pacing and energy. You only need to identif
 {"Use the H3 Context-IR fields above. Be concise but complete; do not enforce the legacy 15-40 word LTX limit." if preserve_names else "Keep video_prompt 15-40 words. Anything longer is over-described for music video."}
 
 {"Most scenes should use a single video_prompt with empty keyframe_prompts." if uses_generated_images else "Every scene should use video_prompt/window_prompts only; omit all still-image fields."}
-Return exactly one object for every requested clip. Preserve each one-based clip_index. Output exactly {len(clips)} objects. Go:"""
+Return exactly one object for every clip requested in the current batch. Preserve each requested one-based clip_index. Go:"""
 
         # Inject model-specific prompt polish guide if provided
         polish_block = kwargs.get("polish_block", "")
@@ -1060,14 +1142,6 @@ Return exactly one object for every requested clip. Preserve each one-based clip
             nsfw,
             "both" if uses_generated_images else "video",
         )
-
-        user_prompt = f"""Scene Concept: {scene_description}
-Song tempo: {bpm:.0f} BPM
-
-Clips:
-{chr(10).join(clip_contexts)}
-
-Write {len(clips)} structured shot plans for clip indexes 1-{len(clips)}. Go:"""
 
         # Send ALL reference images to the LLM (main + character + location refs)
         image_paths = []
@@ -1082,100 +1156,162 @@ Write {len(clips)} structured shot plans for clip indexes 1-{len(clips)}. Go:"""
         if not image_paths:
             image_paths = None
         per_clip_tokens = 700 if uses_generated_images else 520
-        max_tokens = max(4096, len(clips) * per_clip_tokens + 1024)
-        response_schema = _music_shot_schema(
-            len(clips),
-            include_image_fields=uses_generated_images,
-        )
-        shot_schema = response_schema["items"]
-        shot_schema["properties"] = {
-            "clip_index": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": len(clips),
-            },
-            **shot_schema["properties"],
-        }
-        shot_schema["required"] = [
-            "clip_index",
-            *shot_schema["required"],
-        ]
-        candidates = self._call_llm_json(
-            user_prompt=user_prompt,
-            system_prompt=system_prompt,
-            max_tokens=max_tokens,
-            image_paths=image_paths,
-            json_schema=response_schema,
-        )
-        slots, missing, alternatives = self._partition_shot_plans(
-            candidates,
-            len(clips),
-            require_image=uses_generated_images,
-        )
+        slots: dict[int, dict] = {}
+        alternatives: list[dict] = []
 
-        if alternatives:
-            print(
-                f"[MusicVideoPlanner] Preserving {len(alternatives)} valid surplus "
-                f"shot plan(s) as alternatives for {len(clips)} timeline slots."
-            )
-
-        if missing:
-            missing_numbers = [index + 1 for index in missing]
-            missing_contexts = [clip_contexts[index] for index in missing]
-            repair_schema = {
-                "type": "array",
-                "items": shot_schema,
-                "minItems": len(missing),
-                "maxItems": len(missing),
-            }
-            repair_system = f"""You repair missing music-video shot plans.
+        def repair_system_for(shot_schema: dict) -> str:
+            return f"""You repair missing music-video shot plans.
 Return ONLY a JSON array with exactly one complete object for each requested clip_index.
 Do not return already completed indexes. Preserve the requested one-based clip_index values.
-{("image_prompt must be empty. video_prompt must contain only the concrete clip situation; never repeat the master prompt." if direct_video else "Every image_prompt must describe a static first frame and contain at least 24 characters. Every video_prompt must describe subsequent action.")}
+{("Do not return still-image fields. video_prompt must contain only the concrete clip situation; never repeat the master prompt." if direct_video else "Every image_prompt must describe a static first frame and contain at least 24 characters. Every video_prompt must describe subsequent action.")}
 {("Use concise chronological, visually executable natural English." if direct_video else "Use 15-40 words." if is_ltx else "Use chronological, visually executable natural English.")}
 {character_style_contract}
 {visible_text_contract}
 Use empty keyframe_prompts and window_prompts unless strictly necessary.
 Required object schema:
 {json.dumps(shot_schema, ensure_ascii=False)}"""
-            repair_prompt = f"""Compact production context:
+
+        for batch_start in range(0, len(clips), self.PLAN_BATCH_SIZE):
+            batch_indices = list(range(
+                batch_start,
+                min(batch_start + self.PLAN_BATCH_SIZE, len(clips)),
+            ))
+            requested_numbers = [index + 1 for index in batch_indices]
+            batch_schema = self._batch_response_schema(
+                batch_indices,
+                include_image_fields=uses_generated_images,
+            )
+            batch_prompt = f"""Scene Concept: {scene_description}
+Song tempo: {bpm:.0f} BPM
+Requested clip indexes: {', '.join(map(str, requested_numbers))}
+
+Clips:
+{chr(10).join(clip_contexts[index] for index in batch_indices)}
+
+Write exactly {len(batch_indices)} structured shot plans for only the requested clip indexes. Go:"""
+            batch_system = f"""{system_prompt}
+
+CURRENT BATCH CONTRACT:
+- Requested clip indexes: {', '.join(map(str, requested_numbers))}.
+- Return exactly {len(batch_indices)} objects and no other timeline indexes.
+- Preserve these one-based clip_index values exactly."""
+            print(
+                "[MusicVideoPlanner] Planning bounded batch for clip indexes "
+                f"{requested_numbers}."
+            )
+            candidates = self._call_llm_json(
+                user_prompt=batch_prompt,
+                system_prompt=batch_system,
+                max_tokens=max(2048, len(batch_indices) * per_clip_tokens + 768),
+                image_paths=image_paths,
+                json_schema=batch_schema,
+            )
+            batch_slots, missing, batch_alternatives = self._partition_batch_shot_plans(
+                candidates,
+                len(clips),
+                batch_indices,
+                require_image=uses_generated_images,
+            )
+            alternatives.extend(batch_alternatives)
+
+            if missing:
+                missing_numbers = [index + 1 for index in missing]
+                repair_schema = self._batch_response_schema(
+                    missing,
+                    include_image_fields=uses_generated_images,
+                )
+                repair_prompt = f"""Compact production context:
 {self._compact_repair_context(scene_description)}
 
 Song tempo: {bpm:.0f} BPM
 Missing clip indexes: {', '.join(map(str, missing_numbers))}
 Missing clip context:
-{chr(10).join(missing_contexts)}
+{chr(10).join(clip_contexts[index] for index in missing)}
 
 Return only these {len(missing)} missing shot plans."""
-            print(
-                f"[MusicVideoPlanner] Requesting one compact repair for missing "
-                f"clip indexes {missing_numbers}."
-            )
-            repaired = self._call_llm_json(
-                user_prompt=repair_prompt,
-                system_prompt=repair_system,
-                max_tokens=max(2048, len(missing) * 700 + 512),
-                image_paths=image_paths,
-                json_schema=repair_schema,
-                temperature=0.35,
-            )
-            repaired_slots, _repair_missing, repaired_alternatives = self._partition_shot_plans(
-                repaired,
-                len(clips),
-                positional_indices=missing,
-                require_image=uses_generated_images,
-            )
-            for index in missing:
-                if index in repaired_slots:
-                    slots[index] = repaired_slots[index]
-            alternatives.extend(repaired_alternatives)
-            missing = [index for index in range(len(clips)) if index not in slots]
+                print(
+                    "[MusicVideoPlanner] Requesting one compact repair for missing "
+                    f"clip indexes {missing_numbers}."
+                )
+                repaired = self._call_llm_json(
+                    user_prompt=repair_prompt,
+                    system_prompt=repair_system_for(repair_schema["items"]),
+                    max_tokens=max(1536, len(missing) * per_clip_tokens + 512),
+                    image_paths=image_paths,
+                    json_schema=repair_schema,
+                    temperature=0.35,
+                )
+                repaired_slots, missing, repaired_alternatives = self._partition_batch_shot_plans(
+                    repaired,
+                    len(clips),
+                    missing,
+                    positional_indices=missing,
+                    require_image=uses_generated_images,
+                )
+                batch_slots.update(repaired_slots)
+                alternatives.extend(repaired_alternatives)
 
-        if missing:
-            missing_numbers = ", ".join(str(index + 1) for index in missing)
-            raise RuntimeError(
-                "Music-video planning remained incomplete after one compact repair; "
-                f"missing clip indexes {missing_numbers}. No images were queued."
+            # A final single-index request makes one stubborn/truncated tail
+            # recoverable without repeating the rest of its completed batch.
+            for index in list(missing):
+                individual_schema = self._batch_response_schema(
+                    [index],
+                    include_image_fields=uses_generated_images,
+                )
+                individual_number = index + 1
+                individual_prompt = f"""Compact production context:
+{self._compact_repair_context(scene_description)}
+
+Song tempo: {bpm:.0f} BPM
+Missing clip indexes: {individual_number}
+Missing clip context:
+{clip_contexts[index]}
+
+Return exactly this one missing shot plan."""
+                print(
+                    "[MusicVideoPlanner] Requesting individual fallback for clip "
+                    f"index {individual_number}."
+                )
+                individual = self._call_llm_json(
+                    user_prompt=individual_prompt,
+                    system_prompt=repair_system_for(individual_schema["items"]),
+                    max_tokens=max(1536, per_clip_tokens + 512),
+                    image_paths=image_paths,
+                    json_schema=individual_schema,
+                    temperature=0.3,
+                )
+                individual_slots, individual_missing, individual_alternatives = self._partition_batch_shot_plans(
+                    individual,
+                    len(clips),
+                    [index],
+                    positional_indices=[index],
+                    require_image=uses_generated_images,
+                )
+                batch_slots.update(individual_slots)
+                alternatives.extend(individual_alternatives)
+                if not individual_missing:
+                    missing.remove(index)
+
+            if missing:
+                missing_numbers = ", ".join(str(index + 1) for index in missing)
+                raise RuntimeError(
+                    "Music-video planning remained incomplete after bounded repair "
+                    f"and individual fallback; missing clip indexes {missing_numbers}. "
+                    "No images were queued."
+                )
+
+            for index in batch_indices:
+                if index in slots:
+                    raise RuntimeError(
+                        "Music-video planning produced a duplicate completed timeline "
+                        f"slot for clip index {index + 1}. No images were queued."
+                    )
+                slots[index] = batch_slots[index]
+
+        if alternatives:
+            print(
+                f"[MusicVideoPlanner] Preserving {len(alternatives)} valid surplus "
+                f"shot plan(s) as alternatives for {len(clips)} timeline slots."
             )
 
         self._planning_alternatives = alternatives

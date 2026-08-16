@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -293,6 +294,77 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(len(plan.shots), 2)
         self.assertIn("Missing clip indexes: 2", calls[1]["prompt"])
         self.assertNotIn("Missing clip indexes: 1", calls[1]["prompt"])
+
+    def test_music_video_plans_large_timelines_in_bounded_ordered_batches(self):
+        calls = []
+
+        def generate(**kwargs):
+            calls.append(kwargs)
+            match = re.search(r"Requested clip indexes: ([0-9, ]+)", kwargs["prompt"])
+            self.assertIsNotNone(match)
+            requested = [int(value) for value in match.group(1).split(", ")]
+            shots = [_music_shot(index) for index in requested]
+            # Regression fake: providers truncate any response above 8 objects.
+            return json.dumps(shots[:8] if len(shots) > 8 else shots)
+
+        clips = [
+            {"start": index * 4, "end": (index + 1) * 4, "label": "verse", "beat_count": 8}
+            for index in range(41)
+        ]
+        plan = MusicVideoPlanner(llm_generate=generate).plan(
+            clips=clips,
+            scene_description="A long-form performance crossing one coherent city.",
+            bpm=120,
+        )
+
+        self.assertEqual(len(calls), 6)
+        self.assertTrue(all(call["json_schema"]["maxItems"] <= 8 for call in calls))
+        self.assertTrue(all(call["max_new_tokens"] <= 8 * 700 + 768 for call in calls))
+        self.assertEqual(len(plan.shots), 41)
+        self.assertEqual(
+            [shot.scene_goal for shot in plan.shots],
+            [f"Complete narrative beat {index}" for index in range(1, 42)],
+        )
+        self.assertEqual(len({shot.shot_id for shot in plan.shots}), 41)
+
+    def test_music_video_uses_individual_fallback_only_for_still_missing_tail(self):
+        calls = []
+
+        def generate(**kwargs):
+            calls.append(kwargs)
+            return json.dumps([
+                _music_shot(1 if len(calls) == 1 else 2 if len(calls) == 2 else 3),
+            ])
+
+        plan = MusicVideoPlanner(llm_generate=generate).plan(
+            clips=[
+                {"start": 0, "end": 4, "label": "intro", "beat_count": 8},
+                {"start": 4, "end": 8, "label": "verse", "beat_count": 8},
+                {"start": 8, "end": 12, "label": "chorus", "beat_count": 8},
+            ],
+            scene_description="A concise story about a living archive.",
+            bpm=120,
+        )
+
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(plan.shots), 3)
+        self.assertIn("Missing clip indexes: 2, 3", calls[1]["prompt"])
+        self.assertIn("Missing clip indexes: 3", calls[2]["prompt"])
+        self.assertNotIn("Missing clip indexes: 2, 3", calls[2]["prompt"])
+
+    def test_music_video_rejects_duplicate_batch_indexes_without_overwrite(self):
+        first = _music_shot(1)
+        duplicate = _music_shot(1)
+        duplicate["scene_goal"] = "This duplicate must not overwrite the first plan"
+        slots, missing, alternatives = MusicVideoPlanner._partition_batch_shot_plans(
+            [first, duplicate, _music_shot(2)],
+            2,
+            [0, 1],
+        )
+
+        self.assertEqual(missing, [])
+        self.assertEqual(alternatives, [])
+        self.assertEqual(slots[0]["scene_goal"], first["scene_goal"])
 
     def test_music_video_persists_surplus_plans_as_alternatives(self):
         def generate(**_kwargs):
