@@ -65,8 +65,8 @@ jobs:
       - name: Python test suite
         run: python -m pytest -q
 
-  ui-build:
-    name: UI type-check + build
+  ui-check:
+    name: UI tests + lint + type-check + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,6 +78,6 @@ jobs:
       - name: Install UI deps
         working-directory: ui
         run: npm ci
-      - name: Type-check + build (tsc -b && vite build)
+      - name: Test, lint with zero warnings, type-check and build
         working-directory: ui
-        run: npm run build
+        run: npm run check
