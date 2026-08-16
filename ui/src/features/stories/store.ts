@@ -1,20 +1,28 @@
 import { create } from 'zustand'
 import * as api from '../../api/client'
 import { changedSections, createStoryProject, normalizeStoryProject } from './model'
+import { mergeStoryLibraries } from './library'
+import type { StoryLibraryConflict, StoryLibraryData } from './library'
 import type { StoryProject, StoryProjectType } from './types'
 
 const LEGACY_AUTOSAVE_KEY = 'maestro-story-lab-v1'
 const LIBRARY_PREFIX = 'maestro-story-library-v2:'
 
-interface StoryLibraryData {
-  version: 2
-  activeId: string
-  projects: Record<string, StoryProject>
-}
-
 const safeWorkspace = (workspace: string): string =>
   workspace.trim().replace(/[^a-zA-Z0-9._-]+/g, '-') || 'default'
 const libraryKey = (workspace: string): string => `${LIBRARY_PREFIX}${safeWorkspace(workspace)}`
+
+function hasPersistedLocalLibrary(workspace: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return Boolean(
+      window.localStorage.getItem(libraryKey(workspace))
+      || (workspace === 'default' && window.localStorage.getItem(LEGACY_AUTOSAVE_KEY)),
+    )
+  } catch {
+    return false
+  }
+}
 
 function normalizeLibrary(value: unknown): StoryLibraryData | null {
   if (!value || typeof value !== 'object') return null
@@ -99,6 +107,8 @@ interface StoryState {
   hydrated: boolean
   loading: boolean
   saveError: string | null
+  libraryConflicts: StoryLibraryConflict[]
+  resolveLibraryConflict: (id: string, resolution: 'local' | 'remote') => void
   loadWorkspace: (workspace: string) => Promise<void>
   setProject: (project: StoryProject) => void
   patchProject: (patch: Partial<StoryProject>) => void
@@ -120,8 +130,27 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   hydrated: false,
   loading: false,
   saveError: null,
+  libraryConflicts: [],
+  resolveLibraryConflict: (id, resolution) => set(state => {
+    const conflict = state.libraryConflicts.find(item => item.id === id)
+    if (!conflict) return state
+    const selected = resolution === 'remote'
+      ? conflict.remoteProject
+      : conflict.localProject
+    // Give the explicit choice a fresh monotonic timestamp so the next merge
+    // cannot recreate the same equal-time conflict.
+    const project = touched(state.projects[id] || conflict.localProject, selected)
+    return {
+      project: state.project.id === id ? project : state.project,
+      projects: { ...state.projects, [id]: project },
+      libraryConflicts: state.libraryConflicts.filter(item => item.id !== id),
+      dirty: true,
+      saveError: null,
+    }
+  }),
   loadWorkspace: async rawWorkspace => {
     const workspace = safeWorkspace(rawWorkspace)
+    const localSnapshotExisted = hasPersistedLocalLibrary(workspace)
     const previous = get()
     if (workspace === previous.workspace && (previous.hydrated || previous.loading)) return
 
@@ -134,7 +163,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     // Flush the previous workspace before changing the active in-memory
     // library; otherwise the debounce below could be cancelled by a fast
     // workspace switch.
-    if (previous.hydrated && workspace !== previous.workspace) {
+    if (previous.hydrated && workspace !== previous.workspace && !previous.libraryConflicts.length) {
       try {
         const previousLibrary = buildLibrary(previous.project, previous.projects)
         await api.saveStoryLibrary(previous.workspace, previousLibrary)
@@ -153,22 +182,41 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       hydrated: false,
       loading: true,
       saveError: null,
+      libraryConflicts: [],
     })
     try {
       const remoteValue = await api.fetchStoryLibrary(workspace)
       if (get().workspace !== workspace) return
-      let library = normalizeLibrary(remoteValue)
+      const remoteLibrary = normalizeLibrary(remoteValue)
+      let library = remoteLibrary
+      let conflicts: StoryLibraryConflict[] = []
+      let needsRemoteSync = false
       if (!library) {
         // First-run migration: upload the existing v2/legacy browser cache.
         library = local
         await api.saveStoryLibrary(workspace, library)
+      } else if (localSnapshotExisted) {
+        const merged = mergeStoryLibraries(local, library)
+        library = merged.library
+        conflicts = merged.conflicts
+        needsRemoteSync = merged.needsRemoteSync
       }
       persistLocalLibrary(
         workspace,
         library.projects[library.activeId],
         library.projects,
       )
-      lastPersistedLibrary.set(workspace, JSON.stringify(library))
+      // A local-newer/exclusive merge must be sent back to the server. A
+      // conflict deliberately stays unsynced until a future explicit review.
+      const remoteSerialized = remoteLibrary
+        ? JSON.stringify(remoteLibrary)
+        : JSON.stringify(library)
+      lastPersistedLibrary.set(
+        workspace,
+        needsRemoteSync && !conflicts.length
+          ? remoteSerialized
+          : JSON.stringify(library),
+      )
       set({
         project: library.projects[library.activeId],
         projects: library.projects,
@@ -176,6 +224,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
         hydrated: true,
         loading: false,
         saveError: null,
+        libraryConflicts: conflicts,
       })
       if (workspace === 'default') {
         window.localStorage.removeItem(LEGACY_AUTOSAVE_KEY)
@@ -185,6 +234,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       set({
         hydrated: false,
         loading: false,
+        libraryConflicts: [],
         saveError: error instanceof Error ? error.message : 'Story Lab storage is unavailable',
       })
     }
@@ -261,11 +311,17 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       return {
         projects,
         project: state.project.id === id ? projects[remainingId] : state.project,
+        libraryConflicts: state.libraryConflicts.filter(item => item.id !== id),
         dirty: true,
       }
     }
     const project = createStoryProject()
-    return { projects: { [project.id]: project }, project, dirty: true }
+    return {
+      projects: { [project.id]: project },
+      project,
+      libraryConflicts: state.libraryConflicts.filter(item => item.id !== id),
+      dirty: true,
+    }
   }),
 }))
 
@@ -280,6 +336,7 @@ useStoryStore.subscribe(state => {
     // Storypack export remains available when browser storage is full.
   }
   if (!state.hydrated) return
+  if (state.libraryConflicts.length) return
 
   const workspace = state.workspace
   const library = buildLibrary(state.project, state.projects)
@@ -313,3 +370,5 @@ useStoryStore.subscribe(state => {
 })
 
 export { createStoryProject, normalizeStoryProject, storyId } from './model'
+export { mergeStoryLibraries } from './library'
+export type { StoryLibraryConflict, StoryLibraryData } from './library'

@@ -21,6 +21,7 @@ import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
 import { syncTrailerDuration, trailerDurationForProject } from './trailerDefaults'
 import { resolveStoryWritingProvider } from './provider'
+import { StoryLibraryConflictNotice } from './StoryLibraryConflictNotice'
 import {
   buildComicAdaptation,
   buildMusicVideoAdaptation,
@@ -870,6 +871,8 @@ export function StoryLabPanel() {
   const storyHydrated = useStoryStore(state => state.hydrated)
   const storyLoading = useStoryStore(state => state.loading)
   const storySaveError = useStoryStore(state => state.saveError)
+  const storyLibraryConflicts = useStoryStore(state => state.libraryConflicts)
+  const resolveStoryLibraryConflict = useStoryStore(state => state.resolveLibraryConflict)
   const loadWorkspace = useStoryStore(state => state.loadWorkspace)
   const openProject = useStoryStore(state => state.openProject)
   const duplicateProject = useStoryStore(state => state.duplicateProject)
@@ -4567,6 +4570,7 @@ export function StoryLabPanel() {
           <p className="text-[9px] text-text-muted mt-0.5">
             {STORY_PROJECT_TYPES.find(item => item.id === project.projectType)?.description}
           </p>
+          <StoryLibraryConflictNotice conflicts={storyLibraryConflicts} onResolve={resolveStoryLibraryConflict} />
           <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[9px]">
             <span className="inline-flex items-center gap-1.5 text-violet-200">
               <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.8)]" /> Campo o preparación necesaria
