@@ -79,6 +79,7 @@ function RigAnimationPreview({ animation, selected, recommended, onSelect }: { a
  *  scene animator (which moves the camera, not the mesh). */
 export function RigAnimatePanel() {
   const loadOutputs = useStore(state => state.loadOutputs)
+  const activeWorkspace = useStore(state => state.activeWorkspace)
   const setMediaFilter = useStore(state => state.setMediaFilter)
   const [sources, setSources] = useState<RigSource[]>([])
   const [sourcesLoading, setSourcesLoading] = useState(true)
@@ -126,7 +127,7 @@ export function RigAnimatePanel() {
   const loadSources = useCallback(async () => {
     setSourcesLoading(true)
     try {
-      const { outputs: files } = await fetchOutputs(0, 0, { search: '.glb' })
+      const { outputs: files } = await fetchOutputs(0, 0, { search: '.glb', workspace: activeWorkspace })
       setSources(files
         .filter(file => file.type === 'model3d' && /\.glb$/i.test(file.name) && !file.name.includes('_rigged_'))
         .map(file => ({ name: file.name, thumbnail_url: file.thumbnail_url })))
@@ -135,7 +136,7 @@ export function RigAnimatePanel() {
     } finally {
       setSourcesLoading(false)
     }
-  }, [])
+  }, [activeWorkspace])
 
   useEffect(() => {
     void loadSources()

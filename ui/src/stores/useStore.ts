@@ -25,6 +25,64 @@ const _directorRepairPolls = new Map<string, DirectorRepairPoll>()
 const _directorRepairDiscoveries = new Map<string, object>()
 let _dashboardPipelineLoadToken = 0
 let _dashboardPipelineListLoadToken = 0
+let _workspaceRequestEpoch = 0
+let _workspaceListRequestEpoch = 0
+let _pendingWorkspaceTransitionEpoch: number | null = null
+let _outputRequestEpoch = 0
+let _outputAbortController: AbortController | null = null
+let _metadataRequestEpoch = 0
+let _metadataAbortController: AbortController | null = null
+
+type WorkspaceOutputRequest = {
+  workspace: string
+  workspaceEpoch: number
+  requestEpoch: number
+  controller: AbortController
+}
+
+function _workspaceName(state: { activeWorkspace: string; browsingUploads: boolean }): string {
+  return state.browsingUploads ? '__uploads__' : state.activeWorkspace
+}
+
+function _beginWorkspaceTransition(): number {
+  _workspaceRequestEpoch += 1
+  _pendingWorkspaceTransitionEpoch = null
+  // Workspace-list responses also carry the server-side active workspace.
+  // Invalidate any list read that predates this explicit transition.
+  _workspaceListRequestEpoch += 1
+  _outputAbortController?.abort()
+  _outputAbortController = null
+  _metadataAbortController?.abort()
+  _metadataAbortController = null
+  _metadataRequestEpoch += 1
+  return _workspaceRequestEpoch
+}
+
+function _beginOutputRequest(workspace: string): WorkspaceOutputRequest {
+  _outputAbortController?.abort()
+  const request: WorkspaceOutputRequest = {
+    workspace,
+    workspaceEpoch: _workspaceRequestEpoch,
+    requestEpoch: ++_outputRequestEpoch,
+    controller: new AbortController(),
+  }
+  _outputAbortController = request.controller
+  return request
+}
+
+function _isCurrentOutputRequest(
+  get: () => { activeWorkspace: string; browsingUploads: boolean },
+  request: WorkspaceOutputRequest,
+): boolean {
+  return request.workspaceEpoch === _workspaceRequestEpoch
+    && request.requestEpoch === _outputRequestEpoch
+    && !request.controller.signal.aborted
+    && _workspaceName(get()) === request.workspace
+}
+
+function _finishOutputRequest(request: WorkspaceOutputRequest): void {
+  if (_outputAbortController === request.controller) _outputAbortController = null
+}
 
 type OutpaintAspect = 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 
@@ -9189,39 +9247,78 @@ export const useStore = create<AppState>((set, get) => ({
   activeWorkspace: 'default',
   browsingUploads: false,
   loadWorkspaces: async () => {
+    const listRequestEpoch = ++_workspaceListRequestEpoch
+    const pendingTransitionAtStart = _pendingWorkspaceTransitionEpoch
     try {
       const data = await api.fetchWorkspaces()
-      set({ workspaces: data.workspaces, activeWorkspace: data.active })
+      if (
+        listRequestEpoch !== _workspaceListRequestEpoch
+        || pendingTransitionAtStart !== _pendingWorkspaceTransitionEpoch
+        || pendingTransitionAtStart !== null
+      ) return
+      const previousWorkspace = get().activeWorkspace
+      const browsingUploads = get().browsingUploads
+      if (previousWorkspace !== data.active && !browsingUploads) {
+        _beginWorkspaceTransition()
+        set({
+          workspaces: data.workspaces,
+          activeWorkspace: data.active,
+          outputs: [],
+          outputsTotal: 0,
+          selectedOutput: 0,
+          selectedOutputMeta: null,
+          metadataLoading: false,
+        })
+        void get().loadOutputs()
+      } else {
+        set({ workspaces: data.workspaces, activeWorkspace: data.active })
+      }
     } catch (e) {
       console.error('Failed to load workspaces:', e)
     }
   },
   switchWorkspace: async (name) => {
+    const transitionEpoch = _beginWorkspaceTransition()
     // Virtual "Uploads" view: browse the uploads folder WITHOUT touching
     // the server-side active workspace — generations keep saving to the
     // real workspace; uploads are read-only in the gallery.
     if (name === '__uploads__') {
-      set({ browsingUploads: true, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
-      get().loadOutputs()
+      set({ browsingUploads: true, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null, metadataLoading: false })
+      void get().loadOutputs()
       return
     }
+    _pendingWorkspaceTransitionEpoch = transitionEpoch
     try {
       await api.setActiveWorkspace(name)
-      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
-      get().loadOutputs()
-      get().loadWorkspaces()
+      if (transitionEpoch !== _workspaceRequestEpoch) return
+      _pendingWorkspaceTransitionEpoch = null
+      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null, metadataLoading: false })
+      void get().loadOutputs()
+      void get().loadWorkspaces()
     } catch (e) {
+      if (transitionEpoch === _workspaceRequestEpoch) {
+        _pendingWorkspaceTransitionEpoch = null
+        set({ outputsLoading: false, metadataLoading: false })
+      }
       console.error('Failed to switch workspace:', e)
     }
   },
   createWorkspace: async (name) => {
+    const transitionEpoch = _beginWorkspaceTransition()
+    _pendingWorkspaceTransitionEpoch = transitionEpoch
     try {
       await api.createWorkspace(name)
       await api.setActiveWorkspace(name)
-      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
-      get().loadOutputs()
-      get().loadWorkspaces()
+      if (transitionEpoch !== _workspaceRequestEpoch) return
+      _pendingWorkspaceTransitionEpoch = null
+      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null, metadataLoading: false })
+      void get().loadOutputs()
+      void get().loadWorkspaces()
     } catch (e) {
+      if (transitionEpoch === _workspaceRequestEpoch) {
+        _pendingWorkspaceTransitionEpoch = null
+        set({ outputsLoading: false, metadataLoading: false })
+      }
       console.error('Failed to create workspace:', e)
       throw e
     }
@@ -9232,12 +9329,15 @@ export const useStore = create<AppState>((set, get) => ({
     // its switched_to_default answer is authoritative (a client-side
     // activeWorkspace comparison could disagree after a desync and would
     // widen it by force-resetting state the server never changed).
+    const workspaceEpoch = _workspaceRequestEpoch
     const result = await api.deleteWorkspace(name)
+    if (workspaceEpoch !== _workspaceRequestEpoch) return
     if (result.switched_to_default) {
-      set({ browsingUploads: false, activeWorkspace: 'default', outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
-      get().loadOutputs()
+      _beginWorkspaceTransition()
+      set({ browsingUploads: false, activeWorkspace: 'default', outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null, metadataLoading: false })
+      void get().loadOutputs()
     }
-    get().loadWorkspaces()
+    void get().loadWorkspaces()
   },
 
   storageDashboardOpen: false,
@@ -9300,9 +9400,10 @@ export const useStore = create<AppState>((set, get) => ({
   outputsLoading: false,
   loadOutputs: async () => {
     const PAGE_SIZE = 100
-    const { mediaFilter, outputSearchQuery, browsingUploads } = get()
+    const { mediaFilter, outputSearchQuery } = get()
+    const workspace = _workspaceName(get())
+    const request = _beginOutputRequest(workspace)
     const isBackendFilter = mediaFilter === 'favorites' || mediaFilter === 'multiclip' || outputSearchQuery.trim()
-    const ws = browsingUploads ? '__uploads__' : undefined
     set({ outputsLoading: true })
     try {
       const { outputs: apiOutputs, total } = isBackendFilter
@@ -9310,9 +9411,11 @@ export const useStore = create<AppState>((set, get) => ({
             favoritesOnly: mediaFilter === 'favorites',
             multiclipOnly: mediaFilter === 'multiclip',
             search: outputSearchQuery.trim() || undefined,
-            workspace: ws,
+            workspace,
+            signal: request.controller.signal,
           })
-        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace: ws })
+        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace, signal: request.controller.signal })
+      if (!_isCurrentOutputRequest(get, request)) return
       const outputs: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
@@ -9328,11 +9431,14 @@ export const useStore = create<AppState>((set, get) => ({
       }))
       set({ outputs, outputsTotal: total, selectedOutput: 0, outputsLoading: false })
       if (outputs.length > 0) {
-        get().loadOutputMetadata(outputs[0].name)
+        void get().loadOutputMetadata(outputs[0].name)
       }
     } catch (e) {
+      if (!_isCurrentOutputRequest(get, request)) return
       console.error('Failed to load outputs:', e)
       set({ outputsLoading: false })
+    } finally {
+      _finishOutputRequest(request)
     }
   },
 
@@ -9342,10 +9448,14 @@ export const useStore = create<AppState>((set, get) => ({
     const current = get().outputs
     const total = get().outputsTotal
     if (current.length >= total) return // All loaded
+    const workspace = _workspaceName(get())
+    const request = _beginOutputRequest(workspace)
     try {
       const { outputs: apiOutputs, total: newTotal } = await api.fetchOutputs(PAGE_SIZE, current.length, {
-        workspace: get().browsingUploads ? '__uploads__' : undefined,
+        workspace,
+        signal: request.controller.signal,
       })
+      if (!_isCurrentOutputRequest(get, request)) return
       const more: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
@@ -9367,14 +9477,22 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch {
       // Silent fail
+    } finally {
+      _finishOutputRequest(request)
     }
   },
 
   // Incremental refresh: only fetch the newest items to detect new outputs during generation
   refreshOutputs: async () => {
+    const workspace = _workspaceName(get())
+    const request = _beginOutputRequest(workspace)
     try {
       // Only fetch first page — new outputs appear at the top (newest first)
-      const { outputs: apiOutputs, total } = await api.fetchOutputs(50, 0)
+      const { outputs: apiOutputs, total } = await api.fetchOutputs(50, 0, {
+        workspace,
+        signal: request.controller.signal,
+      })
+      if (!_isCurrentOutputRequest(get, request)) return
       const fresh: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
@@ -9418,12 +9536,18 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch {
       // Silent fail for background refresh
+    } finally {
+      if (_isCurrentOutputRequest(get, request)) set({ outputsLoading: false })
+      _finishOutputRequest(request)
     }
   },
 
   toggleFavorite: async (name) => {
+    const workspace = _workspaceName(get())
+    const workspaceEpoch = _workspaceRequestEpoch
     try {
       const result = await api.toggleFavorite(name)
+      if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
       set(s => ({
         outputs: s.outputs.map(o => o.name === name ? { ...o, favorite: result.favorite } : o),
       }))
@@ -9437,16 +9561,25 @@ export const useStore = create<AppState>((set, get) => ({
   metadataLoading: false,
 
   loadOutputMetadata: async (name) => {
+    const workspace = _workspaceName(get())
+    const metadataRequestEpoch = ++_metadataRequestEpoch
+    _metadataAbortController?.abort()
+    const controller = new AbortController()
+    _metadataAbortController = controller
     set({ metadataLoading: true, selectedOutputMeta: null })
     try {
-      const meta = await api.fetchOutputMetadata(name)
+      const meta = await api.fetchOutputMetadata(name, workspace, controller.signal)
+      if (metadataRequestEpoch !== _metadataRequestEpoch || _workspaceName(get()) !== workspace) return
       set({ selectedOutputMeta: meta, metadataLoading: false })
     } catch (e) {
+      if (metadataRequestEpoch !== _metadataRequestEpoch || _workspaceName(get()) !== workspace) return
       // Diagnostic: surface metadata-fetch failures (the usual cause of a
       // "Load Settings does nothing" report on slow/VPN links) instead of
       // swallowing them silently.
       console.error('[LoadSettings] fetchOutputMetadata FAILED for', name, '-', e)
       set({ selectedOutputMeta: null, metadataLoading: false })
+    } finally {
+      if (_metadataAbortController === controller) _metadataAbortController = null
     }
   },
 
@@ -10205,14 +10338,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   rejoinClipGroup: async (groupId) => {
+    const workspace = _workspaceName(get())
+    const workspaceEpoch = _workspaceRequestEpoch
     try {
       const result = await api.rejoinClips(groupId)
-      // Refresh outputs list to include the new concatenated file
-      const outputsRes = await fetch('/api/v1/outputs')
-      if (outputsRes.ok) {
-        const data = await outputsRes.json()
-        set({ outputs: data.files || [] })
-      }
+      if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
+      // Refresh through the epoch-aware, workspace-explicit gallery loader.
+      await get().loadOutputs()
+      if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
       // Select the new file
       const allOutputs = get().outputs
       const newIdx = allOutputs.findIndex(o => o.name === result.filename)
@@ -10230,9 +10363,12 @@ export const useStore = create<AppState>((set, get) => ({
     const idx = get().selectedOutput
     const output = outputs[idx]
     if (!output) return
+    const workspace = _workspaceName(get())
+    const workspaceEpoch = _workspaceRequestEpoch
 
     try {
       await api.deleteOutput(output.name)
+      if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
       // Remove from local state
       const allOutputs = get().outputs.filter(o => o.name !== output.name)
       const newIdx = Math.min(idx, Math.max(0, allOutputs.length - 1))

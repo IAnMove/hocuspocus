@@ -778,7 +778,7 @@ export async function toggleFavorite(name: string): Promise<{ name: string; favo
 
 // --- Outputs ---
 
-export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type'] }): Promise<{ outputs: ApiOutput[]; total: number }> {
+export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
   const params = new URLSearchParams()
   if (limit > 0) params.set('limit', String(limit))
   if (offset > 0) params.set('offset', String(offset))
@@ -789,7 +789,7 @@ export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly
   if (opts?.workspace) params.set('workspace', opts.workspace)
   if (opts?.mediaType) params.set('media_type', opts.mediaType)
   const qs = params.toString()
-  const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`, { cache: 'no-store' })
+  const res = await fetch(`${BASE}/api/v1/outputs${qs ? '?' + qs : ''}`, { cache: 'no-store', signal: opts?.signal })
   if (!res.ok) throw new Error('Failed to fetch outputs')
   const data = await res.json()
   return { outputs: data.outputs, total: data.total ?? data.outputs.length }
@@ -867,6 +867,7 @@ export async function fetchStoredAsset(pathOrFilename: string): Promise<Response
 export async function fetchOutputMetadata(
   name: string,
   workspace?: string,
+  signal?: AbortSignal,
 ): Promise<import('../types').OutputMetadata> {
   // Retry with a per-attempt timeout. On a slow/high-latency link (e.g. the user
   // is remote over VPN) the request can stall long enough that a single attempt
@@ -880,7 +881,10 @@ export async function fetchOutputMetadata(
   const PER_ATTEMPT_MS = 30000  // generous: the server may read embedded video metadata to recover a seed
   let lastErr: unknown = null
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    if (signal?.aborted) throw new DOMException('Metadata request aborted', 'AbortError')
     const controller = new AbortController()
+    const abortFromCaller = () => controller.abort()
+    signal?.addEventListener('abort', abortFromCaller, { once: true })
     const timer = setTimeout(() => controller.abort(), PER_ATTEMPT_MS)
     try {
       const res = await fetch(url, { signal: controller.signal })
@@ -888,6 +892,7 @@ export async function fetchOutputMetadata(
       return await res.json()
     } catch (e) {
       lastErr = e
+      if (signal?.aborted) throw e
       // Diagnostic: AbortError = our per-attempt timeout fired (link too slow);
       // TypeError = network failure / dropped connection. Helps pinpoint a
       // "Load Settings does nothing over VPN" report.
@@ -898,6 +903,7 @@ export async function fetchOutputMetadata(
       }
     } finally {
       clearTimeout(timer)
+      signal?.removeEventListener('abort', abortFromCaller)
     }
   }
   throw lastErr  // all attempts failed — loadOutputMetadata's catch sets meta null

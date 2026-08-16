@@ -118,6 +118,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   // on upload files — hide them. Download + send-to-input still work
   // (serve_file falls back to the uploads folder).
   const browsingUploads = useStore(s => s.browsingUploads)
+  const outputWorkspace = browsingUploads ? '__uploads__' : activeWorkspace
   // Used to translate the raw model_type slug (e.g.
   // "ltx2_22B_distilled_1_1") in the per-clip metadata bar into the
   // human-readable display name (e.g. "LTX-2.3 Distilled 1.1 22B")
@@ -146,6 +147,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const moveRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const metadataRequestRef = useRef(0)
   const editorReplacementTarget = readVideoEditorReplacementTarget()
   const directorReplacementTarget = readDirectorClipReplacementTarget()
 
@@ -185,6 +187,12 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
     return () => observer.disconnect()
   }, [index, onVisible])
 
+  useEffect(() => {
+    metadataRequestRef.current += 1
+    setMeta(null)
+    setMetaLoaded(false)
+  }, [file.name, outputWorkspace])
+
   // Lazy load metadata when first visible
   useEffect(() => {
     if (metaLoaded) return
@@ -194,14 +202,19 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
       (entries) => {
         if (entries[0].isIntersecting) {
           setMetaLoaded(true)
-          fetchOutputMetadata(file.name).then(setMeta).catch(() => {})
+          const request = ++metadataRequestRef.current
+          fetchOutputMetadata(file.name, outputWorkspace)
+            .then(value => {
+              if (metadataRequestRef.current === request) setMeta(value)
+            })
+            .catch(() => {})
         }
       },
       { threshold: 0.1 }
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [file.name, metaLoaded])
+  }, [file.name, metaLoaded, outputWorkspace])
 
   // Pause video when scrolled out of view (but don't auto-play when scrolled in)
   useEffect(() => {

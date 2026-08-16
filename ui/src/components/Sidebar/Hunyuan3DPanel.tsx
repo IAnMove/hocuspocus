@@ -63,6 +63,7 @@ function ViewUpload({ view, value, busy, required, onUpload, onRemove }: {
 
 export function Hunyuan3DPanel() {
   const loadOutputs = useStore(state => state.loadOutputs)
+  const activeWorkspace = useStore(state => state.activeWorkspace)
   const setMediaFilter = useStore(state => state.setMediaFilter)
   const enabledModels = useStore(state => state.enabledModels)
   const toggleModelEnabled = useStore(state => state.toggleModelEnabled)
@@ -119,7 +120,7 @@ export function Hunyuan3DPanel() {
   const loadRetextureSources = useCallback(async () => {
     setSourcesLoading(true)
     try {
-      const { outputs: files } = await fetchOutputs(0, 0, { search: '.glb' })
+      const { outputs: files } = await fetchOutputs(0, 0, { search: '.glb', workspace: activeWorkspace })
       setRetextureSources(files
         .filter(file => file.type === 'model3d' && /\.glb$/i.test(file.name))
         .map(file => ({ path: file.name, name: file.name, thumbnail: file.thumbnail_url })))
@@ -128,7 +129,7 @@ export function Hunyuan3DPanel() {
     } finally {
       setSourcesLoading(false)
     }
-  }, [])
+  }, [activeWorkspace])
 
   useEffect(() => {
     if (operation === 'retexture') void loadRetextureSources()

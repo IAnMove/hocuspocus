@@ -882,7 +882,7 @@ export function VideoEditorPanel() {
 
     const outputName = outputNameFromEditorClip(selected.source, selected.name)
     try {
-      const metadata = await api.fetchOutputMetadata(outputName)
+      const metadata = await api.fetchOutputMetadata(outputName, activeWorkspace)
       if (!metadata.params) throw new Error('Este clip no conserva ajustes de generación reutilizables.')
 
       const store = useStore.getState()
@@ -939,7 +939,7 @@ export function VideoEditorPanel() {
     setMaestroVideos([])
     setMaestroVideoTotal(0)
     try {
-      const result = await api.fetchOutputs(MAESTRO_PICKER_PAGE_SIZE, 0, { mediaType: 'video' })
+      const result = await api.fetchOutputs(MAESTRO_PICKER_PAGE_SIZE, 0, { mediaType: 'video', workspace: activeWorkspace })
       setMaestroVideos(result.outputs)
       setMaestroVideoTotal(result.total)
     } catch (reason) {
@@ -957,7 +957,7 @@ export function VideoEditorPanel() {
       const result = await api.fetchOutputs(
         MAESTRO_PICKER_PAGE_SIZE,
         maestroVideos.length,
-        { mediaType: 'video' },
+        { mediaType: 'video', workspace: activeWorkspace },
       )
       setMaestroVideos(current => {
         const known = new Set(current.map(output => output.name))
@@ -977,8 +977,8 @@ export function VideoEditorPanel() {
     setError(null)
     setAddProgress(`Adding ${output.name}`)
     try {
-      const source = api.getFileUrl(output.name)
-      await addSource(source, source, output.name, output.thumbnail_url || api.getOutputThumbnailUrl(output.name))
+      const source = api.getFileUrl(output.name, activeWorkspace)
+      await addSource(source, source, output.name, output.thumbnail_url || api.getOutputThumbnailUrl(output.name, activeWorkspace))
     } catch (reason) {
       setError((reason as Error).message)
     } finally {

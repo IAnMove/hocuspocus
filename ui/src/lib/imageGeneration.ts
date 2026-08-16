@@ -80,12 +80,13 @@ function localAsset(
   prompt: string,
   model: string,
   identity: ImageTaskIdentity = {},
+  workspace?: string,
 ): ComicAsset {
   return withTaskIdentity({
     id: comicId('asset'),
     name,
     kind: 'local',
-    source: `/api/v1/file/${encodeURIComponent(name)}`,
+    source: api.getFileUrl(name, workspace),
     prompt,
     provider: 'maestro',
     model,
@@ -98,12 +99,13 @@ export async function findCompletedLocalImage(
   model: string,
   excludedNames: Set<string>,
 ): Promise<ComicAsset | null> {
-  const { outputs } = await api.fetchOutputs(50, 0)
+  const workspace = useStore.getState().activeWorkspace
+  const { outputs } = await api.fetchOutputs(50, 0, { workspace })
   const candidates = outputs.filter(output =>
     output.type === 'image' && !excludedNames.has(output.name))
   for (const output of candidates) {
     try {
-      const metadata = await api.fetchOutputMetadata(output.name)
+      const metadata = await api.fetchOutputMetadata(output.name, workspace)
       if (
         metadata.params?.prompt === prompt &&
         metadata.params?.model_type === model
@@ -112,7 +114,7 @@ export async function findCompletedLocalImage(
           jobId: metadata.job_id,
           taskId: metadata.task_id,
           rootTaskId: metadata.root_task_id,
-        })
+        }, workspace)
       }
     } catch {
       // One unreadable gallery sidecar must not prevent recovery from the rest.
@@ -246,7 +248,7 @@ async function runLocalImage(
       if (!path) throw new Error('Image job completed without an image')
       const name = fileName(path)
       maestro.loadOutputs()
-      return localAsset(name, prompt, selected, identity)
+      return localAsset(name, prompt, selected, identity, maestro.activeWorkspace)
     }
   }
 }
