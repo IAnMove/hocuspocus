@@ -24,6 +24,8 @@ jobs:
         run: python scripts/verify_clean_repo.py
       - name: Dependency install/update contract smoke
         run: python scripts/check_dependency_contract.py
+      - name: Documentation links and drift
+        run: python scripts/check_documentation_links.py
       - name: Python syntax check (our modules)
         # compileall only compiles (never imports), so it needs no deps and
         # skips heavy vendored model code. Covers the surface we edit.
