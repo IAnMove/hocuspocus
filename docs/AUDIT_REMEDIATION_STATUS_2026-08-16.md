@@ -22,7 +22,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | TASK-05 | pendiente | — |
 | TASK-06 | pendiente | — |
 | TASK-07 | pendiente | — |
-| DIR-01 | pendiente | — |
+| DIR-01 | completado | Helper compartido mapea antes de filtrar, conserva índices originales/explicitos y prioriza `shotId`; huecos `[∅,b,∅,d] => [1,3]`, null y plan reordenado cubiertos; 49 tests UI + lint/build verdes. |
 | DIR-02 | pendiente | — |
 | PLAN-01 | pendiente | — |
 | PLAN-02 | pendiente | — |

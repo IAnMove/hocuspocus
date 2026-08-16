@@ -8,6 +8,7 @@ import { DEFAULT_PRODUCTION_PROFILE, resolveSupportedVideoFormat } from '../lib/
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
 import { createActivityPublicationGate } from '../lib/activityPublication'
 import { deriveIsGenerating, isGenerationJobActive } from '../lib/generationJobState'
+import { mapDirectorClipImages } from '../lib/directorClipImages'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -3389,14 +3390,14 @@ export const useStore = create<AppState>((set, get) => ({
           video_prompt: c.video_prompt || '',
           image_prompt: c.image_prompt || '',
         })),
-        directorClipImages: pipeline.clips
-          .filter(c => c.start_image_filename)
-          .map((c, i) => ({
-            clipIndex: i,
-            prompt: c.image_prompt || '',
-            file: null as unknown as File,
-            filename: c.start_image_filename!,
+        directorClipImages: mapDirectorClipImages(
+          pipeline.clips.map(c => ({
+            index: c.index,
+            shot_id: c.shot_id,
+            image_prompt: c.image_prompt,
+            filename: c.start_image_filename,
           })),
+        ),
         directorStep: 'review_video',
         directorAutoMode: pipeline.auto_mode,
         directorSeamless: pipeline.seamless,
@@ -10767,14 +10768,10 @@ export const useStore = create<AppState>((set, get) => ({
           // image gen fails (e.g. incompatible LoRA architecture).
           // clipIndex is captured BEFORE filtering so it stays aligned to
           // the original clip plan position even when failed shots drop out.
-          const images = status.clip_images
-            .map((filename, i) => ({
-              clipIndex: i,
-              prompt: status.clip_plans?.[i]?.image_prompt || '',
-              file: null as unknown as File,
-              filename,
-            }))
-            .filter(img => img.filename && img.filename.length > 0)
+          const images = mapDirectorClipImages(
+            status.clip_images,
+            status.clip_plans || [],
+          )
           set({ directorClipImages: images })
         }
 

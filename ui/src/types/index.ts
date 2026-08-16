@@ -1273,6 +1273,7 @@ export interface PartialClipPlan {
 
 export interface DirectorClipImage {
   clipIndex: number
+  shotId?: string
   prompt: string
   file: File
   filename: string
