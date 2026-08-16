@@ -78,6 +78,6 @@ jobs:
       - name: Install UI deps
         working-directory: ui
         run: npm ci
-      - name: Test, lint with zero warnings, type-check and build
+      - name: Test, lint with zero warnings, type-check, build and bundle budget
         working-directory: ui
         run: npm run check

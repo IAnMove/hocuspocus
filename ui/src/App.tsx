@@ -1,10 +1,9 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Menu, Settings } from 'lucide-react'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { MainContent } from './components/MainContent/MainContent'
 import { SettingsDrawer } from './components/SettingsDrawer/SettingsDrawer'
 import { LoraBrowser } from './components/LoraBrowser/LoraBrowser'
-import { DirectorDashboard } from './components/DirectorDashboard/DirectorDashboard'
 import { StorageDashboard } from './components/StorageDashboard/StorageDashboard'
 import { RetakeDialog } from './components/RetakeDialog'
 import { OomRecoveryBanner } from './components/OomRecoveryBanner'
@@ -18,6 +17,19 @@ import { BrandIdentity } from './components/BrandIdentity'
 import { LanAuthGate } from './components/LanAuthGate'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
+
+// Productions is an overlay opened on demand. Keep its sizeable workflow
+// code out of the initial route and load it only on the first open.
+const DirectorDashboard = lazy(() => import('./components/DirectorDashboard/DirectorDashboard').then(module => ({
+  default: module.DirectorDashboard,
+})))
+
+export function LazyDirectorOverlay({ open }: { open: boolean }) {
+  if (!open) return null
+  return <Suspense fallback={<div role="status" className="sr-only">Loading video workflows…</div>}>
+    <DirectorDashboard />
+  </Suspense>
+}
 
 function AppContent() {
   const loadModels = useStore(s => s.loadModels)
@@ -33,6 +45,7 @@ function AppContent() {
   const loadLlmModels = useStore(s => s.loadLlmModels)
   const loadPipelineList = useStore(s => s.loadPipelineList)
   const servicesConfig = useStore(s => s.servicesConfig)
+  const dashboardOpen = useStore(s => s.dashboardOpen)
   const runtimeIdentity = useStore(s => s.systemStats?.runtime)
   const toggleSidebar = useStore(s => s.toggleSidebar)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
@@ -160,7 +173,7 @@ function AppContent() {
       <ActivityFooter />
       <SettingsDrawer />
       <LoraBrowser />
-      <DirectorDashboard />
+      <LazyDirectorOverlay open={dashboardOpen} />
       <StorageDashboard />
       <RecipesOverlay />
       <RetakeDialog />

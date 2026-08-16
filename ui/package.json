@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "tsx --tsconfig tsconfig.app.json --test tests/*.test.mjs tests/*.test.tsx",
-    "check": "npm run test && npm run lint -- --max-warnings=0 && npm run build"
+    "budget": "node scripts/check-build-budget.mjs",
+    "check": "npm run test && npm run lint -- --max-warnings=0 && npm run build && npm run budget"
   },
   "dependencies": {
     "@google/model-viewer": "^4.1.0",

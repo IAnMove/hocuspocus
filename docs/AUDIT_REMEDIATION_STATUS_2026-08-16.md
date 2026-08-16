@@ -75,7 +75,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | ARCH-02 | pendiente | — |
 | ARCH-03 | pendiente | — |
 | OBS-01 | pendiente | — |
-| PERF-01 | pendiente | — |
+| PERF-01 | completado | `DirectorDashboard` se carga sólo al abrir y genera chunk propio de 34.408 B/8.840 B gzip; entry baja de ~303,05 KB a 294.452 B gzip. CI exige chunk lazy y presupuesto entry de 327.680 B; test DOM abre el diálogo sólo tras activar overlay. 98 UI, lint/build/budget verdes. |
 | DEPS-01 | pendiente | — |
 | DEPS-02 | pendiente | — |
 | DEPS-03 | pendiente | — |
