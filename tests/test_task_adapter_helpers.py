@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from services import resource_scheduler
+from routers.canonical_tasks import task_event_cursor
 
 
 ROOT = Path(__file__).parents[1]
@@ -121,11 +122,9 @@ def test_legacy_adapters_use_the_canonical_progress_helper(adapter):
 
 
 def test_task_event_cursor_prefers_latest_valid_cursor():
-    cursor = _load_helpers("_task_event_cursor")["_task_event_cursor"]
-
-    assert cursor(3, "8") == 8
-    assert cursor("12", "broken") == 12
-    assert cursor(-4, -2) == 0
+    assert task_event_cursor(3, "8") == 8
+    assert task_event_cursor("12", "broken") == 12
+    assert task_event_cursor(-4, -2) == 0
 
 
 def _load_publisher(name: str):

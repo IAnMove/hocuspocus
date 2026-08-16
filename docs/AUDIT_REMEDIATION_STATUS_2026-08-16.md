@@ -72,7 +72,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | API-01 | completado | Assembly usa contratos Pydantic request/response y `response_model`; fixture OpenAPI acotada genera el contrato TypeScript y un detector bloquea drift. Payload inválido devuelve 422 estructurado; 8 tests backend, 88 UI, lint y build verdes. |
 | API-02 | completado | Request/progress/response de Director V2 viven en un único módulo de contratos; guard runtime rechaza drift y reconoce el `comic_movie` canónico del backend además del selector UI. Test TypeScript de consumidores + suite/lint/build verdes. |
 | ARCH-01 | pendiente | — |
-| ARCH-02 | pendiente | — |
+| ARCH-02 | completado | Primer dominio vertical extraído: las 8 operaciones HTTP de canonical Activity/Tasks viven en un `APIRouter` importable, mientras workspace, sincronización legacy, registry, upsert y controles se inyectan explícitamente desde `launch.py`. URLs, métodos, operation IDs, 404/409, SSE, namespace cliente y side effects se conservan; snapshot OpenAPI y pruebas de contrato, 40 tests dirigidos y compilación verdes. |
 | ARCH-03 | pendiente | — |
 | OBS-01 | pendiente | — |
 | PERF-01 | completado | `DirectorDashboard` se carga sólo al abrir y genera chunk propio de 34.408 B/8.840 B gzip; entry baja de ~303,05 KB a 294.452 B gzip. CI exige chunk lazy y presupuesto entry de 327.680 B; test DOM abre el diálogo sólo tras activar overlay. 98 UI, lint/build/budget verdes. |

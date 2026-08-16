@@ -119,7 +119,6 @@ from services.upload_stream import (
     stream_upload_file,
     transcode_upload,
 )
-from services.task_identity import canonical_client_task_identity
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 from models.minimax_h3.turbo import (
@@ -207,7 +206,7 @@ sys.argv = _original_argv
 # --- FastAPI setup ---
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from services.access_log_filter import install_quiet_access_filter
@@ -36115,125 +36114,10 @@ def _sync_canonical_tasks(workspace: str) -> None:
         pass
 
 
-@api.get("/api/v1/tasks")
-def list_canonical_tasks(
-    workspace: str | None = None,
-    status: str = "active",
-    root_id: str = "",
-    limit: int = 200,
-):
-    target = _get_active_workspace() if workspace is None else workspace
-    _sync_canonical_tasks(target)
-    from services.task_manager import ACTIVE_STATUSES, ALL_STATUSES
-    statuses = set(ACTIVE_STATUSES) if status == "active" else (
-        set(ALL_STATUSES) if status in {"", "all"} else {item.strip() for item in status.split(",")}
-    )
-    tasks, latest_event_id = _task_registry(target).snapshot(
-        statuses=statuses, root_id=root_id, limit=limit,
-    )
-    return {"workspace": target, "tasks": tasks, "latest_event_id": latest_event_id}
-
-
-@api.post("/api/v1/tasks/upsert")
-def upsert_client_task(body: dict):
-    raw = body.get("task") if isinstance(body.get("task"), dict) else body
-    workspace = raw.get("workspace") if "workspace" in raw else _get_active_workspace()
-    _workspace_dir(workspace)
-    task_id, root_id = canonical_client_task_identity(raw)
-    status = _task_status(raw.get("status"))
-    volatile_detail = raw.get("detailVolatile") is True
-    from services.task_manager import bounded_task_preview
-    raw_detail = raw.get("detailMessage") or ""
-    detail = bounded_task_preview(raw_detail) if volatile_detail else str(raw_detail)[:8000]
-    task = _upsert_canonical_task(
-        workspace, task_id, root_id=root_id,
-        event_exclude_fields={"detail"} if volatile_detail else None,
-        kind=str(raw.get("kind") or "foreground"), workflow="frontend",
-        title=str(raw.get("title") or "Maestro activity"), status=status,
-        phase=str(raw.get("phase") or status),
-        message=str(raw.get("error") or raw.get("message") or "Working…"),
-        detail=detail,
-        current=int(raw.get("current") or 0), total=int(raw.get("total") or 0),
-        detail_current=int(raw.get("detailCurrent") or 0), detail_total=int(raw.get("detailTotal") or 0),
-        created_at=(float(raw.get("startedAt")) / 1000 if float(raw.get("startedAt") or 0) > 1e12 else
-                    float(raw.get("startedAt") or time.time())),
-        cancelable=False,
-        error=({"message": str(raw.get("error")), "retryable": False} if raw.get("error") else None),
-        metadata={"adapter": "frontend", "client_activity_id": str(raw.get("id") or ""),
-                  "generation_details": raw.get("generationDetails") or {},
-                  "token_usage": raw.get("tokenUsage") or {}},
-    )
-    return task
-
-
-def _task_event_cursor(after: object, last_event_id: object) -> int:
-    """Resolve an SSE cursor from query state and the reconnect header."""
-    values = []
-    for value in (after, last_event_id):
-        try:
-            values.append(max(0, int(value or 0)))
-        except (TypeError, ValueError, OverflowError):
-            continue
-    return max(values, default=0)
-
-
 @api.get("/api/v1/resources")
 def list_resource_lanes():
     """Expose the coordinator's real active and waiting leases for the UI."""
     return {"lanes": resource_scheduler.coordinator.snapshot()}
-
-
-@api.get("/api/v1/tasks/events")
-async def stream_canonical_task_events(
-    request: Request,
-    workspace: str | None = None,
-    after: int = 0,
-):
-    target = _get_active_workspace() if workspace is None else workspace
-    registry = _task_registry(target)
-
-    async def event_stream():
-        cursor = _task_event_cursor(after, request.headers.get("last-event-id"))
-        yield "retry: 2000\n\n"
-        while True:
-            if registry.cursor_requires_resync(cursor):
-                marker = await asyncio.to_thread(registry.resync_required_event, cursor)
-                cursor = max(cursor, int(marker["event_id"]))
-                yield f"id: {cursor}\nevent: task\ndata: {json.dumps(marker, ensure_ascii=False)}\n\n"
-                continue
-            events = await asyncio.to_thread(registry.wait_for_events, cursor, 15.0)
-            if not events:
-                yield ": keepalive\n\n"
-                continue
-            for event in events:
-                cursor = max(cursor, int(event["event_id"]))
-                yield f"id: {cursor}\nevent: task\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={
-        "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
-    })
-
-
-@api.get("/api/v1/tasks/{task_id}/events")
-def get_canonical_task_events(task_id: str, workspace: str | None = None, after: int = 0):
-    target = _get_active_workspace() if workspace is None else workspace
-    registry = _task_registry(target)
-    if registry.cursor_requires_resync(after):
-        marker = registry.resync_required_event(after)
-        return {"events": [marker], "resync_required": True}
-    return {"events": registry.events(task_id, after=after), "resync_required": False}
-
-
-@api.get("/api/v1/tasks/{task_id}")
-def get_canonical_task(task_id: str, workspace: str | None = None):
-    target = _get_active_workspace() if workspace is None else workspace
-    _sync_canonical_tasks(target)
-    task = _task_registry(target).get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    children = [item for item in _task_registry(target).list(root_id=task["root_id"], limit=500)
-                if item.get("parent_id") == task_id]
-    return {"task": task, "children": children}
 
 
 def _control_canonical_task(task: dict, action: str):
@@ -36266,61 +36150,26 @@ def _control_canonical_task(task: dict, action: str):
         if adapter == "comic-plan": return resume_director_comic_plan(legacy_id)
         if adapter == "series-assembly":
             return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "resume")
+    if action == "discard" and adapter == "series-assembly":
+        return control_series_assembly_job(
+            _workspace_dir(str(task.get("workspace") or "default")),
+            legacy_id,
+            "discard",
+        )
     raise HTTPException(status_code=409, detail=f"Task does not support {action}")
 
 
-@api.post("/api/v1/tasks/{task_id}/cancel")
-def cancel_canonical_task(task_id: str, workspace: str | None = None):
-    target = _get_active_workspace() if workspace is None else workspace
-    task = _task_registry(target).get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    result = _control_canonical_task(task, "cancel")
-    _sync_canonical_tasks(target)
-    return {"task": _task_registry(target).get(task_id), "result": result}
+from routers.canonical_tasks import create_canonical_tasks_router
 
-
-@api.post("/api/v1/tasks/{task_id}/retry")
-def retry_canonical_task(task_id: str, workspace: str | None = None):
-    target = _get_active_workspace() if workspace is None else workspace
-    task = _task_registry(target).get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    result = _control_canonical_task(task, "retry")
-    if str(task.get("status") or "") in {"failed", "interrupted", "cancelled"}:
-        _task_registry(target).update(
-            task_id,
-            status="queued",
-            phase="queued",
-            message="Resume requested",
-            error=None,
-            completed_at=None,
-            event_type="task.resume_requested",
-        )
-    _sync_canonical_tasks(target)
-    return {"task": _task_registry(target).get(task_id), "result": result}
-
-
-@api.post("/api/v1/tasks/{task_id}/resume")
-def resume_canonical_task(task_id: str, workspace: str | None = None):
-    return retry_canonical_task(task_id, workspace)
-
-
-@api.delete("/api/v1/tasks/{task_id}")
-def dismiss_canonical_task(task_id: str, workspace: str | None = None):
-    target = _get_active_workspace() if workspace is None else workspace
-    existing = _task_registry(target).get(task_id)
-    if existing and str((existing.get("metadata") or {}).get("adapter") or "") == "series-assembly":
-        legacy_id = str(existing.get("backend_job_id") or "")
-        if legacy_id:
-            return control_series_assembly_job(_workspace_dir(target), legacy_id, "discard")
-    try:
-        deleted = _task_registry(target).delete(task_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {"deleted": True, "task_id": task_id}
+api.include_router(create_canonical_tasks_router(
+    get_active_workspace=_get_active_workspace,
+    validate_workspace=_workspace_dir,
+    registry_for_workspace=lambda workspace: _task_registry(workspace),
+    sync_tasks=_sync_canonical_tasks,
+    task_status=_task_status,
+    upsert_task=_upsert_canonical_task,
+    control_task=_control_canonical_task,
+))
 
 
 # ============================================================================
