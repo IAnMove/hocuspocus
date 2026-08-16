@@ -936,6 +936,9 @@ export interface StyleSource extends StyleAttribution {
   downloadedFiles: number
   downloadedBytes: number
   activeJob?: StyleImportJob | null
+  latestJob?: StyleImportJob | null
+  storagePath?: string
+  storageNotice?: string | null
 }
 
 export interface StyleLibraryItem {
@@ -957,15 +960,34 @@ export interface StyleLibraryItem {
 
 export interface StyleImportJob {
   jobId: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted'
-  stage: 'queued' | 'downloading' | 'indexing' | 'previews' | 'completed' | 'failed'
+  status: 'queued' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed' | 'interrupted'
+  stage: 'queued' | 'downloading' | 'indexing' | 'previews' | 'cancelling' | 'cancelled' | 'completed' | 'failed' | 'interrupted'
   current: number
   total: number
   message: string
   downloadedBytes: number
   expectedBytes: number
   error?: string | null
+  storagePath?: string
+  preflight?: StyleImportPreflight
+  cancelRequestedAt?: number | null
+  resumeAvailable?: boolean
+  resumed?: boolean
+  resumeCount?: number
   source: StyleAttribution
+}
+
+export interface StyleImportPreflight {
+  storagePath: string
+  probePath: string
+  downloadedFiles: number
+  downloadedBytes: number
+  expectedBytes: number
+  remainingBytes: number
+  marginBytes: number
+  requiredBytes: number
+  freeBytes: number
+  sufficient: boolean
 }
 
 export interface StyleLibraryPage {
@@ -1009,13 +1031,29 @@ export async function fetchStyleLibrary(params: {
 
 export async function startMiniMaxStyleImport(): Promise<StyleImportJob> {
   const res = await fetch(`${BASE}/api/v1/style-library/imports/minimax-h3-1k`, { method: 'POST' })
-  if (!res.ok) throw new Error('Could not start the MiniMax style download')
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null)
+    const detail = payload?.detail
+    throw new Error(
+      (typeof detail === 'object' && detail?.message)
+      || (typeof detail === 'string' && detail)
+      || 'Could not start the MiniMax style download',
+    )
+  }
   return res.json()
 }
 
 export async function fetchStyleImport(jobId: string): Promise<StyleImportJob> {
   const res = await fetch(`${BASE}/api/v1/style-library/imports/${encodeURIComponent(jobId)}`, { cache: 'no-store' })
   if (!res.ok) throw new Error('Could not load style import progress')
+  return res.json()
+}
+
+export async function cancelStyleImport(jobId: string): Promise<StyleImportJob> {
+  const res = await fetch(`${BASE}/api/v1/style-library/imports/${encodeURIComponent(jobId)}/cancel`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error('Could not cancel the style import')
   return res.json()
 }
 

@@ -66,6 +66,7 @@ app/samples/
 app/settings/
 # Downloaded style references, source media, manifests and lightweight previews.
 app/style_library/
+.maestro-data/
 app/icons/lora_previews/
 app/uploads/
 app/wgp_config.json

@@ -11,10 +11,12 @@ import {
   Loader2,
   Palette,
   Search,
+  Square,
   Trash2,
   X,
 } from 'lucide-react'
 import {
+  cancelStyleImport,
   deleteStyle,
   fetchStyleImport,
   fetchStyleLibrary,
@@ -82,34 +84,69 @@ function SourceAttribution({ source }: { source: StyleSource }) {
             <span className="inline-flex items-center gap-1 text-indicator-warning">
               <AlertTriangle size={10} /> {source.license || source.licenseNotice || 'Licencia no especificada'}
             </span>
+            {source.storagePath && (
+              <span className="max-w-full truncate font-mono" title={source.storagePath}>
+                Storage: {source.storagePath}
+              </span>
+            )}
           </div>
+          {source.storageNotice && <p className="mt-2 text-[10px] text-accent-blue">{source.storageNotice}</p>}
         </div>
       </div>
     </div>
   )
 }
 
-function ImportProgress({ job }: { job: StyleImportJob }) {
+function ImportProgress({
+  job,
+  onCancel,
+  cancelling,
+}: {
+  job: StyleImportJob
+  onCancel: () => void
+  cancelling: boolean
+}) {
   const usingBytes = job.stage === 'downloading' && job.expectedBytes > 0
   const ratio = usingBytes
     ? job.downloadedBytes / job.expectedBytes
     : (job.total > 0 ? job.current / job.total : 0)
   const progress = Math.max(0, Math.min(100, ratio * 100))
+  const active = ['queued', 'running', 'cancelling'].includes(job.status)
+  const attention = ['failed', 'cancelled', 'interrupted'].includes(job.status)
   return (
-    <div className={`rounded-xl border p-3 ${job.status === 'failed' ? 'border-red-500/40 bg-red-500/5' : 'border-accent-blue/30 bg-accent-blue/5'}`}>
+    <div className={`rounded-xl border p-3 ${attention ? 'border-indicator-warning/40 bg-indicator-warning/5' : 'border-accent-blue/30 bg-accent-blue/5'}`}>
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="flex min-w-0 items-center gap-2 text-text-secondary">
-          {job.status === 'failed' ? <AlertTriangle size={13} className="text-red-400" /> : <Loader2 size={13} className="animate-spin text-accent-blue" />}
+          {attention ? <AlertTriangle size={13} className="text-indicator-warning" /> : active ? <Loader2 size={13} className="animate-spin text-accent-blue" /> : <Check size={13} className="text-accent-green" />}
           <span className="truncate">{job.message}</span>
         </span>
-        <span className="shrink-0 font-mono text-[10px] text-text-muted">
-          {usingBytes ? `${formatBytes(job.downloadedBytes)} / ${formatBytes(job.expectedBytes)}` : `${job.current} / ${job.total}`}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="font-mono text-[10px] text-text-muted">
+            {usingBytes ? `${formatBytes(job.downloadedBytes)} / ${formatBytes(job.expectedBytes)}` : `${job.current} / ${job.total}`}
+          </span>
+          {active && (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={cancelling || job.status === 'cancelling'}
+              className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 px-2 py-1 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+            >
+              {cancelling || job.status === 'cancelling' ? <Loader2 size={10} className="animate-spin" /> : <Square size={9} />}
+              Cancelar
+            </button>
+          )}
+        </div>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-tertiary">
         <div className="h-full rounded-full bg-accent-blue transition-all" style={{ width: `${progress}%` }} />
       </div>
       {job.error && <p className="mt-2 text-[11px] text-red-300">{job.error}</p>}
+      {job.preflight && (
+        <p className="mt-2 text-[10px] text-text-muted">
+          Libre: {formatBytes(job.preflight.freeBytes)} · Necesario ahora: {formatBytes(job.preflight.requiredBytes)}
+          {job.resumed ? ` · Reanudación ${job.resumeCount || 1}` : ''}
+        </p>
+      )}
     </div>
   )
 }
@@ -198,6 +235,7 @@ export function StyleSheetPanel() {
   const [deleting, setDeleting] = useState(false)
   const [importJob, setImportJob] = useState<StyleImportJob | null>(null)
   const [startingImport, setStartingImport] = useState(false)
+  const [cancellingImport, setCancellingImport] = useState(false)
   const [modalCopied, setModalCopied] = useState(false)
 
   const source = sources.find(item => item.id === 'huggingface:ostris/minimax_h3_1k')
@@ -205,8 +243,9 @@ export function StyleSheetPanel() {
   const loadSources = useCallback(async () => {
     const next = await fetchStyleSources()
     setSources(next)
-    const active = next.find(item => item.activeJob)?.activeJob
-    if (active) setImportJob(active)
+    const matchingSource = next.find(item => item.id === 'huggingface:ostris/minimax_h3_1k')
+    const visibleJob = matchingSource?.activeJob || matchingSource?.latestJob
+    if (visibleJob) setImportJob(visibleJob)
   }, [])
 
   const loadStyles = useCallback(async () => {
@@ -239,11 +278,11 @@ export function StyleSheetPanel() {
   }, [loadSources, loadStyles])
 
   useEffect(() => {
-    if (!importJob || !['queued', 'running'].includes(importJob.status)) return
+    if (!importJob || !['queued', 'running', 'cancelling'].includes(importJob.status)) return
     const timer = window.setInterval(() => {
       void fetchStyleImport(importJob.jobId).then(async next => {
         setImportJob(next)
-        if (next.stage === 'previews' || ['completed', 'failed', 'interrupted'].includes(next.status)) {
+        if (next.stage === 'previews' || ['completed', 'failed', 'interrupted', 'cancelled'].includes(next.status)) {
           await Promise.all([loadSources(), loadStyles()])
         }
       }).catch(err => setError(err instanceof Error ? err.message : String(err)))
@@ -261,6 +300,19 @@ export function StyleSheetPanel() {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setStartingImport(false)
+    }
+  }
+
+  const cancelImport = async () => {
+    if (!importJob || !['queued', 'running', 'cancelling'].includes(importJob.status)) return
+    setCancellingImport(true)
+    setError(null)
+    try {
+      setImportJob(await cancelStyleImport(importJob.jobId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCancellingImport(false)
     }
   }
 
@@ -284,8 +336,10 @@ export function StyleSheetPanel() {
   const pageCount = Math.max(1, Math.ceil((page?.total || 0) / PAGE_SIZE))
   const collections = page?.facets.collections || []
   const groups = page?.facets.groups || []
-  const importBusy = !!importJob && ['queued', 'running'].includes(importJob.status)
-  const sourceLabel = source?.installed ? 'Sincronizar fuente' : 'Descargar estilos de ostris/minimax_h3_1k'
+  const importBusy = !!importJob && ['queued', 'running', 'cancelling'].includes(importJob.status)
+  const sourceLabel = importJob?.resumeAvailable
+    ? 'Reanudar descarga de estilos'
+    : source?.installed ? 'Sincronizar fuente' : 'Descargar estilos de ostris/minimax_h3_1k'
 
   const activeFilters = useMemo(() => [collection, group, query].filter(Boolean).length, [collection, group, query])
 
@@ -320,7 +374,9 @@ export function StyleSheetPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-5">
         <div className="space-y-3">
           {source && <SourceAttribution source={source} />}
-          {importJob && importJob.status !== 'completed' && <ImportProgress job={importJob} />}
+          {importJob && importJob.status !== 'completed' && (
+            <ImportProgress job={importJob} onCancel={() => { void cancelImport() }} cancelling={cancellingImport} />
+          )}
           {error && (
             <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-300">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {error}

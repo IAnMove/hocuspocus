@@ -5,7 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from services.style_library import StyleLibrary, StyleManifestDegradedError
+from services.style_library import (
+    StyleImportPreflightError,
+    StyleLibrary,
+    StyleManifestDegradedError,
+)
 
 
 def create_style_library_router(library: StyleLibrary) -> APIRouter:
@@ -44,8 +48,14 @@ def create_style_library_router(library: StyleLibrary) -> APIRouter:
     def import_minimax_h3_1k():
         try:
             return library.start_minimax_import()
+        except StyleImportPreflightError as exc:
+            raise HTTPException(status_code=507, detail=exc.detail()) from exc
         except StyleManifestDegradedError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @router.get("/imports/minimax-h3-1k/preflight")
+    def import_minimax_h3_1k_preflight():
+        return library.import_preflight()
 
     @router.post("/manifest/recover")
     def recover_manifest():
@@ -57,6 +67,13 @@ def create_style_library_router(library: StyleLibrary) -> APIRouter:
     @router.get("/imports/{job_id}")
     def import_status(job_id: str):
         job = library.import_status(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Style import job not found")
+        return job
+
+    @router.post("/imports/{job_id}/cancel")
+    def cancel_import(job_id: str):
+        job = library.cancel_import(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Style import job not found")
         return job

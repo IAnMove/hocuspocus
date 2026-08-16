@@ -30720,9 +30720,20 @@ api.include_router(create_series_assembly_router(
 ))
 
 from routers.style_library import create_style_library_router
-from services.style_library import StyleLibrary
+from services.style_library import (
+    StyleLibrary,
+    migrate_legacy_style_library,
+    resolve_style_library_root,
+)
 
-_style_library = StyleLibrary(os.path.join(os.path.dirname(__file__), "style_library"))
+_style_library_legacy_root = os.path.join(os.path.dirname(__file__), "style_library")
+_style_library_root, _style_storage_notice = migrate_legacy_style_library(
+    _style_library_legacy_root,
+    resolve_style_library_root(os.path.dirname(__file__)),
+)
+if _style_storage_notice:
+    print(f"[Style Library] {_style_storage_notice}")
+_style_library = StyleLibrary(_style_library_root, storage_notice=_style_storage_notice)
 api.include_router(create_style_library_router(_style_library))
 
 

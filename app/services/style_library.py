@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import os
 import re
 import shutil
@@ -11,7 +12,7 @@ import subprocess
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any
 
@@ -37,10 +38,90 @@ MINIMAX_H3_1K_SOURCE = {
 
 _STYLE_ID = re.compile(r"minimax-h3-1k-(\d{6})$")
 MAX_MANIFEST_BACKUPS = 10
+MIN_IMPORT_MARGIN_BYTES = 512 * 1024 * 1024
+IMPORT_MARGIN_RATIO = 0.15
+ACTIVE_IMPORT_STATUSES = {"queued", "running", "cancelling"}
+RESUMABLE_IMPORT_STATUSES = {"cancelled", "failed", "interrupted"}
+STYLE_LIBRARY_DIR_ENV = "MAESTRO_STYLE_LIBRARY_DIR"
 
 
 class StyleManifestDegradedError(RuntimeError):
     """Raised when writes are blocked until a corrupt manifest is recovered."""
+
+
+class StyleImportPreflightError(RuntimeError):
+    """Raised before a worker starts when durable storage cannot fit the import."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        required_bytes: int,
+        free_bytes: int,
+        remaining_bytes: int,
+        margin_bytes: int,
+        storage_path: Path,
+    ) -> None:
+        super().__init__(message)
+        self.required_bytes = int(required_bytes)
+        self.free_bytes = int(free_bytes)
+        self.remaining_bytes = int(remaining_bytes)
+        self.margin_bytes = int(margin_bytes)
+        self.storage_path = storage_path
+
+    def detail(self) -> dict[str, Any]:
+        return {
+            "code": "style_import_insufficient_storage",
+            "message": str(self),
+            "requiredBytes": self.required_bytes,
+            "freeBytes": self.free_bytes,
+            "remainingBytes": self.remaining_bytes,
+            "marginBytes": self.margin_bytes,
+            "storagePath": str(self.storage_path),
+        }
+
+
+class _StyleImportCancelled(RuntimeError):
+    """Internal cooperative-cancellation signal for a style import worker."""
+
+
+def resolve_style_library_root(app_dir: str | os.PathLike[str]) -> Path:
+    """Resolve configurable storage outside the application source directory."""
+    app_path = Path(app_dir).expanduser().resolve()
+    configured = str(os.environ.get(STYLE_LIBRARY_DIR_ENV) or "").strip()
+    if configured:
+        configured_path = Path(configured).expanduser()
+        if not configured_path.is_absolute():
+            configured_path = app_path.parent / configured_path
+        return configured_path.resolve()
+
+    project_root = app_path.parent
+    pinokio_home = str(os.environ.get("PINOKIO_HOME") or "").strip()
+    if pinokio_home:
+        return (Path(pinokio_home).expanduser().resolve() / "cache" / "maestro" / "style-library")
+    if project_root.parent.name in {"api", "plugin"}:
+        return (project_root.parent.parent / "cache" / "maestro" / "style-library").resolve()
+    return (project_root / ".maestro-data" / "style-library").resolve()
+
+
+def migrate_legacy_style_library(
+    legacy_root: str | os.PathLike[str],
+    durable_root: str | os.PathLike[str],
+) -> tuple[Path, str | None]:
+    """Atomically relocate legacy data when both roots share a filesystem."""
+    legacy = Path(legacy_root).expanduser().resolve()
+    durable = Path(durable_root).expanduser().resolve()
+    if legacy == durable or not legacy.exists() or durable.exists():
+        return durable, None
+    durable.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.replace(legacy, durable)
+    except OSError as exc:
+        return legacy, (
+            f"Could not atomically migrate style storage to {durable}; "
+            f"continuing at legacy path {legacy}: {exc}"
+        )
+    return durable, f"Style storage migrated atomically from {legacy} to {durable}."
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -71,8 +152,8 @@ def _directory_stats(directory: Path) -> tuple[int, int]:
 class StyleLibrary:
     """Own style manifests, media, import jobs and deletion tombstones."""
 
-    def __init__(self, root: str | os.PathLike[str]) -> None:
-        self.root = Path(root)
+    def __init__(self, root: str | os.PathLike[str], *, storage_notice: str | None = None) -> None:
+        self.root = Path(root).expanduser().resolve()
         self.source_root = self.root / "minimax" / "ostris-minimax_h3_1k"
         self.raw_dir = self.source_root / "raw"
         self.preview_dir = self.source_root / "previews"
@@ -83,8 +164,10 @@ class StyleLibrary:
         self._lock = threading.RLock()
         self._jobs: dict[str, dict[str, Any]] = {}
         self._active_job_id: str | None = None
+        self._cancel_events: dict[str, threading.Event] = {}
         self._manifest_error: str | None = None
         self._quarantined_manifest: str | None = None
+        self.storage_notice = storage_notice
         self._recover_job()
 
     def _recover_job(self) -> None:
@@ -96,10 +179,12 @@ class StyleLibrary:
             return
         if not isinstance(job, dict) or not job.get("jobId"):
             return
-        if job.get("status") in {"queued", "running"}:
+        if job.get("status") in ACTIVE_IMPORT_STATUSES:
             job.update({
                 "status": "interrupted",
+                "stage": "interrupted",
                 "message": "Import interrupted; press download again to resume.",
+                "resumeAvailable": True,
                 "updatedAt": time.time(),
                 "finishedAt": time.time(),
             })
@@ -245,6 +330,9 @@ class StyleLibrary:
                 "downloadedFiles": files,
                 "downloadedBytes": downloaded_bytes,
                 "activeJob": copy.deepcopy(active) if active else None,
+                "latestJob": copy.deepcopy(next(reversed(self._jobs.values()), None)),
+                "storagePath": str(self.root),
+                "storageNotice": self.storage_notice,
                 "status": "degraded" if self._manifest_error else "healthy",
                 "degraded": bool(self._manifest_error),
                 "manifestError": self._manifest_error,
@@ -324,31 +412,87 @@ class StyleLibrary:
             "status": "degraded" if self._manifest_error else "healthy",
         }
 
+    def import_preflight(self, *, reject_if_insufficient: bool = False) -> dict[str, Any]:
+        """Return the storage budget without creating directories or a worker."""
+        files, downloaded_bytes = _directory_stats(self.raw_dir)
+        expected_bytes = int(MINIMAX_H3_1K_SOURCE["expectedBytes"])
+        remaining_bytes = max(0, expected_bytes - downloaded_bytes)
+        margin_bytes = max(
+            MIN_IMPORT_MARGIN_BYTES,
+            int(math.ceil(expected_bytes * IMPORT_MARGIN_RATIO)),
+        )
+        required_bytes = remaining_bytes + margin_bytes
+        probe = self.root
+        while not probe.exists() and probe.parent != probe:
+            probe = probe.parent
+        usage = shutil.disk_usage(probe)
+        result = {
+            "storagePath": str(self.root),
+            "probePath": str(probe),
+            "downloadedFiles": files,
+            "downloadedBytes": downloaded_bytes,
+            "expectedBytes": expected_bytes,
+            "remainingBytes": remaining_bytes,
+            "marginBytes": margin_bytes,
+            "requiredBytes": required_bytes,
+            "freeBytes": int(usage.free),
+            "sufficient": int(usage.free) >= required_bytes,
+        }
+        if reject_if_insufficient and not result["sufficient"]:
+            raise StyleImportPreflightError(
+                "Not enough free storage for the MiniMax style import and safety margin",
+                required_bytes=required_bytes,
+                free_bytes=int(usage.free),
+                remaining_bytes=remaining_bytes,
+                margin_bytes=margin_bytes,
+                storage_path=self.root,
+            )
+        return result
+
     def start_minimax_import(self) -> dict[str, Any]:
         with self._lock:
             self._require_writable_manifest()
             if self._active_job_id:
                 active = self._jobs.get(self._active_job_id)
-                if active and active.get("status") in {"queued", "running"}:
+                if active and active.get("status") in ACTIVE_IMPORT_STATUSES:
                     return copy.deepcopy(active)
-            job_id = f"style-import-{uuid.uuid4().hex[:12]}"
-            job = {
+            preflight = self.import_preflight(reject_if_insufficient=True)
+            previous = next(reversed(self._jobs.values()), None)
+            resumable = bool(previous and previous.get("status") in RESUMABLE_IMPORT_STATUSES)
+            job_id = (
+                str(previous["jobId"])
+                if resumable
+                else f"style-import-{uuid.uuid4().hex[:12]}"
+            )
+            now = time.time()
+            job = copy.deepcopy(previous) if resumable else {}
+            job.update({
                 "jobId": job_id,
                 "status": "queued",
                 "stage": "queued",
                 "current": 0,
                 "total": int(MINIMAX_H3_1K_SOURCE["expectedStyles"]),
-                "message": "Preparing MiniMax H3 style download…",
-                "downloadedBytes": 0,
+                "message": (
+                    "Resuming the partial MiniMax H3 style download…"
+                    if resumable else "Preparing MiniMax H3 style download…"
+                ),
+                "downloadedBytes": int(preflight["downloadedBytes"]),
                 "expectedBytes": int(MINIMAX_H3_1K_SOURCE["expectedBytes"]),
+                "storagePath": str(self.root),
+                "preflight": preflight,
                 "error": None,
-                "createdAt": time.time(),
-                "updatedAt": time.time(),
+                "createdAt": float(job.get("createdAt") or now),
+                "updatedAt": now,
                 "finishedAt": None,
+                "cancelRequestedAt": None,
+                "resumeAvailable": False,
+                "resumed": resumable,
+                "resumeCount": int(job.get("resumeCount") or 0) + (1 if resumable else 0),
                 "source": copy.deepcopy(MINIMAX_H3_1K_SOURCE),
-            }
+            })
             self._jobs[job_id] = job
             self._active_job_id = job_id
+            self._cancel_events[job_id] = threading.Event()
             _atomic_json(self.job_path, job)
             thread = threading.Thread(
                 target=self._run_minimax_import,
@@ -358,6 +502,26 @@ class StyleLibrary:
             )
             thread.start()
             return copy.deepcopy(job)
+
+    def cancel_import(self, job_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return None
+            if job.get("status") not in ACTIVE_IMPORT_STATUSES:
+                return copy.deepcopy(job)
+            cancel_event = self._cancel_events.setdefault(job_id, threading.Event())
+            cancel_event.set()
+            job.update({
+                "status": "cancelling",
+                "message": "Cancelling safely; partial files will be kept for resume…",
+                "cancelRequestedAt": time.time(),
+                "resumeAvailable": True,
+                "updatedAt": time.time(),
+            })
+            snapshot = copy.deepcopy(job)
+        _atomic_json(self.job_path, snapshot)
+        return snapshot
 
     def import_status(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
@@ -375,25 +539,81 @@ class StyleLibrary:
         if persist:
             _atomic_json(self.job_path, snapshot)
 
+    def _cancel_event(self, job_id: str) -> threading.Event:
+        with self._lock:
+            return self._cancel_events.setdefault(job_id, threading.Event())
+
+    def _raise_if_cancelled(self, job_id: str, stage: str) -> None:
+        if self._cancel_event(job_id).is_set():
+            raise _StyleImportCancelled(f"Style import cancelled during {stage}")
+
     def _monitor_download(self, job_id: str, stop: threading.Event) -> None:
         while not stop.wait(1.0):
+            if self._cancel_event(job_id).is_set():
+                self._update_job(
+                    job_id,
+                    status="cancelling",
+                    message="Stopping the current download safely; partial files will be kept…",
+                )
+                return
             files, downloaded_bytes = _directory_stats(self.raw_dir)
-            pairs = min(1000, files // 2)
+            total = int(MINIMAX_H3_1K_SOURCE["expectedStyles"])
+            pairs = min(total, files // 2)
             self._update_job(
                 job_id,
                 persist=False,
                 current=pairs,
                 downloadedBytes=downloaded_bytes,
-                message=f"Downloading style media… {pairs}/1000",
+                message=f"Downloading style media… {pairs}/{total}",
             )
+
+    @staticmethod
+    def _cancel_aware_tqdm(cancel_event: threading.Event):
+        from tqdm.auto import tqdm
+
+        class CancelAwareTqdm(tqdm):
+            def update(self, n=1):
+                if cancel_event.is_set():
+                    raise _StyleImportCancelled("Style import cancelled during download")
+                return super().update(n)
+
+        return CancelAwareTqdm
+
+    def _dataset_info(self):
+        from huggingface_hub import HfApi
+
+        return HfApi().dataset_info(str(MINIMAX_H3_1K_SOURCE["repoId"]))
+
+    def _download_dataset(
+        self,
+        *,
+        revision: str,
+        ignored: list[str],
+        cancel_event: threading.Event,
+    ) -> None:
+        from huggingface_hub import snapshot_download
+
+        snapshot_download(
+            repo_id=str(MINIMAX_H3_1K_SOURCE["repoId"]),
+            repo_type="dataset",
+            revision=revision,
+            local_dir=str(self.raw_dir),
+            allow_patterns=["*.mp4", "*.txt", "README.md"],
+            ignore_patterns=ignored or None,
+            max_workers=4,
+            tqdm_class=self._cancel_aware_tqdm(cancel_event),
+        )
 
     def _run_minimax_import(self, job_id: str) -> None:
         monitor_stop = threading.Event()
         monitor: threading.Thread | None = None
+        cancel_event = self._cancel_event(job_id)
         try:
+            self._raise_if_cancelled(job_id, "startup")
             self.raw_dir.mkdir(parents=True, exist_ok=True)
             self.preview_dir.mkdir(parents=True, exist_ok=True)
             existing = self._require_writable_manifest()
+            self._raise_if_cancelled(job_id, "startup")
             deleted_ids = set(existing.get("deletedIds") or [])
             ignored: list[str] = []
             for style_id in deleted_ids:
@@ -414,18 +634,14 @@ class StyleLibrary:
                 daemon=True,
             )
             monitor.start()
-            from huggingface_hub import HfApi, snapshot_download
-
-            info = HfApi().dataset_info(str(MINIMAX_H3_1K_SOURCE["repoId"]))
-            snapshot_download(
-                repo_id=str(MINIMAX_H3_1K_SOURCE["repoId"]),
-                repo_type="dataset",
-                revision=info.sha,
-                local_dir=str(self.raw_dir),
-                allow_patterns=["*.mp4", "*.txt", "README.md"],
-                ignore_patterns=ignored or None,
-                max_workers=4,
+            info = self._dataset_info()
+            self._raise_if_cancelled(job_id, "download")
+            self._download_dataset(
+                revision=str(info.sha),
+                ignored=ignored,
+                cancel_event=cancel_event,
             )
+            self._raise_if_cancelled(job_id, "download")
             monitor_stop.set()
             if monitor:
                 monitor.join(timeout=3)
@@ -445,7 +661,9 @@ class StyleLibrary:
                 "lastModified": info.last_modified.isoformat() if info.last_modified else None,
             })
             styles: list[dict[str, Any]] = []
-            for number in range(1, 1001):
+            expected_styles = int(MINIMAX_H3_1K_SOURCE["expectedStyles"])
+            for number in range(1, expected_styles + 1):
+                self._raise_if_cancelled(job_id, "indexing")
                 sample = f"{number:06d}"
                 style_id = f"minimax-h3-1k-{sample}"
                 if style_id in deleted_ids:
@@ -474,7 +692,7 @@ class StyleLibrary:
                         job_id,
                         persist=False,
                         current=number,
-                        message=f"Indexing prompts… {number}/1000",
+                        message=f"Indexing prompts… {number}/{expected_styles}",
                     )
             manifest = {
                 "version": 1,
@@ -483,7 +701,6 @@ class StyleLibrary:
                 "deletedIds": sorted(deleted_ids),
                 "updatedAt": time.time(),
             }
-            self._write_manifest(manifest)
 
             self._update_job(
                 job_id,
@@ -492,28 +709,11 @@ class StyleLibrary:
                 total=len(styles),
                 message="Creating lightweight previews…",
             )
-            completed = 0
-            preview_failures: list[str] = []
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                futures = {
-                    pool.submit(self._ensure_preview_for, item): item["id"]
-                    for item in styles
-                }
-                for future in as_completed(futures):
-                    style_id = futures[future]
-                    try:
-                        future.result()
-                    except Exception as exc:
-                        preview_failures.append(f"{style_id}: {exc}")
-                    completed += 1
-                    if completed % 10 == 0 or completed == len(styles):
-                        self._update_job(
-                            job_id,
-                            persist=completed % 50 == 0 or completed == len(styles),
-                            current=completed,
-                            previewFailures=len(preview_failures),
-                            message=f"Creating lightweight previews… {completed}/{len(styles)}",
-                        )
+            preview_failures = self._create_previews(job_id, styles, cancel_event)
+            self._raise_if_cancelled(job_id, "previews")
+            # Publish only after every cancellable stage has reached a safe boundary.
+            # A cancelled refresh therefore leaves the previous manifest untouched.
+            self._write_manifest(manifest)
             warning = None
             if preview_failures:
                 warning = (
@@ -534,23 +734,97 @@ class StyleLibrary:
                     f"Imported {len(styles)} MiniMax H3 styles."
                     if not warning else f"Imported {len(styles)} styles with {warning}"
                 ),
+                resumeAvailable=False,
             )
         except Exception as exc:
             monitor_stop.set()
             if monitor:
                 monitor.join(timeout=3)
-            self._update_job(
-                job_id,
-                status="failed",
-                stage="failed",
-                error=str(exc),
-                finishedAt=time.time(),
-                message=f"Style import failed: {exc}",
-            )
+            files, downloaded_bytes = _directory_stats(self.raw_dir)
+            cancelled = cancel_event.is_set() or isinstance(exc, _StyleImportCancelled)
+            if cancelled:
+                self._update_job(
+                    job_id,
+                    status="cancelled",
+                    stage="cancelled",
+                    downloadedFiles=files,
+                    downloadedBytes=downloaded_bytes,
+                    error=None,
+                    resumeAvailable=True,
+                    finishedAt=time.time(),
+                    message="Import cancelled. Partial files were preserved and can be resumed.",
+                )
+            else:
+                self._update_job(
+                    job_id,
+                    status="failed",
+                    stage="failed",
+                    downloadedFiles=files,
+                    downloadedBytes=downloaded_bytes,
+                    error=str(exc),
+                    resumeAvailable=True,
+                    finishedAt=time.time(),
+                    message=f"Style import failed: {exc}",
+                )
         finally:
+            monitor_stop.set()
             with self._lock:
                 if self._active_job_id == job_id:
                     self._active_job_id = None
+                self._cancel_events.pop(job_id, None)
+
+    def _create_previews(
+        self,
+        job_id: str,
+        styles: list[dict[str, Any]],
+        cancel_event: threading.Event,
+    ) -> list[str]:
+        completed = 0
+        preview_failures: list[str] = []
+        iterator = iter(styles)
+        pending: dict[Future[Path], str] = {}
+
+        def submit_next(pool: ThreadPoolExecutor) -> bool:
+            try:
+                item = next(iterator)
+            except StopIteration:
+                return False
+            future = pool.submit(self._ensure_preview_for, item, cancel_event)
+            pending[future] = str(item["id"])
+            return True
+
+        pool = ThreadPoolExecutor(max_workers=2)
+        try:
+            submit_next(pool)
+            submit_next(pool)
+            while pending:
+                self._raise_if_cancelled(job_id, "previews")
+                done, _ = wait(tuple(pending), timeout=0.25, return_when=FIRST_COMPLETED)
+                if not done:
+                    continue
+                for future in done:
+                    style_id = pending.pop(future)
+                    try:
+                        future.result()
+                    except _StyleImportCancelled:
+                        raise
+                    except Exception as exc:
+                        preview_failures.append(f"{style_id}: {exc}")
+                    completed += 1
+                    if completed % 10 == 0 or completed == len(styles):
+                        self._update_job(
+                            job_id,
+                            persist=completed % 50 == 0 or completed == len(styles),
+                            current=completed,
+                            previewFailures=len(preview_failures),
+                            message=f"Creating lightweight previews… {completed}/{len(styles)}",
+                        )
+                    submit_next(pool)
+        finally:
+            for future in pending:
+                future.cancel()
+            pool.shutdown(wait=True, cancel_futures=True)
+        return preview_failures
 
     def _style_record(self, style_id: str) -> dict[str, Any]:
         if not _STYLE_ID.fullmatch(style_id):
@@ -567,11 +841,47 @@ class StyleLibrary:
             raise KeyError(style_id)
         return record
 
-    def _ensure_preview_for(self, record: dict[str, Any]) -> Path:
+    @staticmethod
+    def _run_preview_process(
+        command: list[str],
+        cancel_event: threading.Event | None,
+    ) -> tuple[int, str]:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        deadline = time.monotonic() + 90
+        while process.poll() is None:
+            if cancel_event is not None and cancel_event.wait(0.1):
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=3)
+                raise _StyleImportCancelled("Style import cancelled during previews")
+            if cancel_event is None:
+                time.sleep(0.1)
+            if time.monotonic() >= deadline:
+                process.kill()
+                _, stderr = process.communicate()
+                return -1, (stderr or "FFmpeg preview timed out")
+        _, stderr = process.communicate()
+        return int(process.returncode or 0), stderr or ""
+
+    def _ensure_preview_for(
+        self,
+        record: dict[str, Any],
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
         style_id = str(record["id"])
         destination = self.preview_dir / f"{style_id}.jpg"
         if destination.is_file() and destination.stat().st_size > 0:
             return destination
+        if cancel_event is not None and cancel_event.is_set():
+            raise _StyleImportCancelled("Style import cancelled during previews")
         source = self.raw_dir / str(record["videoFilename"])
         if not source.is_file():
             raise FileNotFoundError(source)
@@ -585,18 +895,18 @@ class StyleLibrary:
                 "-vf", "scale=320:180:force_original_aspect_ratio=decrease,pad=320:180:(ow-iw)/2:(oh-ih)/2:color=black",
                 "-q:v", "6", str(temporary),
             ]
-            result = subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=90,
-                check=False,
-            )
-            if result.returncode == 0 and temporary.is_file() and temporary.stat().st_size > 0:
+            try:
+                returncode, stderr = self._run_preview_process(command, cancel_event)
+            except _StyleImportCancelled:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise
+            if returncode == 0 and temporary.is_file() and temporary.stat().st_size > 0:
                 os.replace(temporary, destination)
                 return destination
-            error = (result.stderr or error)[-800:]
+            error = (stderr or error)[-800:]
             try:
                 temporary.unlink(missing_ok=True)
             except OSError:

@@ -61,7 +61,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | STORAGE-01 | completado | Wrapper seguro para local/session storage con fallback en memoria sólo cuando persiste el fallo; Welcome/Preflight sobreviven SecurityError/cuota y una eliminación externa no resucita valores; tests UI + lint/build verdes. |
 | I18N-01 | completado | Formatter central basado en locale de aplicación para timestamps de Media/Activity y glosario EN/ES de acciones; snapshots deterministas es-ES/en-US con UTC, lint y build verdes. |
 | TRAILER-01 | completado | Reset por proyecto separado de la sincronización de defaults; tipo/duración siguen al proyecto hasta la primera edición manual y después se preservan; tests de ambos estados + lint/build verdes. |
-| STYLE-01 | pendiente | — |
+| STYLE-01 | completado | Storage configurable (`MAESTRO_STYLE_LIBRARY_DIR`) y durable bajo cache de Pinokio por defecto, con migración atómica de los 1,4 GB legacy; preflight de disco+safety margin antes de crear thread; cancel cooperativo en descarga/index/previews FFmpeg, manifest publicado sólo al final y parciales reanudables incluso tras restart. Estado/ruta/preflight, Cancelar y Reanudar visibles en UI; 7 tests backend + 87 UI, lint y build verdes. |
 | STYLE-02 | completado | Manifest validado con backups generacionales y copia quarantine; corrupción conserva snapshot/tombstones en lectura, status `degraded` y bloquea import/delete hasta recuperación explícita. Recovery restaura último backup sin reintroducir borrados; 4 tests focalizados verdes. |
 | TEST-01 | completado | 1.278 tests coleccionados desde raíz con `PYTHONPATH` eliminado |
 | TEST-02 | completado | Harness actualizado para el contrato de duración H3 posterior a la auditoría; 4 tests verdes |
