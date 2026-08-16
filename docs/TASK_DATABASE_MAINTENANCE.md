@@ -3,6 +3,12 @@
 La base SQLite de tareas conserva el estado recuperable de Activity y un
 historial acotado de eventos. Nunca borres ni compactes la única copia.
 
+Los eventos durables guardan transiciones, fases, contadores, errores acotados,
+uso de tokens y referencias de resultado. Los prompts, letras y credenciales
+se excluyen. Durante un stream LLM sólo se sobrescribe una preview de hasta 400
+caracteres en el snapshot actual: ese texto volátil no se añade a cada evento y
+se elimina al terminar la actividad.
+
 ## 1. Inspección sin cambios
 
 El dry-run crea internamente un snapshot SQLite temporal consistente. No abre

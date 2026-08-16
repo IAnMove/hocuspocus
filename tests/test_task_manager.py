@@ -5,6 +5,7 @@ import time
 from services.task_manager import (
     TASK_SCHEMA_VERSION,
     TaskRegistry,
+    bounded_task_preview,
     redact_sensitive_data,
     task_context_scope,
 )
@@ -80,6 +81,41 @@ def test_identical_syncs_are_semantic_noops_and_terminal_transition_is_once(
     assert completed["completed_at"] == events[-1]["changes"]["completed_at"]
     assert len(notifications) == 2
     connection.close()
+
+
+def test_volatile_stream_preview_updates_snapshot_without_growing_event_history(tmp_path):
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    task = registry.create(id="task-stream", kind="llm", status="running")
+    initial_cursor = registry.latest_event_id()
+    initial_updated_at = task["updated_at"]
+
+    for index in range(500):
+        preview = bounded_task_preview(f"{'raw response ' * 100}{index}")
+        registry.update(
+            task["id"],
+            detail=preview,
+            event_exclude_fields={"detail"},
+        )
+
+    snapshot = registry.get(task["id"])
+    assert len(snapshot["detail"]) <= 400
+    assert snapshot["detail"].endswith("499")
+    assert snapshot["updated_at"] == initial_updated_at
+    assert registry.latest_event_id() == initial_cursor
+    assert len(registry.events(task["id"])) == 1
+
+    completed = registry.update(
+        task["id"],
+        status="completed",
+        phase="completed",
+        detail="",
+        event_exclude_fields={"detail"},
+    )
+    events = registry.events(task["id"])
+    assert completed["detail"] == ""
+    assert len(events) == 2
+    assert "detail" not in events[-1]["changes"]
+    assert events[-1]["changes"]["status"] == "completed"
 
 
 def test_updated_at_only_patch_returns_existing_snapshot_without_event_or_notify(

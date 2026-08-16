@@ -255,6 +255,17 @@ def _json(value: Any) -> str:
     return json.dumps(_bounded(value), ensure_ascii=False, separators=(",", ":"))
 
 
+def bounded_task_preview(value: Any, limit: int = 400) -> str:
+    """Keep one readable tail for snapshots without retaining a raw stream."""
+    normalized = " ".join(str(value or "").split())
+    maximum = max(0, int(limit))
+    if len(normalized) <= maximum:
+        return normalized
+    if maximum <= 1:
+        return normalized[-maximum:] if maximum else ""
+    return f"…{normalized[-(maximum - 1):]}"
+
+
 def new_task_id(prefix: str = "task") -> str:
     safe = "".join(char if char.isalnum() or char in "-_" else "-" for char in prefix).strip("-")
     return f"{safe or 'task'}-{uuid.uuid4().hex[:16]}"
@@ -455,7 +466,12 @@ class TaskRegistry:
         )
         return int(cursor.lastrowid)
 
-    def create(self, **fields: Any) -> dict:
+    def create(
+        self,
+        *,
+        event_exclude_fields: set[str] | frozenset[str] | None = None,
+        **fields: Any,
+    ) -> dict:
         now = _now()
         task_id = str(fields.get("id") or new_task_id(str(fields.get("kind") or "task")))[:200]
         root_id = str(fields.get("root_id") or task_id)[:200]
@@ -525,7 +541,11 @@ class TaskRegistry:
                     task["workflow"], task["created_at"], now, _json(task),
                 ),
             )
-            self._append_event(connection, task, "task.created", task)
+            excluded = set(event_exclude_fields or ())
+            event_snapshot = {
+                key: value for key, value in task.items() if key not in excluded
+            }
+            self._append_event(connection, task, "task.created", event_snapshot)
             connection.commit()
         _update_cancellation_token(self.workspace_dir, task_id, status=status, phase=task["phase"])
         self._notify()
@@ -543,6 +563,7 @@ class TaskRegistry:
         *,
         event_type: str = "task.updated",
         force: bool = False,
+        event_exclude_fields: set[str] | frozenset[str] | None = None,
         **changes: Any,
     ) -> dict:
         with self._write_lock, self._connect() as connection:
@@ -592,7 +613,7 @@ class TaskRegistry:
                     patch["progress"] = task.get("progress", 0.0)
 
             # Compare the normalized patch with the current snapshot before
-            # touching timestamps or the append-only log.  Adapter callers
+            # touching timestamps or the retained event log. Adapter callers
             # can include registry-owned fields such as updated_at, and a
             # forced/event-typed sync is still a no-op when no semantic field
             # changed.  This keeps force useful for transition validation
@@ -618,20 +639,27 @@ class TaskRegistry:
                 )
                 return copy.deepcopy(task)
 
+            excluded = set(event_exclude_fields or ())
+            durable_patch = {
+                key: value for key, value in changed_patch.items() if key not in excluded
+            }
             task.update(changed_patch)
-            task["updated_at"] = now
+            if durable_patch:
+                task["updated_at"] = now
             connection.execute(
                 """UPDATE tasks SET root_id=?, parent_id=?, workspace=?, status=?, kind=?, workflow=?,
                    updated_at=?, snapshot=? WHERE id=?""",
                 (
                     task["root_id"], task.get("parent_id"), task["workspace"], task["status"],
-                    task["kind"], task["workflow"], now, _json(task), task["id"],
+                    task["kind"], task["workflow"], task["updated_at"], _json(task), task["id"],
                 ),
             )
-            self._append_event(connection, task, event_type, changed_patch)
+            if durable_patch:
+                self._append_event(connection, task, event_type, durable_patch)
             connection.commit()
         _update_cancellation_token(self.workspace_dir, task_id, **patch)
-        self._notify()
+        if durable_patch:
+            self._notify()
         return copy.deepcopy(task)
 
     def list(

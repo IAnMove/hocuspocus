@@ -9,6 +9,7 @@ import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
 import { createActivityPublicationGate } from '../lib/activityPublication'
 import { deriveIsGenerating, isGenerationJobActive } from '../lib/generationJobState'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
+import { llmActivityPreview } from '../lib/llmActivityPreview'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -1076,6 +1077,7 @@ export interface ForegroundActivity {
   total?: number
   progress?: number
   detailMessage?: string
+  detailVolatile?: boolean
   detailCurrent?: number
   detailTotal?: number
   tokenUsage?: {
@@ -1930,7 +1932,7 @@ function beginAppActivity(
     message: string,
     current = 0,
     total = options.total || 0,
-    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailCurrent' | 'detailTotal' | 'tokenUsage' | 'generationDetails'>>,
+    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailVolatile' | 'detailCurrent' | 'detailTotal' | 'tokenUsage' | 'generationDetails'>>,
   ) => get().upsertActivity({
     id,
     kind: options.kind,
@@ -1949,6 +1951,9 @@ function beginAppActivity(
     id,
     report,
     finish: (message = 'Complete') => {
+      const clearVolatileDetail = get().activities[id]?.detailVolatile
+        ? { detailMessage: '', detailVolatile: false }
+        : {}
       get().upsertActivity({
         id,
         kind: options.kind,
@@ -1958,11 +1963,15 @@ function beginAppActivity(
         message,
         current: options.total || 1,
         total: options.total || 1,
+        ...clearVolatileDetail,
       })
       window.setTimeout(() => get().removeActivity(id), 4000)
     },
     fail: (error: unknown, phase = options.phase) => {
       const message = error instanceof Error ? error.message : String(error)
+      const clearVolatileDetail = get().activities[id]?.detailVolatile
+        ? { detailMessage: '', detailVolatile: false }
+        : {}
       get().upsertActivity({
         id,
         kind: options.kind,
@@ -1971,6 +1980,7 @@ function beginAppActivity(
         phase,
         message,
         error: message,
+        ...clearVolatileDetail,
       })
     },
   }
@@ -8158,8 +8168,7 @@ export const useStore = create<AppState>((set, get) => ({
             try {
               const progress = await api.getDirectorV2PlanProgress(activity.id)
               if (progress) {
-                const streamed = (progress.stream_text || '').replace(/\s+/g, ' ').trim()
-                const streamPreview = streamed.slice(-1200)
+                const streamPreview = llmActivityPreview(progress.stream_text)
                 const detail = (
                   progress.phase === 'writing_scenes' && streamPreview
                     ? streamPreview
@@ -8172,6 +8181,7 @@ export const useStore = create<AppState>((set, get) => ({
                   3,
                   {
                     detailMessage: detail,
+                    detailVolatile: Boolean(streamPreview),
                     detailCurrent: progress.current || 0,
                     detailTotal: progress.total || directorPlannedClips.length,
                     tokenUsage: progress.usage ? {

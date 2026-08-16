@@ -35310,11 +35310,22 @@ def _canonical_legacy_progress(current: object, total: object, progress: object)
     return max(0.0, min(1.0, value))
 
 
-def _upsert_canonical_task(workspace: str, task_id: str, **fields) -> dict:
+def _upsert_canonical_task(
+    workspace: str,
+    task_id: str,
+    *,
+    event_exclude_fields: set[str] | frozenset[str] | None = None,
+    **fields,
+) -> dict:
     registry = _task_registry(workspace)
     existing = registry.get(task_id)
     if existing is None:
-        return registry.create(id=task_id, workspace=workspace, **fields)
+        return registry.create(
+            id=task_id,
+            workspace=workspace,
+            event_exclude_fields=event_exclude_fields,
+            **fields,
+        )
     from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES
     existing_status = str(existing.get("status") or "")
     incoming_status = str(fields.get("status") or existing_status)
@@ -35329,7 +35340,13 @@ def _upsert_canonical_task(workspace: str, task_id: str, **fields) -> dict:
         and existing.get(key) != value
     }
     if mutable:
-        return registry.update(task_id, force=True, event_type="adapter.synced", **mutable)
+        return registry.update(
+            task_id,
+            force=True,
+            event_type="adapter.synced",
+            event_exclude_fields=event_exclude_fields,
+            **mutable,
+        )
     return existing
 
 
@@ -35738,13 +35755,18 @@ def upsert_client_task(body: dict):
     _workspace_dir(workspace)
     task_id, root_id = canonical_client_task_identity(raw)
     status = _task_status(raw.get("status"))
+    volatile_detail = raw.get("detailVolatile") is True
+    from services.task_manager import bounded_task_preview
+    raw_detail = raw.get("detailMessage") or ""
+    detail = bounded_task_preview(raw_detail) if volatile_detail else str(raw_detail)[:8000]
     task = _upsert_canonical_task(
         workspace, task_id, root_id=root_id,
+        event_exclude_fields={"detail"} if volatile_detail else None,
         kind=str(raw.get("kind") or "foreground"), workflow="frontend",
         title=str(raw.get("title") or "Maestro activity"), status=status,
         phase=str(raw.get("phase") or status),
         message=str(raw.get("error") or raw.get("message") or "Working…"),
-        detail=str(raw.get("detailMessage") or ""),
+        detail=detail,
         current=int(raw.get("current") or 0), total=int(raw.get("total") or 0),
         detail_current=int(raw.get("detailCurrent") or 0), detail_total=int(raw.get("detailTotal") or 0),
         created_at=(float(raw.get("startedAt")) / 1000 if float(raw.get("startedAt") or 0) > 1e12 else
