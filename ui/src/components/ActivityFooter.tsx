@@ -8,6 +8,11 @@ import { useStore } from '../stores/useStore'
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const CONNECTED_RECONCILE_MS = 60_000
 const DISCONNECTED_POLL_MS = 5_000
+type TaskControlAction = 'cancel' | 'resume' | 'dismiss'
+interface TaskControlFailure {
+  action: TaskControlAction
+  message: string
+}
 const PHASE_LABELS: Record<string, string> = {
   planning: 'Planning',
   known_series_research: 'Building series bible',
@@ -132,6 +137,7 @@ export function ActivityFooter() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [clock, setClock] = useState(Date.now())
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
+  const [controlFailures, setControlFailures] = useState<Record<string, TaskControlFailure>>({})
 
   useEffect(() => {
     let mounted = true
@@ -213,6 +219,7 @@ export function ActivityFooter() {
 
     tasksRef.current = []
     setTasks([])
+    setControlFailures({})
     void connectAfterSnapshot()
     return () => {
       mounted = false
@@ -251,7 +258,7 @@ export function ActivityFooter() {
     return () => window.clearInterval(timer)
   }, [activeTasks.length])
 
-  const runControl = (task: CanonicalTask, action: 'cancel' | 'resume' | 'dismiss') => {
+  const runControl = (task: CanonicalTask, action: TaskControlAction) => {
     if (busyIds.has(task.id)) return
     setBusyIds(current => new Set(current).add(task.id))
     const operation = action === 'cancel'
@@ -265,7 +272,22 @@ export function ActivityFooter() {
         : tasksRef.current.map(item => item.id === task.id ? result as CanonicalTask : item)
       tasksRef.current = next
       setTasks(next)
-    }).catch(error => console.error(`Failed to ${action} Maestro task`, error)).finally(() => {
+      setControlFailures(current => {
+        if (!current[task.id]) return current
+        const nextFailures = { ...current }
+        delete nextFailures[task.id]
+        return nextFailures
+      })
+    }).catch(reason => {
+      const message = reason instanceof Error ? reason.message : String(reason)
+      setControlFailures(current => ({
+        ...current,
+        [task.id]: { action, message },
+      }))
+      // A footer-level Cancel can fail while the task list is collapsed. Open
+      // it so the actionable error and Retry control are immediately visible.
+      setDetailsOpen(true)
+    }).finally(() => {
       setBusyIds(current => {
         const next = new Set(current)
         next.delete(task.id)
@@ -297,6 +319,7 @@ export function ActivityFooter() {
               const active = ACTIVE.has(task.status)
               const recipe = generationRecipe(task)
               const visualState = canonicalTaskVisualState(task.status)
+              const controlFailure = controlFailures[task.id]
               return (
                 <div key={task.id} className="rounded-md border border-border bg-bg-primary p-2">
                   <div className="flex items-start gap-2">
@@ -331,6 +354,20 @@ export function ActivityFooter() {
                       </p>
                       {recipe && <p className="mt-0.5 break-words text-[9px] text-amber-300">{recipe}</p>}
                       {resources(task) && <p className="text-[9px] text-accent-blue">{resources(task)}</p>}
+                      {controlFailure && (
+                        <div aria-live="polite" className="mt-1.5 flex items-center justify-between gap-2 rounded border border-red-400/40 bg-red-500/10 px-2 py-1 text-[9px] text-red-300">
+                          <span>{controlFailure.action[0].toUpperCase() + controlFailure.action.slice(1)} failed: {controlFailure.message}</span>
+                          <button
+                            type="button"
+                            disabled={busyIds.has(task.id)}
+                            onClick={() => runControl(task, controlFailure.action)}
+                            className="shrink-0 rounded border border-red-300/50 px-1.5 py-0.5 font-medium disabled:opacity-50"
+                            aria-label={`Retry ${controlFailure.action}`}
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      )}
                       <p className="mt-0.5 flex flex-wrap gap-x-2 text-[9px] text-text-muted">
                         {task.server_origin && <span>server {task.server_origin}</span>}
                         <span>attempt {task.attempt}/{task.max_attempts}</span>

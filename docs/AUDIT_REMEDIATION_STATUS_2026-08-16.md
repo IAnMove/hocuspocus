@@ -48,7 +48,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | PLAY-01 | pendiente | Revalidar contra `68aa157` |
 | POLL-01 | pendiente | — |
 | TIMELINE-01 | completado | Poll serial de Story timeline se detiene en estados terminales; Refresh manual recupera/reanuda y un éxito limpia el error; 33 tests UI + lint/build verdes |
-| ACT-01 | pendiente | — |
+| ACT-01 | completado | Fallos cancel/resume/dismiss quedan por task ID en bloque `aria-live`, preservan la tarea y ofrecen Retry; éxito limpia el error; 34 tests UI + lint/build verdes |
 | UPLOAD-01 | completado | Ingesta en chunks de 1 MiB con límite acumulado y 413; publicación atómica, cleanup en error/cancelación, concurrencia acotada y transcode cancel-safe; 4 tests verdes |
 | CANCEL-01 | pendiente | — |
 | RES-01 | pendiente | — |
