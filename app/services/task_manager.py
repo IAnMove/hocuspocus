@@ -563,6 +563,23 @@ class TaskRegistry:
                 "SELECT snapshot FROM tasks WHERE id = ?", (str(task_id),),
             ).fetchone())
 
+    def is_dismissed(self, task_id: str) -> bool:
+        """Return whether the latest durable event dismissed this task.
+
+        Adapter synchronizers may rebuild a task from an external checkpoint
+        after the row has been deleted.  The deletion tombstone is therefore
+        part of the read contract: a terminal adapter must not be resurrected
+        until it emits a new task-created event (for example after an explicit
+        resume).
+        """
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT type FROM task_events
+                   WHERE task_id = ? ORDER BY event_id DESC LIMIT 1""",
+                (str(task_id),),
+            ).fetchone()
+        return bool(row and str(row["type"] or "") == "task.deleted")
+
     def update(
         self,
         task_id: str,

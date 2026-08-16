@@ -33,6 +33,7 @@ import {
   readVideoEditorReplacementResult,
   writeVideoEditorReplacementTarget,
 } from './replacementHandoff'
+import { VIDEO_EDITOR_PENDING_SOURCE_KEY } from './editorHandoff'
 import {
   editorClipRecoveryMessage,
   normalizeEditorClips,
@@ -97,7 +98,6 @@ const RESOLUTIONS: ResolutionOption[] = [
 
 const VIDEO_ACCEPT = '.mp4,.webm,.mov,.mkv,.avi,.m4v'
 const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
-const VIDEO_EDITOR_PENDING_SOURCE_KEY = 'maestro-video-editor-pending-source'
 const VIDEO_EDITOR_PENDING_SEQUENCE_KEY = 'maestro-video-editor-pending-sequence'
 const VIDEO_EDITOR_EXPORT_KEY = 'maestro-video-editor-export-v1'
 const MAESTRO_PICKER_PAGE_SIZE = 24

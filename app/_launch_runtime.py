@@ -36001,6 +36001,17 @@ def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
         "preview_ready": "completed",
     }.get(raw_status, _task_status(raw_status))
     task_id = f"task-director-{pipeline_id}"
+    # Director checkpoints survive Activity dismissal.  Do not recreate a
+    # terminal card on every snapshot just because its source JSON still
+    # exists; an explicit resume creates a new task event and makes it visible
+    # again.
+    if status in {"completed", "failed", "cancelled", "interrupted"}:
+        try:
+            if _task_registry(workspace).is_dismissed(task_id):
+                return None
+        except Exception:
+            # A task registry failure must not hide the underlying pipeline.
+            pass
     completed_at = _task_timestamp(
         pipeline,
         "finished_at",

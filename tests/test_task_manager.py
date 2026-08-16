@@ -158,6 +158,22 @@ def test_task_registry_persists_ordered_events_and_transitions(tmp_path):
     assert [event["type"] for event in events] == ["task.created", "task.updated", "task.updated"]
 
 
+def test_dismissal_tombstone_prevents_adapter_task_resurrection(tmp_path):
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    task = registry.create(id="task-director-stale", kind="director", status="interrupted")
+    assert registry.is_dismissed(task["id"]) is False
+
+    assert registry.delete(task["id"]) is True
+    assert registry.get(task["id"]) is None
+    assert registry.is_dismissed(task["id"]) is True
+
+    # A new explicit task creation (the equivalent of resume) clears the
+    # effective tombstone because task.created is now the latest event.
+    recreated = registry.create(id=task["id"], kind="director", status="queued")
+    assert recreated["id"] == task["id"]
+    assert registry.is_dismissed(task["id"]) is False
+
+
 def test_restart_marks_unfinished_task_interrupted_and_recoverable(tmp_path):
     first = TaskRegistry(str(tmp_path), interrupt_stale=False)
     first.create(

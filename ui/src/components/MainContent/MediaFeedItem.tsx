@@ -15,6 +15,7 @@ import {
   readVideoEditorReplacementTarget,
   writeVideoEditorReplacementResult,
 } from '../../features/video-editor/replacementHandoff'
+import { writeVideoEditorPendingSource } from '../../features/video-editor/editorHandoff'
 import {
   readDirectorClipReplacementTarget,
   writeDirectorClipReplacementResult,
@@ -302,6 +303,15 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
     })
     setMediaFilter('videoeditor')
   }, [file.name, file.type, setMediaFilter])
+
+  const handleOpenInVideoEditor = useCallback(() => {
+    if (file.type !== 'video') return
+    writeVideoEditorPendingSource({
+      name: file.name,
+      url: getFileUrl(file.name, outputWorkspace),
+    })
+    setMediaFilter('videoeditor')
+  }, [file.name, file.type, outputWorkspace, setMediaFilter])
 
   const handleUseAsDirectorReplacement = useCallback(async () => {
     const target = readDirectorClipReplacementTarget()
@@ -745,6 +755,16 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             >
               <FolderInput size={13} />
               Usar en posición {editorReplacementTarget.clipIndex + 1}
+            </button>
+          )}
+          {file.type === 'video' && (
+            <button
+              onClick={handleOpenInVideoEditor}
+              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors"
+              title="Editar vídeo en Video Editor"
+              aria-label="Editar vídeo en Video Editor"
+            >
+              <Film size={13} />
             </button>
           )}
           {montageSelectionError && <span className="max-w-40 truncate text-[9px] text-red-400" title={montageSelectionError}>{montageSelectionError}</span>}
