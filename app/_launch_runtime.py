@@ -36336,3 +36336,11 @@ def run_server():
             flush=True,
         )
         sys.exit(1)
+
+
+# ``app/launch.py`` loads this module with ``runpy`` and sets its name to
+# ``__main__`` for the Pinokio server entry point.  Keep the executable guard
+# here so that the deferred runtime does not merely import, print setup logs,
+# and exit before emitting the URL that Pinokio captures.
+if __name__ == "__main__":
+    run_server()
