@@ -1377,9 +1377,12 @@ interface AppState {
   dashboardPipelineList: PipelineListItem[]
   dashboardSelectedPipeline: SavedPipelineState | null
   dashboardLoading: boolean
+  dashboardLoadError: string | null
+  dashboardRetryPipelineId: string | null
   setDashboardOpen: (open: boolean, preferredPipelineId?: string) => void
   loadPipelineList: (preferredPipelineId?: string) => Promise<void>
   loadSavedPipeline: (pid: string) => Promise<void>
+  retryDashboardLoad: () => Promise<void>
   tagClip: (pid: string, clipIndex: number, tag: string | null) => Promise<void>
   startPipelineRepair: (pid: string) => Promise<PipelineRepairState>
   cancelPipelineRepair: (pid: string) => Promise<PipelineRepairState>
@@ -2998,8 +3001,10 @@ export const useStore = create<AppState>((set, get) => ({
   dashboardPipelineList: [],
   dashboardSelectedPipeline: null,
   dashboardLoading: false,
+  dashboardLoadError: null,
+  dashboardRetryPipelineId: null,
   setDashboardOpen: (open, preferredPipelineId) => {
-    set({ dashboardOpen: open })
+    set({ dashboardOpen: open, dashboardLoadError: null, dashboardRetryPipelineId: null })
     if (open) {
       get().loadPipelineList(preferredPipelineId)
       if (preferredPipelineId) {
@@ -3012,10 +3017,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
   loadPipelineList: async (preferredPipelineId) => {
     const loadToken = ++_dashboardPipelineListLoadToken
+    const retryPipelineId = preferredPipelineId || get().dashboardSelectedPipeline?.pipeline_id || null
     try {
       const { pipelines } = await api.fetchPipelineList()
       if (loadToken !== _dashboardPipelineListLoadToken) return
-      set({ dashboardPipelineList: pipelines })
+      set({ dashboardPipelineList: pipelines, dashboardLoadError: null, dashboardRetryPipelineId: null })
       // Opening Productions should take the user straight back to live work,
       // even if an older production was selected the last time it was open.
       const preferred = preferredPipelineId
@@ -3067,23 +3073,35 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (e) {
       if (loadToken !== _dashboardPipelineListLoadToken) return
       console.error('Failed to load pipeline list:', e)
+      set({
+        dashboardLoadError: e instanceof Error ? e.message : 'Failed to load pipeline list',
+        dashboardRetryPipelineId: retryPipelineId,
+      })
     }
   },
   loadSavedPipeline: async (pid) => {
     const loadToken = ++_dashboardPipelineLoadToken
-    set({ dashboardLoading: true })
+    set({ dashboardLoading: true, dashboardLoadError: null, dashboardRetryPipelineId: pid })
     try {
       const pipeline = await api.fetchSavedPipeline(pid)
       if (loadToken !== _dashboardPipelineLoadToken) return
-      set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false, dashboardLoadError: null, dashboardRetryPipelineId: null })
       if (_repairNeedsPolling(pipeline.repair)) {
         get().pollPipelineRepair(pid, pipeline.repair!.operation_id)
       }
     } catch (e) {
       if (loadToken !== _dashboardPipelineLoadToken) return
       console.error('Failed to load pipeline:', e)
-      set({ dashboardLoading: false })
+      set({
+        dashboardLoading: false,
+        dashboardLoadError: e instanceof Error ? e.message : 'Failed to load pipeline',
+        dashboardRetryPipelineId: pid,
+      })
     }
+  },
+  retryDashboardLoad: async () => {
+    const state = get()
+    await get().loadPipelineList(state.dashboardRetryPipelineId || state.dashboardSelectedPipeline?.pipeline_id || undefined)
   },
   deletePipeline: async (pid) => {
     // Clear the selection AND drop the pid from the list in the same

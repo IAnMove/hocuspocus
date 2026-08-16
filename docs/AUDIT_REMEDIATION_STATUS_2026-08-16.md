@@ -27,7 +27,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | PLAN-01 | completado | Planificación determinista en lotes máximos de 8; schema restringido a índices del lote, merge ordenado sin overwrite, reparación compacta sólo de huecos y fallback individual. Fake que trunca >8 produce 41/41 únicos en 6 llamadas; 31 tests focalizados verdes. |
 | PLAN-02 | completado | Job JSON atómico por workspace persiste índices/planes tras cada lote, lote activo, llamadas y tokens; status/list/resume públicos y claim único. Reinicio simulado tras lote 3 recupera 1–24 y sólo llama 25–41; 84 tests backend + 68 UI/lint/build verdes. |
 | PLAN-03 | pendiente | — |
-| DIR-03 | pendiente | — |
+| DIR-03 | completado | Fallo de lista/detalle conserva pipeline previa, muestra alerta accesible y destino de Retry; nueva carga limpia error stale y Retry exitoso selecciona el destino. Prueba RTL funcional + suite/lint/build verdes. |
 | SER-01 | pendiente | — |
 | SER-02 | pendiente | — |
 | SER-UI-01 | pendiente | — |

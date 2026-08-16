@@ -729,7 +729,9 @@ function DirectorDashboardInner() {
   const pipelineList = useStore(s => s.dashboardPipelineList)
   const selectedPipeline = useStore(s => s.dashboardSelectedPipeline)
   const loading = useStore(s => s.dashboardLoading)
+  const dashboardLoadError = useStore(s => s.dashboardLoadError)
   const loadPipeline = useStore(s => s.loadSavedPipeline)
+  const retryDashboardLoad = useStore(s => s.retryDashboardLoad)
   const tagClip = useStore(s => s.tagClip)
   const startPipelineRepair = useStore(s => s.startPipelineRepair)
   const cancelPipelineRepair = useStore(s => s.cancelPipelineRepair)
@@ -1067,6 +1069,19 @@ function DirectorDashboardInner() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {dashboardLoadError && (
+          <div role="alert" aria-live="assertive" className="flex flex-wrap items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+            <span className="min-w-0 flex-1">Could not load the selected pipeline: {dashboardLoadError}</span>
+            <button
+              type="button"
+              onClick={() => void retryDashboardLoad()}
+              disabled={loading}
+              className="rounded border border-red-400/40 px-2 py-1 text-[10px] text-red-200 hover:bg-red-500/15 disabled:opacity-40"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {loading && (
           <div className="flex items-center justify-center py-12 text-text-muted">
             <Loader2 size={20} className="animate-spin mr-2" />
