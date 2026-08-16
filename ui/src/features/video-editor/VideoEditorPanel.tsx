@@ -99,6 +99,7 @@ const VIDEO_ACCEPT = '.mp4,.webm,.mov,.mkv,.avi,.m4v'
 const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
 const VIDEO_EDITOR_PENDING_SOURCE_KEY = 'maestro-video-editor-pending-source'
 const VIDEO_EDITOR_PENDING_SEQUENCE_KEY = 'maestro-video-editor-pending-sequence'
+const VIDEO_EDITOR_EXPORT_KEY = 'maestro-video-editor-export-v1'
 const MAESTRO_PICKER_PAGE_SIZE = 24
 const VIDEO_EDITOR_ACTIVE_STATUSES = new Set<api.VideoEditorExportJob['status']>([
   'queued',
@@ -110,6 +111,47 @@ const VIDEO_EDITOR_ACTIVE_STATUSES = new Set<api.VideoEditorExportJob['status']>
 const isVideoEditorJobActive = (job: api.VideoEditorExportJob | null): boolean => (
   Boolean(job && VIDEO_EDITOR_ACTIVE_STATUSES.has(job.status))
 )
+
+function videoEditorExportStorageKey(workspace: string | null | undefined): string {
+  return `${VIDEO_EDITOR_EXPORT_KEY}:${encodeURIComponent(workspace || 'default')}`
+}
+
+function readVideoEditorExportId(workspace: string | null | undefined): string | null {
+  try {
+    const value = window.localStorage.getItem(videoEditorExportStorageKey(workspace))
+    return value && value.trim() ? value : null
+  } catch {
+    return null
+  }
+}
+
+function writeVideoEditorExportId(workspace: string | null | undefined, jobId: string): void {
+  try {
+    window.localStorage.setItem(videoEditorExportStorageKey(workspace), jobId)
+  } catch {
+    // A full browser quota must not prevent an export from continuing.
+  }
+}
+
+function clearVideoEditorExportId(workspace: string | null | undefined): void {
+  try {
+    window.localStorage.removeItem(videoEditorExportStorageKey(workspace))
+  } catch {
+    // Ignore storage failures; the server remains the source of truth.
+  }
+}
+
+function pendingVideoEditorExport(jobId: string): api.VideoEditorExportJob {
+  return {
+    job_id: jobId,
+    status: 'queued',
+    progress: 0,
+    message: 'Reconnecting to export…',
+    filename: null,
+    url: null,
+    error: null,
+  }
+}
 
 const TRANSITIONS: Array<{ value: Transition; label: string; description: string }> = [
   { value: 'none', label: 'Hard cut', description: 'Immediate cut with no overlap.' },
@@ -646,6 +688,9 @@ export function VideoEditorPanel() {
   const sequencePlayingRef = useRef(false)
   const sequenceSlotSeekRef = useRef<Array<number | null>>([null, null])
   const mountedRef = useRef(true)
+  const exportPollingRef = useRef<string | null>(null)
+  const exportPollEpochRef = useRef(0)
+  const exportSubmittingRef = useRef(false)
 
   const [clips, setClips] = useState<EditorClip[]>(draft.clips)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -672,7 +717,10 @@ export function VideoEditorPanel() {
   const [maestroVideoTotal, setMaestroVideoTotal] = useState(0)
   const [pickerLoading, setPickerLoading] = useState(false)
   const [error, setError] = useState<string | null>(draft.warning)
-  const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(null)
+  const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(() => {
+    const jobId = readVideoEditorExportId(activeWorkspace)
+    return jobId ? pendingVideoEditorExport(jobId) : null
+  })
   const [capturingFrame, setCapturingFrame] = useState(false)
   const [capturedFrame, setCapturedFrame] = useState<api.VideoEditorScreenshot | null>(null)
   const [preparingReplacement, setPreparingReplacement] = useState(false)
@@ -1519,8 +1567,51 @@ export function VideoEditorPanel() {
     }
   }, [clips, sequenceMode, totalDuration])
 
+  const pollExport = useCallback(async (jobId: string) => {
+    if (!jobId || exportPollingRef.current === jobId) return
+    exportPollingRef.current = jobId
+    const epoch = ++exportPollEpochRef.current
+    try {
+      let status = await api.fetchVideoEditorExport(jobId)
+      while (mountedRef.current && epoch === exportPollEpochRef.current) {
+        if (!mountedRef.current || epoch !== exportPollEpochRef.current) return
+        setExportJob(status)
+        writeVideoEditorExportId(activeWorkspace, jobId)
+        if (status.status === 'completed') {
+          await refreshOutputs()
+          return
+        }
+        if (status.status === 'failed' || status.status === 'cancelled') {
+          clearVideoEditorExportId(activeWorkspace)
+          return
+        }
+        await wait(1000)
+        if (!mountedRef.current || epoch !== exportPollEpochRef.current) return
+        status = await api.fetchVideoEditorExport(jobId)
+      }
+    } catch (reason) {
+      if (mountedRef.current && epoch === exportPollEpochRef.current) {
+        setError(`Could not reconnect to export ${jobId}: ${(reason as Error).message}`)
+      }
+    } finally {
+      if (exportPollingRef.current === jobId) exportPollingRef.current = null
+    }
+  }, [activeWorkspace, refreshOutputs])
+
+  useEffect(() => {
+    exportPollEpochRef.current += 1
+    exportPollingRef.current = null
+    const jobId = readVideoEditorExportId(activeWorkspace)
+    setExportJob(jobId ? pendingVideoEditorExport(jobId) : null)
+    if (jobId) void pollExport(jobId)
+    return () => {
+      exportPollEpochRef.current += 1
+      exportPollingRef.current = null
+    }
+  }, [activeWorkspace, pollExport])
+
   const startExport = async () => {
-    if (!clips.length || isVideoEditorJobActive(exportJob)) return
+    if (!clips.length || exportSubmittingRef.current || isVideoEditorJobActive(exportJob)) return
     const normalized = normalizeEditorClips(clips, {
       idFactory: clipId,
       thumbnailUrl: api.getVideoEditorThumbnailUrl,
@@ -1536,6 +1627,7 @@ export function VideoEditorPanel() {
       persistEditorDraft(normalized.clips, projectName, resolution, fps)
     }
     setError(recoveryMessage)
+    exportSubmittingRef.current = true
     setExportJob({
       job_id: '',
       status: 'queued',
@@ -1566,20 +1658,16 @@ export function VideoEditorPanel() {
           transition_text_size: clip.transitionTextSize,
         })),
       })
-      while (mountedRef.current) {
-        const status = await api.fetchVideoEditorExport(started.job_id)
-        setExportJob(status)
-        if (status.status === 'completed') {
-          await refreshOutputs()
-          break
-        }
-        if (status.status === 'failed' || status.status === 'cancelled') break
-        await wait(1000)
-      }
+      writeVideoEditorExportId(activeWorkspace, started.job_id)
+      if (mountedRef.current) setExportJob(started)
+      void pollExport(started.job_id)
     } catch (reason) {
       const message = (reason as Error).message
       setError(message)
+      clearVideoEditorExportId(activeWorkspace)
       setExportJob(current => current ? { ...current, status: 'failed', error: message, message } : null)
+    } finally {
+      exportSubmittingRef.current = false
     }
   }
 
@@ -1592,7 +1680,11 @@ export function VideoEditorPanel() {
       message: 'Cancelling at the next FFmpeg safe boundary…',
     } : current)
     try {
-      setExportJob(await api.cancelVideoEditorExport(exportJob.job_id))
+      const cancelled = await api.cancelVideoEditorExport(exportJob.job_id)
+      writeVideoEditorExportId(activeWorkspace, exportJob.job_id)
+      setExportJob(cancelled)
+      if (isVideoEditorJobActive(cancelled)) void pollExport(cancelled.job_id)
+      else if (cancelled.status === 'cancelled') clearVideoEditorExportId(activeWorkspace)
     } catch (reason) {
       const message = (reason as Error).message
       setError(message)
