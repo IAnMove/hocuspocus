@@ -14,5 +14,11 @@ module.exports = Object.freeze({
     path: "app/services/hunyuan3d/vendor/Hunyuan3D-2.1",
     revision: "82920d643c0dc2f7bfd7255f45f62d386edfe60c",
     marker: "app/services/hunyuan3d/env/.maestro_hunyuan3d_21_82920d643c0dc2f7bfd7255f45f62d386edfe60c.installed"
+  }),
+  sam3: Object.freeze({
+    url: "https://github.com/facebookresearch/sam3",
+    path: "app/services/sam/sam3",
+    revision: "8f0b7f4d4e7eda2ed606ebde6702c93359ad01da",
+    marker: "app/services/sam/env/.maestro_sam3_8f0b7f4d4e7eda2ed606ebde6702c93359ad01da.installed"
   })
 })
