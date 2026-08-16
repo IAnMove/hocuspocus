@@ -391,8 +391,11 @@ export interface SeriesJobStatus {
 }
 
 export type {
+  SeriesAssemblyActionRequest,
+  SeriesAssemblyDiscardResponse,
   SeriesAssemblyJob,
   SeriesAssemblyJobResponse,
+  SeriesAssemblyRecoveryResponse,
   SeriesAssemblyStartRequest,
   SeriesAssemblyStatus,
 } from './assemblyContract'

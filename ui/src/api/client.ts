@@ -1,7 +1,7 @@
 import { rememberPrompt } from '../lib/promptHistory'
 import { openCanonicalTaskEventStream } from '../lib/canonicalTaskEvents'
 import type { CanonicalTaskEvent, CanonicalTaskStreamState } from '../lib/canonicalTaskEvents'
-import type { SeriesAssemblyJob, SeriesAssemblyStartRequest } from '../features/series/assemblyContract'
+import type { SeriesAssemblyActionRequest, SeriesAssemblyDiscardResponse, SeriesAssemblyJob, SeriesAssemblyRecoveryResponse, SeriesAssemblyStartRequest } from '../features/series/assemblyContract'
 import { isDirectorV2PlanFailureDetail, isDirectorV2PlanResponse } from '../types'
 import type { DirectorModelCompatibility, DirectorV2PlanFailureDetail, DirectorV2PlanJob, DirectorV2PlanProgress, DirectorV2PlanRequest, DirectorV2PlanResponse, GenerationDetails, H3WindowPlan, ScailResolutionProfile } from '../types'
 
@@ -3142,11 +3142,47 @@ export async function startSeriesEpisodeAssembly(
 }
 
 export async function fetchSeriesEpisodeAssembly(
-  jobId: string,
+  jobId: string, workspace?: string,
 ): Promise<SeriesAssemblyJob> {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
   return seriesResponse(fetch(
-    `${BASE}/api/v1/series/assembly/jobs/${encodeURIComponent(jobId)}`,
+    `${BASE}/api/v1/series/assembly/jobs/${encodeURIComponent(jobId)}${query}`,
   ), 'Could not read Series episode assembly')
+}
+
+export async function cancelSeriesEpisodeAssembly(
+  jobId: string, workspace: string,
+): Promise<SeriesAssemblyJob> {
+  const payload: SeriesAssemblyActionRequest = { workspace }
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/assembly/jobs/${encodeURIComponent(jobId)}/cancel`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+  ), 'Could not cancel Series episode assembly')
+}
+
+export async function resumeSeriesEpisodeAssembly(
+  jobId: string, workspace: string,
+): Promise<SeriesAssemblyJob> {
+  const payload: SeriesAssemblyActionRequest = { workspace }
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/assembly/jobs/${encodeURIComponent(jobId)}/resume`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+  ), 'Could not resume Series episode assembly')
+}
+
+export async function discardSeriesEpisodeAssembly(
+  jobId: string, workspace: string,
+): Promise<SeriesAssemblyDiscardResponse> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/assembly/jobs/${encodeURIComponent(jobId)}?workspace=${encodeURIComponent(workspace)}`,
+    { method: 'DELETE' },
+  ), 'Could not discard Series episode assembly')
+}
+
+export async function fetchSeriesAssemblyRecovery(workspace: string): Promise<SeriesAssemblyRecoveryResponse> {
+  return seriesResponse(fetch(
+    `${BASE}/api/v1/series/assembly/recovery?workspace=${encodeURIComponent(workspace)}`,
+  ), 'Could not read Series assembly recovery')
 }
 
 export async function rejectSeriesAttempt(

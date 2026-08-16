@@ -96,17 +96,17 @@ export function SeriesReviewPanel({
     return () => { active = false; window.clearInterval(timer) }
   }, [activeJobCurrent, activeJobId, activeJobStatus, reload, setJob])
   useEffect(() => {
-    if (!assemblyJobId || !assemblyJobStatus || !['queued', 'running'].includes(assemblyJobStatus)) return
+    if (!assemblyJobId || !assemblyJobStatus || !['queued', 'running', 'cancelling'].includes(assemblyJobStatus)) return
     let active = true
     const timer = window.setInterval(() => {
-      void api.fetchSeriesEpisodeAssembly(assemblyJobId).then(async value => {
+      void api.fetchSeriesEpisodeAssembly(assemblyJobId, workspace).then(async value => {
         if (!active) return
         setAssemblyJob(value)
         if (value.status === 'completed') await reload()
       }).catch(reason => { if (active) setError((reason as Error).message) })
     }, 1000)
     return () => { active = false; window.clearInterval(timer) }
-  }, [assemblyJobId, assemblyJobStatus, reload])
+  }, [assemblyJobId, assemblyJobStatus, reload, workspace])
   const approved = useMemo(() => episode.shots.flatMap(shot => {
     const attempt = shot.attempts.find(item => item.id === shot.approvedAttemptId)
     const asset = attempt?.outputAssetIds.map(id => series.assets[id]).find(Boolean)
@@ -317,7 +317,7 @@ export function SeriesReviewPanel({
         </button>
         <button className={primaryButton} disabled={!playable.length || playingAll} onClick={startPlayAll}><Play size={13} />Play all</button>
         {playingAll && <button className={secondaryButton} onClick={stopPlayAll}><Square size={13} />Stop</button>}
-        <button className={greenButton} disabled={approved.length !== episode.shots.length || assemblyJob?.status === 'queued' || assemblyJob?.status === 'running'} onClick={() => void joinApproved()}>{assemblyJob && ['queued', 'running'].includes(assemblyJob.status) ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}Join clips</button>
+        <button className={greenButton} disabled={approved.length !== episode.shots.length || Boolean(assemblyJob && ['queued', 'running', 'cancelling'].includes(assemblyJob.status))} onClick={() => void joinApproved()}>{assemblyJob && ['queued', 'running', 'cancelling'].includes(assemblyJob.status) ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}Join clips</button>
       </div>
       <p className="mt-2 text-[10px] text-text-muted">Approve all skips incomplete and explicitly rejected attempts. Existing approvals are kept.</p>
       <div className="mt-3 grid min-h-[28rem] overflow-hidden rounded-xl border border-border lg:grid-cols-[18rem_minmax(0,1fr)]">
@@ -380,7 +380,7 @@ export function SeriesReviewPanel({
           <button className={`mt-3 ${greenButton}`} disabled={editBusy} onClick={() => void regenerateEdited()}>{editBusy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}Save and regenerate in this slot</button>
         </div>
       })()}
-      {assemblyJob && <div className={`mt-3 rounded-lg border p-3 text-xs ${assemblyJob.status === 'failed' ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-green-500/30 bg-green-500/10 text-green-200'}`}><div className="flex items-center gap-2">{['queued', 'running'].includes(assemblyJob.status) && <Loader2 size={13} className="animate-spin" />}<span>{assemblyJob.message}</span>{assemblyJob.filename && <a className={`ml-auto ${greenButton}`} href={api.getFileUrl(assemblyJob.filename, workspace)} download><Download size={13} />Download joined episode</a>}</div>{assemblyJob.error && <p className="mt-1 text-[10px]">{assemblyJob.error}</p>}</div>}
+      {assemblyJob && <div className={`mt-3 rounded-lg border p-3 text-xs ${['failed', 'interrupted'].includes(assemblyJob.status) ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-green-500/30 bg-green-500/10 text-green-200'}`}><div className="flex flex-wrap items-center gap-2">{['queued', 'running', 'cancelling'].includes(assemblyJob.status) && <Loader2 size={13} className="animate-spin" />}<span>{assemblyJob.message}</span>{assemblyJob.filename && <a className={`ml-auto ${greenButton}`} href={api.getFileUrl(assemblyJob.filename, workspace)} download><Download size={13} />Download joined episode</a>}{['queued', 'running'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesEpisodeAssembly(assemblyJob.jobId, workspace).then(setAssemblyJob)}><Square size={13} />Cancel join</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => void api.resumeSeriesEpisodeAssembly(assemblyJob.jobId, workspace).then(setAssemblyJob)}><RotateCcw size={13} />Resume join</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => void api.discardSeriesEpisodeAssembly(assemblyJob.jobId, workspace).then(() => setAssemblyJob(null))}><X size={12} />Discard checkpoint</button>}</div>{assemblyJob.error && <p className="mt-1 text-[10px]">{assemblyJob.error}</p>}</div>}
     </SectionCard>}
 
     {reviewView === 'finish' && <><SectionCard title="Video Editor hand-off" description={`${approved.length}/${episode.shots.length} shots have an approved output. The editor opens with the saved Series resolution and orientation.`}>

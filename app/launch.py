@@ -30759,7 +30759,7 @@ def approve_series_episode_attempts_endpoint(
     }
 
 
-from routers.series_assembly import create_series_assembly_router
+from routers.series_assembly import control_series_assembly_job, create_series_assembly_router
 
 api.include_router(create_series_assembly_router(
     resolve_workspace=_series_library_workspace,
@@ -35841,6 +35841,41 @@ def _publish_series_task(job: dict, adapter: str) -> dict:
     )
 
 
+def _publish_series_assembly_task(job: dict) -> dict:
+    """Publish persisted Series Assembly checkpoints to canonical Activity."""
+    legacy_id = _task_legacy_id(job)
+    if not legacy_id:
+        return {}
+    workspace = str(job.get("workspace") or "default")
+    raw_status = str(job.get("status") or "queued")
+    status = "running" if raw_status == "cancelling" else _task_status(raw_status)
+    task_id = str(job.get("taskId") or f"task-series-assembly-{legacy_id}")
+    return _upsert_canonical_task(
+        workspace, task_id,
+        root_id=task_id,
+        kind="assembly", workflow="series-assembly",
+        title="Series Lab · Episode assembly",
+        status=status, phase=str(job.get("stage") or status),
+        message=str(job.get("message") or "Joining approved Series clips…"),
+        current=int(job.get("current") or 0), total=int(job.get("total") or 0),
+        created_at=_task_timestamp(job, "createdAt") or time.time(),
+        started_at=_task_timestamp(job, "startedAt"),
+        completed_at=_task_timestamp(job, "finishedAt"),
+        provider="local", model="FFmpeg", server_origin="local",
+        resource_requirements=["cpu:ffmpeg"],
+        acquired_resources=["cpu:ffmpeg"] if status == "running" else [],
+        project_id=str(job.get("seriesId") or ""), entity_type="episode",
+        entity_id=str(job.get("episodeId") or ""), backend_job_id=legacy_id,
+        cancelable=status in {"created", "queued", "waiting_resource", "running"},
+        resumable=status in {"failed", "cancelled", "interrupted"},
+        recoverable=True,
+        error=({"message": str(job.get("error")), "retryable": True}
+               if job.get("error") else None),
+        result_refs=[str(job["assetId"])] if job.get("assetId") else [],
+        metadata={"adapter": "series-assembly"},
+    )
+
+
 _GENERIC_TASK_CONFIG = {
     "story-plan": ("Story Lab planning", "llm-planning", True),
     "comic-plan": ("Comic planning", "llm-planning", True),
@@ -36028,6 +36063,14 @@ def _sync_canonical_tasks(workspace: str) -> None:
     for job in series_renders:
         if str(job.get("workspace") or "default") == workspace:
             _publish_series_task(job, "series-render")
+    try:
+        from services.series_jobs import SeriesJobStore
+        assembly_jobs = SeriesJobStore(_workspace_dir(workspace), "assembly").list()
+    except (OSError, ValueError, json.JSONDecodeError):
+        assembly_jobs = []
+    for job in assembly_jobs:
+        if str(job.get("workspace") or workspace) == workspace:
+            _publish_series_assembly_task(job)
     with _story_plan_jobs_lock:
         story_jobs = [copy.deepcopy(job) for job in _story_plan_jobs.values()]
     with _comic_plan_jobs_lock:
@@ -36213,12 +36256,16 @@ def _control_canonical_task(task: dict, action: str):
                 "task-minimax-music-"
             )
             return cancel_story_music_candidates_job(root_backend_id)
+        if adapter == "series-assembly":
+            return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "cancel")
     if action in {"retry", "resume"}:
         if adapter == "director": return director_pipeline_resume(legacy_id)
         if adapter == "series-plan": return resume_series_episode_plan(legacy_id)
         if adapter == "series-render": return resume_series_render_job(legacy_id)
         if adapter == "story-plan": return resume_story_lab_generation(legacy_id)
         if adapter == "comic-plan": return resume_director_comic_plan(legacy_id)
+        if adapter == "series-assembly":
+            return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "resume")
     raise HTTPException(status_code=409, detail=f"Task does not support {action}")
 
 
@@ -36262,6 +36309,11 @@ def resume_canonical_task(task_id: str, workspace: str | None = None):
 @api.delete("/api/v1/tasks/{task_id}")
 def dismiss_canonical_task(task_id: str, workspace: str | None = None):
     target = _get_active_workspace() if workspace is None else workspace
+    existing = _task_registry(target).get(task_id)
+    if existing and str((existing.get("metadata") or {}).get("adapter") or "") == "series-assembly":
+        legacy_id = str(existing.get("backend_job_id") or "")
+        if legacy_id:
+            return control_series_assembly_job(_workspace_dir(target), legacy_id, "discard")
     try:
         deleted = _task_registry(target).delete(task_id)
     except ValueError as exc:

@@ -68,6 +68,17 @@
               "title": "Job Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "type": "string" },
+                { "type": "null" }
+              ]
+            }
           }
         ],
         "responses": {
@@ -92,12 +103,96 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "discard_api_v1_series_assembly_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path", "name": "job_id", "required": true,
+            "schema": { "title": "Job Id", "type": "string" }
+          },
+          {
+            "in": "query", "name": "workspace", "required": false,
+            "schema": { "anyOf": [ { "type": "string" }, { "type": "null" } ] }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeriesAssemblyDiscardResponse" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/v1/series/assembly/jobs/{job_id}/cancel": {
+    },
+    "/api/v1/series/assembly/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_api_v1_series_assembly_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path", "name": "job_id", "required": true,
+            "schema": { "title": "Job Id", "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeriesAssemblyActionRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeriesAssemblyJobResponse" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/v1/series/assembly/jobs/{job_id}/resume": {
+      "post": {
+        "operationId": "resume_api_v1_series_assembly_jobs__job_id__resume_post",
+        "parameters": [
+          {
+            "in": "path", "name": "job_id", "required": true,
+            "schema": { "title": "Job Id", "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeriesAssemblyActionRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeriesAssemblyJobResponse" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/v1/series/assembly/recovery": {
+      "get": {
+        "operationId": "recovery_api_v1_series_assembly_recovery_get",
+        "parameters": [
+          {
+            "in": "query", "name": "workspace", "required": false,
+            "schema": { "anyOf": [ { "type": "string" }, { "type": "null" } ] }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeriesAssemblyRecoveryResponse" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
       }
     }
   },
   "components": {
     "schemas": {
       "SeriesAssemblyStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "workspace": {
+            "anyOf": [
+              { "type": "string", "minLength": 1, "maxLength": 200 },
+              { "type": "null" }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "SeriesAssemblyActionRequest": {
         "additionalProperties": false,
         "properties": {
           "workspace": {
@@ -118,7 +213,7 @@
           "episodeId": { "type": "string" },
           "status": {
             "type": "string",
-            "enum": ["queued", "running", "completed", "failed"]
+            "enum": ["queued", "running", "cancelling", "completed", "failed", "cancelled", "interrupted"]
           },
           "stage": { "type": "string" },
           "current": { "type": "integer", "minimum": 0 },
@@ -147,6 +242,27 @@
           "jobId", "workspace", "seriesId", "episodeId", "status",
           "stage", "current", "total", "message"
         ],
+        "type": "object"
+      },
+      "SeriesAssemblyRecoveryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "jobs": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SeriesAssemblyJobResponse" }
+          }
+        },
+        "required": ["jobs"],
+        "type": "object"
+      },
+      "SeriesAssemblyDiscardResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "discarded": { "type": "boolean" },
+          "jobId": { "type": "string" },
+          "outputsPreserved": { "type": "boolean" }
+        },
+        "required": ["discarded", "jobId", "outputsPreserved"],
         "type": "object"
       },
       "HTTPValidationError": {

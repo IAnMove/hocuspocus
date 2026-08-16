@@ -82,7 +82,7 @@ class SeriesJobStore:
     def recoverable(self) -> list[dict]:
         return [
             item for item in self.list()
-            if item.get("status") in {"queued", "running", "failed", "cancelled"}
+            if item.get("status") in {"queued", "running", "failed", "cancelled", "interrupted"}
         ]
 
     def discard(self, job_id: str) -> bool:

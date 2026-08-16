@@ -74,12 +74,16 @@ def test_openapi_fixture_matches_series_assembly_operations_and_schemas(tmp_path
         for method, fixture_operation in fixture_path.items():
             actual_operation = actual["paths"][path][method]
             assert actual_operation["operationId"] == fixture_operation["operationId"]
-            assert actual_operation.get("parameters") == fixture_operation.get("parameters")
-            assert actual_operation.get("requestBody") == fixture_operation.get("requestBody")
+            assert _contract_projection(actual_operation.get("parameters")) == _contract_projection(fixture_operation.get("parameters"))
+            assert _contract_projection(actual_operation.get("requestBody")) == _contract_projection(fixture_operation.get("requestBody"))
             for status in ("200", "422"):
-                assert actual_operation["responses"][status] == fixture_operation["responses"][status]
+                assert _contract_projection(actual_operation["responses"][status]) == _contract_projection(fixture_operation["responses"][status])
 
-    for name in ("SeriesAssemblyStartRequest", "SeriesAssemblyJobResponse"):
+    for name in (
+        "SeriesAssemblyStartRequest", "SeriesAssemblyActionRequest",
+        "SeriesAssemblyJobResponse", "SeriesAssemblyRecoveryResponse",
+        "SeriesAssemblyDiscardResponse",
+    ):
         expected = fixture["components"]["schemas"][name]
         observed = actual["components"]["schemas"][name]
         assert set(observed["properties"]) == set(expected["properties"])
@@ -87,7 +91,7 @@ def test_openapi_fixture_matches_series_assembly_operations_and_schemas(tmp_path
         assert observed.get("additionalProperties", False) == expected.get("additionalProperties", False)
         assert _contract_projection(observed) == _contract_projection(expected)
     assert actual["components"]["schemas"]["SeriesAssemblyJobResponse"]["properties"]["status"]["enum"] == [
-        "queued", "running", "completed", "failed",
+        "queued", "running", "cancelling", "completed", "failed", "cancelled", "interrupted",
     ]
 
 

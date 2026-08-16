@@ -7,6 +7,7 @@ own the job lifecycle without importing the large ``launch`` module or WanGP.
 from __future__ import annotations
 
 import copy
+import inspect
 import json
 import os
 import threading
@@ -20,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.series_assembly import episode_assembly_plan
 from services.series_jobs import SeriesJobStore
+from services.task_manager import get_cancellation_token, get_task_registry
 
 
 PUBLIC_JOB_KEYS = (
@@ -40,9 +42,19 @@ PUBLIC_JOB_KEYS = (
     "finishedAt",
 )
 
+_ASSEMBLY_CONTROLLERS: dict[str, Callable[[str, str], dict[str, Any]]] = {}
+
 
 class SeriesAssemblyStartRequest(BaseModel):
     """Stable request contract for starting one episode assembly."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workspace: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class SeriesAssemblyActionRequest(BaseModel):
+    """Workspace scope for a job mutation."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -58,7 +70,10 @@ class SeriesAssemblyJobResponse(BaseModel):
     workspace: str
     seriesId: str
     episodeId: str
-    status: Literal["queued", "running", "completed", "failed"]
+    status: Literal[
+        "queued", "running", "cancelling", "completed", "failed",
+        "cancelled", "interrupted",
+    ]
     stage: str
     current: int = Field(ge=0)
     total: int = Field(ge=0)
@@ -69,6 +84,20 @@ class SeriesAssemblyJobResponse(BaseModel):
     createdAt: float | None = None
     updatedAt: float | None = None
     finishedAt: float | None = None
+
+
+class SeriesAssemblyRecoveryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    jobs: list[SeriesAssemblyJobResponse]
+
+
+class SeriesAssemblyDiscardResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    discarded: bool
+    jobId: str
+    outputsPreserved: bool
 
 
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -96,27 +125,103 @@ def create_series_assembly_router(
     active_job_ids: set[str] = set()
     jobs_lock = threading.RLock()
 
+    def canonical_task_id(job_id: str) -> str:
+        return f"task-series-assembly-{job_id}"
+
+    def canonical_status(job: dict[str, Any]) -> str:
+        status = str(job.get("status") or "queued")
+        return "running" if status == "cancelling" else status
+
+    def publish_task(job: dict[str, Any]) -> None:
+        """Mirror the durable Assembly checkpoint into Activity's registry."""
+        workspace = str(job.get("workspace") or "default")
+        task_id = str(job.get("taskId") or canonical_task_id(str(job.get("jobId") or "")))
+        registry = get_task_registry(workspace_dir(workspace))
+        status = canonical_status(job)
+        fields = {
+            "root_id": task_id,
+            "kind": "assembly",
+            "workflow": "series-assembly",
+            "title": "Series Lab · Episode assembly",
+            "status": status,
+            "phase": str(job.get("stage") or status),
+            "message": str(job.get("message") or "Joining approved Series clips…"),
+            "current": int(job.get("current") or 0),
+            "total": int(job.get("total") or 0),
+            "created_at": float(job.get("createdAt") or time.time()),
+            "started_at": float(job.get("startedAt") or 0) or None,
+            "completed_at": float(job.get("finishedAt") or 0) or None,
+            "provider": "local",
+            "model": "FFmpeg",
+            "server_origin": "local",
+            "resource_requirements": ["cpu:ffmpeg"],
+            "acquired_resources": ["cpu:ffmpeg"] if status == "running" else [],
+            "project_id": str(job.get("seriesId") or ""),
+            "entity_type": "episode",
+            "entity_id": str(job.get("episodeId") or ""),
+            "backend_job_id": str(job.get("jobId") or ""),
+            "cancelable": status in {"created", "queued", "running"},
+            "resumable": status in {"failed", "cancelled", "interrupted"},
+            "recoverable": True,
+            "error": ({"message": str(job.get("error")), "retryable": True}
+                      if job.get("error") else None),
+            "result_refs": [str(job["assetId"])] if job.get("assetId") else [],
+            "metadata": {"adapter": "series-assembly"},
+        }
+        existing = registry.get(task_id)
+        if existing is None:
+            registry.create(id=task_id, workspace=workspace, **fields)
+        else:
+            try:
+                registry.update(task_id, force=True, event_type="adapter.synced", **fields)
+            except (KeyError, ValueError, OSError):
+                # A terminal task can only be reopened through the explicit
+                # resume endpoint; a late adapter snapshot must not resurrect it.
+                pass
+
+    def normalize_stale(job: dict[str, Any]) -> dict[str, Any]:
+        """Set a checkpoint left by another process to interrupted once."""
+        job_id = str(job.get("jobId") or "")
+        if str(job.get("status") or "") not in {"queued", "running", "cancelling"}:
+            return job
+        with jobs_lock:
+            if job_id in active_job_ids:
+                return job
+            cached = jobs.setdefault(job_id, copy.deepcopy(job))
+        stale = copy.deepcopy(cached)
+        now = time.time()
+        stale.update({
+            "status": "interrupted",
+            "stage": "interrupted",
+            "message": "The previous assembly process was interrupted; it can be resumed.",
+            "error": "Assembly process interrupted before completion",
+            "updatedAt": now,
+            "finishedAt": now,
+        })
+        store(str(stale["workspace"])).save(stale)
+        with jobs_lock:
+            jobs[job_id] = stale
+        publish_task(stale)
+        return copy.deepcopy(stale)
+
     def store(workspace: str) -> SeriesJobStore:
         return SeriesJobStore(workspace_dir(workspace), "assembly")
 
-    def load(job_id: str) -> dict[str, Any] | None:
+    def load(job_id: str, workspace: str | None = None) -> dict[str, Any] | None:
+        target = resolve_workspace(workspace)
         with jobs_lock:
             cached = jobs.get(job_id)
-            if cached:
-                return copy.deepcopy(cached)
-        for workspace in list_workspaces():
-            name = workspace.get("name") if isinstance(workspace, dict) else None
-            if not isinstance(name, str) or not name:
-                continue
-            try:
-                saved = store(name).load(job_id)
-            except (OSError, ValueError, json.JSONDecodeError):
-                continue
-            if saved:
-                with jobs_lock:
-                    jobs[job_id] = saved
-                return copy.deepcopy(saved)
-        return None
+            if cached and str(cached.get("workspace") or "") == target:
+                return normalize_stale(cached)
+        try:
+            saved = store(target).load(job_id)
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+        if not saved:
+            return None
+        with jobs_lock:
+            jobs[job_id] = saved
+        return normalize_stale(saved)
 
     def update(job_id: str, **patch: Any) -> dict[str, Any] | None:
         with jobs_lock:
@@ -127,10 +232,11 @@ def create_series_assembly_router(
             job["updatedAt"] = time.time()
             snapshot = copy.deepcopy(job)
             store(str(job["workspace"])).save(snapshot)
-            return snapshot
+        publish_task(snapshot)
+        return snapshot
 
     def persisted_active_job(workspace: str, series_id: str, episode_id: str) -> dict[str, Any] | None:
-        active_statuses = {"queued", "running"}
+        active_statuses = {"queued", "running", "cancelling"}
         with jobs_lock:
             cached = list(jobs.values())
         try:
@@ -160,14 +266,17 @@ def create_series_assembly_router(
                 return
         stale = copy.deepcopy(active)
         stale.update({
-            "status": "failed",
-            "stage": "failed",
-            "message": "The previous assembly process was interrupted; it can be started again.",
+            "status": "interrupted",
+            "stage": "interrupted",
+            "message": "The previous assembly process was interrupted; it can be resumed.",
             "error": "Assembly process interrupted before completion",
             "updatedAt": time.time(),
             "finishedAt": time.time(),
         })
         store(str(stale["workspace"])).save(stale)
+        with jobs_lock:
+            jobs[job_id] = stale
+        publish_task(stale)
 
     def run(job_id: str) -> None:
         job = update(
@@ -180,8 +289,17 @@ def create_series_assembly_router(
             with jobs_lock:
                 active_job_ids.discard(job_id)
             return
+        task_id = str(job.get("taskId") or canonical_task_id(job_id))
+        token = get_cancellation_token(workspace_dir(str(job["workspace"])), task_id)
         output_path = ""
         try:
+            if token.is_cancelled():
+                update(
+                    job_id, status="cancelled", stage="cancelled",
+                    error=None, finishedAt=time.time(),
+                    message="Series episode assembly cancelled before FFmpeg started.",
+                )
+                return
             clip_paths = [
                 asset_local_path(str(job["workspace"]), {
                     "id": item.get("assetId"),
@@ -195,10 +313,45 @@ def create_series_assembly_router(
                 output_directory,
                 f"{timestamp}_{job['episodeId']}_series_assembly.mp4",
             )
-            if not concatenate_clips(clip_paths, output_path):
+            try:
+                parameters = inspect.signature(concatenate_clips).parameters
+                supports_abort = "abort_callback" in parameters or any(
+                    value.kind == inspect.Parameter.VAR_KEYWORD
+                    for value in parameters.values()
+                )
+            except (TypeError, ValueError):
+                supports_abort = False
+            joined = (
+                concatenate_clips(clip_paths, output_path, abort_callback=token.is_cancelled)
+                if supports_abort else concatenate_clips(clip_paths, output_path)
+            )
+            if token.is_cancelled():
+                if output_path and os.path.isfile(output_path):
+                    try:
+                        os.remove(output_path)
+                    except OSError:
+                        pass
+                update(
+                    job_id, status="cancelled", stage="cancelled",
+                    error=None, finishedAt=time.time(),
+                    message="Series episode assembly cancelled; no joined output was kept.",
+                )
+                return
+            if not joined:
                 raise RuntimeError("ffmpeg could not join the approved Series clips")
             if not os.path.isfile(output_path):
                 raise RuntimeError("Series assembly finished without an output file")
+            if token.is_cancelled():
+                try:
+                    os.remove(output_path)
+                except OSError:
+                    pass
+                update(
+                    job_id, status="cancelled", stage="cancelled",
+                    error=None, finishedAt=time.time(),
+                    message="Series episode assembly cancelled before publishing its output.",
+                )
+                return
 
             asset_id = f"asset_assembly_{uuid.uuid4().hex}"
             completed_at = iso_now()
@@ -240,6 +393,8 @@ def create_series_assembly_router(
                 series["revision"] = int(series.get("revision") or 1) + 1
                 series["updatedAt"] = completed_at
                 library["seriesById"][series["id"]] = series
+                if token.is_cancelled():
+                    raise RuntimeError("Series assembly cancelled before library commit")
                 write_library(str(job["workspace"]), library)
             update(
                 job_id,
@@ -252,6 +407,18 @@ def create_series_assembly_router(
                 message=f"Joined {len(clip_paths)} approved clips in episode order.",
             )
         except Exception as exc:
+            if token.is_cancelled():
+                if output_path and os.path.isfile(output_path):
+                    try:
+                        os.remove(output_path)
+                    except OSError:
+                        pass
+                update(
+                    job_id, status="cancelled", stage="cancelled",
+                    error=None, finishedAt=time.time(),
+                    message="Series episode assembly cancelled; approved clips were not changed.",
+                )
+                return
             if output_path and os.path.isfile(output_path):
                 try:
                     os.remove(output_path)
@@ -308,7 +475,7 @@ def create_series_assembly_router(
                     if value.get("workspace") == workspace
                     and value.get("seriesId") == series_id
                     and value.get("episodeId") == episode_id
-                    and value.get("status") in {"queued", "running"}
+                    and value.get("status") in {"queued", "running", "cancelling"}
                 ), None)
                 if active_here:
                     raise HTTPException(
@@ -319,6 +486,7 @@ def create_series_assembly_router(
                 now = time.time()
                 job = {
                     "jobId": job_id,
+                    "taskId": canonical_task_id(job_id),
                     "kind": "assembly",
                     "workspace": workspace,
                     "seriesId": series_id,
@@ -338,6 +506,7 @@ def create_series_assembly_router(
                 jobs[job_id] = job
                 active_job_ids.add(job_id)
                 store(workspace).save(job)
+                publish_task(job)
         threading.Thread(
             target=run,
             args=(job_id,),
@@ -346,14 +515,141 @@ def create_series_assembly_router(
         ).start()
         return _public_job(job)
 
+    def control(job_id: str, action: str, workspace: str | None = None) -> dict[str, Any]:
+        target = resolve_workspace(workspace)
+        job = load(job_id, target)
+        if not job:
+            raise HTTPException(status_code=404, detail="Series assembly job not found")
+        task_id = str(job.get("taskId") or canonical_task_id(job_id))
+        token = get_cancellation_token(workspace_dir(target), task_id)
+        current_status = str(job.get("status") or "")
+        if action == "cancel":
+            if current_status in {"completed", "failed", "cancelled", "interrupted"}:
+                return _public_job(job)
+            token.cancel(f"Assembly {job_id} cancellation requested")
+            with jobs_lock:
+                active = job_id in active_job_ids
+            updated = update(
+                job_id,
+                status="cancelling" if active else "cancelled",
+                stage="cancelling" if active else "cancelled",
+                finishedAt=None if active else time.time(),
+                error=None,
+                message=(
+                    "Series assembly cancellation requested; waiting for FFmpeg to stop."
+                    if active else "Series episode assembly cancelled before FFmpeg started."
+                ),
+            )
+            return _public_job(updated or job)
+        if action == "resume":
+            if current_status == "completed":
+                raise HTTPException(status_code=409, detail="Completed assembly jobs cannot be resumed")
+            with jobs_lock:
+                if job_id in active_job_ids:
+                    return _public_job(job)
+                token.reset()
+                reopened = copy.deepcopy(job)
+                now = time.time()
+                reopened.update({
+                    "status": "queued", "stage": "queued", "message": "Episode assembly resumed.",
+                    "error": None, "finishedAt": None, "updatedAt": now,
+                })
+                jobs[job_id] = reopened
+                active_job_ids.add(job_id)
+                store(target).save(reopened)
+            publish_task(reopened)
+            threading.Thread(
+                target=run, args=(job_id,), name=f"series-assembly-{job_id[-6:]}", daemon=True,
+            ).start()
+            return _public_job(reopened)
+        if action == "discard":
+            if current_status in {"queued", "running", "cancelling"}:
+                raise HTTPException(status_code=409, detail="Cancel the active assembly before discarding its checkpoint")
+            with jobs_lock:
+                removed = store(target).discard(job_id)
+                jobs.pop(job_id, None)
+            if not removed:
+                raise HTTPException(status_code=404, detail="Series assembly job not found")
+            registry = get_task_registry(workspace_dir(target))
+            try:
+                registry.delete(task_id)
+            except (KeyError, ValueError):
+                pass
+            return {"discarded": True, "jobId": job_id, "outputsPreserved": True}
+        raise HTTPException(status_code=400, detail=f"Unsupported Assembly action: {action}")
+
+    @router.post(
+        "/api/v1/series/assembly/jobs/{job_id}/cancel",
+        response_model=SeriesAssemblyJobResponse,
+    )
+    def cancel(job_id: str, payload: SeriesAssemblyActionRequest):
+        return control(job_id, "cancel", payload.workspace)
+
+    @router.post(
+        "/api/v1/series/assembly/jobs/{job_id}/resume",
+        response_model=SeriesAssemblyJobResponse,
+    )
+    def resume(job_id: str, payload: SeriesAssemblyActionRequest):
+        return control(job_id, "resume", payload.workspace)
+
+    @router.get(
+        "/api/v1/series/assembly/recovery",
+        response_model=SeriesAssemblyRecoveryResponse,
+    )
+    def recovery(workspace: str | None = None):
+        target = resolve_workspace(workspace)
+        recovered = []
+        for item in store(target).recoverable():
+            job = load(str(item.get("jobId") or ""), target)
+            if job:
+                recovered.append(_public_job(job))
+        return {"jobs": recovered}
+
+    @router.delete(
+        "/api/v1/series/assembly/jobs/{job_id}",
+        response_model=SeriesAssemblyDiscardResponse,
+    )
+    def discard(job_id: str, workspace: str | None = None):
+        return control(job_id, "discard", workspace)
+
     @router.get(
         "/api/v1/series/assembly/jobs/{job_id}",
         response_model=SeriesAssemblyJobResponse,
     )
-    def status(job_id: str):
-        job = load(job_id)
+    def status(job_id: str, workspace: str | None = None):
+        job = load(job_id, workspace)
         if not job:
             raise HTTPException(status_code=404, detail="Series assembly job not found")
         return _public_job(job)
 
+    def controller(job_id: str, action: str) -> dict[str, Any]:
+        return control(job_id, action, None)
+
+    _ASSEMBLY_CONTROLLERS[os.path.realpath(os.path.abspath(workspace_dir(resolve_workspace(None))))] = controller
+
+    # Normalize all process leftovers at router construction, not only when
+    # the user happens to press Start. This keeps recovery visible in Activity.
+    for workspace_info in list_workspaces():
+        workspace_name = workspace_info.get("name") if isinstance(workspace_info, dict) else None
+        if not isinstance(workspace_name, str) or not workspace_name:
+            continue
+        _ASSEMBLY_CONTROLLERS[os.path.realpath(os.path.abspath(workspace_dir(workspace_name)))] = (
+            lambda job_id, action, target=workspace_name: control(job_id, action, target)
+        )
+        try:
+            for persisted in store(workspace_name).list():
+                normalize_stale(persisted)
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+
     return router
+
+
+def control_series_assembly_job(workspace_dir_value: str, job_id: str, action: str) -> dict[str, Any]:
+    """Control Assembly from the canonical Activity adapter."""
+    controller = _ASSEMBLY_CONTROLLERS.get(
+        os.path.realpath(os.path.abspath(workspace_dir_value))
+    )
+    if controller is None:
+        raise HTTPException(status_code=404, detail="Series assembly controller not found")
+    return controller(job_id, action)

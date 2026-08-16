@@ -18,6 +18,9 @@ TS_TARGET = ROOT / "ui/src/features/series/assemblyContract.ts"
 
 
 def _schema_type(schema: dict, *, property_name: str = "") -> str:
+    reference = schema.get("$ref")
+    if reference:
+        return reference.rsplit("/", 1)[-1]
     enum = schema.get("enum")
     if enum and property_name == "status":
         return "SeriesAssemblyStatus"
@@ -25,6 +28,8 @@ def _schema_type(schema: dict, *, property_name: str = "") -> str:
     if variants:
         return " | ".join(_schema_type(item, property_name=property_name) for item in variants)
     kind = schema.get("type")
+    if kind == "array":
+        return f"{_schema_type(schema.get('items') or {})}[]"
     return {
         "string": "string",
         "integer": "number",
@@ -46,7 +51,11 @@ def render_types(spec: dict) -> str:
         "export type SeriesAssemblyStatus = " + " | ".join(repr(value) for value in status_values),
         "",
     ]
-    for name in ("SeriesAssemblyStartRequest", "SeriesAssemblyJobResponse"):
+    for name in (
+        "SeriesAssemblyStartRequest", "SeriesAssemblyActionRequest",
+        "SeriesAssemblyJobResponse", "SeriesAssemblyRecoveryResponse",
+        "SeriesAssemblyDiscardResponse",
+    ):
         schema = schemas[name]
         required = set(schema.get("required", []))
         lines.append(f"export interface {name} {{")
