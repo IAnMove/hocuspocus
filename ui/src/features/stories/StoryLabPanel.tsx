@@ -18,6 +18,7 @@ import { AudioRangeSelector } from './AudioRangeSelector'
 import { createStoryActivityLifecycle } from './activityLifecycle'
 import { useComicStore } from '../comics/store'
 import type { ComicProject } from '../comics/types'
+import { syncTrailerDuration, trailerDurationForProject } from './trailerDefaults'
 import {
   buildComicAdaptation,
   buildMusicVideoAdaptation,
@@ -956,6 +957,8 @@ export function StoryLabPanel() {
   const [trailerTagline, setTrailerTagline] = useState('')
   const [trailerTitleCards, setTrailerTitleCards] = useState(false)
   const [trailerPreserveVisualStyle, setTrailerPreserveVisualStyle] = useState(true)
+  const [trailerTouched, setTrailerTouched] = useState(false)
+  const markTrailerTouched = () => setTrailerTouched(true)
   const [musicProductionCandidateId, setMusicProductionCandidateId] = useState(
     project.music.selectedCandidateId
       || project.music.cues.find(cue => cue.selectedCandidateId)?.selectedCandidateId
@@ -1348,9 +1351,7 @@ export function StoryLabPanel() {
   useEffect(() => {
     const currentProject = useStoryStore.getState().project
     setTrailerDirection(DEFAULT_TRAILER_DIRECTION)
-    setTrailerDuration(currentProject.projectType === 'trailer' || currentProject.projectType === 'quick_video'
-      ? Math.max(15, Math.min(180, currentProject.creativeBrief.durationSeconds))
-      : 60)
+    setTrailerDuration(trailerDurationForProject(currentProject.projectType, currentProject.creativeBrief.durationSeconds))
     setTrailerFormat('theatrical')
     setTrailerNarration('hybrid')
     setTrailerSpoiler('balanced')
@@ -1358,7 +1359,17 @@ export function StoryLabPanel() {
     setTrailerTagline('')
     setTrailerTitleCards(false)
     setTrailerPreserveVisualStyle(true)
+    setTrailerTouched(false)
   }, [project.id]) // Each Story starts with a clean trailer treatment.
+
+  useEffect(() => {
+    setTrailerDuration(current => syncTrailerDuration(
+      current,
+      project.projectType,
+      project.creativeBrief.durationSeconds,
+      trailerTouched,
+    ))
+  }, [project.creativeBrief.durationSeconds, project.projectType, trailerTouched])
 
   const openStorySection = (target: StoryTab) => {
     const compactSection = project.projectType !== 'full_story'
@@ -4585,7 +4596,6 @@ export function StoryLabPanel() {
                 : projectType === 'trailer' && project.projectType !== 'trailer'
                   ? 60
                 : project.creativeBrief.durationSeconds
-            if (projectType === 'trailer') setTrailerDuration(durationSeconds)
             patch({
               projectType,
               creativeBrief: { ...project.creativeBrief, durationSeconds },
@@ -5811,28 +5821,28 @@ export function StoryLabPanel() {
                   <div className={`${panel} space-y-4`}>
                     <div><h3 className="text-sm font-semibold text-text-primary">Dirección narrativa</h3><p className="mt-1 text-[10px] text-text-muted">Todo es editable antes de abrir Director o gastar créditos.</p></div>
                     <label className="block text-[10px] text-text-muted">Qué debe prometer este tráiler
-                      <textarea className={`${input} mt-1`} rows={4} value={trailerDirection} onChange={event => setTrailerDirection(event.target.value)} aria-label="Trailer creative direction" />
+                      <textarea className={`${input} mt-1`} rows={4} value={trailerDirection} onChange={event => { markTrailerTouched(); setTrailerDirection(event.target.value) }} aria-label="Trailer creative direction" />
                     </label>
                     <label className="block text-[10px] text-text-muted">Tagline final opcional
-                      <input className={`${input} mt-1`} value={trailerTagline} onChange={event => setTrailerTagline(event.target.value)} placeholder={project.logline || 'Una última frase memorable…'} />
+                      <input className={`${input} mt-1`} value={trailerTagline} onChange={event => { markTrailerTouched(); setTrailerTagline(event.target.value) }} placeholder={project.logline || 'Una última frase memorable…'} />
                     </label>
                     <div>
                       <p className="mb-1.5 text-[10px] text-text-muted">Duración</p>
                       <div className="grid grid-cols-4 gap-1.5">
-                        {[30, 45, 60, 90].map(seconds => <button key={seconds} type="button" className={`${button} ${trailerDuration === seconds ? 'border-amber-400/70 bg-amber-500/10 text-amber-100' : ''}`} onClick={() => setTrailerDuration(seconds)}>{seconds}s</button>)}
+                        {[30, 45, 60, 90].map(seconds => <button key={seconds} type="button" className={`${button} ${trailerDuration === seconds ? 'border-amber-400/70 bg-amber-500/10 text-amber-100' : ''}`} onClick={() => { markTrailerTouched(); setTrailerDuration(seconds) }}>{seconds}s</button>)}
                       </div>
-                      <input className={`${input} mt-2`} type="number" min={15} max={180} step={5} value={trailerDuration} onChange={event => setTrailerDuration(Math.max(15, Math.min(180, Number(event.target.value) || 60)))} />
+                      <input className={`${input} mt-2`} type="number" min={15} max={180} step={5} value={trailerDuration} onChange={event => { markTrailerTouched(); setTrailerDuration(Math.max(15, Math.min(180, Number(event.target.value) || 60))) }} />
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       <label className="block text-[10px] text-text-muted">Formato
-                        <select className={`${input} mt-1`} value={trailerFormat} onChange={event => setTrailerFormat(event.target.value as StoryTrailerFormat)}>
+                        <select className={`${input} mt-1`} value={trailerFormat} onChange={event => { markTrailerTouched(); setTrailerFormat(event.target.value as StoryTrailerFormat) }}>
                           <option value="theatrical">Theatrical · arco completo</option>
                           <option value="teaser">Teaser · misterio</option>
                           <option value="character">Personaje · arco emocional</option>
                         </select>
                       </label>
                       <label className="block text-[10px] text-text-muted">Voces
-                        <select className={`${input} mt-1`} value={trailerNarration} onChange={event => setTrailerNarration(event.target.value as StoryTrailerNarration)}>
+                        <select className={`${input} mt-1`} value={trailerNarration} onChange={event => { markTrailerTouched(); setTrailerNarration(event.target.value as StoryTrailerNarration) }}>
                           <option value="hybrid">Narrador + diálogo selectivo</option>
                           <option value="voice_over">Voz en off principal</option>
                           <option value="dialogue">Solo diálogo de personajes</option>
@@ -5840,14 +5850,14 @@ export function StoryLabPanel() {
                         </select>
                       </label>
                       <label className="block text-[10px] text-text-muted">Nivel de revelación
-                        <select className={`${input} mt-1`} value={trailerSpoiler} onChange={event => setTrailerSpoiler(event.target.value as StoryTrailerSpoiler)}>
+                        <select className={`${input} mt-1`} value={trailerSpoiler} onChange={event => { markTrailerTouched(); setTrailerSpoiler(event.target.value as StoryTrailerSpoiler) }}>
                           <option value="mystery">Misterio · protege casi todo</option>
                           <option value="balanced">Equilibrado · premisa y apuestas</option>
                           <option value="revealing">Revelador · grandes set pieces</option>
                         </select>
                       </label>
                       <label className="block text-[10px] text-text-muted">Curva de intensidad
-                        <select className={`${input} mt-1`} value={trailerIntensity} onChange={event => setTrailerIntensity(event.target.value as StoryTrailerIntensity)}>
+                        <select className={`${input} mt-1`} value={trailerIntensity} onChange={event => { markTrailerTouched(); setTrailerIntensity(event.target.value as StoryTrailerIntensity) }}>
                           <option value="rising">Creciente · clásico épico</option>
                           <option value="relentless">Implacable · urgencia continua</option>
                           <option value="prestige">Prestige · atmósfera y escala</option>
@@ -5855,7 +5865,7 @@ export function StoryLabPanel() {
                       </label>
                     </div>
                     <label className={`flex items-start gap-2 rounded-md border p-2 ${trailerTitleCards && !project.allowClipText ? 'border-amber-400/50 bg-amber-500/10' : 'border-border bg-bg-primary/30'}`}>
-                      <input type="checkbox" checked={trailerTitleCards} onChange={event => setTrailerTitleCards(event.target.checked)} className="mt-0.5 accent-amber-400" />
+                      <input type="checkbox" checked={trailerTitleCards} onChange={event => { markTrailerTouched(); setTrailerTitleCards(event.target.checked) }} className="mt-0.5 accent-amber-400" />
                       <span><span className="block text-[10px] font-medium text-text-primary">Cartelas mínimas: gancho, título y tagline</span><span className="block text-[9px] text-text-muted">Nunca convierte el diálogo en subtítulos. Requiere “Permitir texto visible” en Story.</span></span>
                     </label>
                     {trailerTitleCards && !project.allowClipText && <button type="button" className={`${button} w-full border-amber-400/50 text-amber-200`} onClick={() => patch({ allowClipText: true })}>Permitir texto visible en esta Story</button>}
@@ -5906,7 +5916,7 @@ export function StoryLabPanel() {
                           {directVideoMasterReady ? 'No se ejecutará el modelo de imagen ni se enviarán referencias a H3.' : 'Completa este prompt antes de generar.'}
                         </span>
                       </div>}
-                      <label className={`flex items-start gap-2 pt-1 ${directVideo ? 'opacity-45' : ''}`}><input type="checkbox" disabled={directVideo} checked={trailerPreserveVisualStyle} onChange={event => setTrailerPreserveVisualStyle(event.target.checked)} className="mt-0.5 accent-purple-400" /><span><span className="block text-[10px] text-text-primary">Conservar el estilo visual de Story</span><span className="block text-[9px] text-text-muted">{directVideo ? 'En T2V el estilo procede exclusivamente del prompt maestro.' : 'Mantiene medio, paleta, diseño y referencias aprobadas.'}</span></span></label>
+                      <label className={`flex items-start gap-2 pt-1 ${directVideo ? 'opacity-45' : ''}`}><input type="checkbox" disabled={directVideo} checked={trailerPreserveVisualStyle} onChange={event => { markTrailerTouched(); setTrailerPreserveVisualStyle(event.target.checked) }} className="mt-0.5 accent-purple-400" /><span><span className="block text-[10px] text-text-primary">Conservar el estilo visual de Story</span><span className="block text-[9px] text-text-muted">{directVideo ? 'En T2V el estilo procede exclusivamente del prompt maestro.' : 'Mantiene medio, paleta, diseño y referencias aprobadas.'}</span></span></label>
                     </div>
                     <div className="rounded-lg border border-border bg-bg-primary/30 p-3 space-y-2">
                       <label className="block text-[10px] text-text-muted">Modelo de imagen

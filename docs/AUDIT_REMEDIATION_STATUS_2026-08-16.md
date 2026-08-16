@@ -60,7 +60,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | MEM-01 | pendiente | — |
 | STORAGE-01 | completado | Wrapper seguro para local/session storage con fallback en memoria sólo cuando persiste el fallo; Welcome/Preflight sobreviven SecurityError/cuota y una eliminación externa no resucita valores; tests UI + lint/build verdes. |
 | I18N-01 | pendiente | — |
-| TRAILER-01 | pendiente | — |
+| TRAILER-01 | completado | Reset por proyecto separado de la sincronización de defaults; tipo/duración siguen al proyecto hasta la primera edición manual y después se preservan; tests de ambos estados + lint/build verdes. |
 | STYLE-01 | pendiente | — |
 | STYLE-02 | pendiente | — |
 | TEST-01 | completado | 1.278 tests coleccionados desde raíz con `PYTHONPATH` eliminado |
