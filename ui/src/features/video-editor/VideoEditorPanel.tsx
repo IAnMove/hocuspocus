@@ -25,6 +25,7 @@ import {
 import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
+import { ModalShell } from '../../components/common/ModalShell'
 import {
   clearVideoEditorReplacementResult,
   clearVideoEditorReplacementTarget,
@@ -2374,7 +2375,10 @@ export function VideoEditorPanel() {
       </div>
 
       {pickerOpen && (
-        <div
+        <ModalShell
+          open
+          title="Add a Maestro video"
+          onClose={() => setPickerOpen(false)}
           className="fixed inset-0 z-[80] bg-black/65 flex items-center justify-center p-4"
           onMouseDown={event => {
             if (event.currentTarget === event.target) setPickerOpen(false)
@@ -2387,7 +2391,7 @@ export function VideoEditorPanel() {
               {maestroVideoTotal > 0 && (
                 <span className="text-[10px] text-text-muted">{maestroVideos.length} / {maestroVideoTotal}</span>
               )}
-              <button onClick={() => setPickerOpen(false)} className="ml-auto p-1 rounded hover:bg-bg-hover">
+              <button onClick={() => setPickerOpen(false)} aria-label="Close Maestro video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
                 <X size={15} />
               </button>
             </div>
@@ -2439,7 +2443,7 @@ export function VideoEditorPanel() {
               )}
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
     </div>
   )

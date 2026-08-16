@@ -4,6 +4,7 @@ import { useStore } from '../../stores/useStore'
 import { getFileUrl } from '../../api/client'
 import { getOutputReference } from '../../lib/outputReference'
 import type { H3SegmentState, PipelineClipState, SavedPipelineState } from '../../types'
+import { ModalShell } from '../common/ModalShell'
 
 /** Safely coerce any value to a displayable string */
 function safeStr(val: unknown): string {
@@ -856,7 +857,8 @@ function DirectorDashboardInner() {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-bg-primary">
+    <ModalShell open title="Director video workflows" onClose={() => setOpen(false)}
+      className="fixed inset-0 z-[60] flex flex-col bg-bg-primary">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-2 shrink-0">
         <h1 className="text-sm font-semibold text-text-primary shrink-0">Video workflows</h1>
@@ -1057,7 +1059,7 @@ function DirectorDashboardInner() {
           </div>
         )}
 
-        <button onClick={() => setOpen(false)}
+        <button onClick={() => setOpen(false)} aria-label="Close Director video workflows"
           className="fixed top-3 right-4 z-[61] p-1.5 rounded-lg bg-bg-secondary hover:bg-bg-hover transition-colors shadow-md border border-border">
           <X size={16} className="text-text-muted" />
         </button>
@@ -1148,6 +1150,6 @@ function DirectorDashboardInner() {
           </>
         )}
       </div>
-    </div>
+    </ModalShell>
   )
 }

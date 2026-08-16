@@ -52,7 +52,7 @@ Estados: `pendiente`, `delegado`, `completado`, `bloqueado`.
 | UPLOAD-01 | completado | Ingesta en chunks de 1 MiB con límite acumulado y 413; publicación atómica, cleanup en error/cancelación, concurrencia acotada y transcode cancel-safe; 4 tests verdes |
 | CANCEL-01 | pendiente | — |
 | RES-01 | completado | Ticket monotónico + Condition por lane; sólo la cabeza adquiere, cancelación elimina/despierta; FIFO A/B/C validado 100 veces y B cancelado deja A/C; 17 tests verdes |
-| A11Y-01 | pendiente | — |
+| A11Y-01 | completado | `ModalShell` aporta nombre, `role=dialog`, `aria-modal`, foco inicial/restaurado, Escape y trap Tab/Shift+Tab; migrados Director Dashboard y picker del editor; tests RTL + lint/build verdes. |
 | A11Y-02 | pendiente | — |
 | RESP-01 | pendiente | — |
 | RESP-02 | pendiente | — |
