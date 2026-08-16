@@ -1,8 +1,8 @@
 import { rememberPrompt } from '../lib/promptHistory'
 import { openCanonicalTaskEventStream } from '../lib/canonicalTaskEvents'
 import type { CanonicalTaskEvent, CanonicalTaskStreamState } from '../lib/canonicalTaskEvents'
-import { isDirectorV2PlanResponse } from '../types'
-import type { DirectorModelCompatibility, DirectorV2PlanJob, DirectorV2PlanProgress, DirectorV2PlanRequest, DirectorV2PlanResponse, GenerationDetails, H3WindowPlan, ScailResolutionProfile } from '../types'
+import { isDirectorV2PlanFailureDetail, isDirectorV2PlanResponse } from '../types'
+import type { DirectorModelCompatibility, DirectorV2PlanFailureDetail, DirectorV2PlanJob, DirectorV2PlanProgress, DirectorV2PlanRequest, DirectorV2PlanResponse, GenerationDetails, H3WindowPlan, ScailResolutionProfile } from '../types'
 
 const BASE = ''  // same origin in production; Vite proxy handles /api in dev
 
@@ -1763,6 +1763,30 @@ export async function deletePipeline(pid: string): Promise<{ media_deleted: numb
 
 // --- Director v2 ---
 
+export class DirectorV2PlanError extends Error {
+  readonly detail: DirectorV2PlanFailureDetail
+  readonly job: DirectorV2PlanJob
+
+  constructor(detail: DirectorV2PlanFailureDetail) {
+    super(detail.message)
+    this.name = 'DirectorV2PlanError'
+    this.detail = detail
+    this.job = detail.job
+  }
+}
+
+async function throwDirectorV2PlanError(res: Response, fallback: string): Promise<never> {
+  const payload: unknown = await res.json().catch(() => null)
+  if (payload && typeof payload === 'object') {
+    const detail = (payload as Record<string, unknown>).detail
+    if (isDirectorV2PlanFailureDetail(detail)) {
+      throw new DirectorV2PlanError(detail)
+    }
+    if (typeof detail === 'string' && detail.trim()) throw new Error(detail)
+  }
+  throw new Error(fallback)
+}
+
 export async function directorV2Plan(params: DirectorV2PlanRequest): Promise<DirectorV2PlanResponse> {
   const res = await fetch(`${BASE}/api/v1/director/v2/plan`, {
     method: 'POST',
@@ -1770,8 +1794,7 @@ export async function directorV2Plan(params: DirectorV2PlanRequest): Promise<Dir
     body: JSON.stringify(params),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Plan failed' }))
-    throw new Error(err.detail || 'Director v2 plan failed')
+    return throwDirectorV2PlanError(res, 'Director v2 plan failed')
   }
   const payload: unknown = await res.json()
   if (!isDirectorV2PlanResponse(payload)) {
@@ -1811,8 +1834,7 @@ export async function resumeDirectorV2PlanJob(
     body: JSON.stringify(activityId ? { activity_id: activityId } : {}),
   })
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Director plan resume failed' }))
-    throw new Error(error.detail || 'Director plan resume failed')
+    return throwDirectorV2PlanError(res, 'Director plan resume failed')
   }
   const payload: unknown = await res.json()
   if (!isDirectorV2PlanResponse(payload)) {

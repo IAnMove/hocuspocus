@@ -9,6 +9,7 @@ import { InfoTooltip } from './InfoTooltip'
 import type { DirectorPipelineType, DirectorShotImageGuidance, DirectorSkill, ModelOptions, MusicVideoTreatment, ShortFilmCharacter, ShortFilmPath } from '../../types'
 import { formatSeconds, recommendedWindowProfile } from './DurationSlider'
 import { DirectorClipImagePreview } from './DirectorClipImagePreview'
+import { DirectorPlanRecoveryCard } from './DirectorPlanRecoveryCard'
 
 const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
   .then(module => ({ default: module.ComicDirectorPanel })))
@@ -376,6 +377,8 @@ export function DirectorChat() {
   // mode) or already generating from a previous click (manual mode).
   const isGenerating = useStore(s => s.isGenerating)
   const error = useStore(s => s.directorError)
+  const planRecovery = useStore(s => s.directorPlanRecovery)
+  const resumePlan = useStore(s => s.directorResumePlan)
   const analysis = useStore(s => s.directorAnalysis)
   const plannedClips = useStore(s => s.directorPlannedClips)
   const energyBias = useStore(s => s.directorEnergyBias)
@@ -560,7 +563,7 @@ export function DirectorChat() {
   // analyze phases) and new errors pull the view down to the newest content.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [step, loading, loadingMessage, error, clipPlans.length, clipImages.length, skill])
+  }, [step, loading, loadingMessage, error, planRecovery, clipPlans.length, clipImages.length, skill])
 
   const handleChatSubmit = () => {
     // Music Video "Generate a track": the chat is the song description, and
@@ -1170,7 +1173,14 @@ export function DirectorChat() {
             generation renders its error directly below the Generate status
             control; earlier-stage failures land here, after the current step,
             instead of appearing near the first line of the conversation. */}
-        {error && !atStep('review_video') && (
+        {planRecovery && !atStep('review_video') && (
+          <DirectorPlanRecoveryCard
+            job={planRecovery}
+            loading={loading}
+            onResume={resumePlan}
+          />
+        )}
+        {error && !planRecovery && !atStep('review_video') && (
           <div role="alert" className="text-[11px] text-red-300 bg-red-500/10 rounded px-2 py-2 border border-red-500/30 flex items-start gap-1.5">
             <X size={12} className="mt-0.5 shrink-0" />
             <span><strong className="font-semibold">Error:</strong> {error}</span>

@@ -10777,9 +10777,10 @@ async def _director_v2_plan_body(body: dict):
     except Exception as e:
         import traceback
         traceback.print_exc()
+        recoverable_failure = None
         if plan_job_store is not None and plan_job_id:
             try:
-                plan_job_store.update(
+                failed_job = plan_job_store.update(
                     plan_job_id,
                     status="failed",
                     phase="failed",
@@ -10788,11 +10789,15 @@ async def _director_v2_plan_body(body: dict):
                     error=str(e),
                     finishedAt=time.time(),
                 )
+                from services.director_plan_jobs import build_director_plan_failure_detail
+                recoverable_failure = build_director_plan_failure_detail(failed_job, str(e))
             except Exception as checkpoint_error:
                 print(f"[DirectorPlanJob] Could not persist failure state: {checkpoint_error}")
         llm_service.update_activity_tracking(
             tracking_id, status="failed", detail=str(e), error=str(e)
         )
+        if recoverable_failure is not None:
+            raise HTTPException(status_code=500, detail=recoverable_failure)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if plan_job_id:

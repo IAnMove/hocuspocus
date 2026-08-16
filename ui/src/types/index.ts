@@ -1496,6 +1496,60 @@ export interface DirectorV2PlanJob {
   finishedAt?: number | null
 }
 
+export interface DirectorV2PlanFailureDetail {
+  code: 'director_plan_incomplete'
+  message: string
+  job: DirectorV2PlanJob
+  resume: {
+    action: 'resume_missing'
+    method: 'POST'
+    path: string
+  }
+  imagesQueued: false
+}
+
+/** Runtime boundary for durable Director job snapshots returned on failures. */
+export function isDirectorV2PlanJob(value: unknown): value is DirectorV2PlanJob {
+  if (!value || typeof value !== 'object') return false
+  const job = value as Record<string, unknown>
+  const statuses = ['queued', 'running', 'completed', 'failed', 'cancelled']
+  const isNumberArray = (items: unknown): items is number[] => (
+    Array.isArray(items) && items.every(item => Number.isInteger(item))
+  )
+  return typeof job.jobId === 'string'
+    && typeof job.workspace === 'string'
+    && isDirectorSkill(job.skillType)
+    && typeof job.status === 'string'
+    && statuses.includes(job.status)
+    && typeof job.phase === 'string'
+    && typeof job.message === 'string'
+    && typeof job.total === 'number'
+    && isNumberArray(job.completedIndices)
+    && isNumberArray(job.missingIndices)
+    && Array.isArray(job.completedBatches)
+    && isNumberArray(job.activeBatch)
+    && typeof job.calls === 'number'
+    && !!job.usage
+    && typeof job.usage === 'object'
+    && typeof job.createdAt === 'number'
+    && typeof job.updatedAt === 'number'
+}
+
+/** Runtime boundary for the structured partial-plan failure contract. */
+export function isDirectorV2PlanFailureDetail(value: unknown): value is DirectorV2PlanFailureDetail {
+  if (!value || typeof value !== 'object') return false
+  const detail = value as Record<string, unknown>
+  const resume = detail.resume as Record<string, unknown> | undefined
+  return detail.code === 'director_plan_incomplete'
+    && typeof detail.message === 'string'
+    && isDirectorV2PlanJob(detail.job)
+    && !!resume
+    && resume.action === 'resume_missing'
+    && resume.method === 'POST'
+    && typeof resume.path === 'string'
+    && detail.imagesQueued === false
+}
+
 /** Runtime boundary for the Director v2 response returned by the backend. */
 export function isDirectorV2PlanResponse(value: unknown): value is DirectorV2PlanResponse {
   if (!value || typeof value !== 'object') return false

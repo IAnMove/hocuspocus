@@ -4,6 +4,7 @@ import { directorV2Plan } from '../src/api/client'
 import {
   DIRECTOR_SKILLS,
   isDirectorSkill,
+  isDirectorV2PlanFailureDetail,
   isDirectorV2PlanResponse,
   type DirectorV2PlanResponse,
 } from '../src/types'
@@ -20,6 +21,30 @@ test('Director v2 API parameters use the shared DirectorSkill contract', () => {
   assert.equal(request.plan_job_id, 'director-plan-resume')
   assert.equal(isDirectorSkill('comic_movie'), true)
   assert.equal(isDirectorSkill('not-a-director-skill'), false)
+})
+
+test('Director v2 partial failures require an explicit non-rendering resume contract', () => {
+  const detail = {
+    code: 'director_plan_incomplete',
+    message: 'Final batch failed',
+    job: {
+      jobId: 'director-plan-partial', workspace: 'default', skillType: 'music_video',
+      status: 'failed', phase: 'failed', message: 'Recoverable', total: 10,
+      completedIndices: [1, 2, 3, 4, 5, 6, 7, 8], missingIndices: [9, 10],
+      completedBatches: [{ indices: [1, 2, 3, 4, 5, 6, 7, 8], completedAt: 1 }],
+      activeBatch: [], calls: 2, usage: { total_tokens: 900 }, error: 'Final batch failed',
+      result: null, createdAt: 1, updatedAt: 2, finishedAt: 2,
+    },
+    resume: {
+      action: 'resume_missing', method: 'POST',
+      path: '/api/v1/director/v2/plan/jobs/director-plan-partial/resume?workspace=default',
+    },
+    imagesQueued: false,
+  }
+
+  assert.equal(isDirectorV2PlanFailureDetail(detail), true)
+  assert.equal(isDirectorV2PlanFailureDetail({ ...detail, imagesQueued: true }), false)
+  assert.equal(isDirectorV2PlanFailureDetail({ ...detail, job: { ...detail.job, missingIndices: ['9'] } }), false)
 })
 
 test('Director v2 response guard rejects drifted skill types and malformed prompts', () => {

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
+import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanJob, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
@@ -1753,6 +1753,9 @@ interface AppState {
    *  "Analyzing audio..." in the UI when null. */
   directorLoadingMessage: string | null
   directorError: string | null
+  /** Durable partial plan shown after a provider failure. It contains no
+   * prompts, only saved/missing indexes and the resume identifier. */
+  directorPlanRecovery: DirectorV2PlanJob | null
   directorReferenceImage: File | null
   directorReferenceImagePath: string | null
   directorCharacterRefs: File[]
@@ -1855,6 +1858,7 @@ interface AppState {
   directorAddH3AudioRef: (file: File) => void
   directorRemoveH3AudioRef: (index: number) => void
   directorPlanPrompts: () => Promise<void>
+  directorResumePlan: () => Promise<void>
   directorPlanVideoPrompts: () => Promise<void>
   directorGenerateStartImages: () => Promise<void>
   directorApplyToClips: () => void
@@ -7230,6 +7234,7 @@ export const useStore = create<AppState>((set, get) => ({
   directorLoading: false,
   directorLoadingMessage: null,
   directorError: null,
+  directorPlanRecovery: null,
   directorReferenceImage: null,
   directorReferenceImagePath: null,
   directorCharacterRefs: [],
@@ -8150,7 +8155,7 @@ export const useStore = create<AppState>((set, get) => ({
       message: 'Preparing visual references…',
       total: 3,
     })
-    set({ directorLoading: true, directorError: null, directorStep: 'plan' })
+    set({ directorLoading: true, directorError: null, directorPlanRecovery: null, directorStep: 'plan' })
     try {
       // Upload all reference images
       const { refImagePath, charPaths, locPaths } = directVideo
@@ -8268,6 +8273,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorClipPlans: plans,
         directorStep: directVideo ? 'review_video' : 'review',
         directorLoading: false,
+        directorPlanRecovery: null,
       })
       activity.finish(`${plans.length} visual shot plans ready for review`)
 
@@ -8282,8 +8288,66 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Planning failed'
       console.error('Director planning failed:', e)
-      set({ directorLoading: false, directorError: msg, directorStep: 'style' })
+      set({
+        directorLoading: false,
+        directorError: msg,
+        directorPlanRecovery: e instanceof api.DirectorV2PlanError ? e.job : null,
+        directorStep: 'style',
+      })
       activity.fail(e, 'planning')
+    }
+  },
+
+  directorResumePlan: async () => {
+    const recovery = get().directorPlanRecovery
+    if (!recovery || recovery.status === 'completed') return
+    if (recovery.workspace !== get().activeWorkspace) {
+      set({ directorError: `This plan belongs to workspace “${recovery.workspace}”. Switch back to resume it.` })
+      return
+    }
+    const activity = beginAppActivity(get, {
+      kind: 'director_planning',
+      title: 'Music Video Director',
+      phase: 'resuming',
+      message: `Resuming ${recovery.missingIndices.length} missing clip plans…`,
+      total: recovery.total,
+    })
+    set({ directorLoading: true, directorError: null, directorStep: 'plan' })
+    try {
+      const result = await api.resumeDirectorV2PlanJob(
+        recovery.jobId,
+        recovery.workspace,
+        activity.id,
+      )
+      const plans = result.clip_plans.map(plan => ({
+        video_prompt: plan.video_prompt || '',
+        image_prompt: plan.image_prompt || '',
+      }))
+      const directVideo = get().directorMusicVideoTreatment.generation_mode === 'direct_video'
+      set({
+        directorClipPlans: plans,
+        directorStep: directVideo ? 'review_video' : 'review',
+        directorLoading: false,
+        directorPlanRecovery: null,
+      })
+      activity.finish(`${plans.length} visual shot plans ready for review`)
+
+      // Rendering is intentionally gated behind a complete resumed response.
+      // A failed/partial response never reaches either generation action.
+      if (get().directorAutoMode) {
+        if (directVideo) get().directorGenerate()
+        else get().directorGenerateStartImages()
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Planning resume failed'
+      console.error('Director planning resume failed:', e)
+      set({
+        directorLoading: false,
+        directorError: msg,
+        directorPlanRecovery: e instanceof api.DirectorV2PlanError ? e.job : recovery,
+        directorStep: 'style',
+      })
+      activity.fail(e, 'resuming')
     }
   },
 
@@ -8775,6 +8839,7 @@ export const useStore = create<AppState>((set, get) => ({
       directorSceneDescription: '',
       directorLoading: false,
       directorError: null,
+      directorPlanRecovery: null,
       directorReferenceImage: null,
       directorReferenceImagePath: null,
       directorCharacterRefs: [],

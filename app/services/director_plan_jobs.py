@@ -14,6 +14,7 @@ import threading
 import time
 import uuid
 from typing import Any
+from urllib.parse import quote
 
 
 DIRECTOR_PLAN_JOBS_DIR = ".director-plan-jobs-v1"
@@ -45,6 +46,27 @@ def _clip_index(plan: dict) -> int | None:
     except (AttributeError, TypeError, ValueError):
         return None
     return value if value > 0 else None
+
+
+def build_director_plan_failure_detail(job: dict, error: str | None = None) -> dict:
+    """Return the safe, actionable API contract for a recoverable plan failure."""
+    snapshot = DirectorPlanJobStore.public_snapshot(job)
+    job_id = quote(str(snapshot.get("jobId") or ""), safe="")
+    workspace = quote(str(snapshot.get("workspace") or "default"), safe="")
+    message = str(error or snapshot.get("error") or snapshot.get("message") or "Director planning failed")
+    return {
+        "code": "director_plan_incomplete",
+        "message": message,
+        "job": snapshot,
+        "resume": {
+            "action": "resume_missing",
+            "method": "POST",
+            "path": f"/api/v1/director/v2/plan/jobs/{job_id}/resume?workspace={workspace}",
+        },
+        # The planning endpoint never starts image generation. Keep this
+        # explicit so clients cannot mistake a partial plan for queued work.
+        "imagesQueued": False,
+    }
 
 
 class DirectorPlanJobStore:

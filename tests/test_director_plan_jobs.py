@@ -10,6 +10,7 @@ import pytest
 from app.services.director.planners.music_video import MusicVideoPlanner
 from app.services.director_plan_jobs import (
     DirectorPlanJobStore,
+    build_director_plan_failure_detail,
     claim_director_plan_job,
     release_director_plan_job,
 )
@@ -166,6 +167,47 @@ def test_checkpoint_never_overwrites_a_completed_clip(tmp_path):
     assert reloaded is not None
     assert reloaded["completedShotPlans"][0]["scene_goal"] == "Durable narrative beat 1"
     assert "request" not in store.public_snapshot(reloaded)
+
+
+def test_failure_contract_preserves_partial_batches_and_exposes_resume_action(tmp_path):
+    store = DirectorPlanJobStore(str(tmp_path))
+    job = store.create(
+        {"scene_description": "A recoverable plan"},
+        workspace="project with spaces",
+        skill_type="music_video",
+        total=10,
+    )
+    partial = store.record_batch(
+        job["jobId"],
+        indices=list(range(1, 9)),
+        shot_plans=[_shot(index) for index in range(1, 9)],
+    )
+    failed = store.update(
+        job["jobId"],
+        status="failed",
+        phase="failed",
+        message="Music-video planning stopped; completed batches are recoverable",
+        error="Provider stopped during the final batch",
+    )
+
+    detail = build_director_plan_failure_detail(failed)
+
+    assert partial["completedIndices"] == list(range(1, 9))
+    assert detail["code"] == "director_plan_incomplete"
+    assert detail["message"] == "Provider stopped during the final batch"
+    assert detail["job"]["completedIndices"] == list(range(1, 9))
+    assert detail["job"]["missingIndices"] == [9, 10]
+    assert detail["job"]["completedBatches"][0]["indices"] == list(range(1, 9))
+    assert detail["resume"] == {
+        "action": "resume_missing",
+        "method": "POST",
+        "path": (
+            f"/api/v1/director/v2/plan/jobs/{job['jobId']}/resume"
+            "?workspace=project%20with%20spaces"
+        ),
+    }
+    assert detail["imagesQueued"] is False
+    assert "request" not in detail["job"]
 
 
 def test_job_ids_cannot_escape_the_workspace(tmp_path):
