@@ -865,8 +865,20 @@ def compose_direct_video_prompt(
             clean_effects = [item for item in clean_effects if item]
             if clean_effects:
                 sound_parts.append("Synchronized effects: " + ", ".join(clean_effects))
+    # ``h3_audio_prompt`` is a UI-level generation preference. Its default
+    # explicitly says "include ... dialogue or music", which is not ambience
+    # and must never be copied into H3's ``overall_soundscape``. Exact speech
+    # belongs only in <d> blocks and music in its own official field.
     direction = " ".join(str(audio_direction or "").split()).strip(" .")
-    if direction and not authored_soundscape:
+    if (
+        direction
+        and not authored_soundscape
+        and not re.search(
+            r"\b(?:dialogue|voice|voices|speech|vocal|lyrics?|singing|music|song)\b",
+            direction,
+            flags=re.I,
+        )
+    ):
         sound_parts.append(direction)
     if not sound_parts:
         sound_parts.append("Natural synchronized ambience and effects matching the visible action")

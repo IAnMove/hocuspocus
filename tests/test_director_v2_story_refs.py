@@ -224,6 +224,28 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertIn("Low strings rise into a sharp brass hit", compiled)
         self.assertNotIn("Natural scene-appropriate stereo ambience", compiled)
 
+    def test_direct_video_never_leaks_global_audio_meta_into_soundscape(self):
+        plans = [{
+            "scene_goal": "A silent cave reveal",
+            "environment": "a wet stone cave",
+            "video_prompt": "A traveler raises a lantern and stays silent.",
+            "audio_plan": {"mode": "ambient_only", "ambience": "distant cave drips"},
+        }]
+        enforce_direct_video_on_clip_plans(
+            plans,
+            "Dark adventure cinematography.",
+            audio_direction=(
+                "Natural synchronized production sound matching the visible "
+                "environment and actions; include explicitly described dialogue "
+                "or music, otherwise use ambience and sound effects only."
+            ),
+        )
+        soundscape = plans[0]["video_prompt"].split(
+            "overall_soundscape:", 1
+        )[1].split("non_diegetic_music:", 1)[0].casefold()
+        self.assertIn("distant cave drips", soundscape)
+        self.assertNotIn("dialogue", soundscape)
+        self.assertNotIn("music", soundscape)
     def test_choruses_reuse_signature_set_with_controlled_coverage(self):
         clips = [
             {"label": "verse"},

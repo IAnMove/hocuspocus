@@ -230,7 +230,15 @@ def _sound_fields(plan: dict, audio_direction: str) -> tuple[str, str]:
     # in the full-clip soundscape can make H3 extend a short line with invented
     # speech before or after the authored words.
     direction = _clean(audio_direction)
-    if direction:
+    # The global UI audio preference can contain meta instructions such as
+    # "include dialogue or music". Those are not diegetic ambience and H3
+    # treats words like dialogue/voice/music in this field as an audio cue.
+    # Literal speech and music have dedicated Context-IR locations instead.
+    if direction and not re.search(
+        r"\b(?:dialogue|voice|voices|speech|vocal|lyrics?|singing|music|song)\b",
+        direction,
+        flags=re.I,
+    ):
         soundscape_parts.append(direction)
     if not soundscape_parts:
         soundscape_parts.append("Natural stereo production sound synchronized to visible actions")
