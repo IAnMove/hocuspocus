@@ -527,10 +527,6 @@ def create_quick_video_batch_router(
                 control(job_id, action, item_index, target)
         )
         settings = payload.settings.model_dump()
-        if settings["generationMode"] == "direct_video" and not (
-            settings.get("directVideoMasterPrompt") or settings.get("visualStyle")
-        ):
-            raise HTTPException(status_code=400, detail="Direct video needs a visual-style or master prompt")
         job_id = f"quick-batch-{uuid.uuid4().hex[:12]}"
         now = time.time()
         job = {

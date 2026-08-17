@@ -5,6 +5,7 @@ import type { StoryMusicVideoGenerationMode, StoryProject } from './types'
 
 const control = 'inline-flex items-center justify-center gap-1 rounded-md border border-border bg-bg-tertiary px-2 py-1 text-[10px] text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40'
 const activeStatuses = new Set(['queued', 'running', 'cancelling'])
+const PER_IDEA_STYLE_CONTRACT = 'Each batch idea defines its own visual style. Follow the style stated in the current idea exactly; never impose or carry over a style from another batch item.'
 
 interface Props {
   project: StoryProject
@@ -114,7 +115,9 @@ export function QuickVideoBatchPanel({
           spokenLanguage: project.spokenLanguage,
           visualStyle: project.visualStyle,
           characterVisualStyle: project.characterVisualStyle,
-          directVideoMasterPrompt: project.directVideoMasterPrompt,
+          directVideoMasterPrompt: generationMode === 'direct_video'
+            ? project.directVideoMasterPrompt.trim() || project.visualStyle.trim() || PER_IDEA_STYLE_CONTRACT
+            : project.directVideoMasterPrompt,
           allowClipText: project.allowClipText,
           writingProvider: project.provider.writingProvider,
           writingModel: project.provider.writingModel,
@@ -157,8 +160,6 @@ export function QuickVideoBatchPanel({
 
   const directReferencesMissing = generationMode === 'direct_references'
     && references.length === 0
-  const directPromptMissing = generationMode === 'direct_video'
-    && !project.directVideoMasterPrompt.trim() && !project.visualStyle.trim()
 
   return (
     <div className="rounded-lg border border-fuchsia-500/25 bg-fuchsia-500/5 p-3 space-y-3">
@@ -206,10 +207,12 @@ export function QuickVideoBatchPanel({
         </label>
       </div>
       {directReferencesMissing && <p className="text-[10px] text-amber-300">El modo Referencias directas necesita al menos una imagen aprobada.</p>}
-      {directPromptMissing && <p className="text-[10px] text-amber-300">El modo T2V necesita una hoja de estilo o prompt maestro.</p>}
+      {generationMode === 'direct_video' && !project.directVideoMasterPrompt.trim() && !project.visualStyle.trim() && (
+        <p className="text-[10px] text-fuchsia-200/80">Cada línea definirá su propio estilo visual; no se aplicará una hoja de estilo global.</p>
+      )}
       <button
         className={`${control} w-full border-fuchsia-400/50 bg-fuchsia-500/10 text-fuchsia-100`}
-        disabled={!parsedIdeas.length || busy || directReferencesMissing || directPromptMissing}
+        disabled={!parsedIdeas.length || busy || directReferencesMissing}
         onClick={() => void start()}
       >
         {busy ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}

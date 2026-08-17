@@ -152,6 +152,21 @@ def test_image_guided_batch_does_not_require_direct_references(tmp_path):
     assert started[0][1]["music_video_treatment"] is None
 
 
+def test_direct_video_batch_accepts_per_idea_style_without_master_prompt(tmp_path):
+    router, started = _app(tmp_path, {})
+    start = _endpoint(router, "/api/v1/stories/quick-video-batches/start", "POST")
+    payload = _payload(["Stop-motion de plastilina: un robot pierde su sombra"])
+    payload["settings"]["visualStyle"] = ""
+    payload["settings"]["directVideoMasterPrompt"] = ""
+    response = start(QuickVideoBatchStartRequest.model_validate(payload))
+    job = _wait_for_terminal(router, response["jobId"])
+
+    assert job["status"] == "completed"
+    treatment = started[0][1]["music_video_treatment"]
+    assert treatment["generation_mode"] == "direct_video"
+    assert treatment["direct_video_master_prompt"] == ""
+
+
 def test_cancelled_batch_does_not_start_after_waiting_for_queue(tmp_path):
     router, started = _app(tmp_path, {})
     start = _endpoint(router, "/api/v1/stories/quick-video-batches/start", "POST")

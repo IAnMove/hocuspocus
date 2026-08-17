@@ -22,7 +22,6 @@ test('Quick Video batch falls back from missing references to image-guided mode'
   const payloads: Array<Record<string, unknown>> = []
   const project = createStoryProject('quick_video')
   project.musicVideoGenerationMode = 'direct_references'
-  project.visualStyle = 'Animación 2D limpia'
 
   globalThis.fetch = async (input, init) => {
     const url = String(input)
@@ -62,6 +61,17 @@ test('Quick Video batch falls back from missing references to image-guided mode'
     const settings = payloads[0].settings as Record<string, unknown>
     assert.equal(settings.generationMode, 'image_guided')
     assert.deepEqual(settings.references, [])
+
+    fireEvent.click(screen.getByRole('button', { name: /Texto a vídeo/ }))
+    assert.ok(screen.getByText('Cada línea definirá su propio estilo visual; no se aplicará una hoja de estilo global.'))
+    fireEvent.change(screen.getByLabelText('Ideas para lote de vídeos rápidos, una por línea'), {
+      target: { value: 'Stop-motion: una criatura abre una puerta imposible' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Encolar 1 vídeo' }))
+    await waitFor(() => assert.equal(payloads.length, 2))
+    const directSettings = payloads[1].settings as Record<string, unknown>
+    assert.equal(directSettings.generationMode, 'direct_video')
+    assert.match(String(directSettings.directVideoMasterPrompt), /Each batch idea defines its own visual style/)
   } finally {
     cleanup()
     globalThis.fetch = originalFetch
