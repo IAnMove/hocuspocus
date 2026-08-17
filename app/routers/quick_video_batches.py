@@ -21,6 +21,15 @@ ACTIVE = {"queued", "running", "cancelling"}
 TERMINAL = {"completed", "failed", "cancelled", "interrupted"}
 PIPELINE_TERMINAL = {"completed", "failed", "cancelled", "crashed", "preview_ready"}
 STORE_DIR = ".quick-video-batches-v1"
+PER_IDEA_STYLE_INTERPRETATION = (
+    "PER-IDEA VISUAL INTERPRETATION: Treat any visual style explicitly stated in the "
+    "current idea as authoritative for the environment and rendering. When the idea names "
+    "a recognizable character, preserve that character's signature silhouette, proportions, "
+    "wardrobe, palette and native design language. In a crossover, keep each character "
+    "recognizable in their own design while harmonizing only lighting, camera and background "
+    "finish. Never flatten distinct characters into generic lookalikes or inherit a style from "
+    "another batch item."
+)
 PUBLIC_KEYS = (
     "jobId", "taskId", "workspace", "title", "status", "stage", "current",
     "total", "message", "error", "continueOnError", "settings", "items",
@@ -298,6 +307,14 @@ def create_quick_video_batch_router(
             raise ValueError("Direct-reference batches need at least one approved reference")
         duration = int(settings.get("durationSeconds") or 15)
         idea = str(item.get("idea") or "")
+        authored_master_prompt = (
+            str(settings.get("directVideoMasterPrompt") or "").strip()
+            or str(settings.get("visualStyle") or "").strip()
+        )
+        direct_master_prompt = "\n\n".join(filter(None, (
+            authored_master_prompt,
+            PER_IDEA_STYLE_INTERPRETATION,
+        )))
         story_description = (
             "Create a self-contained micro-story from this idea. It must have a clear setup, "
             "conflict or comic escalation, climax, and satisfying payoff. Do not depend on any "
@@ -345,8 +362,7 @@ def create_quick_video_batch_router(
             "video_loras": {},
             "music_video_treatment": ({
                 "generation_mode": "direct_video",
-                "direct_video_master_prompt": settings.get("directVideoMasterPrompt")
-                    or settings.get("visualStyle") or "",
+                "direct_video_master_prompt": direct_master_prompt,
             } if mode == "direct_video" else None),
         }
         return params

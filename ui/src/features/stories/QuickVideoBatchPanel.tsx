@@ -5,7 +5,7 @@ import type { StoryMusicVideoGenerationMode, StoryProject } from './types'
 
 const control = 'inline-flex items-center justify-center gap-1 rounded-md border border-border bg-bg-tertiary px-2 py-1 text-[10px] text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40'
 const activeStatuses = new Set(['queued', 'running', 'cancelling'])
-const PER_IDEA_STYLE_CONTRACT = 'Each batch idea defines its own visual style. Follow the style stated in the current idea exactly; never impose or carry over a style from another batch item.'
+const PER_IDEA_STYLE_CONTRACT = 'Each batch idea defines its own visual style. Follow the style stated in the current idea exactly and never carry over a style from another item. A recognizable named character keeps their signature silhouette, proportions, wardrobe, palette and native design language. In crossovers, preserve each character identity while harmonizing only lighting, camera and background finish; never turn them into generic lookalikes.'
 
 interface Props {
   project: StoryProject

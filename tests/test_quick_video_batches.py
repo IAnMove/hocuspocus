@@ -164,7 +164,8 @@ def test_direct_video_batch_accepts_per_idea_style_without_master_prompt(tmp_pat
     assert job["status"] == "completed"
     treatment = started[0][1]["music_video_treatment"]
     assert treatment["generation_mode"] == "direct_video"
-    assert treatment["direct_video_master_prompt"] == ""
+    assert "PER-IDEA VISUAL INTERPRETATION" in treatment["direct_video_master_prompt"]
+    assert "signature silhouette" in treatment["direct_video_master_prompt"]
 
 
 def test_cancelled_batch_does_not_start_after_waiting_for_queue(tmp_path):
