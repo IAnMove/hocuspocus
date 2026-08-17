@@ -32,9 +32,11 @@ from services.director.planners.short_film import (  # noqa: E402
     _extract_h3_screenplay_dialogue,
     _fit_bounded_frame_schedule,
     _h3_native_structure_issues,
+    _h3_dialogue_shot_floor,
     _h3_planner_token_budget,
     _h3_preferred_native_durations,
     _h3_vocal_semantic_issues,
+    _normalize_h3_audio_metadata,
     _normalize_h3_voice_bible,
     _reconcile_h3_dialogue_manifest,
     _restore_h3_dialogue_after_pacing_repair,
@@ -737,6 +739,66 @@ class TestH3CharacterAuthenticity(unittest.TestCase):
                 max_spoken_words=20,
             )
 
+    def test_table_read_rejects_generated_dialogue_over_duration_budget(self):
+        with self.assertRaisesRegex(ValueError, "11 > 6 words"):
+            _apply_h3_character_table_read(
+                [{
+                    "speaker_name": "Ross",
+                    "spoken_text": "This original generated sentence is deliberately much too long.",
+                }],
+                [{
+                    "turn": 1,
+                    "speaker_name": "Ross",
+                    "original_text": (
+                        "This original generated sentence is deliberately much too long."
+                    ),
+                    "revised_text": (
+                        "This replacement also remains far too long for this tiny clip."
+                    ),
+                    "delivery": "hurried",
+                }],
+                story_description="Ross needs to react quickly.",
+                max_spoken_words=6,
+            )
+
+    def test_table_read_retries_once_with_a_strict_duration_repair(self):
+        calls = []
+
+        def generate(**kwargs):
+            calls.append(kwargs)
+            line = (
+                "This answer is still much too verbose for the requested duration."
+                if len(calls) == 1 else
+                "Not good."
+            )
+            return json.dumps([{
+                "turn": 1,
+                "speaker_name": "Ross",
+                "original_text": "This situation is becoming medically quite concerning.",
+                "revised_text": line,
+                "delivery": "fast and worried",
+            }])
+
+        planner = ShortFilmPlanner(
+            llm_generate=generate,
+            llm_generate_streaming=generate,
+        )
+        revised = planner._run_h3_character_table_read(
+            story_description="Ross reacts to a problem.",
+            screenplay="ROSS\nThis situation is becoming medically quite concerning.",
+            manifest=[{
+                "speaker_name": "Ross",
+                "spoken_text": "This situation is becoming medically quite concerning.",
+            }],
+            voice_bible=[],
+            max_spoken_words=4,
+            maximum_line_words=10,
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertIn("MANDATORY DURATION REPAIR", calls[1]["prompt"])
+        self.assertEqual(revised[0]["spoken_text"], "Not good.")
+
     def test_speaker_visual_contract_adds_framing_and_voice_direction(self):
         shots = [{
             "subjects_on_screen": [{
@@ -949,6 +1011,13 @@ I have classified this as a Level Three problem.
 
 
 class TestH3DirectorDialogueBudget(unittest.TestCase):
+    def test_dialogue_shot_floor_expands_beyond_nominal_runtime_capacity(self):
+        manifest_64 = [{"spoken_text": " ".join(["word"] * 64)}]
+        manifest_99 = [{"spoken_text": " ".join(["word"] * 99)}]
+
+        self.assertEqual(_h3_dialogue_shot_floor(manifest_64, 30), 3)
+        self.assertEqual(_h3_dialogue_shot_floor(manifest_99, 30), 4)
+
     def test_preferred_durations_obey_hardware_safe_frame_ceiling(self):
         minimum_only = _h3_preferred_native_durations(
             fps=24,
@@ -1348,6 +1417,87 @@ class TestH3DirectorDialoguePlanning(unittest.TestCase):
         }])
 
         self.assertEqual(issues, [])
+
+    def test_vocal_semantic_audit_allows_repeated_descriptions_of_tagged_speech(self):
+        issues = _h3_vocal_semantic_issues([{
+            "scene_goal": "Ana pregunta and Luis responde.",
+            "action_beats": [
+                "Ana pregunta mirando a Luis.",
+                "Luis responde y Ana reacciona.",
+            ],
+            "dialogue_beats": [{
+                "speaker_id": "ana",
+                "spoken_text": "¿Vienes?",
+            }, {
+                "speaker_id": "luis",
+                "spoken_text": "Sí.",
+            }],
+            "audio_plan": {
+                "mode": "dialogue_driven",
+                "effects": ["Door closes"],
+                "timing_anchor": "audio",
+                "lip_sync_critical": True,
+            },
+            "video_prompt": (
+                "Ana pregunta <d>[Spanish] ¿Vienes?</d>. Luis responde "
+                "<d>[Spanish] Sí.</d>. overall_soundscape: Quiet room tone. "
+                "non_diegetic_music: N/A"
+            ),
+        }])
+
+        self.assertEqual(issues, [])
+
+    def test_audio_metadata_is_derived_from_restored_dialogue(self):
+        shots = [{
+            "dialogue_beats": [{"speaker_id": "ana", "spoken_text": "Hola."}],
+            "audio_plan": {
+                "mode": "ambient_only",
+                "timing_anchor": "video",
+                "lip_sync_critical": False,
+                "ambience": "Quiet room tone",
+            },
+        }, {
+            "dialogue_beats": [],
+            "audio_plan": {
+                "mode": "dialogue_driven",
+                "timing_anchor": "audio",
+                "lip_sync_critical": True,
+                "ambience": "Wind and leaves",
+            },
+        }]
+
+        _normalize_h3_audio_metadata(shots)
+
+        self.assertEqual(shots[0]["audio_plan"]["mode"], "dialogue_driven")
+        self.assertEqual(shots[0]["audio_plan"]["timing_anchor"], "audio")
+        self.assertTrue(shots[0]["audio_plan"]["lip_sync_critical"])
+        self.assertEqual(shots[1]["audio_plan"]["mode"], "ambient_only")
+        self.assertEqual(shots[1]["audio_plan"]["timing_anchor"], "video")
+        self.assertFalse(shots[1]["audio_plan"]["lip_sync_critical"])
+        self.assertEqual(shots[1]["audio_plan"]["ambience"], "Wind and leaves")
+
+    def test_final_prompt_contract_allows_visual_references_to_tagged_lines(self):
+        beats = [{"speaker_id": "ana", "spoken_text": "¿Vienes?"}, {
+            "speaker_id": "luis", "spoken_text": "Sí.",
+        }]
+        prompt = (
+            "integrated_multimodal_description: [Shot 1] Ana pregunta mirando "
+            "a Luis: <d>[Spanish] ¿Vienes?</d>. Luis responde enseguida: "
+            "<d>[Spanish] Sí.</d>. La cámara vuelve a Ana tras la respuesta.\n\n"
+            "overall_soundscape: Quiet room tone and a closing door.\n\n"
+            "non_diegetic_music: N/A"
+        )
+
+        self.assertEqual(validate_h3_prompt_contract(
+            prompt,
+            beats,
+            mode="t2va",
+            audio_plan={
+                "mode": "dialogue_driven",
+                "timing_anchor": "audio",
+                "lip_sync_critical": True,
+            },
+        ), [])
 
     def test_vocal_semantic_audit_rejects_background_voices_in_ambience(self):
         issues = _h3_vocal_semantic_issues([{

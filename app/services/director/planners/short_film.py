@@ -699,7 +699,6 @@ def _apply_h3_character_table_read(
     locked = _h3_user_locked_dialogue_map(story_description)
     revised_manifest: list[dict[str, Any]] = []
     changed = 0
-    original_word_count = 0
     revised_word_count = 0
     for turn, original in enumerate(manifest, start=1):
         raw = by_turn[turn]
@@ -743,17 +742,33 @@ def _apply_h3_character_table_read(
             source_beat["delivery"] = delivery
             updated["source_beat"] = source_beat
         revised_manifest.append(updated)
-        original_word_count += len(original_text.split())
         revised_word_count += len(candidate.split())
         if _h3_dialogue_word_fingerprint(candidate) != original_fingerprint:
             changed += 1
 
     # The characterization pass may tighten an over-budget screenplay, but it
     # may never create a new timing overrun or make an existing one worse.
-    allowed_total = max(int(max_spoken_words or 0), original_word_count)
+    locked_word_count = sum(
+        len(_h3_plain_dialogue_text(entry.get("spoken_text")).split())
+        for entry in manifest
+        if _h3_dialogue_word_fingerprint(entry.get("spoken_text")) in locked
+    )
+    unlocked_turn_count = sum(
+        1 for entry in manifest
+        if _h3_dialogue_word_fingerprint(entry.get("spoken_text")) not in locked
+    )
+    # Literal user dialogue is immutable even when it alone exceeds the target
+    # duration.  Generated dialogue, by contrast, must actually fit the table
+    # read budget; accepting the original overrun here merely deferred a known
+    # failure until shot allocation.
+    allowed_total = max(
+        int(max_spoken_words or 0),
+        locked_word_count + unlocked_turn_count,
+    )
     if revised_word_count > allowed_total:
         raise ValueError(
-            "table read increased dialogue beyond the available timing budget"
+            "table read dialogue exceeds the available timing budget "
+            f"({revised_word_count} > {allowed_total} words)"
         )
     return revised_manifest, changed
 
@@ -1161,7 +1176,13 @@ def _h3_vocal_semantic_issues(items: list[dict]) -> list[str]:
                 f"shot {index} describes unstructured vocal performance: "
                 + ", ".join(non_speech_action_vocals[:5])
             )
-        if len(action_vocals) > len(beats):
+        # In a dialogue shot the visual planner may mention the same tagged
+        # delivery in scene_goal, action_beats and ending_beat.  Counting those
+        # descriptive verbs as separate lines produced false positives such as
+        # ``pregunta, responde, pregunta`` beside two exact <d> turns.  The
+        # immutable dialogue ledger and compiled tags already define what is
+        # audible.  A vocal action remains unsafe when there is no exact line.
+        if action_vocals and (not beats or non_speech_action_vocals):
             issues.append(
                 f"shot {index} describes {len(action_vocals)} vocal action(s) "
                 f"but has {len(beats)} exact dialogue beat(s): "
@@ -1197,6 +1218,35 @@ def _h3_vocal_semantic_issues(items: list[dict]) -> list[str]:
     return list(dict.fromkeys(issues))
 
 
+def _normalize_h3_audio_metadata(items: list[dict]) -> list[dict]:
+    """Derive H3 timing/lip-sync flags from the authoritative dialogue ledger.
+
+    These three fields are not creative decisions.  Letting a repair model
+    contradict the restored immutable dialogue caused otherwise valid plans to
+    fail after their only repair pass.  Ambience, effects and vocal style stay
+    untouched so genuinely unsafe vocal material is still audited.
+    """
+
+    for raw in items or []:
+        if not isinstance(raw, dict):
+            continue
+        has_dialogue = any(
+            isinstance(beat, dict)
+            and _h3_plain_dialogue_text(beat.get("spoken_text"))
+            for beat in (raw.get("dialogue_beats") or [])
+        )
+        audio = dict(
+            raw.get("audio_plan")
+            if isinstance(raw.get("audio_plan"), dict)
+            else {}
+        )
+        audio["mode"] = "dialogue_driven" if has_dialogue else "ambient_only"
+        audio["timing_anchor"] = "audio" if has_dialogue else "video"
+        audio["lip_sync_critical"] = has_dialogue
+        raw["audio_plan"] = audio
+    return items
+
+
 def _h3_planner_token_budget(target_duration: float) -> int:
     """Leave enough room for complete, self-contained H3 shot JSON."""
 
@@ -1207,6 +1257,22 @@ def _h3_planner_token_budget(target_duration: float) -> int:
     # 200-token/second allowance hit its exact ceiling on a valid 90-second
     # plan and left the final object half-written.
     return min(23000, max(12288, int(math.ceil(target_duration * 240))))
+
+
+def _h3_dialogue_shot_floor(
+    manifest: list[dict[str, Any]],
+    maximum_dialogue_words: int,
+) -> int:
+    """Return the minimum native clips needed to preserve every spoken word."""
+
+    total_words = sum(
+        len(_h3_plain_dialogue_text(entry.get("spoken_text")).split())
+        for entry in (manifest or [])
+        if isinstance(entry, dict)
+    )
+    if total_words <= 0:
+        return 1
+    return max(1, math.ceil(total_words / max(1, maximum_dialogue_words)))
 
 
 def _h3_dialogue_events(items: list[dict]) -> list[dict]:
@@ -2817,6 +2883,17 @@ SUPPLIED CHARACTER CARDS:
             }
             for index, entry in enumerate(manifest, start=1)
         ]
+        locked_word_count = sum(
+            len(_h3_plain_dialogue_text(row["original_text"]).split())
+            for row in payload if row["user_locked"]
+        )
+        unlocked_turn_count = sum(
+            1 for row in payload if not row["user_locked"]
+        )
+        table_read_word_budget = max(
+            int(max_spoken_words or 0),
+            locked_word_count + unlocked_turn_count,
+        )
         bible_text = _format_h3_voice_bible(voice_bible) or (
             "No structured voice bible was available. Infer distinct speech "
             "only from the project concept and screenplay context."
@@ -2838,43 +2915,67 @@ PROJECT CONCEPT:
 CHARACTER VOICE BIBLE (binding):
 {bible_text}
 
-MAXIMUM SPOKEN WORDS ACROSS ALL TURNS: {max_spoken_words}
+MAXIMUM SPOKEN WORDS ACROSS ALL TURNS: {table_read_word_budget}
 
 DIALOGUE TURN MANIFEST:
 {json.dumps(payload, ensure_ascii=False, indent=2)}
 
 FULL SCREENPLAY FOR ACTION AND RELATIONSHIP CONTEXT:
 {screenplay}"""
-        try:
-            rows = self._call_llm_json(
-                user_prompt=user_prompt,
-                system_prompt=system_prompt,
-                max_tokens=max(2048, min(8192, len(manifest) * 190)),
-                thinking_budget=4096,
-                temperature=0.65,
-                streaming=True,
-                frequency_penalty=0.12,
-                presence_penalty=0.04,
-                json_schema=_h3_table_read_schema(len(manifest)),
-            )
-            revised, changed = _apply_h3_character_table_read(
-                manifest,
-                rows,
-                story_description=story_description,
-                max_spoken_words=max_spoken_words,
-                maximum_line_words=maximum_line_words,
-            )
-            print(
-                "[ShortFilmPlanner] H3 character table read validated "
-                f"{len(revised)} turn(s) and revised {changed}; dialogue is now locked."
-            )
-            return revised
-        except Exception as exc:
-            print(
-                "[ShortFilmPlanner] H3 character table read failed validation; "
-                f"locking the original screenplay dialogue instead ({exc})."
-            )
-            return manifest
+        last_error: Optional[Exception] = None
+        for attempt in range(2):
+            attempt_prompt = user_prompt
+            if attempt:
+                attempt_prompt += f"""
+
+MANDATORY DURATION REPAIR:
+The previous table read failed validation: {last_error}
+Rewrite every non-locked revised_text more concisely and count the words before
+responding. The sum of all revised_text values MUST be at most
+{table_read_word_budget} words. Keep locked text exact. Prefer one short natural
+sentence or fragment per turn; do not preserve wording that prevents the
+exchange from fitting the video."""
+            try:
+                rows = self._call_llm_json(
+                    user_prompt=attempt_prompt,
+                    system_prompt=system_prompt,
+                    max_tokens=max(2048, min(8192, len(manifest) * 190)),
+                    thinking_budget=4096,
+                    temperature=0.65 if not attempt else 0.25,
+                    streaming=True,
+                    frequency_penalty=0.12,
+                    presence_penalty=0.04,
+                    json_schema=_h3_table_read_schema(len(manifest)),
+                )
+                revised, changed = _apply_h3_character_table_read(
+                    manifest,
+                    rows,
+                    story_description=story_description,
+                    max_spoken_words=max_spoken_words,
+                    maximum_line_words=maximum_line_words,
+                )
+                print(
+                    "[ShortFilmPlanner] H3 character table read validated "
+                    f"{len(revised)} turn(s) and revised {changed}; dialogue is now locked."
+                )
+                return revised
+            except Exception as exc:
+                last_error = exc
+                is_duration_error = "timing budget" in str(exc).casefold()
+                if not attempt and is_duration_error:
+                    print(
+                        "[ShortFilmPlanner] H3 character table read exceeded or "
+                        "violated its contract; requesting one concise duration "
+                        f"repair ({exc})."
+                    )
+                elif not attempt:
+                    break
+
+        print(
+            "[ShortFilmPlanner] H3 character table read failed validation; "
+            f"locking the original screenplay dialogue instead ({last_error})."
+        )
+        return manifest
 
     # Audio-Driven Planning
 
@@ -5448,6 +5549,22 @@ SCREENPLAY:
         dialogue_manifest_json = _h3_dialogue_manifest_prompt(
             screenplay_dialogue_manifest
         )
+        dialogue_shot_floor = _h3_dialogue_shot_floor(
+            screenplay_dialogue_manifest,
+            maximum_dialogue_words,
+        )
+        if dialogue_shot_floor > shot_count_high:
+            # Exact user-authored dialogue may legitimately exceed the nominal
+            # idea duration.  The user's words remain immutable, so expand the
+            # legal shot range instead of asking an impossible two-shot repair
+            # (for example 99 words in only 60 words of H3 capacity).
+            shot_count_low = max(shot_count_low, dialogue_shot_floor)
+            maximum_by_runtime = max(maximum_by_runtime, dialogue_shot_floor)
+            shot_count_high = max(shot_count_high, dialogue_shot_floor)
+        effective_planning_duration = max(
+            float(target_duration),
+            shot_count_low * minimum_seconds,
+        )
         print(
             "[ShortFilmPlanner] Locked "
             f"{len(screenplay_dialogue_manifest)} screenplay dialogue turn(s) "
@@ -5535,7 +5652,7 @@ OUTPUT — one closed object per native shot:
 
 TASK: Convert this {target_duration}-second screenplay into {shot_count_low}-{shot_count_high} self-contained native H3 shots.
 
-Total duration should remain approximately {target_duration} seconds. Each duration_sec must be between {minimum_seconds:.2f} and {maximum_seconds:.2f} seconds; prefer these valid native durations when pacing permits: {preferred_duration_text}. Do not output a duration above {maximum_seconds:.2f} seconds.
+Total duration should remain approximately {effective_planning_duration:.2f} seconds. Each duration_sec must be between {minimum_seconds:.2f} and {maximum_seconds:.2f} seconds; prefer these valid native durations when pacing permits: {preferred_duration_text}. Do not output a duration above {maximum_seconds:.2f} seconds.
 
 PROJECT WORLD SOURCE OF TRUTH:
 {story_description}
@@ -5846,6 +5963,7 @@ SCREENPLAY:
             [frames / fps for frames in schedule],
             words_per_second=_H3_DIALOGUE_WORDS_PER_SECOND,
         )
+        _normalize_h3_audio_metadata(shot_dicts)
         vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
         if not structure_issues and (
             dialogue_integrity_error or dialogue_violations
@@ -5861,6 +5979,7 @@ SCREENPLAY:
             else:
                 dialogue_integrity_error = None
                 dialogue_violations = []
+                _normalize_h3_audio_metadata(shot_dicts)
                 vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
                 print(
                     "[ShortFilmPlanner] Deterministic H3 dialogue compiler "
@@ -5984,6 +6103,7 @@ VOCAL SEMANTIC REPAIR:
                 f"{repair_mode}; the visual repair's rewritten dialogue was "
                 "ignored."
             )
+            _normalize_h3_audio_metadata(shot_dicts)
             vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
             if vocal_semantic_issues:
                 raise RuntimeError(
@@ -6170,6 +6290,7 @@ VOCAL SEMANTIC REPAIR:
                     f"original visual edits ({error})."
                 )
 
+        _normalize_h3_audio_metadata(shot_dicts)
         final_vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
         if final_vocal_semantic_issues:
             raise RuntimeError(
@@ -6190,6 +6311,7 @@ VOCAL SEMANTIC REPAIR:
         )
         shot_dicts = _prepare_h3_prompt_only_continuity(shot_dicts)
 
+        _normalize_h3_audio_metadata(shot_dicts)
         post_compilation_vocal_issues = _h3_vocal_semantic_issues(shot_dicts)
         if post_compilation_vocal_issues:
             raise RuntimeError(

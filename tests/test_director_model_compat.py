@@ -1071,7 +1071,63 @@ class TestDirectorVideoExecutionProfile(unittest.TestCase):
                 ("1920x1088 (16:9 1080p)", "1920x1088"),
                 ("1088x1920 (9:16 1080p)", "1088x1920"),
             ],
+            "resolution_presets": {
+                "540p": {
+                    "values": {
+                        "16:9": "960x544",
+                        "9:16": "544x960",
+                    },
+                },
+                "720p": {
+                    "values": {
+                        "16:9": "1280x704",
+                        "9:16": "704x1280",
+                    },
+                },
+            },
         }
+
+    def test_explicit_portrait_preset_overrides_landscape_model_default(self):
+        profile = build_director_video_execution_profile(
+            "minimax_h3",
+            self._h3_model(),
+            {"resolution": "960x544"},
+            {"gpu_vram_gb": 24},
+            resolution_preset="540p",
+            aspect_ratio="9:16",
+        )
+
+        self.assertEqual(profile["requested_resolution"], "544x960")
+        self.assertEqual(profile["normalized_resolution"], "544x960")
+
+    def test_pipeline_writes_selected_portrait_canvas_into_video_params(self):
+        params = {
+            "video_model": "minimax_h3",
+            "video_params": {"resolution": "960x544"},
+            "video_loras": {},
+            "director_resolution_preset": "540p",
+            "director_aspect_ratio": "9:16",
+        }
+
+        profile = pipeline._create_director_video_execution_profile(
+            params,
+            model_def=self._h3_model(),
+            hardware={"gpu_vram_gb": 24},
+        )
+
+        self.assertEqual(params["video_params"]["resolution"], "544x960")
+        self.assertEqual(profile["normalized_resolution"], "544x960")
+
+    def test_invalid_explicit_aspect_does_not_fall_back_to_model_default(self):
+        with self.assertRaisesRegex(ValueError, "does not support 4:5"):
+            build_director_video_execution_profile(
+                "minimax_h3",
+                self._h3_model(),
+                {"resolution": "960x544"},
+                {"gpu_vram_gb": 24},
+                resolution_preset="540p",
+                aspect_ratio="4:5",
+            )
 
     def test_auto_profile_uses_exact_canvas_vram_policy(self):
         profile = build_director_video_execution_profile(

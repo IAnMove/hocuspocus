@@ -1604,16 +1604,12 @@ def validate_h3_prompt_contract(
                 "silent visual field still contains affirmative vocal cues: "
                 + ", ".join(remaining_vocals[:5])
             )
-    elif expected_dialogue:
-        expected_count = sum(
-            1 for beat in (dialogue_beats or [])
-            if _normalized_space(_field(beat, "spoken_text", ""))
-        )
-        if len(remaining_vocals) > expected_count:
-            errors.append(
-                "visual field contains more vocal actions than exact dialogue "
-                f"lines ({len(remaining_vocals)} > {expected_count})"
-            )
+    # With exact dialogue, descriptive prose may refer to the same tagged
+    # delivery in more than one visual sentence (setup, action and payoff).
+    # Those repeated verbs are not additional audible lines: <d> blocks and
+    # the immutable dialogue ledger are authoritative.  Truly unstructured
+    # vocalizations are still rejected above, while any affirmative vocal cue
+    # remains forbidden for a silent shot.
     if not re.match(r"^\s*\[Shot\s+1\]", visual, flags=re.IGNORECASE):
         errors.append(f"{visual_field} does not begin with [Shot 1]")
     if re.search(

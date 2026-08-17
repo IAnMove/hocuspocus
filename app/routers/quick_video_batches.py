@@ -534,29 +534,42 @@ def create_quick_video_batch_router(
                             return
         except Exception as exc:
             traceback.print_exc()
-            # Publish a resumable failure only after relinquishing ownership.
-            # Otherwise an immediate Resume can observe ``failed`` while
-            # start_worker still sees this exiting worker as active.
+            # Finalize item state, parent state, and worker ownership in one
+            # critical section.  Releasing ``active`` first let GET polling
+            # start a replacement worker while this exception handler was
+            # still publishing the failure; publishing first made an immediate
+            # Resume observe a worker that was about to exit.  The atomic
+            # transition avoids both races.
             with lock:
+                current_job = jobs.get(job_id)
+                snapshot = None
+                if current_job:
+                    interrupted_item = next((
+                        item for item in current_job.get("items", [])
+                        if item.get("status") in {"planning", "running"}
+                    ), None)
+                    if interrupted_item is not None:
+                        interrupted_item.update({
+                            "status": "interrupted",
+                            "stage": "interrupted",
+                            "message": (
+                                "Quick Video setup was interrupted and can be resumed."
+                            ),
+                            "error": str(exc),
+                        })
+                    current_job.update({
+                        "status": "failed",
+                        "stage": "failed",
+                        "message": "Quick Video batch stopped.",
+                        "error": str(exc),
+                        "finishedAt": time.time(),
+                        "updatedAt": time.time(),
+                    })
+                    snapshot = save(current_job)
                 active.discard(job_id)
                 owns_active_slot = False
-            with lock:
-                current_job = copy.deepcopy(jobs.get(job_id) or {})
-            interrupted_index = next((
-                index
-                for index, item in enumerate(current_job.get("items", []))
-                if item.get("status") in {"planning", "running"}
-            ), None)
-            if interrupted_index is not None:
-                item_update(
-                    job_id,
-                    interrupted_index,
-                    status="interrupted",
-                    stage="interrupted",
-                    message="Quick Video setup was interrupted and can be resumed.",
-                    error=str(exc),
-                )
-            update(job_id, status="failed", stage="failed", message="Quick Video batch stopped.", error=str(exc), finishedAt=time.time())
+            if snapshot:
+                publish(snapshot)
         finally:
             if owns_active_slot:
                 with lock:
