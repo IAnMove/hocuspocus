@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.services import director_pipeline
+from app.services.director.minimax_h3_prompting import format_minimax_h3_prompt
 
 
 def test_h3_duration_segments_stay_on_the_supported_lattice():
@@ -213,14 +214,28 @@ def test_h3_direct_video_repeats_master_and_never_sends_images(tmp_path: Path):
         )
 
     assert len(submitted) == 2
-    assert all(item["prompt"].startswith("IMMUTABLE HEAVY METAL WORLD.") for item in submitted)
-    assert all("Scene overview: A duel above an alien city" in item["prompt"] for item in submitted)
+    assert all(item["prompt"].startswith("integrated_multimodal_description: [Shot 1]") for item in submitted)
+    assert all("Shared visual direction: IMMUTABLE HEAVY METAL WORLD" in item["prompt"] for item in submitted)
+    assert all("A duel above an alien city" in item["prompt"] for item in submitted)
+    assert all("Scene overview:" not in item["prompt"] for item in submitted)
     assert all("overall_soundscape:" in item["prompt"] for item in submitted)
+    assert all(item["prompt"].count("overall_soundscape:") == 1 for item in submitted)
+    assert all(
+        "overall_soundscape:" not in item["prompt"].split(
+            "overall_soundscape:", 1
+        )[0]
+        for item in submitted
+    )
     assert all("non_diegetic_music: N/A" in item["prompt"] for item in submitted)
     assert all("PORTRAIT COMPOSITION LOCK:" in item["prompt"] for item in submitted)
     assert all("full 544x960 vertical portrait canvas" in item["prompt"] for item in submitted)
     assert all("VISIBLE TEXT LOCK" in item["prompt"] for item in submitted)
     assert all("Picture 1" not in item["prompt"] for item in submitted)
+    assert all(
+        format_minimax_h3_prompt({}, item["prompt"], reference_mode="direct")
+        == item["prompt"]
+        for item in submitted
+    )
     assert all(item["image_prompt_type"] == "" for item in submitted)
     assert all("image_start" not in item and "image_refs" not in item for item in submitted)
     assert all("h3_ref_videos" not in item and "h3_ref_audios" not in item for item in submitted)

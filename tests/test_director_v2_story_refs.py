@@ -174,8 +174,10 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             allow_clip_text=False,
         )
         prompt = plans[0]["video_prompt"]
-        self.assertTrue(prompt.startswith("IMMUTABLE PAINTED WORLD."))
-        self.assertIn("Scene overview: Reveal the alien citadel", prompt)
+        self.assertTrue(prompt.startswith("integrated_multimodal_description: [Shot 1]"))
+        self.assertIn("Shared visual direction: IMMUTABLE PAINTED WORLD", prompt)
+        self.assertIn("Reveal the alien citadel", prompt)
+        self.assertNotIn("Scene overview:", prompt)
         self.assertIn("A lone warrior raises", prompt)
         self.assertIn("non_diegetic_music: N/A", prompt)
         self.assertEqual(plans[0]["image_prompt"], "")
@@ -203,7 +205,8 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             "IMMUTABLE NOIR WORLD.",
         )
 
-        self.assertIn("Shot 1: A woman crosses a stormy plaza", plans[0]["video_prompt"])
+        self.assertIn("[Shot 1]", plans[0]["video_prompt"])
+        self.assertIn("A woman crosses a stormy plaza", plans[0]["video_prompt"])
         self.assertNotIn('{"integrated_multimodal_description"', plans[0]["video_prompt"])
         self.assertIn("Rain, thunder and hurried footsteps", plans[0]["video_prompt"])
         self.assertIn("Low strings rise into a sharp brass hit", plans[0]["video_prompt"])

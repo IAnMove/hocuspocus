@@ -808,12 +808,14 @@ def compose_direct_video_prompt(
     allow_clip_text: bool = True,
     audio_source_prompt: object | None = None,
 ) -> str:
-    """Compose one self-contained text-only video prompt.
+    """Compile one text-only clip into H3's final Context-IR prompt.
 
-    ``master_prompt`` is copied verbatim at the front of every generated clip.
-    The LLM is only responsible for ``situation_prompt``.  No first-frame or
-    reference terminology is introduced here because direct mode has no image
-    conditioning at any stage.
+    The direct-video master is production guidance, not an extra spoken scene.
+    Older code prefixed it with ``Scene overview`` / ``Shot 1`` labels and then
+    the H3 service wrapped that text a second time.  That could leave the
+    prompt's sound fields inside ``integrated_multimodal_description`` and make
+    the audiovisual model treat production prose as something to vocalize.
+    Keep one official H3 envelope at this boundary instead.
     """
     master = " ".join(str(master_prompt or "").split()).strip()
     authored_soundscape, authored_music = _direct_video_audio_fields(
@@ -878,13 +880,51 @@ def compose_direct_video_prompt(
     if not music or music.casefold() in {"none", "n/a", "no music"}:
         music = "N/A"
 
-    return "\n".join((
-        master,
-        f"{DIRECT_VIDEO_SCENE_MARKER} {overview}.",
-        f"{DIRECT_VIDEO_SHOT_MARKER} {situation}.",
-        f"{DIRECT_VIDEO_SOUND_MARKER} {'; '.join(sound_parts)}.",
-        f"{DIRECT_VIDEO_MUSIC_MARKER} {music}",
-    )).strip()
+    # H3's own compiler owns the three official fields and exact <d> blocks.
+    # Present the shared master as visual guidance inside the visual body rather
+    # than as a free-floating instruction that a later formatter might mistake
+    # for part of the audible timeline.
+    visual_parts = []
+    if master:
+        visual_parts.append(f"Shared visual direction: {master}")
+    if overview:
+        visual_parts.append(overview)
+    if situation:
+        visual_parts.append(situation)
+    visual_source = ". ".join(
+        value.strip(" .") for value in visual_parts if value.strip(" .")
+    )
+
+    compiled_audio = dict(audio)
+    if not compiled_audio.get("ambience") and sound_parts:
+        compiled_audio["ambience"] = "; ".join(sound_parts)
+    try:
+        from .h3_dialogue import compile_h3_official_prompt
+    except ImportError:  # pragma: no cover - compatibility import path
+        from services.director.h3_dialogue import compile_h3_official_prompt
+    compiled, _ = compile_h3_official_prompt(
+        visual_source,
+        shot.get("_director_subjects_on_screen") or shot.get("subjects_on_screen") or [],
+        shot.get("_director_dialogue_beats") or shot.get("dialogue_beats") or [],
+        mode="t2va",
+        audio_plan=compiled_audio,
+    )
+
+    # A user-authored soundscape/music line is more specific than generic shot
+    # metadata. Restore it only in its official field, never in the visual body.
+    if authored_soundscape:
+        compiled = re.sub(
+            r"(?im)^overall_soundscape\s*:\s*.*?(?=\n\s*non_diegetic_music\s*:|\Z)",
+            f"overall_soundscape: {authored_soundscape.strip(' .')}.",
+            compiled,
+        )
+    if music != "N/A":
+        compiled = re.sub(
+            r"(?im)^non_diegetic_music\s*:\s*.*$",
+            f"non_diegetic_music: {music.strip(' .')}",
+            compiled,
+        )
+    return compiled.strip()
 
 
 def enforce_direct_video_on_clip_plans(
