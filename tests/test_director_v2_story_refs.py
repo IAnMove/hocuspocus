@@ -320,6 +320,34 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertIn("Missing clip indexes: 2", calls[1]["prompt"])
         self.assertNotIn("Missing clip indexes: 1", calls[1]["prompt"])
 
+    def test_music_video_performer_uses_timestamped_lyric_ledger(self):
+        plan = MusicVideoPlanner(
+            llm_generate=lambda **kwargs: json.dumps([_music_shot(1)]),
+        ).plan(
+            clips=[{
+                "start": 0.0,
+                "end": 4.0,
+                "label": "verse",
+                "beat_count": 8,
+                "dominant_speaker": "lead",
+            }],
+            lyrics=[{
+                "start": 0.0,
+                "end": 8.0,
+                "text": "Uno dos tres cuatro cinco seis",
+                "speaker": "lead",
+            }],
+            scene_description="A single performer in a cave.",
+            bpm=90,
+            music_video_treatment={"mode": "performance", "performer_presence": 100, "lip_sync": "frequent"},
+        )
+
+        shot = plan.shots[0]
+        self.assertEqual([beat.spoken_text for beat in shot.dialogue_beats], ["Uno dos tres"])
+        self.assertEqual(shot.dialogue_beats[0].speaker_id, "lead")
+        self.assertEqual(shot.audio_plan.mode, "dialogue_driven")
+        self.assertTrue(shot.audio_plan.lip_sync_critical)
+
     def test_music_video_plans_large_timelines_in_bounded_ordered_batches(self):
         calls = []
 

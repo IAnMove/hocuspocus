@@ -372,7 +372,18 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         self.assertNotIn("about to speak", visual)
         self.assertNotIn("hissing", visual)
 
-    def test_final_preflight_blocks_unhandled_silent_vocal_intent(self):
+    def test_silent_clip_discards_orphan_dialogue_tags(self):
+        prompt, _ = compile_h3_official_prompt(
+            "A performer raps beside a cave pool. </d>. "
+            "overall_soundscape: Cave drips. non_diegetic_music: N/A",
+            [],
+            [],
+            mode="t2va",
+        )
+        self.assertNotIn("</d>", prompt)
+        self.assertNotIn("raps", prompt.casefold())
+
+    def test_final_preflight_sanitizes_unledgered_silent_vocal_intent(self):
         plans = [{
             "video_prompt": (
                 "A professor canta una melod\u00eda frente a la m\u00e1quina. "
@@ -383,11 +394,10 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             "_director_subjects_on_screen": [],
         }]
 
-        with self.assertRaisesRegex(
-            H3DialogueContractError,
-            "silent visual field still contains affirmative vocal cues: canta",
-        ):
-            compile_h3_clip_plans(plans)
+        compile_h3_clip_plans(plans)
+        visual = plans[0]["video_prompt"].split("overall_soundscape:", 1)[0]
+        self.assertNotIn("canta", visual.casefold())
+        self.assertIn("closed-mouth", visual.casefold())
 
     def test_final_preflight_accepts_explicitly_negated_vocal_words(self):
         plans = [{
@@ -402,7 +412,7 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
 
         compile_h3_clip_plans(plans)
 
-        self.assertIn("no one speaks", plans[0]["video_prompt"].casefold())
+        self.assertIn("no character speaks", plans[0]["video_prompt"].casefold())
 
     def test_negation_does_not_hide_a_later_vocal_cue_after_a_comma(self):
         plans = [{

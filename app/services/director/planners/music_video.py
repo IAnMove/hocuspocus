@@ -9,6 +9,7 @@ Outputs: ProductionPlan with ShotPlan objects (NOT final prompts).
 
 from __future__ import annotations
 import json
+import math
 import os
 import re
 from typing import Optional, Any
@@ -570,6 +571,7 @@ class MusicVideoPlanner(BasePlanner):
             lyrics=lyrics,
             speaker_names=speaker_names,
             coverage_plan=coverage_plan,
+            treatment=treatment,
         )
 
         total_duration = sum(c.get("end", 0) - c.get("start", 0) for c in clips) if clips else None
@@ -833,6 +835,64 @@ class MusicVideoPlanner(BasePlanner):
         if not lyrics:
             return ""
         return "\n".join(line.get("text", "") for line in lyrics if line.get("text", "").strip())
+
+    @staticmethod
+    def _lyric_beats_for_clip(
+        clip: dict,
+        lyrics: Optional[list[dict]],
+        *,
+        fallback_speaker: str = "",
+    ) -> list[DialogueBeat]:
+        """Return the timestamped lyric slice that belongs to one clip.
+
+        The audio analyser may emit long transcription segments spanning more
+        than one native H3 clip.  Slice their words by the temporal overlap so
+        adjacent clips neither repeat a whole verse nor ask H3 to improvise
+        the missing words.  These are the canonical lyric turns used later to
+        produce ``<d>`` blocks and the syllable-duration timeline.
+        """
+
+        if not lyrics:
+            return []
+        try:
+            clip_start = float(clip.get("start", 0.0) or 0.0)
+            clip_end = float(clip.get("end", clip_start) or clip_start)
+        except (TypeError, ValueError):
+            return []
+        if clip_end <= clip_start:
+            return []
+
+        beats: list[DialogueBeat] = []
+        for segment in lyrics:
+            if not isinstance(segment, dict):
+                continue
+            text = " ".join(str(segment.get("text") or "").split())
+            if not text:
+                continue
+            try:
+                start = float(segment.get("start", 0.0) or 0.0)
+                end = float(segment.get("end", start) or start)
+            except (TypeError, ValueError):
+                continue
+            overlap_start, overlap_end = max(start, clip_start), min(end, clip_end)
+            if overlap_end <= overlap_start or end <= start:
+                continue
+            words = text.split()
+            first = math.floor((overlap_start - start) / (end - start) * len(words))
+            last = math.ceil((overlap_end - start) / (end - start) * len(words))
+            first = max(0, min(first, len(words) - 1))
+            last = max(first + 1, min(last, len(words)))
+            lyric_slice = " ".join(words[first:last]).strip()
+            if not lyric_slice:
+                continue
+            beats.append(DialogueBeat(
+                spoken_text=lyric_slice,
+                speaker_id=str(segment.get("speaker") or fallback_speaker or "performer"),
+                delivery="rhythmic sung or rapped lyric, synchronized to the source track",
+                physical_cue="visible lip sync only for these exact words",
+                priority="high",
+            ))
+        return beats
 
     # ── Clip Context Building ────────────────────────────────────────
 
@@ -1379,6 +1439,7 @@ Return exactly this one missing shot plan."""
         lyrics: Optional[list[dict]],
         speaker_names: dict[str, str],
         coverage_plan: Optional[list[dict[str, Any]]] = None,
+        treatment: Optional[dict[str, Any]] = None,
     ) -> list[ShotPlan]:
         """Convert raw LLM JSON output into validated ShotPlan objects."""
         shots = []
@@ -1423,6 +1484,29 @@ Return exactly this one missing shot plan."""
             dialogue_beats = None
             if raw.get("dialogue_beats"):
                 dialogue_beats = [DialogueBeat.from_dict(db) for db in raw["dialogue_beats"]]
+
+            # The production soundtrack is authoritative.  On a performer
+            # shot with an analysed lyric interval, make that precise slice
+            # the H3 dialogue ledger instead of trusting free-form words such
+            # as "sings" or "raps" in the visual prose.  B-roll remains mute.
+            lip_sync = str((treatment or {}).get("lip_sync") or "frequent").lower()
+            wants_lip_sync = lip_sync not in {"none", "never", "off"}
+            if coverage.get("performer_present") and wants_lip_sync:
+                lyric_beats = self._lyric_beats_for_clip(
+                    clip,
+                    lyrics,
+                    fallback_speaker=str(clip.get("dominant_speaker") or ""),
+                )
+                if lyric_beats:
+                    dialogue_beats = lyric_beats
+                    audio = AudioPlan(
+                        mode="dialogue_driven",
+                        ambience=audio_raw.get("ambience"),
+                        effects=audio_raw.get("effects"),
+                        vocal_style="sung or rapped only from the exact lyric ledger",
+                        timing_anchor="audio",
+                        lip_sync_critical=True,
+                    )
 
             # Determine image strategy
             image_strategy = "reference_edit" if has_reference else "fresh_generation"

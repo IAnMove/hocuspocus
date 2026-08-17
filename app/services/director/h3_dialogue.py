@@ -87,6 +87,8 @@ _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
     # reads that as a request for native speech, so render the intention with
     # facial acting when the shot has no exact dialogue ledger.
     (re.compile(r"\b(?:mouth|lips?)\s+(?:half[- ]?)?(?:open(?:s|ed|ing)?|part(?:s|ed|ing)?)\b[^.!?]{0,64}\b(?:to|as\s+if(?:\s+about)?\s+to)\s+(?:speak|sing|say|whisper|mutter)\b", re.I), "mouth remains closed in tense hesitation"),
+    (re.compile(r"\bnadie\s+canta\b", re.I), "nadie permanece en silencio"),
+    (re.compile(r"\bno\s+one\s+speaks\b", re.I), "everyone remains silent"),
     (re.compile(r"\b(?:hissing|rapping|singing|speaking|saying|whispering|muttering)\s+(?:the\s+)?(?:verse|lyrics?|line|song|words?)\b", re.I), "moving with tense rhythmic physicality"),
     (re.compile(r"\b(?:delivering|performing)\s+(?:a\s+)?vocal\s+performance\b", re.I), "performing with tense physical rhythm"),
     # A music-video planner can still phrase an unledgered performance as a
@@ -94,7 +96,7 @@ _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
     # setup before the verb, but replace the rest of that vocal clause.  The
     # final soundtrack is assembled separately; native H3 vocals are never a
     # valid substitute when this clip has no exact <d> line.
-    (re.compile(r"\b(?:rap(?:s|ped|ping)?|whisper(?:s|ed|ing)?|mutter(?:s|ed|ing)?|hiss(?:es|ed|ing)?|(?:rape|susurra|murmura|sisea)(?:n|ndo|ba|ron|ría|rían)?)\b[^.!?]{0,220}", re.I), "holds a tense closed-mouth expression"),
+    (re.compile(r"\b(?:rap(?:s|ped|ping)?|whisper(?:s|ed|ing)?|mutter(?:s|ed|ing)?|hiss(?:es|ed|ing)?|(?:rape|susurra|murmura|sisea|canta|pronuncia)(?:n|ndo|ba|ron|ría|rían)?|articula(?:n)?\s+(?:un\s+)?rap)\b[^.!?]{0,220}", re.I), "holds a tense closed-mouth expression"),
     (re.compile(r"\b(?:with\s+)?visible\s+lip\s+movement\b", re.I), "with a closed mouth"),
     (re.compile(r"\bgrunts?\s+with\s+effort\b", re.I), "strains visibly with the effort"),
     (re.compile(r"\blaughs?\s+nervously\b", re.I), "smiles nervously"),
@@ -1408,6 +1410,17 @@ def compile_h3_official_prompt(
     mode = str(mode or "t2va").strip().lower()
     if mode not in {"t2va", "i2va", "fl2va", "l2va", "ref2va"}:
         raise H3DialogueContractError(f"Unknown MiniMax H3 prompt mode: {mode}")
+    # In a silent shot an orphaned <d> / </d> is planner debris, not an
+    # authorised line.  Keeping it makes the whole music-video plan fail even
+    # though the canonical dialogue ledger is empty.  Real dialogue continues
+    # to use the strict path below and malformed tags still fail loudly there.
+    has_ledger_dialogue = any(
+        _normalized_space(_field(beat, "spoken_text", ""))
+        for beat in (dialogue_beats or [])
+    )
+    source_prompt = str(prompt or "")
+    if not has_ledger_dialogue:
+        source_prompt = _H3_DIALOGUE_TOKEN_RE.sub("", source_prompt)
     registry = speaker_registry if isinstance(speaker_registry, Mapping) else {}
     (
         reference_definitions,
@@ -1422,7 +1435,7 @@ def compile_h3_official_prompt(
         registry,
     )
     body, soundscape, music, existing_blocks = _source_prompt_parts(
-        prompt,
+        source_prompt,
         project_context=project_context,
         opening_blocking=opening_blocking,
         closing_blocking=closing_blocking,
@@ -1433,11 +1446,15 @@ def compile_h3_official_prompt(
         audio_plan.get("spoken_language")
         if isinstance(audio_plan, Mapping) else ""
     )
-    has_structured_dialogue = any(
-        _normalized_space(_field(beat, "spoken_text", ""))
-        for beat in (dialogue_beats or [])
-    ) or bool(existing_blocks)
-    if not has_structured_dialogue and not has_driving_audio:
+    has_structured_dialogue = has_ledger_dialogue or bool(existing_blocks)
+    if has_ledger_dialogue and not existing_blocks:
+        # Music planners commonly leave free-form "sings/raps" prose beside
+        # a now-authoritative lyric ledger.  Keep only the exact <d> words as
+        # a vocal instruction; visual delivery is converted to physical acting
+        # and vocal ambience is removed before H3 sees it.
+        body = _sanitize_silent_visual_vocals(body)
+        soundscape = _sanitize_silent_soundscape(soundscape)
+    elif not has_structured_dialogue and not has_driving_audio:
         body = _sanitize_silent_visual_vocals(body)
         soundscape = _sanitize_silent_soundscape(soundscape)
     body, vocal_contract = _compile_official_dialogue(
