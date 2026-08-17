@@ -415,6 +415,9 @@ def _h3_plain_dialogue_text(value: Any) -> str:
     text = _normalize_h3_text(value)
     text = re.sub(r"<\s*/?\s*d\s*>", "", text, flags=re.IGNORECASE).strip()
     text = re.sub(r"^\[[^\]]+\]\s*", "", text).strip()
+    # Spanish screenplay prose commonly prefixes a spoken line with an em dash.
+    # It is punctuation, not part of the exact words sent to H3.
+    text = re.sub(r"^[\-\u2013\u2014]\s*", "", text).strip()
     return re.sub(r"\s+", " ", text)
 
 
@@ -434,9 +437,21 @@ def _h3_screenplay_speaker_heading(value: Any) -> tuple[str, bool] | None:
     if markdown:
         text = markdown.group(1).strip()
 
+    # MiniMax and other writing models often emit natural-language screenplay
+    # headings such as ``Sulema:`` instead of all-caps studio formatting.  The
+    # old parser ignored those headings, locked an empty dialogue manifest and
+    # later deleted valid <d> blocks from the shot plan.  Accept a conservative
+    # name-plus-colon form while continuing to reject structural labels below.
+    colon_heading = re.fullmatch(
+        r"([A-Za-z\u00c0-\u024f][A-Za-z\u00c0-\u024f0-9 .'\u2019\-()]{0,60}):",
+        text,
+    )
+    if colon_heading:
+        text = colon_heading.group(1).strip()
+
     # Standard screenplay headings are short uppercase names. Exclude scene
     # headings and structural labels so they cannot become phantom speakers.
-    if not re.fullmatch(r"[A-Z][A-Z0-9 .'\-()]{0,60}", text):
+    if not colon_heading and not re.fullmatch(r"[A-Z][A-Z0-9 .'\-()]{0,60}", text):
         return None
     upper = text.upper()
     if upper.startswith(("INT.", "EXT.", "INT/EXT.", "I/E.")):
@@ -607,6 +622,7 @@ def _h3_user_locked_dialogue_map(
         r'<\s*d\s*>\s*(?:\[[^\]]+\]\s*)?(.+?)<\s*/\s*d\s*>',
         r'"([^"\r\n]{1,600})"',
         r'\u201c([^\u201d\r\n]{1,600})\u201d',
+        r'\u00ab([^\u00bb\r\n]{1,600})\u00bb',
     )
     for pattern in patterns:
         candidates.extend(
@@ -6079,20 +6095,32 @@ repeating that prose across every metadata field."""
                 movement_intensity=cam_raw.get("movement_intensity", "subtle"),
             )
 
-            audio_raw = raw.get("audio_plan", {})
-            has_dialogue = bool(raw.get("dialogue_beats"))
-            audio = AudioPlan(
-                mode=audio_raw.get("mode", "dialogue_driven" if has_dialogue else "ambient_only"),
-                ambience=audio_raw.get("ambience"),
-                timing_anchor="audio" if has_dialogue else "video",
-                lip_sync_critical=audio_raw.get("lip_sync_critical", has_dialogue),
-            )
-
             is_h3_native = bool(
                 frames_maximum is not None
                 and str(getattr(self, "_video_model", "") or "")
                 .lower().startswith("minimax_h3")
             )
+            audio_raw = raw.get("audio_plan", {})
+            has_dialogue = bool(raw.get("dialogue_beats"))
+            if is_h3_native:
+                # The reconciled dialogue manifest is authoritative.  Never
+                # preserve a planner's dialogue_driven/lip-sync flags after its
+                # dialogue was rejected or removed, because that gives H3 an
+                # open-ended vocal instruction with no exact <d> words.
+                audio_mode = "dialogue_driven" if has_dialogue else "ambient_only"
+                lip_sync_critical = has_dialogue
+            else:
+                audio_mode = audio_raw.get(
+                    "mode", "dialogue_driven" if has_dialogue else "ambient_only"
+                )
+                lip_sync_critical = audio_raw.get("lip_sync_critical", has_dialogue)
+            audio = AudioPlan(
+                mode=audio_mode,
+                ambience=audio_raw.get("ambience"),
+                timing_anchor="audio" if has_dialogue else "video",
+                lip_sync_critical=lip_sync_critical,
+            )
+
             dialogue_beats = None
             if raw.get("dialogue_beats"):
                 dialogue_beats = [DialogueBeat.from_dict(db) for db in raw["dialogue_beats"]]

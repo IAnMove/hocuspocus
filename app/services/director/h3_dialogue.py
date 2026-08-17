@@ -67,6 +67,29 @@ _H3_SPEECHLIKE_AMBIENCE_REPLACEMENTS = (
     ),
 )
 
+# H3 renders picture and sound jointly.  A vocal verb in an otherwise silent
+# visual description is therefore an audio instruction, even when a silence
+# sentence appears later.  These rewrites remove the *semantic* contradiction
+# instead of trying to overpower it with more negative prompting.
+_H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
+    (re.compile(r"\bgrita\s+pidiendo\s+socorro\b", re.I), "agita los brazos con expresi\u00f3n de alarma"),
+    (re.compile(r"\bpide\s+(?:ayuda|socorro)(?:\s+con\s+el\s+mismo\s+grito(?:\s+\w+)?)?", re.I), "hace se\u00f1ales urgentes con ambos brazos"),
+    (re.compile(r"\breacciona\s+con\s+un\s+jadeo(?:\s+(?:sincero|nervioso|fuerte|audible))?", re.I), "reacciona abriendo mucho los ojos"),
+    (re.compile(r"\b(?:r\u00ede|se\s+r\u00ede)\s+nervios[oa]\b", re.I), "sonr\u00ede con nerviosismo"),
+    (re.compile(r"\bgru\u00f1e\s+con\s+esfuerzo\b", re.I), "tensa el rostro por el esfuerzo"),
+    (re.compile(r"\bexclama(?:\s+un)?\s+[\"'\u00ab].+?[\"'\u00bb](?:\s+(?:satisfecho|satisfecha|nervioso|nerviosa))?", re.I), "adopta una expresi\u00f3n satisfecha"),
+    (re.compile(r"\bpronuncia(?:\s+con\s+\w+)?\s+su\s+(?:\u00fanica\s+)?l\u00ednea(?:\s+\w+)?", re.I), "mantiene la expresi\u00f3n descrita con la boca cerrada"),
+    (re.compile(r"\bshouts?\s+for\s+help\b", re.I), "signals urgently for help with both arms"),
+    (re.compile(r"\b(?:says?|speaks?|sings?|whispers?|mutters?)\s+(?:his|her|their)\s+(?:only\s+)?line\b", re.I), "holds the described expression with a closed mouth"),
+    (re.compile(r"\bgrunts?\s+with\s+effort\b", re.I), "strains visibly with the effort"),
+    (re.compile(r"\blaughs?\s+nervously\b", re.I), "smiles nervously"),
+)
+
+_H3_SILENT_SOUNDSCAPE_VOCAL_REPLACEMENTS = (
+    re.compile(r"(?:^|[,;])\s*[^,;]*\b(?:jadeo|risa|gru\u00f1ido|exclamaci\u00f3n|grito|voz|voces|di\u00e1logo)\b[^,;]*", re.I),
+    re.compile(r"(?:^|[,;])\s*[^,;]*\b(?:gasp|laugh|grunt|exclamation|shout|voice|voices|speech|dialogue)\b[^,;]*", re.I),
+)
+
 _H3_BASE_FIELDS = (
     "integrated_multimodal_description",
     "overall_soundscape",
@@ -260,6 +283,28 @@ def _sanitize_scripted_ambience(prompt: str) -> str:
         return re.sub(r"\s*;\s*(?=;|$)", "", segment).strip(" ;")
 
     return _rewrite_outside_dialogue(prompt, sanitize)
+
+
+def _sanitize_silent_visual_vocals(prompt: str) -> str:
+    """Turn unstructured vocal actions into equivalent visible silent acting."""
+
+    def sanitize(segment: str) -> str:
+        for pattern, replacement in _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS:
+            segment = pattern.sub(replacement, segment)
+        return segment
+
+    return _rewrite_outside_dialogue(prompt, sanitize)
+
+
+def _sanitize_silent_soundscape(soundscape: str) -> str:
+    """Keep a silent shot's soundscape to ambience and physical effects."""
+
+    result = str(soundscape or "")
+    for pattern in _H3_SILENT_SOUNDSCAPE_VOCAL_REPLACEMENTS:
+        result = pattern.sub("", result)
+    result = re.sub(r"\s*[,;]\s*[,;]+", "; ", result)
+    result = re.sub(r"\s+", " ", result).strip(" ,;.")
+    return result or "Natural scene-appropriate stereo ambience and synchronized physical effects"
 
 
 def _insert_visual_detail(prompt: str, label: str, detail: str) -> str:
@@ -1285,6 +1330,13 @@ def compile_h3_official_prompt(
         audio_plan.get("spoken_language")
         if isinstance(audio_plan, Mapping) else ""
     )
+    has_structured_dialogue = any(
+        _normalized_space(_field(beat, "spoken_text", ""))
+        for beat in (dialogue_beats or [])
+    ) or bool(existing_blocks)
+    if not has_structured_dialogue and not has_driving_audio:
+        body = _sanitize_silent_visual_vocals(body)
+        soundscape = _sanitize_silent_soundscape(soundscape)
     body, vocal_contract = _compile_official_dialogue(
         body,
         subjects or [],

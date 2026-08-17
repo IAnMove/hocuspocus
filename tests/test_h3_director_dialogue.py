@@ -325,6 +325,33 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         )
         self.assertNotIn("the first tagged line", prompt)
 
+    def test_silent_clip_rewrites_vocal_actions_instead_of_contradicting_itself(self):
+        prompt, _ = compile_h3_official_prompt(
+            "Sulema grita pidiendo socorro desde el agua Then Ferm\u00edn "
+            "reacciona con un jadeo sincero y r\u00ede nervioso Then Eugenio "
+            "pronuncia su \u00fanica l\u00ednea doctoral. "
+            "overall_soundscape: Brisa, jadeo de Ferm\u00edn, risa nerviosa y "
+            "grito de Sulema; chapuz\u00f3n. non_diegetic_music: N/A",
+            [],
+            [],
+            mode="t2va",
+        )
+
+        visual = prompt.split("overall_soundscape:", 1)[0].casefold()
+        soundscape = prompt.split("overall_soundscape:", 1)[1].split(
+            "non_diegetic_music:", 1,
+        )[0].casefold()
+        self.assertNotIn("grita pidiendo", visual)
+        self.assertNotIn("jadeo", visual)
+        self.assertNotIn("r\u00ede nervioso", visual)
+        self.assertNotIn("pronuncia su", visual)
+        self.assertIn("boca cerrada", visual)
+        self.assertNotRegex(
+            soundscape,
+            r"\b(?:jadeo|risa|grito|voz|voces)\b",
+        )
+        self.assertIn("no character speaks", prompt.casefold())
+
     def test_ref2va_compiler_emits_six_fields_and_maps_real_manifest_order(self):
         references = [
             {
@@ -1065,6 +1092,57 @@ INT. APARTMENT - DAY
                     "spoken_text": "Ross! Did you just *shit* yourself?",
                 },
             ],
+        )
+
+    def test_extracts_title_case_spanish_screenplay_dialogue_with_em_dash(self):
+        screenplay = """EXT. ORILLA DEL LAGO \u2014 MEDIOD\u00cdA
+
+Sulema cae al agua y agita ambos brazos.
+
+Sulema:
+\u2014\u00a1Socorro!
+
+Eugenio se ajusta las gafas.
+
+Eugenio:
+\u2014\u00a1Exacto! \u00a1Ah\u00ed quer\u00eda llegar yo!
+"""
+
+        self.assertEqual(
+            _extract_h3_screenplay_dialogue(screenplay),
+            [
+                {"speaker_name": "Sulema", "spoken_text": "\u00a1Socorro!"},
+                {
+                    "speaker_name": "Eugenio",
+                    "spoken_text": "\u00a1Exacto! \u00a1Ah\u00ed quer\u00eda llegar yo!",
+                },
+            ],
+        )
+
+    def test_spanish_guillemets_keep_user_dialogue_verbatim_in_table_read(self):
+        manifest = [{
+            "speaker_name": "Eugenio",
+            "spoken_text": "\u00a1Exacto! \u00a1Ah\u00ed quer\u00eda llegar yo!",
+        }]
+        revised, changed = _apply_h3_character_table_read(
+            manifest,
+            [{
+                "turn": 1,
+                "speaker_name": "Eugenio",
+                "original_text": "\u00a1Exacto! \u00a1Ah\u00ed quer\u00eda llegar yo!",
+                "revised_text": "Eso era exactamente lo que pretend\u00eda.",
+                "delivery": "grave y pausada",
+            }],
+            story_description=(
+                "Su \u00fanica frase es \u00ab\u00a1Exacto! \u00a1Ah\u00ed quer\u00eda llegar yo!\u00bb."
+            ),
+            max_spoken_words=20,
+        )
+
+        self.assertEqual(changed, 0)
+        self.assertEqual(
+            revised[0]["spoken_text"],
+            "\u00a1Exacto! \u00a1Ah\u00ed quer\u00eda llegar yo!",
         )
 
     def test_manifest_reconciliation_keeps_dialogue_in_semantic_shots(self):
