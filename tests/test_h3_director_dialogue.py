@@ -2414,6 +2414,35 @@ Ross turns toward Joey.
             " ".join(shot["video_prompt"] for shot in restored),
         )
 
+    def test_uneven_repaired_slots_preserve_words_with_deterministic_split(self):
+        speaker = {
+            "character_id": "speaker", "speaker_name": "Speaker",
+            "visual_description": "Speaker", "position_or_relation": "center",
+            "wardrobe": "blue shirt",
+        }
+        first = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty"
+        second = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon"
+        original = [{
+            "subjects_on_screen": [speaker],
+            "dialogue_beats": [
+                {"speaker_id": "speaker", "spoken_text": first},
+                {"speaker_id": "speaker", "spoken_text": second},
+            ],
+        }]
+        repaired = [
+            {"subjects_on_screen": [speaker], "dialogue_beats": [], "video_prompt": "A."},
+            {"subjects_on_screen": [speaker], "dialogue_beats": [], "video_prompt": "B."},
+        ]
+        restored = _restore_h3_dialogue_after_pacing_repair(
+            original, repaired, [14.375, 5.2]
+        )
+        spoken = " ".join(
+            beat["spoken_text"]
+            for shot in restored
+            for beat in shot.get("dialogue_beats") or []
+        )
+        self.assertEqual(spoken, f"{first} {second}")
+
     def test_missing_pass2_turn_is_compiled_without_whole_plan_llm_repair(self):
         screenplay = """INT. APARTMENT - DAY
 

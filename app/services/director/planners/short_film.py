@@ -1701,20 +1701,53 @@ def _restore_h3_dialogue_after_pacing_repair(
                     costs[shot_no + 1][end] = candidate
                     parents[shot_no + 1][end] = start
 
-    if not math.isfinite(costs[shot_count][event_count]):
-        raise ValueError(
-            "the original complete dialogue turns cannot fit the repaired "
-            "per-shot timing without changing words"
-        )
-
-    assignments: list[list[int]] = [[] for _ in repaired]
-    end = event_count
-    for shot_no in range(shot_count, 0, -1):
-        start = parents[shot_no][end]
-        if start is None:
-            raise ValueError("the deterministic dialogue allocation is incomplete")
-        assignments[shot_no - 1] = list(range(start, end))
-        end = start
+    if math.isfinite(costs[shot_count][event_count]):
+        assignments: list[list[int]] = [[] for _ in repaired]
+        end = event_count
+        for shot_no in range(shot_count, 0, -1):
+            start = parents[shot_no][end]
+            if start is None:
+                raise ValueError("the deterministic dialogue allocation is incomplete")
+            assignments[shot_no - 1] = list(range(start, end))
+            end = start
+    else:
+        # A repaired plan can have legal total capacity but an unfortunate
+        # distribution (for example a long turn followed by a short final
+        # shot). Preserve the complete word stream by splitting only at word
+        # boundaries and filling the available shots sequentially. This is a
+        # deterministic last resort; it never rewrites or invents dialogue.
+        fallback_events: list[dict] = []
+        fallback_assignments: list[list[int]] = [[] for _ in repaired]
+        event_index = 0
+        for shot_no, capacity in enumerate(capacities):
+            remaining = capacity
+            while remaining > 0 and event_index < len(events):
+                event = events[event_index]
+                words = event["beat"]["spoken_text"].split()
+                if not words:
+                    event_index += 1
+                    continue
+                take = min(remaining, len(words))
+                clone = dict(event)
+                clone["beat"] = dict(event["beat"])
+                clone["beat"]["spoken_text"] = " ".join(words[:take])
+                fallback_assignments[shot_no].append(len(fallback_events))
+                fallback_events.append(clone)
+                remaining -= take
+                if take == len(words):
+                    event_index += 1
+                else:
+                    event = dict(event)
+                    event["beat"] = dict(event["beat"])
+                    event["beat"]["spoken_text"] = " ".join(words[take:])
+                    events[event_index] = event
+        if event_index < len(events):
+            raise ValueError(
+                "the original complete dialogue turns cannot fit the repaired "
+                "per-shot timing without changing words"
+            )
+        events = fallback_events
+        assignments = fallback_assignments
 
     for shot_no, raw in enumerate(repaired):
         raw["dialogue_beats"] = [
