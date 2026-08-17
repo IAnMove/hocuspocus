@@ -22,6 +22,7 @@ import type { ComicProject } from '../comics/types'
 import { syncTrailerDuration, trailerDurationForProject } from './trailerDefaults'
 import { resolveStoryWritingProvider } from './provider'
 import { StoryLibraryConflictNotice } from './StoryLibraryConflictNotice'
+import { QuickVideoBatchPanel } from './QuickVideoBatchPanel'
 import {
   buildComicAdaptation,
   buildMusicVideoAdaptation,
@@ -6261,6 +6262,17 @@ export function StoryLabPanel() {
                     <button className={`${button} ${completeGenerationButton} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !filmGenerationImageReady || !directReferenceVideoReady || !storyVideoConfigurationReady} onClick={() => stageFilm(true)}>{productionBusy === 'film' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {project.projectType === 'quick_video' ? 'Generar vídeo rápido completo' : 'Generate complete short film'}</button>
                     <button className={`${button} w-full`} disabled={!project.synopsis || !project.characters.length || Boolean(productionIssues.length) || Boolean(productionBusy) || !storyVideoConfigurationReady} onClick={() => stageFilm(false)}><ChevronRight size={13} /> {project.projectType === 'quick_video' ? 'Abrir en Director' : 'Open in Short Film Director'}</button>
                     <p className="text-[9px] text-text-muted">Complete generation launches a recoverable Director pipeline and may consume image/video credits.</p>
+                    {project.projectType === 'quick_video' && (
+                      <QuickVideoBatchPanel
+                        project={project}
+                        workspace={activeWorkspace}
+                        videoModel={filmVideoModel}
+                        imageModel={filmImageModel}
+                        resolution={storyVideoResolution}
+                        aspectRatio={storyVideoAspectRatio}
+                        durationSeconds={filmDuration}
+                      />
+                    )}
                   </div>
                   )}
                   {project.projectType !== 'quick_video' && (

@@ -30774,6 +30774,48 @@ api.include_router(create_series_assembly_router(
     iso_now=_series_iso_now,
 ))
 
+
+def _quick_video_batch_reference_path(source: str, workspace: str) -> str | None:
+    """Resolve only Loreframe-owned image URLs used by a Quick Video batch."""
+    from urllib.parse import unquote, urlparse
+
+    parsed_path = urlparse(str(source or "")).path
+    if parsed_path.startswith("/api/v1/file/"):
+        filename = unquote(parsed_path.split("/api/v1/file/", 1)[1])
+        candidate = _safe_join(_workspace_dir(workspace), filename)
+    elif parsed_path.startswith("/api/v1/uploads/"):
+        filename = unquote(parsed_path.split("/api/v1/uploads/", 1)[1])
+        candidate = _safe_join(os.path.join(os.getcwd(), "uploads"), filename)
+    else:
+        return None
+    return candidate if candidate and os.path.isfile(candidate) else None
+
+
+from routers.quick_video_batches import (
+    control_quick_video_batch_job,
+    create_quick_video_batch_router,
+)
+from services.director_pipeline import (
+    get_pipeline_status as _quick_batch_pipeline_status,
+    resume_pipeline as _quick_batch_resume_pipeline,
+    start_pipeline as _quick_batch_start_pipeline,
+    stop_pipeline as _quick_batch_stop_pipeline,
+)
+
+api.include_router(create_quick_video_batch_router(
+    resolve_workspace=_series_library_workspace,
+    workspace_dir=_workspace_dir,
+    list_workspaces=_list_workspaces,
+    ensure_pipeline_ready=_init_pipeline,
+    start_pipeline=_quick_batch_start_pipeline,
+    get_pipeline_status=_quick_batch_pipeline_status,
+    stop_pipeline=_quick_batch_stop_pipeline,
+    resume_pipeline=_quick_batch_resume_pipeline,
+    get_model_def=wgp.get_model_def,
+    get_model_defaults=wgp.get_default_settings,
+    resolve_reference=_quick_video_batch_reference_path,
+))
+
 from routers.style_library import create_style_library_router
 from services.style_library import (
     StyleLibrary,
@@ -36153,6 +36195,12 @@ def _control_canonical_task(task: dict, action: str):
             return cancel_story_music_candidates_job(root_backend_id)
         if adapter == "series-assembly":
             return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "cancel")
+        if adapter == "quick-video-batch":
+            return control_quick_video_batch_job(
+                _workspace_dir(str(task.get("workspace") or "default")),
+                legacy_id,
+                "cancel",
+            )
     if action in {"retry", "resume"}:
         if adapter == "director": return director_pipeline_resume(legacy_id)
         if adapter == "series-plan": return resume_series_episode_plan(legacy_id)
@@ -36161,6 +36209,12 @@ def _control_canonical_task(task: dict, action: str):
         if adapter == "comic-plan": return resume_director_comic_plan(legacy_id)
         if adapter == "series-assembly":
             return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "resume")
+        if adapter == "quick-video-batch":
+            return control_quick_video_batch_job(
+                _workspace_dir(str(task.get("workspace") or "default")),
+                legacy_id,
+                "resume",
+            )
     if action == "discard" and adapter == "series-assembly":
         return control_series_assembly_job(
             _workspace_dir(str(task.get("workspace") or "default")),

@@ -3236,6 +3236,109 @@ export interface StoryGenerationStatus {
   result?: { result?: Record<string, unknown> } | null
 }
 
+export interface QuickVideoBatchItem {
+  index: number
+  idea: string
+  status: 'queued' | 'planning' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'skipped'
+  stage: string
+  message: string
+  pipelineId?: string | null
+  outputFiles: string[]
+  finalOutput?: string | null
+  error?: string | null
+  createdAt: number
+  startedAt?: number | null
+  finishedAt?: number | null
+  progressCurrent: number
+  progressTotal: number
+}
+
+export interface QuickVideoBatchJob {
+  jobId: string
+  taskId: string
+  workspace: string
+  title: string
+  status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  stage: string
+  current: number
+  total: number
+  message: string
+  error?: string | null
+  continueOnError: boolean
+  settings: Record<string, unknown>
+  items: QuickVideoBatchItem[]
+  createdAt: number
+  updatedAt: number
+  finishedAt?: number | null
+}
+
+export interface QuickVideoBatchStart {
+  workspace: string
+  title: string
+  ideas: string[]
+  continueOnError: boolean
+  settings: {
+    durationSeconds: number
+    generationMode: 'direct_video' | 'image_guided' | 'direct_references'
+    videoModel: string
+    imageModel: string
+    resolution: string
+    aspectRatio: string
+    spokenLanguage: string
+    visualStyle: string
+    characterVisualStyle: string
+    directVideoMasterPrompt: string
+    allowClipText: boolean
+    writingProvider: string
+    writingModel: string
+    writingBaseUrl: string
+    characters: Array<Record<string, unknown>>
+    references: Array<{ source: string; label: string; kind: string }>
+  }
+}
+
+async function quickVideoBatchResponse(response: Promise<Response>, fallback: string) {
+  const resolved = await response
+  if (!resolved.ok) {
+    const error = await resolved.json().catch(() => ({ detail: fallback }))
+    throw new Error(error.detail || fallback)
+  }
+  return resolved.json()
+}
+
+export async function startQuickVideoBatch(payload: QuickVideoBatchStart): Promise<QuickVideoBatchJob> {
+  return quickVideoBatchResponse(fetch(`${BASE}/api/v1/stories/quick-video-batches/start`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  }), 'Could not start Quick Video batch')
+}
+
+export async function listQuickVideoBatches(workspace: string): Promise<{ jobs: QuickVideoBatchJob[] }> {
+  return quickVideoBatchResponse(fetch(
+    `${BASE}/api/v1/stories/quick-video-batches?workspace=${encodeURIComponent(workspace)}`,
+  ), 'Could not load Quick Video batches')
+}
+
+export async function getQuickVideoBatch(jobId: string, workspace: string): Promise<QuickVideoBatchJob> {
+  return quickVideoBatchResponse(fetch(
+    `${BASE}/api/v1/stories/quick-video-batches/${encodeURIComponent(jobId)}?workspace=${encodeURIComponent(workspace)}`,
+  ), 'Could not load Quick Video batch')
+}
+
+export async function controlQuickVideoBatch(
+  jobId: string,
+  action: 'cancel' | 'resume' | 'retry-item' | 'skip-item' | 'discard',
+  workspace: string,
+  itemIndex?: number,
+): Promise<QuickVideoBatchJob | { jobId: string; discarded: boolean; outputsPreserved: boolean }> {
+  return quickVideoBatchResponse(fetch(
+    `${BASE}/api/v1/stories/quick-video-batches/${encodeURIComponent(jobId)}/${action}`,
+    {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace, itemIndex }),
+    },
+  ), `Could not ${action} Quick Video batch`)
+}
+
 const STORY_STATUS_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 15_000, 15_000, 15_000]
 
 function isStoryStatusNetworkError(error: unknown): boolean {
