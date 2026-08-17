@@ -383,6 +383,31 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         self.assertNotIn("</d>", prompt)
         self.assertNotIn("raps", prompt.casefold())
 
+    def test_lyric_ledger_replaces_stale_tag_after_music_field(self):
+        plans = [{
+            "video_prompt": (
+                "A singer sings toward camera. overall_soundscape: Cave drips. "
+                "non_diegetic_music: Beat. <d>[Spanish] Stale entire verse.</d>"
+            ),
+            "_director_dialogue_beats": [{
+                "speaker_id": "lead",
+                "spoken_text": "La línea temporal correcta.",
+            }],
+            "_director_subjects_on_screen": [],
+            "_director_audio_plan": {
+                "mode": "dialogue_driven",
+                "timing_anchor": "audio",
+                "lip_sync_critical": True,
+            },
+        }]
+
+        compile_h3_clip_plans(plans, durations=[5.5])
+        compiled = plans[0]["video_prompt"]
+        self.assertEqual(compiled.count("<d>"), 1)
+        self.assertIn("La línea temporal correcta.", compiled)
+        self.assertNotIn("Stale entire verse", compiled)
+        self.assertNotIn("sings", compiled.casefold())
+
     def test_final_preflight_sanitizes_unledgered_silent_vocal_intent(self):
         plans = [{
             "video_prompt": (
@@ -414,7 +439,7 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
 
         self.assertIn("no character speaks", plans[0]["video_prompt"].casefold())
 
-    def test_negation_does_not_hide_a_later_vocal_cue_after_a_comma(self):
+    def test_silent_clip_rewrites_a_later_vocal_cue_after_a_comma(self):
         plans = [{
             "video_prompt": (
                 "A professor works silently. No music, then he sings. "
@@ -425,11 +450,9 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             "_director_subjects_on_screen": [],
         }]
 
-        with self.assertRaisesRegex(
-            H3DialogueContractError,
-            "unstructured vocal performance: sings",
-        ):
-            compile_h3_clip_plans(plans)
+        compile_h3_clip_plans(plans)
+        visual = plans[0]["video_prompt"].split("overall_soundscape:", 1)[0]
+        self.assertNotIn("sings", visual.casefold())
 
     def test_final_preflight_blocks_unstructured_reply(self):
         plans = [{
@@ -471,7 +494,7 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         ):
             compile_h3_clip_plans(plans)
 
-    def test_failed_final_preflight_does_not_mutate_the_plan(self):
+    def test_final_preflight_repairs_unledgered_singing(self):
         plans = [{
             "video_prompt": (
                 "A professor sings beside a machine. "
@@ -480,12 +503,10 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             "_director_dialogue_beats": [],
             "_director_subjects_on_screen": [],
         }]
-        original = copy.deepcopy(plans)
-
-        with self.assertRaises(H3DialogueContractError):
-            compile_h3_clip_plans(plans)
-
-        self.assertEqual(plans, original)
+        compile_h3_clip_plans(plans)
+        visual = plans[0]["video_prompt"].split("overall_soundscape:", 1)[0]
+        self.assertNotIn("sings", visual.casefold())
+        self.assertIn("closed-mouth", visual.casefold())
 
     def test_short_dialogue_is_not_inserted_inside_unrelated_prose(self):
         prompt, _ = compile_h3_official_prompt(
@@ -499,7 +520,7 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         self.assertNotIn("<d>[English] No</d> one is visible", prompt)
         self.assertIn("<d>[English] No</d>", prompt)
 
-    def test_final_preflight_blocks_extra_vocal_performance_with_dialogue(self):
+    def test_final_preflight_repairs_extra_vocal_performance_with_dialogue(self):
         plans = [{
             "video_prompt": (
                 "Ana says <d>[Spanish] Ya est\u00e1n aqu\u00ed.</d> while Luis grunts. "
@@ -513,11 +534,10 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             "_director_subjects_on_screen": [],
         }]
 
-        with self.assertRaisesRegex(
-            H3DialogueContractError,
-            "unstructured vocal performance: grunts",
-        ):
-            compile_h3_clip_plans(plans)
+        compile_h3_clip_plans(plans)
+        visual = plans[0]["video_prompt"].split("overall_soundscape:", 1)[0]
+        self.assertNotIn("grunts", visual.casefold())
+        self.assertIn("<d>[Spanish] Ya están aquí.</d>", visual)
 
     def test_ref2va_compiler_emits_six_fields_and_maps_real_manifest_order(self):
         references = [

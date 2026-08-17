@@ -87,6 +87,9 @@ _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
     # reads that as a request for native speech, so render the intention with
     # facial acting when the shot has no exact dialogue ledger.
     (re.compile(r"\b(?:mouth|lips?)\s+(?:half[- ]?)?(?:open(?:s|ed|ing)?|part(?:s|ed|ing)?)\b[^.!?]{0,64}\b(?:to|as\s+if(?:\s+about)?\s+to)\s+(?:speak|sing|say|whisper|mutter)\b", re.I), "mouth remains closed in tense hesitation"),
+    # With a canonical <d> line, this is merely delivery prose.  Replace it
+    # before the tag so H3 has exactly one vocal authority: the tag itself.
+    (re.compile(r"\b(?:sings?|raps?|speaks?|says?|whispers?|mutters?|canta(?:n)?|rapea(?:n)?|habla(?:n)?|dice(?:n)?|susurra(?:n)?|murmura(?:n)?)\b[^.!?]{0,220}(?=\s*<\s*d\s*>)", re.I), "performs the exact lyric: "),
     (re.compile(r"\bnadie\s+canta\b", re.I), "nadie permanece en silencio"),
     (re.compile(r"\bno\s+one\s+speaks\b", re.I), "everyone remains silent"),
     (re.compile(r"\b(?:hissing|rapping|singing|speaking|saying|whispering|muttering)\s+(?:the\s+)?(?:verse|lyrics?|line|song|words?)\b", re.I), "moving with tense rhythmic physicality"),
@@ -96,7 +99,7 @@ _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
     # setup before the verb, but replace the rest of that vocal clause.  The
     # final soundtrack is assembled separately; native H3 vocals are never a
     # valid substitute when this clip has no exact <d> line.
-    (re.compile(r"\b(?:rap(?:s|ped|ping)?|whisper(?:s|ed|ing)?|mutter(?:s|ed|ing)?|hiss(?:es|ed|ing)?|(?:rape|susurra|murmura|sisea|canta|pronuncia)(?:n|ndo|ba|ron|ría|rían)?|articula(?:n)?\s+(?:un\s+)?rap)\b[^.!?]{0,220}", re.I), "holds a tense closed-mouth expression"),
+    (re.compile(r"\b(?:rap(?:s|ped|ping)?|sing(?:s|ing|sang)?|whisper(?:s|ed|ing)?|mutter(?:s|ed|ing)?|hiss(?:es|ed|ing)?|gasp(?:s|ed|ing)?|laugh(?:s|ed|ing)?|grunt(?:s|ed|ing)?|sob(?:s|bed|bing)?|moan(?:s|ed|ing)?|cough(?:s|ed|ing)?|sneeze(?:s|d|ing)?|whistle(?:s|d|ing)?|babble(?:s|d|ing)?|(?:rape|susurra|murmura|sisea|canta|pronuncia|jadea|ríe|gruñe|solloza|gime|tose|estornuda|silba|tararea|balbucea)(?:n|ndo|ba|ron|ría|rían)?|articula(?:n)?\s+(?:un\s+)?rap)\b[^.!?]{0,220}", re.I), "holds a tense closed-mouth expression"),
     (re.compile(r"\b(?:with\s+)?visible\s+lip\s+movement\b", re.I), "with a closed mouth"),
     (re.compile(r"\bgrunts?\s+with\s+effort\b", re.I), "strains visibly with the effort"),
     (re.compile(r"\blaughs?\s+nervously\b", re.I), "smiles nervously"),
@@ -1441,13 +1444,25 @@ def compile_h3_official_prompt(
         closing_blocking=closing_blocking,
         audio_plan=audio_plan,
     )
+    # Planner JSON occasionally appends a previously compiled <d> block after
+    # ``non_diegetic_music``.  When a fresh canonical lyric ledger exists,
+    # that stale block must not survive in a sound field or compete with the
+    # timestamped slice for this native clip.
+    if has_ledger_dialogue:
+        existing_blocks = []
+        soundscape = _H3_DIALOGUE_TOKEN_RE.sub(
+            "", _H3_STRICT_DIALOGUE_RE.sub("", soundscape),
+        ).strip()
+        music = _H3_DIALOGUE_TOKEN_RE.sub(
+            "", _H3_STRICT_DIALOGUE_RE.sub("", music),
+        ).strip() or "N/A"
     from .spoken_language import h3_language_tag
     forced_language = h3_language_tag(
         audio_plan.get("spoken_language")
         if isinstance(audio_plan, Mapping) else ""
     )
     has_structured_dialogue = has_ledger_dialogue or bool(existing_blocks)
-    if has_ledger_dialogue and not existing_blocks:
+    if has_ledger_dialogue:
         # Music planners commonly leave free-form "sings/raps" prose beside
         # a now-authoritative lyric ledger.  Keep only the exact <d> words as
         # a vocal instruction; visual delivery is converted to physical acting
