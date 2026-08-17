@@ -8,6 +8,7 @@ and malformed or contradictory prompts are rejected before GPU generation.
 
 from __future__ import annotations
 
+import copy
 import math
 import re
 from typing import Any, Iterable, Mapping, MutableMapping, Sequence
@@ -88,6 +89,41 @@ _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
 _H3_SILENT_SOUNDSCAPE_VOCAL_REPLACEMENTS = (
     re.compile(r"(?:^|[,;])\s*[^,;]*\b(?:jadeo|risa|gru\u00f1ido|exclamaci\u00f3n|grito|voz|voces|di\u00e1logo)\b[^,;]*", re.I),
     re.compile(r"(?:^|[,;])\s*[^,;]*\b(?:gasp|laugh|grunt|exclamation|shout|voice|voices|speech|dialogue)\b[^,;]*", re.I),
+)
+
+_H3_AFFIRMATIVE_VOCAL_RE = re.compile(
+    r"\b(?:grita(?:n)?|dice(?:n)?|habla(?:n)?|canta(?:n)?|susurra(?:n)?|"
+    r"murmura(?:n)?|pronuncia(?:n)?|exclama(?:n)?|jadea(?:n)?|r\u00ede(?:n)?|"
+    r"gru\u00f1e(?:n)?|solloza(?:n)?|gime(?:n)?|tose(?:n)?|estornuda(?:n)?|"
+    r"silba(?:n)?|tararea(?:n)?|balbucea(?:n)?|responde(?:n)?|respond(?:i\u00f3|ieron)|"
+    r"contesta(?:n)?|contest(?:\u00f3|aron)|pregunta(?:n)?|"
+    r"pide(?:n)?\s+(?:ayuda|socorro)|shouts?|says?|speaks?|sings?|whispers?|"
+    r"mutters?|exclaims?|gasps?|laughs?|grunts?|sobs?|moans?|coughs?|"
+    r"sneezes?|whistles?|babbles?|responds?|repl(?:y|ies|ied)|answers?|"
+    r"answered|asks?|calls?\s+for\s+help)\b",
+    re.IGNORECASE,
+)
+_H3_NON_SPEECH_VOCAL_RE = re.compile(
+    r"\b(?:canta(?:n)?|jadea(?:n)?|r\u00ede(?:n)?|gru\u00f1e(?:n)?|"
+    r"solloza(?:n)?|gime(?:n)?|tose(?:n)?|estornuda(?:n)?|silba(?:n)?|"
+    r"tararea(?:n)?|balbucea(?:n)?|sings?|gasps?|laughs?|grunts?|sobs?|"
+    r"moans?|coughs?|sneezes?|whistles?|babbles?)\b",
+    re.IGNORECASE,
+)
+_H3_VOCAL_SOUND_RE = re.compile(
+    r"\b(?:voz|voces|grito|gritos|jadeo|jadeos|risa|risas|gru\u00f1ido|"
+    r"gru\u00f1idos|sollozo|sollozos|gemido|gemidos|tos|estornudo|estornudos|"
+    r"silbido|silbidos|canto|balbuceo|charla|parloteo|exclamaci\u00f3n|"
+    r"exclamaciones|habla|di\u00e1logo|voice|voices|shout|shouts|gasp|gasps|"
+    r"laugh|laughs|laughter|grunt|grunts|sob|sobs|sobbing|moan|moans|"
+    r"moaning|cough|coughs|sneeze|sneezes|whistle|whistles|babble|chatter|"
+    r"exclamation|exclamations|speech|dialogue|muttering|whispering|singing)\b",
+    re.IGNORECASE,
+)
+_H3_NEGATED_VOCAL_PREFIX_RE = re.compile(
+    r"(?:\bno|\bnever|\bnobody|\bno\s+one|\bdo\s+not|\bdoes\s+not|"
+    r"\bmust\s+not|\bnadie|\bning\u00fan|\bninguna|\bsin)\b[^,.!?;:]{0,48}$",
+    re.IGNORECASE,
 )
 
 _H3_BASE_FIELDS = (
@@ -240,12 +276,24 @@ def _replace_first_outside_dialogue(
     spans, malformed = _dialogue_spans(prompt)
     if malformed:
         return prompt, False
+    normalized_needle = str(needle).strip()
+    pattern = re.compile(
+        rf"(?<!\w){re.escape(normalized_needle)}(?!\w)",
+        re.IGNORECASE,
+    )
+    short_line = len(re.findall(r"\w+", normalized_needle)) <= 2
     cursor = 0
     for start, end in [*spans, (len(prompt), len(prompt))]:
-        found = prompt.find(needle, cursor, start)
-        if found >= 0:
+        for found in pattern.finditer(prompt, cursor, start):
+            if short_line:
+                prefix = prompt[max(cursor, found.start() - 72):found.start()]
+                speech_cues = list(_H3_AFFIRMATIVE_VOCAL_RE.finditer(prefix))
+                if not speech_cues or found.start() - (
+                    max(cursor, found.start() - 72) + speech_cues[-1].end()
+                ) > 32:
+                    continue
             return (
-                f"{prompt[:found]}{replacement}{prompt[found + len(needle):]}",
+                f"{prompt[:found.start()]}{replacement}{prompt[found.end():]}",
                 True,
             )
         cursor = end
@@ -305,6 +353,47 @@ def _sanitize_silent_soundscape(soundscape: str) -> str:
     result = re.sub(r"\s*[,;]\s*[,;]+", "; ", result)
     result = re.sub(r"\s+", " ", result).strip(" ,;.")
     return result or "Natural scene-appropriate stereo ambience and synchronized physical effects"
+
+
+def _affirmative_matches(value: Any, pattern: re.Pattern[str]) -> list[str]:
+    text = normalize_h3_text(value)
+    matches: list[str] = []
+    for match in pattern.finditer(text):
+        prefix = text[max(0, match.start() - 56):match.start()]
+        if _H3_NEGATED_VOCAL_PREFIX_RE.search(prefix):
+            continue
+        matches.append(match.group(0))
+    return matches
+
+
+def h3_affirmative_vocal_cues(value: Any) -> list[str]:
+    """Find affirmative speech/vocal actions outside canonical dialogue tags."""
+
+    text = re.sub(
+        r"<\s*d\s*>.*?<\s*/\s*d\s*>",
+        " ",
+        normalize_h3_text(value),
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return _affirmative_matches(text, _H3_AFFIRMATIVE_VOCAL_RE)
+
+
+def h3_vocal_sound_cues(value: Any) -> list[str]:
+    """Find affirmative vocal nouns in an ambience/effects sound layer."""
+
+    return _affirmative_matches(value, _H3_VOCAL_SOUND_RE)
+
+
+def h3_non_speech_vocal_cues(value: Any) -> list[str]:
+    """Find unstructured vocal performance outside exact dialogue tags."""
+
+    text = re.sub(
+        r"<\s*d\s*>.*?<\s*/\s*d\s*>",
+        " ",
+        normalize_h3_text(value),
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return _affirmative_matches(text, _H3_NON_SPEECH_VOCAL_RE)
 
 
 def _insert_visual_detail(prompt: str, label: str, detail: str) -> str:
@@ -1423,6 +1512,7 @@ def validate_h3_prompt_contract(
     *,
     mode: str = "t2va",
     references: Sequence[Mapping[str, Any]] | None = None,
+    audio_plan: Mapping[str, Any] | None = None,
 ) -> list[str]:
     """Validate the official field order plus Maestro's exact dialogue data."""
 
@@ -1448,6 +1538,82 @@ def validate_h3_prompt_contract(
     extracted_fields = _extract_h3_fields(text)
     visual_field = "detailed_description" if mode == "ref2va" else "integrated_multimodal_description"
     visual = extracted_fields.get(visual_field, "")
+    expected_dialogue = any(
+        _normalized_space(_field(beat, "spoken_text", ""))
+        for beat in (dialogue_beats or [])
+    )
+    audio = audio_plan if isinstance(audio_plan, Mapping) else {}
+    _, _, has_driving_audio, _, _, _ = _reference_relationships(
+        references or [], [], {}
+    )
+    if audio and not has_driving_audio:
+        audio_mode = str(audio.get("mode") or "").strip().casefold()
+        timing_anchor = str(audio.get("timing_anchor") or "").strip().casefold()
+        lip_sync = bool(audio.get("lip_sync_critical"))
+        if expected_dialogue:
+            if audio_mode != "dialogue_driven":
+                errors.append(
+                    "exact dialogue requires audio_plan.mode=dialogue_driven"
+                )
+            if timing_anchor != "audio":
+                errors.append(
+                    "exact dialogue requires audio_plan.timing_anchor=audio"
+                )
+            if not lip_sync:
+                errors.append(
+                    "exact dialogue requires audio_plan.lip_sync_critical=true"
+                )
+        else:
+            permitted_silent_modes = {
+                "", "ambient_only", "music_driven", "audio_driven",
+                "generated_audio",
+            }
+            if audio_mode not in permitted_silent_modes:
+                errors.append(
+                    "silent generation uses an unsupported audio_plan.mode"
+                )
+            if (
+                audio_mode in {"", "ambient_only"}
+                and timing_anchor not in {"", "video"}
+            ):
+                errors.append(
+                    "silent generation requires audio_plan.timing_anchor=video"
+                )
+            if audio_mode in {"", "ambient_only", "music_driven"} and lip_sync:
+                errors.append(
+                    "silent generation requires audio_plan.lip_sync_critical=false"
+                )
+    remaining_vocals = h3_affirmative_vocal_cues(visual)
+    non_speech_vocals = h3_non_speech_vocal_cues(visual)
+    if non_speech_vocals:
+        errors.append(
+            "visual field still contains unstructured vocal performance: "
+            + ", ".join(non_speech_vocals[:5])
+        )
+    sound_vocals = h3_vocal_sound_cues(
+        extracted_fields.get("overall_soundscape", "")
+    )
+    if sound_vocals:
+        errors.append(
+            "overall_soundscape still contains vocal material: "
+            + ", ".join(sound_vocals[:5])
+        )
+    if not expected_dialogue and not _dialogue_spans(text)[0]:
+        if remaining_vocals:
+            errors.append(
+                "silent visual field still contains affirmative vocal cues: "
+                + ", ".join(remaining_vocals[:5])
+            )
+    elif expected_dialogue:
+        expected_count = sum(
+            1 for beat in (dialogue_beats or [])
+            if _normalized_space(_field(beat, "spoken_text", ""))
+        )
+        if len(remaining_vocals) > expected_count:
+            errors.append(
+                "visual field contains more vocal actions than exact dialogue "
+                f"lines ({len(remaining_vocals)} > {expected_count})"
+            )
     if not re.match(r"^\s*\[Shot\s+1\]", visual, flags=re.IGNORECASE):
         errors.append(f"{visual_field} does not begin with [Shot 1]")
     if re.search(
@@ -1534,8 +1700,9 @@ def compile_h3_clip_plans(
     Ref2VA wrapper around a previously compiled prompt.
     """
 
-    registry = _build_stable_speaker_registry(clip_plans)
-    for index, plan in enumerate(clip_plans):
+    candidates = copy.deepcopy(list(clip_plans))
+    registry = _build_stable_speaker_registry(candidates)
+    for index, plan in enumerate(candidates):
         beats = plan.get("_director_dialogue_beats") or []
         for beat in beats:
             if isinstance(beat, MutableMapping) and "spoken_text" in beat:
@@ -1595,9 +1762,13 @@ def compile_h3_clip_plans(
             beats,
             mode=mode,
             references=references,
+            audio_plan=plan.get("_director_audio_plan") or {},
         )
         if errors:
             raise H3DialogueContractError(
                 f"Shot {index + 1}: " + "; ".join(errors)
             )
+    for original, candidate in zip(clip_plans, candidates):
+        original.clear()
+        original.update(candidate)
     return clip_plans

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 import json
 import sys
@@ -33,6 +34,7 @@ from services.director.planners.short_film import (  # noqa: E402
     _h3_native_structure_issues,
     _h3_planner_token_budget,
     _h3_preferred_native_durations,
+    _h3_vocal_semantic_issues,
     _normalize_h3_voice_bible,
     _reconcile_h3_dialogue_manifest,
     _restore_h3_dialogue_after_pacing_repair,
@@ -352,6 +354,143 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         )
         self.assertIn("no character speaks", prompt.casefold())
 
+    def test_final_preflight_blocks_unhandled_silent_vocal_intent(self):
+        plans = [{
+            "video_prompt": (
+                "A professor canta una melod\u00eda frente a la m\u00e1quina. "
+                "overall_soundscape: Mechanical hum. "
+                "non_diegetic_music: N/A"
+            ),
+            "_director_dialogue_beats": [],
+            "_director_subjects_on_screen": [],
+        }]
+
+        with self.assertRaisesRegex(
+            H3DialogueContractError,
+            "silent visual field still contains affirmative vocal cues: canta",
+        ):
+            compile_h3_clip_plans(plans)
+
+    def test_final_preflight_accepts_explicitly_negated_vocal_words(self):
+        plans = [{
+            "video_prompt": (
+                "A professor works silently; nadie canta y no one speaks. "
+                "overall_soundscape: Mechanical hum; no voices. "
+                "non_diegetic_music: N/A"
+            ),
+            "_director_dialogue_beats": [],
+            "_director_subjects_on_screen": [],
+        }]
+
+        compile_h3_clip_plans(plans)
+
+        self.assertIn("no one speaks", plans[0]["video_prompt"].casefold())
+
+    def test_negation_does_not_hide_a_later_vocal_cue_after_a_comma(self):
+        plans = [{
+            "video_prompt": (
+                "A professor works silently. No music, then he sings. "
+                "overall_soundscape: Mechanical hum. "
+                "non_diegetic_music: N/A"
+            ),
+            "_director_dialogue_beats": [],
+            "_director_subjects_on_screen": [],
+        }]
+
+        with self.assertRaisesRegex(
+            H3DialogueContractError,
+            "unstructured vocal performance: sings",
+        ):
+            compile_h3_clip_plans(plans)
+
+    def test_final_preflight_blocks_unstructured_reply(self):
+        plans = [{
+            "video_prompt": (
+                'The woman replies, "No." overall_soundscape: Room tone. '
+                "non_diegetic_music: N/A"
+            ),
+            "_director_dialogue_beats": [],
+            "_director_subjects_on_screen": [],
+        }]
+
+        with self.assertRaisesRegex(
+            H3DialogueContractError,
+            "affirmative vocal cues: replies",
+        ):
+            compile_h3_clip_plans(plans)
+
+    def test_final_preflight_rejects_dialogue_with_silent_audio_plan(self):
+        plans = [{
+            "video_prompt": (
+                "Ana says <d>[Spanish] Hola.</d> "
+                "overall_soundscape: Room tone. non_diegetic_music: N/A"
+            ),
+            "_director_dialogue_beats": [{
+                "speaker_id": "ana",
+                "spoken_text": "Hola.",
+            }],
+            "_director_subjects_on_screen": [],
+            "_director_audio_plan": {
+                "mode": "ambient_only",
+                "timing_anchor": "video",
+                "lip_sync_critical": False,
+            },
+        }]
+
+        with self.assertRaisesRegex(
+            H3DialogueContractError,
+            "audio_plan.mode=dialogue_driven",
+        ):
+            compile_h3_clip_plans(plans)
+
+    def test_failed_final_preflight_does_not_mutate_the_plan(self):
+        plans = [{
+            "video_prompt": (
+                "A professor sings beside a machine. "
+                "overall_soundscape: Machine hum. non_diegetic_music: N/A"
+            ),
+            "_director_dialogue_beats": [],
+            "_director_subjects_on_screen": [],
+        }]
+        original = copy.deepcopy(plans)
+
+        with self.assertRaises(H3DialogueContractError):
+            compile_h3_clip_plans(plans)
+
+        self.assertEqual(plans, original)
+
+    def test_short_dialogue_is_not_inserted_inside_unrelated_prose(self):
+        prompt, _ = compile_h3_official_prompt(
+            "No one is visible. A person says no one should move. "
+            "overall_soundscape: Room tone. non_diegetic_music: N/A",
+            [],
+            [{"speaker_id": "person", "spoken_text": "No"}],
+        )
+
+        self.assertIn("No one is visible", prompt)
+        self.assertNotIn("<d>[English] No</d> one is visible", prompt)
+        self.assertIn("<d>[English] No</d>", prompt)
+
+    def test_final_preflight_blocks_extra_vocal_performance_with_dialogue(self):
+        plans = [{
+            "video_prompt": (
+                "Ana says <d>[Spanish] Ya est\u00e1n aqu\u00ed.</d> while Luis grunts. "
+                "overall_soundscape: Footsteps and room tone. "
+                "non_diegetic_music: N/A"
+            ),
+            "_director_dialogue_beats": [{
+                "speaker_id": "ana",
+                "spoken_text": "Ya est\u00e1n aqu\u00ed.",
+            }],
+            "_director_subjects_on_screen": [],
+        }]
+
+        with self.assertRaisesRegex(
+            H3DialogueContractError,
+            "unstructured vocal performance: grunts",
+        ):
+            compile_h3_clip_plans(plans)
+
     def test_ref2va_compiler_emits_six_fields_and_maps_real_manifest_order(self):
         references = [
             {
@@ -477,20 +616,21 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         ))
 
     def test_ref2va_driving_audio_is_not_mistaken_for_a_silent_shot(self):
+        references = [{
+            "type": "image",
+            "role": "the singer",
+            "image_intent": "identity",
+        }, {
+            "type": "audio",
+            "role": "the exact song performance",
+            "audio_intent": "drive",
+        }]
         prompt, _ = compile_h3_official_prompt(
             "A singer performs on stage. overall_soundscape: Venue ambience.",
             [],
             [],
             mode="ref2va",
-            references=[{
-                "type": "image",
-                "role": "the singer",
-                "image_intent": "identity",
-            }, {
-                "type": "audio",
-                "role": "the exact song performance",
-                "audio_intent": "drive",
-            }],
+            references=references,
         )
 
         self.assertIn("mapped driving audio", prompt)
@@ -505,7 +645,12 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             validate_h3_prompt_contract(
                 prompt,
                 mode="ref2va",
-                references=[{"type": "audio"}],
+                references=references,
+                audio_plan={
+                    "mode": "audio_driven",
+                    "timing_anchor": "audio",
+                    "lip_sync_critical": True,
+                },
             ),
             [],
         )
@@ -1059,6 +1204,219 @@ class TestH3DirectorDialogueBudget(unittest.TestCase):
 
 
 class TestH3DirectorDialoguePlanning(unittest.TestCase):
+    def test_semantic_vocal_failure_gets_one_bounded_llm_repair(self):
+        calls = []
+
+        def shot(*, contradictory: bool) -> dict:
+            return {
+                "title": "The machine wakes",
+                "duration_sec": 5.2,
+                "scene_goal": (
+                    "The professor sings beside the machine."
+                    if contradictory else
+                    "The professor watches the machine wake."
+                ),
+                "narrative_role": "setup",
+                "scene_type": "opening",
+                "continuity_strategy": "independent",
+                "continuity_group": "laboratory",
+                "subjects_on_screen": [{
+                    "visual_description": "An elderly professor in a lab coat",
+                    "character_id": "professor",
+                    "speaker_name": "Professor",
+                    "position_or_relation": "screen-left foreground, standing",
+                    "wardrobe": "white lab coat, dark trousers, black shoes",
+                }],
+                "spatial_setup": "The professor stands left of the machine.",
+                "environment": "A retrofuturistic laboratory",
+                "visual_style": "stylized 2D animation",
+                "lighting": "amber laboratory light",
+                "mood": "curious",
+                "action_beats": [
+                    "The professor sings while pointing at the machine."
+                    if contradictory else
+                    "The professor points at the machine with his mouth closed."
+                ],
+                "dialogue_beats": [],
+                "camera_plan": {
+                    "framing": "wide shot",
+                    "movement": "slow push in",
+                    "movement_intensity": "subtle",
+                },
+                "audio_plan": {
+                    "mode": "ambient_only",
+                    "ambience": "quiet laboratory room tone",
+                    "effects": ["singing"] if contradictory else ["machine hum"],
+                    "vocal_style": "none",
+                    "timing_anchor": "video",
+                    "lip_sync_critical": False,
+                },
+                "ending_beat": "The machine emits blue light.",
+                "closing_blocking": "The professor remains screen-left.",
+                "video_prompt": (
+                    "The professor sings beside the machine. "
+                    "overall_soundscape: Machine hum and singing. "
+                    "non_diegetic_music: N/A."
+                    if contradictory else
+                    "The professor points silently with his mouth closed. "
+                    "overall_soundscape: Machine hum. "
+                    "non_diegetic_music: N/A."
+                ),
+                "multishot": False,
+                "window_prompts": [],
+            }
+
+        def generate(**kwargs):
+            calls.append(kwargs)
+            if "acclaimed screenwriter" in kwargs["system_prompt"]:
+                return "INT. LABORATORY - DAY\n\nThe professor activates a machine."
+            return json.dumps(shot(
+                contradictory="H3 WHOLE-PLAN REPAIR" not in kwargs["prompt"],
+            ))
+
+        planner = ShortFilmPlanner(
+            llm_generate=generate,
+            llm_generate_streaming=generate,
+        )
+        plan = planner.plan(
+            story_description="A professor silently activates a machine.",
+            target_duration=5.2,
+            target_scenes=1,
+            video_model="minimax_h3",
+            shot_image_policy="prompt_only",
+            fps=24,
+            frames_steps=17,
+            frames_minimum=124,
+            frames_maximum=345,
+        )
+
+        repair_calls = [
+            call for call in calls
+            if "H3 WHOLE-PLAN REPAIR" in call["prompt"]
+        ]
+        self.assertEqual(len(repair_calls), 1)
+        self.assertEqual(len(plan.shots), 1)
+        self.assertNotIn("sing", plan.shots[0].video_prompt.casefold())
+        self.assertFalse(plan.shots[0].audio_plan.lip_sync_critical)
+
+    def test_vocal_semantic_audit_rejects_the_real_silent_shot_contradiction(self):
+        issues = _h3_vocal_semantic_issues([{
+            "scene_goal": "Sulema pide socorro y Ferm\u00edn la rescata.",
+            "action_beats": [
+                "Sulema grita pidiendo socorro desde el agua.",
+                "Ferm\u00edn reacciona con un jadeo y r\u00ede nervioso.",
+            ],
+            "dialogue_beats": [],
+            "audio_plan": {
+                "mode": "dialogue_driven",
+                "effects": ["Jadeo de Ferm\u00edn", "Salpic\u00f3n"],
+                "lip_sync_critical": True,
+            },
+            "video_prompt": (
+                "Sulema grita pidiendo socorro. No character speaks. "
+                "overall_soundscape: Brisa, jadeo y agua. "
+                "non_diegetic_music: N/A"
+            ),
+        }])
+
+        joined = " ".join(issues)
+        self.assertIn("silent but audio_plan.mode is dialogue_driven", joined)
+        self.assertIn("silent but lip_sync_critical is true", joined)
+        self.assertIn("vocal material in audio_plan.effects", joined)
+        self.assertIn("vocal action", joined)
+        self.assertIn("overall_soundscape", joined)
+
+    def test_vocal_semantic_audit_accepts_exact_dialogue_and_physical_sound(self):
+        issues = _h3_vocal_semantic_issues([{
+            "scene_goal": "Eugenio delivers the punchline.",
+            "action_beats": ["Eugenio says his line while adjusting his glasses."],
+            "dialogue_beats": [{
+                "speaker_id": "eugenio",
+                "spoken_text": "\u00a1Exacto! \u00a1Ah\u00ed quer\u00eda llegar yo!",
+            }],
+            "audio_plan": {
+                "mode": "dialogue_driven",
+                "effects": ["Ondas suaves en el agua", "Crujido de tierra"],
+                "lip_sync_critical": True,
+            },
+            "video_prompt": (
+                "Eugenio says: <d>[Spanish] \u00a1Exacto! \u00a1Ah\u00ed quer\u00eda "
+                "llegar yo!</d> No other character speaks. "
+                "overall_soundscape: Brisa y ondas suaves. "
+                "non_diegetic_music: N/A"
+            ),
+        }])
+
+        self.assertEqual(issues, [])
+
+    def test_vocal_semantic_audit_rejects_background_voices_in_ambience(self):
+        issues = _h3_vocal_semantic_issues([{
+            "scene_goal": "A silent cafe establishing shot.",
+            "action_beats": ["Customers lift cups with their mouths closed."],
+            "dialogue_beats": [],
+            "audio_plan": {
+                "mode": "ambient_only",
+                "ambience": "Coffee shop chatter and cup clinks",
+                "effects": ["Cup clinks"],
+                "lip_sync_critical": False,
+            },
+            "video_prompt": (
+                "Customers drink silently. overall_soundscape: Cup clinks. "
+                "non_diegetic_music: N/A"
+            ),
+        }])
+
+        self.assertIn("audio_plan.ambience", " ".join(issues))
+
+    def test_vocal_semantic_audit_rejects_extra_untagged_vocalizations(self):
+        issues = _h3_vocal_semantic_issues([{
+            "scene_goal": "Sulema asks for help.",
+            "action_beats": [
+                "Sulema shouts for help.",
+                "Ferm\u00edn grunts and laughs nervously after the rescue.",
+            ],
+            "dialogue_beats": [{
+                "speaker_id": "sulema",
+                "spoken_text": "\u00a1Socorro!",
+            }],
+            "audio_plan": {
+                "mode": "dialogue_driven",
+                "effects": ["Ferm\u00edn grunts", "Water splash"],
+                "lip_sync_critical": True,
+            },
+            "video_prompt": (
+                "Sulema shouts <d>[Spanish] \u00a1Socorro!</d>. Ferm\u00edn grunts "
+                "and laughs. overall_soundscape: Water and a grunt. "
+                "non_diegetic_music: N/A"
+            ),
+        }])
+
+        joined = " ".join(issues)
+        self.assertIn("vocal material in audio_plan.effects", joined)
+        self.assertIn("vocal action", joined)
+        self.assertIn("unstructured vocal performance", joined)
+
+    def test_vocal_semantic_audit_rejects_one_grunt_beside_one_exact_line(self):
+        issues = _h3_vocal_semantic_issues([{
+            "scene_goal": "Sulema holds still while Ferm\u00edn grunts.",
+            "action_beats": ["Ferm\u00edn grunts."],
+            "dialogue_beats": [{
+                "speaker_id": "sulema",
+                "spoken_text": "\u00a1Socorro!",
+            }],
+            "audio_plan": {
+                "mode": "dialogue_driven",
+                "effects": [],
+                "lip_sync_critical": True,
+            },
+            "video_prompt": (
+                "Sulema says <d>[Spanish] \u00a1Socorro!</d> while Ferm\u00edn grunts. "
+                "overall_soundscape: Water. non_diegetic_music: N/A"
+            ),
+        }])
+
+        self.assertIn("unstructured vocal performance", " ".join(issues))
+
     def test_extracts_complete_centered_screenplay_dialogue_manifest(self):
         screenplay = """<think>private planning that must be ignored</think>
 INT. APARTMENT - DAY

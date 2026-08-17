@@ -410,8 +410,8 @@ class TestDirectorModelAssessment(unittest.TestCase):
                         ),
                         "ambience": "quiet office room tone",
                         "effects": [],
-                        "timing_anchor": "video",
-                        "lip_sync_critical": False,
+                        "timing_anchor": "audio" if index == 0 else "video",
+                        "lip_sync_critical": index == 0,
                     },
                     "ending_beat": "The room falls quiet",
                     "video_prompt": (

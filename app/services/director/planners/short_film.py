@@ -31,7 +31,10 @@ from ..policies import (
 from ..guide_loader import load_guide as _load_guide_helper
 from ..h3_dialogue import (
     compile_h3_vocal_contract as _inject_h3_vocal_contract,
+    h3_affirmative_vocal_cues as _h3_affirmative_vocal_matches,
     h3_dialogue_budget_violations as _h3_dialogue_budget_violations,
+    h3_non_speech_vocal_cues as _h3_non_speech_vocal_matches,
+    h3_vocal_sound_cues as _h3_affirmative_vocal_effect_matches,
     normalize_h3_text as _normalize_h3_text,
 )
 from .base import BasePlanner
@@ -1081,6 +1084,117 @@ def _h3_native_structure_issues(
         if missing:
             issues.append(f"shot {index} is missing {', '.join(missing)}")
     return issues
+
+
+def _h3_vocal_semantic_issues(items: list[dict]) -> list[str]:
+    """Audit the semantic audio contract before any H3 GPU job is queued.
+
+    Exact dialogue is owned by ``dialogue_beats`` and ``<d>``.  Vocal effects
+    or surplus vocal actions outside that ledger are ambiguous joint
+    audio/video instructions and are rejected for an LLM repair pass.
+    """
+
+    issues: list[str] = []
+    for index, raw in enumerate(items or [], start=1):
+        if not isinstance(raw, dict):
+            continue
+        beats = [
+            beat for beat in (raw.get("dialogue_beats") or [])
+            if isinstance(beat, dict)
+            and _h3_plain_dialogue_text(beat.get("spoken_text"))
+        ]
+        has_dialogue = bool(beats)
+        audio = raw.get("audio_plan") if isinstance(raw.get("audio_plan"), dict) else {}
+        mode = str(audio.get("mode") or "").strip().casefold()
+        lip_sync = bool(audio.get("lip_sync_critical"))
+
+        if has_dialogue:
+            if mode != "dialogue_driven":
+                issues.append(
+                    f"shot {index} has exact dialogue but audio_plan.mode is "
+                    f"{mode or 'empty'}"
+                )
+            if not lip_sync:
+                issues.append(
+                    f"shot {index} has exact dialogue but lip_sync_critical is false"
+                )
+        else:
+            if mode == "dialogue_driven":
+                issues.append(
+                    f"shot {index} is silent but audio_plan.mode is dialogue_driven"
+                )
+            if lip_sync:
+                issues.append(
+                    f"shot {index} is silent but lip_sync_critical is true"
+                )
+
+        effects = [
+            str(effect or "") for effect in (audio.get("effects") or [])
+        ]
+        vocal_effects = [
+            effect for effect in effects
+            if _h3_affirmative_vocal_effect_matches(effect)
+        ]
+        if vocal_effects:
+            issues.append(
+                f"shot {index} puts vocal material in audio_plan.effects: "
+                + ", ".join(effect[:80] for effect in vocal_effects[:3])
+            )
+        ambience = str(audio.get("ambience") or "")
+        if _h3_affirmative_vocal_effect_matches(ambience):
+            issues.append(
+                f"shot {index} puts vocal material in audio_plan.ambience"
+            )
+
+        action_text = " ".join(
+            str(value or "")
+            for value in (
+                *(raw.get("action_beats") or []),
+                raw.get("scene_goal"),
+                raw.get("ending_beat"),
+            )
+        )
+        action_vocals = _h3_affirmative_vocal_matches(action_text)
+        non_speech_action_vocals = _h3_non_speech_vocal_matches(action_text)
+        if non_speech_action_vocals:
+            issues.append(
+                f"shot {index} describes unstructured vocal performance: "
+                + ", ".join(non_speech_action_vocals[:5])
+            )
+        if len(action_vocals) > len(beats):
+            issues.append(
+                f"shot {index} describes {len(action_vocals)} vocal action(s) "
+                f"but has {len(beats)} exact dialogue beat(s): "
+                + ", ".join(action_vocals[:5])
+            )
+
+        prompt = str(raw.get("video_prompt") or "")
+        prompt_vocals = _h3_affirmative_vocal_matches(prompt)
+        non_speech_prompt_vocals = _h3_non_speech_vocal_matches(prompt)
+        if non_speech_prompt_vocals:
+            issues.append(
+                f"shot {index} prompt contains unstructured vocal performance: "
+                + ", ".join(non_speech_prompt_vocals[:5])
+            )
+        if not beats and prompt_vocals:
+            issues.append(
+                f"shot {index} prompt contains {len(prompt_vocals)} vocal "
+                "instruction(s) but no exact dialogue line: "
+                + ", ".join(prompt_vocals[:5])
+            )
+
+        soundscape_match = re.search(
+            r"\boverall_soundscape\s*:\s*(.*?)"
+            r"(?=\bnon_diegetic_music\s*:|$)",
+            prompt,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        soundscape = soundscape_match.group(1) if soundscape_match else ""
+        if _h3_affirmative_vocal_effect_matches(soundscape):
+            issues.append(
+                f"shot {index} overall_soundscape contains unstructured vocal material"
+            )
+    return list(dict.fromkeys(issues))
 
 
 def _h3_planner_token_budget(target_duration: float) -> int:
@@ -5732,6 +5846,7 @@ SCREENPLAY:
             [frames / fps for frames in schedule],
             words_per_second=_H3_DIALOGUE_WORDS_PER_SECOND,
         )
+        vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
         if not structure_issues and (
             dialogue_integrity_error or dialogue_violations
         ):
@@ -5746,11 +5861,17 @@ SCREENPLAY:
             else:
                 dialogue_integrity_error = None
                 dialogue_violations = []
+                vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
                 print(
                     "[ShortFilmPlanner] Deterministic H3 dialogue compiler "
                     f"{repair_mode}; skipped the whole-plan LLM repair."
                 )
-        if structure_issues or dialogue_integrity_error or dialogue_violations:
+        if (
+            structure_issues
+            or dialogue_integrity_error
+            or dialogue_violations
+            or vocal_semantic_issues
+        ):
             original_shot_dicts = copy.deepcopy(shot_dicts)
             issue_messages = [
                 f"- Incomplete structured output: {issue}"
@@ -5765,6 +5886,10 @@ SCREENPLAY:
                 f"{item['word_count']} spoken words but only "
                 f"{item['word_budget']} fit in {item['duration_sec']:.2f}s."
                 for item in dialogue_violations
+            )
+            issue_messages.extend(
+                "- Vocal semantics: " + issue
+                for issue in vocal_semantic_issues
             )
             issue_lines = "\n".join(issue_messages)
             repair_max_items = max(shot_count_high, maximum_by_runtime)
@@ -5784,10 +5909,23 @@ nest <d> tags, or exceed roughly two spoken words per second in any shot.
 Keep structured metadata concise so the complete array fits: one short
 sentence per descriptive metadata field and at most three action beats. Put
 the complete standalone generation description in video_prompt instead of
-repeating that prose across every metadata field."""
+repeating that prose across every metadata field.
+
+VOCAL SEMANTIC REPAIR:
+- Every audible word must exist in the immutable dialogue manifest and in one
+  matching <d>[Language] exact words</d> block. Never invent calls, interjections,
+  grunts, laughs, gasps, muttering, singing, background voices, or quoted sounds.
+- A manifest line may have one matching speaking action beside its <d> block.
+  Convert every other vocal action into visible physical acting with a closed
+  mouth. Put only ambience and physical object/action sounds in audio_plan.effects
+  and overall_soundscape.
+- If a shot has no manifest line, set mode=ambient_only, timing_anchor=video and
+  lip_sync_critical=false. If it has a manifest line, set mode=dialogue_driven,
+  timing_anchor=audio and lip_sync_critical=true."""
             print(
                 "[ShortFilmPlanner] H3 plan failed completeness, dialogue, "
-                "or pacing validation; requesting one whole-plan repair "
+                "pacing, or vocal-semantic validation; requesting one "
+                "whole-plan repair "
                 "before generation."
             )
             repaired_raw = self._call_llm_json(
@@ -5846,6 +5984,14 @@ repeating that prose across every metadata field."""
                 f"{repair_mode}; the visual repair's rewritten dialogue was "
                 "ignored."
             )
+            vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
+            if vocal_semantic_issues:
+                raise RuntimeError(
+                    "MiniMax H3's repaired plan still contains contradictory "
+                    "or unstructured vocal instructions ("
+                    + "; ".join(vocal_semantic_issues)
+                    + "). No video jobs were queued."
+                )
             dialogue_violations = _h3_dialogue_budget_violations(
                 shot_dicts,
                 [frames / fps for frames in schedule],
@@ -6024,6 +6170,14 @@ repeating that prose across every metadata field."""
                     f"original visual edits ({error})."
                 )
 
+        final_vocal_semantic_issues = _h3_vocal_semantic_issues(shot_dicts)
+        if final_vocal_semantic_issues:
+            raise RuntimeError(
+                "MiniMax H3 vocal preflight rejected the final plan ("
+                + "; ".join(final_vocal_semantic_issues)
+                + "). No video jobs were queued."
+            )
+
         print(
             "[ShortFilmPlanner] H3 shot plan verified: "
             f"{len(shot_dicts)} complete shot(s), "
@@ -6035,6 +6189,14 @@ repeating that prose across every metadata field."""
             character_voice_bible,
         )
         shot_dicts = _prepare_h3_prompt_only_continuity(shot_dicts)
+
+        post_compilation_vocal_issues = _h3_vocal_semantic_issues(shot_dicts)
+        if post_compilation_vocal_issues:
+            raise RuntimeError(
+                "MiniMax H3 vocal preflight rejected the compiled prompts ("
+                + "; ".join(post_compilation_vocal_issues)
+                + "). No video jobs were queued."
+            )
 
         assert_no_minor_content(
             collect_pass2_text(shot_dicts), source="shot list (H3 native Pass 2)"
