@@ -138,6 +138,20 @@ def test_quick_video_batch_rejects_duplicate_and_blank_ideas(tmp_path):
     assert len(started) == 1
 
 
+def test_image_guided_batch_does_not_require_direct_references(tmp_path):
+    router, started = _app(tmp_path, {})
+    start = _endpoint(router, "/api/v1/stories/quick-video-batches/start", "POST")
+    payload = _payload(["Historia guiada por una imagen inicial"])
+    payload["settings"]["generationMode"] = "image_guided"
+    payload["settings"]["references"] = []
+    response = start(QuickVideoBatchStartRequest.model_validate(payload))
+    job = _wait_for_terminal(router, response["jobId"])
+
+    assert job["status"] == "completed"
+    assert started[0][1]["shot_image_guidance"] == "auto"
+    assert started[0][1]["music_video_treatment"] is None
+
+
 def test_cancelled_batch_does_not_start_after_waiting_for_queue(tmp_path):
     router, started = _app(tmp_path, {})
     start = _endpoint(router, "/api/v1/stories/quick-video-batches/start", "POST")

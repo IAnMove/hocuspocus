@@ -1,7 +1,7 @@
 import { ExternalLink, Loader2, Play, RefreshCcw, Square, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as api from '../../api/client'
-import type { StoryProject } from './types'
+import type { StoryMusicVideoGenerationMode, StoryProject } from './types'
 
 const control = 'inline-flex items-center justify-center gap-1 rounded-md border border-border bg-bg-tertiary px-2 py-1 text-[10px] text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40'
 const activeStatuses = new Set(['queued', 'running', 'cancelling'])
@@ -36,6 +36,15 @@ function itemTone(status: string): string {
   return 'border-border bg-bg-primary'
 }
 
+function safeBatchMode(
+  mode: StoryMusicVideoGenerationMode,
+  referenceCount: number,
+): StoryMusicVideoGenerationMode {
+  return mode === 'direct_references' && referenceCount === 0
+    ? 'image_guided'
+    : mode
+}
+
 export function QuickVideoBatchPanel({
   project, workspace, videoModel, imageModel, resolution, aspectRatio, durationSeconds,
 }: Props) {
@@ -44,6 +53,14 @@ export function QuickVideoBatchPanel({
   const [jobs, setJobs] = useState<api.QuickVideoBatchJob[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const references = useMemo(() => attachedReferences(project), [project])
+  const inheritedGenerationMode = safeBatchMode(
+    project.musicVideoGenerationMode,
+    references.length,
+  )
+  const [generationMode, setGenerationMode] = useState<StoryMusicVideoGenerationMode>(
+    inheritedGenerationMode,
+  )
 
   const parsedIdeas = useMemo(() => {
     const seen = new Set<string>()
@@ -55,6 +72,10 @@ export function QuickVideoBatchPanel({
       return true
     })
   }, [ideas])
+
+  useEffect(() => {
+    setGenerationMode(inheritedGenerationMode)
+  }, [project.id, inheritedGenerationMode])
 
   const refresh = useCallback(async () => {
     try {
@@ -85,7 +106,7 @@ export function QuickVideoBatchPanel({
         continueOnError,
         settings: {
           durationSeconds,
-          generationMode: project.musicVideoGenerationMode,
+          generationMode,
           videoModel,
           imageModel,
           resolution,
@@ -103,7 +124,7 @@ export function QuickVideoBatchPanel({
             description: [character.appearance, character.wardrobe, character.personality, character.voice]
               .filter(Boolean).join('. '),
           })),
-          references: attachedReferences(project),
+          references,
         },
       })
       setJobs(current => [created, ...current.filter(job => job.jobId !== created.jobId)])
@@ -134,9 +155,9 @@ export function QuickVideoBatchPanel({
     }
   }
 
-  const directReferencesMissing = project.musicVideoGenerationMode === 'direct_references'
-    && attachedReferences(project).length === 0
-  const directPromptMissing = project.musicVideoGenerationMode === 'direct_video'
+  const directReferencesMissing = generationMode === 'direct_references'
+    && references.length === 0
+  const directPromptMissing = generationMode === 'direct_video'
     && !project.directVideoMasterPrompt.trim() && !project.visualStyle.trim()
 
   return (
@@ -154,10 +175,31 @@ export function QuickVideoBatchPanel({
         placeholder={'George encuentra un botón que detiene el tiempo\nUn robot intenta aprobar un examen humano\nUna familia descubre que su vecino viene del futuro'}
         aria-label="Ideas para lote de vídeos rápidos, una por línea"
       />
+      <fieldset className="space-y-1.5">
+        <legend className="text-[10px] font-medium text-text-secondary">Cómo generar cada vídeo</legend>
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+          {([
+            ['image_guided', 'Imagen inicial', 'T2I → vídeo'],
+            ['direct_video', 'Texto a vídeo', 'Sin imágenes'],
+            ['direct_references', 'Referencias', 'H3 Ref2VA'],
+          ] as const).map(([mode, label, detail]) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={generationMode === mode}
+              className={`${control} flex-col ${generationMode === mode ? 'border-fuchsia-400/70 bg-fuchsia-500/15 text-fuchsia-100' : ''}`}
+              onClick={() => setGenerationMode(mode)}
+            >
+              <span>{label}</span>
+              <span className="text-[9px] text-text-muted">{detail}</span>
+            </button>
+          ))}
+        </div>
+      </fieldset>
       <div className="flex flex-wrap items-center gap-2 text-[10px] text-text-muted">
         <span>{parsedIdeas.length} idea{parsedIdeas.length === 1 ? '' : 's'}</span>
         <span>· {durationSeconds}s cada una</span>
-        <span>· {project.musicVideoGenerationMode === 'direct_video' ? 'T2V sin imágenes' : project.musicVideoGenerationMode === 'direct_references' ? 'Referencias directas' : 'Imágenes iniciales'}</span>
+        <span>· {generationMode === 'direct_video' ? 'T2V sin imágenes' : generationMode === 'direct_references' ? 'Referencias directas' : 'Imágenes iniciales'}</span>
         <label className="ml-auto flex items-center gap-1.5">
           <input type="checkbox" checked={continueOnError} onChange={event => setContinueOnError(event.target.checked)} />
           Continuar si una falla
