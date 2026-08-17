@@ -7,6 +7,7 @@ import json
 import os
 import threading
 import time
+import traceback
 import uuid
 from collections.abc import Callable, Iterable
 from typing import Any, Literal
@@ -297,9 +298,42 @@ def create_quick_video_batch_router(
         video_model = str(settings.get("videoModel") or "minimax_h3_legacy")
         image_model = str(settings.get("imageModel") or "flux2_klein_9b")
         mode = str(settings.get("generationMode") or "direct_video")
+        if mode not in {"direct_video", "image_guided", "direct_references"}:
+            raise ValueError(
+                f"Unsupported saved Quick Video generation mode: {mode}"
+            )
         video_def = dict(get_model_def(video_model) or {})
-        video_params = dict(get_model_defaults(video_model) or {})
-        image_params = dict(get_model_defaults(image_model) or {})
+
+        def safe_model_defaults(
+            model_type: str,
+            *,
+            required: bool,
+            allow_unregistered_remote: bool = False,
+        ) -> dict[str, Any]:
+            if not required:
+                return {}
+            try:
+                value = get_model_defaults(model_type)
+            except Exception as exc:
+                if allow_unregistered_remote:
+                    # API-backed models need no local WGP defaults and may
+                    # intentionally be absent from its model registry.
+                    print(
+                        f"[Quick Video batch] No local defaults for {model_type}: "
+                        f"{exc}. Using request-level settings."
+                    )
+                    return {}
+                raise RuntimeError(
+                    f"Could not load local defaults for {model_type}: {exc}"
+                ) from exc
+            return dict(value) if isinstance(value, dict) else {}
+
+        video_params = safe_model_defaults(video_model, required=True)
+        image_params = safe_model_defaults(
+            image_model,
+            required=mode == "image_guided",
+            allow_unregistered_remote=image_model.startswith("minimax:"),
+        )
         char_paths, char_labels, loc_paths, loc_labels = reference_paths(
             settings, str(job["workspace"]),
         )
@@ -394,6 +428,7 @@ def create_quick_video_batch_router(
             time.sleep(1.0)
 
     def run(job_id: str) -> None:
+        owns_active_slot = True
         try:
             with _EXECUTION_LOCK:
                 with lock:
@@ -498,10 +533,34 @@ def create_quick_video_batch_router(
                             update(job_id, status="failed", stage="failed", message=f"Batch stopped at item {next_index + 1}.", error=error, finishedAt=time.time())
                             return
         except Exception as exc:
-            update(job_id, status="failed", stage="failed", message="Quick Video batch stopped.", error=str(exc), finishedAt=time.time())
-        finally:
+            traceback.print_exc()
+            # Publish a resumable failure only after relinquishing ownership.
+            # Otherwise an immediate Resume can observe ``failed`` while
+            # start_worker still sees this exiting worker as active.
             with lock:
                 active.discard(job_id)
+                owns_active_slot = False
+            with lock:
+                current_job = copy.deepcopy(jobs.get(job_id) or {})
+            interrupted_index = next((
+                index
+                for index, item in enumerate(current_job.get("items", []))
+                if item.get("status") in {"planning", "running"}
+            ), None)
+            if interrupted_index is not None:
+                item_update(
+                    job_id,
+                    interrupted_index,
+                    status="interrupted",
+                    stage="interrupted",
+                    message="Quick Video setup was interrupted and can be resumed.",
+                    error=str(exc),
+                )
+            update(job_id, status="failed", stage="failed", message="Quick Video batch stopped.", error=str(exc), finishedAt=time.time())
+        finally:
+            if owns_active_slot:
+                with lock:
+                    active.discard(job_id)
 
     def start_worker(job_id: str) -> bool:
         with lock:

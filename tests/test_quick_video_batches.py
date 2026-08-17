@@ -43,7 +43,7 @@ def _endpoint(router, path, method):
     )
 
 
-def _app(tmp_path, terminal_statuses):
+def _app(tmp_path, terminal_statuses, *, get_model_defaults=None):
     started = []
     statuses = terminal_statuses
 
@@ -73,7 +73,7 @@ def _app(tmp_path, terminal_statuses):
         stop_pipeline=lambda _pipeline_id: True,
         resume_pipeline=lambda _pipeline_id, _out_dir: (True, "resumed"),
         get_model_def=lambda _model: {"fps": 24, "frames_steps": 17, "frames_minimum": 124},
-        get_model_defaults=lambda _model: {},
+        get_model_defaults=get_model_defaults or (lambda _model: {}),
         resolve_reference=lambda _source, _workspace: None,
     )
     return router, started
@@ -166,6 +166,97 @@ def test_direct_video_batch_accepts_per_idea_style_without_master_prompt(tmp_pat
     assert treatment["generation_mode"] == "direct_video"
     assert "PER-IDEA VISUAL INTERPRETATION" in treatment["direct_video_master_prompt"]
     assert "signature silhouette" in treatment["direct_video_master_prompt"]
+
+
+def test_direct_video_does_not_resolve_unused_remote_image_defaults(tmp_path):
+    requested_models = []
+
+    def defaults(model_type):
+        requested_models.append(model_type)
+        if model_type == "minimax:image-01":
+            raise AttributeError("'NoneType' object has no attribute 'get'")
+        return {"resolution": "544x960"}
+
+    router, started = _app(
+        tmp_path,
+        {},
+        get_model_defaults=defaults,
+    )
+    start = _endpoint(router, "/api/v1/stories/quick-video-batches/start", "POST")
+    payload = _payload(["Una historia generada directamente como vídeo"])
+    payload["settings"]["imageModel"] = "minimax:image-01"
+    response = start(QuickVideoBatchStartRequest.model_validate(payload))
+    job = _wait_for_terminal(router, response["jobId"])
+
+    assert job["status"] == "completed"
+    assert requested_models == ["minimax_h3_legacy"]
+    assert started[0][1]["image_params"] == {}
+
+
+def test_image_guided_allows_remote_image_model_without_local_defaults(tmp_path):
+    requested_models = []
+
+    def defaults(model_type):
+        requested_models.append(model_type)
+        if model_type == "minimax:image-01":
+            raise AttributeError("'NoneType' object has no attribute 'get'")
+        return {"resolution": "544x960"}
+
+    router, started = _app(
+        tmp_path,
+        {},
+        get_model_defaults=defaults,
+    )
+    start = _endpoint(router, "/api/v1/stories/quick-video-batches/start", "POST")
+    payload = _payload(["Una historia guiada por una imagen generada"])
+    payload["settings"]["generationMode"] = "image_guided"
+    payload["settings"]["imageModel"] = "minimax:image-01"
+    response = start(QuickVideoBatchStartRequest.model_validate(payload))
+    job = _wait_for_terminal(router, response["jobId"])
+
+    assert job["status"] == "completed"
+    assert requested_models == ["minimax_h3_legacy", "minimax:image-01"]
+    assert started[0][1]["image_params"] == {}
+
+
+def test_batch_can_resume_immediately_after_setup_failure(tmp_path):
+    calls = 0
+
+    def defaults(_model_type):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("temporary settings failure")
+        return {"resolution": "544x960"}
+
+    router, started = _app(
+        tmp_path,
+        {},
+        get_model_defaults=defaults,
+    )
+    start = _endpoint(router, "/api/v1/stories/quick-video-batches/start", "POST")
+    control = _endpoint(
+        router,
+        "/api/v1/stories/quick-video-batches/{job_id}/{action}",
+        "POST",
+    )
+    response = start(QuickVideoBatchStartRequest.model_validate(
+        _payload(["Historia recuperable"]),
+    ))
+    failed = _wait_for_terminal(router, response["jobId"])
+
+    assert failed["status"] == "failed"
+    assert failed["items"][0]["status"] == "interrupted"
+
+    resumed = control(
+        response["jobId"],
+        "resume",
+        QuickVideoBatchActionRequest(workspace="default"),
+    )
+    assert resumed["status"] in {"queued", "running"}
+    completed = _wait_for_terminal(router, response["jobId"])
+    assert completed["status"] == "completed"
+    assert len(started) == 1
 
 
 def test_cancelled_batch_does_not_start_after_waiting_for_queue(tmp_path):
