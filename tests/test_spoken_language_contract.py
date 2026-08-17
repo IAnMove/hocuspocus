@@ -58,7 +58,25 @@ def test_reapplying_language_does_not_wrap_an_already_compiled_h3_prompt():
         "video_prompt": "integrated_multimodal_description: compiled",
         "_director_h3_source_prompt": "Ada speaks.",
         "_director_h3_compiled_prompt": "integrated_multimodal_description: compiled",
+        "_director_dialogue_beats": [{
+            "speaker_id": "ada",
+            "spoken_text": "Hola.",
+        }],
     }
     apply_spoken_language_to_plans([plan], "Español de España")
     assert plan["video_prompt"] == "integrated_multimodal_description: compiled"
     assert plan["_director_h3_source_prompt"].startswith("SPOKEN LANGUAGE CONTRACT")
+
+
+def test_silent_h3_clip_does_not_receive_a_spoken_language_contract():
+    contract = spoken_language_contract("Español de España")
+    plan = {
+        "video_prompt": "integrated_multimodal_description: compiled",
+        "_director_h3_source_prompt": f"{contract}\nA silent moonlit cave.",
+        "_director_dialogue_beats": [],
+        "_director_audio_plan": {"mode": "music_driven"},
+    }
+    apply_spoken_language_to_plans([plan], "Español de España")
+    assert "SPOKEN LANGUAGE CONTRACT" not in plan["_director_h3_source_prompt"]
+    assert plan["_director_h3_source_prompt"] == "A silent moonlit cave."
+    assert "spoken_language" not in plan["_director_audio_plan"]

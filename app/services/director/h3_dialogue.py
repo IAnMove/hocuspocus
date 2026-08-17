@@ -82,6 +82,20 @@ _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
     (re.compile(r"\bpronuncia(?:\s+con\s+\w+)?\s+su\s+(?:\u00fanica\s+)?l\u00ednea(?:\s+\w+)?", re.I), "mantiene la expresi\u00f3n descrita con la boca cerrada"),
     (re.compile(r"\bshouts?\s+for\s+help\b", re.I), "signals urgently for help with both arms"),
     (re.compile(r"\b(?:says?|speaks?|sings?|whispers?|mutters?)\s+(?:his|her|their)\s+(?:only\s+)?line\b", re.I), "holds the described expression with a closed mouth"),
+    # Planner prose often describes an *intention* to speak rather than an
+    # authored line (for example, a reflection "about to speak").  H3 still
+    # reads that as a request for native speech, so render the intention with
+    # facial acting when the shot has no exact dialogue ledger.
+    (re.compile(r"\b(?:mouth|lips?)\s+(?:half[- ]?)?(?:open(?:s|ed|ing)?|part(?:s|ed|ing)?)\b[^.!?]{0,64}\b(?:to|as\s+if(?:\s+about)?\s+to)\s+(?:speak|sing|say|whisper|mutter)\b", re.I), "mouth remains closed in tense hesitation"),
+    (re.compile(r"\b(?:hissing|rapping|singing|speaking|saying|whispering|muttering)\s+(?:the\s+)?(?:verse|lyrics?|line|song|words?)\b", re.I), "moving with tense rhythmic physicality"),
+    (re.compile(r"\b(?:delivering|performing)\s+(?:a\s+)?vocal\s+performance\b", re.I), "performing with tense physical rhythm"),
+    # A music-video planner can still phrase an unledgered performance as a
+    # full clause ("rapping the plea in a whisper").  Preserve the visible
+    # setup before the verb, but replace the rest of that vocal clause.  The
+    # final soundtrack is assembled separately; native H3 vocals are never a
+    # valid substitute when this clip has no exact <d> line.
+    (re.compile(r"\b(?:rap(?:s|ped|ping)?|whisper(?:s|ed|ing)?|mutter(?:s|ed|ing)?|hiss(?:es|ed|ing)?|(?:rape|susurra|murmura|sisea)(?:n|ndo|ba|ron|ría|rían)?)\b[^.!?]{0,220}", re.I), "holds a tense closed-mouth expression"),
+    (re.compile(r"\b(?:with\s+)?visible\s+lip\s+movement\b", re.I), "with a closed mouth"),
     (re.compile(r"\bgrunts?\s+with\s+effort\b", re.I), "strains visibly with the effort"),
     (re.compile(r"\blaughs?\s+nervously\b", re.I), "smiles nervously"),
 )

@@ -124,17 +124,32 @@ def apply_spoken_language_to_plans(
     normalized = normalize_spoken_language(language)
     if not normalized:
         return
+    contract = spoken_language_contract(normalized)
     for plan in plans:
-        source = plan.get("_director_h3_source_prompt")
-        if source:
-            plan["_director_h3_source_prompt"] = append_spoken_language_contract(
-                source, normalized,
-            )
+        source_key = (
+            "_director_h3_source_prompt"
+            if plan.get("_director_h3_source_prompt")
+            else "video_prompt"
+        )
+        source = str(plan.get(source_key) or "")
+        beats = plan.get("_director_dialogue_beats") or plan.get("dialogue_beats") or []
+        has_exact_dialogue = any(
+            isinstance(beat, dict)
+            and str(beat.get("spoken_text") or beat.get("text") or "").strip()
+            for beat in beats
+        ) or bool(re.search(r"<\s*d\s*>", source, re.IGNORECASE))
+        if has_exact_dialogue:
+            plan[source_key] = append_spoken_language_contract(source, normalized)
         else:
-            plan["video_prompt"] = append_spoken_language_contract(
-                plan.get("video_prompt"), normalized,
-            )
+            # A language contract is meaningful only beside an immutable
+            # <d> line.  In a music/ambient clip it becomes misleading visual
+            # prose and can make H3 invent a voice.  Strip our own canonical
+            # contract without attempting to rewrite user-authored text.
+            plan[source_key] = source.replace(contract, "").strip()
         audio_plan = plan.get("_director_audio_plan")
         audio_plan = dict(audio_plan) if isinstance(audio_plan, dict) else {}
-        audio_plan["spoken_language"] = normalized
+        if has_exact_dialogue:
+            audio_plan["spoken_language"] = normalized
+        else:
+            audio_plan.pop("spoken_language", None)
         plan["_director_audio_plan"] = audio_plan

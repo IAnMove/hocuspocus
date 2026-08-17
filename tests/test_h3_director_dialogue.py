@@ -356,6 +356,22 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         )
         self.assertIn("no character speaks", prompt.casefold())
 
+    def test_silent_clip_rewrites_about_to_speak_and_song_delivery(self):
+        prompt, _ = compile_h3_official_prompt(
+            "A reflection has its mouth half-open as if about to speak, then "
+            "the performer hissing the verse into a mirror pool. "
+            "overall_soundscape: Cave drips. non_diegetic_music: N/A",
+            [],
+            [],
+            mode="t2va",
+        )
+
+        visual = prompt.split("overall_soundscape:", 1)[0].casefold()
+        self.assertNotIn("about to speak", visual)
+        self.assertNotIn("hissing the verse", visual)
+        self.assertNotIn("about to speak", visual)
+        self.assertNotIn("hissing", visual)
+
     def test_final_preflight_blocks_unhandled_silent_vocal_intent(self):
         plans = [{
             "video_prompt": (
