@@ -1386,6 +1386,8 @@ interface AppState {
   loadSavedPipeline: (pid: string) => Promise<void>
   retryDashboardLoad: () => Promise<void>
   tagClip: (pid: string, clipIndex: number, tag: string | null) => Promise<void>
+  updateClipPrompt: (pid: string, clipIndex: number, body: { video_prompt?: string; image_prompt?: string }) => Promise<void>
+  selectClipVideo: (pid: string, clipIndex: number, filename: string) => Promise<void>
   startPipelineRepair: (pid: string) => Promise<PipelineRepairState>
   cancelPipelineRepair: (pid: string) => Promise<PipelineRepairState>
   pollPipelineRepair: (pid: string, operationId: string) => void
@@ -3128,6 +3130,20 @@ export const useStore = create<AppState>((set, get) => ({
     get().loadOutputs()
     get().loadWorkspaces()
   },
+  updateClipPrompt: async (pid, clipIndex, body) => {
+    const pipeline = await api.updatePipelineClipPrompt(pid, clipIndex, body)
+    set(s => {
+      if (!s.dashboardSelectedPipeline || s.dashboardSelectedPipeline.pipeline_id !== pid) {
+        return { dashboardSelectedPipeline: pipeline }
+      }
+      return { dashboardSelectedPipeline: pipeline }
+    })
+  },
+  selectClipVideo: async (pid, clipIndex, filename) => {
+    await api.selectPipelineClipVideo(pid, clipIndex, filename)
+    const pipeline = await api.fetchSavedPipeline(pid)
+    set({ dashboardSelectedPipeline: pipeline })
+  },
   tagClip: async (pid, clipIndex, tag) => {
     try {
       await api.tagPipelineClip(pid, clipIndex, tag)
@@ -3310,6 +3326,8 @@ export const useStore = create<AppState>((set, get) => ({
       directorError: null,
     })
     get().pollPipelineStatus()
+    void get().loadSavedPipeline(pid)
+    void get().loadPipelineList(pid)
   },
 
   // ── Recipes (one-click Studio presets) ────────────────────────────
@@ -10571,8 +10589,10 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'plan',
         directorLoading: true,
         directorError: null,
+        mediaFilter: 'workspaces',
       })
       get().pollPipelineStatus()
+      void get().loadPipelineList(pipeline_id)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Pipeline failed to start'
       set({ directorError: msg })

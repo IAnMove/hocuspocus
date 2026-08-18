@@ -457,8 +457,11 @@ export function ActivityFooter() {
           <span>{busyIds.has(primary.id) ? 'Cancelling…' : 'Cancel'}</span>
         </button>
       )}
-      <button onClick={() => setVideoWorkflowsOpen(true)} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:border-accent-blue/50 hover:text-accent-blue transition-colors shrink-0" title="Open independent video creations and edit their clips">
-        <ListVideo size={12} /><span className="hidden sm:inline">Video workflows</span>
+      <button onClick={() => {
+        useStore.getState().setMediaFilter('workspaces')
+        setVideoWorkflowsOpen(false)
+      }} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:border-accent-blue/50 hover:text-accent-blue transition-colors shrink-0" title="Open Workspaces to inspect prompts, references and the generation queue">
+        <ListVideo size={12} /><span className="hidden sm:inline">Workspaces</span>
       </button>
     </footer>
   )

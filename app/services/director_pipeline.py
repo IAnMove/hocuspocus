@@ -26,7 +26,7 @@ import unicodedata
 import traceback
 from contextlib import nullcontext
 from functools import wraps
-from typing import Callable, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
@@ -1814,6 +1814,11 @@ def list_pipeline_states(out_dir: str, workspace: Optional[str] = None) -> list[
                             changed = True
                         if changed:
                             _write_pipeline_json_unlocked(filepath, data)
+                    clip_count = (
+                        len(data.get("clips") or [])
+                        or len(data.get("clip_plans") or [])
+                        or len(data.get("planned_clips") or [])
+                    )
                     results.append({
                         "id": pid,
                         "status": status,
@@ -1825,7 +1830,7 @@ def list_pipeline_states(out_dir: str, workspace: Optional[str] = None) -> list[
                         "completed_at": data.get("completed_at"),
                         "progress": copy.deepcopy(data.get("progress") or {}),
                         "error": data.get("error"),
-                        "clip_count": len(data.get("clips", [])),
+                        "clip_count": clip_count,
                         "output_count": len(data.get("output_files", [])),
                         "output_files": list(data.get("output_files", []) or []),
                         "scene_description": (data.get("scene_description", "") or "")[:100],
@@ -2156,6 +2161,161 @@ def _require_video_start_images(
     )
 
 
+def _clip_plan_from_planned(planned: Mapping[str, Any] | None) -> dict:
+    """Build a generation-ready clip plan from a planner shot."""
+
+    planned = dict(planned or {})
+    source = (
+        planned.get("_director_h3_source_prompt")
+        or planned.get("video_prompt")
+        or planned.get("suggested_prompt_hint")
+        or ""
+    )
+    plan = {
+        "video_prompt": source,
+        "image_prompt": planned.get("image_prompt") or "",
+        "keyframe_prompts": list(planned.get("keyframe_prompts") or []),
+        "window_prompts": list(planned.get("window_prompts") or []),
+        "window_count": planned.get("window_count") or 1,
+        "shot_id": planned.get("shot_id"),
+        "seed": planned.get("seed"),
+    }
+    for key, value in planned.items():
+        if str(key).startswith("_director_"):
+            plan[key] = copy.deepcopy(value)
+    if not plan.get("_director_h3_source_prompt"):
+        plan["_director_h3_source_prompt"] = source
+    if planned.get("_director_duration_sec") is None and planned.get("duration_sec") is not None:
+        plan["_director_duration_sec"] = planned.get("duration_sec")
+    return plan
+
+
+def _queue_plans_from_saved_state(data: Mapping[str, Any]) -> tuple[list[dict], list[dict]]:
+    """Recover clip_plans + planned_clips from a saved Director snapshot.
+
+    A music-video run that dies in H3 preflight still has planner shots on
+    disk even when ``clips`` and ``clip_plans`` were never written. Resume
+    and the Workspaces queue both need that planned list as the source of
+    truth.
+    """
+
+    saved_clips = data.get("clips") if isinstance(data.get("clips"), list) else []
+    saved_plans = data.get("clip_plans") if isinstance(data.get("clip_plans"), list) else []
+    saved_planned = (
+        data.get("planned_clips")
+        if isinstance(data.get("planned_clips"), list)
+        else []
+    )
+    if saved_plans and (not saved_clips or len(saved_plans) == len(saved_clips)):
+        planned = (
+            copy.deepcopy(saved_planned)
+            if saved_planned and (
+                not saved_clips or len(saved_planned) == len(saved_clips)
+                or len(saved_planned) == len(saved_plans)
+            )
+            else [
+                copy.deepcopy((clip or {}).get("planned_clip") or {})
+                for clip in saved_clips
+            ]
+        )
+        if len(planned) < len(saved_plans):
+            planned.extend({} for _ in range(len(saved_plans) - len(planned)))
+        return copy.deepcopy(saved_plans), planned[:len(saved_plans)]
+    if saved_clips:
+        plans = []
+        planned = []
+        for clip in saved_clips:
+            clip = clip if isinstance(clip, Mapping) else {}
+            planned_clip = copy.deepcopy(clip.get("planned_clip") or {})
+            plan = {
+                "image_prompt": clip.get("image_prompt", ""),
+                "video_prompt": clip.get("video_prompt", ""),
+                "keyframe_prompts": clip.get("keyframe_prompts", []) or [],
+                "window_prompts": clip.get("window_prompts", []) or [],
+                "window_count": clip.get("window_count", 1),
+                "shot_id": clip.get("shot_id"),
+                "seed": clip.get("seed"),
+            }
+            for key, value in clip.items():
+                if str(key).startswith("_director_"):
+                    plan[key] = copy.deepcopy(value)
+            if not plan.get("_director_h3_source_prompt"):
+                plan["_director_h3_source_prompt"] = (
+                    planned_clip.get("_director_h3_source_prompt")
+                    or clip.get("video_prompt")
+                    or ""
+                )
+            plans.append(plan)
+            planned.append(planned_clip)
+        if saved_planned and len(saved_planned) == len(saved_clips):
+            planned = copy.deepcopy(saved_planned)
+        return plans, planned
+    if saved_planned:
+        return (
+            [_clip_plan_from_planned(item) for item in saved_planned],
+            copy.deepcopy(saved_planned),
+        )
+    return [], []
+
+
+def hydrate_queue_clips(state: Mapping[str, Any] | None) -> dict:
+    """Expose a displayable clip queue even when generation never started."""
+
+    data = dict(state or {})
+    clips = data.get("clips") if isinstance(data.get("clips"), list) else []
+    if clips:
+        data["queue_source"] = "clips"
+        return data
+    plans, planned = _queue_plans_from_saved_state(data)
+    if not plans and not planned:
+        data["queue_source"] = "clips"
+        data.setdefault("clips", [])
+        return data
+    source = plans or [_clip_plan_from_planned(item) for item in planned]
+    hydrated = []
+    for index, plan in enumerate(source):
+        plan = plan if isinstance(plan, Mapping) else {}
+        planned_item = planned[index] if index < len(planned) and isinstance(planned[index], Mapping) else {}
+        clip = {
+            "index": index,
+            "shot_id": plan.get("shot_id") or planned_item.get("shot_id"),
+            "seed": plan.get("seed") or planned_item.get("seed"),
+            "duration_seconds": (
+                planned_item.get("duration_sec")
+                or plan.get("_director_duration_sec")
+                or planned_item.get("_director_duration_sec")
+            ),
+            "planned_clip": dict(planned_item),
+            "image_prompt": plan.get("image_prompt") or "",
+            "video_prompt": (
+                plan.get("video_prompt")
+                or planned_item.get("_director_h3_source_prompt")
+                or ""
+            ),
+            "keyframe_prompts": list(plan.get("keyframe_prompts") or []),
+            "window_prompts": list(plan.get("window_prompts") or []),
+            "window_count": plan.get("window_count") or 1,
+            "image_prompt_pre_polish": None,
+            "video_prompt_pre_polish": None,
+            "window_prompts_pre_polish": None,
+            "keyframe_prompts_pre_polish": None,
+            "start_image_filename": None,
+            "keyframe_filenames": [],
+            "video_filename": None,
+            "video_attempts": [],
+            "tag": None,
+            "image_gen_time_sec": None,
+            "video_gen_time_sec": None,
+        }
+        for key, value in {**dict(planned_item), **dict(plan)}.items():
+            if str(key).startswith("_director_"):
+                clip[key] = copy.deepcopy(value)
+        hydrated.append(clip)
+    data["clips"] = hydrated
+    data["queue_source"] = "clip_plans" if plans and data.get("clip_plans") else "planned"
+    return data
+
+
 def load_pipeline_state(out_dir: str, pid: str) -> Optional[dict]:
     """Load a saved state while serialized against deletion/replacement."""
     with _pipeline_file_lock:
@@ -2216,6 +2376,55 @@ def _update_clip_tag_locked(out_dir: str, pid: str, clip_index: int, tag: Option
             _write_pipeline_json_unlocked(filepath, state)
             return True
     return False
+
+
+@_exclusive_pipeline_operation
+def update_clip_prompts(
+    out_dir: str,
+    pid: str,
+    clip_index: int,
+    *,
+    video_prompt: Optional[str] = None,
+    image_prompt: Optional[str] = None,
+) -> dict:
+    """Persist edited prompts onto clips, clip_plans and planned_clips."""
+
+    def updater(state: dict) -> None:
+        clips = state.get("clips") if isinstance(state.get("clips"), list) else []
+        plans = state.get("clip_plans") if isinstance(state.get("clip_plans"), list) else []
+        planned = (
+            state.get("planned_clips")
+            if isinstance(state.get("planned_clips"), list)
+            else []
+        )
+        size = max(len(clips), len(plans), len(planned))
+        if clip_index < 0 or clip_index >= size:
+            raise ValueError("Clip not found")
+        if video_prompt is not None:
+            text = str(video_prompt)
+            if clip_index < len(clips) and isinstance(clips[clip_index], dict):
+                clips[clip_index]["video_prompt"] = text
+                clips[clip_index]["_director_h3_source_prompt"] = text
+            if clip_index < len(plans) and isinstance(plans[clip_index], dict):
+                plans[clip_index]["video_prompt"] = text
+                plans[clip_index]["_director_h3_source_prompt"] = text
+            if clip_index < len(planned) and isinstance(planned[clip_index], dict):
+                planned[clip_index]["_director_h3_source_prompt"] = text
+                if "video_prompt" in planned[clip_index]:
+                    planned[clip_index]["video_prompt"] = text
+        if image_prompt is not None:
+            text = str(image_prompt)
+            if clip_index < len(clips) and isinstance(clips[clip_index], dict):
+                clips[clip_index]["image_prompt"] = text
+            if clip_index < len(plans) and isinstance(plans[clip_index], dict):
+                plans[clip_index]["image_prompt"] = text
+            if clip_index < len(planned) and isinstance(planned[clip_index], dict):
+                planned[clip_index]["image_prompt"] = text
+
+    saved = _update_saved_pipeline(out_dir, pid, updater)
+    if saved is None:
+        raise ValueError(f"Pipeline {pid} not found")
+    return hydrate_queue_clips(saved)
 
 
 @_exclusive_pipeline_operation
@@ -7033,11 +7242,30 @@ def _resume_pipeline_reserved(pid: str, out_dir: str) -> tuple[bool, str]:
         and len(data.get("planned_clips")) == len(saved_clips)
         else flattened_planned_clips
     )
+    if not clip_plans:
+        recovered_plans, recovered_planned = _queue_plans_from_saved_state(data)
+        if recovered_plans:
+            clip_plans = recovered_plans
+            planned_clips = recovered_planned
     clip_images = [c.get("start_image_filename") for c in saved_clips]
     clip_source_images = [c.get("source_image_filename") for c in saved_clips]
     clip_end_images = [c.get("end_image_filename") for c in saved_clips]
     clip_keyframes = [c.get("keyframe_filenames", []) or [] for c in saved_clips]
     clip_video_files = [c.get("video_filename") for c in saved_clips]
+    if clip_plans and len(clip_images) != len(clip_plans):
+        clip_images = list(clip_images) + [None] * (len(clip_plans) - len(clip_images))
+        clip_source_images = list(clip_source_images) + [None] * (
+            len(clip_plans) - len(clip_source_images)
+        )
+        clip_end_images = list(clip_end_images) + [None] * (
+            len(clip_plans) - len(clip_end_images)
+        )
+        clip_keyframes = list(clip_keyframes) + [
+            [] for _ in range(len(clip_plans) - len(clip_keyframes))
+        ]
+        clip_video_files = list(clip_video_files) + [None] * (
+            len(clip_plans) - len(clip_video_files)
+        )
 
     workspace = data.get("workspace") if data.get("workspace") not in ("default", None) else None
     resume_out_dir = os.path.dirname(state_path)
@@ -7685,13 +7913,17 @@ def _run_pipeline(pid: str, resume: bool = False):
         apply_spoken_language_to_plans(
             clip_plans, params.get("spoken_language", ""),
         )
+        # Persist the planned queue before H3 preflight so a contract
+        # refusal still leaves every shot visible/editable in Workspaces.
+        _update_pipeline(pid, clip_plans=clip_plans, llm_streaming=False)
+        _save_pipeline_state(pid)
         _preflight_h3_director_prompts(
             params.get("video_model", ""),
             clip_plans,
             pid=pid,
         )
         _update_pipeline(pid, clip_plans=clip_plans, llm_streaming=False)
-        _save_pipeline_state(pid)  # Save after planning
+        _save_pipeline_state(pid)  # Save compiled prompts after planning
 
         # Check cancellation
         if _pipeline_cancel_requested(pid):

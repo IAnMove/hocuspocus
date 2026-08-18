@@ -10195,12 +10195,32 @@ def list_active_director_pipelines():
 @api.get("/api/v1/director/pipelines/{pid}")
 def get_saved_pipeline(pid: str):
     """Get a full saved pipeline state."""
-    from services.director_pipeline import load_pipeline_state
+    from services.director_pipeline import hydrate_queue_clips, load_pipeline_state
     base = wgp.server_config.get("save_path", "outputs")
     state = load_pipeline_state(base, pid)
     if not state:
         return JSONResponse({"error": "Pipeline not found"}, status_code=404)
-    return state
+    return hydrate_queue_clips(state)
+
+
+@api.put("/api/v1/director/pipelines/{pid}/clips/{clip_index}/prompt")
+async def update_pipeline_clip_prompt(pid: str, clip_index: int, request: Request):
+    """Persist an edited image/video prompt onto a saved pipeline shot."""
+    from services.director_pipeline import PipelineBusyError, update_clip_prompts
+    body = await request.json()
+    base = wgp.server_config.get("save_path", "outputs")
+    try:
+        return update_clip_prompts(
+            base,
+            pid,
+            clip_index,
+            video_prompt=body.get("video_prompt"),
+            image_prompt=body.get("image_prompt"),
+        )
+    except PipelineBusyError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
 
 @api.put("/api/v1/director/pipelines/{pid}/clips/{clip_index}/tag")

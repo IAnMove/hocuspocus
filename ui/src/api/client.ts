@@ -1673,6 +1673,23 @@ export async function fetchSavedPipeline(pid: string): Promise<import('../types'
   return res.json()
 }
 
+export async function updatePipelineClipPrompt(
+  pid: string,
+  clipIndex: number,
+  body: { video_prompt?: string; image_prompt?: string },
+): Promise<import('../types').SavedPipelineState> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/clips/${clipIndex}/prompt`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Could not save prompt' }))
+    throw new Error(err.error || err.detail || 'Could not save prompt')
+  }
+  return res.json()
+}
+
 export async function tagPipelineClip(pid: string, clipIndex: number, tag: string | null): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/clips/${clipIndex}/tag`, {
     method: 'PUT',

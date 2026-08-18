@@ -658,11 +658,11 @@ export function DirectorChat() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => useStore.getState().setDashboardOpen(true)}
+              onClick={() => useStore.getState().setMediaFilter('workspaces')}
               className="text-[10px] text-accent-blue hover:text-accent-blue/80 flex items-center gap-0.5 transition-colors"
-              title="Open independent video creations and edit their clips"
+              title="Open Workspaces to inspect prompts, references and the generation queue"
             >
-              Video workflows
+              Workspaces
             </button>
             {(skill || step !== 'upload') && (
               <button

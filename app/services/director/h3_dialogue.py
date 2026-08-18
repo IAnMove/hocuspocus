@@ -92,6 +92,12 @@ _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
     (re.compile(r"\b(?:sings?|raps?|speaks?|says?|whispers?|mutters?|canta(?:n)?|rapea(?:n)?|habla(?:n)?|dice(?:n)?|susurra(?:n)?|murmura(?:n)?)\b[^.!?]{0,220}(?=\s*<\s*d\s*>)", re.I), "performs the exact lyric: "),
     (re.compile(r"\bnadie\s+canta\b", re.I), "nadie permanece en silencio"),
     (re.compile(r"\bno\s+one\s+speaks\b", re.I), "everyone remains silent"),
+    # Spanish music-video planners often lock a mute performer with
+    # "nunca/jamás/no habla".  Rewrite those before the generic verb
+    # pass so H3 never sees an affirmative speech cue.
+    (re.compile(r"\bnunca\s+habla(?:n)?\b", re.I), "nunca abre la boca"),
+    (re.compile(r"\bjam[aá]s\s+habla(?:n)?\b", re.I), "jam\u00e1s abre la boca"),
+    (re.compile(r"\bno\s+habla(?:n)?\b", re.I), "no abre la boca"),
     (re.compile(r"\b(?:hissing|rapping|singing|speaking|saying|whispering|muttering)\s+(?:the\s+)?(?:verse|lyrics?|line|song|words?)\b", re.I), "moving with tense rhythmic physicality"),
     (re.compile(r"\b(?:delivering|performing)\s+(?:a\s+)?vocal\s+performance\b", re.I), "performing with tense physical rhythm"),
     # A music-video planner can still phrase an unledgered performance as a
@@ -99,7 +105,7 @@ _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
     # setup before the verb, but replace the rest of that vocal clause.  The
     # final soundtrack is assembled separately; native H3 vocals are never a
     # valid substitute when this clip has no exact <d> line.
-    (re.compile(r"\b(?:rap(?:s|ped|ping)?|sing(?:s|ing|sang)?|whisper(?:s|ed|ing)?|mutter(?:s|ed|ing)?|hiss(?:es|ed|ing)?|gasp(?:s|ed|ing)?|laugh(?:s|ed|ing)?|grunt(?:s|ed|ing)?|sob(?:s|bed|bing)?|moan(?:s|ed|ing)?|cough(?:s|ed|ing)?|sneeze(?:s|d|ing)?|whistle(?:s|d|ing)?|babble(?:s|d|ing)?|(?:rape|susurra|murmura|sisea|canta|pronuncia|jadea|ríe|gruñe|solloza|gime|tose|estornuda|silba|tararea|balbucea)(?:n|ndo|ba|ron|ría|rían)?|articula(?:n)?\s+(?:un\s+)?rap)\b[^.!?]{0,220}", re.I), "holds a tense closed-mouth expression"),
+    (re.compile(r"\b(?:rap(?:s|ped|ping)?|sing(?:s|ing|sang)?|whisper(?:s|ed|ing)?|mutter(?:s|ed|ing)?|hiss(?:es|ed|ing)?|gasp(?:s|ed|ing)?|laugh(?:s|ed|ing)?|grunt(?:s|ed|ing)?|sob(?:s|bed|bing)?|moan(?:s|ed|ing)?|cough(?:s|ed|ing)?|sneeze(?:s|d|ing)?|whistle(?:s|d|ing)?|babble(?:s|d|ing)?|(?:rape|habla|dice|grita|exclama|responde|contesta|pregunta|susurra|murmura|sisea|canta|pronuncia|jadea|ríe|gruñe|solloza|gime|tose|estornuda|silba|tararea|balbucea)(?:n|ndo|ando|iendo|ba|ron|ría|rían)?|articula(?:n)?\s+(?:un\s+)?rap)\b[^.!?]{0,220}", re.I), "holds a tense closed-mouth expression"),
     (re.compile(r"\b(?:with\s+)?visible\s+lip\s+movement\b", re.I), "with a closed mouth"),
     (re.compile(r"\bgrunts?\s+with\s+effort\b", re.I), "strains visibly with the effort"),
     (re.compile(r"\blaughs?\s+nervously\b", re.I), "smiles nervously"),
@@ -141,7 +147,8 @@ _H3_VOCAL_SOUND_RE = re.compile(
 )
 _H3_NEGATED_VOCAL_PREFIX_RE = re.compile(
     r"(?:\bno|\bnever|\bnobody|\bno\s+one|\bdo\s+not|\bdoes\s+not|"
-    r"\bmust\s+not|\bnadie|\bning\u00fan|\bninguna|\bsin)\b[^,.!?;:]{0,48}$",
+    r"\bmust\s+not|\bnadie|\bnunca|\bjam[aá]s|\bning\u00fan|\bninguna|\bsin)"
+    r"\b[^,.!?;:]{0,48}$",
     re.IGNORECASE,
 )
 

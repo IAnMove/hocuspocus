@@ -539,7 +539,7 @@ export interface Scene {
   }
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces'
 export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
 export type ScailResolutionProfile = '480p' | '512p' | '704p'
@@ -1583,6 +1583,23 @@ export interface PipelineVideoAttempt {
   source?: 'original' | 'regenerated' | 'studio' | 'recovered' | string
 }
 
+export interface PlannedDirectorClip {
+  start?: number
+  end?: number
+  duration_sec?: number
+  duration_frames?: number
+  section_label?: string
+  suggested_prompt_hint?: string
+  _director_h3_source_prompt?: string
+  _director_audio_plan?: Record<string, unknown>
+  _director_dialogue_beats?: Array<Record<string, unknown>>
+  _director_subjects_on_screen?: Array<Record<string, unknown>>
+  _director_duration_sec?: number
+  _director_h3_prompt_mode?: string
+  _director_project_context?: string
+  [key: string]: unknown
+}
+
 export interface PipelineClipState {
   index: number
   shot_id?: string
@@ -1612,6 +1629,11 @@ export interface PipelineClipState {
   h3_segment_prompts?: string[]
   h3_segments?: H3SegmentState[]
   h3_prompt_validation?: 'optimized' | 'deterministic_fallback' | 'direct_video_contract' | null
+  _director_h3_source_prompt?: string
+  _director_audio_plan?: Record<string, unknown>
+  _director_dialogue_beats?: Array<Record<string, unknown>>
+  _director_subjects_on_screen?: Array<Record<string, unknown>>
+  _director_h3_prompt_mode?: string
 }
 
 export interface H3SegmentState {
@@ -1691,6 +1713,8 @@ export interface SavedPipelineState {
   created_at: number
   completed_at: number | null
   status: string
+  phase?: string
+  error?: string | null
   pipeline_type: string
   generation_mode?: 'image_guided' | 'direct_video'
   direct_video_master_prompt?: string
@@ -1715,6 +1739,13 @@ export interface SavedPipelineState {
   shot_image_guidance?: DirectorShotImageGuidance
   llm_log: PipelineLlmLog | null
   clips: PipelineClipState[]
+  planned_clips?: PlannedDirectorClip[]
+  clip_plans?: Array<Record<string, unknown>>
+  character_ref_paths?: string[]
+  location_ref_paths?: string[]
+  image_loras?: Record<string, unknown>
+  video_loras?: Record<string, unknown>
+  queue_source?: 'clips' | 'clip_plans' | 'planned'
   output_files: string[]
   final_output_filename?: string
   prompt_generation_time_sec?: number | null
@@ -1730,6 +1761,7 @@ export interface SavedPipelineState {
 export interface PipelineListItem {
   id: string
   status: string
+  phase?: string
   pipeline_type: string
   generation_mode?: 'image_guided' | 'direct_video'
   comic_id?: string | null
@@ -1738,5 +1770,6 @@ export interface PipelineListItem {
   output_count: number
   scene_description: string
   workspace: string
+  error?: string | null
   repair_status?: PipelineRepairStatus | null
 }

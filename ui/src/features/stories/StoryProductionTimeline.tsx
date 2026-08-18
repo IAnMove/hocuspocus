@@ -251,7 +251,12 @@ export function StoryProductionTimeline({ production, initiallyOpen = false }: {
         <button className={control} disabled={!playable.length || playingAll} onClick={() => { setPlaybackShotId(playable[0].shotId); setPlayingAll(true) }}><Play size={11} />Play all</button>
         {playingAll && <button className={control} onClick={() => { playerRef.current?.pause(); setPlayingAll(false); setPlaybackShotId(null) }}><Square size={11} />Stop</button>}
         <button className={control} disabled={playable.length < 2 || loading} onClick={() => { setLoading(true); setError(null); void rejoinPipelineClips(pipelineId).then(() => api.fetchSavedPipeline(pipelineId)).then(setPipeline).catch(reason => setError((reason as Error).message)).finally(() => setLoading(false)) }}>{loading ? <Loader2 size={11} className="animate-spin" /> : <Combine size={11} />}Join clips</button>
-        <button className={control} onClick={() => setDashboardOpen(true, pipelineId)}><ExternalLink size={11} />Edit/regenerate clips</button>
+        <button className={control} onClick={() => {
+          useStore.getState().setMediaFilter('workspaces')
+          void useStore.getState().loadPipelineList(pipelineId)
+          void useStore.getState().loadSavedPipeline(pipelineId)
+          setDashboardOpen(false)
+        }}><ExternalLink size={11} />Edit/regenerate clips</button>
         {finalOutput && <a className={control} href={api.getFileUrl(finalOutput, pipeline?.workspace)} target="_blank" rel="noreferrer">Open joined video</a>}
       </div>
       {error && <p className="mb-2 rounded border border-red-500/30 bg-red-500/10 p-2 text-[10px] text-red-300">{error}</p>}

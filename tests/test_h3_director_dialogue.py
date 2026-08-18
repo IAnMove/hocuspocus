@@ -439,6 +439,39 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
 
         self.assertIn("no character speaks", plans[0]["video_prompt"].casefold())
 
+    def test_final_preflight_accepts_spanish_nunca_habla(self):
+        plans = [{
+            "video_prompt": (
+                "Gandalf mantiene la boca cerrada y nunca habla. "
+                "SPEAKER_00 cruza el fondo. "
+                "overall_soundscape: Viento suave. non_diegetic_music: N/A"
+            ),
+            "_director_dialogue_beats": [],
+            "_director_subjects_on_screen": [],
+        }]
+
+        compile_h3_clip_plans(plans)
+        visual = plans[0]["video_prompt"].split("overall_soundscape:", 1)[0]
+        self.assertNotRegex(visual, r"(?i)\bhabla(?:n)?\b")
+        self.assertIn("abre la boca", visual.casefold())
+
+    def test_silent_clip_rewrites_unledgered_habla_and_rapeando(self):
+        plans = [{
+            "video_prompt": (
+                "SPEAKER_00 cruza el fondo rapeando en espa\u00f1ol "
+                "mientras Gandalf habla con la c\u00e1mara. "
+                "overall_soundscape: Viento. non_diegetic_music: N/A"
+            ),
+            "_director_dialogue_beats": [],
+            "_director_subjects_on_screen": [],
+        }]
+
+        compile_h3_clip_plans(plans)
+        visual = plans[0]["video_prompt"].split("overall_soundscape:", 1)[0]
+        self.assertNotIn("habla", visual.casefold())
+        self.assertNotIn("rapeando", visual.casefold())
+        self.assertIn("closed-mouth", visual.casefold())
+
     def test_silent_clip_rewrites_a_later_vocal_cue_after_a_comma(self):
         plans = [{
             "video_prompt": (
