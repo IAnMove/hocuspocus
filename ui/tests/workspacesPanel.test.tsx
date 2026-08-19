@@ -127,6 +127,7 @@ test('Workspaces processing lists planned shots, models and a video placeholder'
     assert.match(screen.getByRole('heading', { name: 'La Canción de Gandalf' }).textContent || '', /Gandalf/)
     assert.ok(screen.getAllByText(/minimax_h3_legacy/).length >= 1)
     assert.ok(screen.getByText('Gandalf mantiene la boca cerrada y nunca habla.'))
+    assert.ok(screen.getByRole('button', { name: 'mute' }))
     assert.ok(screen.getByText('Video placeholder'))
     assert.ok(screen.getByRole('button', { name: /Start \/ resume videos/ }))
     assert.ok(screen.getByRole('button', { name: /Regenerar vídeo completo/ }))

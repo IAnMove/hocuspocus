@@ -1386,7 +1386,7 @@ interface AppState {
   loadSavedPipeline: (pid: string) => Promise<void>
   retryDashboardLoad: () => Promise<void>
   tagClip: (pid: string, clipIndex: number, tag: string | null) => Promise<void>
-  updateClipPrompt: (pid: string, clipIndex: number, body: { video_prompt?: string; image_prompt?: string }) => Promise<void>
+  updateClipPrompt: (pid: string, clipIndex: number, body: { video_prompt?: string; image_prompt?: string; soundtrack_drive?: boolean }) => Promise<void>
   selectClipVideo: (pid: string, clipIndex: number, filename: string) => Promise<void>
   startPipelineRepair: (pid: string) => Promise<PipelineRepairState>
   cancelPipelineRepair: (pid: string) => Promise<PipelineRepairState>

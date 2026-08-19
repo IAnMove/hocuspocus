@@ -10210,12 +10210,16 @@ async def update_pipeline_clip_prompt(pid: str, clip_index: int, request: Reques
     body = await request.json()
     base = wgp.server_config.get("save_path", "outputs")
     try:
+        soundtrack_drive = body.get("soundtrack_drive")
+        if soundtrack_drive is not None:
+            soundtrack_drive = bool(soundtrack_drive)
         return update_clip_prompts(
             base,
             pid,
             clip_index,
             video_prompt=body.get("video_prompt"),
             image_prompt=body.get("image_prompt"),
+            soundtrack_drive=soundtrack_drive,
         )
     except PipelineBusyError as exc:
         return JSONResponse({"error": str(exc)}, status_code=409)

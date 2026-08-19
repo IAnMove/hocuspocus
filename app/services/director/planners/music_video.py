@@ -460,6 +460,7 @@ class MusicVideoPlanner(BasePlanner):
             clips, lyrics, performer_map, speaker_names, speaker_mappings,
             coverage_plan,
             allow_clip_text=kwargs.get("allow_clip_text") is True,
+            lip_sync=str(treatment.get("lip_sync") or "frequent"),
         )
 
         # Call LLM for creative planning
@@ -934,9 +935,13 @@ class MusicVideoPlanner(BasePlanner):
         speaker_mappings: Optional[dict],
         coverage_plan: Optional[list[dict[str, Any]]] = None,
         allow_clip_text: bool = False,
+        lip_sync: str = "frequent",
     ) -> list[str]:
         """Build text descriptions for each clip (context for LLM)."""
         contexts = []
+        wants_lip_sync = str(lip_sync or "frequent").lower() not in {
+            "none", "never", "off",
+        }
         for i, clip in enumerate(clips):
             section = (clip.get("label") or "verse").lower()
             beat_count = clip.get("beat_count", 8)
@@ -991,8 +996,23 @@ class MusicVideoPlanner(BasePlanner):
                     "clip. Do not invent a modern rapper, MC, or concert artist "
                     "to deliver the vocal unless the Scene Concept asks for one."
                 )
+                if wants_lip_sync:
+                    coverage_hint += (
+                        " This clip receives the source-audio slice as driving "
+                        "audio. Describe visible lip movement synchronized to it; "
+                        "do not invent, quote, or transcribe lyrics; do not write "
+                        "spoken or sung words."
+                    )
+                else:
+                    coverage_hint += (
+                        " No lip-sync: any visible mouth remains closed. Do not "
+                        "describe singing or rapping."
+                    )
             elif lyrics_snippet:
-                coverage_hint += " Deliberate b-roll: no lip-sync; any visible mouth remains closed."
+                coverage_hint += (
+                    " Deliberate b-roll: no driving vocal audio; no lip-sync; "
+                    "any visible mouth remains closed."
+                )
             if coverage.get("reuse_chorus_signature"):
                 coverage_hint += " Return to the same chorus signature instead of inventing a new location."
             ctx = f"Clip {i + 1}: {section}, {beat_count} beats, {vocal_info}.{performer_hint}{coverage_hint}"
@@ -1086,9 +1106,11 @@ class MusicVideoPlanner(BasePlanner):
             "self-contained with setting, composition, named identities plus "
             "visible traits, wardrobe, performance, camera, lighting, ambience, "
             "effects, and music.\n"
-            "- The per-shot source-audio slice is mapped as driving audio. "
-            "Describe visible singing, lip movement, dance, action, and camera "
-            "that synchronize to it; do not invent or transcribe lyrics.\n"
+            "- Performance/lip-sync shots receive the per-shot source-audio "
+            "slice as driving audio. Describe visible lip movement, dance, "
+            "action, and camera that synchronize to it; do not invent or "
+            "transcribe lyrics. B-roll shots get no vocal audio: keep mouths "
+            "closed and do not describe singing.\n"
             "- Character/location references are soft guidance, not fixed first "
             "frames. Describe the finished target shot.\n"
             "- Do not create image_prompt, image_source, visual_changes, or "
@@ -1515,33 +1537,28 @@ Return exactly this one missing shot plan."""
                 timing_anchor="audio",
             )
 
-            # Parse dialogue beats if present
+            # Music videos never author H3 speech.  Lyrics stay in clip
+            # context for timing only; the song slice (or silence) is the
+            # vocal authority.  Ignore any LLM-invented dialogue_beats.
             dialogue_beats = None
-            if raw.get("dialogue_beats"):
-                dialogue_beats = [DialogueBeat.from_dict(db) for db in raw["dialogue_beats"]]
 
-            # The production soundtrack is authoritative.  On a performer
-            # shot with an analysed lyric interval, make that precise slice
-            # the H3 dialogue ledger instead of trusting free-form words such
-            # as "sings" or "raps" in the visual prose.  B-roll remains mute.
+            # The production soundtrack is the vocal authority.  Performance
+            # shots receive the matching song slice as driving audio; H3 must
+            # not generate speech from transcribed lyrics.  B-roll stays mute.
             lip_sync = str((treatment or {}).get("lip_sync") or "frequent").lower()
             wants_lip_sync = lip_sync not in {"none", "never", "off"}
             if coverage.get("performer_present") and wants_lip_sync:
-                lyric_beats = self._lyric_beats_for_clip(
-                    clip,
-                    lyrics,
-                    fallback_speaker=str(clip.get("dominant_speaker") or ""),
+                audio = AudioPlan(
+                    mode="audio_driven",
+                    ambience=audio_raw.get("ambience"),
+                    effects=audio_raw.get("effects"),
+                    vocal_style=(
+                        "lips and body synchronized to the mapped driving "
+                        "audio; do not invent or transcribe lyrics"
+                    ),
+                    timing_anchor="audio",
+                    lip_sync_critical=True,
                 )
-                if lyric_beats:
-                    dialogue_beats = lyric_beats
-                    audio = AudioPlan(
-                        mode="dialogue_driven",
-                        ambience=audio_raw.get("ambience"),
-                        effects=audio_raw.get("effects"),
-                        vocal_style="sung or rapped only from the exact lyric ledger",
-                        timing_anchor="audio",
-                        lip_sync_critical=True,
-                    )
 
             # Determine image strategy
             image_strategy = "reference_edit" if has_reference else "fresh_generation"

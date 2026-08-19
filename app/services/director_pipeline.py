@@ -2386,6 +2386,7 @@ def update_clip_prompts(
     *,
     video_prompt: Optional[str] = None,
     image_prompt: Optional[str] = None,
+    soundtrack_drive: Optional[bool] = None,
 ) -> dict:
     """Persist edited prompts onto clips, clip_plans and planned_clips."""
 
@@ -2420,6 +2421,27 @@ def update_clip_prompts(
                 plans[clip_index]["image_prompt"] = text
             if clip_index < len(planned) and isinstance(planned[clip_index], dict):
                 planned[clip_index]["image_prompt"] = text
+        if soundtrack_drive is not None:
+            wants = bool(soundtrack_drive)
+            audio = {
+                "mode": "audio_driven" if wants else "music_driven",
+                "timing_anchor": "audio",
+                "lip_sync_critical": wants,
+            }
+            if wants:
+                audio["vocal_style"] = (
+                    "lips and body synchronized to the mapped driving audio; "
+                    "do not invent or transcribe lyrics"
+                )
+            for container in (clips, plans, planned):
+                if clip_index < len(container) and isinstance(container[clip_index], dict):
+                    merged = dict(container[clip_index].get("_director_audio_plan") or {})
+                    merged.update(audio)
+                    container[clip_index]["_director_audio_plan"] = merged
+                    if "audio_plan" in container[clip_index]:
+                        container[clip_index]["audio_plan"] = merged
+                    if not wants:
+                        container[clip_index]["_director_dialogue_beats"] = []
 
     saved = _update_saved_pipeline(out_dir, pid, updater)
     if saved is None:
@@ -3061,6 +3083,49 @@ def _audio_timeline_start(planned_clips: list[dict]) -> float:
     return start_sec
 
 
+def _music_video_clip_wants_drive(plan: Mapping[str, Any] | None) -> bool:
+    """True when this music-video shot should receive the song slice as drive audio.
+
+    Explicit mute plans (``music_driven`` / ambient, no lip-sync) stay silent.
+    Unannotated legacy clips keep the previous always-drive behaviour so older
+    Omni tests and saved threads still condition on the soundtrack.
+    """
+
+    if not isinstance(plan, Mapping):
+        return True
+    audio = plan.get("_director_audio_plan") or plan.get("audio_plan") or {}
+    if not isinstance(audio, Mapping) or not audio:
+        return True
+    from services.director.h3_dialogue import h3_audio_plan_wants_drive
+    return h3_audio_plan_wants_drive(audio)
+
+
+def _apply_music_video_soundtrack_contract(clip_plans: list[dict]) -> None:
+    """Drop lyric ``<d>`` ledgers and mark drive vs mute before H3 compile."""
+
+    for plan in clip_plans:
+        if not isinstance(plan, dict):
+            continue
+        wants_drive = _music_video_clip_wants_drive(plan)
+        audio = dict(plan.get("_director_audio_plan") or plan.get("audio_plan") or {})
+        if wants_drive:
+            audio["mode"] = "audio_driven"
+            audio["timing_anchor"] = "audio"
+            audio["lip_sync_critical"] = True
+            if not str(audio.get("vocal_style") or "").strip():
+                audio["vocal_style"] = (
+                    "lips and body synchronized to the mapped driving audio; "
+                    "do not invent or transcribe lyrics"
+                )
+        else:
+            audio["mode"] = "music_driven"
+            audio["lip_sync_critical"] = False
+        plan["_director_audio_plan"] = audio
+        if "audio_plan" in plan:
+            plan["audio_plan"] = audio
+        plan["_director_dialogue_beats"] = []
+
+
 def _director_reference_label(params: dict, kind: str, index: int) -> str:
     """Return a stable, human-readable role for an H3 Director reference."""
 
@@ -3334,6 +3399,8 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
         "_director_closing_blocking": clip.get("_director_closing_blocking", ""),
         "_director_audio_plan": clip.get("_director_audio_plan") or {},
     }
+    if str(state.get("pipeline_type") or snapshot.get("pipeline_type") or "") == "music_video":
+        _apply_music_video_soundtrack_contract([prompt_plan])
     _preflight_h3_director_prompts(video_model, [prompt_plan], pid=pid)
     prompt = prompt_plan["video_prompt"]
     video_loras = state.get("video_loras") or {}
@@ -3766,16 +3833,19 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     ) / fps
     clip_duration_sec = video_length / fps
     slice_path = None
+    wants_drive = pipeline_type != "short_film_story" and (
+        pipeline_type != "music_video" or _music_video_clip_wants_drive(prompt_plan)
+    )
     if (
         director_strategy == OMNI_REFERENCE
-        and pipeline_type != "short_film_story"
+        and wants_drive
         and (not audio_path or not os.path.isfile(audio_path))
     ):
         raise ValueError(
             "This H3 Omni project no longer has its source soundtrack or "
             "dialogue audio. Restore that file before rerunning the clip."
         )
-    if pipeline_type != "short_film_story" and audio_path and os.path.isfile(audio_path):
+    if wants_drive and audio_path and os.path.isfile(audio_path):
         pid_token = re.sub(r"[^A-Za-z0-9_-]", "_", pid)[:32]
         slice_path = os.path.join(
             clip_out_dir,
@@ -12427,17 +12497,10 @@ def _h3_apply_reference_contract(prompt: str, reference_mode: str) -> str:
 def _h3_apply_identity_contract(prompt: str) -> str:
     """Keep recurring faces stable when H3 has to reveal them after occlusion."""
     text = str(prompt or "").strip()
-    marker = "IDENTITY CONTINUITY LOCK:"
+    marker = "Same faces and wardrobe throughout"
     if marker.casefold() in text.casefold():
         return text
-    identity = (
-        "IDENTITY CONTINUITY LOCK: Every recurring character is the exact same "
-        "person throughout. Preserve facial geometry, eye shape, nose, mouth, "
-        "age, hairline and distinguishing features from the supplied frame and "
-        "character references. If a face is hidden, turned away or leaves frame, "
-        "restore that same identity when it becomes visible; never substitute a "
-        "generic or newly invented face."
-    )
+    identity = "Same faces and wardrobe throughout."
     parts = re.split(r"\bAudio\s*:", text, maxsplit=1, flags=re.I)
     if len(parts) == 2:
         return f"{parts[0].strip()} {identity}\nAudio: {parts[1].strip()}".strip()
@@ -12819,6 +12882,15 @@ def _run_minimax_h3_story_video(
     """Render a complete Story short film as sequential native-audio H3 clips."""
     fps = 24
     video_model = str(params.get("video_model") or "minimax_h3")
+    pipeline_type = str(params.get("pipeline_type") or "")
+    audio_path = str(params.get("audio_path") or "")
+    audio_origin_sec = (
+        _audio_timeline_start(planned_clips)
+        if pipeline_type != "short_film_story" and audio_path
+        else 0.0
+    )
+    if pipeline_type == "music_video":
+        _apply_music_video_soundtrack_contract(clip_plans)
     direct_video, direct_video_master_prompt = _direct_video_settings(params)
     shot_image_policy = _director_effective_shot_image_policy(params)
     uses_shot_images = shot_images_required(shot_image_policy)
@@ -12990,6 +13062,8 @@ def _run_minimax_h3_story_video(
         raise RuntimeError("MiniMax H3 received no planned Story shots to render.")
 
     outputs: list[str] = []
+    temporary_h3_audio: list[str] = []
+    shot_elapsed_frames = [0] * len(clip_plans)
     saved_segment_states = (_pipelines.get(pid) or {}).get("_h3_segments") or []
     segment_states: list[list[dict]] = [
         copy.deepcopy(saved_segment_states[index])
@@ -13133,6 +13207,44 @@ def _run_minimax_h3_story_video(
             elif segment_start and not direct_video:
                 gen_params["image_start"] = segment_start
 
+            wants_drive = (
+                pipeline_type != "short_film_story"
+                and audio_path
+                and os.path.isfile(audio_path)
+                and (
+                    pipeline_type != "music_video"
+                    or _music_video_clip_wants_drive(clip_plans[shot_index])
+                )
+            )
+            slice_path = None
+            if wants_drive:
+                pid_token = re.sub(r"[^A-Za-z0-9_-]", "_", pid)[:32]
+                slice_path = os.path.join(
+                    out_dir,
+                    f"_director_h3_audio_{pid_token}_s{shot_index}_{segment_index}_"
+                    f"{uuid.uuid4().hex[:8]}.wav",
+                )
+                clip_start = (
+                    audio_origin_sec + shot_elapsed_frames[shot_index] / fps
+                )
+                try:
+                    _slice_audio_segment(
+                        audio_path,
+                        clip_start,
+                        frames / fps,
+                        slice_path,
+                    )
+                    temporary_h3_audio.append(slice_path)
+                    gen_params["audio_prompt_type"] = "A"
+                    gen_params["audio_guide"] = slice_path
+                except Exception as exc:
+                    print(
+                        f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1} "
+                        f"audio slice failed; generating without soundtrack "
+                        f"conditioning: {exc}"
+                    )
+                    slice_path = None
+
             print(
                 f"[Pipeline {pid}] MiniMax H3 shot {shot_index + 1}, "
                 f"segment {segment_index + 1}/{segment_count}: {frames} frames"
@@ -13207,9 +13319,16 @@ def _run_minimax_h3_story_video(
                     "total_steps": 0,
                 },
             )
+            shot_elapsed_frames[shot_index] += frames
             _save_pipeline_state(pid)
     finally:
         for path in continuation_frames:
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                pass
+        for path in temporary_h3_audio:
             try:
                 if os.path.isfile(path):
                     os.remove(path)
@@ -13349,6 +13468,8 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
     video_model = params.get("video_model") or "ltx2_22B_distilled_1_1"
     from services.director.spoken_language import apply_spoken_language_to_plans
     apply_spoken_language_to_plans(clip_plans, params.get("spoken_language", ""))
+    if str(params.get("pipeline_type") or "") == "music_video":
+        _apply_music_video_soundtrack_contract(clip_plans)
     _preflight_h3_director_prompts(video_model, clip_plans, pid=pid)
     video_params = params.get("video_params", {})
     video_loras = params.get("video_loras", {})
@@ -13832,8 +13953,13 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 "MiniMax H3 Omni Director needs a valid generated composition "
                 "image for every shot. Repair the missing start images first."
             )
+        wants_any_drive = (
+            any(_music_video_clip_wants_drive(plan) for plan in clip_plans)
+            if pipeline_type == "music_video"
+            else pipeline_type != "short_film_story"
+        )
         if (
-            pipeline_type != "short_film_story"
+            wants_any_drive
             and (not audio_path or not os.path.isfile(audio_path))
         ):
             raise RuntimeError(
@@ -13847,7 +13973,15 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
                 zip(image_start_paths, per_clip_frames)
             ):
                 drive_slice = None
-                if pipeline_type != "short_film_story":
+                clip_plan = clip_plans[index] if index < len(clip_plans) else {}
+                wants_drive = (
+                    pipeline_type != "short_film_story"
+                    and (
+                        pipeline_type != "music_video"
+                        or _music_video_clip_wants_drive(clip_plan)
+                    )
+                )
+                if wants_drive:
                     drive_slice = os.path.join(
                         out_dir,
                         f"_director_h3_audio_{pid_token}_c{index}_{uuid.uuid4().hex[:8]}.wav",
@@ -13891,7 +14025,10 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         )
     elif pipeline_type == "short_film_story":
         audio_params["audio_prompt_type"] = ""
-    elif audio_path:
+    elif audio_path and (
+        pipeline_type != "music_video"
+        or any(_music_video_clip_wants_drive(plan) for plan in clip_plans)
+    ):
         audio_params["audio_prompt_type"] = "A"
         audio_params["audio_guide"] = audio_path
         # Music analysis may intentionally omit a silent intro. Align model

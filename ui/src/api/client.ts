@@ -1676,7 +1676,7 @@ export async function fetchSavedPipeline(pid: string): Promise<import('../types'
 export async function updatePipelineClipPrompt(
   pid: string,
   clipIndex: number,
-  body: { video_prompt?: string; image_prompt?: string },
+  body: { video_prompt?: string; image_prompt?: string; soundtrack_drive?: boolean },
 ): Promise<import('../types').SavedPipelineState> {
   const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/clips/${clipIndex}/prompt`, {
     method: 'PUT',

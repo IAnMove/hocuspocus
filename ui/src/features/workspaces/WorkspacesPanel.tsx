@@ -30,12 +30,16 @@ function statusTone(status: string): string {
   return 'bg-bg-tertiary text-text-muted'
 }
 
+function clipWantsDrive(clip: PipelineClipState): boolean {
+  const plan = clip._director_audio_plan
+    || (clip.planned_clip as { _director_audio_plan?: Record<string, unknown> } | null)?._director_audio_plan
+  if (!plan || Object.keys(plan).length === 0) return true
+  const mode = String(plan.mode || '').toLowerCase()
+  return Boolean(plan.lip_sync_critical) && (mode === 'audio_driven' || mode === 'dialogue_driven')
+}
+
 function audioPlanLabel(clip: PipelineClipState): string {
-  const plan = clip._director_audio_plan || (clip.planned_clip as { _director_audio_plan?: Record<string, unknown> } | null)?._director_audio_plan
-  if (!plan) return '—'
-  return [plan.mode, plan.timing_anchor, plan.lip_sync_critical ? 'lip-sync' : null]
-    .filter(Boolean)
-    .join(' · ') || '—'
+  return clipWantsDrive(clip) ? 'canto · drive' : 'mute'
 }
 
 export function WorkspacesPanel() {
@@ -471,7 +475,9 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
   const [draft, setDraft] = useState(shotPrompt(clip))
   const [saving, setSaving] = useState(false)
   const [rerunning, setRerunning] = useState(false)
+  const [togglingDrive, setTogglingDrive] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const wantsDrive = clipWantsDrive(clip)
   const attempt = selectedAttempt(clip)
   const attempts = useMemo(() => attemptsForClip(clip), [clip])
   const duration = shotDuration(clip)
@@ -492,6 +498,18 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
       setSaving(false)
+    }
+  }
+
+  const toggleDrive = async () => {
+    setTogglingDrive(true)
+    setError(null)
+    try {
+      await updateClipPrompt(pipeline.pipeline_id, clip.index, { soundtrack_drive: !wantsDrive })
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setTogglingDrive(false)
     }
   }
 
@@ -516,7 +534,15 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
         </label>
         {duration != null && <span className="text-[10px] text-text-muted">{duration.toFixed(1)}s</span>}
         <span className="text-[10px] text-text-muted">{clip._director_h3_prompt_mode || pipeline.video_model}</span>
-        <span className="text-[10px] text-text-muted">{audioPlanLabel(clip)}</span>
+        <button
+          type="button"
+          className={`rounded px-1.5 py-0.5 text-[9px] ${wantsDrive ? 'bg-violet-500/20 text-violet-100' : 'bg-bg-tertiary text-text-muted'}`}
+          disabled={togglingDrive || busy}
+          onClick={() => void toggleDrive()}
+          title={wantsDrive ? 'Este plano recibe el vocal de la canción. Clic para dejarlo mute.' : 'Este plano no recibe vocal. Clic para marcar canto/drive.'}
+        >
+          {togglingDrive ? '…' : audioPlanLabel(clip)}
+        </button>
         <span className={`rounded px-1.5 py-0.5 text-[9px] ${attempt ? 'bg-green-500/15 text-indicator-success' : 'bg-bg-tertiary text-text-muted'}`}>
           {attempt ? `${attempts.length} take${attempts.length === 1 ? '' : 's'}` : 'placeholder'}
         </span>

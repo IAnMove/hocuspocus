@@ -91,3 +91,34 @@ class TestDirectorWorkspaceQueue(unittest.TestCase):
             saved["planned_clips"][0]["_director_h3_source_prompt"],
             "Edited closed-mouth shot.",
         )
+
+    def test_soundtrack_drive_toggle_persists_on_planned_clips(self):
+        with tempfile.TemporaryDirectory() as output_dir:
+            path = os.path.join(output_dir, "_director_pipeline_drive.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({
+                    "pipeline_id": "drive",
+                    "status": "completed",
+                    "clips": [],
+                    "clip_plans": [],
+                    "planned_clips": [{
+                        "_director_h3_source_prompt": "A dwarf faces camera.",
+                        "_director_audio_plan": {
+                            "mode": "audio_driven",
+                            "lip_sync_critical": True,
+                        },
+                    }],
+                }, handle)
+
+            updated = pipeline.update_clip_prompts(
+                output_dir,
+                "drive",
+                0,
+                soundtrack_drive=False,
+            )
+
+        self.assertEqual(
+            updated["clips"][0]["_director_audio_plan"]["mode"],
+            "music_driven",
+        )
+        self.assertFalse(updated["clips"][0]["_director_audio_plan"]["lip_sync_critical"])
