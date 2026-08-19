@@ -50,9 +50,7 @@ VIDEO_VAE = "minimax_h3_video_vae_fp16.safetensors"
 AUDIO_VAE = "minimax_h3_audio_vae_fp32.safetensors"
 
 DEFAULT_AUDIO_DIRECTION = (
-    "Natural synchronized production sound matching the visible environment "
-    "and actions; include explicitly described dialogue or music, otherwise "
-    "use ambience and sound effects only; clear, audible stereo mix."
+    "Only explicitly described sounds. If none are described, remain silent."
 )
 
 MODEL_PROFILES = {

@@ -874,14 +874,15 @@ def compose_direct_video_prompt(
         direction
         and not authored_soundscape
         and not re.search(
-            r"\b(?:dialogue|voice|voices|speech|vocal|lyrics?|singing|music|song)\b",
+            r"\b(?:dialogue|voice|voices|speech|vocal|lyrics?|singing|music|song|"
+            r"explicitly described|remain silent)\b",
             direction,
             flags=re.I,
         )
     ):
         sound_parts.append(direction)
     if not sound_parts:
-        sound_parts.append("Natural synchronized ambience and effects matching the visible action")
+        sound_parts.append("Silence")
     music = authored_music.strip(" .")
     if not music:
         music = " ".join(str(audio.get("music") or "").split()).strip(" .")

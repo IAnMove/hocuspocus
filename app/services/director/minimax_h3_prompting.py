@@ -152,8 +152,6 @@ def _camera_sentence(plan: dict) -> str:
 
 def _dialogue_sentences(plan: dict, subject_ids: list[str]) -> list[str]:
     sentences: list[str] = []
-    audio = plan.get("audio_plan") if isinstance(plan.get("audio_plan"), dict) else {}
-    default_delivery = _clean(audio.get("vocal_style"))
     for index, raw in enumerate(_items(plan.get("dialogue_beats"))):
         if not isinstance(raw, dict):
             continue
@@ -162,13 +160,10 @@ def _dialogue_sentences(plan: dict, subject_ids: list[str]) -> list[str]:
             continue
         speaker = _clean(raw.get("speaker_name") or raw.get("speaker_id"))
         speaker_id = subject_ids[min(index, len(subject_ids) - 1)] if subject_ids else "S1"
-        delivery = _clean(raw.get("delivery")) or default_delivery
         cue = f"({speaker_id})"
         if speaker:
             cue += f" {speaker}"
         cue += f" says <d>[{infer_h3_spoken_language(spoken)}] {spoken}</d>"
-        if delivery:
-            cue += f" with {delivery} delivery"
         sentences.append(cue + ".")
     return sentences
 
@@ -185,8 +180,8 @@ def _integrated_description(plan: dict, prompt: str) -> str:
     )
     definitions, subject_ids = _subject_definitions(plan)
     action = _strip_legacy_contracts(prompt)
-    if not action:
-        action_beats = [_clean(item) for item in _items(plan.get("action_beats")) if _clean(item)]
+    action_beats = [_clean(item) for item in _items(plan.get("action_beats")) if _clean(item)]
+    if (not action or len(action) > 700) and action_beats:
         action = " Then ".join(action_beats)
     if not action:
         action = _clean(plan.get("scene_goal")) or "The staged action unfolds naturally."
@@ -209,10 +204,7 @@ def _integrated_description(plan: dict, prompt: str) -> str:
     ending = _clean(clean_visual_field(plan.get("ending_beat")))
     if ending and ending.casefold() not in action.casefold():
         parts.append(f"The shot ends on {ending.rstrip('.')}.")
-    parts.append(
-        "IDENTITY CONTINUITY LOCK: recurring people keep the same facial geometry, age, "
-        "hairline, wardrobe and distinguishing features throughout occlusion and re-entry."
-    )
+    parts.append("Same faces and wardrobe throughout.")
     return " ".join(parts)
 
 
@@ -231,17 +223,20 @@ def _sound_fields(plan: dict, audio_direction: str) -> tuple[str, str]:
     # speech before or after the authored words.
     direction = _clean(audio_direction)
     # The global UI audio preference can contain meta instructions such as
-    # "include dialogue or music". Those are not diegetic ambience and H3
-    # treats words like dialogue/voice/music in this field as an audio cue.
-    # Literal speech and music have dedicated Context-IR locations instead.
-    if direction and not re.search(
-        r"\b(?:dialogue|voice|voices|speech|vocal|lyrics?|singing|music|song)\b",
-        direction,
-        flags=re.I,
+    # "include dialogue or music" or "only explicitly described sounds".
+    # Those are not diegetic ambience and H3 treats them as audible events.
+    if (
+        direction
+        and not re.search(
+            r"\b(?:dialogue|voice|voices|speech|vocal|lyrics?|singing|music|song|"
+            r"explicitly described|remain silent)\b",
+            direction,
+            flags=re.I,
+        )
     ):
         soundscape_parts.append(direction)
     if not soundscape_parts:
-        soundscape_parts.append("Natural stereo production sound synchronized to visible actions")
+        soundscape_parts.append("Silence")
 
     mode = _clean(audio.get("mode")).lower()
     if mode in {"music_driven", "audio_driven"}:

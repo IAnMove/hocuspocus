@@ -301,7 +301,7 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
 
         prompt = workflow["10"]["inputs"]["prompt"]
         self.assertIn("overall_soundscape:", prompt)
-        self.assertIn("Natural stereo production sound", prompt)
+        self.assertIn("Silence", prompt)
         soundscape = prompt.split("overall_soundscape:", 1)[1].split(
             "non_diegetic_music:", 1
         )[0].casefold()

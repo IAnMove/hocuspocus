@@ -1409,7 +1409,7 @@ def _h3_rebuilt_visual_prompt(raw: dict) -> str:
     sound_bits = [clean(audio.get("ambience"))]
     sound_bits.extend(clean(value) for value in audio.get("effects") or [])
     sound_bits = [value for value in sound_bits if value]
-    soundscape = ", ".join(sound_bits) or "Natural scene-appropriate stereo ambience"
+    soundscape = ", ".join(sound_bits) or "Silence"
 
     music = "N/A"
     old_prompt = str(raw.get("video_prompt") or "")
@@ -1515,7 +1515,7 @@ def _complete_h3_truncated_tail(
         has_dialogue = bool(dialogue_beats)
         tail["audio_plan"] = {
             "mode": "dialogue_driven" if has_dialogue else "ambient_only",
-            "ambience": "Natural scene-appropriate stereo ambience",
+            "ambience": "Silence",
             "effects": [],
             "vocal_style": "Natural character voices",
             "timing_anchor": "audio" if has_dialogue else "video",
@@ -5630,7 +5630,7 @@ H3 NATIVE SHOT CONTRACT — NON-NEGOTIABLE:
 - Each screenplay event and each spoken line appears in exactly one shot. Do not duplicate dialogue across adjacent shots. Preserve scripted dialogue verbatim.
 - CONVERSATION PACKING IS REQUIRED: a change of speaker is not by itself a reason to start another array item. Within the same uninterrupted location and story beat, prefer one native clip ({preferred_duration_text}) containing 2-4 alternating dialogue turns when their combined total is no more than {maximum_dialogue_words} words. Keep a brief reaction such as "What?", a gasp, or a one-line reply in the surrounding exchange instead of wasting a separate minimum-length clip.
 - INTERNAL CAMERA EDITING IS SUPPORTED: inside one bounded H3 clip, the camera may begin on an ensemble frame, cut or reframe to each current speaker before their tagged line, hold their unobstructed face and mouth through the complete line, capture reactions, and finish on a new composition. Describe that chronological coverage in camera_plan and action_beats. Prefer the lower end of the requested shot-count range for a continuous dialogue scene.
-- DIALOGUE MUST NOT LIVE ONLY IN dialogue_beats. Every dialogue_beats[].spoken_text must also appear exactly once in the same shot's video_prompt as <d>[Language] Exact words</d>, using the broad language named by any SPOKEN LANGUAGE CONTRACT in the project source (for example, Español de España uses [Spanish]). Keep accent/locale instructions outside the tag. If no contract exists, infer the language from the exact words. If dialogue_beats is empty, explicitly state that no one speaks, mouths remain closed, and no muttering, gibberish, or speech-like vocalization occurs.
+- DIALOGUE MUST NOT LIVE ONLY IN dialogue_beats. Every dialogue_beats[].spoken_text must also appear exactly once in the same shot's video_prompt as <d>[Language] Exact words</d>, using the broad language named by any SPOKEN LANGUAGE CONTRACT in the project source (for example, Español de España uses [Spanish]). Write the spoken words in that contract language, never in the character's origin language (an Italian plumber still speaks Spanish if the contract is Español de España). Keep accent/locale instructions outside the tag. If no contract exists, infer the language from the exact words. If dialogue_beats is empty, explicitly state that no one speaks, mouths remain closed, and no muttering, gibberish, or speech-like vocalization occurs. Write overall_soundscape as one short line of sounds that are actually heard; do not list absences.
 - SPEAKER VISIBILITY IS REQUIRED: every person who delivers a line must have a complete subjects_on_screen entry and remain visibly framed with an unobstructed face and mouth for the full line. Reframe to the current speaker before speech; reaction framing may follow only after the spoken line is complete.
 - CAST LIST CONSISTENCY IS REQUIRED: every person mentioned in spatial_setup, action_beats, dialogue_beats, ending_beat, closing_blocking, or video_prompt must appear in subjects_on_screen. Do not mention a bystander in blocking while omitting that person from the visible cast.
 - A shot may follow another in the finished edit, but its prompt must describe its own opening state instead of saying "continue", "as before", "the push-in continues", or similar.

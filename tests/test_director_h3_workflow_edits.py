@@ -190,7 +190,7 @@ def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Pa
     assert all(item["model_type"] == "minimax_h3_legacy" for item in submitted)
     assert submitted[0]["h3_reference_mode"] == "references"
     assert submitted[0]["image_refs"][1].endswith("portrait.png")
-    assert "IDENTITY CONTINUITY LOCK" in submitted[0]["prompt"]
+    assert "Same faces and wardrobe throughout" in submitted[0]["prompt"]
     saved = director_pipeline.load_pipeline_state(str(tmp_path), "editable")
     assert [item["filename"] for item in saved["clips"][0]["h3_segments"]] == [
         "old_0.mp4", "new_1.mp4", "new_2.mp4",

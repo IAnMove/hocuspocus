@@ -736,6 +736,62 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             [],
         )
 
+    def test_audio_driven_plan_is_not_compiled_as_closed_mouth_silence(self):
+        prompt, contract = compile_h3_official_prompt(
+            "A dwarf faces the camera and raps the verse. overall_soundscape: Cave drip.",
+            [],
+            [],
+            mode="t2va",
+            audio_plan={
+                "mode": "audio_driven",
+                "timing_anchor": "audio",
+                "lip_sync_critical": True,
+            },
+        )
+
+        self.assertIn("mapped driving audio", prompt)
+        self.assertIn("moves their lips in time with the mapped driving audio", prompt)
+        self.assertNotIn("No character speaks", prompt)
+        self.assertNotIn("holds a tense closed-mouth expression", prompt.casefold())
+        self.assertIn("mapped driving audio", contract.casefold())
+
+    def test_compile_strips_language_contract_absences_and_delivery_novels(self):
+        source = (
+            "SPOKEN LANGUAGE CONTRACT: Every generated spoken word must be only "
+            "in Español de España. Use a native Spain/Castilian accent. "
+            "VISUAL STYLE LOCK: Classic American comic book illustration. "
+            "Mario and Luigi stop in an empty plaza. Mario (S2) speaks with a "
+            "Cadencia grave, respirada, casi murmurada delivery: "
+            "<d>[Spanish] Vamos, Luigi. Camina.</d>. "
+            "SPEAKER VISIBILITY: Keep Mario, Luigi visibly framed whenever "
+            "they speak. Reframe to the current speaker before each line. "
+            "overall_soundscape: Silencio absoluto de la plaza vacía: no hay "
+            "transeúntes, no hay campanas, no hay coches, leve crujido del "
+            "empedrado. non_diegetic_music: N/A"
+        )
+        prompt, _ = compile_h3_official_prompt(
+            source,
+            [],
+            [{
+                "speaker_id": "mario",
+                "speaker_name": "Mario",
+                "spoken_text": "Vamos, Luigi. Camina.",
+            }],
+            mode="t2va",
+            audio_plan={"spoken_language": "Español de España"},
+        )
+
+        self.assertIn("<d>[Spanish] Vamos, Luigi. Camina.</d>", prompt)
+        self.assertNotIn("SPOKEN LANGUAGE CONTRACT", prompt)
+        self.assertNotIn("SPEAKER VISIBILITY", prompt)
+        self.assertNotIn("Cadencia grave", prompt)
+        self.assertNotIn("no hay campanas", prompt.casefold())
+        soundscape = prompt.split("overall_soundscape:", 1)[1].split(
+            "non_diegetic_music:", 1,
+        )[0]
+        self.assertIn("empedrado", soundscape.casefold())
+        self.assertLess(len(prompt), 1600)
+
 
 class TestH3CharacterAuthenticity(unittest.TestCase):
     def test_voice_bible_keeps_only_supplied_cast(self):
