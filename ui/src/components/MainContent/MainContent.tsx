@@ -31,6 +31,8 @@ const StyleSheetPanel = lazy(() => import('../../features/styles/StyleSheetPanel
   .then(module => ({ default: module.StyleSheetPanel })))
 const WorkspacesPanel = lazy(() => import('../../features/workspaces/WorkspacesPanel')
   .then(module => ({ default: module.WorkspacesPanel })))
+const CharacterCreatorPanel = lazy(() => import('../../features/characters/CharacterCreatorPanel')
+  .then(module => ({ default: module.CharacterCreatorPanel })))
 
 function PanelLoadingFallback() {
   return (
@@ -688,6 +690,7 @@ export function MainContent() {
               : mediaFilter === 'stories' ? 'Story Lab'
               : mediaFilter === 'series' ? 'Series Lab'
               : mediaFilter === 'workspaces' ? 'Workspaces'
+              : mediaFilter === 'characters' ? 'Character Creator'
               : mediaFilter === 'styles' ? 'Hoja de estilos'
               : mediaFilter === 'videoeditor' ? 'Video Editor'
               : outputsTotal > outputs.length
@@ -729,6 +732,12 @@ export function MainContent() {
           <div className="flex-1 overflow-hidden p-2 md:p-4">
             <div className="max-w-[1900px] mx-auto h-full">
               <WorkspacesPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'characters' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <CharacterCreatorPanel />
             </div>
           </div>
         ) : mediaFilter === 'styles' ? (

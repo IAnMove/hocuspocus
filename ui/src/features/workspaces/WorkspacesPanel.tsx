@@ -48,28 +48,60 @@ export function WorkspacesPanel() {
   const retryLoad = useStore(s => s.retryDashboardLoad)
   const resumePipeline = useStore(s => s.resumePipeline)
   const rejoinClips = useStore(s => s.rejoinPipelineClips)
+  const livePipelineId = useStore(s => s.pipelineId)
+  const livePipelineStatus = useStore(s => s.pipelineStatus)
   const [actionError, setActionError] = useState<string | null>(null)
   const [launching, setLaunching] = useState(false)
   const [rejoining, setRejoining] = useState(false)
+  const [query, setQuery] = useState('')
+  const [newestFirst, setNewestFirst] = useState(true)
+
+  const pendingLive = Boolean(
+    livePipelineId
+    && !pipelineList.some(item => item.id === livePipelineId)
+    && selectedPipeline?.pipeline_id !== livePipelineId,
+  )
 
   useEffect(() => {
-    void loadPipelineList(selectedPipeline?.pipeline_id)
-  }, [loadPipelineList, selectedPipeline?.pipeline_id])
+    void loadPipelineList()
+  }, [loadPipelineList])
 
   useEffect(() => {
-    if (!selectedPipeline) return
-    const live = pipelineBusy(selectedPipeline)
-    if (!live) return
+    if (!selectedPipeline && !livePipelineId) return
+    const live = selectedPipeline ? pipelineBusy(selectedPipeline) : Boolean(livePipelineId)
+    if (!live && !pendingLive) return
     const timer = window.setInterval(() => {
-      void loadPipeline(selectedPipeline.pipeline_id)
-      void loadPipelineList(selectedPipeline.pipeline_id)
+      if (selectedPipeline) void loadPipeline(selectedPipeline.pipeline_id)
+      else if (livePipelineId) void loadPipeline(livePipelineId)
+      void loadPipelineList()
     }, 3000)
     return () => window.clearInterval(timer)
-  }, [loadPipeline, loadPipelineList, selectedPipeline])
+  }, [livePipelineId, loadPipeline, loadPipelineList, pendingLive, selectedPipeline])
 
   const queue = selectedPipeline ? hydratePipelineQueue(selectedPipeline) : null
   const selectedId = queue?.pipeline_id || ''
   const readyVideos = queue?.clips.filter(clip => Boolean(selectedAttempt(clip)?.filename && !clip.video_stale)).length || 0
+  const sortedThreads = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    const filtered = pipelineList.filter(item => {
+      if (!needle) return true
+      return [
+        item.id,
+        item.pipeline_type,
+        item.status,
+        item.scene_description,
+        item.error,
+      ].some(value => String(value || '').toLowerCase().includes(needle))
+    })
+    return [...filtered].sort((left, right) => {
+      const leftLive = left.status === 'running' || left.id === livePipelineId ? 1 : 0
+      const rightLive = right.status === 'running' || right.id === livePipelineId ? 1 : 0
+      if (leftLive !== rightLive) return rightLive - leftLive
+      return newestFirst
+        ? (right.created_at || 0) - (left.created_at || 0)
+        : (left.created_at || 0) - (right.created_at || 0)
+    })
+  }, [livePipelineId, newestFirst, pipelineList, query])
 
   const launch = async () => {
     if (!selectedPipeline) return
@@ -109,15 +141,39 @@ export function WorkspacesPanel() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-text-primary">Workspaces</h2>
-              <p className="text-[10px] text-text-muted">Processing · song and video threads</p>
+              <p className="text-[10px] text-text-muted">Elige un hilo. Los más nuevos van arriba.</p>
             </div>
-            <button type="button" className={button} onClick={() => void loadPipelineList(selectedId || undefined)} title="Reload threads">
+            <button type="button" className={button} onClick={() => void loadPipelineList()} title="Reload threads">
               <RefreshCw size={13} />
             </button>
           </div>
+          <input
+            type="search"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Buscar hilo…"
+            className="mt-2 w-full rounded-md border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary"
+          />
+          <div className="mt-2 flex gap-1">
+            <button type="button" className={`${button} flex-1 ${newestFirst ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setNewestFirst(true)}>Nuevo → viejo</button>
+            <button type="button" className={`${button} flex-1 ${!newestFirst ? 'border-violet-400/40 text-violet-100' : ''}`} onClick={() => setNewestFirst(false)}>Viejo → nuevo</button>
+          </div>
         </div>
         <nav aria-label="Saved threads" className="flex min-h-0 max-h-36 flex-1 gap-2 overflow-x-auto p-2 md:block md:max-h-none md:overflow-x-hidden md:overflow-y-auto">
-          {pipelineList.map(item => (
+          {pendingLive && livePipelineId && (
+            <button
+              type="button"
+              onClick={() => void loadPipeline(livePipelineId)}
+              className="mb-0 min-w-52 shrink-0 rounded-lg border border-blue-500/40 bg-blue-500/10 p-2 text-left md:mb-1.5 md:w-full md:min-w-0"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-medium text-text-primary">Hilo en preparación</span>
+                <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] bg-blue-500/20 text-chip-blue">{livePipelineStatus?.status || 'running'}</span>
+              </div>
+              <div className="mt-1 text-[10px] text-text-muted">Se está escribiendo el plan. Pulsa para reintentar la carga.</div>
+            </button>
+          )}
+          {sortedThreads.map(item => (
             <button
               key={item.id}
               type="button"
@@ -134,10 +190,13 @@ export function WorkspacesPanel() {
               {item.error && <p className="mt-1 line-clamp-2 text-[10px] text-red-300">{item.error}</p>}
             </button>
           ))}
-          {!pipelineList.length && (
+          {!pipelineList.length && !pendingLive && (
             <p className="min-w-64 p-3 text-[11px] leading-relaxed text-text-muted">
-              Generate a song or Director video and the thread appears here with every prompt, reference and queued shot.
+              Genera una canción o un vídeo Director y el hilo aparece aquí. No hace falta escribir un ID: pulsa el más nuevo de la lista.
             </p>
+          )}
+          {pipelineList.length > 0 && !sortedThreads.length && (
+            <p className="min-w-64 p-3 text-[11px] text-text-muted">Ningún hilo coincide con “{query}”.</p>
           )}
         </nav>
       </aside>
@@ -185,9 +244,9 @@ export function WorkspacesPanel() {
           {!loading && !selectedPipeline && (
             <div className="mx-auto mt-16 max-w-lg rounded-2xl border border-violet-500/30 bg-violet-500/10 p-8 text-center">
               <Layers size={28} className="mx-auto text-violet-300" />
-              <h3 className="mt-3 text-base font-semibold text-text-primary">Inspect the generation queue</h3>
+              <h3 className="mt-3 text-base font-semibold text-text-primary">Carga un hilo de la lista</h3>
               <p className="mt-2 text-xs leading-relaxed text-text-muted">
-                After a song or music video writes its prompts, open the thread here to see every shot, reference and model, edit mid-run, pick takes and join the final video.
+                A la izquierda están todos los hilos, del más nuevo al más viejo. Pulsa uno para ver prompts, referencias, modelos y vídeos. Si acabas de generar, espera a que aparezca o pulsa “Hilo en preparación”.
               </p>
             </div>
           )}

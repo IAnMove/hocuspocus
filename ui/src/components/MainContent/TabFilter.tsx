@@ -14,6 +14,7 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
   { value: 'stories', label: 'Story Lab', shortLabel: 'Lab', icon: 'library' },
   { value: 'series', label: 'Series Lab', shortLabel: 'Series', icon: 'library' },
   { value: 'workspaces', label: 'Workspaces', shortLabel: 'Work', icon: 'layers' },
+  { value: 'characters', label: 'Character Creator', shortLabel: 'Char', icon: 'person' },
   { value: 'styles', label: 'Hoja de estilos', shortLabel: 'Styles', icon: 'palette' },
   { value: 'comics', label: 'Comics', shortLabel: 'Comic', icon: 'book' },
   { value: 'videoeditor', label: 'Video Editor', shortLabel: 'Edit', icon: 'film' },

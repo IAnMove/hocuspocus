@@ -122,6 +122,8 @@ test('Workspaces processing lists planned shots, models and a video placeholder'
     render(<WorkspacesPanel />)
     assert.ok(screen.getByRole('region', { name: 'Workspaces' }))
     assert.ok(screen.getByRole('navigation', { name: 'Saved threads' }))
+    assert.ok(screen.getByRole('button', { name: /Nuevo → viejo/ }))
+    assert.ok(screen.getByPlaceholderText('Buscar hilo…'))
     assert.match(screen.getByRole('heading', { name: 'La Canción de Gandalf' }).textContent || '', /Gandalf/)
     assert.ok(screen.getAllByText(/minimax_h3_legacy/).length >= 1)
     assert.ok(screen.getByText('Gandalf mantiene la boca cerrada y nunca habla.'))

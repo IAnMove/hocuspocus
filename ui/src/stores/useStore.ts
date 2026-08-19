@@ -3100,10 +3100,12 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch (e) {
       if (loadToken !== _dashboardPipelineLoadToken) return
+      const message = e instanceof Error ? e.message : 'Failed to load pipeline'
+      const stillWriting = /not found|404/i.test(message)
       console.error('Failed to load pipeline:', e)
       set({
         dashboardLoading: false,
-        dashboardLoadError: e instanceof Error ? e.message : 'Failed to load pipeline',
+        dashboardLoadError: stillWriting ? null : message,
         dashboardRetryPipelineId: pid,
       })
     }
@@ -10589,10 +10591,9 @@ export const useStore = create<AppState>((set, get) => ({
         directorStep: 'plan',
         directorLoading: true,
         directorError: null,
-        mediaFilter: 'workspaces',
       })
       get().pollPipelineStatus()
-      void get().loadPipelineList(pipeline_id)
+      void get().loadPipelineList()
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Pipeline failed to start'
       set({ directorError: msg })
