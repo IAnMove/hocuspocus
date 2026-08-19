@@ -326,6 +326,35 @@ _SECTION_ALIASES = {
 }
 
 
+def build_music_video_cast_lock(
+    scene_description: str,
+    treatment: dict[str, Any] | None = None,
+) -> str:
+    """Keep the soundtrack genre from inventing a second modern cast.
+
+    Rap or sung audio is timing only. If the user named a world or people,
+    those are the only on-screen identities unless they explicitly ask for a
+    contemporary performer.
+    """
+
+    treatment = treatment if isinstance(treatment, dict) else {}
+    forbidden = str(treatment.get("forbidden_elements") or "").strip()
+    extra = f" Also never introduce: {forbidden}." if forbidden else ""
+    return (
+        "CAST LOCK — AUDIO GENRE IS NOT CAST:\n"
+        "A rap, hip-hop, sung, or spoken soundtrack does not authorize a "
+        "modern concert performer on screen. If the Scene Concept names a "
+        "world or cast (for example Middle-earth, dwarves, elves, hobbits, "
+        "wizards), every visible person must belong to that cast and "
+        "wardrobe. Never invent a contemporary rapper, MC, hoodie-and-chain "
+        "hype man, bucket-hat street artist, SPEAKER_00 modern vocalist, or "
+        "modern concert crowd unless the Scene Concept explicitly asks for "
+        "them. Lyric clips may show the named in-world characters acting, "
+        "working, or facing camera; they must not be replaced by an "
+        f"unrelated musician.{extra}"
+    )
+
+
 def _parse_performer_map(scene_description: str) -> dict[str, str]:
     """Extract section→performer mapping from natural language scene description.
 
@@ -957,7 +986,11 @@ class MusicVideoPlanner(BasePlanner):
                 f"section direction: {coverage.get('section_rule', '')}."
             )
             if coverage.get("performer_present"):
-                coverage_hint += " Show the assigned performer delivering the vocal when lyrics are present."
+                coverage_hint += (
+                    " Show the Scene Concept's named in-world characters in this "
+                    "clip. Do not invent a modern rapper, MC, or concert artist "
+                    "to deliver the vocal unless the Scene Concept asks for one."
+                )
             elif lyrics_snippet:
                 coverage_hint += " Deliberate b-roll: no lip-sync; any visible mouth remains closed."
             if coverage.get("reuse_chorus_signature"):
@@ -1097,7 +1130,7 @@ The user's main reference is visual ground truth. Every image_prompt and video_p
 Character references define identity and location references define the setting. Follow their labels and the Scene Concept in every self-contained video prompt; do not invent conflicting identities or settings."""
         else:
             scene_anchoring_rules = """SCENE-ANCHORING (avoid off-topic content):
-No visual reference was provided. Invent one consistent performer and setting that fit the Scene Concept, then reuse the same artist and world across every clip. Show the performer delivering vocals on lyric clips and do not drift off-concept."""
+No visual reference was provided. Invent one consistent in-world cast and setting that fit the Scene Concept, then reuse those same identities and that world across every clip. Do not invent a second modern musician because the audio is rap or song."""
         direct_video_contract = f"""DIRECT TEXT-TO-VIDEO MODE — STRICT:
 - There is no start image, generated image, keyframe or visual reference.
 - The immutable master prompt below defines the visual medium and world. It is automatically
@@ -1178,6 +1211,8 @@ Notes:
 - window_prompts: empty ([]) unless the scene needs >26s continuous video.
 
 {scene_anchoring_rules}
+
+{build_music_video_cast_lock(scene_description, treatment)}
 
 KEEP MUSIC-VIDEO PROMPTS EXECUTABLE:
 For each scene, the music drives the pacing and energy. You only need to identify:

@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from app.services.director.planners.comic_movie import ComicMoviePlanner
 from app.services.director.planners.music_video import (
     MusicVideoPlanner,
+    build_music_video_cast_lock,
     build_music_video_coverage,
     normalize_music_video_treatment,
 )
@@ -88,6 +89,15 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(treatment["performer_presence"], 100)
         self.assertEqual(treatment["recurring_sets"], ["stage", "rooftop"])
         self.assertEqual(treatment["lip_sync"], "occasional")
+
+    def test_cast_lock_forbids_modern_rappers_in_a_named_world(self):
+        lock = build_music_video_cast_lock(
+            "Videoclip de los enanos de The Lord of the Rings",
+            {"forbidden_elements": "raperos modernos, hoodies, cadenas de oro"},
+        )
+        self.assertIn("AUDIO GENRE IS NOT CAST", lock)
+        self.assertIn("rapper", lock.casefold())
+        self.assertIn("raperos modernos", lock)
 
     def test_direct_video_treatment_keeps_master_prompt_and_ignores_visual_refs(self):
         treatment = normalize_music_video_treatment({
