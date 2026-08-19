@@ -258,6 +258,23 @@ export function WorkspacesPanel() {
 }
 
 function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
+  const updateClipPrompt = useStore(s => s.updateClipPrompt)
+  const [instruction, setInstruction] = useState('')
+  const [shorten, setShorten] = useState(true)
+  const [selected, setSelected] = useState<Set<number>>(() => new Set())
+  const [proposals, setProposals] = useState<Record<number, string>>({})
+  const [rewriting, setRewriting] = useState(false)
+  const [savingBatch, setSavingBatch] = useState(false)
+  const [rewriteStatus, setRewriteStatus] = useState('')
+  const [rewriteError, setRewriteError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setSelected(new Set())
+    setProposals({})
+    setRewriteStatus('')
+    setRewriteError(null)
+  }, [pipeline.pipeline_id])
+
   const refs = [
     ...(pipeline.character_ref_paths || []).map(path => ({ kind: 'Character', path })),
     ...(pipeline.location_ref_paths || []).map(path => ({ kind: 'Location', path })),
@@ -266,6 +283,78 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
   const finalOutput = pipeline.final_output_filename || [...(pipeline.output_files || [])]
     .reverse()
     .find(name => /(?:rejoin|multiclip|_movie)\.(?:mp4|webm|mkv|mov)$/i.test(name))
+  const indexes = pipeline.clips.map(clip => clip.index)
+  const selectedCount = indexes.filter(index => selected.has(index)).length
+  const proposalCount = indexes.filter(index => selected.has(index) && proposals[index]).length
+
+  const toggleShot = (index: number) => {
+    setSelected(current => {
+      const next = new Set(current)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
+
+  const selectAll = () => setSelected(new Set(indexes))
+  const selectNone = () => setSelected(new Set())
+
+  const proposeSelected = async () => {
+    const targets = pipeline.clips.filter(clip => selected.has(clip.index))
+    if (!targets.length) return
+    if (!instruction.trim() && !shorten) {
+      setRewriteError('Escribe una consigna o marca acortar para MiniMax.')
+      return
+    }
+    setRewriting(true)
+    setRewriteError(null)
+    try {
+      const { extractRewrittenPrompt, workspaceRewriteSystemPrompt } = await import('./rewrite')
+      const system = workspaceRewriteSystemPrompt(instruction, shorten)
+      for (const [offset, clip] of targets.entries()) {
+        setRewriteStatus(`Reescribiendo shot ${clip.index + 1} (${offset + 1}/${targets.length})…`)
+        const original = shotPrompt(clip)
+        const text = await api.generateLlmText({
+          prompt: original,
+          system_prompt: system,
+          max_new_tokens: 1536,
+          temperature: 0.2,
+        })
+        setProposals(current => ({
+          ...current,
+          [clip.index]: extractRewrittenPrompt(text, original),
+        }))
+      }
+      setRewriteStatus(`Listas ${targets.length} propuestas. Revisa y guarda las que quieras.`)
+    } catch (reason) {
+      setRewriteError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setRewriting(false)
+    }
+  }
+
+  const saveSelected = async () => {
+    const targets = pipeline.clips.filter(clip => selected.has(clip.index) && proposals[clip.index])
+    if (!targets.length) return
+    setSavingBatch(true)
+    setRewriteError(null)
+    try {
+      for (const [offset, clip] of targets.entries()) {
+        setRewriteStatus(`Guardando shot ${clip.index + 1} (${offset + 1}/${targets.length})…`)
+        await updateClipPrompt(pipeline.pipeline_id, clip.index, { video_prompt: proposals[clip.index] })
+      }
+      setProposals(current => {
+        const next = { ...current }
+        targets.forEach(clip => { delete next[clip.index] })
+        return next
+      })
+      setRewriteStatus(`Guardados ${targets.length} prompts.`)
+    } catch (reason) {
+      setRewriteError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setSavingBatch(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -302,12 +391,51 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
         )}
       </div>
 
+      <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-3 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-[11px] font-medium uppercase tracking-wider text-violet-100">Consigna del hilo</h3>
+          <span className="text-[10px] text-text-muted">{selectedCount} seleccionados · {proposalCount} con propuesta</span>
+        </div>
+        <textarea
+          value={instruction}
+          onChange={event => setInstruction(event.target.value)}
+          rows={3}
+          placeholder='Ejemplo: quita todos los MC, hoodies y cadenas. Quédate solo con enanos de Tolkien.'
+          className="w-full resize-y rounded-md border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary"
+        />
+        <label className="flex items-center gap-2 text-[11px] text-text-secondary">
+          <input type="checkbox" checked={shorten} onChange={event => setShorten(event.target.checked)} />
+          Acortar el cuerpo visual para MiniMax H3 (conserva campos y refs)
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={button} onClick={selectAll}>Select all</button>
+          <button type="button" className={button} onClick={selectNone}>Quitar selección</button>
+          <button type="button" className={primary} disabled={rewriting || savingBatch || selectedCount === 0} onClick={() => void proposeSelected()}>
+            {rewriting ? <Loader2 size={12} className="animate-spin" /> : null}
+            Proponer en seleccionados
+          </button>
+          <button type="button" className={button} disabled={savingBatch || rewriting || proposalCount === 0} onClick={() => void saveSelected()}>
+            {savingBatch ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+            Guardar seleccionados
+          </button>
+        </div>
+        {rewriteStatus && <p className="text-[11px] text-text-secondary">{rewriteStatus}</p>}
+        {rewriteError && <p className="text-[11px] text-red-300">{rewriteError}</p>}
+      </div>
+
       <div className="space-y-3">
         <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">
           Queue ({pipeline.clips.length})
         </h3>
         {pipeline.clips.map(clip => (
-          <QueueShotCard key={`${pipeline.pipeline_id}-${clip.index}`} pipeline={pipeline} clip={clip} />
+          <QueueShotCard
+            key={`${pipeline.pipeline_id}-${clip.index}`}
+            pipeline={pipeline}
+            clip={clip}
+            selected={selected.has(clip.index)}
+            proposal={proposals[clip.index]}
+            onToggleSelected={() => toggleShot(clip.index)}
+          />
         ))}
         {!pipeline.clips.length && (
           <p className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-text-muted">
@@ -328,7 +456,13 @@ function MetaChip({ label, value }: { label: string; value: string }) {
   )
 }
 
-function QueueShotCard({ pipeline, clip }: { pipeline: SavedPipelineState; clip: PipelineClipState }) {
+function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }: {
+  pipeline: SavedPipelineState
+  clip: PipelineClipState
+  selected: boolean
+  proposal?: string
+  onToggleSelected: () => void
+}) {
   const updateClipPrompt = useStore(s => s.updateClipPrompt)
   const rerunClipVideo = useStore(s => s.rerunClipVideo)
   const selectClipVideo = useStore(s => s.selectClipVideo)
@@ -376,7 +510,10 @@ function QueueShotCard({ pipeline, clip }: { pipeline: SavedPipelineState; clip:
   return (
     <article className="rounded-xl border border-border bg-bg-secondary p-3">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h4 className="text-xs font-semibold text-text-primary">Shot {clip.index + 1}</h4>
+        <label className="flex items-center gap-1.5 text-xs text-text-secondary">
+          <input type="checkbox" checked={selected} onChange={onToggleSelected} />
+          <span className="font-semibold text-text-primary">Shot {clip.index + 1}</span>
+        </label>
         {duration != null && <span className="text-[10px] text-text-muted">{duration.toFixed(1)}s</span>}
         <span className="text-[10px] text-text-muted">{clip._director_h3_prompt_mode || pipeline.video_model}</span>
         <span className="text-[10px] text-text-muted">{audioPlanLabel(clip)}</span>
@@ -421,6 +558,12 @@ function QueueShotCard({ pipeline, clip }: { pipeline: SavedPipelineState; clip:
             />
           ) : (
             <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-text-secondary">{shotPrompt(clip) || 'No prompt yet'}</p>
+          )}
+          {proposal && proposal !== shotPrompt(clip) && (
+            <div className="rounded border border-emerald-500/30 bg-emerald-500/10 p-2">
+              <div className="mb-1 text-[9px] uppercase tracking-wider text-emerald-200">Propuesta</div>
+              <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-emerald-100">{proposal}</p>
+            </div>
           )}
           {(subjects.length > 0 || beats.length > 0 || clip.h3_references) && (
             <div className="rounded border border-cyan-500/20 bg-cyan-500/5 p-2 text-[10px] text-text-secondary">

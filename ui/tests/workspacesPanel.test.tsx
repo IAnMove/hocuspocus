@@ -130,6 +130,9 @@ test('Workspaces processing lists planned shots, models and a video placeholder'
     assert.ok(screen.getByText('Video placeholder'))
     assert.ok(screen.getByRole('button', { name: /Start \/ resume videos/ }))
     assert.ok(screen.getByRole('button', { name: /Regenerar vídeo completo/ }))
+    assert.ok(screen.getByRole('button', { name: 'Select all' }))
+    assert.ok(screen.getByRole('button', { name: /Proponer en seleccionados/ }))
+    assert.ok(screen.getByPlaceholderText(/quita todos los MC/))
     assert.ok(screen.getByText(/Queue from planned prompts/))
   } finally {
     cleanup()

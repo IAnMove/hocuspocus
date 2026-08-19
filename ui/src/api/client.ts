@@ -3985,6 +3985,30 @@ export async function cancelRigJob(jobId: string): Promise<RigJob> {
 
 // --- LLM Service ---
 
+export async function generateLlmText(params: {
+  prompt: string
+  system_prompt?: string
+  max_new_tokens?: number
+  temperature?: number
+}): Promise<string> {
+  const res = await fetch(`${BASE}/api/v1/llm/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt: params.prompt,
+      system_prompt: params.system_prompt || '',
+      max_new_tokens: params.max_new_tokens ?? 1536,
+      temperature: params.temperature ?? 0.3,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'LLM generate failed' }))
+    throw new Error(err.detail || err.error || 'LLM generate failed')
+  }
+  const body = await res.json()
+  return String(body.text || '')
+}
+
 export async function fetchLlmStatus(): Promise<import('../types').LlmStatus> {
   const res = await fetch(`${BASE}/api/v1/llm/status`)
   if (!res.ok) throw new Error('Failed to fetch LLM status')
