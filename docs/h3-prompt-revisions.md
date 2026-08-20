@@ -43,3 +43,26 @@ use ambience and sound effects only; clear, audible stereo mix.
 ```
 
 Previous empty soundscape fallback: `Natural scene-appropriate stereo ambience`.
+
+## 2026-08-20 — Pencil loads one clip, not the sequence
+
+**Why:** Load settings on a single H3 clip reconstructed `multi_prompts_gen_type=3`
+into every newline as a Studio clip. The sidebar became unusable and the
+next generate glued the old monster prompt to the new one.
+
+**New behaviour**
+
+- Pencil / “edit this video” on a normal clip → one prompt, one image, one duration.
+- Only `*_multiclip.mp4` still opens the full sequence.
+- Structured H3 prompts are never split on `\n`.
+- Multi-clip Studio shows one expanded shot; the rest are a Shot 1 / 2 / 3 list.
+
+**Revert**
+
+```
+git revert <this-commit>
+```
+
+Key files: `ui/src/features/studio/studioRestore.ts`,
+`ui/src/stores/useStore.ts`,
+`ui/src/components/Sidebar/MultiClipEditor.tsx`.

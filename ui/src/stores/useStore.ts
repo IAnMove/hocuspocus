@@ -12,6 +12,11 @@ import { mapDirectorClipImages } from '../lib/directorClipImages'
 import { llmActivityPreview } from '../lib/llmActivityPreview'
 import { createDirectorSlice } from './directorSlice'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
+import {
+  extractSingleClipStudioParams,
+  isJoinedSequenceOutput,
+  splitStudioClipPrompts,
+} from '../features/studio/studioRestore'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -1576,11 +1581,13 @@ interface AppState {
   // Multi-clip state
   clips: MultiClip[]
   singlePromptMode: boolean
+  studioFocusedClipIndex: number
   setClipPrompt: (index: number, prompt: string) => void
   setClipStartImage: (index: number, file: File | null) => void
   addClipKeyframe: (index: number, file: File) => void
   removeClipKeyframe: (index: number, keyframeIndex: number) => void
   setSinglePromptMode: (v: boolean) => void
+  setStudioFocusedClipIndex: (index: number) => void
   syncClipCount: () => void
 
   // Generation state (queue)
@@ -2045,6 +2052,7 @@ interface VideoSubModeStash {
   slidingWindowOverlap: number
   clips: MultiClip[]
   singlePromptMode: boolean
+  studioFocusedClipIndex: number
 }
 
 const captureVideoSubModeStash = (s: AppState): VideoSubModeStash => ({
@@ -2064,6 +2072,7 @@ const captureVideoSubModeStash = (s: AppState): VideoSubModeStash => ({
   slidingWindowOverlap: s.slidingWindowOverlap,
   clips: s.clips,
   singlePromptMode: s.singlePromptMode,
+  studioFocusedClipIndex: s.studioFocusedClipIndex,
 })
 
 // The "input spec" — everything the Inputs panel + prompt box write into
@@ -2913,6 +2922,7 @@ export const useStore = create<AppState>((set, get) => ({
             slidingWindowOverlap: saved.slidingWindowOverlap,
             clips: saved.clips,
             singlePromptMode: saved.singlePromptMode,
+            studioFocusedClipIndex: saved.studioFocusedClipIndex ?? 0,
           })
         } else {
           set(s => ({
@@ -2939,7 +2949,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (value === 2) {
         get().syncClipCount()
       } else {
-        set({ clips: [], singlePromptMode: false })
+        set({ clips: [], singlePromptMode: false, studioFocusedClipIndex: 0 })
       }
     }
     // Snapshot the changed param into the current mode's IN-MEMORY
@@ -4385,6 +4395,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Multi-clip state
   clips: [],
   singlePromptMode: false,
+  studioFocusedClipIndex: 0,
   setClipPrompt: (index, prompt) => {
     const clips = [...get().clips]
     if (clips[index]) {
@@ -4418,6 +4429,9 @@ export const useStore = create<AppState>((set, get) => ({
     set({ clips })
   },
   setSinglePromptMode: (v) => set({ singlePromptMode: v }),
+  setStudioFocusedClipIndex: (index) => set({
+    studioFocusedClipIndex: Number.isFinite(index) ? Math.floor(index) : 0,
+  }),
   syncClipCount: () => {
     const { params, durationSeconds, slidingWindowSeconds, slidingWindowOverlap, modelOptions } = get()
     if (params.image_mode !== 2) return
@@ -9740,33 +9754,15 @@ export const useStore = create<AppState>((set, get) => ({
     ) ? p.h3_window_plan as unknown as H3WindowPlan : null
 
     // Detect multi-clip output and reconstruct clips
-    if (p.multi_prompts_gen_type === 3 && Array.isArray(p.image_start)) {
-      // Director Mode joins per-clip prompts with `\n---CLIP_BOUNDARY---\n`
-      // (see app/launch.py:7279). Studio Mode multi-shot joins with plain
-      // `\n` (single-line prompts only). Split on the boundary token first
-      // so Director prompts that contain their own newlines survive; fall
-      // back to plain newline split for legacy Studio multi-clip sidecars
-      // that don't carry the boundary marker.
-      //
-      // Before this fix: every internal `\n` in a Director clip prompt
-      // became a clip break, doubling+ the clip count and leaving half of
-      // them with the literal string `---CLIP_BOUNDARY---` as their prompt.
-      // The visible symptom was "some prompts populate but others don't"
-      // and start-image indices going to the wrong clips.
-      const promptText = (p.prompt as string) || ''
-      const CLIP_BOUNDARY = '\n---CLIP_BOUNDARY---\n'
-      const promptLines = promptText.includes(CLIP_BOUNDARY)
-        ? promptText.split(CLIP_BOUNDARY).map(s => s.trim()).filter(Boolean)
-        : promptText.split('\n').map(s => s.trim()).filter(Boolean)
+    const selectedName = get().filteredOutputs()[get().selectedOutput]?.name || ''
+    const loadFullSequence = isJoinedSequenceOutput(selectedName)
+    if (p.multi_prompts_gen_type === 3 && Array.isArray(p.image_start) && loadFullSequence) {
+      // Director Mode joins per-clip prompts with `\n---CLIP_BOUNDARY---\n`.
+      // Structured H3 prompts contain their own newlines, so never split those
+      // on `\n` or Studio reconstructs dozens of fake clips.
+      const promptLines = splitStudioClipPrompts((p.prompt as string) || '')
       const imagePaths = p.image_start as string[]
-      // Per-clip durations (Director Mode populates this; Studio mode may not).
-      // Saved by app/launch.py as part of raw_params before per-clip split;
-      // survives onto the concat multiclip sidecar (see real sidecar example
-      // in app/outputs/Testing04/...multiclip.meta.json line 13-26).
       const perClipFrames = Array.isArray(p.per_clip_frames) ? (p.per_clip_frames as number[]) : []
-      // Per-clip keyframe images (Director Mode KFI feature). Array of arrays
-      // — each inner array holds the keyframe paths for that clip. Studio
-      // Mode multi-shot generations don't use this field today.
       const perClipKeyframes = Array.isArray(p.per_clip_keyframes) ? (p.per_clip_keyframes as string[][]) : []
       const clipCount = Math.max(promptLines.length, imagePaths.length, perClipFrames.length)
       const clips: MultiClip[] = []
@@ -9783,17 +9779,13 @@ export const useStore = create<AppState>((set, get) => ({
             .map(path => ({ file: null, path })),
         })
       }
-      set({ clips, singlePromptMode: false })
+      set({ clips, singlePromptMode: false, studioFocusedClipIndex: 0 })
       newParams.image_mode = 2
       newParams.multi_prompts_gen_type = 3
 
-      // Fetch clip images from their real storage location. User-provided
-      // images live in uploads, while Director comic frames live in outputs.
-      // Prefer the original sidecar path because it retains that distinction;
-      // fetchStoredAsset falls back for old basename-only sidecars.
       const uploadNames = Array.isArray(uploadFilenames?.image_start)
         ? uploadFilenames.image_start as string[]
-        : imagePaths.map(p => (p || '').replace(/\\/g, '/').split('/').pop() || '')
+        : imagePaths.map(path => (path || '').replace(/\\/g, '/').split('/').pop() || '')
       for (let i = 0; i < clipCount; i++) {
         const fname = uploadNames[i]
         if (fname) {
@@ -9810,11 +9802,24 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
     } else {
-      // Set or clear attachment paths from sidecar
-      newParams.image_start = p.image_start ? (p.image_start as string) : ''
-      set({ clips: [], singlePromptMode: false })
+      const extracted = (
+        p.multi_prompts_gen_type === 3 || Array.isArray(p.image_start)
+      ) ? extractSingleClipStudioParams(p) : null
+      if (extracted) {
+        newParams.prompt = extracted.prompt
+        newParams.image_start = extracted.imageStart
+        newParams.image_end = extracted.imageEnd
+        if (extracted.videoLength) newParams.video_length = extracted.videoLength
+        newParams.image_prompt_type = extracted.imagePromptType
+      } else {
+        newParams.image_start = p.image_start ? (p.image_start as string) : ''
+      }
+      newParams.multi_prompts_gen_type = 2
+      set({ clips: [], singlePromptMode: false, studioFocusedClipIndex: 0 })
     }
-    newParams.image_end = p.image_end ? (p.image_end as string) : ''
+    if (newParams.image_end === undefined) {
+      newParams.image_end = p.image_end ? (p.image_end as string) : ''
+    }
 
     // Rebuild lora weights from multipliers string
     const loraWeights: Record<string, number[]> = {}
@@ -9933,12 +9938,14 @@ export const useStore = create<AppState>((set, get) => ({
     // from the full path in params for sidecars missing upload_filenames.
     const startFile = (typeof uploadFilenames?.image_start === 'string'
       ? uploadFilenames.image_start
-      : null) || _deriveBase(p.image_start)
+      : null) || _deriveBase(newParams.image_start)
     const endFile = (typeof uploadFilenames?.image_end === 'string'
       ? uploadFilenames.image_end
-      : null) || _deriveBase(p.image_end)
+      : null) || _deriveBase(newParams.image_end)
     if (hadStartImage && startFile) {
-      api.fetchStoredAsset(typeof p.image_start === 'string' ? p.image_start : startFile)
+      api.fetchStoredAsset(typeof newParams.image_start === 'string' && newParams.image_start
+        ? newParams.image_start
+        : startFile)
         .then(r => r.ok ? r.blob() : null)
         .then(blob => {
           if (!blob) return
@@ -9948,7 +9955,9 @@ export const useStore = create<AppState>((set, get) => ({
         .catch(() => {})
     }
     if (hadEndImage && endFile) {
-      api.fetchStoredAsset(typeof p.image_end === 'string' ? p.image_end : endFile)
+      api.fetchStoredAsset(typeof newParams.image_end === 'string' && newParams.image_end
+        ? newParams.image_end
+        : endFile)
         .then(r => r.ok ? r.blob() : null)
         .then(blob => {
           if (!blob) return
