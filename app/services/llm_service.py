@@ -684,6 +684,24 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
     return local_models + remote_models
 
 
+MINIMAX_CHAT_MODELS = frozenset({
+    "MiniMax-M3",
+    "MiniMax-M2.7",
+    "MiniMax-M2.7-highspeed",
+})
+
+
+def normalize_minimax_chat_routing(
+    model_id: str,
+    provider: str,
+    remote_url: str = "",
+) -> tuple[str, str]:
+    """MiniMax chat ids are hosted API models, never local GGUF files."""
+    if str(model_id or "").strip() in MINIMAX_CHAT_MODELS:
+        return "minimax", str(remote_url or "").strip() or "https://api.minimax.io"
+    return str(provider or "local"), str(remote_url or "")
+
+
 def _find_free_port() -> int:
     import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -1294,12 +1312,26 @@ def _scheduled_llm_load(function):
     def wrapped(*args, **kwargs):
         model_id = kwargs.get("model_id", args[0] if len(args) > 0 else "")
         device = kwargs.get("device", args[1] if len(args) > 1 else "cpu")
+        force_reload = kwargs.get("force_reload", args[2] if len(args) > 2 else False)
         provider = kwargs.get("provider", args[3] if len(args) > 3 else "local")
         remote_url = kwargs.get("remote_url", args[4] if len(args) > 4 else "")
+        api_key = kwargs.get("api_key", args[5] if len(args) > 5 else "")
+        provider, remote_url = normalize_minimax_chat_routing(
+            str(model_id or ""),
+            str(provider or "local"),
+            str(remote_url or ""),
+        )
         if str(provider or "local").lower() in {
             "remote", "openai", "anthropic", "minimax",
         }:
-            return function(*args, **kwargs)
+            return function(
+                model_id=model_id,
+                device=device,
+                force_reload=force_reload,
+                provider=provider,
+                remote_url=remote_url,
+                api_key=api_key,
+            )
         from . import resource_scheduler
         lane = resource_scheduler.llm_lane(
             str(provider or "local"),
@@ -1348,6 +1380,14 @@ def load_model(
     """
     global _process, _model_id, _device, _server_port, _vision_available
     global _provider, _remote_url, _api_key
+
+    provider, remote_url = normalize_minimax_chat_routing(
+        str(model_id or ""),
+        str(provider or "local"),
+        str(remote_url or ""),
+    )
+    if provider == "minimax" and not str(remote_url or "").strip():
+        remote_url = "https://api.minimax.io"
 
     # Handle remote/API providers — no subprocess needed
     if provider in ("remote", "openai", "anthropic", "minimax"):

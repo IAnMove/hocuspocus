@@ -8889,12 +8889,20 @@ def _ensure_llm_loaded(params: dict):
     desired_model = params.get("llm_model_id") or services_cfg.get("llm_model_id", "Abhiray/gemma-4-E4B-it-heretic-GGUF")
     desired_device = params.get("llm_device") or services_cfg.get("llm_device", "cpu")
     desired_provider = params.get("llm_provider") or services_cfg.get("llm_provider", "local")
-    desired_remote_url = services_cfg.get("llm_remote_url", "")
+    desired_remote_url = params.get("llm_remote_url") or services_cfg.get("llm_remote_url", "")
+    desired_provider, desired_remote_url = llm_service.normalize_minimax_chat_routing(
+        str(desired_model or ""),
+        str(desired_provider or "local"),
+        str(desired_remote_url or ""),
+    )
     desired_api_key = ""
     if desired_provider == "openai":
         desired_api_key = services_cfg.get("openai_api_key", "")
     elif desired_provider == "anthropic":
         desired_api_key = services_cfg.get("anthropic_api_key", "")
+    elif desired_provider == "minimax":
+        desired_api_key = services_cfg.get("minimax_api_key", "")
+        desired_remote_url = desired_remote_url or "https://api.minimax.io"
 
     # Free GPU memory before running a local CUDA LLM. Director planning
     # fires right after image edits / audio analysis: memory profiles keep
