@@ -1,0 +1,11 @@
+{
+  "name": "Loreframe Lab (CPU dev)",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "ui-dev",
+      "command": "bash -lc 'cd ui && npm run dev -- --host'"
+    }
+  ],
+  "ports": [3000]
+}
