@@ -47,6 +47,7 @@ import type {
   StoryTrailerFormat, StoryTrailerIntensity, StoryTrailerNarration, StoryTrailerSpoiler, StoryWritingProvider,
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
+import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, normalizeStoryMusicModel, songWriteTarget } from './musicModel'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
@@ -1172,14 +1173,12 @@ export function StoryLabPanel() {
           : project.provider.writingBaseUrl
     const imageProvider: StoryImageProvider = productionProfile.image.provider === 'minimax'
       ? 'minimax' : 'maestro'
-    const musicModel = productionProfile.music.model === 'music-2.6' ? 'music-2.6' : 'music-3.0'
     if (
       project.provider.writingProvider === writingProvider
       && project.provider.writingModel === productionProfile.text.model
       && project.provider.writingBaseUrl === writingBaseUrl
       && project.provider.imageProvider === imageProvider
       && project.provider.imageModel === productionProfile.image.model
-      && project.music.model === musicModel
     ) return
     patch({
       provider: {
@@ -1190,16 +1189,13 @@ export function StoryLabPanel() {
         imageProvider,
         imageModel: productionProfile.image.model,
       },
-      music: { ...project.music, model: musicModel },
     })
   }, [
     patch,
     productionProfile.image.model,
     productionProfile.image.provider,
-    productionProfile.music.model,
     productionProfile.text.model,
     productionProfile.text.provider,
-    project.music,
     project.provider,
   ])
   const beginStoryActivity = (phase: string, message: string, total = 0) => {
@@ -3112,7 +3108,7 @@ export function StoryLabPanel() {
         || storySongBrief(project, project.music.targetDurationSeconds)
       const written = await api.writeSong({
         ...musicWritingProviderParams,
-        target: 'minimax',
+        target: project.music.mode === 'cover' ? 'minimax' : songWriteTarget(project.music.model),
         model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
         description: brief,
         style_direction: project.music.style || `${project.genre}, ${project.tone}`,
@@ -3157,7 +3153,7 @@ export function StoryLabPanel() {
         || storySongBrief(project, project.music.targetDurationSeconds)
       const written = await api.writeSong({
         ...musicWritingProviderParams,
-        target: 'minimax',
+        target: project.music.mode === 'cover' ? 'minimax' : songWriteTarget(project.music.model),
         model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
         description: 'Write completely original replacement lyrics for this Story. Keep only the broad section order, approximate meter and singability of the authorized source; do not copy distinctive wording, names or lines.',
         style_direction: project.music.style || storyBrief,
@@ -3243,7 +3239,7 @@ export function StoryLabPanel() {
         activity.update('Story Lab is writing the missing song prompt and lyrics…', 'writing_song', 0, 1)
         const written = await api.writeSong({
           ...musicWritingProviderParams,
-          target: 'minimax',
+          target: project.music.mode === 'cover' ? 'minimax' : songWriteTarget(project.music.model),
           model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
           description: brief,
           style_direction: style || `${project.genre}, ${project.tone}`,
@@ -3425,7 +3421,7 @@ export function StoryLabPanel() {
       writingProvider: latest.provider.writingProvider,
       writingModel: latest.provider.writingModel,
       writingBaseUrl: latest.provider.writingBaseUrl,
-      target: 'minimax',
+      target: latest.music.mode === 'cover' ? 'minimax' : songWriteTarget(latest.music.model),
       model: latest.music.model,
       instrumental: cue.instrumental,
       description: [
@@ -3627,7 +3623,7 @@ export function StoryLabPanel() {
     try {
       const written = await api.writeSong({
         ...musicWritingProviderParams,
-        target: 'minimax',
+        target: project.music.mode === 'cover' ? 'minimax' : songWriteTarget(project.music.model),
         model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
         description: 'Create a complete new version of this Story song. Recompose the arrangement and rewrite every lyric line from scratch; preserve only its Story meaning and emotional progression.',
         style_direction: requestedStyle || project.music.style || `${project.genre}, ${project.tone}`,
@@ -3668,7 +3664,7 @@ export function StoryLabPanel() {
         : cue.kind === 'world' ? 'the Story world' : 'the complete Story'
       const written = await api.writeSong({
         ...musicWritingProviderParams,
-        target: 'minimax',
+        target: project.music.mode === 'cover' ? 'minimax' : songWriteTarget(project.music.model),
         model: project.music.model,
         instrumental: cue.instrumental,
         description: `Create an entirely original ${cue.instrumental ? 'instrumental music cue' : 'song'} for ${target}. Purpose in this Story: ${cue.purpose}.`,
@@ -3811,8 +3807,8 @@ export function StoryLabPanel() {
     queued = false,
     onJobSubmitted?: (jobId: string) => void,
   ): Promise<boolean> => {
-    if (!servicesConfig?.minimax_api_key_set) {
-      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first.' })
+    if (!isAceStepMusicModel(useStoryStore.getState().projects[project.id]?.music.model) && !servicesConfig?.minimax_api_key_set) {
+      setNotice({ kind: 'error', text: 'Add the MiniMax API key in Settings → Services first, or switch the song model to ACE-Step.' })
       return false
     }
     const sourceProjectId = project.id
@@ -3827,15 +3823,62 @@ export function StoryLabPanel() {
     if (!cue.instrumental && !MINIMAX_LYRIC_SECTION.test(cue.lyrics)) {
       setNotice({
         kind: 'error',
-        text: `“${cue.title}” needs [Verse], [Chorus] or another supported section tag before MiniMax generation. Adapt it with the LLM or edit the lyrics first.`,
+        text: `“${cue.title}” needs [Verse], [Chorus] or another supported section tag before generation. Adapt it with the LLM or edit the lyrics first.`,
       })
       return false
     }
+    const usingAceStep = isAceStepMusicModel(current.music.model)
     const activity = queued
       ? null
-      : beginStoryActivity('generating_music', `MiniMax Music is generating “${cue.title}”…`, 1)
+      : beginStoryActivity('generating_music', `${usingAceStep ? 'ACE-Step' : 'MiniMax Music'} is generating “${cue.title}”…`, 1)
     setMusicCueBusy(`audio:${cueId}`)
     try {
+      if (usingAceStep) {
+        const prompt = cue.style.trim()
+        const rendered = await api.generateMusic({
+          style: prompt,
+          lyrics: cue.instrumental ? '[Instrumental]' : cue.lyrics,
+          instrumental: cue.instrumental,
+          duration_seconds: current.music.targetDurationSeconds,
+          model_type: ACE_STEP_MUSIC_MODEL,
+          workspace: activeWorkspace,
+        })
+        const createdAt = new Date().toISOString()
+        const language = cue.lyricsLanguage || current.language
+        const firstVersion = nextMusicCandidateVersion(cue.candidates, language, current.language)
+        const candidates = [{
+          id: storyId('song'),
+          displayName: `${cue.title} · ${language} · v${firstVersion}`,
+          title: cue.title,
+          language,
+          version: firstVersion,
+          name: rendered.filename,
+          source: rendered.audio_path,
+          prompt,
+          lyrics: cue.lyrics,
+          provider: 'local' as const,
+          model: ACE_STEP_MUSIC_MODEL,
+          durationSeconds: current.music.targetDurationSeconds,
+          createdAt,
+        }]
+        updateProjectById(sourceProjectId, latest => {
+          const target = latest.music.cues.find(item => item.id === cueId)
+          if (!target) return latest
+          return {
+            ...latest,
+            music: {
+              ...latest.music,
+              cues: latest.music.cues.map(item => item.id === cueId ? {
+                ...item,
+                candidates: [...item.candidates, ...candidates],
+                selectedCandidateId: candidates[0]?.id || item.selectedCandidateId,
+              } : item),
+            },
+          }
+        })
+        setNotice({ kind: 'ok', text: `ACE-Step generated “${cue.title}”.` })
+        return true
+      }
       const prompt = cue.style.trim().slice(0, 300)
       const result = await api.generateStoryMusicCandidates({
         prompt,
@@ -5577,11 +5620,12 @@ export function StoryLabPanel() {
                 )}
 
                 <div className={`${panel} mb-4 grid md:grid-cols-[1fr_1fr_2fr] gap-3 items-end`}>
-                  <label className="block text-[10px] text-text-muted">MiniMax model for proposed tracks
+                  <label className="block text-[10px] text-text-muted">Song model
                     <select className={`${input} mt-1`} value={project.music.model}
-                      onChange={event => patch({ music: { ...project.music, model: event.target.value === 'music-2.6' ? 'music-2.6' : 'music-3.0' } })}>
-                      <option value="music-3.0">Music 3.0 · recommended</option>
-                      <option value="music-2.6">Music 2.6 · compatibility</option>
+                      onChange={event => patch({ music: { ...project.music, model: normalizeStoryMusicModel(event.target.value) } })}>
+                      <option value={ACE_STEP_MUSIC_MODEL}>ACE-Step 1.5 XL · default</option>
+                      <option value="music-3.0">MiniMax Music 3.0 · unavailable to new accounts</option>
+                      <option value="music-2.6">MiniMax Music 2.6</option>
                     </select>
                   </label>
                   <div className="text-[10px] text-text-muted">
@@ -6641,15 +6685,16 @@ export function StoryLabPanel() {
                           <option value="cover">Cover from reference</option>
                         </select>
                       </label>
-                      <label className="block text-[10px] text-text-muted">MiniMax model
+                      <label className="block text-[10px] text-text-muted">Song model
                         <select className={`${input} mt-1`} value={project.music.mode === 'cover' ? 'music-cover' : project.music.model}
                           disabled={project.music.mode === 'cover'}
-                          onChange={event => patch({ music: { ...project.music, model: event.target.value === 'music-2.6' ? 'music-2.6' : 'music-3.0' } })}>
+                          onChange={event => patch({ music: { ...project.music, model: normalizeStoryMusicModel(event.target.value) } })}>
                           {project.music.mode === 'cover'
-                            ? <option value="music-cover">Music Cover</option>
+                            ? <option value="music-cover">MiniMax Music Cover</option>
                             : <>
-                              <option value="music-3.0">Music 3.0 · recommended</option>
-                              <option value="music-2.6">Music 2.6 · compatibility</option>
+                              <option value={ACE_STEP_MUSIC_MODEL}>ACE-Step 1.5 XL · default</option>
+                              <option value="music-3.0">MiniMax Music 3.0 · unavailable to new accounts</option>
+                              <option value="music-2.6">MiniMax Music 2.6</option>
                             </>}
                         </select>
                       </label>
@@ -6715,7 +6760,7 @@ export function StoryLabPanel() {
                       disabled={productionBusy === 'music' || !servicesConfig?.minimax_api_key_set}
                       onClick={() => void generateMinimaxSongs()}>
                       {productionBusy === 'music' ? <Loader2 size={13} className="animate-spin" /> : <Music size={13} />}
-                      Generate {project.music.candidateCount} {project.music.mode === 'cover' ? 'covers' : 'songs'} with MiniMax {project.music.mode === 'cover' ? 'Music Cover' : project.music.model === 'music-3.0' ? 'Music 3.0' : 'Music 2.6'}
+                      Generate {project.music.candidateCount} {project.music.mode === 'cover' ? 'covers' : 'songs'} with {project.music.mode === 'cover' ? 'MiniMax Music Cover' : isAceStepMusicModel(project.music.model) ? 'ACE-Step' : project.music.model === 'music-2.6' ? 'MiniMax Music 2.6' : 'MiniMax Music 3.0'}
                     </button>
                     {!servicesConfig?.minimax_api_key_set && <p className="text-[9px] text-amber-300">Configure MiniMax in Settings → Services to generate candidates.</p>}
                     <p className="text-[9px] text-text-muted">Optional local generation is also supported through Director’s internal ACE-Step engine; it can be selected instead of MiniMax without changing the video workflow.</p>

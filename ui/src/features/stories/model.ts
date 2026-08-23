@@ -6,6 +6,7 @@ import {
   DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
   LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT,
 } from '../../types/index.ts'
+import { normalizeStoryMusicModel } from './musicModel'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
 
@@ -378,7 +379,7 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     visualJobs: {},
     music: {
       mode: 'original',
-      model: 'music-3.0',
+      model: 'ace_step_v1_5_xl_sft_lm_4b',
       brief: '',
       style: '',
       sourceLyrics: '',
@@ -589,7 +590,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       : {},
     music: {
       mode: project.music?.mode === 'cover' ? 'cover' : 'original',
-      model: project.music?.model === 'music-2.6' ? 'music-2.6' : 'music-3.0',
+      model: normalizeStoryMusicModel(project.music?.model),
       brief: text(project.music?.brief),
       style: text(project.music?.style),
       sourceLyrics: text(project.music?.sourceLyrics),
