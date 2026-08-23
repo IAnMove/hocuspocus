@@ -237,10 +237,12 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
   const [activeClip, setActiveClip] = useState<string | null>(null)
 
   // Keep the model-viewer runtime out of Maestro's main Image/Video/Audio
-  // bundle. It is loaded only when a 3D gallery item is actually rendered.
+  // bundle, and only mount WebGL for the active card. The virtualizer can
+  // keep ~10 3D items in the window; each model-viewer is a full GPU
+  // context, which freezes the desktop when Hunyuan is also running.
   useEffect(() => {
-    if (canPreviewModel3d) void import('@google/model-viewer')
-  }, [canPreviewModel3d])
+    if (canPreviewModel3d && isActive) void import('@google/model-viewer')
+  }, [canPreviewModel3d, isActive])
 
   const resolution = isAudio ? '' : ((params?.resolution as string) || '')
   const seed = params?.seed as number | undefined
@@ -636,12 +638,14 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
             : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
         ) : isModel3d ? (
           <div className="w-full h-full relative">
-            {canPreviewModel3d ? (
+            {canPreviewModel3d && isActive ? (
               <model-viewer key={file.url} src={getFileUrl(file.name)} alt={file.name} camera-controls auto-rotate={isRigged ? undefined : true} autoplay={isRigged ? true : undefined} animation-name={isRigged && activeClip ? activeClip : undefined} shadow-intensity="1" exposure="1" loading="lazy" className="w-full h-full" />
+            ) : canPreviewModel3d && file.thumbnail_url ? (
+              <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-contain" loading="lazy" />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-center px-4">
                 <div className="w-16 h-16 rounded-2xl bg-bg-active flex items-center justify-center"><Box size={26} className="text-accent-blue" /></div>
-                <div><p className="text-sm text-text-secondary">3D model asset</p><p className="text-[11px] text-text-muted mt-1">Interactive preview is available for GLB exports.</p></div>
+                <div><p className="text-sm text-text-secondary">3D model asset</p><p className="text-[11px] text-text-muted mt-1">{canPreviewModel3d ? 'Select this card to open the interactive GLB preview.' : 'Interactive preview is available for GLB exports.'}</p></div>
               </div>
             )}
             <a

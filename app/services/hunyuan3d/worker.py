@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -28,9 +29,95 @@ sys.path.insert(0, str(V21_ROOT))
 sys.path.insert(0, str(V21_ROOT / "hy3dshape"))
 sys.path.insert(0, str(V21_ROOT / "hy3dpaint"))
 
+# Texturing or exporting a multi-million-face mesh can pin CPU/RAM and lock
+# the GPU driver long enough that the host looks frozen. Cap before those
+# stages so a high octree setting cannot take the machine down.
+_MAX_TEXTURE_FACES = 200_000
+_MAX_EXPORT_FACES = 400_000
+
 
 def event(phase: str, progress: float, message: str) -> None:
     print("MAESTRO_EVENT " + json.dumps({"phase": phase, "progress": progress, "message": message}), flush=True)
+
+
+def release_cuda() -> None:
+    """Drop orphaned GPU tensors between Hunyuan stages.
+
+    rembg / text-to-image / shape / paint each load a large network. If the
+    previous one is still resident, the next load swaps into system RAM and
+    the machine appears hung.
+    """
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            if hasattr(torch.cuda, "ipc_collect"):
+                torch.cuda.ipc_collect()
+    except Exception:
+        pass
+
+
+class Heartbeat:
+    """Emit progress while a CUDA call prints no newlines.
+
+    Hunyuan's tqdm uses ``\\r``, so the parent job watchdog sees silence and
+    may kill the worker mid-kernel — that is a common way to wedge the GPU
+    driver. A newline heartbeat keeps the job alive and the UI moving.
+    """
+
+    def __init__(self, phase: str, progress: float, message: str, interval: float = 20.0):
+        self.phase = phase
+        self.progress = progress
+        self.message = message
+        self.interval = interval
+        self._stop = threading.Event()
+        self._started = 0.0
+        self._thread = threading.Thread(target=self._run, name="hy3d-heartbeat", daemon=True)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval):
+            elapsed = int(time.time() - self._started)
+            event(self.phase, self.progress, f"{self.message} ({elapsed}s elapsed)")
+
+    def __enter__(self) -> Heartbeat:
+        self._started = time.time()
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=2)
+
+
+def mesh_face_count(mesh: Any) -> int:
+    faces = getattr(mesh, "faces", None)
+    try:
+        return int(len(faces))
+    except TypeError:
+        return 0
+
+
+def reduce_faces(mesh: Any, max_faces: int) -> Any:
+    event("simplify", 0.66, f"Reducing mesh to {max_faces} faces to avoid a GPU/RAM hang")
+    try:
+        from hy3dgen.shapegen import DegenerateFaceRemover, FaceReducer, FloaterRemover
+        mesh = FloaterRemover()(mesh)
+        mesh = DegenerateFaceRemover()(mesh)
+        return FaceReducer()(mesh, max_facenum=max_faces)
+    except Exception as exc:
+        print(f"Mesh simplification skipped: {exc}", flush=True)
+        return mesh
+
+
+def guard_mesh_complexity(mesh: Any, settings: dict[str, Any], *, for_texture: bool) -> Any:
+    hard_limit = _MAX_TEXTURE_FACES if for_texture else _MAX_EXPORT_FACES
+    if settings.get("reduce_face"):
+        hard_limit = min(hard_limit, int(settings.get("target_face_num") or hard_limit))
+    count = mesh_face_count(mesh)
+    if count > hard_limit:
+        return reduce_faces(mesh, hard_limit)
+    return mesh
 
 
 def supported_call(callable_obj, **kwargs):
@@ -74,16 +161,12 @@ def make_text_image(prompt: str, output_dir: Path, device: str) -> tuple[Any, st
             event("text_to_image", 0.08, f"Hugging Face metadata unavailable; retrying in {delay}s ({attempt}/3)")
             time.sleep(delay)
     assert pipeline is not None
-    image = pipeline(prompt)
+    with Heartbeat("text_to_image", 0.1, "Generating the text-to-image condition"):
+        image = pipeline(prompt)
     path = output_dir / "text_condition.png"
     image.save(path)
     del pipeline
-    gc.collect()
-    try:
-        import torch
-        torch.cuda.empty_cache()
-    except Exception:
-        pass
+    release_cuda()
     return image.convert("RGBA"), str(path)
 
 
@@ -105,7 +188,11 @@ def prepare_images(request: dict[str, Any], engine: str, temp_dir: Path):
         else:
             from hy3dgen.rembg import BackgroundRemover
         remover = BackgroundRemover()
-        images = {name: remover(image) for name, image in images.items()}
+        try:
+            images = {name: remover(image) for name, image in images.items()}
+        finally:
+            del remover
+            release_cuda()
 
     for name, image in images.items():
         normalized_path = temp_dir / f"{name}.png"
@@ -119,15 +206,16 @@ def load_v2_pipeline(model: dict[str, Any], settings: dict[str, Any]):
     from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
 
     event("loading_model", 0.24, f"Loading {model['label']}")
-    try:
-        pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-            model["repo"],
-            subfolder=model["subfolder"],
-            use_safetensors=True,
-            device="cuda",
-        )
-    except TypeError:
-        pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"], subfolder=model["subfolder"])
+    with Heartbeat("loading_model", 0.24, f"Loading {model['label']}"):
+        try:
+            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+                model["repo"],
+                subfolder=model["subfolder"],
+                use_safetensors=True,
+                device="cuda",
+            )
+        except TypeError:
+            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"], subfolder=model["subfolder"])
     configure_pipeline(pipeline, settings)
     return pipeline
 
@@ -141,7 +229,11 @@ def load_v21_pipeline(model: dict[str, Any], settings: dict[str, Any]):
     from hy3dshape import Hunyuan3DDiTFlowMatchingPipeline
 
     event("loading_model", 0.24, f"Loading {model['label']}")
-    pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"])
+    with Heartbeat("loading_model", 0.24, f"Loading {model['label']}"):
+        try:
+            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"], device="cuda")
+        except TypeError:
+            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"])
     configure_pipeline(pipeline, settings)
     return pipeline
 
@@ -197,27 +289,19 @@ def generate_mesh(request: dict[str, Any], images: dict[str, Any]):
     }
     event("shape", 0.38, "Generating 3D geometry")
     started = time.time()
-    result = supported_call(pipeline, **call_kwargs)
+    with Heartbeat("shape", 0.38, "Generating 3D geometry"):
+        result = supported_call(pipeline, **call_kwargs)
     mesh = result[0] if isinstance(result, (list, tuple)) else result
     print(f"Shape generation completed in {time.time() - started:.2f}s", flush=True)
     del pipeline
-    gc.collect()
-    torch.cuda.empty_cache()
+    release_cuda()
     return mesh
 
 
 def simplify_mesh(mesh, settings: dict[str, Any]):
     if not settings.get("reduce_face"):
         return mesh
-    event("simplify", 0.68, f"Reducing mesh to {settings['target_face_num']} faces")
-    try:
-        from hy3dgen.shapegen import FloaterRemover, DegenerateFaceRemover, FaceReducer
-        mesh = FloaterRemover()(mesh)
-        mesh = DegenerateFaceRemover()(mesh)
-        return FaceReducer()(mesh, max_facenum=settings["target_face_num"])
-    except Exception as exc:
-        print(f"Mesh simplification skipped: {exc}", flush=True)
-        return mesh
+    return reduce_faces(mesh, settings["target_face_num"])
 
 
 def load_retexture_mesh(source_path: str):
@@ -257,10 +341,13 @@ def texture_v2(mesh, image, settings: dict[str, Any]):
         print("Hunyuan Paint 2.0 CPU offload skipped to keep custom tensors on one device", flush=True)
     event("texture", 0.8, "Generating texture maps")
     try:
-        textured = paint(mesh, image=image)
+        with Heartbeat("texture", 0.8, "Generating texture maps"):
+            textured = paint(mesh, image=image)
     except TypeError:
-        textured = paint(mesh, image)
+        with Heartbeat("texture", 0.8, "Generating texture maps"):
+            textured = paint(mesh, image)
     del paint
+    release_cuda()
     return textured
 
 
@@ -279,12 +366,13 @@ def texture_v21(mesh, source_image_path: str, settings: dict[str, Any], temp_dir
     paint = Hunyuan3DPaintPipeline(config)
     obj_path = temp_dir / "pbr_textured.obj"
     event("texture", 0.8, "Generating PBR material maps")
-    textured_obj = paint(
-        mesh_path=str(initial_mesh),
-        image_path=source_image_path,
-        output_mesh_path=str(obj_path),
-        save_glb=False,
-    )
+    with Heartbeat("texture", 0.8, "Generating PBR material maps"):
+        textured_obj = paint(
+            mesh_path=str(initial_mesh),
+            image_path=source_image_path,
+            output_mesh_path=str(obj_path),
+            save_glb=False,
+        )
     textured_obj = Path(textured_obj or obj_path)
     glb_path = output_path if output_path.suffix.lower() == ".glb" else temp_dir / "pbr_textured.glb"
     textures = {
@@ -294,6 +382,7 @@ def texture_v21(mesh, source_image_path: str, settings: dict[str, Any], temp_dir
     }
     create_glb_with_pbr_materials(str(textured_obj), textures, str(glb_path))
     del paint
+    release_cuda()
     if output_path.suffix.lower() != ".glb":
         import trimesh
         converted = trimesh.load(glb_path, force="scene")
@@ -306,6 +395,13 @@ def main() -> None:
     parser.add_argument("--request", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
+
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    try:
+        import torch
+        torch.set_grad_enabled(False)
+    except Exception:
+        pass
 
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
     output_path = Path(args.output).resolve()
@@ -326,6 +422,7 @@ def main() -> None:
             mesh = simplify_mesh(mesh, settings)
 
         texture_mode = settings["texture_mode"]
+        mesh = guard_mesh_complexity(mesh, settings, for_texture=texture_mode != "none")
         if texture_mode == "pbr":
             texture_v21(mesh, source_image_path, settings, temp_dir, output_path)
         else:

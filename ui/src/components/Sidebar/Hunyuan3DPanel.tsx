@@ -17,6 +17,8 @@ type ViewName = 'front' | 'left' | 'right' | 'back'
 type UploadedView = { path: string; name: string; url: string }
 type RetextureSource = { path: string; name: string; thumbnail?: string | null }
 
+const ACTIVE_3D_JOB_STATUSES = new Set(['queued', 'waiting', 'waiting_resource', 'running', 'cancelling'])
+
 const viewLabels: Record<ViewName, string> = {
   front: 'Front',
   left: 'Left',
@@ -108,7 +110,7 @@ export function Hunyuan3DPanel() {
 
   const selectedModel = useMemo(() => capabilities?.models.find(model => model.id === modelId), [capabilities, modelId])
   const isMultiview = operation === 'generate' && !!selectedModel?.multiview
-  const isRunning = job?.status === 'queued' || job?.status === 'running'
+  const isRunning = !!job && ACTIVE_3D_JOB_STATUSES.has(job.status)
   const installed = !!capabilities?.runtime.installed
   const hasTextureReference = !!views.front || !!prompt.trim()
   const hasInput = operation === 'retexture'
@@ -205,7 +207,7 @@ export function Hunyuan3DPanel() {
   const activeJobStatus = job?.status
 
   useEffect(() => {
-    if (!activeJobId || (activeJobStatus !== 'queued' && activeJobStatus !== 'running')) return
+    if (!activeJobId || !ACTIVE_3D_JOB_STATUSES.has(activeJobStatus ?? '')) return
     let disposed = false
     let failures = 0
     const poll = async () => {
@@ -259,7 +261,7 @@ export function Hunyuan3DPanel() {
         num_inference_steps: steps,
         guidance_scale: guidance,
         octree_resolution: octree,
-        num_chunks: chunks,
+        num_chunks: Math.max(1000, Math.min(40000, chunks)),
         seed,
         output_format: outputFormat,
         texture_resolution: textureResolution,
@@ -388,7 +390,7 @@ export function Hunyuan3DPanel() {
                 <label className="text-[10px] text-text-muted">Octree resolution
                   <select value={octree} onChange={event => setOctree(Number(event.target.value))} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary">{[64, 128, 256, 384, 512].map(value => <option key={value} value={value}>{value}</option>)}</select>
                 </label>
-                <label className="text-[10px] text-text-muted">Processing chunks<input type="number" min={1000} max={500000} step={1000} value={chunks} onChange={event => setChunks(Number(event.target.value))} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary" /></label>
+                <label className="text-[10px] text-text-muted">Processing chunks<input type="number" min={1000} max={40000} step={1000} value={chunks} onChange={event => setChunks(Number(event.target.value))} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary" /></label>
                 <label className="text-[10px] text-text-muted">Seed<input type="number" min={0} value={seed} onChange={event => setSeed(Number(event.target.value))} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary" /></label>
                 <label className="text-[10px] text-text-muted">Surface algorithm<select value={mcAlgo} onChange={event => setMcAlgo(event.target.value)} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary"><option value="dmc">DMC</option><option value="mc">Marching Cubes</option></select></label>
                 {textureMode !== 'none' && <label className="text-[10px] text-text-muted">Texture resolution<select value={textureResolution} onChange={event => setTextureResolution(Number(event.target.value))} className="mt-1 w-full bg-bg-primary border border-border rounded px-2 py-1.5 text-[11px] text-text-primary"><option value={512}>512</option><option value={768}>768</option><option value={1024}>1024</option></select></label>}
@@ -398,10 +400,10 @@ export function Hunyuan3DPanel() {
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={cpuOffload} onChange={event => setCpuOffload(event.target.checked)} /> CPU offload</label>
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={flashvdm} onChange={event => setFlashvdm(event.target.checked)} /> FlashVDM</label>
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={removeBackground} onChange={event => setRemoveBackground(event.target.checked)} /> Remove background</label>
-                <label className="flex items-center gap-1.5"><input type="checkbox" checked={compile} onChange={event => setCompile(event.target.checked)} /> Torch compile</label>
+                <label className="flex items-center gap-1.5" title="First compile can pin RAM for a long time. Leave off unless you know you need it."><input type="checkbox" checked={compile} onChange={event => setCompile(event.target.checked)} /> Torch compile</label>
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={reduceFace} onChange={event => setReduceFace(event.target.checked)} /> Simplify mesh</label>
               </div>
-              <p className="text-[9px] text-text-muted">Higher octree/texture resolutions and PBR consume substantially more VRAM. CPU offload is recommended while other Loreframe Lab models are in use.</p>
+              <p className="text-[9px] text-text-muted">Higher octree/texture resolutions and PBR consume substantially more VRAM. Chunks above 16k at octree 512 can freeze the GPU. CPU offload is recommended while other Loreframe Lab models are in use.</p>
             </div>
           )}
 
