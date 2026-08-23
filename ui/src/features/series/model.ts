@@ -3,7 +3,7 @@ import type {
 } from './types'
 
 export const seriesId = (prefix: string): string =>
-  `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 
 const text = (value: unknown, fallback = ''): string => typeof value === 'string' ? value : fallback
 const objects = <T>(value: unknown): T[] => Array.isArray(value)
@@ -33,6 +33,11 @@ export function normalizeSeriesProject(value: unknown): SeriesProject | null {
     format: project.format === 'serial' || project.format === 'hybrid' ? project.format : 'episodic',
     defaultEpisodeDurationSeconds: Math.max(15, Number(project.defaultEpisodeDurationSeconds) || 75),
     language: text(project.language, 'Español'), genre: text(project.genre),
+    spokenLanguage: text(project.spokenLanguage, text(project.language, 'Español de España')),
+    protagonistConsistency: project.protagonistConsistency === true,
+    protagonistCharacterId: objects<SeriesCharacter>(project.characters)
+      .some(character => character.id === text(project.protagonistCharacterId))
+      ? text(project.protagonistCharacterId) : '',
     tone: text(project.tone, 'Cinematic'), audience: text(project.audience, 'General'),
     visualStyle: text(project.visualStyle), characterVisualStyle: text(project.characterVisualStyle),
     cameraLanguage: text(project.cameraLanguage), allowClipText: project.allowClipText === true,

@@ -73,7 +73,7 @@ class TestCancellableDownloads(unittest.TestCase):
             bar.close()
 
     def test_generation_worker_and_ui_are_wired_to_cooperative_cancel(self):
-        with open(os.path.join(APP, "launch.py"), "r", encoding="utf-8") as handle:
+        with open(os.path.join(APP, "_launch_runtime.py"), "r", encoding="utf-8") as handle:
             launch = handle.read()
         with open(
             os.path.join(ROOT, "ui", "src", "stores", "useStore.ts"),
@@ -81,6 +81,12 @@ class TestCancellableDownloads(unittest.TestCase):
             encoding="utf-8",
         ) as handle:
             store = handle.read()
+        with open(
+            os.path.join(ROOT, "ui", "src", "stores", "jobReducers.ts"),
+            "r",
+            encoding="utf-8",
+        ) as handle:
+            job_reducers = handle.read()
 
         self.assertIn("with safe_download.cancellable_downloads(", launch)
         self.assertIn("lambda: is_cancel_requested(job)", launch)
@@ -89,7 +95,8 @@ class TestCancellableDownloads(unittest.TestCase):
         self.assertIn("with safe_download.cancellable_downloads(", legacy_call)
         stop = store[store.index("stopGeneration: (jobId) => {"):]
         stop = stop[:stop.index("\n  },")]
-        self.assertIn("message: 'Cancelling…'", stop)
+        self.assertIn("markJobsCancelling(s.jobs, targets)", stop)
+        self.assertIn("message: 'Cancelling…'", job_reducers)
         self.assertIn("void api.cancelJob(id)", stop)
         self.assertNotIn("filter(j => j.id !== jobId)", stop)
 

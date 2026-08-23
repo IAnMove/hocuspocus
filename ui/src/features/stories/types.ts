@@ -1,3 +1,5 @@
+import type { AspectRatio, ResolutionPreset } from '../../types'
+
 export type StoryWritingProvider =
   | 'maestro'
   | 'deepseek'
@@ -8,10 +10,14 @@ export type StoryWritingProvider =
 export type StoryImageProvider = 'maestro' | 'minimax'
 export type StoryApprovalState = 'draft' | 'approved'
 export type StoryWorkflowMode = 'guided' | 'automatic'
-export type StoryProjectType = 'full_story' | 'music_video' | 'quick_video'
+export type StoryProjectType = 'full_story' | 'music_video' | 'trailer' | 'quick_video'
 export type StoryMusicVideoGenerationMode = 'image_guided' | 'direct_references' | 'direct_video'
 export type StoryDirectVideoPromptMode = 'inherit' | 'custom'
 export type StoryQuickFormat = 'dialogue' | 'meme' | 'parody' | 'sketch' | 'viral' | 'announcement'
+export type StoryTrailerFormat = 'theatrical' | 'teaser' | 'character'
+export type StoryTrailerNarration = 'hybrid' | 'voice_over' | 'dialogue' | 'visual'
+export type StoryTrailerSpoiler = 'mystery' | 'balanced' | 'revealing'
+export type StoryTrailerIntensity = 'rising' | 'relentless' | 'prestige'
 export type StoryAssetKind = 'world' | 'location' | 'character' | 'prop' | 'style' | 'ignore'
 
 export interface StoryVisualAsset {
@@ -106,7 +112,7 @@ export interface StoryBeat {
 
 export interface StoryProduction {
   id: string
-  kind: 'comic' | 'film' | 'music_video'
+  kind: 'comic' | 'film' | 'music_video' | 'trailer'
   title: string
   createdAt: string
   sourceVersion: number
@@ -133,6 +139,9 @@ export interface StoryMusicCandidate {
   model: string
   durationSeconds: number
   createdAt: string
+  /** Canonical backend identity for audit, cancellation and exact output correlation. */
+  taskId?: string
+  rootTaskId?: string
 }
 
 export interface StoryMusicCue {
@@ -158,7 +167,7 @@ export interface StoryMusicCue {
 
 export interface StoryMusicDraft {
   mode: 'original' | 'cover'
-  model: 'music-3.0' | 'music-2.6'
+  model: 'music-3.0' | 'music-2.6' | 'ace_step_v1_5_xl_sft_lm_4b'
   brief: string
   style: string
   sourceLyrics: string
@@ -183,6 +192,13 @@ export interface StoryProviderSettings {
   imageModel: string
 }
 
+export interface StoryVideoOverride {
+  /** Empty only while a legacy project captures the old shared Director selection once. */
+  model: string
+  resolution: ResolutionPreset
+  aspectRatio: AspectRatio
+}
+
 export interface StoryProject {
   version: 1
   id: string
@@ -204,6 +220,13 @@ export interface StoryProject {
     durationSeconds: number
   }
   language: string
+  /** Exact spoken language/accent contract for generated native video audio. Empty means auto. */
+  spokenLanguage: string
+  /** Prefer distinct settings across music-video clips instead of repeating one scene. */
+  locationVariety: 'balanced' | 'single_location'
+  /** Require one approved primary protagonist image before video production. */
+  protagonistConsistency: boolean
+  protagonistCharacterId: string
   genre: string
   tone: string
   audience: string
@@ -228,6 +251,8 @@ export interface StoryProject {
   ending: string
   workflowMode: StoryWorkflowMode
   provider: StoryProviderSettings
+  /** Durable Story-only video recipe; ignored while the global profile is inherited. */
+  videoOverride: StoryVideoOverride
   world: StoryWorld
   characters: StoryCharacter[]
   relationships: StoryRelationship[]

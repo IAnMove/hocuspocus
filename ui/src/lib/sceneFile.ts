@@ -24,7 +24,7 @@ export const parseSceneFile = (text: string): Scene => {
   const parsed: unknown = JSON.parse(normalized)
   if (!parsed || typeof parsed !== 'object') throw new Error('The scene JSON must contain an object.')
   const candidate = parsed as Partial<Scene>
-  if (candidate.version !== 1 || !Array.isArray(candidate.layers)) throw new Error('This is not a Maestro Scene Animator scene.')
+  if (candidate.version !== 1 || !Array.isArray(candidate.layers)) throw new Error('This is not a Loreframe Lab Scene Animator scene.')
   return candidate as Scene
 }
 

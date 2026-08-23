@@ -968,7 +968,7 @@ export function InputsPanel() {
           <div className="flex items-start gap-2">
             <Layers size={14} className="mt-0.5 shrink-0 text-amber-300" />
             <p className="text-[10px] leading-relaxed text-amber-100/90">
-              MiniMax H3 no puede conservar el Start frame exacto y usar referencias de identidad separadas en la misma generación. Crea primero una imagen compuesta: Maestro colocará las referencias dentro de la escena inicial y usará el resultado como primer fotograma exacto con FL2VA.
+              MiniMax H3 no puede conservar el Start frame exacto y usar referencias de identidad separadas en la misma generación. Crea primero una imagen compuesta: Loreframe Lab colocará las referencias dentro de la escena inicial y usará el resultado como primer fotograma exacto con FL2VA.
             </p>
           </div>
           <button

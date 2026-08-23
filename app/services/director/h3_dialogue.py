@@ -4,10 +4,15 @@ H3 treats ``<d>[Language] ...</d>`` blocks as an audio-generation contract.
 These helpers keep that contract out of best-effort prompt rewriting: structured
 Director dialogue is canonical, existing blocks are replaced as whole units,
 and malformed or contradictory prompts are rejected before GPU generation.
+
+Temporary generation policy: never describe sound, silence, ambience, foley,
+or music in the H3 prompt. The only audio in the payload is exact ``<d>``
+dialogue. ``overall_soundscape`` and ``non_diegetic_music`` stay ``N/A``.
 """
 
 from __future__ import annotations
 
+import copy
 import math
 import re
 from typing import Any, Iterable, Mapping, MutableMapping, Sequence
@@ -50,6 +55,110 @@ _H3_SPEECHLIKE_AMBIENCE_REPLACEMENTS = (
         ),
         "nonverbal room tone",
     ),
+    (
+        re.compile(
+            r"clear foreground voices with precise lip sync and "
+            r"natural delivery(?:[.;]|$)",
+            re.IGNORECASE,
+        ),
+        "",
+    ),
+    (
+        re.compile(
+            r"vocal delivery\s*:[^.;]*(?:[.;]|$)",
+            re.IGNORECASE,
+        ),
+        "",
+    ),
+)
+
+# H3 renders picture and sound jointly.  A vocal verb in an otherwise silent
+# visual description is therefore an audio instruction, even when a silence
+# sentence appears later.  These rewrites remove the *semantic* contradiction
+# instead of trying to overpower it with more negative prompting.
+_H3_SILENT_VISUAL_VOCAL_REPLACEMENTS = (
+    (re.compile(r"\bgrita\s+pidiendo\s+socorro\b", re.I), "agita los brazos con expresi\u00f3n de alarma"),
+    (re.compile(r"\bpide\s+(?:ayuda|socorro)(?:\s+con\s+el\s+mismo\s+grito(?:\s+\w+)?)?", re.I), "hace se\u00f1ales urgentes con ambos brazos"),
+    (re.compile(r"\breacciona\s+con\s+un\s+jadeo(?:\s+(?:sincero|nervioso|fuerte|audible))?", re.I), "reacciona abriendo mucho los ojos"),
+    (re.compile(r"\b(?:r\u00ede|se\s+r\u00ede)\s+nervios[oa]\b", re.I), "sonr\u00ede con nerviosismo"),
+    (re.compile(r"\bgru\u00f1e\s+con\s+esfuerzo\b", re.I), "tensa el rostro por el esfuerzo"),
+    (re.compile(r"\bexclama(?:\s+un)?\s+[\"'\u00ab].+?[\"'\u00bb](?:\s+(?:satisfecho|satisfecha|nervioso|nerviosa))?", re.I), "adopta una expresi\u00f3n satisfecha"),
+    (re.compile(r"\bpronuncia(?:\s+con\s+\w+)?\s+su\s+(?:\u00fanica\s+)?l\u00ednea(?:\s+\w+)?", re.I), "mantiene la expresi\u00f3n descrita con la boca cerrada"),
+    (re.compile(r"\bshouts?\s+for\s+help\b", re.I), "signals urgently for help with both arms"),
+    (re.compile(r"\b(?:says?|speaks?|sings?|whispers?|mutters?)\s+(?:his|her|their)\s+(?:only\s+)?line\b", re.I), "holds the described expression with a closed mouth"),
+    # Planner prose often describes an *intention* to speak rather than an
+    # authored line (for example, a reflection "about to speak").  H3 still
+    # reads that as a request for native speech, so render the intention with
+    # facial acting when the shot has no exact dialogue ledger.
+    (re.compile(r"\b(?:mouth|lips?)\s+(?:half[- ]?)?(?:open(?:s|ed|ing)?|part(?:s|ed|ing)?)\b[^.!?]{0,64}\b(?:to|as\s+if(?:\s+about)?\s+to)\s+(?:speak|sing|say|whisper|mutter)\b", re.I), "mouth remains closed in tense hesitation"),
+    # With a canonical <d> line, this is merely delivery prose.  Replace it
+    # before the tag so H3 has exactly one vocal authority: the tag itself.
+    (re.compile(r"\b(?:sings?|raps?|speaks?|says?|whispers?|mutters?|canta(?:n)?|rapea(?:n)?|habla(?:n)?|dice(?:n)?|susurra(?:n)?|murmura(?:n)?)\b[^.!?]{0,220}(?=\s*<\s*d\s*>)", re.I), "performs the exact lyric: "),
+    (re.compile(r"\bnadie\s+canta\b", re.I), ""),
+    (re.compile(r"\bno\s+one\s+speaks(?:\s+in\s+this\s+shot)?\b", re.I), ""),
+    (re.compile(r"\beveryone\s+remains\s+silent\b", re.I), ""),
+    (re.compile(r"\bnadie\s+habla\.?\s*silencio\s+de\s+voces\b", re.I), ""),
+    (re.compile(r"\bsilencio\s+de\s+voces\b", re.I), ""),
+    (re.compile(r"\bnadie\s+habla\b", re.I), ""),
+    (re.compile(r"\bno\s+voices\b", re.I), ""),
+    # Spanish music-video planners often lock a mute performer with
+    # "nunca/jamás/no habla".  Rewrite those before the generic verb
+    # pass so H3 never sees an affirmative speech cue.
+    (re.compile(r"\bnunca\s+habla(?:n)?\b", re.I), "nunca abre la boca"),
+    (re.compile(r"\bjam[aá]s\s+habla(?:n)?\b", re.I), "jam\u00e1s abre la boca"),
+    (re.compile(r"\bno\s+habla(?:n)?\b", re.I), "no abre la boca"),
+    (re.compile(r"\b(?:hissing|rapping|singing|speaking|saying|whispering|muttering)\s+(?:the\s+)?(?:verse|lyrics?|line|song|words?)\b", re.I), "moving with tense rhythmic physicality"),
+    (re.compile(r"\b(?:delivering|performing)\s+(?:a\s+)?vocal\s+performance\b", re.I), "performing with tense physical rhythm"),
+    # A music-video planner can still phrase an unledgered performance as a
+    # full clause ("rapping the plea in a whisper").  Preserve the visible
+    # setup before the verb, but replace the rest of that vocal clause.  The
+    # final soundtrack is assembled separately; native H3 vocals are never a
+    # valid substitute when this clip has no exact <d> line.
+    (re.compile(r"\b(?:rap(?:s|ped|ping)?|sing(?:s|ing|sang)?|whisper(?:s|ed|ing)?|mutter(?:s|ed|ing)?|hiss(?:es|ed|ing)?|gasp(?:s|ed|ing)?|laugh(?:s|ed|ing)?|grunt(?:s|ed|ing)?|sob(?:s|bed|bing)?|moan(?:s|ed|ing)?|cough(?:s|ed|ing)?|sneeze(?:s|d|ing)?|whistle(?:s|d|ing)?|babble(?:s|d|ing)?|(?:rape|habla|dice|grita|exclama|responde|contesta|pregunta|susurra|murmura|sisea|canta|pronuncia|jadea|ríe|gruñe|solloza|gime|tose|estornuda|silba|tararea|balbucea)(?:n|ndo|ando|iendo|ba|ron|ría|rían)?|articula(?:n)?\s+(?:un\s+)?rap)\b[^.!?]{0,220}", re.I), "holds a tense closed-mouth expression"),
+    (re.compile(r"\b(?:with\s+)?visible\s+lip\s+movement\b", re.I), "with a closed mouth"),
+    (re.compile(r"\bgrunts?\s+with\s+effort\b", re.I), "strains visibly with the effort"),
+    (re.compile(r"\blaughs?\s+nervously\b", re.I), "smiles nervously"),
+)
+
+_H3_SILENT_SOUNDSCAPE_VOCAL_REPLACEMENTS = (
+    re.compile(r"(?:^|[,;])\s*[^,;]*\b(?:jadeo|risa|gru\u00f1ido|exclamaci\u00f3n|grito|voz|voces|di\u00e1logo)\b[^,;]*", re.I),
+    re.compile(r"(?:^|[,;])\s*[^,;]*\b(?:gasp|laugh|grunt|exclamation|shout|voice|voices|speech|dialogue)\b[^,;]*", re.I),
+)
+
+_H3_AFFIRMATIVE_VOCAL_RE = re.compile(
+    r"\b(?:grita(?:n)?|dice(?:n)?|habla(?:n)?|canta(?:n)?|susurra(?:n)?|"
+    r"murmura(?:n)?|pronuncia(?:n)?|exclama(?:n)?|jadea(?:n)?|r\u00ede(?:n)?|"
+    r"gru\u00f1e(?:n)?|solloza(?:n)?|gime(?:n)?|tose(?:n)?|estornuda(?:n)?|"
+    r"silba(?:n)?|tararea(?:n)?|balbucea(?:n)?|responde(?:n)?|respond(?:i\u00f3|ieron)|"
+    r"contesta(?:n)?|contest(?:\u00f3|aron)|pregunta(?:n)?|"
+    r"pide(?:n)?\s+(?:ayuda|socorro)|shouts?|says?|speaks?|sings?|whispers?|"
+    r"mutters?|exclaims?|gasps?|laughs?|grunts?|sobs?|moans?|coughs?|"
+    r"sneezes?|whistles?|babbles?|responds?|repl(?:y|ies|ied)|answers?|"
+    r"answered|asks?|calls?\s+for\s+help)\b",
+    re.IGNORECASE,
+)
+_H3_NON_SPEECH_VOCAL_RE = re.compile(
+    r"\b(?:canta(?:n)?|jadea(?:n)?|r\u00ede(?:n)?|gru\u00f1e(?:n)?|"
+    r"solloza(?:n)?|gime(?:n)?|tose(?:n)?|estornuda(?:n)?|silba(?:n)?|"
+    r"tararea(?:n)?|balbucea(?:n)?|sings?|gasps?|laughs?|grunts?|sobs?|"
+    r"moans?|coughs?|sneezes?|whistles?|babbles?)\b",
+    re.IGNORECASE,
+)
+_H3_VOCAL_SOUND_RE = re.compile(
+    r"\b(?:voz|voces|grito|gritos|jadeo|jadeos|risa|risas|gru\u00f1ido|"
+    r"gru\u00f1idos|sollozo|sollozos|gemido|gemidos|tos|estornudo|estornudos|"
+    r"silbido|silbidos|canto|balbuceo|charla|parloteo|exclamaci\u00f3n|"
+    r"exclamaciones|habla|di\u00e1logo|voice|voices|shout|shouts|gasp|gasps|"
+    r"laugh|laughs|laughter|grunt|grunts|sob|sobs|sobbing|moan|moans|"
+    r"moaning|cough|coughs|sneeze|sneezes|whistle|whistles|babble|chatter|"
+    r"exclamation|exclamations|speech|dialogue|muttering|whispering|singing)\b",
+    re.IGNORECASE,
+)
+_H3_NEGATED_VOCAL_PREFIX_RE = re.compile(
+    r"(?:\bno|\bnever|\bnobody|\bno\s+one|\bdo\s+not|\bdoes\s+not|"
+    r"\bmust\s+not|\bnadie|\bnunca|\bjam[aá]s|\bning\u00fan|\bninguna|\bsin)"
+    r"\b[^,.!?;:]{0,48}$",
+    re.IGNORECASE,
 )
 
 _H3_BASE_FIELDS = (
@@ -181,10 +290,12 @@ def _dialogue_payload(value: Any) -> tuple[str, str]:
     return language, text
 
 
-def h3_dialogue_tag(spoken_text: Any) -> str:
+def h3_dialogue_tag(spoken_text: Any, forced_language: str = "") -> str:
     """Build exactly one canonical H3 dialogue block."""
 
     language, words = _dialogue_payload(spoken_text)
+    if forced_language:
+        language = forced_language
     return f"<d>[{language}] {words}</d>"
 
 
@@ -200,12 +311,24 @@ def _replace_first_outside_dialogue(
     spans, malformed = _dialogue_spans(prompt)
     if malformed:
         return prompt, False
+    normalized_needle = str(needle).strip()
+    pattern = re.compile(
+        rf"(?<!\w){re.escape(normalized_needle)}(?!\w)",
+        re.IGNORECASE,
+    )
+    short_line = len(re.findall(r"\w+", normalized_needle)) <= 2
     cursor = 0
     for start, end in [*spans, (len(prompt), len(prompt))]:
-        found = prompt.find(needle, cursor, start)
-        if found >= 0:
+        for found in pattern.finditer(prompt, cursor, start):
+            if short_line:
+                prefix = prompt[max(cursor, found.start() - 72):found.start()]
+                speech_cues = list(_H3_AFFIRMATIVE_VOCAL_RE.finditer(prefix))
+                if not speech_cues or found.start() - (
+                    max(cursor, found.start() - 72) + speech_cues[-1].end()
+                ) > 32:
+                    continue
             return (
-                f"{prompt[:found]}{replacement}{prompt[found + len(needle):]}",
+                f"{prompt[:found.start()]}{replacement}{prompt[found.end():]}",
                 True,
             )
         cursor = end
@@ -234,14 +357,83 @@ def _sanitize_scripted_ambience(prompt: str) -> str:
     def sanitize(segment: str) -> str:
         for pattern, replacement in _H3_SPEECHLIKE_AMBIENCE_REPLACEMENTS:
             segment = pattern.sub(replacement, segment)
-        return re.sub(
+        segment = re.sub(
             r"\bnonverbal room tone(?:\s*(?:,|and)\s*nonverbal room tone)+\b",
             "nonverbal room tone",
             segment,
             flags=re.IGNORECASE,
         )
+        return re.sub(r"\s*;\s*(?=;|$)", "", segment).strip(" ;")
 
     return _rewrite_outside_dialogue(prompt, sanitize)
+
+
+def _sanitize_silent_visual_vocals(prompt: str) -> str:
+    """Turn unstructured vocal actions into equivalent visible silent acting."""
+
+    def sanitize(segment: str) -> str:
+        for pattern, replacement in _H3_SILENT_VISUAL_VOCAL_REPLACEMENTS:
+            segment = pattern.sub(replacement, segment)
+        segment = re.sub(r"\s{2,}", " ", segment)
+        segment = re.sub(r"\s+([.,;:])", r"\1", segment)
+        segment = re.sub(r";\s*(?:y|and)\s*[.,]?", ".", segment, flags=re.I)
+        segment = re.sub(r"\b(?:y|and)\s*$", "", segment, flags=re.I)
+        segment = re.sub(r"\s{2,}", " ", segment)
+        return segment.strip(" ,;.")
+
+    return _rewrite_outside_dialogue(prompt, sanitize)
+
+
+def _sanitize_silent_soundscape(soundscape: str) -> str:
+    """Keep a silent shot's soundscape to ambience and physical effects."""
+
+    result = str(soundscape or "")
+    for pattern in _H3_SILENT_SOUNDSCAPE_VOCAL_REPLACEMENTS:
+        result = pattern.sub("", result)
+    result = re.sub(r"\s*[,;]\s*[,;]+", "; ", result)
+    result = re.sub(r"\s+", " ", result).strip(" ,;.")
+    return compact_h3_soundscape(result)
+
+
+def _affirmative_matches(value: Any, pattern: re.Pattern[str]) -> list[str]:
+    text = normalize_h3_text(value)
+    matches: list[str] = []
+    for match in pattern.finditer(text):
+        prefix = text[max(0, match.start() - 56):match.start()]
+        if _H3_NEGATED_VOCAL_PREFIX_RE.search(prefix):
+            continue
+        matches.append(match.group(0))
+    return matches
+
+
+def h3_affirmative_vocal_cues(value: Any) -> list[str]:
+    """Find affirmative speech/vocal actions outside canonical dialogue tags."""
+
+    text = re.sub(
+        r"<\s*d\s*>.*?<\s*/\s*d\s*>",
+        " ",
+        normalize_h3_text(value),
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return _affirmative_matches(text, _H3_AFFIRMATIVE_VOCAL_RE)
+
+
+def h3_vocal_sound_cues(value: Any) -> list[str]:
+    """Find affirmative vocal nouns in an ambience/effects sound layer."""
+
+    return _affirmative_matches(value, _H3_VOCAL_SOUND_RE)
+
+
+def h3_non_speech_vocal_cues(value: Any) -> list[str]:
+    """Find unstructured vocal performance outside exact dialogue tags."""
+
+    text = re.sub(
+        r"<\s*d\s*>.*?<\s*/\s*d\s*>",
+        " ",
+        normalize_h3_text(value),
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return _affirmative_matches(text, _H3_NON_SPEECH_VOCAL_RE)
 
 
 def _insert_visual_detail(prompt: str, label: str, detail: str) -> str:
@@ -312,18 +504,6 @@ def validate_h3_vocal_contract(
             )
         if actual_words != expected_words:
             errors.append("dialogue words or speaker order differ from dialogue_beats")
-    elif not blocks:
-        has_silence_contract = bool(re.search(
-            r"\bno (?:one|character) speaks\b",
-            prompt,
-            flags=re.IGNORECASE,
-        ))
-        has_mapped_audio_contract = (
-            "mapped driving audio" in prompt.casefold()
-            and "do not generate additional dialogue" in prompt.casefold()
-        )
-        if not (has_silence_contract or has_mapped_audio_contract):
-            errors.append("silent prompt has no explicit H3 silence contract")
     return errors
 
 
@@ -367,21 +547,31 @@ def compile_h3_vocal_contract(
                 [h3_dialogue_tag(prompt[start:end]) for start, end in spans],
             )
             prompt = _sanitize_scripted_ambience(prompt)
-        _, remains_malformed = _dialogue_spans(prompt)
-        if remains_malformed:
-            raise H3DialogueContractError(
-                "MiniMax H3 dialogue tags remain unbalanced after repair."
+            _, remains_malformed = _dialogue_spans(prompt)
+            if remains_malformed:
+                raise H3DialogueContractError(
+                    "MiniMax H3 dialogue tags remain unbalanced after repair."
+                )
+            errors = validate_h3_vocal_contract(prompt, [])
+            if errors:
+                raise H3DialogueContractError(
+                    "Invalid MiniMax H3 vocal contract: " + "; ".join(errors)
+                )
+            contract_match = _H3_VOCAL_SECTION_RE.search(prompt)
+            contract = _normalized_space(
+                contract_match.group(0) if contract_match else ""
             )
+            return prompt, contract
+        prompt = _H3_VOCAL_SECTION_RE.sub(" ", prompt).strip()
+        prompt = re.sub(r"\s{2,}", " ", prompt).strip()
+        prompt = _sanitize_scripted_ambience(prompt)
+        prompt = _sanitize_silent_visual_vocals(prompt)
         errors = validate_h3_vocal_contract(prompt, [])
         if errors:
             raise H3DialogueContractError(
                 "Invalid MiniMax H3 vocal contract: " + "; ".join(errors)
             )
-        contract_match = _H3_VOCAL_SECTION_RE.search(prompt)
-        contract = _normalized_space(
-            contract_match.group(0) if contract_match else ""
-        )
-        return prompt, contract
+        return prompt, ""
 
     prompt = _H3_VOCAL_SECTION_RE.sub(" ", prompt).strip()
     spans, malformed = _dialogue_spans(prompt)
@@ -430,16 +620,10 @@ def compile_h3_vocal_contract(
             instructions.append(instruction)
 
         prompt = _sanitize_scripted_ambience(prompt)
-        guard = (
-            "Only these explicitly tagged lines are spoken, once each and in "
-            "the listed order. Do not add, paraphrase, repeat, or improvise "
-            "dialogue, muttering, murmuring, gibberish, or speech-like "
-            "vocalizations. No background or crowd voices are audible. Anyone "
-            "not currently delivering a tagged line remains silent with their "
-            "mouth closed except for explicitly described nonverbal actions."
-        )
-        detail = " ".join([*instructions, guard])
+        detail = " ".join(instructions)
         label = "DIALOGUE AND VOCAL PERFORMANCE"
+        if instructions:
+            prompt = _insert_visual_detail(prompt, label, detail)
     elif spans:
         replacements = [h3_dialogue_tag(prompt[start:end]) for start, end in spans]
         prompt = _replace_spans(prompt, spans, replacements)
@@ -449,24 +633,20 @@ def compile_h3_vocal_contract(
                 "MiniMax H3 dialogue tags remain unbalanced after repair."
             )
         prompt = _sanitize_scripted_ambience(prompt)
-        detail = (
-            "Only the explicitly tagged dialogue already present in this "
-            "prompt is spoken. Do not add, paraphrase, repeat, or improvise "
-            "any other words, muttering, murmuring, gibberish, or speech-like "
-            "vocalizations. No background or crowd voices are audible. "
-            "Non-speaking characters keep their mouths closed."
-        )
+        detail = ""
         label = "DIALOGUE AND VOCAL PERFORMANCE"
     else:
-        detail = (
-            "No one speaks in this shot. All visible people remain silent and "
-            "keep their mouths closed except for explicitly described nonverbal "
-            "actions. Generate no muttering, murmuring, gibberish, invented "
-            "words, background voices, or speech-like vocalizations."
-        )
-        label = "SILENCE AND VOCAL PERFORMANCE"
-
-    prompt = _insert_visual_detail(prompt, label, detail)
+        # Silent shot: do not narrate silence into the picture description.
+        # H3 performs that text as spoken audio ("silencio de voces",
+        # "no one speaks"). Absence of <d> tags is the silence contract.
+        prompt = _sanitize_scripted_ambience(prompt)
+        prompt = _sanitize_silent_visual_vocals(prompt)
+        errors = validate_h3_vocal_contract(prompt, dialogue_beats)
+        if errors:
+            raise H3DialogueContractError(
+                "Invalid MiniMax H3 vocal contract: " + "; ".join(errors)
+            )
+        return prompt, ""
     errors = validate_h3_vocal_contract(prompt, dialogue_beats)
     if errors:
         raise H3DialogueContractError(
@@ -554,6 +734,148 @@ def _extract_h3_fields(text: str) -> dict[str, str]:
     return fields
 
 
+H3_SOUND_FIELD_PLACEHOLDER = "N/A"
+# Visual only. Mute shots of famous talking characters otherwise invent speech.
+H3_CLOSED_LIPS_LOCK = (
+    "On-screen faces keep lips closed and jaws still while physical action continues."
+)
+_H3_CLOSED_LIPS_ALREADY_RE = re.compile(
+    r"\b(?:lips?\s+(?:remain|stay|staying|kept|keep)\s+closed|"
+    r"mouths?\s+(?:stay|remain|staying|keep|kept)\s+closed|"
+    r"boca(?:s)?\s+cerrada(?:s)?|"
+    r"keep lips closed and jaws still)\b",
+    re.IGNORECASE,
+)
+
+# Temporary: H3 performs any written audio note, including negative conditions.
+# Drop only the sentences that instruct sound or silence; keep picture and <d>.
+_H3_NO_SOUND_MARKERS_RE = re.compile(
+    r"(?:"
+    r"\b(?:remain(?:s)? silent|everyone remains silent|"
+    r"all (?:characters|people|visible people) remain silent)\b"
+    r"|\b(?:silencio de voces|nadie habla|no (?:one|character) speaks|"
+    r"nobody speaks|they don'?t speak|no hablan)\b"
+    r"|\b(?:only that (?:phrase|line)|solo esa frase|"
+    r"no other words are spoken|the tagged lines are the only spoken words|"
+    r"these are the only spoken words)\b"
+    r"|\b(?:audio contains no (?:human )?voices?|"
+    r"no human voices?|without (?:any )?(?:human )?voices?)\b"
+    r"|\bVOCAL TIMELINE LOCK\b"
+    r"|\bonly explicitly described sounds\b"
+    r")",
+    re.IGNORECASE,
+)
+_H3_AUDIO_CLAUSE_RE = re.compile(
+    r"(?:^|\n)\s*Audio\s*:.*?(?=\n\s*\S|\Z)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _strip_h3_sound_instructions(text: str) -> str:
+    """Remove silence/sound-instruction prose; keep <d> dialogue intact."""
+
+    protected: list[str] = []
+
+    def stash(match: re.Match[str]) -> str:
+        protected.append(match.group(0))
+        return f"@@H3_D_{len(protected) - 1}@@"
+
+    body = _H3_STRICT_DIALOGUE_RE.sub(stash, str(text or ""))
+    body = _H3_AUDIO_CLAUSE_RE.sub(" ", body)
+    chunks = re.split(r"(?<=[.!?])\s+", body)
+    kept: list[str] = []
+    for chunk in chunks:
+        piece = chunk.strip()
+        if not piece:
+            continue
+        if _H3_NO_SOUND_MARKERS_RE.search(piece):
+            piece = _H3_NO_SOUND_MARKERS_RE.split(piece, maxsplit=1)[0].rstrip(" ,;:")
+            if not piece.strip() or not (
+                "@@H3_D_" in piece or re.search(r"\[Shot\s+\d+\]", piece, re.I)
+            ):
+                continue
+        kept.append(piece)
+    body = " ".join(kept)
+    for index, block in enumerate(protected):
+        body = body.replace(f"@@H3_D_{index}@@", block)
+    return _normalized_space(body)
+
+
+def apply_h3_no_sound_description(prompt: str) -> str:
+    """Keep dialogue tags; never describe sound, silence, or music.
+
+    H3 performs written audio notes as speech. Until native audio control is
+    reliable, the picture description stays visual and the sound fields are N/A.
+    """
+
+    text = str(prompt or "")
+    if not text.strip():
+        return text
+    visual_fields = {
+        "integrated_multimodal_description",
+        "detailed_description",
+        "summary",
+    }
+    matches = list(re.finditer(
+        r"(?i)(?<![A-Za-z0-9_])(" + "|".join(
+            re.escape(field) for field in _H3_ALL_FIELDS
+        ) + r")\s*:",
+        text,
+    ))
+    if not matches:
+        return _ensure_closed_lips_when_mute(_strip_h3_sound_instructions(text))
+    for index in range(len(matches) - 1, -1, -1):
+        match = matches[index]
+        name = match.group(1).lower()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        if name in {"overall_soundscape", "non_diegetic_music"}:
+            text = (
+                f"{text[:match.end()]} {H3_SOUND_FIELD_PLACEHOLDER}\n\n"
+                f"{text[end:].lstrip()}"
+            )
+            continue
+        if name in visual_fields:
+            cleaned = _strip_h3_sound_instructions(text[match.end():end])
+            text = f"{text[:match.end()]} {cleaned}\n\n{text[end:].lstrip()}"
+    return _ensure_closed_lips_when_mute(re.sub(r"\n{3,}", "\n\n", text).strip())
+
+
+def _ensure_closed_lips_when_mute(prompt: str) -> str:
+    """H3 invents catchphrases on mute stills unless lips stay closed.
+
+    This is picture blocking, not an audio note. Skip when a ``<d>`` line
+    already authorises speech.
+    """
+
+    text = str(prompt or "")
+    if not text.strip() or re.search(r"<\s*d\s*>", text, re.IGNORECASE):
+        return text
+    if _H3_CLOSED_LIPS_ALREADY_RE.search(text):
+        return text
+    visual_fields = (
+        "integrated_multimodal_description",
+        "detailed_description",
+    )
+    matches = list(re.finditer(
+        r"(?i)(?<![A-Za-z0-9_])(" + "|".join(
+            re.escape(field) for field in visual_fields
+        ) + r")\s*:",
+        text,
+    ))
+    if matches:
+        match = matches[0]
+        boundary = _H3_SOUND_BOUNDARY_RE.search(text, match.end())
+        end = boundary.start() if boundary else len(text)
+        body = text[match.end():end].rstrip()
+        insert = f"{body} {H3_CLOSED_LIPS_LOCK}\n\n"
+        return f"{text[:match.end()]} {insert}{text[end:].lstrip()}".strip()
+    boundary = _H3_SOUND_BOUNDARY_RE.search(text)
+    if boundary:
+        body = text[:boundary.start()].rstrip()
+        return f"{body} {H3_CLOSED_LIPS_LOCK}\n\n{text[boundary.start():]}".strip()
+    return f"{text.rstrip()} {H3_CLOSED_LIPS_LOCK}".strip()
+
+
 def _strip_h3_custom_sections(text: str) -> str:
     previous = None
     result = str(text or "")
@@ -561,6 +883,71 @@ def _strip_h3_custom_sections(text: str) -> str:
         previous = result
         result = _H3_CUSTOM_SECTION_RE.sub(" ", result)
     return result
+
+
+_H3_COMPACT_VISUAL_DROPS = (
+    re.compile(
+        r"\bSPOKEN LANGUAGE CONTRACT\s*:.*?(?=\b(?:VISUAL STYLE LOCK|SPEAKER VISIBILITY|"
+        r"IDENTITY CONTINUITY|VOCAL TIMELINE|Keep |Only the tagged|\[Shot)|$)",
+        re.IGNORECASE | re.DOTALL,
+    ),
+    re.compile(
+        r"\b(?:SPEAKER VISIBILITY|IDENTITY CONTINUITY LOCK|VOCAL TIMELINE LOCK)\s*:.*?"
+        r"(?=\b(?:SPEAKER VISIBILITY|IDENTITY CONTINUITY|VOCAL TIMELINE|Keep |"
+        r"Only the tagged|By the final beat|overall_soundscape)|$)",
+        re.IGNORECASE | re.DOTALL,
+    ),
+    re.compile(
+        r"\bUse the supplied image as the exact first frame\.[^.]*\.",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bKeep \S[^.]*visibly framed whenever they speak\.[^.]*\.",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bReframe to the current speaker before each line;[^.]*\.",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bOnly the tagged lines are spoken[^.]*\.",
+        re.IGNORECASE,
+    ),
+)
+
+
+_H3_SOUND_ABSENCE_RE = re.compile(
+    r"(?:^|[,;:]\s*)(?:no hay|ningún|ninguna|ningune|ausencia(?: total)? de|"
+    r"sin\s+(?:transeúntes|coches|campanas|gente|voces|tráfico)|"
+    r"no\s+(?:cars?|people|pedestrians?|bells?|voices?|traffic|footsteps?)|"
+    r"absence of|without (?:any )?(?:cars?|people|voices?|traffic))"
+    r"[^,.;]*",
+    re.IGNORECASE,
+)
+
+
+def compact_h3_visual_body(text: str) -> str:
+    """Keep setting, action and <d> lines; drop Maestro wrapper prose."""
+
+    body = _normalized_space(text)
+    for pattern in _H3_COMPACT_VISUAL_DROPS:
+        body = pattern.sub(" ", body)
+    body = re.sub(r"\bVISUAL STYLE LOCK\s*:\s*", "", body, flags=re.IGNORECASE)
+    body = re.sub(
+        r"\bspeaks with a\b(?:(?!<\s*d\s*>).){0,400}(?=<\s*d\s*>)",
+        "says ",
+        body,
+        flags=re.IGNORECASE,
+    )
+    if re.search(r"<\s*d\s*>", body, re.IGNORECASE):
+        body = re.sub(r"\bholds a tense closed-mouth expression\b", "", body, flags=re.I)
+    return _normalized_space(body)
+
+
+def compact_h3_soundscape(text: str) -> str:
+    """Temporary: never describe sound. Schema value is always N/A."""
+
+    return H3_SOUND_FIELD_PLACEHOLDER
 
 
 def _trim_sentence(value: Any) -> str:
@@ -646,10 +1033,14 @@ def _source_prompt_parts(
         flags=re.IGNORECASE,
     )
     body = re.sub(r"^\s*\[Shot\s+1\]\s*", "", body, flags=re.IGNORECASE)
-    body = _normalized_space(body)
+    body = compact_h3_visual_body(body)
 
     context = _normalized_space(normalize_h3_text(project_context))
-    if context and not _meaningful_context_present(context, body):
+    if (
+        context
+        and "spoken language contract" not in context.casefold()
+        and not _meaningful_context_present(context, body)
+    ):
         if len(context) > 360:
             context = context[:360].rsplit(" ", 1)[0].rstrip(" ,;:-") + "..."
         body = f"Project context: {context}. {body}".strip()
@@ -672,12 +1063,18 @@ def _source_prompt_parts(
             for effect in (plan.get("effects") or [])
             if _trim_sentence(effect)
         )
-        soundscape = ", ".join(sound_bits) or "Natural scene-appropriate stereo ambience"
-    soundscape = _trim_sentence(
+        soundscape = ", ".join(sound_bits) or "Silence"
+    soundscape = compact_h3_soundscape(
         _sanitize_scripted_ambience(normalize_h3_text(soundscape))
     )
     music = _trim_sentence(normalize_h3_text(music)) or "N/A"
-    if music.casefold() in {"n/a", "none", "no music"}:
+    music = re.sub(
+        r"\bUse the supplied image as the exact first frame\.[^.]*\.",
+        "",
+        music,
+        flags=re.IGNORECASE,
+    ).strip()
+    if not music or music.casefold() in {"n/a", "none", "no music"}:
         music = "N/A"
     return body, soundscape, music, existing_blocks
 
@@ -792,6 +1189,7 @@ def _compile_official_dialogue(
     existing_blocks: Sequence[str],
     *,
     has_driving_audio: bool = False,
+    forced_language: str = "",
 ) -> tuple[str, str]:
     """Place exact tagged lines and stable speaker IDs in the visual field."""
 
@@ -800,7 +1198,8 @@ def _compile_official_dialogue(
         spoken = normalize_h3_text(_field(beat, "spoken_text", ""))
         if not _normalized_space(spoken):
             continue
-        _, words = _dialogue_payload(spoken)
+        authored_language, words = _dialogue_payload(spoken)
+        carries_language = bool(re.search(r"(?:<d>\s*)?\[[^\]]+\]", spoken, re.I))
         speaker_key = _normalized_space(_field(beat, "speaker_id", ""))
         entry = _speaker_registry_entry(registry, speaker_key)
         if entry:
@@ -810,7 +1209,8 @@ def _compile_official_dialogue(
             stable_id = f"(S{len(valid_beats) + 1})"
         valid_beats.append({
             "words": normalize_h3_text(words),
-            "tag": h3_dialogue_tag(spoken),
+            "tag": "",
+            "authored_language": authored_language if carries_language else "",
             "stable_id": stable_id,
             "speaker_name": speaker_name,
             "delivery": _normalized_space(_field(beat, "delivery", "")),
@@ -824,6 +1224,26 @@ def _compile_official_dialogue(
             "MiniMax H3 dialogue tags are unbalanced and cannot be repaired safely."
         )
 
+    # An explicit language in the reviewed/source prompt is authoritative.
+    # Previously, rebuilding from plain dialogue_beats silently reverted such
+    # lines to English when no project-wide spoken-language contract existed.
+    from .spoken_language import infer_h3_spoken_language
+
+    source_languages = [
+        _dialogue_payload(body[start:end])[0]
+        for start, end in spans
+    ]
+    for index, beat in enumerate(valid_beats):
+        language = (
+            forced_language
+            or (source_languages[index] if index < len(source_languages) else "")
+            or beat["authored_language"]
+            or infer_h3_spoken_language(beat["words"])
+        )
+        beat["tag"] = h3_dialogue_tag(
+            f"[{language}] {beat['words']}",
+        )
+
     if valid_beats:
         replacements = [
             valid_beats[index]["tag"] if index < len(valid_beats) else ""
@@ -835,17 +1255,9 @@ def _compile_official_dialogue(
                 body, beat["words"], beat["tag"],
             )
             if not replaced:
-                delivery = (
-                    f" with a {beat['delivery']} delivery"
-                    if beat["delivery"] else ""
-                )
-                cue = (
-                    f" While speaking, {beat['physical_cue']}"
-                    if beat["physical_cue"] else ""
-                )
                 body = (
-                    f"{body} {beat['speaker_name']} {beat['stable_id']} speaks"
-                    f"{delivery}: {beat['tag']}.{cue}"
+                    f"{body} {beat['speaker_name']} {beat['stable_id']} says: "
+                    f"{beat['tag']}."
                 ).strip()
 
         cursor = 0
@@ -857,21 +1269,14 @@ def _compile_official_dialogue(
                 stable_id=beat["stable_id"],
                 cursor=cursor,
             )
-        guard = (
-            "Only the tagged lines are spoken, once each in order. After the "
-            "final tagged line, every character remains silent with their "
-            "mouth closed; no other speech or background voices occur."
-        )
-        if "only the tagged lines are spoken" not in body.casefold():
-            body = f"{body} {guard}".strip()
         contract = " ".join(
             f"{beat['speaker_name']} {beat['stable_id']}: {beat['tag']}"
             for beat in valid_beats
         )
     else:
-        canonical_blocks = [h3_dialogue_tag(block) for block in existing_blocks]
+        canonical_blocks = [h3_dialogue_tag(block, forced_language) for block in existing_blocks]
         if spans:
-            canonical_blocks = [h3_dialogue_tag(body[start:end]) for start, end in spans]
+            canonical_blocks = [h3_dialogue_tag(body[start:end], forced_language) for start, end in spans]
             body = _replace_spans(body, spans, canonical_blocks)
         elif canonical_blocks:
             additions = " ".join(
@@ -880,12 +1285,6 @@ def _compile_official_dialogue(
             )
             body = f"{body} {additions}".strip()
         if canonical_blocks:
-            guard = (
-                "Only the tagged lines are spoken; everyone remains silent "
-                "with their mouth closed at all other times."
-            )
-            if "only the tagged lines are spoken" not in body.casefold():
-                body = f"{body} {guard}".strip()
             contract = " ".join(canonical_blocks)
         elif has_driving_audio:
             driver_contract = (
@@ -897,13 +1296,9 @@ def _compile_official_dialogue(
                 body = f"{body} {driver_contract}".strip()
             contract = driver_contract
         else:
-            silence = (
-                "No character speaks; all visible mouths remain closed, and "
-                "no speech-like vocalization or background voice occurs."
-            )
-            if not re.search(r"\bno (?:one|character) speaks\b", body, re.IGNORECASE):
-                body = f"{body} {silence}".strip()
-            contract = silence
+            # Do not write "no one speaks" into the picture description.
+            # H3 treats that sentence as spoken audio.
+            contract = ""
 
     body = _normalized_space(body)
     return body, contract
@@ -1200,6 +1595,47 @@ def _alignment_header(
     return ""
 
 
+def h3_audio_plan_wants_drive(
+    audio_plan: Mapping[str, Any] | None,
+    *,
+    has_dialogue: bool = False,
+) -> bool:
+    """True when the song/timeline is the vocal authority instead of ``<d>``.
+
+    Music-video performance shots set ``audio_driven`` + ``lip_sync_critical``
+    and must not be compiled as closed-mouth silence.  Authored dialogue
+    still wins: a short-film line is never treated as soundtrack drive.
+    """
+
+    if has_dialogue:
+        return False
+    audio = audio_plan if isinstance(audio_plan, Mapping) else {}
+    mode = str(audio.get("mode") or "").strip().casefold()
+    if not audio.get("lip_sync_critical"):
+        return False
+    return mode in {"audio_driven", "dialogue_driven"}
+
+
+_H3_DRIVEN_VISUAL_VOCAL_REPLACEMENTS = (
+    (
+        re.compile(
+            r"\b(?:sings?|raps?|canta(?:n)?|rapea(?:n)?)\b[^.!?]{0,80}",
+            re.IGNORECASE,
+        ),
+        "moves their lips in time with the mapped driving audio",
+    ),
+)
+
+
+def _sanitize_driven_visual_vocals(text: str) -> str:
+    """Keep lip-sync language on drive shots without asking H3 to invent lyrics."""
+
+    updated = str(text or "")
+    for pattern, replacement in _H3_DRIVEN_VISUAL_VOCAL_REPLACEMENTS:
+        updated = pattern.sub(replacement, updated)
+    return _normalized_space(updated)
+
+
 def compile_h3_official_prompt(
     prompt: str,
     subjects: Sequence[Any] | None,
@@ -1219,6 +1655,19 @@ def compile_h3_official_prompt(
     mode = str(mode or "t2va").strip().lower()
     if mode not in {"t2va", "i2va", "fl2va", "l2va", "ref2va"}:
         raise H3DialogueContractError(f"Unknown MiniMax H3 prompt mode: {mode}")
+    # In a silent shot an orphaned <d> / </d> is planner debris, not an
+    # authorised line.  Keeping it makes the whole music-video plan fail even
+    # though the canonical dialogue ledger is empty.  Real dialogue continues
+    # to use the strict path below and malformed tags still fail loudly there.
+    has_ledger_dialogue = any(
+        _normalized_space(_field(beat, "spoken_text", ""))
+        for beat in (dialogue_beats or [])
+    )
+    source_prompt = str(prompt or "")
+    if not has_ledger_dialogue:
+        spans, _malformed = _dialogue_spans(source_prompt)
+        if not spans:
+            source_prompt = _H3_DIALOGUE_TOKEN_RE.sub("", source_prompt)
     registry = speaker_registry if isinstance(speaker_registry, Mapping) else {}
     (
         reference_definitions,
@@ -1233,12 +1682,46 @@ def compile_h3_official_prompt(
         registry,
     )
     body, soundscape, music, existing_blocks = _source_prompt_parts(
-        prompt,
+        source_prompt,
         project_context=project_context,
         opening_blocking=opening_blocking,
         closing_blocking=closing_blocking,
         audio_plan=audio_plan,
     )
+    # Planner JSON occasionally appends a previously compiled <d> block after
+    # ``non_diegetic_music``.  When a fresh canonical lyric ledger exists,
+    # that stale block must not survive in a sound field or compete with the
+    # timestamped slice for this native clip.
+    if has_ledger_dialogue:
+        existing_blocks = []
+        soundscape = _H3_DIALOGUE_TOKEN_RE.sub(
+            "", _H3_STRICT_DIALOGUE_RE.sub("", soundscape),
+        ).strip()
+        music = _H3_DIALOGUE_TOKEN_RE.sub(
+            "", _H3_STRICT_DIALOGUE_RE.sub("", music),
+        ).strip() or "N/A"
+    from .spoken_language import h3_language_tag
+    forced_language = h3_language_tag(
+        audio_plan.get("spoken_language")
+        if isinstance(audio_plan, Mapping) else ""
+    )
+    has_structured_dialogue = has_ledger_dialogue or bool(existing_blocks)
+    has_driving_audio = has_driving_audio or h3_audio_plan_wants_drive(
+        audio_plan,
+        has_dialogue=has_structured_dialogue,
+    )
+    if has_ledger_dialogue:
+        # Music planners commonly leave free-form "sings/raps" prose beside
+        # a now-authoritative lyric ledger.  Keep only the exact <d> words as
+        # a vocal instruction; visual delivery is converted to physical acting
+        # and vocal ambience is removed before H3 sees it.
+        body = _sanitize_silent_visual_vocals(body)
+        soundscape = _sanitize_silent_soundscape(soundscape)
+    elif has_driving_audio and not has_structured_dialogue:
+        body = _sanitize_driven_visual_vocals(body)
+    elif not has_structured_dialogue and not has_driving_audio:
+        body = _sanitize_silent_visual_vocals(body)
+        soundscape = _sanitize_silent_soundscape(soundscape)
     body, vocal_contract = _compile_official_dialogue(
         body,
         subjects or [],
@@ -1246,7 +1729,20 @@ def compile_h3_official_prompt(
         registry,
         existing_blocks,
         has_driving_audio=has_driving_audio,
+        forced_language=forced_language,
     )
+    body = compact_h3_visual_body(body)
+    soundscape = compact_h3_soundscape(soundscape)
+    # H3 has a native minimum duration, so a short authored line may leave
+    # several seconds that the audiovisual model otherwise fills with invented
+    # speech. Bind every tagged line to a concrete interval and assign the
+    # remaining time to closed-mouth action and production sound. The job
+    # boundary reapplies this after frame-lattice rounding with the exact
+    # physical duration.
+    if duration_seconds:
+        from ..minimax_h3_duration import inject_h3_vocal_timeline
+
+        body, _ = inject_h3_vocal_timeline(body, duration_seconds)
     body = re.sub(r"^\s*\[Shot\s+1\]\s*", "", body, flags=re.IGNORECASE)
     body = f"[Shot 1] {body}".strip()
 
@@ -1305,7 +1801,7 @@ def compile_h3_official_prompt(
         )
         if header:
             compiled = f"{header}\n\n{compiled}"
-    return normalize_h3_text(compiled).strip(), vocal_contract
+    return apply_h3_no_sound_description(normalize_h3_text(compiled).strip()), vocal_contract
 
 
 def validate_h3_prompt_contract(
@@ -1314,6 +1810,7 @@ def validate_h3_prompt_contract(
     *,
     mode: str = "t2va",
     references: Sequence[Mapping[str, Any]] | None = None,
+    audio_plan: Mapping[str, Any] | None = None,
 ) -> list[str]:
     """Validate the official field order plus Maestro's exact dialogue data."""
 
@@ -1339,6 +1836,79 @@ def validate_h3_prompt_contract(
     extracted_fields = _extract_h3_fields(text)
     visual_field = "detailed_description" if mode == "ref2va" else "integrated_multimodal_description"
     visual = extracted_fields.get(visual_field, "")
+    expected_dialogue = any(
+        _normalized_space(_field(beat, "spoken_text", ""))
+        for beat in (dialogue_beats or [])
+    )
+    audio = audio_plan if isinstance(audio_plan, Mapping) else {}
+    _, _, has_driving_audio, _, _, _ = _reference_relationships(
+        references or [], [], {}
+    )
+    if audio and not has_driving_audio:
+        audio_mode = str(audio.get("mode") or "").strip().casefold()
+        timing_anchor = str(audio.get("timing_anchor") or "").strip().casefold()
+        lip_sync = bool(audio.get("lip_sync_critical"))
+        if expected_dialogue:
+            if audio_mode != "dialogue_driven":
+                errors.append(
+                    "exact dialogue requires audio_plan.mode=dialogue_driven"
+                )
+            if timing_anchor != "audio":
+                errors.append(
+                    "exact dialogue requires audio_plan.timing_anchor=audio"
+                )
+            if not lip_sync:
+                errors.append(
+                    "exact dialogue requires audio_plan.lip_sync_critical=true"
+                )
+        else:
+            permitted_silent_modes = {
+                "", "ambient_only", "music_driven", "audio_driven",
+                "generated_audio",
+            }
+            if audio_mode not in permitted_silent_modes:
+                errors.append(
+                    "silent generation uses an unsupported audio_plan.mode"
+                )
+            if (
+                audio_mode in {"", "ambient_only"}
+                and timing_anchor not in {"", "video"}
+            ):
+                errors.append(
+                    "silent generation requires audio_plan.timing_anchor=video"
+                )
+            if audio_mode in {"", "ambient_only", "music_driven"} and lip_sync:
+                errors.append(
+                    "silent generation requires audio_plan.lip_sync_critical=false"
+                )
+    remaining_vocals = h3_affirmative_vocal_cues(visual)
+    non_speech_vocals = h3_non_speech_vocal_cues(visual)
+    mapped_driving_audio = "mapped driving audio" in text.casefold()
+    if non_speech_vocals and not mapped_driving_audio:
+        errors.append(
+            "visual field still contains unstructured vocal performance: "
+            + ", ".join(non_speech_vocals[:5])
+        )
+    sound_vocals = h3_vocal_sound_cues(
+        extracted_fields.get("overall_soundscape", "")
+    )
+    if sound_vocals and not mapped_driving_audio:
+        errors.append(
+            "overall_soundscape still contains vocal material: "
+            + ", ".join(sound_vocals[:5])
+        )
+    if not expected_dialogue and not _dialogue_spans(text)[0]:
+        if remaining_vocals and not mapped_driving_audio:
+            errors.append(
+                "silent visual field still contains affirmative vocal cues: "
+                + ", ".join(remaining_vocals[:5])
+            )
+    # With exact dialogue, descriptive prose may refer to the same tagged
+    # delivery in more than one visual sentence (setup, action and payoff).
+    # Those repeated verbs are not additional audible lines: <d> blocks and
+    # the immutable dialogue ledger are authoritative.  Truly unstructured
+    # vocalizations are still rejected above, while any affirmative vocal cue
+    # remains forbidden for a silent shot.
     if not re.match(r"^\s*\[Shot\s+1\]", visual, flags=re.IGNORECASE):
         errors.append(f"{visual_field} does not begin with [Shot 1]")
     if re.search(
@@ -1425,8 +1995,9 @@ def compile_h3_clip_plans(
     Ref2VA wrapper around a previously compiled prompt.
     """
 
-    registry = _build_stable_speaker_registry(clip_plans)
-    for index, plan in enumerate(clip_plans):
+    candidates = copy.deepcopy(list(clip_plans))
+    registry = _build_stable_speaker_registry(candidates)
+    for index, plan in enumerate(candidates):
         beats = plan.get("_director_dialogue_beats") or []
         for beat in beats:
             if isinstance(beat, MutableMapping) and "spoken_text" in beat:
@@ -1486,9 +2057,13 @@ def compile_h3_clip_plans(
             beats,
             mode=mode,
             references=references,
+            audio_plan=plan.get("_director_audio_plan") or {},
         )
         if errors:
             raise H3DialogueContractError(
                 f"Shot {index + 1}: " + "; ".join(errors)
             )
+    for original, candidate in zip(clip_plans, candidates):
+        original.clear()
+        original.update(candidate)
     return clip_plans

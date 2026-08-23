@@ -1,12 +1,14 @@
 import copy
 import json
 from pathlib import Path
+import re
 
 import pytest
 
 from services.series_library import (
     SeriesConflictError,
     append_shot_render_attempt,
+    approve_episode_render_attempts,
     approve_shot_render_attempt,
     commit_canon_delta,
     create_series_episode,
@@ -20,6 +22,7 @@ from services.series_library import (
     validate_series_asset_uri,
     write_series_library,
     update_shot_render_attempt,
+    update_series_episode,
 )
 
 
@@ -33,11 +36,11 @@ def example_library():
 def test_constructors_produce_ids_defaults_and_frozen_snapshot():
     series = create_series_project("default")
     episode = create_series_episode(series)
-    assert series["id"].startswith("series_")
+    assert re.fullmatch(r"series_[0-9a-f]{32}", series["id"])
     assert series["provider"]["videoModel"] == "minimax_h3_legacy"
     assert series["provider"]["useGlobalProfile"] is True
     assert series["provider"]["videoSettings"]["orientation"] == "landscape"
-    assert episode["id"].startswith("episode_")
+    assert re.fullmatch(r"episode_[0-9a-f]{32}", episode["id"])
     assert episode["canonSnapshot"]["revision"] == series["canon"]["revision"]
     series["canon"]["worldSummary"] = "Changed later"
     assert episode["canonSnapshot"]["worldSummary"] == ""
@@ -109,6 +112,8 @@ def test_episode_order_repair_is_deterministic():
     series = value["seriesById"]["series_signal"]
     clone = copy.deepcopy(series["episodesById"]["episode_1"])
     clone.update({"id": "episode_2", "number": 2})
+    clone["script"] = []
+    clone["shots"] = []
     series["episodesById"]["episode_2"] = clone
     series["seasons"][0]["episodeOrder"] = ["missing", "episode_1", "episode_1"]
     first = normalize_series_library(value, "default")
@@ -117,6 +122,90 @@ def test_episode_order_repair_is_deterministic():
         "episode_1", "episode_2",
     ]
     assert second == first
+
+
+def test_duplicate_live_graph_ids_are_rejected_before_persistence():
+    value = example_library()
+    series = value["seriesById"]["series_signal"]
+    duplicate = copy.deepcopy(series["characters"][0])
+    series["characters"].append(duplicate)
+
+    with pytest.raises(ValueError, match="duplicate id"):
+        normalize_series_library(value, "default")
+
+
+def test_legacy_shot_dialogue_ids_are_migrated_away_from_script_ids():
+    value = example_library()
+
+    normalized = normalize_series_library(value, "default")
+    episode = normalized["seriesById"]["series_signal"]["episodesById"]["episode_1"]
+    script_ids = {
+        line["id"] for scene in episode["script"] for line in scene.get("dialogue", [])
+    }
+    shot_ids = {
+        line["id"] for shot in episode["shots"] for line in shot.get("dialogueBeats", [])
+    }
+
+    assert script_ids.isdisjoint(shot_ids)
+
+
+def test_unknown_shot_scene_is_rejected_during_library_normalization():
+    value = example_library()
+    shot = value["seriesById"]["series_signal"]["episodesById"]["episode_1"]["shots"][0]
+    shot["sceneId"] = "missing_scene"
+
+    with pytest.raises(ValueError, match="uses unknown scene"):
+        normalize_series_library(value, "default")
+
+
+@pytest.mark.parametrize(("mutate", "message"), [
+    (
+        lambda project: project["relationships"][0].update({"fromCharacterId": "missing_character"}),
+        "unknown character",
+    ),
+    (
+        lambda project: project["episodesById"]["episode_1"]["script"][0].update(
+            {"locationId": "missing_location"}
+        ),
+        "unknown location",
+    ),
+    (
+        lambda project: project["episodesById"]["episode_1"]["shots"][0].update(
+            {"continuityFromShotId": "missing_shot"}
+        ),
+        "unknown shot",
+    ),
+    (
+        lambda project: project["episodesById"]["episode_1"]["shots"][0]["attempts"][0].update(
+            {"outputAssetIds": ["missing_asset"]}
+        ),
+        "unknown asset",
+    ),
+])
+def test_broken_live_graph_references_are_rejected(mutate, message):
+    value = example_library()
+    mutate(value["seriesById"]["series_signal"])
+
+    with pytest.raises(ValueError, match=message):
+        normalize_series_library(value, "default")
+
+
+def test_saved_shot_duration_uses_the_same_h3_contract_as_rendering():
+    value = example_library()
+    shot = value["seriesById"]["series_signal"]["episodesById"]["episode_1"]["shots"][0]
+    shot["durationSeconds"] = 8
+
+    normalized = normalize_series_library(value, "default")
+
+    saved = normalized["seriesById"]["series_signal"]["episodesById"]["episode_1"]["shots"][0]
+    assert saved["durationSeconds"] == 5.167
+    assert saved["dialogueDuration"]["requestedClipSeconds"] == 5.167
+    assert saved["dialogueDuration"]["syllableCount"] > 0
+
+    reopened = normalize_series_library(normalized, "default")
+    reopened_shot = reopened["seriesById"]["series_signal"]["episodesById"]["episode_1"]["shots"][0]
+    assert reopened_shot["durationSeconds"] == saved["durationSeconds"]
+    assert reopened_shot["dialogueDuration"] == saved["dialogueDuration"]
 
 
 def test_story_import_is_new_draft_with_provenance_and_no_source_mutation():
@@ -165,6 +254,78 @@ def test_canon_optimistic_revision_conflict_and_old_snapshot_survives():
     assert updated["canon"]["revision"] == 2
 
 
+def test_episode_update_requires_a_revision_and_rejects_stale_runtime_overwrite():
+    series = normalize_series_library(example_library(), "default")["seriesById"]["series_signal"]
+    episode = series["episodesById"]["episode_1"]
+    stale_episode = copy.deepcopy(episode)
+    stale_revision = series["revision"]
+
+    with pytest.raises(ValueError, match="baseSeriesRevision or baseEpisodeUpdatedAt"):
+        update_series_episode(series, "episode_1", {"title": "Unsafe save"})
+
+    rendered_shot, attempt = append_shot_render_attempt(
+        episode["shots"][0], manifest={"strategy": "references"},
+        model="minimax_h3_ref2va", settings={"durationSeconds": 10}, seed=91,
+    )
+    episode["shots"][0] = rendered_shot
+    episode["updatedAt"] = "2026-08-16T10:00:00Z"
+    series["revision"] += 1
+    stale_episode["title"] = "Stale tab title"
+    stale_episode["shots"][0]["attempts"] = []
+
+    with pytest.raises(SeriesConflictError, match="revision changed"):
+        update_series_episode(
+            series,
+            "episode_1",
+            stale_episode,
+            base_series_revision=stale_revision,
+        )
+
+    assert series["episodesById"]["episode_1"]["shots"][0]["attempts"][-1]["id"] == attempt["id"]
+
+
+def test_current_episode_patch_edits_prompt_without_touching_server_runtime():
+    series = normalize_series_library(example_library(), "default")["seriesById"]["series_signal"]
+    episode = series["episodesById"]["episode_1"]
+    episode["assemblyAssetIds"] = ["asset-joined"]
+    episode["runtimeJob"] = {"id": "render-job-1", "status": "completed"}
+    current_shot = copy.deepcopy(episode["shots"][0])
+    patch_shot = copy.deepcopy(current_shot)
+    patch_shot["prompt"] = "A precise, newly edited shot prompt."
+    patch_shot["attempts"] = []
+    patch_shot.pop("approvedAttemptId", None)
+    patch_shot["referenceManifest"] = {"strategy": "client-overwrite"}
+
+    updated = update_series_episode(
+        series,
+        "episode_1",
+        {
+            "id": "episode_1",
+            "title": "Edited safely",
+            "status": "archived",
+            "productionIds": ["client-overwrite"],
+            "assemblyAssetIds": ["client-overwrite"],
+            "shots": [patch_shot],
+        },
+        base_episode_updated_at=episode["updatedAt"],
+        updated_at="2026-08-16T11:00:00Z",
+    )
+    saved = updated["episodesById"]["episode_1"]
+
+    assert saved["title"] == "Edited safely"
+    assert saved["status"] == episode["status"]
+    assert saved["productionIds"] == episode["productionIds"]
+    assert saved["assemblyAssetIds"] == ["asset-joined"]
+    assert saved["runtimeJob"] == episode["runtimeJob"]
+    assert saved["canonSnapshot"] == episode["canonSnapshot"]
+    assert len(saved["shots"]) == len(episode["shots"])
+    assert saved["shots"][0]["prompt"] == "A precise, newly edited shot prompt."
+    assert saved["shots"][0]["attempts"] == current_shot["attempts"]
+    assert saved["shots"][0]["approvedAttemptId"] == current_shot["approvedAttemptId"]
+    assert saved["shots"][0]["referenceManifest"] == current_shot["referenceManifest"]
+    assert updated["revision"] == series["revision"] + 1
+
+
 def test_shot_retry_appends_attempt_and_approval_is_explicit():
     shot = normalize_series_library(example_library(), "default")["seriesById"]["series_signal"][
         "episodesById"
@@ -179,6 +340,8 @@ def test_shot_retry_appends_attempt_and_approval_is_explicit():
     )
     assert len(second["attempts"]) == len(shot["attempts"]) + 2
     assert attempt["id"] != retry["id"]
+    assert re.fullmatch(r"attempt_[0-9a-f]{32}", attempt["id"])
+    assert re.fullmatch(r"attempt_[0-9a-f]{32}", retry["id"])
     assert "approvedAttemptId" not in second
     with pytest.raises(ValueError, match="completed"):
         approve_shot_render_attempt(second, retry["id"])
@@ -193,3 +356,37 @@ def test_shot_retry_appends_attempt_and_approval_is_explicit():
     assert "approvedAttemptId" not in rejected
     assert rejected["attempts"][-1]["reviewDecision"] == "rejected"
     assert approved["attempts"][0:len(shot["attempts"])] == shot["attempts"]
+
+
+def test_bulk_attempt_approval_is_atomic_and_rejects_duplicate_shots():
+    shot_a = {
+        "id": "shot-a", "attempts": [{
+            "id": "attempt-a", "status": "completed", "outputAssetIds": ["asset-a"],
+        }],
+    }
+    shot_b = {
+        "id": "shot-b", "attempts": [{
+            "id": "attempt-b", "status": "failed", "outputAssetIds": [],
+        }],
+    }
+    episode = {"id": "episode-1", "shots": [shot_a, shot_b]}
+    original = copy.deepcopy(episode)
+
+    with pytest.raises(ValueError, match="Only a completed"):
+        approve_episode_render_attempts(episode, [
+            {"shotId": "shot-a", "attemptId": "attempt-a"},
+            {"shotId": "shot-b", "attemptId": "attempt-b"},
+        ])
+    assert episode == original
+
+    approved = approve_episode_render_attempts(episode, [
+        {"shotId": "shot-a", "attemptId": "attempt-a"},
+    ])
+    assert approved["shots"][0]["approvedAttemptId"] == "attempt-a"
+    assert "approvedAttemptId" not in episode["shots"][0]
+
+    with pytest.raises(ValueError, match="more than once"):
+        approve_episode_render_attempts(episode, [
+            {"shotId": "shot-a", "attemptId": "attempt-a"},
+            {"shotId": "shot-a", "attemptId": "attempt-a"},
+        ])

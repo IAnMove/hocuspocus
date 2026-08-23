@@ -14,6 +14,8 @@ import subprocess
 import threading
 import logging
 import requests
+from contextlib import contextmanager
+from functools import wraps
 from typing import Optional
 from . import debug_trace
 from .debug_trace import trace_llm_call
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Singleton state
 _process: Optional[subprocess.Popen] = None
-_lock = threading.Lock()
+_lock = threading.RLock()
 _model_id: str = ""
 _device: str = ""
 _server_port: int = 0
@@ -682,6 +684,24 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
     return local_models + remote_models
 
 
+MINIMAX_CHAT_MODELS = frozenset({
+    "MiniMax-M3",
+    "MiniMax-M2.7",
+    "MiniMax-M2.7-highspeed",
+})
+
+
+def normalize_minimax_chat_routing(
+    model_id: str,
+    provider: str,
+    remote_url: str = "",
+) -> tuple[str, str]:
+    """MiniMax chat ids are hosted API models, never local GGUF files."""
+    if str(model_id or "").strip() in MINIMAX_CHAT_MODELS:
+        return "minimax", str(remote_url or "").strip() or "https://api.minimax.io"
+    return str(provider or "local"), str(remote_url or "")
+
+
 def _find_free_port() -> int:
     import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -1286,6 +1306,59 @@ def _get_server_exe() -> str:
     return os.path.join(bin_dir, "llama-server")
 
 
+def _scheduled_llm_load(function):
+    """Serialize local model loading on the same lane used for inference."""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        model_id = kwargs.get("model_id", args[0] if len(args) > 0 else "")
+        device = kwargs.get("device", args[1] if len(args) > 1 else "cpu")
+        force_reload = kwargs.get("force_reload", args[2] if len(args) > 2 else False)
+        provider = kwargs.get("provider", args[3] if len(args) > 3 else "local")
+        remote_url = kwargs.get("remote_url", args[4] if len(args) > 4 else "")
+        api_key = kwargs.get("api_key", args[5] if len(args) > 5 else "")
+        provider, remote_url = normalize_minimax_chat_routing(
+            str(model_id or ""),
+            str(provider or "local"),
+            str(remote_url or ""),
+        )
+        if str(provider or "local").lower() in {
+            "remote", "openai", "anthropic", "minimax",
+        }:
+            return function(
+                model_id=model_id,
+                device=device,
+                force_reload=force_reload,
+                provider=provider,
+                remote_url=remote_url,
+                api_key=api_key,
+            )
+        from . import resource_scheduler
+        lane = resource_scheduler.llm_lane(
+            str(provider or "local"),
+            base_url=str(remote_url or ""),
+            device=str(device or "cpu"),
+        )
+        task_id = f"llm-load-{threading.get_ident()}-{time.time_ns()}"
+        cancelled = _current_task_cancel_callback()
+        try:
+            with resource_scheduler.coordinator.acquire(
+                lane,
+                task_id=task_id,
+                description=f"Local LLM load · {model_id or 'default'}",
+                cancelled=cancelled,
+            ):
+                with _cancelable_singleton_lock(
+                    cancelled,
+                    task_id=task_id,
+                    operation="loading the local LLM",
+                ):
+                    return function(*args, **kwargs)
+        except resource_scheduler.ResourceAcquireCancelled as exc:
+            raise InterruptedError(str(exc)) from exc
+    return wrapped
+
+
+@_scheduled_llm_load
 def load_model(
     model_id: str = "",
     device: str = "cpu",
@@ -1308,6 +1381,14 @@ def load_model(
     global _process, _model_id, _device, _server_port, _vision_available
     global _provider, _remote_url, _api_key
 
+    provider, remote_url = normalize_minimax_chat_routing(
+        str(model_id or ""),
+        str(provider or "local"),
+        str(remote_url or ""),
+    )
+    if provider == "minimax" and not str(remote_url or "").strip():
+        remote_url = "https://api.minimax.io"
+
     # Handle remote/API providers — no subprocess needed
     if provider in ("remote", "openai", "anthropic", "minimax"):
         with _lock:
@@ -1326,11 +1407,12 @@ def load_model(
         return
 
     repo_id = model_id or DEFAULT_HF_REPO
-    _provider = "local"
-    _remote_url = ""
-    _api_key = ""
-
     with _lock:
+        # Keep every singleton routing mutation under the same lock used by
+        # scheduled requests when they validate their routing snapshot.
+        _provider = "local"
+        _remote_url = ""
+        _api_key = ""
         if is_loaded() and _model_id == repo_id and not force_reload:
             return
 
@@ -1709,7 +1791,222 @@ def _image_to_data_url(image_path: str, max_size: int = 768) -> Optional[str]:
         return f"data:{mime};base64,{data}"
 
 
+def _current_task_cancel_callback():
+    """Return a cheap cancellation probe for the active canonical task."""
+    try:
+        from .task_manager import current_task_cancellation_token
+        token = current_task_cancellation_token()
+        if token is not None:
+            return token.is_cancelled
+        from .task_manager import current_task_context, get_task_registry
+        context = current_task_context()
+        parent_task_id = str(context.get("task_id") or "")
+        workspace_dir = str(context.get("workspace_dir") or "")
+        if not parent_task_id or not workspace_dir:
+            return None
+        operation_registry = get_task_registry(workspace_dir)
+    except Exception:
+        return None
+
+    def cancelled() -> bool:
+        try:
+            parent = operation_registry.get(parent_task_id)
+        except Exception:
+            return False
+        return bool(
+            parent and (
+                parent.get("status") in {"cancelled", "interrupted"}
+                or parent.get("phase") == "cancelling"
+            )
+        )
+
+    return cancelled
+
+
+class LLMRequestCancelled(InterruptedError):
+    """Raised when one job's active provider request is cancelled."""
+
+    def __init__(self, provider: str, *, abort_supported: bool) -> None:
+        self.provider = str(provider or "LLM")
+        self.abort_supported = bool(abort_supported)
+        capability = "aborted" if self.abort_supported else "could not be aborted"
+        super().__init__(
+            f"{self.provider} request cancelled ({capability}); "
+            "completed stages remain recoverable"
+        )
+
+
+def _resolve_cancellation_token(token=None):
+    """Use an explicit token or resolve the current canonical task token."""
+    if token is not None:
+        return token
+    try:
+        from .task_manager import current_task_cancellation_token
+        return current_task_cancellation_token()
+    except Exception:
+        return None
+
+
+def _token_cancelled(token) -> bool:
+    if token is None:
+        return False
+    try:
+        probe = getattr(token, "is_cancelled", None)
+        if callable(probe):
+            return bool(probe())
+        probe = getattr(token, "is_set", None)
+        if callable(probe):
+            return bool(probe())
+    except Exception:
+        return False
+    return False
+
+
+def _watch_response_for_cancellation(response, token, provider: str):
+    """Close one response when its job token fires, without touching others."""
+    if token is None:
+        return None
+    close = getattr(response, "close", None)
+    abort_supported = callable(close)
+    stopped = threading.Event()
+    state = {"abort_supported": abort_supported, "cancelled": False}
+
+    def watch() -> None:
+        while not stopped.wait(0.05):
+            if not _token_cancelled(token):
+                continue
+            state["cancelled"] = True
+            if abort_supported:
+                try:
+                    close()
+                except Exception:
+                    state["abort_supported"] = False
+            return
+
+    watcher = threading.Thread(
+        target=watch,
+        name=f"llm-cancel-{str(provider or 'provider').lower()[:16]}",
+        daemon=True,
+    )
+    watcher.start()
+    return stopped, watcher, state
+
+
+def _stop_response_cancellation_watcher(watcher) -> None:
+    if watcher is None:
+        return
+    stopped, thread, _state = watcher
+    stopped.set()
+    if thread is not threading.current_thread():
+        thread.join(timeout=0.25)
+
+
+def _raise_if_token_cancelled(token, provider: str, *, abort_supported: bool = True) -> None:
+    if _token_cancelled(token):
+        raise LLMRequestCancelled(provider, abort_supported=abort_supported)
+
+
+@contextmanager
+def _cancelable_singleton_lock(
+    cancelled=None,
+    *,
+    task_id: str = "llm",
+    operation: str = "using the LLM",
+):
+    """Acquire the mutable singleton lock without making cancel wait forever."""
+    acquired = False
+    try:
+        if cancelled is None:
+            _lock.acquire()
+            acquired = True
+        else:
+            while True:
+                if cancelled():
+                    from .resource_scheduler import ResourceAcquireCancelled
+                    raise ResourceAcquireCancelled(
+                        f"Task {task_id} was cancelled while {operation}"
+                    )
+                if _lock.acquire(timeout=0.1):
+                    acquired = True
+                    break
+        yield
+    finally:
+        if acquired:
+            _lock.release()
+
+
+def _singleton_routing_snapshot(cancelled=None) -> tuple:
+    """Read all globals a singleton completion uses while holding its lock."""
+    with _cancelable_singleton_lock(
+        cancelled,
+        operation="waiting for the LLM configuration",
+    ):
+        return (
+            _provider,
+            _remote_url,
+            _model_id,
+            _device,
+            _api_key,
+            _vision_available,
+        )
+
+
+def _scheduled_llm_request(function):
+    """Acquire the concrete local/remote LLM lane for singleton requests."""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        from . import resource_scheduler
+        cancelled = _current_task_cancel_callback()
+        try:
+            while True:
+                routing = _singleton_routing_snapshot(cancelled)
+                provider, remote_url, model_id, device, _key, _vision = routing
+                provider = str(provider or "local")
+                lane = resource_scheduler.llm_lane(
+                    provider,
+                    base_url=(remote_url if provider != "local" else ""),
+                    device=device or "cpu",
+                )
+                task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
+                # The GPU hand-off hook identifies an intentional CUDA LLM
+                # owner by this prefix. A generic label made it unload the
+                # very model this request was about to use.
+                owner_label = (
+                    "Local LLM" if provider == "local" else "Remote LLM"
+                )
+                with resource_scheduler.coordinator.acquire(
+                    lane,
+                    task_id=task_id,
+                    description=f"{owner_label} completion · {model_id or 'default'}",
+                    cancelled=cancelled,
+                ):
+                    # The provider may have changed while this request waited
+                    # for its physical lane. Revalidate under the singleton
+                    # lock; if it moved, release the stale lane and retry. The
+                    # lock then prevents load/unload from mutating routing or
+                    # killing llama-server during the active HTTP request.
+                    with _cancelable_singleton_lock(
+                        cancelled,
+                        task_id=task_id,
+                        operation="waiting to start the LLM request",
+                    ):
+                        if routing != (
+                            _provider,
+                            _remote_url,
+                            _model_id,
+                            _device,
+                            _api_key,
+                            _vision_available,
+                        ):
+                            continue
+                        return function(*args, **kwargs)
+        except resource_scheduler.ResourceAcquireCancelled as exc:
+            raise InterruptedError(str(exc)) from exc
+    return wrapped
+
+
 @trace_llm_call("generate", context=lambda: {"provider": _provider, "model_id": _model_id})
+@_scheduled_llm_request
 def generate(
     prompt: str,
     system_prompt: str = "",
@@ -1769,7 +2066,7 @@ def generate(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and (_vision_available or _provider in ("remote", "openai")):
+    if image_paths and (_vision_available or _provider in ("remote", "openai", "minimax")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -1917,6 +2214,7 @@ def generate_openai_compatible(
     presence_penalty: float = 0.0,
     json_schema: Optional[dict] = None,
     image_paths: Optional[list[str]] = None,
+    cancellation_token=None,
 ) -> str:
     """Run one isolated OpenAI-compatible text request.
 
@@ -1925,6 +2223,7 @@ def generate_openai_compatible(
     overrides such as asking DeepSeek to revise one comic while keeping the
     application's normal internal LLM active.
     """
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
     model_id = (model_id or "").strip()
     base_url = (base_url or "").strip().rstrip("/")
     if not model_id:
@@ -2013,8 +2312,67 @@ def generate_openai_compatible(
     attempts = 2 if is_minimax or (json_schema is not None and is_deepseek) else 1
     from . import resource_scheduler
     request_lane = resource_scheduler.remote_lane(model_id, base_url)
+    operation_registry = None
+    operation_id = ""
+    parent_task_id = ""
+    try:
+        from .task_manager import current_task_context, get_task_registry, new_task_id
+        task_context = current_task_context()
+        parent_task_id = task_context.get("task_id", "")
+        workspace_dir = task_context.get("workspace_dir", "")
+        if parent_task_id and workspace_dir:
+            operation_registry = get_task_registry(workspace_dir)
+            parent_task = operation_registry.get(parent_task_id)
+            if parent_task:
+                operation_id = new_task_id("llm-call")
+                operation_registry.create(
+                    id=operation_id, root_id=parent_task["root_id"], parent_id=parent_task_id,
+                    workspace=parent_task.get("workspace") or "default",
+                    kind="llm-call", workflow=parent_task.get("workflow") or "llm",
+                    title=f"{model_id} completion", status="waiting_resource",
+                    phase="waiting_resource", message=f"Waiting to call {provider_name}",
+                    provider=provider_name, model=model_id, server_origin=base_url,
+                    resource_requirements=[request_lane.key], attempt=1, max_attempts=attempts,
+                    cancelable=False, recoverable=False,
+                    metadata={"operation": "generate_openai_compatible"},
+                )
+    except Exception as exc:
+        logger.debug("Could not publish LLM child operation: %s", exc)
+
+    def finish_operation(status: str, message: str, usage: Optional[dict] = None, error: str = "") -> None:
+        if not operation_registry or not operation_id:
+            return
+        normalized = usage or {}
+        prompt_count = int(normalized.get("prompt_tokens", normalized.get("input_tokens", 0)) or 0)
+        completion_count = int(normalized.get("completion_tokens", normalized.get("output_tokens", 0)) or 0)
+        total_count = int(normalized.get("total_tokens") or prompt_count + completion_count)
+        try:
+            operation_registry.update(
+                operation_id, status=status, phase=status, message=message,
+                token_usage={"prompt": prompt_count, "completion": completion_count,
+                             "total": total_count, "calls": 1},
+                error=({"message": error, "retryable": True} if error else None),
+                event_type=f"operation.{status}", force=True,
+            )
+            parent = operation_registry.get(parent_task_id)
+            if parent and total_count:
+                previous = parent.get("token_usage") or {}
+                operation_registry.update(
+                    parent_task_id,
+                    token_usage={
+                        "prompt": int(previous.get("prompt") or 0) + prompt_count,
+                        "completion": int(previous.get("completion") or 0) + completion_count,
+                        "total": int(previous.get("total") or 0) + total_count,
+                        "calls": int(previous.get("calls") or 0) + 1,
+                    },
+                    event_type="task.tokens",
+                )
+        except Exception as exc:
+            logger.debug("Could not finish LLM child operation: %s", exc)
+
     for content_attempt in range(attempts):
         request_payload = dict(payload)
+        response_watcher = None
         if is_minimax and content_attempt > 0:
             request_payload["max_completion_tokens"] = max(
                 int(request_payload["max_completion_tokens"]) * 2,
@@ -2022,44 +2380,138 @@ def generate_openai_compatible(
             )
         try:
             task_id = f"llm-{threading.get_ident()}-{time.time_ns()}"
+
+            def request_cancelled() -> bool:
+                if not operation_registry:
+                    return False
+                operation = operation_registry.get(operation_id) if operation_id else None
+                parent = operation_registry.get(parent_task_id) if parent_task_id else None
+                return any(
+                    task and task.get("status") in {"cancelled", "interrupted"}
+                    for task in (operation, parent)
+                )
+
             with resource_scheduler.coordinator.acquire(
                 request_lane,
                 task_id=task_id,
                 description=f"{model_id} completion",
+                cancelled=request_cancelled,
             ):
+                if operation_registry and operation_id:
+                    operation_registry.update(
+                        operation_id, status="running", phase="requesting",
+                        message=f"Calling {provider_name} · attempt {content_attempt + 1}/{attempts}",
+                        attempt=content_attempt + 1,
+                        acquired_resources=[request_lane.key],
+                        event_type="operation.started", force=True,
+                    )
+                _raise_if_token_cancelled(cancellation_token, provider_name)
                 response = requests.post(
-                    endpoint, json=request_payload, headers=headers, timeout=(10, 600),
+                    endpoint,
+                    json=request_payload,
+                    headers=headers,
+                    timeout=(10, 600),
+                    stream=bool(cancellation_token),
+                )
+                response_watcher = _watch_response_for_cancellation(
+                    response, cancellation_token, provider_name,
+                )
+                _raise_if_token_cancelled(
+                    cancellation_token,
+                    provider_name,
+                    abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
                 )
                 # Some otherwise-compatible APIs do not implement OpenAI's
                 # structured response envelope. Retry once without it; Maestro
                 # still validates and repairs the returned JSON locally.
                 if response.status_code in (400, 422) and "response_format" in request_payload:
+                    _stop_response_cancellation_watcher(response_watcher)
+                    response_watcher = None
+                    try:
+                        response.close()
+                    except Exception:
+                        pass
                     fallback_payload = dict(request_payload)
                     fallback_payload.pop("response_format", None)
                     response = requests.post(
-                        endpoint, json=fallback_payload, headers=headers, timeout=(10, 600),
+                        endpoint,
+                        json=fallback_payload,
+                        headers=headers,
+                        timeout=(10, 600),
+                        stream=bool(cancellation_token),
+                    )
+                    response_watcher = _watch_response_for_cancellation(
+                        response, cancellation_token, provider_name,
                     )
                 response.raise_for_status()
+                _raise_if_token_cancelled(
+                    cancellation_token,
+                    provider_name,
+                    abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+                )
+        except LLMRequestCancelled as exc:
+            _stop_response_cancellation_watcher(response_watcher)
+            finish_operation(
+                "cancelled",
+                "Provider request cancelled",
+                error=str(exc),
+            )
+            raise
+        except resource_scheduler.ResourceAcquireCancelled as exc:
+            _stop_response_cancellation_watcher(response_watcher)
+            finish_operation("cancelled", "Provider call cancelled before it started")
+            raise InterruptedError(str(exc)) from exc
         except requests.exceptions.RequestException as exc:
+            abort_supported = bool(
+                response_watcher and response_watcher[2].get("abort_supported")
+            )
+            _stop_response_cancellation_watcher(response_watcher)
+            if _token_cancelled(cancellation_token):
+                raise LLMRequestCancelled(
+                    provider_name,
+                    abort_supported=abort_supported,
+                ) from exc
             detail = ""
             if getattr(exc, "response", None) is not None:
                 detail = str(exc.response.text or "")[:500]
             suffix = f": {detail}" if detail else ""
+            finish_operation("failed", "Provider request failed", error=f"OpenAI-compatible request failed{suffix}")
             raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
 
         try:
+            _raise_if_token_cancelled(
+                cancellation_token,
+                provider_name,
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
             response_data = response.json()
             base_response = response_data.get("base_resp") or {}
             if base_response.get("status_code") not in (None, 0):
                 detail = str(base_response.get("status_msg") or "MiniMax returned an error")
+                finish_operation("failed", "Provider returned an error", error=detail)
                 raise RuntimeError(detail)
             choice = response_data["choices"][0]
             message = choice["message"]
             content = _strip_thinking_tags(str(message.get("content") or "")).strip()
         except (KeyError, IndexError, TypeError, ValueError) as exc:
+            abort_supported = bool(
+                response_watcher and response_watcher[2].get("abort_supported")
+            )
+            _stop_response_cancellation_watcher(response_watcher)
+            response_watcher = None
+            if _token_cancelled(cancellation_token):
+                raise LLMRequestCancelled(
+                    provider_name,
+                    abort_supported=abort_supported,
+                ) from exc
+            finish_operation("failed", "Provider response was invalid", error="OpenAI-compatible provider returned an invalid response")
             raise RuntimeError("OpenAI-compatible provider returned an invalid response") from exc
         if content:
-            _record_activity_usage(response_data.get("usage") or {})
+            _stop_response_cancellation_watcher(response_watcher)
+            response_watcher = None
+            response_usage = response_data.get("usage") or {}
+            _record_activity_usage(response_usage)
+            finish_operation("completed", "Provider response received and parsed", response_usage)
             return content
         usage = response_data.get("usage") or {}
         token_details = usage.get("completion_tokens_details") or {}
@@ -2074,7 +2526,11 @@ def generate_openai_compatible(
             "; retrying once with more output headroom" if content_attempt + 1 < attempts else "",
         )
         if content_attempt + 1 < attempts:
+            _stop_response_cancellation_watcher(response_watcher)
+            response_watcher = None
             time.sleep(0.4)
+    _stop_response_cancellation_watcher(response_watcher)
+    finish_operation("failed", "Provider returned empty content", error=f"{provider_name} returned empty content")
     raise RuntimeError(
         f"{provider_name} returned empty content after {attempts} "
         f"{'attempts' if attempts != 1 else 'attempt'}"
@@ -2088,6 +2544,7 @@ def get_stream_status() -> dict:
 
 
 @trace_llm_call("generate_streaming", context=lambda: {"provider": _provider, "model_id": _model_id})
+@_scheduled_llm_request
 def generate_streaming(
     prompt: str,
     system_prompt: str = "",
@@ -2101,6 +2558,7 @@ def generate_streaming(
     frequency_penalty: float = 0.0,
     presence_penalty: float = 0.0,
     json_schema: Optional[dict] = None,
+    cancellation_token=None,
 ) -> str:
     """Generate text using SSE streaming, populating the stream buffer in real-time.
 
@@ -2117,6 +2575,9 @@ def generate_streaming(
     """
     global _stream_buffer, _stream_done, _last_system_prompt, _last_user_prompt, _last_thinking_text
     import re as _re
+
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, _provider)
 
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
@@ -2153,7 +2614,7 @@ def generate_streaming(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and (_vision_available or _provider in ("remote", "openai")):
+    if image_paths and (_vision_available or _provider in ("remote", "openai", "minimax")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -2264,12 +2725,16 @@ def generate_streaming(
         pass
 
     if _provider == "anthropic":
-        return _generate_streaming_anthropic(messages, total_tokens, max(temperature, 0.01), top_p)
+        return _generate_streaming_anthropic(
+            messages, total_tokens, max(temperature, 0.01), top_p,
+            cancellation_token=cancellation_token,
+        )
 
     raw_content = ""
     reasoning_content = ""
     stream_usage = {}
     in_reasoning = False
+    response_watcher = None
     try:
         resp = requests.post(
             f"{_server_url()}/v1/chat/completions",
@@ -2279,6 +2744,9 @@ def generate_streaming(
             stream=True,
         )
         resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, _provider,
+        )
         # Ollama commonly serves SSE as ``text/event-stream`` without an
         # explicit charset. requests then falls back to ISO-8859-1, turning
         # UTF-8 Spanish such as "océano" into "ocÃ©ano". SSE JSON is UTF-8
@@ -2287,6 +2755,10 @@ def generate_streaming(
 
         import json as _json_mod
         for line in resp.iter_lines(decode_unicode=True):
+            _raise_if_token_cancelled(
+                cancellation_token, _provider,
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
             if not line or not line.startswith("data: "):
                 continue
             data_str = line[6:]  # strip "data: "
@@ -2322,17 +2794,35 @@ def generate_streaming(
                     _record_activity_stream(display, False)
             except Exception:
                 continue
+        _raise_if_token_cancelled(
+            cancellation_token,
+            _provider,
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
 
+    except LLMRequestCancelled:
+        with _stream_lock:
+            _stream_done = True
+        raise
     except requests.exceptions.RequestException as e:
         # Server socket died mid-stream (common: subprocess crash). Surface
         # the real cause so the Director run reports it instead of hanging.
         with _stream_lock:
             _stream_done = True
+        if _token_cancelled(cancellation_token):
+            raise LLMRequestCancelled(
+                _provider,
+                abort_supported=bool(
+                    response_watcher and response_watcher[2].get("abort_supported")
+                ),
+            ) from e
         raise _diagnose_llm_request_failure(e) from e
     except Exception:
         with _stream_lock:
             _stream_done = True
         raise
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     # Capture thinking text for the pipeline dashboard. Two sources:
     #   1. reasoning_content — populated by chat templates that emit
@@ -2416,7 +2906,14 @@ def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top
     return content.strip()
 
 
-def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: float, top_p: float) -> str:
+def _generate_streaming_anthropic(
+    messages: list,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    *,
+    cancellation_token=None,
+) -> str:
     """Streaming generation via Anthropic Messages API with SSE."""
     global _stream_buffer, _stream_done
     import re as _re
@@ -2442,6 +2939,9 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
 
     raw_content = ""
     stream_usage = {}
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, "Anthropic")
+    response_watcher = None
     try:
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -2451,9 +2951,17 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
             stream=True,
         )
         resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, "Anthropic",
+        )
 
         import json
         for line in resp.iter_lines():
+            _raise_if_token_cancelled(
+                cancellation_token,
+                "Anthropic",
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
             if not line:
                 continue
             line_str = line.decode("utf-8", errors="replace")
@@ -2481,12 +2989,33 @@ def _generate_streaming_anthropic(messages: list, max_tokens: int, temperature: 
                         _stream_buffer = raw_content
                     _record_activity_stream(raw_content, False)
 
+    except LLMRequestCancelled:
+        with _stream_lock:
+            _stream_done = True
+        raise
+    except requests.exceptions.RequestException as e:
+        if _token_cancelled(cancellation_token):
+            with _stream_lock:
+                _stream_done = True
+            raise LLMRequestCancelled(
+                "Anthropic",
+                abort_supported=bool(
+                    response_watcher and response_watcher[2].get("abort_supported")
+                ),
+            ) from e
+        print(f"[LLM/Anthropic] Streaming error: {e}")
+        with _stream_lock:
+            _stream_buffer = raw_content or f"Error: {e}"
+            _stream_done = True
+        return ""
     except Exception as e:
         print(f"[LLM/Anthropic] Streaming error: {e}")
         with _stream_lock:
             _stream_buffer = raw_content or f"Error: {e}"
             _stream_done = True
         return ""
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     content = _strip_thinking_tags(raw_content)
 
@@ -2851,8 +3380,9 @@ def enhance_prompt(
             "(S2), etc. speaker ID and use <d>[Language] literal words</d>. "
             "When the user requests a discussion without supplying lines, write "
             "short meaningful dialogue that fits the supplied Duration. Once the "
-            "last line ends, describe silent visible action and closed mouths; do "
-            "not invent more speech. No markdown, explanation, or LoRA filenames."
+            "last line ends, continue with visible action only. Do not describe "
+            "sound or silence. overall_soundscape and non_diegetic_music are N/A. "
+            "No markdown, explanation, or LoRA filenames."
         )
     else:
         system += "\n\nCRITICAL: Output ONLY the enhanced prompt text. No headers, no labels, no markdown, no explanation, no \"Enhancement Logic\", no \"Edit Prompt:\". No LoRA filenames (.safetensors). Just the raw prompt text."
@@ -3048,6 +3578,11 @@ def enhance_prompt(
         result = _strip_h3_untagged_dialogue_duplicates(result, prompt)
         result = _enforce_h3_soundscape_silence(result, prompt)
         result = _enforce_h3_music_request(result, prompt, reference_context)
+        try:
+            from services.director.h3_dialogue import apply_h3_no_sound_description
+        except ImportError:
+            from app.services.director.h3_dialogue import apply_h3_no_sound_description
+        result = apply_h3_no_sound_description(result)
     return result
 
 
@@ -3122,19 +3657,8 @@ def _h3_dialogue_schedule(prompt: str, duration_seconds: Optional[float]) -> tup
 
 
 def _build_h3_timed_silence_clause(prompt: str, duration_seconds: Optional[float]) -> str:
-    if not _h3_requests_speech(prompt):
-        return ""
-    duration, start, end = _h3_dialogue_schedule(prompt, duration_seconds)
-    return (
-        f"From 0.00 to {start:.2f} seconds, show active scene-appropriate nonverbal action rather "
-        "than idle staring; every mouth stays completely closed and the audio contains no human "
-        "voice. Begin the first tagged line at approximately "
-        f"{start:.2f} seconds and finish all <d> dialogue by approximately {end:.2f} seconds. "
-        f"From {end:.2f} to {duration:.2f} seconds, fill the remaining timeline with concrete "
-        "nonverbal action, reactions, camera development, ambience, and synchronized practical "
-        "effects. Outside the tagged interval there are no voices, whispers, grunts, audible "
-        "breathing, or speech-like vocalizations, and every mouth remains closed."
-    )
+    # Temporary: do not inject silence or sound instructions. H3 performs them.
+    return ""
 
 
 def _build_h3_dialogue_requirement(
@@ -3182,20 +3706,8 @@ def _h3_timed_silence_contract_satisfied(
     result: str,
     duration_seconds: Optional[float],
 ) -> bool:
-    """Require explicit non-vocal time allocation around requested speech."""
-    if not _h3_requests_speech(prompt):
-        return True
-    import re
-    text = str(result or "")
-    has_opening_interval = bool(re.search(r"(?i)\bfrom\s+0(?:\.0+)?\s+(?:to|until)", text))
-    has_closed_mouths = bool(re.search(r"(?i)\bmouths?\b.{0,50}\bclosed\b", text))
-    has_no_voice = bool(
-        re.search(r"(?i)\b(?:no|without)\s+(?:human\s+)?(?:voices?|speech|vocal)", text)
-    )
-    has_remaining_interval = bool(
-        re.search(r"(?i)\bfrom\s+\d+(?:\.\d+)?\s+(?:to|until)\s+\d+(?:\.\d+)?\s+seconds", text)
-    )
-    return has_opening_interval and has_closed_mouths and has_no_voice and has_remaining_interval
+    """Silence prose is no longer required; H3 performs those notes as speech."""
+    return True
 
 
 def _h3_voice_binding_contract_satisfied(
@@ -3281,10 +3793,6 @@ def _inject_missing_h3_dialogue(result: str, prompt: str, *, ref2va: bool) -> st
         f"The intended speaker (S{index}) says exactly once: <d>[English] {line}</d>."
         for index, line in enumerate(missing, start=1)
     )
-    additions += (
-        " These are the only spoken words in the video; before and after them, everyone remains "
-        "silent with mouths closed, with no other voices or speech-like vocalization."
-    )
     field = "detailed_description" if ref2va else "integrated_multimodal_description"
     next_field = "overall_soundscape"
     import re
@@ -3312,7 +3820,6 @@ def _inject_h3_generated_dialogue(result: str, fragment: str, *, ref2va: bool) -
     addition = (
         " The complete requested exchange is: "
         + " ".join(valid_lines)
-        + " No other words are spoken; afterward everyone remains silent with mouths closed."
     )
     field = "detailed_description" if ref2va else "integrated_multimodal_description"
     import re
@@ -3362,49 +3869,14 @@ def _strip_h3_untagged_dialogue_duplicates(result: str, prompt: str) -> str:
 
 
 def _enforce_h3_soundscape_silence(result: str, prompt: str) -> str:
-    """Keep the model from filling dialogue gaps with invented human noises."""
-    if not _h3_requests_speech(prompt):
-        return result
+    """Temporary: never describe sound. Keep the required label; value is N/A."""
     import re
-    if re.search(
-        r"(?i)\b(?:grunt|gasp|scream|laugh|sob|cry|audible breathing|nonverbal vocal)\w*\b",
-        str(prompt or ""),
-    ):
-        return result
-
-    pattern = re.compile(
-        r"(?ms)(^\s*overall_soundscape\s*:)(.*?)(?=^\s*non_diegetic_music\s*:)",
+    return re.sub(
+        r"(?ms)^\s*overall_soundscape\s*:.*?(?=^\s*non_diegetic_music\s*:)",
+        "overall_soundscape: N/A\n",
+        str(result or ""),
+        count=1,
     )
-    match = pattern.search(str(result or ""))
-    if not match:
-        return result
-    content = match.group(2).strip()
-    sentences = re.split(r"(?<=[.!?])\s+", content)
-    kept = []
-    for sentence in sentences:
-        has_negation = re.search(r"(?i)\b(?:no|not|without|never)\b", sentence)
-        if has_negation:
-            kept.append(sentence.strip())
-            continue
-        # Remove only comma/semicolon clauses that introduce vocal filler so a
-        # mixed sentence keeps its impacts, ambience, and debris sounds.
-        safe_segments = [
-            segment.strip()
-            for segment in re.split(r"[,;]", sentence)
-            if segment.strip()
-            and not re.search(
-                r"(?i)\b(?:grunt|gasp|whisper|scream|laugh|breath|voice|speech-like)\w*\b",
-                segment,
-            )
-        ]
-        if safe_segments:
-            kept.append(", ".join(safe_segments))
-    kept.append(
-        "Outside the tagged dialogue, no human voices, whispers, grunts, audible breathing, "
-        "or speech-like vocalizations occur"
-    )
-    replacement = match.group(1) + " " + ". ".join(kept).rstrip(".") + ".\n"
-    return result[:match.start()] + replacement + result[match.end():]
 
 
 def _enforce_h3_music_request(
@@ -3462,7 +3934,6 @@ def _build_h3_ref2va_tagged_fallback(
         )
     subject_mapping = " ".join(subject_bindings + [mapping])
     request = _compile_h3_explicit_dialogue(prompt)
-    timed_clause = _build_h3_timed_silence_clause(prompt, duration_seconds)
     return (
         f"subject_definitions: {subject_mapping}\n"
         "summary: A finished video matching the requested action, identity, setting, and explicitly "
@@ -3470,12 +3941,8 @@ def _build_h3_ref2va_tagged_fallback(
         f"retention_analysis: Preserve the mapped identity, motion, and audio roles exactly: {mapping}\n"
         f"detailed_description: The finished target video follows this request: {request} "
         "Reference pictures provide identity and appearance only, never their original background, "
-        "framing, pose, or an opening still. The scripted dialogue is the only speech; all mouths "
-        f"remain closed before and after it. {timed_clause}\n"
-        "overall_soundscape: Continuous scene-appropriate stereo ambience and synchronized practical "
-        "sound effects begin at the first frame and continue naturally underneath dialogue. Outside "
-        "tagged dialogue there are no human voices, whispers, grunts, audible breathing, or "
-        "speech-like vocalizations.\n"
+        "framing, pose, or an opening still.\n"
+        "overall_soundscape: N/A\n"
         "non_diegetic_music: N/A"
     )
 
@@ -3494,14 +3961,9 @@ def _build_h3_context_fallback(
         else ""
     )
     request = _compile_h3_explicit_dialogue(prompt)
-    timed_clause = _build_h3_timed_silence_clause(prompt, duration_seconds)
     return (
-        f"{alignment}integrated_multimodal_description: [Shot 1] {request} The scripted dialogue "
-        f"is the only speech; all mouths remain closed before and after it. {timed_clause}\n\n"
-        "overall_soundscape: Continuous scene-appropriate ambience and synchronized practical "
-        "sound effects begin at the first frame and continue naturally underneath dialogue. Outside "
-        "tagged dialogue there are no human voices, whispers, grunts, audible breathing, or "
-        "speech-like vocalizations.\n\n"
+        f"{alignment}integrated_multimodal_description: [Shot 1] {request}\n\n"
+        "overall_soundscape: N/A\n\n"
         "non_diegetic_music: N/A"
     )
 
@@ -3557,16 +4019,16 @@ def describe_image(
     prompt: str = "Describe this image in detail for use as a video generation prompt.",
     max_new_tokens: int = 256,
 ) -> str:
-    """Describe an image. Vision support requires multimodal GGUF (future)."""
+    """Describe an image with the loaded LLM when it accepts vision input."""
     if not os.path.isfile(image_path):
         raise FileNotFoundError(f"Image not found: {image_path}")
 
-    basename = os.path.basename(image_path)
     return generate(
-        prompt=f"The user has an image file named '{basename}'. {prompt}",
+        prompt=prompt,
         system_prompt="You are a helpful assistant that generates creative, detailed video prompts.",
         max_new_tokens=max_new_tokens,
         temperature=0.4,
+        image_paths=[image_path],
     )
 
 

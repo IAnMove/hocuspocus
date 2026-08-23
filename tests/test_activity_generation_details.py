@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "launch.py"
+LAUNCH = ROOT / "app" / "_launch_runtime.py"
 CLIENT = ROOT / "ui" / "src" / "api" / "client.ts"
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 ACTIVITY = ROOT / "ui" / "src" / "components" / "ActivityFooter.tsx"
@@ -25,21 +25,37 @@ def test_backend_status_and_reconnect_publish_frozen_generation_details():
 def test_activity_footer_places_exact_model_and_recipe_next_to_cancel():
     source = ACTIVITY.read_text(encoding="utf-8")
 
-    assert "function currentModelLabel" in source
     assert "function generationRecipe" in source
-    assert "function generationTitle" in source
-    assert "Using: ${currentModel}" in source
-    assert "flow shift ${details.flow_shift}" in source
+    assert "const parts = [task.provider, task.model]" in source
+    assert "details.video_model_name || details.video_model_type" in source
+    assert "details.image_model_name || details.image_model_type" in source
+    assert "flow shift ${details.flow_shift ?? details.flowShift}" in source
+    assert "audio shift ${details.audio_shift ?? details.audioShift}" in source
+    assert "profile ${details.profile}" in source
     assert "Turbo ${details.turbo ? 'on' : 'off'}" in source
-    assert "primaryModel" in source
-    assert "activeRows.find" in source
-    assert "Cancel this complete generation workflow" in source
+    assert "Cache off" in source
+    assert "LoRAs off" in source
+    assert "primary?.model" in source
+    assert "title={generationRecipe(primary)}" in source
+    assert "api.cancelCanonicalTask(task.id, activeWorkspace)" in source
+    assert "primary.cancelable" in source
 
 
-def test_activity_footer_hides_cancelled_ltx_jobs_and_explains_planning():
+def test_activity_footer_treats_cancellation_as_terminal_history():
     source = ACTIVITY.read_text(encoding="utf-8")
 
-    assert "function humanReadableActivityMessage" in source
-    assert "image and video generation have not started" in source
-    assert "job.status === 'completed' || job.status === 'failed'" in source
-    assert "job.status === 'completed' || job.status === 'cancelled'" in source
+    assert "planning: 'Planning'" in source
+    assert "cancelling: 'Cancelling at a safe boundary'" in source
+    assert "cancelled: 'Cancelled'" in source
+    assert "const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])" in source
+    assert "primaryVisualState === 'cancelled'" in source
+
+
+def test_activity_footer_recovers_and_cancels_series_lab_jobs():
+    source = ACTIVITY.read_text(encoding="utf-8")
+
+    assert "api.fetchCanonicalTasks(activeWorkspace, 'all')" in source
+    assert "api.subscribeCanonicalTaskEvents" in source
+    assert "api.cancelCanonicalTask(task.id, activeWorkspace)" in source
+    assert "api.dismissCanonicalTask(task.id, activeWorkspace)" in source
+    assert "known_series_research: 'Building series bible'" in source

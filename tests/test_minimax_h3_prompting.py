@@ -54,6 +54,32 @@ def test_first_frame_prompt_uses_official_field_order_and_dialogue_tags():
     assert "(S1) Erio says <d>[Spanish] ¿Dónde está la semilla?</d>" in prompt
     assert "slow dolly in" in prompt
     assert "Audio:" not in prompt
+    soundscape = prompt.split("overall_soundscape:", 1)[1].split(
+        "non_diegetic_music:", 1,
+    )[0]
+    assert "N/A" in soundscape
+    assert "desert wind" not in soundscape.casefold()
+    assert "servo" not in soundscape.casefold()
+    assert "foreground voices" not in soundscape.casefold()
+    assert "vocal delivery" not in soundscape.casefold()
+
+
+def test_direct_structured_prompt_is_preserved_without_a_fake_picture_reference():
+    source = (
+        "integrated_multimodal_description: [Shot 1] A silent machine starts.\n\n"
+        "overall_soundscape: Low mechanical hum. No human voices.\n\n"
+        "non_diegetic_music: N/A"
+    )
+
+    prompt = format_minimax_h3_prompt({}, source, reference_mode="direct")
+
+    assert "integrated_multimodal_description:" in prompt
+    assert "overall_soundscape: N/A" in prompt
+    assert "Low mechanical hum" not in prompt
+    assert "No human voices" not in prompt
+    assert is_structured_h3_prompt(prompt, "direct")
+    assert FIRST_FRAME_REFERENCE not in prompt
+    assert "referenced picture" not in prompt
 
 
 def test_reference_prompt_uses_six_field_contract_without_first_frame_claim():

@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from PIL import Image
 
@@ -16,6 +16,37 @@ from app.services import minimax_h3_service as h3
 
 
 class TestMiniMaxH3Workflow(unittest.TestCase):
+    def test_local_sidecar_http_ignores_ambient_proxy_state(self):
+        response = Mock()
+
+        class FakeSession:
+            trust_env = True
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def request(self, method, url, **kwargs):
+                self.request_args = (method, url, kwargs)
+                self.trust_env_at_request = self.trust_env
+                return response
+
+        session = FakeSession()
+        with patch.object(h3.requests, "Session", return_value=session):
+            result = h3._local_http_request(
+                "GET", "http://127.0.0.1:43123/history/example", timeout=60,
+            )
+
+        self.assertIs(result, response)
+        self.assertFalse(session.trust_env_at_request)
+        self.assertEqual(session.request_args, (
+            "GET",
+            "http://127.0.0.1:43123/history/example",
+            {"timeout": 60},
+        ))
+
     def test_legacy_options_publish_ref2va_image_limit(self):
         self.assertEqual(h3.MODEL_OPTIONS["max_image_refs"], 9)
 
@@ -159,7 +190,8 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         self.assertEqual(workflow["10"]["class_type"], "MiniMaxH3ImageToVideo")
         final_prompt = workflow["10"]["inputs"]["prompt"]
         self.assertEqual(final_prompt.lower().count("overall_soundscape:"), 1)
-        self.assertIn("at 0.00 seconds", final_prompt)
+        self.assertNotIn("at 0.00 seconds", final_prompt)
+        self.assertNotIn("referenced picture", final_prompt)
         self.assertEqual(workflow["27"]["inputs"]["fps"], 24.0)
         self.assertEqual(workflow["27"]["inputs"]["audio"], ["26", 0])
         self.assertEqual(workflow["28"]["inputs"]["codec"], "auto")
@@ -269,7 +301,27 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
 
         prompt = workflow["10"]["inputs"]["prompt"]
         self.assertIn("overall_soundscape:", prompt)
-        self.assertIn("clear, audible stereo mix", prompt)
+        soundscape = prompt.split("overall_soundscape:", 1)[1].split(
+            "non_diegetic_music:", 1
+        )[0]
+        self.assertIn("N/A", soundscape)
+        self.assertNotIn("Silence", soundscape)
+        self.assertNotIn("dialogue", soundscape.casefold())
+
+    def test_structured_direct_prompt_reaches_h3_verbatim(self):
+        source = (
+            "integrated_multimodal_description: [Shot 1] A silent machine starts.\n\n"
+            "overall_soundscape: Low mechanical hum. No human voices.\n\n"
+            "non_diegetic_music: N/A"
+        )
+
+        workflow, _ = h3.build_workflow({**h3.DEFAULTS, "prompt": source}, "jobdirect")
+
+        final_prompt = workflow["10"]["inputs"]["prompt"]
+        self.assertIn("A silent machine starts.", final_prompt)
+        self.assertIn("overall_soundscape: N/A", final_prompt)
+        self.assertNotIn("Low mechanical hum", final_prompt)
+        self.assertNotIn("No human voices", final_prompt)
 
     def test_authored_audio_clause_is_not_duplicated(self):
         prompt = "A quiet beach. Audio: gentle waves and gulls."
@@ -280,7 +332,8 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         }, "jobaudioauthored")
 
         final_prompt = workflow["10"]["inputs"]["prompt"]
-        self.assertIn("overall_soundscape: gentle waves and gulls.", final_prompt)
+        self.assertIn("overall_soundscape: N/A", final_prompt)
+        self.assertNotIn("gentle waves", final_prompt)
         self.assertNotIn("loud machinery", final_prompt)
 
     def test_comfy_sampling_progress_is_exposed_to_maestro_jobs(self):

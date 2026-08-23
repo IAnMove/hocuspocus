@@ -19,7 +19,7 @@ _requires_torch = unittest.skipUnless(
 
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_LAUNCH_PATH = os.path.join(_ROOT, "app", "launch.py")
+_LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _WAN_HANDLER_PATH = os.path.join(
     _ROOT, "app", "models", "wan", "wan_handler.py",
@@ -3765,7 +3765,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
 
     def test_recast_worker_initializes_probe_frame_before_local_use(self):
-        tree = ast.parse(_read(_LAUNCH_PATH), filename="app/launch.py")
+        tree = ast.parse(_read(_LAUNCH_PATH), filename="app/_launch_runtime.py")
         endpoint = next(
             node
             for node in tree.body
@@ -3840,7 +3840,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("editRecastIsolateReference: true", store)
         self.assertIn("isolate_reference: true", store)
         self.assertNotIn("Isolate replacement from reference background", controls)
-        self.assertIn("Maestro isolates references", controls)
+        self.assertIn("Loreframe Lab isolates references", controls)
 
     def test_recast_uses_identity_latents_and_trims_motion_preroll(self):
         launch = _read(_LAUNCH_PATH)

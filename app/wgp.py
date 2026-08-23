@@ -6524,8 +6524,9 @@ def concatenate_multi_clip_videos(
     Uses ffmpeg's concat FILTER (not demuxer) which re-encodes all clips to a
     uniform format.  This is slower than stream-copy but reliably handles
     codec, timebase, and resolution mismatches that cause the concat demuxer
-    to silently drop clips. It intentionally performs direct cuts: visual
-    edit transitions such as xfade belong to the Video Editor post-process.
+    to silently drop clips. When there is no driving soundtrack, a short
+    freeze-tail plus crossfade is applied so assemblies do not slap-cut.
+    Driving-audio joins stay hard-cut so the song stays in sync.
     to silently drop clips. ``audio_start_sec`` identifies the source-track
     timestamp represented by the joined video's first frame. ``pad_audio``
     extends a marginally short source track with silence. When padding is
@@ -6610,6 +6611,15 @@ def concatenate_multi_clip_videos(
 
     use_clip_audio = clips_have_audio and not audio_path
     audio_label = "with embedded audio" if use_clip_audio else ("with external audio" if audio_path else "video only")
+    if n > 1 and not audio_path:
+        try:
+            from services.mix_concat import concat_with_tail_hold_and_crossfade
+        except ImportError:
+            from app.services.mix_concat import concat_with_tail_hold_and_crossfade
+        print(f"[Multi-Clip] Joining {n} clips with 0.5s hold + 0.4s crossfade ({audio_label})")
+        if concat_with_tail_hold_and_crossfade(valid_paths, output_path):
+            return True
+        print("[Multi-Clip] Soft join failed; falling back to hard concat")
     print(f"[Multi-Clip] Joining {n} clips using concat filter (re-encode, {audio_label})")
     if audio_path and audio_start_sec > 0:
         print(f"[Multi-Clip] External audio begins at source time {audio_start_sec:.3f}s")

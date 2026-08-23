@@ -183,7 +183,7 @@ def recommend_settings(hw: dict) -> dict:
             "compile": "",
             "_recommendation_label": "Auto-tune unavailable on this hardware",
             "_recommendation_reason": (
-                "No CUDA-capable GPU detected. Maestro requires NVIDIA GPU "
+                "No CUDA-capable GPU detected. Loreframe Lab requires NVIDIA GPU "
                 "with 6+ GB VRAM. Default conservative profile applied — "
                 "performance may be limited."
             ),

@@ -240,6 +240,37 @@ def build_director_video_execution_profile(
         architectural_maximum = None
 
     requested_resolution = str(video_params.get("resolution") or "").strip()
+    # Studio defaults contain a concrete landscape canvas.  In Director,
+    # however, an explicit preset + aspect selection is the user's request
+    # and must win over that inherited default.  Previously the selection was
+    # persisted only as descriptive metadata, so e.g. ``540p`` + ``9:16``
+    # still rendered with H3's default ``960x544`` landscape canvas.
+    resolution_presets = model_def.get("resolution_presets") or {}
+    preset_key = str(resolution_preset or "").strip()
+    aspect_key = str(aspect_ratio or "").strip()
+    preset_config = (
+        resolution_presets.get(preset_key)
+        if isinstance(resolution_presets, Mapping)
+        else None
+    )
+    if preset_key and aspect_key and resolution_presets and not isinstance(
+        preset_config, Mapping
+    ):
+        raise ValueError(
+            f"{model_type} does not support Director resolution preset "
+            f"{preset_key}."
+        )
+    if isinstance(preset_config, Mapping):
+        preset_values = preset_config.get("values") or {}
+        if isinstance(preset_values, Mapping):
+            preset_resolution = preset_values.get(aspect_key)
+            if preset_resolution:
+                requested_resolution = str(preset_resolution).strip()
+            elif preset_key and aspect_key:
+                raise ValueError(
+                    f"{model_type} does not support {aspect_key} at "
+                    f"Director resolution preset {preset_key}."
+                )
     normalized_resolution = requested_resolution
     recommendation: dict[str, Any] | None = None
     recommended_maximum = architectural_maximum

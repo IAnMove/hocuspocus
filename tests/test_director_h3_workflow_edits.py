@@ -190,7 +190,7 @@ def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Pa
     assert all(item["model_type"] == "minimax_h3_legacy" for item in submitted)
     assert submitted[0]["h3_reference_mode"] == "references"
     assert submitted[0]["image_refs"][1].endswith("portrait.png")
-    assert "IDENTITY CONTINUITY LOCK" in submitted[0]["prompt"]
+    assert "Same faces and wardrobe throughout" in submitted[0]["prompt"]
     saved = director_pipeline.load_pipeline_state(str(tmp_path), "editable")
     assert [item["filename"] for item in saved["clips"][0]["h3_segments"]] == [
         "old_0.mp4", "new_1.mp4", "new_2.mp4",
@@ -211,3 +211,138 @@ def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Pa
     )
     assert rejoin_sidecar["generation_time"] == saved["total_time_sec"]
     assert rejoin_sidecar["generation_timings"]["assembly_time_sec"] == saved["assembly_time_sec"]
+
+
+def test_clip_history_is_recovered_selected_and_used_by_rejoin(tmp_path: Path):
+    for filename in ("clip_0_original.mp4", "clip_0_rerun.mp4", "clip_1.mp4"):
+        (tmp_path / filename).write_bytes(b"video")
+    for filename, clip_index, created_at, prompt in (
+        ("clip_0_original.mp4", 0, 100.0, "Original prompt"),
+        ("clip_0_rerun.mp4", 0, 200.0, "Edited prompt"),
+        ("clip_1.mp4", 1, 110.0, "Second prompt"),
+    ):
+        legacy_sidecar = filename == "clip_0_original.mp4"
+        (tmp_path / filename.replace(".mp4", ".meta.json")).write_text(
+            json.dumps({
+                "director_pipeline_id": "history",
+                **({} if legacy_sidecar else {"director_clip_index": clip_index}),
+                "output_filename": filename,
+                "created_at": created_at,
+                "params": {
+                    "_director_pipeline_id": "history",
+                    **({
+                        "_director_progress_label": "H3 Legacy · clip 1/2",
+                    } if legacy_sidecar else {}),
+                    "model_type": "test_video",
+                    "prompt": prompt,
+                    "seed": clip_index + int(created_at),
+                    "resolution": "720x1280",
+                    "video_length": 81,
+                },
+            }),
+            encoding="utf-8",
+        )
+    _write_pipeline(tmp_path, {
+        "pipeline_id": "history",
+        "created_at": 50.0,
+        "status": "completed",
+        "pipeline_type": "short_film_story",
+        "video_model": "test_video",
+        "shot_image_policy": "prompt_only",
+        "video_params": {"resolution": "720x1280"},
+        "clips": [
+            {
+                "index": 0,
+                "video_filename": "clip_0_rerun.mp4",
+                "video_prompt": "Edited prompt",
+                "video_stale": False,
+            },
+            {
+                "index": 1,
+                "video_filename": "clip_1.mp4",
+                "video_prompt": "Second prompt",
+                "video_stale": False,
+            },
+        ],
+        "output_files": [
+            "clip_0_original.mp4", "clip_0_rerun.mp4", "clip_1.mp4",
+        ],
+        "workspace": "default",
+    })
+
+    loaded = director_pipeline.load_pipeline_state(str(tmp_path), "history")
+    assert [
+        attempt["filename"] for attempt in loaded["clips"][0]["video_attempts"]
+    ] == ["clip_0_original.mp4", "clip_0_rerun.mp4"]
+
+    selected = director_pipeline.select_clip_video_attempt(
+        str(tmp_path), "history", 0, "clip_0_original.mp4",
+    )
+    assert selected["filename"] == "clip_0_original.mp4"
+
+    joined = []
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(paths, destination, _audio, **_kwargs):
+            joined.extend(Path(path).name for path in paths)
+            Path(destination).write_bytes(b"joined")
+            return True
+
+    with patch.object(director_pipeline, "_wgp", FakeWgp()):
+        director_pipeline.rejoin_clips(str(tmp_path), "history")
+
+    assert joined == ["clip_0_original.mp4", "clip_1.mp4"]
+    saved = director_pipeline.load_pipeline_state(str(tmp_path), "history")
+    assert saved["clips"][0]["selected_video_filename"] == "clip_0_original.mp4"
+    assert saved["clips"][0]["video_filename"] == "clip_0_original.mp4"
+
+
+def test_explicit_whole_clip_selection_ignores_old_h3_segments(tmp_path: Path):
+    filenames = ("shot0_a.mp4", "shot0_b.mp4", "shot0_studio.mp4", "shot1.mp4")
+    for filename in filenames:
+        (tmp_path / filename).write_bytes(b"video")
+    _write_pipeline(tmp_path, {
+        "pipeline_id": "h3-selection",
+        "created_at": 10.0,
+        "status": "completed",
+        "pipeline_type": "short_film_story",
+        "video_model": "minimax_h3_legacy",
+        "clips": [
+            {
+                "index": 0,
+                "video_filename": "shot0_b.mp4",
+                "video_prompt": "Whole shot zero",
+                "h3_segments": [
+                    {"index": 0, "filename": "shot0_a.mp4", "stale": False},
+                    {"index": 1, "filename": "shot0_b.mp4", "stale": False},
+                ],
+            },
+            {
+                "index": 1,
+                "video_filename": "shot1.mp4",
+                "video_prompt": "Whole shot one",
+                "h3_segments": [
+                    {"index": 0, "filename": "shot1.mp4", "stale": False},
+                ],
+            },
+        ],
+        "output_files": list(filenames),
+        "workspace": "default",
+    })
+    director_pipeline.select_clip_video_attempt(
+        str(tmp_path), "h3-selection", 0, "shot0_studio.mp4",
+    )
+    joined = []
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(paths, destination, _audio, **_kwargs):
+            joined.extend(Path(path).name for path in paths)
+            Path(destination).write_bytes(b"joined")
+            return True
+
+    with patch.object(director_pipeline, "_wgp", FakeWgp()):
+        director_pipeline.rejoin_clips(str(tmp_path), "h3-selection")
+
+    assert joined == ["shot0_studio.mp4", "shot1.mp4"]

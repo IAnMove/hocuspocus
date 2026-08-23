@@ -109,6 +109,9 @@ class H3WindowPlannerTests(unittest.TestCase):
         self.assertNotIn("stops the truck", first)
         self.assertIn("braces both hands", second)
         self.assertIn("<d>[English] Look out!</d>", second)
+        self.assertNotIn("the first tagged line is spoken exactly once", second)
+        self.assertNotIn("all characters remain silent", first)
+        self.assertNotIn("all characters remain silent", final)
         self.assertNotIn("Look out!", first)
         self.assertNotIn("Look out!", final)
         self.assertIn(plan["windows"][0]["closing_state"], compiled[1]["opening_state"])
@@ -116,6 +119,7 @@ class H3WindowPlannerTests(unittest.TestCase):
             self.assertEqual(item["prompt"].count("integrated_multimodal_description:"), 1)
             self.assertEqual(item["prompt"].count("overall_soundscape:"), 1)
             self.assertEqual(item["prompt"].count("non_diegetic_music:"), 1)
+            self.assertEqual(item["prompt"].count("VOCAL TIMELINE LOCK:"), 0)
             self.assertIn("Clark Kent wears the same blue shirt", item["prompt"])
 
     def test_compiler_assigns_endpoint_images_to_the_correct_passes(self):
@@ -375,7 +379,7 @@ class H3WindowPlannerTests(unittest.TestCase):
 
     def test_ui_and_runtime_use_explicit_prompt_arrays(self):
         handler = (APP / "wgp.py").read_text(encoding="utf-8")
-        launch = (APP / "launch.py").read_text(encoding="utf-8")
+        launch = (APP / "_launch_runtime.py").read_text(encoding="utf-8")
         store = (ROOT / "ui" / "src" / "stores" / "useStore.ts").read_text(encoding="utf-8")
         advanced = (ROOT / "ui" / "src" / "components" / "Sidebar" / "AdvancedSettings.tsx").read_text(encoding="utf-8")
         prompt_input = (ROOT / "ui" / "src" / "components" / "Sidebar" / "PromptInput.tsx").read_text(encoding="utf-8")

@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import threading
 import time
-from typing import Iterator
+from typing import Callable, Iterator
 from urllib.parse import urlparse
 
 
@@ -38,6 +38,10 @@ class ResourceLane:
     label: str
     location: str
     capacity: int = 1
+
+
+class ResourceAcquireCancelled(RuntimeError):
+    """Raised when a task is cancelled before its resource lease begins."""
 
 
 def local_gpu_lane(gpu_index: int = 0) -> ResourceLane:
@@ -102,8 +106,13 @@ class ResourceCoordinator:
 
     def __init__(self) -> None:
         self._guard = threading.Lock()
+        self._thread_state = threading.local()
         self._slots: dict[str, threading.BoundedSemaphore] = {}
         self._state: dict[str, dict] = {}
+        self._next_ticket = 0
+        self._prepare_hooks: dict[
+            str, Callable[[ResourceLane, str, str], None]
+        ] = {}
 
     def _slot(self, lane: ResourceLane) -> threading.BoundedSemaphore:
         with self._guard:
@@ -118,8 +127,111 @@ class ResourceCoordinator:
                     "active": 0,
                     "waiting": 0,
                     "tasks": [],
+                    "waiters": [],
+                    # The condition shares the coordinator guard so ticket
+                    # inspection, removal, and slot hand-off are atomic.
+                    "condition": threading.Condition(self._guard),
                 }
             return slot
+
+    def _remove_waiter_locked(self, lane: ResourceLane, waiter: dict) -> bool:
+        """Remove one queued ticket and wake the next ticket in its lane."""
+        state = self._state[lane.key]
+        for index, queued in enumerate(state["waiters"]):
+            if queued is waiter:
+                state["waiters"].pop(index)
+                state["waiting"] = max(0, state["waiting"] - 1)
+                state["condition"].notify_all()
+                return True
+        return False
+
+    def shared_lock(self, lane: ResourceLane) -> threading.BoundedSemaphore:
+        """Return the coordinator-owned primitive for legacy FIFO adapters.
+
+        The main Maestro generation queue already has tested FIFO and abort
+        semantics around a lock. Giving it this exact semaphore lets migrated
+        engines acquire through :meth:`acquire` without introducing a second
+        GPU lock or allowing two owners of the same physical device.
+        """
+        return self._slot(lane)
+
+    def set_prepare_hook(
+        self,
+        lane: ResourceLane,
+        hook: Callable[[ResourceLane, str, str], None] | None,
+    ) -> None:
+        """Install a post-acquisition runtime handoff hook for one lane."""
+        self._slot(lane)
+        with self._guard:
+            if hook is None:
+                self._prepare_hooks.pop(lane.key, None)
+            else:
+                self._prepare_hooks[lane.key] = hook
+
+    @contextmanager
+    def adopt_acquired(
+        self,
+        lane: ResourceLane,
+        *,
+        task_id: str,
+        description: str = "",
+    ) -> Iterator[ResourceLane]:
+        """Observe a lease whose coordinator semaphore is already held.
+
+        Maestro's original video queue owns FIFO/cancellation semantics around
+        the same physical semaphore returned by :meth:`shared_lock`.  Once
+        that queue has acquired it, this adapter performs the normal runtime
+        hand-off and makes the owner visible in :meth:`snapshot` without
+        attempting to acquire the semaphore a second time.
+
+        Callers must hold ``shared_lock(lane)`` for the whole context.
+        """
+        self._slot(lane)
+        held = getattr(self._thread_state, "held", None)
+        if held is None:
+            held = {}
+            self._thread_state.held = held
+        if held.get(lane.key, 0) > 0:
+            held[lane.key] += 1
+            try:
+                yield lane
+            finally:
+                held[lane.key] -= 1
+                if held[lane.key] <= 0:
+                    held.pop(lane.key, None)
+            return
+
+        held[lane.key] = 1
+        active = False
+        try:
+            with self._guard:
+                prepare_hook = self._prepare_hooks.get(lane.key)
+            if prepare_hook is not None:
+                prepare_hook(lane, task_id, description)
+
+            started_at = time.time()
+            with self._guard:
+                state = self._state[lane.key]
+                state["active"] += 1
+                state["tasks"].append({
+                    "id": task_id,
+                    "description": description,
+                    "started_at": started_at,
+                })
+                active = True
+            yield lane
+        finally:
+            held[lane.key] = max(0, held.get(lane.key, 1) - 1)
+            if held[lane.key] <= 0:
+                held.pop(lane.key, None)
+            if active:
+                with self._guard:
+                    state = self._state[lane.key]
+                    state["active"] = max(0, state["active"] - 1)
+                    state["tasks"] = [
+                        task for task in state["tasks"]
+                        if task["id"] != task_id
+                    ]
 
     @contextmanager
     def acquire(
@@ -128,35 +240,137 @@ class ResourceCoordinator:
         *,
         task_id: str,
         description: str = "",
+        cancelled: Callable[[], bool] | None = None,
+        poll_interval: float = 0.1,
     ) -> Iterator[ResourceLane]:
+        held = getattr(self._thread_state, "held", None)
+        if held is None:
+            held = {}
+            self._thread_state.held = held
+        if held.get(lane.key, 0) > 0:
+            # A parent operation may deliberately retain a CUDA lease across
+            # several observable child calls. Re-entering that same physical
+            # lane on the same thread must not deadlock on its semaphore.
+            if cancelled is not None and cancelled():
+                raise ResourceAcquireCancelled(
+                    f"Task {task_id} was cancelled before re-entering {lane.key}"
+                )
+            held[lane.key] += 1
+            try:
+                yield lane
+            finally:
+                held[lane.key] -= 1
+                if held[lane.key] <= 0:
+                    held.pop(lane.key, None)
+            return
+
         slot = self._slot(lane)
+        queued_at = time.time()
+        waiter = {
+            "id": task_id,
+            "description": description,
+            "queued_at": queued_at,
+        }
         with self._guard:
             state = self._state[lane.key]
+            self._next_ticket += 1
+            waiter["ticket"] = self._next_ticket
             state["waiting"] += 1
-        slot.acquire()
-        started_at = time.time()
-        with self._guard:
-            state = self._state[lane.key]
-            state["waiting"] -= 1
-            state["active"] += 1
-            state["tasks"].append({
-                "id": task_id,
-                "description": description,
-                "started_at": started_at,
-            })
+            state["waiters"].append(waiter)
+            condition = state["condition"]
+        acquired = False
+        active = False
+        active_task = None
+        waiting = True
+        held_registered = False
         try:
+            interval = max(0.01, float(poll_interval or 0.1))
+            while True:
+                if cancelled is not None and cancelled():
+                    with self._guard:
+                        self._remove_waiter_locked(lane, waiter)
+                    raise ResourceAcquireCancelled(
+                        f"Task {task_id} was cancelled while waiting for {lane.key}"
+                    )
+                with self._guard:
+                    state = self._state[lane.key]
+                    # A ticket may acquire only when it reaches the front of
+                    # its lane. This makes arrival order authoritative rather
+                    # than merely observable in the status snapshot.
+                    if state["waiters"] and state["waiters"][0] is waiter:
+                        if slot.acquire(blocking=False):
+                            acquired = True
+                            state["waiters"].pop(0)
+                            state["waiting"] = max(0, state["waiting"] - 1)
+                            waiting = False
+                            held[lane.key] = held.get(lane.key, 0) + 1
+                            held_registered = True
+                            state["active"] += 1
+                            active_task = {
+                                "id": task_id,
+                                "description": description,
+                                "started_at": time.time(),
+                            }
+                            state["tasks"].append(active_task)
+                            active = True
+                            condition.notify_all()
+                            break
+                    # A bounded wait keeps compatibility with legacy callers
+                    # that acquire shared_lock() directly: their semaphore
+                    # release cannot itself notify this condition.
+                    condition.wait(timeout=interval)
+            # Close the small race between the final cancellation check and
+            # semaphore acquisition. A cancelled waiter must never start a
+            # provider call merely because the previous owner just released.
+            if cancelled is not None and cancelled():
+                raise ResourceAcquireCancelled(
+                    f"Task {task_id} was cancelled while acquiring {lane.key}"
+                )
+            # Ownership was registered before leaving the ticket hand-off.
+            # A cleanup hook may itself call a migrated service on this lane;
+            # treating that call as reentrant avoids deadlocking on the
+            # semaphore that this hook already owns.
+            with self._guard:
+                prepare_hook = self._prepare_hooks.get(lane.key)
+            if prepare_hook is not None:
+                prepare_hook(lane, task_id, description)
+            if cancelled is not None and cancelled():
+                raise ResourceAcquireCancelled(
+                    f"Task {task_id} was cancelled while preparing {lane.key}"
+                )
             yield lane
         finally:
+            if held_registered:
+                held[lane.key] = max(0, held.get(lane.key, 1) - 1)
+                if held[lane.key] <= 0:
+                    held.pop(lane.key, None)
             with self._guard:
                 state = self._state[lane.key]
-                state["active"] = max(0, state["active"] - 1)
-                state["tasks"] = [task for task in state["tasks"] if task["id"] != task_id]
-            slot.release()
+                if waiting:
+                    self._remove_waiter_locked(lane, waiter)
+                if active:
+                    state["active"] = max(0, state["active"] - 1)
+                    state["tasks"] = [
+                        task for task in state["tasks"] if task is not active_task
+                    ]
+                condition.notify_all()
+            if acquired:
+                slot.release()
+                with self._guard:
+                    condition.notify_all()
 
     def snapshot(self) -> list[dict]:
         with self._guard:
             return [
-                {**state, "tasks": [dict(task) for task in state["tasks"]]}
+                {
+                    **{
+                        key: value
+                        for key, value in state.items()
+                        if key != "condition"
+                    },
+                    "tasks": [dict(task) for task in state["tasks"]],
+                    "waiters": [dict(task) for task in state["waiters"]],
+                }
                 for state in self._state.values()
             ]
 

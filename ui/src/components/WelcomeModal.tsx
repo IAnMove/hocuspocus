@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Sparkles, Download, Cpu, ShieldAlert, X } from 'lucide-react'
+import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
 
 const SEEN_KEY = 'maestro_welcome_seen_v1'
 
@@ -13,12 +14,12 @@ const SEEN_KEY = 'maestro_welcome_seen_v1'
  * it can render instantly on first paint.
  */
 export function WelcomeModal() {
-  const [open, setOpen] = useState(() => localStorage.getItem(SEEN_KEY) !== '1')
+  const [open, setOpen] = useState(() => safeStorageGet('local', SEEN_KEY) !== '1')
 
   if (!open) return null
 
   const dismiss = () => {
-    localStorage.setItem(SEEN_KEY, '1')
+    safeStorageSet('local', SEEN_KEY, '1')
     setOpen(false)
   }
 

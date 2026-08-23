@@ -1,15 +1,15 @@
 VIDEO PROMPT (video_prompt) — for MiniMax H3:
 
-MiniMax H3 generates synchronized picture and stereo sound. A Director shot may
-be text-only (FL2VA) or use soft image/audio references (Ref2VA); neither path
-guarantees a fixed start frame. Every video prompt therefore stands on its own.
+MiniMax H3 generates picture and stereo sound together, but Maestro currently
+sends picture plus exact dialogue tags only. A Director shot may be text-only
+(FL2VA) or use soft image/audio references (Ref2VA); neither path guarantees a
+fixed start frame. Every video prompt therefore stands on its own.
 
 SELF-CONTAINED SHOT RULES:
 - Describe the finished target shot, not instructions to copy, animate, replace,
   or edit a reference.
 - Include the setting, composition, every visible subject, identity/appearance,
-  wardrobe, action, camera behavior, lighting, dialogue, ambience, effects, and
-  music that must exist in the result.
+  wardrobe, action, camera behavior, lighting, and any exact dialogue tags.
 - Follow the model-aware CHARACTER NAMING block in the surrounding Director
   instructions. In prompt-only/direct-reference mode, preserve every recognizable
   proper identity and its series, film, franchise, or performer exactly as
@@ -36,23 +36,37 @@ CONTINUITY WITHOUT A FIXED START IMAGE:
 CONTEXT-IR FORMAT:
 - Structure video_prompt with exactly these labeled sections:
   integrated_multimodal_description, overall_soundscape, non_diegetic_music.
-- Begin integrated_multimodal_description with [Shot 1] and narrate visible
-  action, camera, dialogue, and synchronized sound in chronological order.
+- Begin integrated_multimodal_description with [Shot 1] and narrate only
+  visible action and camera.
 - Give each speaking person a stable ID such as (S1) or (S2).
 - Literal speech uses <d>[English] Exact words.</d> (change the language tag
-  when requested). Speaker identity, action, delivery, and voice are outside
-  the dialogue tag. Preserve scripted dialogue verbatim.
+  when requested). Speaker identity and visible action are outside the tag.
 - Every structured dialogue_beats entry must also appear exactly once in
   video_prompt. Never leave the actual spoken words only in the JSON field.
-- When no dialogue is requested, explicitly keep mouths closed and omit voices
-  or speech-like sounds. Explicitly forbid muttering, murmuring, improvised
-  words, and gibberish; never fill unused time with invented speech.
-- After the last spoken line, use visible reactions or motion for remaining
-  time and state that characters remain silent with mouths closed.
-- overall_soundscape contains ambience, practical effects, and non-verbal human
-  sounds. Do not repeat dialogue there.
-- non_diegetic_music is audience-only music. Use N/A unless music is requested
-  or the shot follows supplied driving music.
+- When no dialogue is requested, omit <d> tags and continue with visible
+  action only.
+- After the last spoken line, continue with visible reactions or motion.
+
+AUDIO POLICY (temporary, highest priority):
+MiniMax H3 treats any written audio note as something to perform, including
+negative conditions and silence. Until native audio is reliable, the prompt
+must contain zero sound description.
+- The only allowed audio content is exact spoken dialogue, written solely as
+  <d>[Language] exact words</d> when someone actually speaks.
+- If there is no dialogue, omit <d> tags entirely and keep describing picture.
+- A mute shot of a known talking character still makes H3 invent speech unless
+  the picture fills the duration with physical action and closed lips. Closed
+  lips are visible acting, not an audio note. Do not assign speaker IDs unless
+  that person has a <d> line. Do not write stills, freeze-frames, or leftover
+  quiet time.
+- Do not describe sound in any form: not ambience, room tone, foley, practical
+  effects, music, voices, vocal performance, or the audible result of a visible
+  action.
+- Do not describe silence or the absence of sound. Do not write negative audio
+  conditions of any kind. Do not mention leftover duration as quiet time.
+- overall_soundscape must be exactly N/A.
+- non_diegetic_music must be exactly N/A.
+- These two labels are required schema, not permission to invent audio.
 
 TIMING:
 - Keep actions and dialogue realistic for the requested duration. Spoken text
@@ -62,8 +76,8 @@ TIMING:
   syntax inside video_prompt. Use the required structured continuity fields
   only for Director's planning and handoff logic.
 - For supplied driving audio, describe the visible performance, lip movement,
-  rhythm, and action that synchronize to it; do not transcribe or replace its
-  audible content.
+  rhythm, and action that synchronize to it; do not transcribe, describe, or
+  replace its audible content.
 
 Do not include negative prompts, model names, LoRA names, technical settings,
 reference-index guesses, or explanatory prose in video_prompt.

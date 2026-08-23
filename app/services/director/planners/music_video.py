@@ -9,6 +9,7 @@ Outputs: ProductionPlan with ShotPlan objects (NOT final prompts).
 
 from __future__ import annotations
 import json
+import math
 import os
 import re
 from typing import Optional, Any
@@ -325,6 +326,35 @@ _SECTION_ALIASES = {
 }
 
 
+def build_music_video_cast_lock(
+    scene_description: str,
+    treatment: dict[str, Any] | None = None,
+) -> str:
+    """Keep the soundtrack genre from inventing a second modern cast.
+
+    Rap or sung audio is timing only. If the user named a world or people,
+    those are the only on-screen identities unless they explicitly ask for a
+    contemporary performer.
+    """
+
+    treatment = treatment if isinstance(treatment, dict) else {}
+    forbidden = str(treatment.get("forbidden_elements") or "").strip()
+    extra = f" Also never introduce: {forbidden}." if forbidden else ""
+    return (
+        "CAST LOCK — AUDIO GENRE IS NOT CAST:\n"
+        "A rap, hip-hop, sung, or spoken soundtrack does not authorize a "
+        "modern concert performer on screen. If the Scene Concept names a "
+        "world or cast (for example Middle-earth, dwarves, elves, hobbits, "
+        "wizards), every visible person must belong to that cast and "
+        "wardrobe. Never invent a contemporary rapper, MC, hoodie-and-chain "
+        "hype man, bucket-hat street artist, SPEAKER_00 modern vocalist, or "
+        "modern concert crowd unless the Scene Concept explicitly asks for "
+        "them. Lyric clips may show the named in-world characters acting, "
+        "working, or facing camera; they must not be replaced by an "
+        f"unrelated musician.{extra}"
+    )
+
+
 def _parse_performer_map(scene_description: str) -> dict[str, str]:
     """Extract section→performer mapping from natural language scene description.
 
@@ -357,6 +387,7 @@ def _parse_performer_map(scene_description: str) -> dict[str, str]:
 
 class MusicVideoPlanner(BasePlanner):
     skill_type = "music_video"
+    PLAN_BATCH_SIZE = 8
 
     def plan(
         self,
@@ -429,6 +460,7 @@ class MusicVideoPlanner(BasePlanner):
             clips, lyrics, performer_map, speaker_names, speaker_mappings,
             coverage_plan,
             allow_clip_text=kwargs.get("allow_clip_text") is True,
+            lip_sync=str(treatment.get("lip_sync") or "frequent"),
         )
 
         # Call LLM for creative planning
@@ -569,6 +601,7 @@ class MusicVideoPlanner(BasePlanner):
             lyrics=lyrics,
             speaker_names=speaker_names,
             coverage_plan=coverage_plan,
+            treatment=treatment,
         )
 
         total_duration = sum(c.get("end", 0) - c.get("start", 0) for c in clips) if clips else None
@@ -678,6 +711,87 @@ class MusicVideoPlanner(BasePlanner):
         missing = [index for index in range(expected) if index not in slots]
         return slots, missing, alternatives
 
+    @classmethod
+    def _partition_batch_shot_plans(
+        cls,
+        candidates: list[dict],
+        expected: int,
+        batch_indices: list[int],
+        positional_indices: Optional[list[int]] = None,
+        *,
+        require_image: bool = True,
+    ) -> tuple[dict[int, dict], list[int], list[dict]]:
+        """Map one bounded response only onto the slots requested by its batch.
+
+        Explicit indexes that belong to another timeline batch are rejected so
+        they cannot pre-fill or overwrite later work. Duplicate indexes are
+        also rejected rather than being retained as ambiguous alternatives.
+        Only genuinely surplus indexes outside the timeline are preserved as
+        creative alternatives, matching the historical two-slot behaviour.
+        """
+        allowed = set(batch_indices)
+        positional = positional_indices if positional_indices is not None else batch_indices
+        slots: dict[int, dict] = {}
+        alternatives: list[dict] = []
+        for position, candidate in enumerate(candidates):
+            if not cls._shot_is_complete(candidate, require_image=require_image):
+                continue
+            raw_index = candidate.get("clip_index") if isinstance(candidate, dict) else None
+            try:
+                if raw_index not in (None, ""):
+                    index = int(raw_index) - 1
+                elif position < len(positional):
+                    index = positional[position]
+                else:
+                    continue
+            except (TypeError, ValueError):
+                if position >= len(positional):
+                    continue
+                index = positional[position]
+
+            if index in allowed:
+                if index in slots:
+                    print(
+                        "[MusicVideoPlanner] Rejecting duplicate shot plan for "
+                        f"clip index {index + 1}."
+                    )
+                    continue
+                normalized = dict(candidate)
+                normalized["clip_index"] = index + 1
+                slots[index] = normalized
+            elif index < 0 or index >= expected:
+                alternatives.append(dict(candidate))
+            else:
+                print(
+                    "[MusicVideoPlanner] Rejecting out-of-batch shot plan for "
+                    f"clip index {index + 1}."
+                )
+
+        missing = [index for index in batch_indices if index not in slots]
+        return slots, missing, alternatives
+
+    @staticmethod
+    def _batch_response_schema(
+        indices: list[int],
+        *,
+        include_image_fields: bool,
+    ) -> dict:
+        """Build a closed schema whose clip indexes are limited to one batch."""
+        response_schema = _music_shot_schema(
+            len(indices),
+            include_image_fields=include_image_fields,
+        )
+        shot_schema = response_schema["items"]
+        shot_schema["properties"] = {
+            "clip_index": {
+                "type": "integer",
+                "enum": [index + 1 for index in indices],
+            },
+            **shot_schema["properties"],
+        }
+        shot_schema["required"] = ["clip_index", *shot_schema["required"]]
+        return response_schema
+
     @staticmethod
     def _compact_repair_context(value: str, limit: int = 7000) -> str:
         normalized = re.sub(r"\s+", " ", str(value or "")).strip()
@@ -752,6 +866,64 @@ class MusicVideoPlanner(BasePlanner):
             return ""
         return "\n".join(line.get("text", "") for line in lyrics if line.get("text", "").strip())
 
+    @staticmethod
+    def _lyric_beats_for_clip(
+        clip: dict,
+        lyrics: Optional[list[dict]],
+        *,
+        fallback_speaker: str = "",
+    ) -> list[DialogueBeat]:
+        """Return the timestamped lyric slice that belongs to one clip.
+
+        The audio analyser may emit long transcription segments spanning more
+        than one native H3 clip.  Slice their words by the temporal overlap so
+        adjacent clips neither repeat a whole verse nor ask H3 to improvise
+        the missing words.  These are the canonical lyric turns used later to
+        produce ``<d>`` blocks and the syllable-duration timeline.
+        """
+
+        if not lyrics:
+            return []
+        try:
+            clip_start = float(clip.get("start", 0.0) or 0.0)
+            clip_end = float(clip.get("end", clip_start) or clip_start)
+        except (TypeError, ValueError):
+            return []
+        if clip_end <= clip_start:
+            return []
+
+        beats: list[DialogueBeat] = []
+        for segment in lyrics:
+            if not isinstance(segment, dict):
+                continue
+            text = " ".join(str(segment.get("text") or "").split())
+            if not text:
+                continue
+            try:
+                start = float(segment.get("start", 0.0) or 0.0)
+                end = float(segment.get("end", start) or start)
+            except (TypeError, ValueError):
+                continue
+            overlap_start, overlap_end = max(start, clip_start), min(end, clip_end)
+            if overlap_end <= overlap_start or end <= start:
+                continue
+            words = text.split()
+            first = math.floor((overlap_start - start) / (end - start) * len(words))
+            last = math.ceil((overlap_end - start) / (end - start) * len(words))
+            first = max(0, min(first, len(words) - 1))
+            last = max(first + 1, min(last, len(words)))
+            lyric_slice = " ".join(words[first:last]).strip()
+            if not lyric_slice:
+                continue
+            beats.append(DialogueBeat(
+                spoken_text=lyric_slice,
+                speaker_id=str(segment.get("speaker") or fallback_speaker or "performer"),
+                delivery="rhythmic sung or rapped lyric, synchronized to the source track",
+                physical_cue="visible lip sync only for these exact words",
+                priority="high",
+            ))
+        return beats
+
     # ── Clip Context Building ────────────────────────────────────────
 
     def _build_clip_contexts(
@@ -763,9 +935,13 @@ class MusicVideoPlanner(BasePlanner):
         speaker_mappings: Optional[dict],
         coverage_plan: Optional[list[dict[str, Any]]] = None,
         allow_clip_text: bool = False,
+        lip_sync: str = "frequent",
     ) -> list[str]:
         """Build text descriptions for each clip (context for LLM)."""
         contexts = []
+        wants_lip_sync = str(lip_sync or "frequent").lower() not in {
+            "none", "never", "off",
+        }
         for i, clip in enumerate(clips):
             section = (clip.get("label") or "verse").lower()
             beat_count = clip.get("beat_count", 8)
@@ -815,9 +991,28 @@ class MusicVideoPlanner(BasePlanner):
                 f"section direction: {coverage.get('section_rule', '')}."
             )
             if coverage.get("performer_present"):
-                coverage_hint += " Show the assigned performer delivering the vocal when lyrics are present."
+                coverage_hint += (
+                    " Show the Scene Concept's named in-world characters in this "
+                    "clip. Do not invent a modern rapper, MC, or concert artist "
+                    "to deliver the vocal unless the Scene Concept asks for one."
+                )
+                if wants_lip_sync:
+                    coverage_hint += (
+                        " This clip receives the source-audio slice as driving "
+                        "audio. Describe visible lip movement synchronized to it; "
+                        "do not invent, quote, or transcribe lyrics; do not write "
+                        "spoken or sung words."
+                    )
+                else:
+                    coverage_hint += (
+                        " No lip-sync: any visible mouth remains closed. Do not "
+                        "describe singing or rapping."
+                    )
             elif lyrics_snippet:
-                coverage_hint += " Deliberate b-roll: no lip-sync; any visible mouth remains closed."
+                coverage_hint += (
+                    " Deliberate b-roll: no driving vocal audio; no lip-sync; "
+                    "any visible mouth remains closed."
+                )
             if coverage.get("reuse_chorus_signature"):
                 coverage_hint += " Return to the same chorus signature instead of inventing a new location."
             ctx = f"Clip {i + 1}: {section}, {beat_count} beats, {vocal_info}.{performer_hint}{coverage_hint}"
@@ -911,9 +1106,11 @@ class MusicVideoPlanner(BasePlanner):
             "self-contained with setting, composition, named identities plus "
             "visible traits, wardrobe, performance, camera, lighting, ambience, "
             "effects, and music.\n"
-            "- The per-shot source-audio slice is mapped as driving audio. "
-            "Describe visible singing, lip movement, dance, action, and camera "
-            "that synchronize to it; do not invent or transcribe lyrics.\n"
+            "- Performance/lip-sync shots receive the per-shot source-audio "
+            "slice as driving audio. Describe visible lip movement, dance, "
+            "action, and camera that synchronize to it; do not invent or "
+            "transcribe lyrics. B-roll shots get no vocal audio: keep mouths "
+            "closed and do not describe singing.\n"
             "- Character/location references are soft guidance, not fixed first "
             "frames. Describe the finished target shot.\n"
             "- Do not create image_prompt, image_source, visual_changes, or "
@@ -955,7 +1152,7 @@ The user's main reference is visual ground truth. Every image_prompt and video_p
 Character references define identity and location references define the setting. Follow their labels and the Scene Concept in every self-contained video prompt; do not invent conflicting identities or settings."""
         else:
             scene_anchoring_rules = """SCENE-ANCHORING (avoid off-topic content):
-No visual reference was provided. Invent one consistent performer and setting that fit the Scene Concept, then reuse the same artist and world across every clip. Show the performer delivering vocals on lyric clips and do not drift off-concept."""
+No visual reference was provided. Invent one consistent in-world cast and setting that fit the Scene Concept, then reuse those same identities and that world across every clip. Do not invent a second modern musician because the audio is rap or song."""
         direct_video_contract = f"""DIRECT TEXT-TO-VIDEO MODE — STRICT:
 - There is no start image, generated image, keyframe or visual reference.
 - The immutable master prompt below defines the visual medium and world. It is automatically
@@ -995,6 +1192,9 @@ MUSIC VIDEO RULES:
 - Instrumental = environment, textures. Bridge = contrasting, unexpected.
 - Use controlled recurrence. Revisit the same chorus set, wardrobe and visual motif.
 - Vary framing and camera coverage inside recurring sets; do not invent a new world for every lyric.
+- Unless the Scene Concept explicitly requests a single-location video, distribute the clips across at least three visually distinct settings. A setting or prop mentioned in the global brief is an available anchor, not a requirement for every clip.
+- Never repeat the same location-plus-action combination (for example, sitting at a computer in a cafe) across most clips. Keep visual style global, but vary situation, action, scale, time of day, and environment across verses and bridge.
+- Treat visual-style text as medium, palette, lighting and design language only. Do not turn an incidental action, prop or location embedded in style text into a repeated scene template.
 - Performer visibility and lip-sync follow the editable treatment and each clip's planned role.
 
 EDITABLE MUSIC-VIDEO TREATMENT:
@@ -1034,6 +1234,8 @@ Notes:
 
 {scene_anchoring_rules}
 
+{build_music_video_cast_lock(scene_description, treatment)}
+
 KEEP MUSIC-VIDEO PROMPTS EXECUTABLE:
 For each scene, the music drives the pacing and energy. You only need to identify:
   - WHO is in frame ({"preserve user-supplied proper names and pair them with useful visible traits" if preserve_names else "the performer, by descriptor — never by name"})
@@ -1044,7 +1246,7 @@ For each scene, the music drives the pacing and energy. You only need to identif
 {"Use the H3 Context-IR fields above. Be concise but complete; do not enforce the legacy 15-40 word LTX limit." if preserve_names else "Keep video_prompt 15-40 words. Anything longer is over-described for music video."}
 
 {"Most scenes should use a single video_prompt with empty keyframe_prompts." if uses_generated_images else "Every scene should use video_prompt/window_prompts only; omit all still-image fields."}
-Return exactly one object for every requested clip. Preserve each one-based clip_index. Output exactly {len(clips)} objects. Go:"""
+Return exactly one object for every clip requested in the current batch. Preserve each requested one-based clip_index. Go:"""
 
         # Inject model-specific prompt polish guide if provided
         polish_block = kwargs.get("polish_block", "")
@@ -1057,14 +1259,6 @@ Return exactly one object for every requested clip. Preserve each one-based clip
             nsfw,
             "both" if uses_generated_images else "video",
         )
-
-        user_prompt = f"""Scene Concept: {scene_description}
-Song tempo: {bpm:.0f} BPM
-
-Clips:
-{chr(10).join(clip_contexts)}
-
-Write {len(clips)} structured shot plans for clip indexes 1-{len(clips)}. Go:"""
 
         # Send ALL reference images to the LLM (main + character + location refs)
         image_paths = []
@@ -1079,100 +1273,209 @@ Write {len(clips)} structured shot plans for clip indexes 1-{len(clips)}. Go:"""
         if not image_paths:
             image_paths = None
         per_clip_tokens = 700 if uses_generated_images else 520
-        max_tokens = max(4096, len(clips) * per_clip_tokens + 1024)
-        response_schema = _music_shot_schema(
-            len(clips),
-            include_image_fields=uses_generated_images,
-        )
-        shot_schema = response_schema["items"]
-        shot_schema["properties"] = {
-            "clip_index": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": len(clips),
-            },
-            **shot_schema["properties"],
-        }
-        shot_schema["required"] = [
-            "clip_index",
-            *shot_schema["required"],
-        ]
-        candidates = self._call_llm_json(
-            user_prompt=user_prompt,
-            system_prompt=system_prompt,
-            max_tokens=max_tokens,
-            image_paths=image_paths,
-            json_schema=response_schema,
-        )
-        slots, missing, alternatives = self._partition_shot_plans(
-            candidates,
+        completed_shot_plans = kwargs.get("completed_shot_plans") or []
+        if not isinstance(completed_shot_plans, list):
+            raise ValueError("completed_shot_plans must be a list")
+        slots, _resume_missing, resume_alternatives = self._partition_shot_plans(
+            completed_shot_plans,
             len(clips),
             require_image=uses_generated_images,
         )
+        if resume_alternatives:
+            raise ValueError("Saved Director plan checkpoint contains duplicate or invalid clip indexes")
+        alternatives: list[dict] = []
+        batch_checkpoint = kwargs.get("batch_checkpoint")
 
-        if alternatives:
-            print(
-                f"[MusicVideoPlanner] Preserving {len(alternatives)} valid surplus "
-                f"shot plan(s) as alternatives for {len(clips)} timeline slots."
-            )
+        def notify_checkpoint(event: dict) -> None:
+            if callable(batch_checkpoint):
+                batch_checkpoint(event)
 
-        if missing:
-            missing_numbers = [index + 1 for index in missing]
-            missing_contexts = [clip_contexts[index] for index in missing]
-            repair_schema = {
-                "type": "array",
-                "items": shot_schema,
-                "minItems": len(missing),
-                "maxItems": len(missing),
-            }
-            repair_system = f"""You repair missing music-video shot plans.
+        def repair_system_for(shot_schema: dict) -> str:
+            return f"""You repair missing music-video shot plans.
 Return ONLY a JSON array with exactly one complete object for each requested clip_index.
 Do not return already completed indexes. Preserve the requested one-based clip_index values.
-{("image_prompt must be empty. video_prompt must contain only the concrete clip situation; never repeat the master prompt." if direct_video else "Every image_prompt must describe a static first frame and contain at least 24 characters. Every video_prompt must describe subsequent action.")}
+{("Do not return still-image fields. video_prompt must contain only the concrete clip situation; never repeat the master prompt." if direct_video else "Every image_prompt must describe a static first frame and contain at least 24 characters. Every video_prompt must describe subsequent action.")}
 {("Use concise chronological, visually executable natural English." if direct_video else "Use 15-40 words." if is_ltx else "Use chronological, visually executable natural English.")}
 {character_style_contract}
 {visible_text_contract}
 Use empty keyframe_prompts and window_prompts unless strictly necessary.
 Required object schema:
 {json.dumps(shot_schema, ensure_ascii=False)}"""
-            repair_prompt = f"""Compact production context:
+
+        for batch_start in range(0, len(clips), self.PLAN_BATCH_SIZE):
+            batch_indices = list(range(
+                batch_start,
+                min(batch_start + self.PLAN_BATCH_SIZE, len(clips)),
+            ))
+            batch_slots = {
+                index: slots[index]
+                for index in batch_indices
+                if index in slots
+            }
+            pending_indices = [index for index in batch_indices if index not in slots]
+            if not pending_indices:
+                print(
+                    "[MusicVideoPlanner] Reusing durable batch for clip indexes "
+                    f"{[index + 1 for index in batch_indices]}."
+                )
+                continue
+            requested_numbers = [index + 1 for index in pending_indices]
+            batch_schema = self._batch_response_schema(
+                pending_indices,
+                include_image_fields=uses_generated_images,
+            )
+            batch_prompt = f"""Scene Concept: {scene_description}
+Song tempo: {bpm:.0f} BPM
+Requested clip indexes: {', '.join(map(str, requested_numbers))}
+
+Clips:
+{chr(10).join(clip_contexts[index] for index in pending_indices)}
+
+Write exactly {len(pending_indices)} structured shot plans for only the requested clip indexes. Go:"""
+            batch_system = f"""{system_prompt}
+
+CURRENT BATCH CONTRACT:
+- Requested clip indexes: {', '.join(map(str, requested_numbers))}.
+- Return exactly {len(pending_indices)} objects and no other timeline indexes.
+- Preserve these one-based clip_index values exactly."""
+            print(
+                "[MusicVideoPlanner] Planning bounded batch for clip indexes "
+                f"{requested_numbers}."
+            )
+            notify_checkpoint({
+                "event": "call_started",
+                "phase": "batch",
+                "indices": requested_numbers,
+            })
+            candidates = self._call_llm_json(
+                user_prompt=batch_prompt,
+                system_prompt=batch_system,
+                max_tokens=max(2048, len(pending_indices) * per_clip_tokens + 768),
+                image_paths=image_paths,
+                json_schema=batch_schema,
+            )
+            new_slots, missing, batch_alternatives = self._partition_batch_shot_plans(
+                candidates,
+                len(clips),
+                pending_indices,
+                require_image=uses_generated_images,
+            )
+            batch_slots.update(new_slots)
+            alternatives.extend(batch_alternatives)
+
+            if missing:
+                missing_numbers = [index + 1 for index in missing]
+                repair_schema = self._batch_response_schema(
+                    missing,
+                    include_image_fields=uses_generated_images,
+                )
+                repair_prompt = f"""Compact production context:
 {self._compact_repair_context(scene_description)}
 
 Song tempo: {bpm:.0f} BPM
 Missing clip indexes: {', '.join(map(str, missing_numbers))}
 Missing clip context:
-{chr(10).join(missing_contexts)}
+{chr(10).join(clip_contexts[index] for index in missing)}
 
 Return only these {len(missing)} missing shot plans."""
-            print(
-                f"[MusicVideoPlanner] Requesting one compact repair for missing "
-                f"clip indexes {missing_numbers}."
-            )
-            repaired = self._call_llm_json(
-                user_prompt=repair_prompt,
-                system_prompt=repair_system,
-                max_tokens=max(2048, len(missing) * 700 + 512),
-                image_paths=image_paths,
-                json_schema=repair_schema,
-                temperature=0.35,
-            )
-            repaired_slots, _repair_missing, repaired_alternatives = self._partition_shot_plans(
-                repaired,
-                len(clips),
-                positional_indices=missing,
-                require_image=uses_generated_images,
-            )
-            for index in missing:
-                if index in repaired_slots:
-                    slots[index] = repaired_slots[index]
-            alternatives.extend(repaired_alternatives)
-            missing = [index for index in range(len(clips)) if index not in slots]
+                print(
+                    "[MusicVideoPlanner] Requesting one compact repair for missing "
+                    f"clip indexes {missing_numbers}."
+                )
+                notify_checkpoint({
+                    "event": "call_started",
+                    "phase": "repair",
+                    "indices": missing_numbers,
+                })
+                repaired = self._call_llm_json(
+                    user_prompt=repair_prompt,
+                    system_prompt=repair_system_for(repair_schema["items"]),
+                    max_tokens=max(1536, len(missing) * per_clip_tokens + 512),
+                    image_paths=image_paths,
+                    json_schema=repair_schema,
+                    temperature=0.35,
+                )
+                repaired_slots, missing, repaired_alternatives = self._partition_batch_shot_plans(
+                    repaired,
+                    len(clips),
+                    missing,
+                    positional_indices=missing,
+                    require_image=uses_generated_images,
+                )
+                batch_slots.update(repaired_slots)
+                alternatives.extend(repaired_alternatives)
 
-        if missing:
-            missing_numbers = ", ".join(str(index + 1) for index in missing)
-            raise RuntimeError(
-                "Music-video planning remained incomplete after one compact repair; "
-                f"missing clip indexes {missing_numbers}. No images were queued."
+            # A final single-index request makes one stubborn/truncated tail
+            # recoverable without repeating the rest of its completed batch.
+            for index in list(missing):
+                individual_schema = self._batch_response_schema(
+                    [index],
+                    include_image_fields=uses_generated_images,
+                )
+                individual_number = index + 1
+                individual_prompt = f"""Compact production context:
+{self._compact_repair_context(scene_description)}
+
+Song tempo: {bpm:.0f} BPM
+Missing clip indexes: {individual_number}
+Missing clip context:
+{clip_contexts[index]}
+
+Return exactly this one missing shot plan."""
+                print(
+                    "[MusicVideoPlanner] Requesting individual fallback for clip "
+                    f"index {individual_number}."
+                )
+                notify_checkpoint({
+                    "event": "call_started",
+                    "phase": "individual_fallback",
+                    "indices": [individual_number],
+                })
+                individual = self._call_llm_json(
+                    user_prompt=individual_prompt,
+                    system_prompt=repair_system_for(individual_schema["items"]),
+                    max_tokens=max(1536, per_clip_tokens + 512),
+                    image_paths=image_paths,
+                    json_schema=individual_schema,
+                    temperature=0.3,
+                )
+                individual_slots, individual_missing, individual_alternatives = self._partition_batch_shot_plans(
+                    individual,
+                    len(clips),
+                    [index],
+                    positional_indices=[index],
+                    require_image=uses_generated_images,
+                )
+                batch_slots.update(individual_slots)
+                alternatives.extend(individual_alternatives)
+                if not individual_missing:
+                    missing.remove(index)
+
+            if missing:
+                missing_numbers = ", ".join(str(index + 1) for index in missing)
+                raise RuntimeError(
+                    "Music-video planning remained incomplete after bounded repair "
+                    f"and individual fallback; missing clip indexes {missing_numbers}. "
+                    "No images were queued."
+                )
+
+            notify_checkpoint({
+                "event": "batch_completed",
+                "indices": [index + 1 for index in batch_indices],
+                "shot_plans": [batch_slots[index] for index in batch_indices],
+            })
+            for index in batch_indices:
+                if index in slots and slots[index] != batch_slots[index]:
+                    raise RuntimeError(
+                        "Music-video planning produced a conflicting completed timeline "
+                        f"slot for clip index {index + 1}. No images were queued."
+                    )
+                slots[index] = batch_slots[index]
+
+        if alternatives:
+            print(
+                f"[MusicVideoPlanner] Preserving {len(alternatives)} valid surplus "
+                f"shot plan(s) as alternatives for {len(clips)} timeline slots."
             )
 
         self._planning_alternatives = alternatives
@@ -1193,6 +1496,7 @@ Return only these {len(missing)} missing shot plans."""
         lyrics: Optional[list[dict]],
         speaker_names: dict[str, str],
         coverage_plan: Optional[list[dict[str, Any]]] = None,
+        treatment: Optional[dict[str, Any]] = None,
     ) -> list[ShotPlan]:
         """Convert raw LLM JSON output into validated ShotPlan objects."""
         shots = []
@@ -1233,10 +1537,28 @@ Return only these {len(missing)} missing shot plans."""
                 timing_anchor="audio",
             )
 
-            # Parse dialogue beats if present
+            # Music videos never author H3 speech.  Lyrics stay in clip
+            # context for timing only; the song slice (or silence) is the
+            # vocal authority.  Ignore any LLM-invented dialogue_beats.
             dialogue_beats = None
-            if raw.get("dialogue_beats"):
-                dialogue_beats = [DialogueBeat.from_dict(db) for db in raw["dialogue_beats"]]
+
+            # The production soundtrack is the vocal authority.  Performance
+            # shots receive the matching song slice as driving audio; H3 must
+            # not generate speech from transcribed lyrics.  B-roll stays mute.
+            lip_sync = str((treatment or {}).get("lip_sync") or "frequent").lower()
+            wants_lip_sync = lip_sync not in {"none", "never", "off"}
+            if coverage.get("performer_present") and wants_lip_sync:
+                audio = AudioPlan(
+                    mode="audio_driven",
+                    ambience=audio_raw.get("ambience"),
+                    effects=audio_raw.get("effects"),
+                    vocal_style=(
+                        "lips and body synchronized to the mapped driving "
+                        "audio; do not invent or transcribe lyrics"
+                    ),
+                    timing_anchor="audio",
+                    lip_sync_critical=True,
+                )
 
             # Determine image strategy
             image_strategy = "reference_edit" if has_reference else "fresh_generation"

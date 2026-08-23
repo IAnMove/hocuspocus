@@ -5,7 +5,7 @@ export type SeriesFormat = 'serial' | 'episodic' | 'hybrid'
 export type SeriesSourceMode = 'original' | 'known_universe_experimental' | 'hybrid'
 export type SeriesRenderStrategy = 'auto' | 'direct' | 'first_frame' | 'references' | 'first_last'
 export type SeriesEpisodeStatus = 'draft' | 'outline' | 'script' | 'shot_plan' | 'rendering' | 'completed' | 'archived'
-export type SeriesAttemptStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type SeriesAttemptStatus = 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
 
 export interface SeriesAsset {
   id: string
@@ -197,6 +197,25 @@ export interface SeriesShot {
   sceneId: string
   order: number
   durationSeconds: number
+  dialogueDuration?: {
+    model: string
+    durationMode: 'continuous' | 'discrete' | 'frame_lattice'
+    wordCount: number
+    syllableCount: number
+    secondsPerSyllable: number
+    segmentCount: number
+    spokenSeconds: number
+    estimatedVoiceSeconds: number
+    requestedClipSeconds: number
+    minimumLimited: boolean
+    requiresSplit: boolean
+    modelMinimumSeconds: number
+    modelMaximumSeconds: number
+    fps?: number
+    calculatedFrames?: number
+    effectiveFrames?: number
+    frameLattice?: string
+  }
   framing: string
   camera: string
   action: string
@@ -287,6 +306,9 @@ export interface SeriesProject {
   format: SeriesFormat
   defaultEpisodeDurationSeconds: number
   language: string
+  spokenLanguage: string
+  protagonistConsistency: boolean
+  protagonistCharacterId: string
   genre: string
   tone: string
   audience: string
@@ -330,11 +352,13 @@ export interface SeriesLibrary {
 
 export interface SeriesJobStatus {
   jobId: string
+  taskId?: string | null
+  rootTaskId?: string | null
   jobType?: 'canon' | 'episode'
   workspace: string
   seriesId: string
   episodeId: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   stage: string
   current: number
   total: number
@@ -344,6 +368,7 @@ export interface SeriesJobStatus {
   seriesResult?: (Pick<SeriesProject, 'canon' | 'characters' | 'relationships' | 'locations'> & Partial<Pick<
     SeriesProject,
     'title' | 'premise' | 'logline' | 'format' | 'defaultEpisodeDurationSeconds' | 'language' |
+    'spokenLanguage' | 'protagonistConsistency' | 'protagonistCharacterId' |
     'genre' | 'tone' | 'audience' | 'visualStyle' | 'characterVisualStyle' | 'cameraLanguage' |
     'sourceMode' | 'masterUniversePrompt' | 'rightsNote' | 'props'
   >>) | null
@@ -364,3 +389,13 @@ export interface SeriesJobStatus {
   updatedAt?: number
   finishedAt?: number
 }
+
+export type {
+  SeriesAssemblyActionRequest,
+  SeriesAssemblyDiscardResponse,
+  SeriesAssemblyJob,
+  SeriesAssemblyJobResponse,
+  SeriesAssemblyRecoveryResponse,
+  SeriesAssemblyStartRequest,
+  SeriesAssemblyStatus,
+} from './assemblyContract'

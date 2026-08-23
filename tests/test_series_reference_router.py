@@ -28,6 +28,22 @@ def test_character_location_prop_priority_and_stable_order():
     assert "plot_critical_prop" in roles
 
 
+def test_optional_fixed_protagonist_is_first_and_missing_identity_blocks():
+    series, episode = fixtures()
+    series["protagonistConsistency"] = True
+    series["protagonistCharacterId"] = "char_ivo"
+    shot = copy.deepcopy(episode["shots"][0])
+    routed = route_shot_references(series, episode, shot)
+    assert routed["selected"][0]["referenceRole"] == "recurring_protagonist_identity"
+    assert routed["selected"][0]["assetId"] == "asset_ivo"
+
+    ivo = next(character for character in series["characters"] if character["id"] == "char_ivo")
+    ivo["referenceAssetIds"] = []
+    ivo["primaryReferenceAssetId"] = None
+    blocked = route_shot_references(series, episode, shot)
+    assert any("fixed-protagonist mode blocks rendering" in error for error in blocked["errors"])
+
+
 def test_absent_character_never_routes_even_manual():
     series, episode = fixtures()
     shot = copy.deepcopy(episode["shots"][6])  # only Mara is visible
@@ -106,6 +122,52 @@ def test_crowd_requires_composed_start_frame_warning():
     assert result["errors"]
 
 
+def test_auto_crowd_without_references_uses_direct_generation_with_warning():
+    series, episode = fixtures()
+    third = copy.deepcopy(series["characters"][0])
+    third.update({"id": "char_third", "name": "Third", "referenceAssetIds": []})
+    series["characters"].append(third)
+    for character in series["characters"]:
+        character["referenceAssetIds"] = []
+        character.pop("primaryReferenceAssetId", None)
+    series["locations"] = []
+    series["props"] = []
+    series["assets"] = {}
+    shot = copy.deepcopy(episode["shots"][0])
+    shot["visibleCharacterIds"].append("char_third")
+    shot.pop("locationId", None)
+    shot["propIds"] = []
+    shot["renderStrategy"] = "auto"
+
+    result = route_shot_references(series, episode, shot)
+
+    assert result["strategy"] == "direct"
+    assert result["selected"] == []
+    assert result["errors"] == []
+    assert any("improvise this crowd composition" in warning for warning in result["warnings"])
+
+
+def test_auto_continuity_without_previous_output_uses_direct_generation():
+    series, episode = fixtures()
+    for character in series["characters"]:
+        character["referenceAssetIds"] = []
+        character.pop("primaryReferenceAssetId", None)
+    series["locations"] = []
+    series["props"] = []
+    series["assets"] = {}
+    shot = copy.deepcopy(episode["shots"][1])
+    shot["continuityFromShotId"] = episode["shots"][0]["id"]
+    shot.pop("locationId", None)
+    shot["propIds"] = []
+    shot["renderStrategy"] = "auto"
+
+    result = route_shot_references(series, episode, shot)
+
+    assert result["strategy"] == "direct"
+    assert result["selected"] == []
+    assert result["errors"] == []
+
+
 def test_previous_video_routes_as_reference_not_fake_first_frame():
     series, episode = fixtures()
     previous = episode["shots"][0]
@@ -122,6 +184,27 @@ def test_previous_video_routes_as_reference_not_fake_first_frame():
     result = route_shot_references(series, episode, shot)
     assert result["strategy"] == "references"
     assert result["selected"][0]["referenceRole"] == "previous_segment"
+    assert result["selected"][0]["includeAudio"] is False
+
+
+def test_reference_video_audio_is_only_enabled_by_explicit_asset_metadata():
+    series, episode = fixtures()
+    previous = episode["shots"][0]
+    previous["approvedAttemptId"] = "attempt_previous"
+    previous["attempts"] = [{
+        "id": "attempt_previous", "status": "completed", "outputAssetIds": ["asset_previous"],
+    }]
+    series["assets"]["asset_previous"] = {
+        "id": "asset_previous", "kind": "video", "uri": "outputs/previous.mp4",
+        "ownerType": "attempt", "ownerId": "attempt_previous",
+        "metadata": {"includeAudio": True},
+    }
+    shot = copy.deepcopy(episode["shots"][1])
+    shot["continuityFromShotId"] = previous["id"]
+
+    result = route_shot_references(series, episode, shot)
+
+    assert result["selected"][0]["includeAudio"] is True
 
 
 def test_first_last_capability_falls_back_with_warning():

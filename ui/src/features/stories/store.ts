@@ -1,20 +1,28 @@
 import { create } from 'zustand'
 import * as api from '../../api/client'
 import { changedSections, createStoryProject, normalizeStoryProject } from './model'
+import { mergeStoryLibraries } from './library'
+import type { StoryLibraryConflict, StoryLibraryData } from './library'
 import type { StoryProject, StoryProjectType } from './types'
 
 const LEGACY_AUTOSAVE_KEY = 'maestro-story-lab-v1'
 const LIBRARY_PREFIX = 'maestro-story-library-v2:'
 
-interface StoryLibraryData {
-  version: 2
-  activeId: string
-  projects: Record<string, StoryProject>
-}
-
 const safeWorkspace = (workspace: string): string =>
   workspace.trim().replace(/[^a-zA-Z0-9._-]+/g, '-') || 'default'
 const libraryKey = (workspace: string): string => `${LIBRARY_PREFIX}${safeWorkspace(workspace)}`
+
+function hasPersistedLocalLibrary(workspace: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return Boolean(
+      window.localStorage.getItem(libraryKey(workspace))
+      || (workspace === 'default' && window.localStorage.getItem(LEGACY_AUTOSAVE_KEY)),
+    )
+  } catch {
+    return false
+  }
+}
 
 function normalizeLibrary(value: unknown): StoryLibraryData | null {
   if (!value || typeof value !== 'object') return null
@@ -30,13 +38,15 @@ function normalizeLibrary(value: unknown): StoryLibraryData | null {
   if (!firstId) return null
   const activeId = typeof raw.activeId === 'string' && projects[raw.activeId]
     ? raw.activeId : firstId
-  return { version: 2, activeId, projects }
+  const revision = typeof raw.revision === 'number' && Number.isInteger(raw.revision) && raw.revision >= 0
+    ? raw.revision : 0
+  return { version: 2, revision, activeId, projects }
 }
 
 function restoreLocalLibrary(workspace: string): StoryLibraryData {
   const fallback = createStoryProject()
   if (typeof window === 'undefined') {
-    return { version: 2, activeId: fallback.id, projects: { [fallback.id]: fallback } }
+    return { version: 2, revision: 0, activeId: fallback.id, projects: { [fallback.id]: fallback } }
   }
   try {
     const raw = JSON.parse(window.localStorage.getItem(libraryKey(workspace)) || 'null')
@@ -47,20 +57,22 @@ function restoreLocalLibrary(workspace: string): StoryLibraryData {
       : null
     if (legacy) {
       const project = normalizeStoryProject(legacy)
-      return { version: 2, activeId: project.id, projects: { [project.id]: project } }
+      return { version: 2, revision: 0, activeId: project.id, projects: { [project.id]: project } }
     }
   } catch {
     // Fall through to a clean, valid library.
   }
-  return { version: 2, activeId: fallback.id, projects: { [fallback.id]: fallback } }
+  return { version: 2, revision: 0, activeId: fallback.id, projects: { [fallback.id]: fallback } }
 }
 
 function buildLibrary(
   project: StoryProject,
   projects: Record<string, StoryProject>,
+  revision: number,
 ): StoryLibraryData {
   return {
     version: 2,
+    revision,
     activeId: project.id,
     projects: { ...projects, [project.id]: project },
   }
@@ -70,12 +82,120 @@ function persistLocalLibrary(
   workspace: string,
   project: StoryProject,
   projects: Record<string, StoryProject>,
+  revision: number,
 ): void {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(
     libraryKey(workspace),
-    JSON.stringify(buildLibrary(project, projects)),
+    JSON.stringify(buildLibrary(project, projects, revision)),
   )
+}
+
+function freshStoryId(prefix: string, used: Set<string>): string {
+  let id = `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  while (used.has(id)) id = `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  used.add(id)
+  return id
+}
+
+/**
+ * A duplicated Story is a new document, not another view of the source.
+ * Remap every durable nested identity and the references which point at it;
+ * active visual jobs and production history deliberately do not carry over.
+ */
+function duplicateStoryProject(source: StoryProject): StoryProject {
+  const clone = structuredClone(source)
+  const used = new Set<string>([
+    clone.id,
+    ...clone.world.locations.map(item => item.id),
+    ...clone.characters.map(item => item.id),
+    ...clone.beats.map(item => item.id),
+    ...clone.relationships.map(item => item.id),
+    ...Object.keys(clone.assets),
+    ...Object.values(clone.assets).map(item => item.id),
+    ...clone.music.cues.map(item => item.id),
+    ...clone.music.cues.flatMap(item => item.candidates.map(candidate => candidate.id)),
+    ...clone.music.candidates.map(item => item.id),
+    ...clone.productions.map(item => item.id),
+  ])
+  const projectId = freshStoryId('story', used)
+  const characterIds = new Map<string, string>()
+  const assetIds = new Map<string, string>()
+
+  clone.world.locations = clone.world.locations.map(location => {
+    const id = freshStoryId('location', used)
+    return { ...location, id }
+  })
+  clone.characters = clone.characters.map(character => {
+    const id = freshStoryId('character', used)
+    characterIds.set(character.id, id)
+    return { ...character, id }
+  })
+  clone.beats = clone.beats.map(beat => ({ ...beat, id: freshStoryId('beat', used) }))
+  clone.relationships = clone.relationships.map(relationship => ({
+    ...relationship,
+    id: freshStoryId('relationship', used),
+    fromCharacterId: characterIds.get(relationship.fromCharacterId) || relationship.fromCharacterId,
+    toCharacterId: characterIds.get(relationship.toCharacterId) || relationship.toCharacterId,
+  }))
+  clone.assets = Object.fromEntries(Object.entries(clone.assets).map(([oldId, asset]) => {
+    const id = freshStoryId('asset', used)
+    assetIds.set(oldId, id)
+    return [id, { ...asset, id }]
+  }))
+  const remapAsset = (id: string) => assetIds.get(id) || id
+  clone.world.referenceAssetIds = clone.world.referenceAssetIds.map(remapAsset)
+  clone.world.locations.forEach(location => {
+    location.referenceAssetIds = location.referenceAssetIds.map(remapAsset)
+  })
+  clone.characters = clone.characters.map(character => ({
+    ...character,
+    referenceAssetIds: character.referenceAssetIds.map(remapAsset),
+    primaryReferenceAssetId: character.primaryReferenceAssetId
+      ? remapAsset(character.primaryReferenceAssetId) : undefined,
+  }))
+  Object.values(clone.assets).forEach(asset => {
+    if (asset.derivedFromAssetId) asset.derivedFromAssetId = remapAsset(asset.derivedFromAssetId)
+  })
+  clone.protagonistCharacterId = characterIds.get(clone.protagonistCharacterId) || clone.protagonistCharacterId
+  clone.music.cues = clone.music.cues.map(cue => {
+    const id = freshStoryId('music-cue', used)
+    const cueCandidateIds = new Map<string, string>()
+    const candidates = cue.candidates.map(candidate => {
+      const candidateId = freshStoryId('song', used)
+      cueCandidateIds.set(candidate.id, candidateId)
+      return { ...candidate, id: candidateId }
+    })
+    return {
+      ...cue,
+      id,
+      targetId: characterIds.get(cue.targetId) || (cue.targetId === source.id ? projectId : cue.targetId),
+      candidates,
+      selectedCandidateId: cue.selectedCandidateId
+        ? cueCandidateIds.get(cue.selectedCandidateId) : undefined,
+    }
+  })
+  const globalCandidateIds = new Map<string, string>()
+  clone.music.candidates = clone.music.candidates.map(candidate => {
+    const id = freshStoryId('song', used)
+    globalCandidateIds.set(candidate.id, id)
+    return { ...candidate, id }
+  })
+  clone.music.selectedCandidateId = clone.music.selectedCandidateId
+    ? globalCandidateIds.get(clone.music.selectedCandidateId) : undefined
+  const now = new Date().toISOString()
+  return normalizeStoryProject({
+    ...clone,
+    id: projectId,
+    protagonistCharacterId: characterIds.get(source.protagonistCharacterId) || clone.protagonistCharacterId,
+    visualJobs: {},
+    title: `${source.title} copy`,
+    revision: 1,
+    approvals: {},
+    productions: [],
+    createdAt: now,
+    updatedAt: now,
+  })
 }
 
 function touched(before: StoryProject, candidate: StoryProject): StoryProject {
@@ -95,14 +215,21 @@ interface StoryState {
   workspace: string
   project: StoryProject
   projects: Record<string, StoryProject>
+  libraryRevision: number
   dirty: boolean
   hydrated: boolean
   loading: boolean
   saveError: string | null
+  libraryConflicts: StoryLibraryConflict[]
+  activeProjectOperations: Record<string, number>
+  resolveLibraryConflict: (id: string, resolution: 'local' | 'remote') => void
   loadWorkspace: (workspace: string) => Promise<void>
   setProject: (project: StoryProject) => void
   patchProject: (patch: Partial<StoryProject>) => void
   updateProject: (updater: (project: StoryProject) => StoryProject) => void
+  updateProjectById: (id: string, updater: (project: StoryProject) => StoryProject) => void
+  beginProjectOperation: (id: string) => void
+  endProjectOperation: (id: string) => void
   newProject: (projectType?: StoryProjectType) => void
   duplicateProject: (id?: string) => void
   openProject: (id: string) => void
@@ -116,17 +243,38 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   workspace: initialWorkspace,
   project: restored.projects[restored.activeId],
   projects: restored.projects,
+  libraryRevision: restored.revision,
   dirty: false,
   hydrated: false,
   loading: false,
   saveError: null,
+  libraryConflicts: [],
+  activeProjectOperations: {},
+  resolveLibraryConflict: (id, resolution) => set(state => {
+    const conflict = state.libraryConflicts.find(item => item.id === id)
+    if (!conflict) return state
+    const selected = resolution === 'remote'
+      ? conflict.remoteProject
+      : conflict.localProject
+    // Give the explicit choice a fresh monotonic timestamp so the next merge
+    // cannot recreate the same equal-time conflict.
+    const project = touched(state.projects[id] || conflict.localProject, selected)
+    return {
+      project: state.project.id === id ? project : state.project,
+      projects: { ...state.projects, [id]: project },
+      libraryConflicts: state.libraryConflicts.filter(item => item.id !== id),
+      dirty: true,
+      saveError: null,
+    }
+  }),
   loadWorkspace: async rawWorkspace => {
     const workspace = safeWorkspace(rawWorkspace)
+    const localSnapshotExisted = hasPersistedLocalLibrary(workspace)
     const previous = get()
     if (workspace === previous.workspace && (previous.hydrated || previous.loading)) return
 
     try {
-      persistLocalLibrary(previous.workspace, previous.project, previous.projects)
+      persistLocalLibrary(previous.workspace, previous.project, previous.projects, previous.libraryRevision)
     } catch {
       // The visible story remains exportable even if browser storage is full.
     }
@@ -134,11 +282,17 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     // Flush the previous workspace before changing the active in-memory
     // library; otherwise the debounce below could be cancelled by a fast
     // workspace switch.
-    if (previous.hydrated && workspace !== previous.workspace) {
+    if (previous.hydrated && workspace !== previous.workspace && !previous.libraryConflicts.length) {
       try {
-        const previousLibrary = buildLibrary(previous.project, previous.projects)
-        await api.saveStoryLibrary(previous.workspace, previousLibrary)
-        lastPersistedLibrary.set(previous.workspace, JSON.stringify(previousLibrary))
+        const previousLibrary = buildLibrary(previous.project, previous.projects, previous.libraryRevision)
+        const savedPrevious = await api.saveStoryLibrary(previous.workspace, previousLibrary)
+        lastPersistedLibrary.set(previous.workspace, JSON.stringify(savedPrevious))
+        persistLocalLibrary(
+          previous.workspace,
+          previous.project,
+          previous.projects,
+          savedPrevious.revision,
+        )
       } catch {
         // Its local cache remains intact and will be retried next time.
       }
@@ -149,33 +303,60 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       workspace,
       project: local.projects[local.activeId],
       projects: local.projects,
+      libraryRevision: local.revision,
       dirty: false,
       hydrated: false,
       loading: true,
       saveError: null,
+      libraryConflicts: [],
     })
     try {
       const remoteValue = await api.fetchStoryLibrary(workspace)
       if (get().workspace !== workspace) return
-      let library = normalizeLibrary(remoteValue)
+      const remoteLibrary = normalizeLibrary(remoteValue)
+      let library = remoteLibrary
+      let conflicts: StoryLibraryConflict[] = []
+      let needsRemoteSync = false
       if (!library) {
         // First-run migration: upload the existing v2/legacy browser cache.
-        library = local
-        await api.saveStoryLibrary(workspace, library)
+        library = {
+          ...local,
+          revision: Number.isInteger(remoteValue.revision) && remoteValue.revision >= 0
+            ? remoteValue.revision : 0,
+        }
+        library = normalizeLibrary(await api.saveStoryLibrary(workspace, library)) || library
+      } else if (localSnapshotExisted) {
+        const merged = mergeStoryLibraries(local, library)
+        library = merged.library
+        conflicts = merged.conflicts
+        needsRemoteSync = merged.needsRemoteSync
       }
       persistLocalLibrary(
         workspace,
         library.projects[library.activeId],
         library.projects,
+        library.revision,
       )
-      lastPersistedLibrary.set(workspace, JSON.stringify(library))
+      // A local-newer/exclusive merge must be sent back to the server. A
+      // conflict deliberately stays unsynced until a future explicit review.
+      const remoteSerialized = remoteLibrary
+        ? JSON.stringify(remoteLibrary)
+        : JSON.stringify(library)
+      lastPersistedLibrary.set(
+        workspace,
+        needsRemoteSync && !conflicts.length
+          ? remoteSerialized
+          : JSON.stringify(library),
+      )
       set({
         project: library.projects[library.activeId],
         projects: library.projects,
+        libraryRevision: library.revision,
         dirty: false,
         hydrated: true,
         loading: false,
         saveError: null,
+        libraryConflicts: conflicts,
       })
       if (workspace === 'default') {
         window.localStorage.removeItem(LEGACY_AUTOSAVE_KEY)
@@ -185,6 +366,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       set({
         hydrated: false,
         loading: false,
+        libraryConflicts: [],
         saveError: error instanceof Error ? error.message : 'Story Lab storage is unavailable',
       })
     }
@@ -213,13 +395,41 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       dirty: true,
     }
   }),
+  updateProjectById: (id, updater) => set(state => {
+    const source = state.projects[id]
+    if (!source) return state
+    const project = touched(source, updater(structuredClone(source)))
+    return {
+      project: state.project.id === id ? project : state.project,
+      projects: { ...state.projects, [id]: project },
+      dirty: true,
+    }
+  }),
+  beginProjectOperation: id => set(state => ({
+    activeProjectOperations: {
+      ...state.activeProjectOperations,
+      [id]: (state.activeProjectOperations[id] || 0) + 1,
+    },
+  })),
+  endProjectOperation: id => set(state => {
+    const count = state.activeProjectOperations[id] || 0
+    if (count <= 1) {
+      const activeProjectOperations = { ...state.activeProjectOperations }
+      delete activeProjectOperations[id]
+      return { activeProjectOperations }
+    }
+    return {
+      activeProjectOperations: { ...state.activeProjectOperations, [id]: count - 1 },
+    }
+  }),
   newProject: projectType => set(state => {
     const fresh = createStoryProject(projectType)
-    // Provider choices are user preferences in practice. Keep them when a
-    // new Story is created instead of silently returning to Maestro internal.
+    // New projects inherit the production profile. Keep the dormant explicit
+    // provider values for a later opt-out, but never copy the previous Story's
+    // inheritance mode or video override into a brand-new project.
     const project = {
       ...fresh,
-      provider: { ...fresh.provider, ...state.project.provider },
+      provider: { ...fresh.provider, ...state.project.provider, useGlobalProfile: true },
     }
     return {
       project,
@@ -228,19 +438,11 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   }),
   duplicateProject: id => set(state => {
-    const source = state.projects[id || state.project.id]
+    const sourceId = id || state.project.id
+    if (state.activeProjectOperations[sourceId]) return state
+    const source = state.projects[sourceId]
     if (!source) return state
-    const now = new Date().toISOString()
-    const project = normalizeStoryProject({
-      ...structuredClone(source),
-      id: `story-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
-      title: `${source.title} copy`,
-      revision: 1,
-      approvals: {},
-      productions: [],
-      createdAt: now,
-      updatedAt: now,
-    })
+    const project = duplicateStoryProject(source)
     return {
       project,
       projects: { ...state.projects, [project.id]: project },
@@ -252,6 +454,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return project ? { project, dirty: true } : state
   }),
   deleteProject: id => set(state => {
+    if (state.activeProjectOperations[id]) return state
     if (!state.projects[id]) return state
     const projects = { ...state.projects }
     delete projects[id]
@@ -260,11 +463,17 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       return {
         projects,
         project: state.project.id === id ? projects[remainingId] : state.project,
+        libraryConflicts: state.libraryConflicts.filter(item => item.id !== id),
         dirty: true,
       }
     }
     const project = createStoryProject()
-    return { projects: { [project.id]: project }, project, dirty: true }
+    return {
+      projects: { [project.id]: project },
+      project,
+      libraryConflicts: state.libraryConflicts.filter(item => item.id !== id),
+      dirty: true,
+    }
   }),
 }))
 
@@ -274,14 +483,15 @@ const lastPersistedLibrary = new Map<string, string>()
 useStoryStore.subscribe(state => {
   if (typeof window === 'undefined') return
   try {
-    persistLocalLibrary(state.workspace, state.project, state.projects)
+    persistLocalLibrary(state.workspace, state.project, state.projects, state.libraryRevision)
   } catch {
     // Storypack export remains available when browser storage is full.
   }
   if (!state.hydrated) return
+  if (state.libraryConflicts.length) return
 
   const workspace = state.workspace
-  const library = buildLibrary(state.project, state.projects)
+  const library = buildLibrary(state.project, state.projects, state.libraryRevision)
   const serialized = JSON.stringify(library)
   if (lastPersistedLibrary.get(workspace) === serialized) return
 
@@ -290,17 +500,64 @@ useStoryStore.subscribe(state => {
     backendSaveChain = backendSaveChain
       .catch(() => undefined)
       .then(async () => {
-        await api.saveStoryLibrary(workspace, library)
-        lastPersistedLibrary.set(workspace, serialized)
+        const saved = await api.saveStoryLibrary(workspace, library)
+        const savedSerialized = JSON.stringify(saved)
+        lastPersistedLibrary.set(workspace, savedSerialized)
         useStoryStore.setState(current => {
-          if (
-            current.workspace !== workspace
-            || JSON.stringify(buildLibrary(current.project, current.projects)) !== serialized
-          ) return {}
-          return { dirty: false, saveError: null }
+          if (current.workspace !== workspace) return {}
+          const contentUnchanged = JSON.stringify(
+            buildLibrary(current.project, current.projects, library.revision),
+          ) === serialized
+          return {
+            libraryRevision: saved.revision,
+            dirty: !contentUnchanged,
+            saveError: null,
+          }
         })
       })
-      .catch(error => {
+      .catch(async error => {
+        if (error instanceof api.StoryLibraryRevisionError) {
+          try {
+            const remoteValue = await api.fetchStoryLibrary(workspace)
+            const current = useStoryStore.getState()
+            if (current.workspace !== workspace) return
+            const remote = normalizeLibrary(remoteValue) || {
+              version: 2 as const,
+              revision: Number.isInteger(remoteValue.revision) ? remoteValue.revision : error.currentRevision,
+              activeId: '',
+              projects: {},
+            }
+            const local = buildLibrary(
+              current.project,
+              current.projects,
+              current.libraryRevision,
+            )
+            const merged = mergeStoryLibraries(local, remote)
+            // The remote snapshot is the CAS baseline. A conflict blocks
+            // autosave; a clean local-newer merge immediately retries at the
+            // newly observed revision.
+            lastPersistedLibrary.set(workspace, JSON.stringify(remote))
+            persistLocalLibrary(
+              workspace,
+              merged.library.projects[merged.library.activeId],
+              merged.library.projects,
+              merged.library.revision,
+            )
+            useStoryStore.setState({
+              project: merged.library.projects[merged.library.activeId],
+              projects: merged.library.projects,
+              libraryRevision: merged.library.revision,
+              dirty: merged.needsRemoteSync || merged.conflicts.length > 0,
+              libraryConflicts: merged.conflicts,
+              saveError: merged.conflicts.length
+                ? 'Story library changed in another tab. Review the conflict before saving.'
+                : null,
+            })
+            return
+          } catch (recoveryError) {
+            error = recoveryError
+          }
+        }
         useStoryStore.setState(current => current.workspace === workspace
           ? {
               dirty: true,
@@ -312,3 +569,5 @@ useStoryStore.subscribe(state => {
 })
 
 export { createStoryProject, normalizeStoryProject, storyId } from './model'
+export { mergeStoryLibraries } from './library'
+export type { StoryLibraryConflict, StoryLibraryData } from './library'

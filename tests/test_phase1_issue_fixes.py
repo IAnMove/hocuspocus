@@ -12,7 +12,7 @@ from unittest import mock
 
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_LAUNCH_PATH = os.path.join(_ROOT, "app", "launch.py")
+_LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _LTX2_PATH = os.path.join(_ROOT, "app", "models", "ltx2", "ltx2.py")
 _LTX2_INPAINT_PATH = os.path.join(
@@ -2357,7 +2357,7 @@ class TestOutpaintShotAwarePlanning(unittest.TestCase):
                     "_jobs": jobs,
                     "_gen_lock": object(),
                     "_active_gen_states": {},
-                    "generation_slot": lambda *args, **kwargs: (
+                    "_coordinated_generation_slot": lambda *args, **kwargs: (
                         contextlib.nullcontext(True)
                     ),
                     "try_start": try_start,

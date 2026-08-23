@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
 import { Upload, Loader2, Music, Zap, RotateCcw, X, ChevronRight, ChevronDown, ImageIcon, Play } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { DirectorClipImagePreview } from './DirectorClipImagePreview'
+import { useObjectUrl } from '../../lib/useObjectUrl'
 const AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a'
 const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.bmp'
 
@@ -55,6 +57,8 @@ export function DirectorPanel() {
   const energyBias = useStore(s => s.directorEnergyBias)
   const clipPlans = useStore(s => s.directorClipPlans)
   const sceneDescription = useStore(s => s.directorSceneDescription)
+  const spokenLanguage = useStore(s => s.directorSpokenLanguage)
+  const setSpokenLanguage = useStore(s => s.setDirectorSpokenLanguage)
   const audioFile = useStore(s => s.directorAudioFile)
   const referenceImage = useStore(s => s.directorReferenceImage)
   const clipImages = useStore(s => s.directorClipImages)
@@ -78,10 +82,7 @@ export function DirectorPanel() {
   const autoMode = useStore(s => s.directorAutoMode)
   const setAutoMode = useStore(s => s.setDirectorAutoMode)
 
-  const refImagePreview = useMemo(
-    () => referenceImage ? URL.createObjectURL(referenceImage) : null,
-    [referenceImage]
-  )
+  const refImagePreview = useObjectUrl(referenceImage)
 
   // Sample lyrics per speaker for identification
   const speakerSamples = useMemo(() => {
@@ -419,6 +420,17 @@ export function DirectorPanel() {
       {/* Step 3: Scene description + Reference image */}
       {step === 'style' && (
         <div className="space-y-2">
+          <label className="block">
+            <span className="text-[11px] text-text-muted uppercase tracking-wider">Spoken language</span>
+            <select className="mt-1 w-full rounded-lg border border-border bg-bg-secondary px-2 py-1.5 text-xs text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
+              <option value="">Auto from dialogue</option>
+              <option value="Español de España">Español de España</option>
+              <option value="Español latinoamericano">Español latinoamericano</option>
+              <option value="English">English</option>
+              <option value="French">Français</option>
+              <option value="Italian">Italiano</option>
+            </select>
+          </label>
           {/* Auto-mode checkbox */}
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
@@ -662,8 +674,8 @@ export function DirectorPanel() {
             <div className="grid grid-cols-3 gap-1.5 max-h-[300px] overflow-y-auto">
               {clipImages.map((img, i) => (
                 <div key={i} className="relative">
-                  <img
-                    src={URL.createObjectURL(img.file)}
+                  <DirectorClipImagePreview
+                    image={img}
                     alt={`Clip ${img.clipIndex + 1}`}
                     className="w-full aspect-square object-cover rounded-lg border border-border"
                   />
@@ -706,8 +718,8 @@ export function DirectorPanel() {
             <div className="grid grid-cols-5 gap-1 mb-1">
               {clipImages.map((img, i) => (
                 <div key={i} className="relative">
-                  <img
-                    src={URL.createObjectURL(img.file)}
+                  <DirectorClipImagePreview
+                    image={img}
                     alt={`Clip ${img.clipIndex + 1}`}
                     className="w-full aspect-square object-cover rounded border border-border"
                   />

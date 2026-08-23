@@ -1,13 +1,16 @@
 import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen, Zap } from 'lucide-react'
 import { useStore, getFamiliesForMode, getModelsForFamily, resolveResolution } from '../../stores/useStore'
-import { fetchModelOptions, getFileUrl } from '../../api/client'
+import { fetchModelOptions } from '../../api/client'
 import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
 import { DirectorSongSetup } from './DirectorSongSetup'
 import { InfoTooltip } from './InfoTooltip'
 import type { DirectorPipelineType, DirectorShotImageGuidance, DirectorSkill, ModelOptions, MusicVideoTreatment, ShortFilmCharacter, ShortFilmPath } from '../../types'
 import { formatSeconds, recommendedWindowProfile } from './DurationSlider'
+import { DirectorClipImagePreview } from './DirectorClipImagePreview'
+import { DirectorPlanRecoveryCard } from './DirectorPlanRecoveryCard'
+import { useObjectUrl } from '../../lib/useObjectUrl'
 
 const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
   .then(module => ({ default: module.ComicDirectorPanel })))
@@ -375,6 +378,8 @@ export function DirectorChat() {
   // mode) or already generating from a previous click (manual mode).
   const isGenerating = useStore(s => s.isGenerating)
   const error = useStore(s => s.directorError)
+  const planRecovery = useStore(s => s.directorPlanRecovery)
+  const resumePlan = useStore(s => s.directorResumePlan)
   const analysis = useStore(s => s.directorAnalysis)
   const plannedClips = useStore(s => s.directorPlannedClips)
   const energyBias = useStore(s => s.directorEnergyBias)
@@ -395,6 +400,8 @@ export function DirectorChat() {
     || s.directorLocationRefPaths.length
   ))
   const sceneDescription = useStore(s => s.directorSceneDescription)
+  const spokenLanguage = useStore(s => s.directorSpokenLanguage)
+  const setSpokenLanguage = useStore(s => s.setDirectorSpokenLanguage)
   const audioFile = useStore(s => s.directorAudioFile)
   const referenceImage = useStore(s => s.directorReferenceImage)
   const clipImages = useStore(s => s.directorClipImages)
@@ -471,7 +478,7 @@ export function DirectorChat() {
   const isShortFilm = skill === 'short_film'
   const isStoryPath = isShortFilm && shortFilmPath === 'story'
   const isMusicVideo = !!skill && !isShortFilm
-  const isDirectVideo = isMusicVideo && musicVideoTreatment.generation_mode === 'direct_video'
+  const isDirectVideo = musicVideoTreatment.generation_mode === 'direct_video'
   // Music Video "Generate a track" setup: the bottom chat IS the song
   // description, and Send kicks off the whole write-song → render → video chain.
   const isMvGenerate = isMusicVideo && musicSource === 'generate'
@@ -488,10 +495,7 @@ export function DirectorChat() {
   const [chatInput, setChatInput] = useState<string | null>(null)
   const resolvedChatInput = chatInput ?? (step === 'style' ? sceneDescription : '')
 
-  const refImagePreview = useMemo(
-    () => referenceImage ? URL.createObjectURL(referenceImage) : null,
-    [referenceImage]
-  )
+  const refImagePreview = useObjectUrl(referenceImage)
 
   const speakerSamples = useMemo(() => {
     const samples: Record<string, string[]> = {}
@@ -557,7 +561,7 @@ export function DirectorChat() {
   // analyze phases) and new errors pull the view down to the newest content.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [step, loading, loadingMessage, error, clipPlans.length, clipImages.length, skill])
+  }, [step, loading, loadingMessage, error, planRecovery, clipPlans.length, clipImages.length, skill])
 
   const handleChatSubmit = () => {
     // Music Video "Generate a track": the chat is the song description, and
@@ -654,11 +658,11 @@ export function DirectorChat() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => useStore.getState().setDashboardOpen(true)}
+              onClick={() => useStore.getState().setMediaFilter('workspaces')}
               className="text-[10px] text-accent-blue hover:text-accent-blue/80 flex items-center gap-0.5 transition-colors"
-              title="Open independent video creations and edit their clips"
+              title="Open Workspaces to inspect prompts, references and the generation queue"
             >
-              Video workflows
+              Workspaces
             </button>
             {(skill || step !== 'upload') && (
               <button
@@ -675,7 +679,7 @@ export function DirectorChat() {
         {/* Welcome message */}
         <SystemBubble>
           <p className="text-xs text-text-secondary">
-            Welcome to Maestro Director. Choose a skill to get started.
+            Welcome to Loreframe Lab Director. Choose a skill to get started.
           </p>
         </SystemBubble>
 
@@ -898,6 +902,20 @@ export function DirectorChat() {
         {/* Style step */}
         {(atStep('style') || pastStep('style')) && (
           <>
+            {atStep('style') && <SystemBubble>
+              <label className="block">
+                <span className="text-[10px] text-text-muted">Idioma hablado del vídeo</span>
+                <select className="mt-1 w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
+                  <option value="">Automático según el diálogo</option>
+                  <option value="Español de España">Español de España</option>
+                  <option value="Español latinoamericano">Español latinoamericano</option>
+                  <option value="English">English</option>
+                  <option value="French">Français</option>
+                  <option value="Italian">Italiano</option>
+                </select>
+                <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">Se añade a todos los planos; la variante regional es best effort del modelo.</span>
+              </label>
+            </SystemBubble>}
             {/* Story path: show reference image + characters + duration here (since no upload step) */}
             {isStoryPath && atStep('style') && (
               <SystemBubble>
@@ -1153,7 +1171,14 @@ export function DirectorChat() {
             generation renders its error directly below the Generate status
             control; earlier-stage failures land here, after the current step,
             instead of appearing near the first line of the conversation. */}
-        {error && !atStep('review_video') && (
+        {planRecovery && !atStep('review_video') && (
+          <DirectorPlanRecoveryCard
+            job={planRecovery}
+            loading={loading}
+            onResume={resumePlan}
+          />
+        )}
+        {error && !planRecovery && !atStep('review_video') && (
           <div role="alert" className="text-[11px] text-red-300 bg-red-500/10 rounded px-2 py-2 border border-red-500/30 flex items-start gap-1.5">
             <X size={12} className="mt-0.5 shrink-0" />
             <span><strong className="font-semibold">Error:</strong> {error}</span>
@@ -1287,7 +1312,7 @@ function MusicVideoTreatmentEditor({
             <div>
               <p className="text-[10px] font-medium text-fuchsia-200">T2V puro · sin contaminación de imágenes</p>
               <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">
-                Maestro repetirá este prompt maestro completo en cada clip. El LLM solo escribirá la situación concreta. No se generarán primeros fotogramas ni se enviarán referencias visuales a H3; los campos de estilo antiguos tampoco se mezclarán con este mundo.
+                Loreframe Lab repetirá este prompt maestro completo en cada clip. El LLM solo escribirá la situación concreta. No se generarán primeros fotogramas ni se enviarán referencias visuales a H3; los campos de estilo antiguos tampoco se mezclarán con este mundo.
               </p>
             </div>
             <label className="block text-[9px] text-text-muted">Prompt maestro inmutable
@@ -1811,6 +1836,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
   placeholder: string
 }) {
   const [dragOver, setDragOver] = useState(false)
+  const previewUrl = useObjectUrl(file)
 
   return (
     <div
@@ -1828,7 +1854,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
       }`}
     >
       <div className="relative flex-shrink-0">
-        <img src={URL.createObjectURL(file)} alt={`Ref ${index+1}`}
+        <img src={previewUrl || ''} alt={`Ref ${index+1}`}
           className="w-[60px] h-[60px] object-cover rounded border border-border pointer-events-none" />
         <button onClick={() => onRemove(index)}
           className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -3284,8 +3310,8 @@ function ImageGenView({
         <div className="grid grid-cols-3 gap-1.5">
           {clipImages.map((img, i) => (
             <div key={i} className="relative">
-              <img
-                src={img.file ? URL.createObjectURL(img.file) : getFileUrl(img.filename)}
+              <DirectorClipImagePreview
+                image={img}
                 alt={`Clip ${img.clipIndex + 1}`}
                 className="w-full aspect-square object-cover rounded-lg border border-border"
               />
@@ -3363,8 +3389,8 @@ function VideoPromptsReview({
         <div className="grid grid-cols-5 gap-1 mb-1">
           {clipImages.map((img, i) => (
             <div key={i} className="relative">
-              <img
-                src={img.file ? URL.createObjectURL(img.file) : getFileUrl(img.filename)}
+              <DirectorClipImagePreview
+                image={img}
                 alt={`Clip ${img.clipIndex + 1}`}
                 className="w-full aspect-square object-cover rounded border border-border"
               />

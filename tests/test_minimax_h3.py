@@ -28,7 +28,7 @@ _TURBO_PATH = _APP / "models" / "minimax_h3" / "turbo.py"
 _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
-_LAUNCH_PATH = _APP / "launch.py"
+_LAUNCH_PATH = _APP / "_launch_runtime.py"
 _LLM_SERVICE_PATH = _APP / "services" / "llm_service.py"
 _DEFAULT_PATH = _APP / "defaults" / "minimax_h3.json"
 _LEGACY_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_legacy.json"
@@ -279,6 +279,21 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("minimax_h3_service.generate(", launch)
         self.assertIn("def _is_legacy_h3_model", launch)
         self.assertIn("_release_legacy_h3_when_queue_allows", launch)
+
+    def test_series_and_manual_release_drop_the_isolated_h3_runtime(self):
+        launch = _read(_LAUNCH_PATH)
+        series_worker = launch.split(
+            "def _run_series_render_job(job_id: str) -> None:", 1,
+        )[1].split("def _series_render_candidates", 1)[0]
+        manual_release = launch.split(
+            "def system_release_model():", 1,
+        )[1].split("# ============================================================================", 1)[0]
+
+        self.assertIn(
+            "_release_legacy_h3_when_queue_allows(job_id)", series_worker,
+        )
+        self.assertIn("minimax_h3_service.is_runtime_running()", manual_release)
+        self.assertIn("minimax_h3_service.stop_runtime()", manual_release)
 
     def test_handler_exposes_base_fl2va_contract(self):
         model_def = self.handler.query_model_def("minimax_h3", {})
@@ -913,14 +928,16 @@ class TestMiniMaxH3Definition(unittest.TestCase):
             "non_diegetic_music:",
             "(S1)",
             "<d>[English]",
-            "remain silent with their mouths closed",
+            "AUDIO POLICY",
+            "zero sound description",
         ):
             self.assertIn(required, enhance_guide)
         self.assertIn("but supplies no script", enhance_guide)
-        self.assertIn("TIMED SILENCE AROUND DIALOGUE", enhance_guide)
-        self.assertIn("idle staring", enhance_guide)
+        self.assertNotIn("TIMED SILENCE AROUND DIALOGUE", enhance_guide)
+        self.assertNotIn("remain silent with their mouths closed", enhance_guide)
         self.assertIn("<d>[English] Exact words.</d>", dialect_guide)
-        self.assertIn("Never invent extra speech", dialect_guide)
+        self.assertIn("AUDIO POLICY", dialect_guide)
+        self.assertIn("zero sound description", dialect_guide)
         self.assertIn("proper names", dialect_guide)
         self.assertIn("Maestro maps the exact per-shot", ref2va_dialect_guide)
         self.assertIn("Do not guess reference numbers", ref2va_dialect_guide)
@@ -956,10 +973,11 @@ class TestMiniMaxH3Definition(unittest.TestCase):
             "detailed_description:",
             "overall_soundscape:",
             "non_diegetic_music:",
-            "TIMED SILENCE AROUND DIALOGUE",
-            "do not authorize",
+            "AUDIO POLICY",
+            "zero sound description",
         ):
             self.assertIn(required, guide)
+        self.assertNotIn("TIMED SILENCE AROUND DIALOGUE", guide)
 
     def test_omni_reference_request_and_ui_are_wired_end_to_end(self):
         launch = _read(_LAUNCH_PATH)
@@ -1030,7 +1048,8 @@ class TestMiniMaxH3Definition(unittest.TestCase):
             helpers["_h3_dialogue_contract_satisfied"]('A man says, "Hello."', fallback)
         )
         self.assertIn("<d>[English] Hello.</d>", fallback)
-        self.assertIn("begin at the first frame", fallback)
+        self.assertIn("overall_soundscape: N/A", fallback)
+        self.assertNotIn("begin at the first frame", fallback)
         self.assertTrue(
             helpers["_h3_voice_binding_contract_satisfied"](
                 fallback,
@@ -1063,8 +1082,8 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         )
         self.assertIn("REQUIRED VERBATIM", requirement)
         self.assertIn("Run it locally.", requirement)
-        self.assertIn("From 0.00 to 2.00 seconds", requirement)
-        self.assertIn("no human voice", requirement)
+        self.assertNotIn("From 0.00 to 2.00 seconds", requirement)
+        self.assertNotIn("no human voice", requirement)
 
         timed = helpers["_build_h3_ref2va_tagged_fallback"](
             'Blaine says, "Snap this, bitch" before punching.',
@@ -1101,7 +1120,8 @@ class TestMiniMaxH3Definition(unittest.TestCase):
             'Blaine says, "Snap this, bitch" before punching.',
         )
         self.assertNotIn("grunts loudly", cleaned_sound)
-        self.assertIn("no human voices", cleaned_sound)
+        self.assertIn("overall_soundscape: N/A", cleaned_sound)
+        self.assertNotIn("no human voices", cleaned_sound)
         no_invented_music = helpers["_enforce_h3_music_request"](
             cleaned_sound,
             'A cinematic fight. Blaine says, "Snap this, bitch".',
@@ -1542,15 +1562,15 @@ class TestMiniMaxH3RuntimeMath(unittest.TestCase):
         self.assertIn("<Audio 1>", voice)
         self.assertIn("voice-timbre", voice)
         self.assertIn("do not copy its source words", voice)
-        self.assertIn("begin at the first frame", voice)
         self.assertIn("subject_definitions:", voice)
         self.assertIn("detailed_description:", voice)
         self.assertIn("<d>[English] Snap this.</d>", voice)
         self.assertNotIn('"Snap this."', voice)
         self.assertIn("source location, background, composition, framing, or pose", voice)
-        self.assertIn("only spoken words", voice)
-        self.assertIn("From 0.00 to 2.00 seconds", voice)
-        self.assertIn("From 3.00 to 10.00 seconds", voice)
+        self.assertIn("overall_soundscape: N/A", voice)
+        self.assertNotIn("begin at the first frame", voice)
+        self.assertNotIn("From 0.00 to 2.00 seconds", voice)
+        self.assertNotIn("only spoken words", voice)
 
         drive = ensure_ref2va_prompt_relationships(
             "A singer performs.",

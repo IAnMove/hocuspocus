@@ -6,8 +6,8 @@ import logging
 
 
 # These endpoints are read-only UI heartbeats/status feeds. Successful polls
-# add no diagnostic value and can fire multiple times per second. Their errors
-# remain visible because QuietPollingAccessFilter only drops status < 400.
+# add no diagnostic value and can fire multiple times per second. Redirects
+# and errors remain visible because the filter drops only 2xx responses.
 QUIET_POLL_PATHS = frozenset(
     {
         "/health",
@@ -56,7 +56,7 @@ class QuietPollingAccessFilter(logging.Filter):
         except (TypeError, ValueError):
             return True
 
-        if method not in {"GET", "HEAD"} or status_code >= 400:
+        if method not in {"GET", "HEAD"} or not 200 <= status_code < 300:
             return True
         return not _is_quiet_poll_path(path)
 

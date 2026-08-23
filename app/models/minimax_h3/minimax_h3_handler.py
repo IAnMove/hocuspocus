@@ -883,19 +883,16 @@ def pace_h3_sliding_window_prompt(
         if allowed_dialogue_indices:
             dialogue_instruction = (
                 "Only the <d> dialogue tags still present below may be spoken "
-                "in this segment, once each and in order. Reserved dialogue "
-                "markers are silent and must not produce speech or gibberish."
+                "in this segment, once each and in order."
             )
         else:
             dialogue_instruction = (
-                "This segment has no assigned scripted dialogue. Everyone "
-                "remains silent with mouths closed; do not add speech, muttering, "
-                "or gibberish. Reserved dialogue markers are not spoken."
+                "This segment contains no <d> dialogue tags. Continue the "
+                "visible action from the plan."
             )
     else:
         dialogue_instruction = (
-            "Do not invent or repeat dialogue beyond what this segment of the "
-            "full-shot plan explicitly requires."
+            "Continue the visible action from this segment of the full-shot plan."
         )
 
     return (

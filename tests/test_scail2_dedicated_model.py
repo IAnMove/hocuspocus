@@ -152,7 +152,7 @@ class TestDedicatedScail2Model(unittest.TestCase):
         handler_path = os.path.join(
             _APP, "models", "wan", "wan_handler.py",
         )
-        launch_path = os.path.join(_APP, "launch.py")
+        launch_path = os.path.join(_APP, "_launch_runtime.py")
         with open(scail2_path, "r", encoding="utf-8") as handle:
             scail2_source = handle.read()
         with open(handler_path, "r", encoding="utf-8") as handle:

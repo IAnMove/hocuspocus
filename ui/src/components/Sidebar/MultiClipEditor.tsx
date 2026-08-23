@@ -70,11 +70,14 @@ export function MultiClipEditor() {
   const clips = useStore(s => s.clips)
   const singlePromptMode = useStore(s => s.singlePromptMode)
   const setSinglePromptMode = useStore(s => s.setSinglePromptMode)
+  const focusedClipIndex = useStore(s => s.studioFocusedClipIndex)
+  const setFocusedClipIndex = useStore(s => s.setStudioFocusedClipIndex)
   const setClipPrompt = useStore(s => s.setClipPrompt)
   const setClipStartImage = useStore(s => s.setClipStartImage)
   const addClipKeyframe = useStore(s => s.addClipKeyframe)
   const removeClipKeyframe = useStore(s => s.removeClipKeyframe)
   const slidingWindowSeconds = useStore(s => s.slidingWindowSeconds)
+  const openIndex = focusedClipIndex
 
   if (clips.length === 0) return null
 
@@ -93,15 +96,23 @@ export function MultiClipEditor() {
       <div className="space-y-2">
         {clips.map((clip, i) => (
           <div key={i} className="border border-border rounded-lg p-2 space-y-2">
-            <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 text-left"
+              onClick={() => setFocusedClipIndex(openIndex === i ? -1 : i)}
+            >
               <span className="text-[11px] text-text-muted uppercase tracking-wider font-medium">
-                Clip {i + 1}
+                Shot {i + 1}
               </span>
-              <span className="text-[10px] text-text-muted ml-auto">
-                {slidingWindowSeconds}s
+              <span className="min-w-0 flex-1 truncate text-[10px] text-text-muted">
+                {(singlePromptMode && i > 0 ? clips[0].prompt : clip.prompt) || 'Empty prompt'}
               </span>
-            </div>
-
+              <span className="text-[10px] text-text-muted">
+                {clip.durationFrames ? `${clip.durationFrames}f` : `${slidingWindowSeconds}s`}
+              </span>
+            </button>
+            {openIndex !== i ? null : (
+            <>
             <ClipDropZone
               file={clip.startImage}
               path={clip.startImagePath}
@@ -153,10 +164,12 @@ export function MultiClipEditor() {
                 }
               }}
               disabled={singlePromptMode && i > 0}
-              placeholder={`Describe clip ${i + 1}...`}
-              rows={2}
-              className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted resize-none focus:outline-none focus:border-accent-blue transition-colors disabled:opacity-40"
+              placeholder={`Describe shot ${i + 1}...`}
+              rows={8}
+              className="w-full min-h-[10rem] bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted resize-y focus:outline-none focus:border-accent-blue transition-colors disabled:opacity-40"
             />
+            </>
+            )}
           </div>
         ))}
       </div>
