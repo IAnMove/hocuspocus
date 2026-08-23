@@ -91,6 +91,11 @@ class TestComicCompatibleLlm(unittest.TestCase):
         self.assertNotIn("Authorization", post.call_args.kwargs["headers"])
 
     def test_minimax_uses_its_openai_compatible_endpoint(self):
+        schema = {
+            "type": "object",
+            "properties": {"fps": {"enum": [30, 60]}},
+            "required": ["fps"],
+        }
         with patch(
             "services.llm_service.requests.post",
             return_value=_Response('<think>Plan the structure.</think>{"ok": true}'),
@@ -100,7 +105,7 @@ class TestComicCompatibleLlm(unittest.TestCase):
                 model_id="MiniMax-M3",
                 base_url="https://api.minimax.io/v1",
                 api_key="minimax-shared-secret",
-                json_schema={"type": "object"},
+                json_schema=schema,
             )
         self.assertEqual(result, '{"ok": true}')
         self.assertEqual(
@@ -112,7 +117,12 @@ class TestComicCompatibleLlm(unittest.TestCase):
             "Bearer minimax-shared-secret",
         )
         self.assertEqual(post.call_args.kwargs["json"]["model"], "MiniMax-M3")
-        self.assertNotIn("response_format", post.call_args.kwargs["json"])
+        response_schema = post.call_args.kwargs["json"]["response_format"]["json_schema"]["schema"]
+        self.assertEqual(
+            response_schema["properties"]["fps"],
+            {"type": "integer", "minimum": 30, "maximum": 60},
+        )
+        self.assertEqual(schema["properties"]["fps"], {"enum": [30, 60]})
         self.assertEqual(
             post.call_args.kwargs["json"]["thinking"],
             {"type": "disabled"},

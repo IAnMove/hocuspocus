@@ -57,6 +57,15 @@ test('extractJsonObject takes the outermost object', () => {
   assert.deepEqual(extractJsonObject('noise { "a": 1 } trailing'), { a: 1 })
 })
 
+test('extractJsonObject tolerates quoted JSON and skips invalid brace noise', () => {
+  assert.deepEqual(extractJsonObject(JSON.stringify('{"a":1}')), { a: 1 })
+  assert.deepEqual(extractJsonObject('analysis {not json} then {"a":2}'), { a: 2 })
+  assert.throws(
+    () => extractJsonObject('I could not create the requested structure.'),
+    /complete recipe JSON object/,
+  )
+})
+
 test('example UFO series shares one saucer identity across shots and does not auto-record', () => {
   const recipe = parseSceneRecipe(EXAMPLE_SAUCER_CRUISE_RECIPE)
   assert.equal(recipe.record, false)

@@ -2246,6 +2246,43 @@ def generate(
     return content.strip()
 
 
+def _minimax_compatible_json_schema(value):
+    """Adapt valid JSON Schema features that MiniMax's API rejects.
+
+    MiniMax structured output currently accepts numeric fields, but its
+    schema validator treats ``enum`` values as strings.  Preserve the
+    caller's original schema for local validation while relaxing numeric
+    enums to their bounded numeric range in the provider envelope.
+    """
+    if isinstance(value, list):
+        return [_minimax_compatible_json_schema(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    normalized = {
+        key: _minimax_compatible_json_schema(item)
+        for key, item in value.items()
+    }
+    enum_values = normalized.get("enum")
+    if (
+        isinstance(enum_values, list)
+        and enum_values
+        and all(
+            isinstance(item, (int, float)) and not isinstance(item, bool)
+            for item in enum_values
+        )
+    ):
+        normalized.pop("enum", None)
+        normalized["type"] = (
+            "integer"
+            if all(isinstance(item, int) for item in enum_values)
+            else "number"
+        )
+        normalized["minimum"] = min(enum_values)
+        normalized["maximum"] = max(enum_values)
+    return normalized
+
+
 @trace_llm_call("generate_openai_compatible")
 def generate_openai_compatible(
     *,
@@ -2277,12 +2314,19 @@ def generate_openai_compatible(
         raise RuntimeError("An OpenAI-compatible model name is required")
     if not base_url.startswith(("http://", "https://")):
         raise RuntimeError("The OpenAI-compatible base URL must start with http:// or https://")
+    is_deepseek = "deepseek.com" in base_url.lower()
+    is_minimax = "minimax.io" in base_url.lower()
+    provider_schema = (
+        _minimax_compatible_json_schema(json_schema)
+        if is_minimax and json_schema is not None
+        else json_schema
+    )
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
-    if json_schema is not None:
+    if provider_schema is not None:
         compact_schema = json.dumps(
-            json_schema,
+            provider_schema,
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -2303,8 +2347,6 @@ def generate_openai_compatible(
         messages.append({"role": "user", "content": content_parts})
     else:
         messages.append({"role": "user", "content": prompt})
-    is_deepseek = "deepseek.com" in base_url.lower()
-    is_minimax = "minimax.io" in base_url.lower()
     payload = {
         "model": model_id,
         "messages": messages,
@@ -2328,17 +2370,17 @@ def generate_openai_compatible(
         payload["frequency_penalty"] = frequency_penalty
     if presence_penalty > 0:
         payload["presence_penalty"] = presence_penalty
-    if json_schema is not None and not is_minimax:
-        schema_root = str(json_schema.get("type") or "") if isinstance(json_schema, dict) else ""
+    if provider_schema is not None:
+        schema_root = str(provider_schema.get("type") or "") if isinstance(provider_schema, dict) else ""
         if is_deepseek and schema_root == "object":
             payload["response_format"] = {"type": "json_object"}
         elif not is_deepseek:
             payload["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": "maestro_comic_response",
+                    "name": "maestro_response",
                     "strict": True,
-                    "schema": json_schema,
+                    "schema": provider_schema,
                 },
             }
 

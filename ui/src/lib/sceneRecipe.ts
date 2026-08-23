@@ -395,12 +395,60 @@ ${inventory}`
 }
 
 export function extractJsonObject(text: string): unknown {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const raw = (fenced ? fenced[1] : text).trim()
-  const start = raw.indexOf('{')
-  const end = raw.lastIndexOf('}')
-  if (start < 0 || end <= start) throw new Error('The model did not return a recipe JSON object.')
-  return JSON.parse(raw.slice(start, end + 1))
+  const parseCandidate = (candidate: string): unknown | undefined => {
+    try {
+      const parsed = JSON.parse(candidate.trim())
+      if (typeof parsed === 'string') {
+        try {
+          return JSON.parse(parsed.trim())
+        } catch {
+          return undefined
+        }
+      }
+      return parsed
+    } catch {
+      return undefined
+    }
+  }
+
+  const raw = text.trim()
+  const direct = parseCandidate(raw)
+  if (direct && typeof direct === 'object' && !Array.isArray(direct)) return direct
+
+  for (const match of raw.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)) {
+    const fenced = parseCandidate(match[1])
+    if (fenced && typeof fenced === 'object' && !Array.isArray(fenced)) return fenced
+  }
+
+  let start = -1
+  let depth = 0
+  let quoted = false
+  let escaped = false
+  for (let index = 0; index < raw.length; index += 1) {
+    const character = raw[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') quoted = false
+      continue
+    }
+    if (character === '"') {
+      quoted = true
+      continue
+    }
+    if (character === '{') {
+      if (depth === 0) start = index
+      depth += 1
+    } else if (character === '}' && depth > 0) {
+      depth -= 1
+      if (depth === 0 && start >= 0) {
+        const parsed = parseCandidate(raw.slice(start, index + 1))
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+        start = -1
+      }
+    }
+  }
+  throw new Error('The model did not return a complete recipe JSON object.')
 }
 
 function asString(value: unknown): string {
