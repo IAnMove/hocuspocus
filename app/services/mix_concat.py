@@ -10,10 +10,126 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
+from collections.abc import Callable
 from typing import Sequence
 
 HOLD_TAIL_SEC = 0.5
 FADE_SEC = 0.4
+
+
+def should_use_hold_crossfade(
+    clip_count: int,
+    *,
+    has_driving_audio: bool = False,
+    pad_audio: bool = False,
+    audio_duration_sec: float | None = None,
+) -> bool:
+    """Soft joins add hold+crossfade time and must not change a locked timeline.
+
+    Recast / Repaint / Outpaint pass ``audio_duration_sec`` (and often
+    ``pad_audio``) so the assembled shot count stays exact. Those callers
+    then reject any frame-count drift and delete the mix. Free-form Director
+    and Series joins omit that lock and still get the freeze-tail dissolve.
+    """
+    if int(clip_count) < 2:
+        return False
+    if has_driving_audio:
+        return False
+    if pad_audio:
+        return False
+    if audio_duration_sec is not None:
+        return False
+    return True
+
+
+def hold_crossfade_output_seconds(
+    durations: Sequence[float],
+    *,
+    hold_sec: float = HOLD_TAIL_SEC,
+    fade_sec: float = FADE_SEC,
+) -> float:
+    """Timeline length after freeze-tails and overlapping dissolves."""
+    if len(durations) < 2:
+        return float(durations[0]) if durations else 0.0
+    fade = float(fade_sec)
+    hold = float(hold_sec)
+    padded = [max(0.1, float(duration)) + hold for duration in durations]
+    elapsed = padded[0]
+    for index in range(1, len(padded)):
+        pair_fade = min(fade, hold, padded[index - 1] * 0.4, padded[index] * 0.4)
+        elapsed = elapsed + padded[index] - pair_fade
+    return elapsed
+
+
+def _remove_if_exists(path: str) -> None:
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
+def _run_ffmpeg_command(
+    cmd: list[str],
+    output_path: str,
+    *,
+    abort_callback: Callable[[], bool] | None = None,
+    timeout: float = 3600,
+) -> bool:
+    process = None
+    try:
+        if abort_callback is None:
+            completed = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout,
+            )
+            if completed.returncode != 0:
+                err = (completed.stderr or "")[-800:]
+                print(f"[MixConcat] ffmpeg error: {err}")
+                _remove_if_exists(output_path)
+                return False
+            return os.path.isfile(output_path) and os.path.getsize(output_path) > 0
+
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                _stdout, stderr = process.communicate(timeout=0.5)
+                break
+            except subprocess.TimeoutExpired:
+                if abort_callback():
+                    print("[MixConcat] concatenation cancelled")
+                    process.terminate()
+                    try:
+                        process.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.communicate()
+                    _remove_if_exists(output_path)
+                    return False
+                if time.monotonic() >= deadline:
+                    process.kill()
+                    process.communicate()
+                    _remove_if_exists(output_path)
+                    return False
+        if process.returncode != 0:
+            err = (stderr or "")[-800:]
+            print(f"[MixConcat] ffmpeg error: {err}")
+            _remove_if_exists(output_path)
+            return False
+        return os.path.isfile(output_path) and os.path.getsize(output_path) > 0
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"[MixConcat] ffmpeg failed: {exc}")
+        if process is not None and process.poll() is None:
+            process.kill()
+            try:
+                process.communicate()
+            except Exception:
+                pass
+        _remove_if_exists(output_path)
+        return False
 
 
 def probe_duration_seconds(path: str, ffmpeg_bin: str = "ffmpeg") -> float | None:
@@ -84,6 +200,7 @@ def concat_with_tail_hold_and_crossfade(
     *,
     hold_sec: float = HOLD_TAIL_SEC,
     fade_sec: float = FADE_SEC,
+    abort_callback: Callable[[], bool] | None = None,
 ) -> bool:
     """Re-encode clips with a 0.5s freeze tail and ~0.4s crossfade."""
     ffmpeg_bin = os.environ.get("FFMPEG_BINARY", "ffmpeg")
@@ -130,15 +247,8 @@ def concat_with_tail_hold_and_crossfade(
         f"[MixConcat] hold={hold_sec:.2f}s fade={fade_sec:.2f}s "
         f"clips={len(valid)} -> {os.path.basename(output_path)}"
     )
-    try:
-        completed = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=3600,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        print(f"[MixConcat] ffmpeg failed: {exc}")
-        return False
-    if completed.returncode != 0:
-        err = (completed.stderr or "")[-800:]
-        print(f"[MixConcat] ffmpeg error: {err}")
-        return False
-    return os.path.isfile(output_path) and os.path.getsize(output_path) > 0
+    return _run_ffmpeg_command(
+        cmd,
+        output_path,
+        abort_callback=abort_callback,
+    )

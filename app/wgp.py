@@ -6611,14 +6611,29 @@ def concatenate_multi_clip_videos(
 
     use_clip_audio = clips_have_audio and not audio_path
     audio_label = "with embedded audio" if use_clip_audio else ("with external audio" if audio_path else "video only")
-    if n > 1 and not audio_path:
-        try:
-            from services.mix_concat import concat_with_tail_hold_and_crossfade
-        except ImportError:
-            from app.services.mix_concat import concat_with_tail_hold_and_crossfade
+    try:
+        from services.mix_concat import (
+            concat_with_tail_hold_and_crossfade,
+            should_use_hold_crossfade,
+        )
+    except ImportError:
+        from app.services.mix_concat import (
+            concat_with_tail_hold_and_crossfade,
+            should_use_hold_crossfade,
+        )
+    if should_use_hold_crossfade(
+        n,
+        has_driving_audio=bool(audio_path),
+        pad_audio=bool(pad_audio),
+        audio_duration_sec=audio_duration_sec,
+    ):
         print(f"[Multi-Clip] Joining {n} clips with 0.5s hold + 0.4s crossfade ({audio_label})")
-        if concat_with_tail_hold_and_crossfade(valid_paths, output_path):
+        if concat_with_tail_hold_and_crossfade(
+            valid_paths, output_path, abort_callback=abort_callback,
+        ):
             return True
+        if abort_callback is not None and abort_callback():
+            return False
         print("[Multi-Clip] Soft join failed; falling back to hard concat")
     print(f"[Multi-Clip] Joining {n} clips using concat filter (re-encode, {audio_label})")
     if audio_path and audio_start_sec > 0:
