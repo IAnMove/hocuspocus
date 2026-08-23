@@ -80,6 +80,16 @@ def _candidate(
     }
     if variant_id:
         result["variantId"] = variant_id
+    metadata = asset.get("metadata") if isinstance(asset.get("metadata"), dict) else {}
+    if result["mediaType"] == "video":
+        # Identity/location footage often carries unrelated speech. Reference
+        # video sound is therefore explicit opt-in, never an implicit input.
+        result["includeAudio"] = metadata.get("includeAudio") is True
+    elif result["mediaType"] == "audio":
+        intent = str(metadata.get("audioIntent") or "").strip().lower()
+        result["audioIntent"] = intent if intent in {"voice", "drive", "style"} else (
+            "voice" if entity_type == "character" else "style"
+        )
     return result
 
 
@@ -139,7 +149,9 @@ def _auto_strategy(
     if source_mode == "known_universe_experimental" and visible_count == 0:
         return "direct"
     if shot.get("continuityFromShotId") and capabilities.get("supportsContinuation"):
-        return "first_frame" if has_exact_start else "references"
+        if has_exact_start:
+            return "first_frame"
+        return "references" if candidates else "direct"
     if has_exact_start and capabilities.get("supportsFirstFrame"):
         return "first_frame"
     if candidates:
@@ -227,16 +239,24 @@ def route_shot_references(
                     break
 
     ordered_character_ids: list[tuple[str, int, str, str]] = []
+    locked_protagonist = str(series.get("protagonistCharacterId") or "") \
+        if series.get("protagonistConsistency") else ""
+    if locked_protagonist and locked_protagonist in visible:
+        ordered_character_ids.append((
+            locked_protagonist, 1, "recurring_protagonist_identity",
+            "Optional protagonist identity lock is enabled",
+        ))
     if primary:
-        ordered_character_ids.append((primary, 2, "primary_speaker_identity", "Primary speaker is visible"))
+        if primary != locked_protagonist:
+            ordered_character_ids.append((primary, 2, "primary_speaker_identity", "Primary speaker is visible"))
     for character_id in speaking:
-        if character_id != primary:
+        if character_id not in {primary, locked_protagonist}:
             ordered_character_ids.append((
                 character_id, 3, "visible_speaking_character_identity",
                 "Speaking character is visible",
             ))
     for character_id in visible:
-        if character_id not in speaking:
+        if character_id not in speaking and character_id != locked_protagonist:
             ordered_character_ids.append((
                 character_id, 4, "visible_character_identity",
                 "Recurring reaction/listening character is visible",
@@ -252,7 +272,11 @@ def route_shot_references(
             if isinstance(shot.get("wardrobeByCharacterId"), dict) else {}
         entity_refs = _entity_assets(character, assets, str(wardrobe_map.get(character_id) or "") or None)
         if not entity_refs:
-            warnings.append(f"Visible character {character.get('name', character_id)} has no approved reference.")
+            message = f"Visible character {character.get('name', character_id)} has no approved reference."
+            if character_id == locked_protagonist:
+                errors.append(message + " The fixed-protagonist mode blocks rendering until its primary portrait is approved.")
+            else:
+                warnings.append(message)
         for asset in entity_refs:
             candidates.append(_candidate(
                 asset, entity_type="character", entity_id=character_id,
@@ -342,12 +366,18 @@ def route_shot_references(
         deduplicated = []
 
     if len(visible) >= 3 and not exact_start_ids:
-        warnings.append(
-            "This crowd cannot be blocked reliably with loose portraits; approve a composed start frame."
-        )
-        errors.append("Approve a composed start frame before rendering this crowd shot.")
-        if capabilities.get("supportsFirstFrame"):
-            strategy = "first_frame"
+        if strategy == "direct":
+            warnings.append(
+                "Direct text-to-video will improvise this crowd composition because no approved "
+                "composed start frame is available."
+            )
+        else:
+            warnings.append(
+                "This crowd cannot be blocked reliably with loose portraits; approve a composed start frame."
+            )
+            errors.append("Approve a composed start frame before rendering this crowd shot.")
+            if capabilities.get("supportsFirstFrame"):
+                strategy = "first_frame"
     elif len(visible) == 2 and not exact_start_ids:
         warnings.append(
             "Two-character blocking from loose portraits is approximate; use an approved composed start frame when composition matters."
@@ -382,8 +412,22 @@ def route_shot_references(
             media_counts[media_type] += 1
     if omitted:
         warnings.append(f"{len(omitted)} reference(s) were omitted by model or manual limits.")
+    if strategy == "references" and not any(
+        item["mediaType"] in {"image", "video"} for item in selected
+    ):
+        for item in selected:
+            omitted.append({
+                key: value for key, value in item.items() if key != "priority"
+            } | {"reason": "Audio cannot be the only Ref2VA reference"})
+        selected = []
+        warnings.append("Audio-only reference routing is invalid for H3; using direct generation.")
     if strategy in {"references", "first_frame", "first_last"} and not selected:
-        errors.append("The selected render strategy has no usable routed references.")
+        if requested_strategy == "auto":
+            warnings.append(
+                "Auto routing found no usable reference file; using direct text-to-video generation."
+            )
+        else:
+            errors.append("The selected render strategy has no usable routed references.")
         strategy = "direct"
         warnings.append("Falling back to direct generation because no usable reference remains.")
     if strategy in {"first_frame", "first_last"} and not any(
@@ -391,6 +435,15 @@ def route_shot_references(
     ):
         warnings.append("No exact start image survived reference routing; using reference generation.")
         strategy = "references" if selected else "direct"
+    if strategy in {"first_frame", "first_last"}:
+        allowed_roles = {"composed_start_frame"}
+        if strategy == "first_last":
+            allowed_roles.add("composed_end_frame")
+        unused = [item for item in selected if item.get("referenceRole") not in allowed_roles]
+        selected = [item for item in selected if item.get("referenceRole") in allowed_roles]
+        omitted.extend({
+            key: value for key, value in item.items() if key != "priority"
+        } | {"reason": "First-frame mode submits only exact composed frame assets"} for item in unused)
 
     first_frame_role = "none"
     if strategy in {"first_frame", "first_last"}:

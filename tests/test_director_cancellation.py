@@ -20,6 +20,7 @@ if _APP_DIR not in sys.path:
 
 from services import director_pipeline as pipeline  # noqa: E402
 from services.job_lifecycle import (  # noqa: E402
+    acknowledge_cancel,
     finish_job,
     is_cancel_requested,
     record_job_outputs,
@@ -125,7 +126,7 @@ class TestDirectorCancellation(unittest.TestCase):
             f"Repair {pid} did not settle; last state was {last_repair!r}"
         )
 
-    def test_abort_marks_queued_and_running_children_cancelled(self):
+    def test_abort_cancels_queued_child_and_defers_running_child(self):
         pid = "pipe-children"
         self._add_pipeline(pid)
         queued = {
@@ -157,7 +158,8 @@ class TestDirectorCancellation(unittest.TestCase):
         try:
             pipeline._abort_pipeline_jobs(pid)
             self.assertEqual(queued["status"], "cancelled")
-            self.assertEqual(running["status"], "cancelled")
+            self.assertEqual(running["status"], "cancelling")
+            self.assertIsNone(running["finished_at"])
             self.assertEqual(unrelated["status"], "queued")
             self.assertTrue(state["abort"])
             interrupt.assert_called_once_with()
@@ -165,6 +167,8 @@ class TestDirectorCancellation(unittest.TestCase):
             unregister_abort_state(
                 "running", pipeline._active_gen_states, state,
             )
+        self.assertEqual(running["status"], "cancelled")
+        self.assertIsNotNone(running["finished_at"])
 
     def test_stop_is_persisted_and_terminal_updates_are_rejected(self):
         pid = "pipe-stop"
@@ -276,6 +280,7 @@ class TestDirectorCancellation(unittest.TestCase):
                 return
             request_cancel(job)
             record_job_outputs(job, ["cancelled-rerun.png"])
+            acknowledge_cancel(job)
 
         pipeline._run_generation = fake_generation
         with self.assertRaises(
@@ -330,6 +335,7 @@ class TestDirectorCancellation(unittest.TestCase):
             while not is_cancel_requested(job):
                 time.sleep(0.001)
             record_job_outputs(job, ["late-timeout-output.mp4"])
+            acknowledge_cancel(job)
             settled.set()
 
         pipeline._run_generation = fake_generation
@@ -393,7 +399,7 @@ class TestDirectorCancellation(unittest.TestCase):
         self.assertTrue(pipeline._claim_pipeline_operation(pid))
         pipeline._release_pipeline_operation(pid)
 
-    def test_cancelled_detached_wait_is_bounded_and_keeps_child_lease(self):
+    def test_cancelled_detached_wait_stays_pending_until_worker_acknowledges(self):
         pid = "pipe-stuck-rerun"
         self._add_pipeline(pid, "completed")
         entered = threading.Event()
@@ -406,25 +412,43 @@ class TestDirectorCancellation(unittest.TestCase):
             request_cancel(job)
             entered.set()
             release.wait(timeout=2)
+            acknowledge_cancel(job)
 
         pipeline._run_generation = non_cooperative_generation
         pipeline._GENERATION_SETTLE_GRACE_S = 0.02
-        started = time.monotonic()
-        with self.assertRaises(pipeline.GenerationCancelledError):
-            pipeline._submit_and_wait(
-                {
-                    "_director_pipeline_id": pid,
-                    "_director_detached_operation": True,
-                },
-                timeout_s=1,
-                out_dir=self.temp_dir.name,
-            )
-        self.assertLess(time.monotonic() - started, 0.5)
-        self.assertTrue(entered.is_set())
+        errors = []
+
+        def submit_detached():
+            try:
+                pipeline._submit_and_wait(
+                    {
+                        "_director_pipeline_id": pid,
+                        "_director_detached_operation": True,
+                    },
+                    timeout_s=1,
+                    out_dir=self.temp_dir.name,
+                )
+            except BaseException as error:
+                errors.append(error)
+
+        waiter = threading.Thread(target=submit_detached)
+        waiter.start()
+        self.assertTrue(entered.wait(timeout=1))
+        time.sleep(0.03)
+        self.assertTrue(waiter.is_alive())
+        only_job = next(iter(pipeline._jobs.values()))
+        self.assertEqual(only_job["status"], "cancelling")
+        self.assertIsNone(only_job["finished_at"])
         self.assertTrue(pipeline._pipeline_child_jobs.get(pid))
         self.assertFalse(pipeline._claim_pipeline_operation(pid))
 
         release.set()
+        waiter.join(timeout=1)
+        self.assertFalse(waiter.is_alive())
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], pipeline.GenerationCancelledError)
+        self.assertEqual(only_job["status"], "cancelled")
+        self.assertIsNotNone(only_job["finished_at"])
         deadline = time.time() + 1
         while pipeline._pipeline_child_jobs.get(pid) and time.time() < deadline:
             time.sleep(0.005)
@@ -1658,7 +1682,7 @@ class TestDirectorCancellation(unittest.TestCase):
         self.assertEqual(repair["status"], "interrupted")
         self.assertEqual(repair["phase"], "interrupted")
         self.assertIsNone(repair["clip_index"])
-        self.assertIn("Maestro stopped", repair["error"])
+        self.assertIn("Loreframe Lab stopped", repair["error"])
         self.assertIsNotNone(repair["completed_at"])
 
         summaries = pipeline.list_pipeline_states(self.temp_dir.name)

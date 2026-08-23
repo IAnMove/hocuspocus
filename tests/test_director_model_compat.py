@@ -410,8 +410,8 @@ class TestDirectorModelAssessment(unittest.TestCase):
                         ),
                         "ambience": "quiet office room tone",
                         "effects": [],
-                        "timing_anchor": "video",
-                        "lip_sync_critical": False,
+                        "timing_anchor": "audio" if index == 0 else "video",
+                        "lip_sync_critical": index == 0,
                     },
                     "ending_beat": "The room falls quiet",
                     "video_prompt": (
@@ -480,15 +480,16 @@ class TestDirectorModelAssessment(unittest.TestCase):
             "<d>[English] Identity theft is not a joke, Jim.</d>",
             plan.shots[0].video_prompt,
         )
-        self.assertIn(
+        self.assertNotIn(
             "Only these explicitly tagged lines are spoken",
             plan.shots[0].video_prompt,
         )
-        self.assertIn(
+        self.assertNotIn(
             "SILENCE AND VOCAL PERFORMANCE",
             plan.shots[1].video_prompt,
         )
-        self.assertIn("gibberish", plan.shots[1].video_prompt)
+        self.assertNotIn("No one speaks", plan.shots[1].video_prompt)
+        self.assertNotIn("<d>", plan.shots[1].video_prompt)
         self.assertEqual(
             plan.shots[0].metadata["continuity_group"],
             "dunder_mifflin_conference_room",
@@ -711,9 +712,7 @@ class TestDirectorModelAssessment(unittest.TestCase):
         )
         silence_prompt = (
             "integrated_multimodal_description: Jim looks into camera. "
-            "SILENCE AND VOCAL PERFORMANCE: No one speaks in this shot. "
-            "Generate no muttering, murmuring, gibberish, invented words, or "
-            "speech-like vocalizations. overall_soundscape: Quiet office. "
+            "overall_soundscape: Quiet office. "
             "non_diegetic_music: N/A."
         )
         plans = [
@@ -738,7 +737,8 @@ class TestDirectorModelAssessment(unittest.TestCase):
             )
 
         self.assertEqual(result[0]["video_prompt"], dialogue_prompt)
-        self.assertEqual(result[1]["video_prompt"], silence_prompt)
+        self.assertNotIn("<d>", result[1]["video_prompt"])
+        self.assertNotIn("SILENCE AND VOCAL PERFORMANCE", result[1]["video_prompt"])
 
     def test_h3_generated_image_polish_does_not_rewrite_video_prompt(self):
         plan = [{
@@ -1071,7 +1071,63 @@ class TestDirectorVideoExecutionProfile(unittest.TestCase):
                 ("1920x1088 (16:9 1080p)", "1920x1088"),
                 ("1088x1920 (9:16 1080p)", "1088x1920"),
             ],
+            "resolution_presets": {
+                "540p": {
+                    "values": {
+                        "16:9": "960x544",
+                        "9:16": "544x960",
+                    },
+                },
+                "720p": {
+                    "values": {
+                        "16:9": "1280x704",
+                        "9:16": "704x1280",
+                    },
+                },
+            },
         }
+
+    def test_explicit_portrait_preset_overrides_landscape_model_default(self):
+        profile = build_director_video_execution_profile(
+            "minimax_h3",
+            self._h3_model(),
+            {"resolution": "960x544"},
+            {"gpu_vram_gb": 24},
+            resolution_preset="540p",
+            aspect_ratio="9:16",
+        )
+
+        self.assertEqual(profile["requested_resolution"], "544x960")
+        self.assertEqual(profile["normalized_resolution"], "544x960")
+
+    def test_pipeline_writes_selected_portrait_canvas_into_video_params(self):
+        params = {
+            "video_model": "minimax_h3",
+            "video_params": {"resolution": "960x544"},
+            "video_loras": {},
+            "director_resolution_preset": "540p",
+            "director_aspect_ratio": "9:16",
+        }
+
+        profile = pipeline._create_director_video_execution_profile(
+            params,
+            model_def=self._h3_model(),
+            hardware={"gpu_vram_gb": 24},
+        )
+
+        self.assertEqual(params["video_params"]["resolution"], "544x960")
+        self.assertEqual(profile["normalized_resolution"], "544x960")
+
+    def test_invalid_explicit_aspect_does_not_fall_back_to_model_default(self):
+        with self.assertRaisesRegex(ValueError, "does not support 4:5"):
+            build_director_video_execution_profile(
+                "minimax_h3",
+                self._h3_model(),
+                {"resolution": "960x544"},
+                {"gpu_vram_gb": 24},
+                resolution_preset="540p",
+                aspect_ratio="4:5",
+            )
 
     def test_auto_profile_uses_exact_canvas_vram_policy(self):
         profile = build_director_video_execution_profile(
@@ -1753,6 +1809,74 @@ class TestDirectorH3GenerationContract(unittest.TestCase):
         self.assertTrue(generated_slice)
         self.assertFalse(os.path.exists(generated_slice[0]))
 
+    def test_ref2va_skips_drive_audio_on_mute_music_video_shots(self):
+        model_type = "minimax_h3_ref2va"
+        model_def = {
+            "name": "H3 Ref2VA",
+            "fps": 24,
+            "frames_minimum": 124,
+            "frames_maximum": 345,
+            "frames_steps": 17,
+            "latent_size": 17,
+            "image_prompt_types_allowed": "",
+            "returns_audio": True,
+            "omni_reference": True,
+            "director_video_strategy": "omni_reference",
+            "director_audio_input_mode": "reference_manifest",
+            "director_trim_end_frames": False,
+        }
+        self._install_registry(model_type, model_def)
+        shot = self._file("shot.png")
+        song = self._file("song.wav")
+        captured = {}
+        generated_slice = []
+
+        def slice_audio(source, start, duration, destination):
+            with open(destination, "wb") as handle:
+                handle.write(b"slice")
+            generated_slice.append(destination)
+
+        def submit(params, **kwargs):
+            captured.update(params)
+            return ["joined.mp4"]
+
+        with (
+            patch.object(pipeline, "_slice_audio_segment", side_effect=slice_audio),
+            patch.object(pipeline, "_submit_and_wait", side_effect=submit),
+        ):
+            pipeline._run_video_generation(
+                "h3-mute",
+                {
+                    "video_model": model_type,
+                    "pipeline_type": "music_video",
+                    "seamless": False,
+                    "video_params": {},
+                    "audio_path": song,
+                },
+                [{
+                    "video_prompt": "A mountain ridge in fog.",
+                    "_director_audio_plan": {
+                        "mode": "music_driven",
+                        "timing_anchor": "audio",
+                        "lip_sync_critical": False,
+                    },
+                    "_director_dialogue_beats": [{
+                        "spoken_text": "Uno dos tres",
+                        "speaker_id": "lead",
+                    }],
+                }],
+                [{"start": 2.0, "duration_frames": 124}],
+                [os.path.basename(shot)],
+                out_dir=self.temp_dir.name,
+            )
+
+        self.assertEqual(captured["multi_clip_concat_audio"], song)
+        self.assertFalse(generated_slice)
+        manifest = captured["per_clip_minimax_h3_references"][0]
+        self.assertFalse(any(item.get("type") == "audio" for item in manifest))
+        self.assertNotIn("<d>", captured["prompt"])
+        self.assertNotIn("No character speaks", captured["prompt"])
+
 
 class TestDirectorUICatalogContract(unittest.TestCase):
     def test_ui_preserves_backend_director_capabilities(self):
@@ -1770,7 +1894,7 @@ class TestDirectorUICatalogContract(unittest.TestCase):
             "SettingsDrawer",
             "DirectorLoraSelector.tsx",
         )
-        launch_path = os.path.join(_APP_DIR, "launch.py")
+        launch_path = os.path.join(_APP_DIR, "_launch_runtime.py")
         pipeline_path = os.path.join(_APP_DIR, "services", "director_pipeline.py")
         with open(client_path, encoding="utf-8") as handle:
             client = handle.read()

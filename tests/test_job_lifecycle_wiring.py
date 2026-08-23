@@ -48,7 +48,7 @@ def _load_isolated_function(relative_path: str, name: str, namespace: dict):
 class TestJobLifecycleWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.launch = _parse("app/launch.py")
+        cls.launch = _parse("app/_launch_runtime.py")
 
     def test_each_worker_uses_lifecycle_transitions(self):
         expected = {
@@ -83,9 +83,27 @@ class TestJobLifecycleWiring(unittest.TestCase):
             for node in ast.walk(cancel)
         ))
 
+    def test_generation_lifecycle_is_connected_to_canonical_task_events(self):
+        observer = _function(self.launch, "_observe_generation_job_state")
+        self.assertIn("_publish_generation_task", _called_names(observer))
+        registrations = [
+            node for node in ast.walk(self.launch)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "set_job_state_observer"
+        ]
+        self.assertEqual(len(registrations), 1)
+        self.assertIsInstance(registrations[0].args[0], ast.Name)
+        self.assertEqual(
+            registrations[0].args[0].id,
+            "_observe_generation_job_state",
+        )
+
     def test_generation_jobs_reserve_fifo_position_before_worker_start(self):
         new_job = _function(self.launch, "_new_generation_job")
         self.assertIn("register_generation_job", _called_names(new_job))
+        manual_job = _function(self.launch, "_register_manual_generation_job")
+        self.assertIn("register_generation_job", _called_names(manual_job))
         for endpoint_name in (
             "retake_video_endpoint",
             "edit_anything_endpoint",
@@ -99,7 +117,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         ):
             with self.subTest(endpoint=endpoint_name):
                 self.assertIn(
-                    "register_generation_job",
+                    "_register_manual_generation_job",
                     _called_names(_function(self.launch, endpoint_name)),
                 )
 
@@ -112,7 +130,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
     def test_generation_timer_starts_from_lifecycle_active_timestamp(self):
         generation = _function(self.launch, "_run_generation")
         with open(
-            os.path.join(_ROOT, "app", "launch.py"), "r", encoding="utf-8",
+            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
         ) as handle:
             source = ast.get_source_segment(handle.read(), generation)
         self.assertIsNotNone(source)
@@ -234,7 +252,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
             self.launch, "_apply_spatial_upsampling_to_file",
         )
         with open(
-            os.path.join(_ROOT, "app", "launch.py"),
+            os.path.join(_ROOT, "app", "_launch_runtime.py"),
             "r", encoding="utf-8",
         ) as handle:
             launch_source = handle.read()
@@ -251,7 +269,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
     def test_generation_stamps_partial_outputs_before_cancel_return(self):
         generation = _function(self.launch, "_run_generation")
         with open(
-            os.path.join(_ROOT, "app", "launch.py"), "r", encoding="utf-8",
+            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
         ) as handle:
             launch_source = handle.read()
         source = ast.get_source_segment(launch_source, generation)
@@ -285,7 +303,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
     def test_continuation_accepts_all_generated_video_containers(self):
         generation = _function(self.launch, "_run_generation")
         with open(
-            os.path.join(_ROOT, "app", "launch.py"), "r", encoding="utf-8",
+            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
         ) as handle:
             launch_source = handle.read()
         source = ast.get_source_segment(launch_source, generation)
@@ -446,7 +464,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
     def test_multiclip_dispatch_preserves_audio_origin(self):
         generation = _function(self.launch, "_run_generation")
         with open(
-            os.path.join(_ROOT, "app", "launch.py"), "r", encoding="utf-8",
+            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
         ) as handle:
             source = ast.get_source_segment(handle.read(), generation)
         self.assertIn('raw_params.get("audio_frame_offset", 0)', source)

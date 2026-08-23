@@ -49,11 +49,9 @@ TEXT_ENCODER = "qwen3vl_32b_minimax_h3_int4_convrot.safetensors"
 VIDEO_VAE = "minimax_h3_video_vae_fp16.safetensors"
 AUDIO_VAE = "minimax_h3_audio_vae_fp32.safetensors"
 
-DEFAULT_AUDIO_DIRECTION = (
-    "Natural synchronized production sound matching the visible environment "
-    "and actions; include explicitly described dialogue or music, otherwise "
-    "use ambience and sound effects only; clear, audible stereo mix."
-)
+# Temporary: do not send a separate audio direction. H3 performs any written
+# audio note, including negative conditions such as "remain silent".
+DEFAULT_AUDIO_DIRECTION = ""
 
 MODEL_PROFILES = {
     # ``balanced`` is retained as a backwards-compatible saved-settings alias.
@@ -114,6 +112,20 @@ DEFAULTS = {
     "image_fit_mode": "contain",
     "h3_allow_low_memory_fallback": False,
 }
+
+
+def _local_http_request(method: str, url: str, **kwargs) -> requests.Response:
+    """Call the local H3 sidecar without consulting ambient proxy state.
+
+    The ComfyUI runtime always binds to loopback.  Letting Requests merge
+    process-wide proxy settings is unnecessary and can also fail when another
+    library temporarily exposes malformed proxy state while a long Director
+    batch is running.  A short-lived session keeps the request isolated and
+    the response body is already buffered before the session closes.
+    """
+    with requests.Session() as session:
+        session.trust_env = False
+        return session.request(method, url, **kwargs)
 
 
 def prepare_extend_anchor(
@@ -313,7 +325,7 @@ def ensure_audio_prompt(prompt: str, audio_direction: str = "") -> str:
         return normalized_prompt
     normalized_audio = " ".join(str(audio_direction or "").split())
     if not normalized_audio:
-        normalized_audio = DEFAULT_AUDIO_DIRECTION
+        return normalized_prompt
     prefix = f"{normalized_prompt}\n" if normalized_prompt else ""
     return f"{prefix}Audio: {normalized_audio}"
 
@@ -462,7 +474,7 @@ def ensure_runtime(
             if _process.poll() is not None:
                 raise RuntimeError(f"MiniMax H3 runtime exited with code {_process.returncode}")
             try:
-                if requests.get(f"{base_url}/system_stats", timeout=2).ok:
+                if _local_http_request("GET", f"{base_url}/system_stats", timeout=2).ok:
                     return base_url
             except requests.RequestException:
                 pass
@@ -544,7 +556,7 @@ def cancel() -> None:
     if _port is None:
         return
     try:
-        requests.post(f"http://127.0.0.1:{_port}/interrupt", timeout=3)
+        _local_http_request("POST", f"http://127.0.0.1:{_port}/interrupt", timeout=3)
     except requests.RequestException:
         pass
 
@@ -746,10 +758,17 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
         from .director.minimax_h3_prompting import format_minimax_h3_prompt
     except ImportError:
         from services.director.minimax_h3_prompting import format_minimax_h3_prompt
+    prompt_mode = (
+        "references"
+        if pipeline == "ref2va"
+        else "first_frame"
+        if params.get("image_start")
+        else "direct"
+    )
     prompt = format_minimax_h3_prompt(
         {},
         raw_prompt,
-        reference_mode="references" if pipeline == "ref2va" else "first_frame",
+        reference_mode=prompt_mode,
         audio_direction=audio_direction,
     )
     copy_index = 0
@@ -863,7 +882,8 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
     )
     progress("Loading MiniMax H3 and generating native video + stereo audio…", 10, 0, 0)
     client_id = f"maestro-{job_id}"
-    response = requests.post(
+    response = _local_http_request(
+        "POST",
         f"{base_url}/prompt", json={"prompt": workflow, "client_id": client_id}, timeout=30
     )
     response.raise_for_status()
@@ -913,7 +933,9 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
                 # when ComfyUI receives this status request.  Ten seconds is
                 # too short on large local renders and incorrectly reports a
                 # completed prompt as failed.
-                result = requests.get(f"{base_url}/history/{prompt_id}", timeout=60).json()
+                result = _local_http_request(
+                    "GET", f"{base_url}/history/{prompt_id}", timeout=60,
+                ).json()
                 last_history_poll = now
                 if prompt_id in result:
                     history = result[prompt_id]

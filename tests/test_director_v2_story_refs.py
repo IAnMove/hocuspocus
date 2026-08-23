@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ from types import SimpleNamespace
 from app.services.director.planners.comic_movie import ComicMoviePlanner
 from app.services.director.planners.music_video import (
     MusicVideoPlanner,
+    build_music_video_cast_lock,
     build_music_video_coverage,
     normalize_music_video_treatment,
 )
@@ -24,7 +26,7 @@ from app.services.director_video_strategy import SHOT_IMAGE_PROMPT_ONLY
 
 
 def _load_planner_kwargs():
-    source = Path(__file__).parents[1].joinpath("app", "launch.py").read_text(encoding="utf-8")
+    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     selected = []
     for node in tree.body:
@@ -36,7 +38,7 @@ def _load_planner_kwargs():
         if isinstance(node, ast.FunctionDef) and node.name == "_director_v2_planner_kwargs":
             selected.append(node)
     namespace: dict = {}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "launch.py", "exec"), namespace)
+    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
     return namespace["_director_v2_planner_kwargs"]
 
 
@@ -88,6 +90,15 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(treatment["recurring_sets"], ["stage", "rooftop"])
         self.assertEqual(treatment["lip_sync"], "occasional")
 
+    def test_cast_lock_forbids_modern_rappers_in_a_named_world(self):
+        lock = build_music_video_cast_lock(
+            "Videoclip de los enanos de The Lord of the Rings",
+            {"forbidden_elements": "raperos modernos, hoodies, cadenas de oro"},
+        )
+        self.assertIn("AUDIO GENRE IS NOT CAST", lock)
+        self.assertIn("rapper", lock.casefold())
+        self.assertIn("raperos modernos", lock)
+
     def test_direct_video_treatment_keeps_master_prompt_and_ignores_visual_refs(self):
         treatment = normalize_music_video_treatment({
             "generation_mode": "direct_video",
@@ -106,6 +117,27 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             "location_ref_paths": ["/tmp/location.png"],
         }
         self.assertFalse(director_pipeline._has_visual_references(params))
+
+    def test_story_trailer_direct_video_is_text_only_too(self):
+        params = {
+            "pipeline_type": "short_film_story",
+            "music_video_treatment": {
+                "generation_mode": "direct_video",
+                "direct_video_master_prompt": "Immutable cinematic supermarket world.",
+            },
+            "reference_image_path": "/tmp/ignored-world.png",
+            "character_ref_paths": ["/tmp/ignored-character.png"],
+        }
+
+        enabled, master_prompt = director_pipeline._direct_video_settings(params)
+
+        self.assertTrue(enabled)
+        self.assertEqual(master_prompt, "Immutable cinematic supermarket world.")
+        self.assertFalse(director_pipeline._has_visual_references(params))
+        self.assertEqual(
+            director_pipeline._director_effective_shot_image_policy(params),
+            SHOT_IMAGE_PROMPT_ONLY,
+        )
 
     def test_direct_video_overrides_stale_saved_image_policy(self):
         params = {
@@ -152,16 +184,78 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             allow_clip_text=False,
         )
         prompt = plans[0]["video_prompt"]
-        self.assertTrue(prompt.startswith("IMMUTABLE PAINTED WORLD."))
-        self.assertIn("Scene overview: Reveal the alien citadel", prompt)
+        self.assertTrue(prompt.startswith("integrated_multimodal_description: [Shot 1]"))
+        self.assertIn("Shared visual direction: IMMUTABLE PAINTED WORLD", prompt)
+        self.assertIn("Reveal the alien citadel", prompt)
+        self.assertNotIn("Scene overview:", prompt)
         self.assertIn("A lone warrior raises", prompt)
-        self.assertIn("non_diegetic_music: none", prompt)
+        self.assertIn("non_diegetic_music: N/A", prompt)
         self.assertEqual(plans[0]["image_prompt"], "")
         self.assertEqual(plans[0]["image_source"], "none")
         self.assertEqual(plans[0]["keyframe_prompts"], [])
         self.assertEqual(plans[0]["h3_segment_prompts"], [])
         self.assertIn("VISIBLE TEXT LOCK", prompt)
 
+    def test_direct_video_preflight_preserves_authored_audio_and_music(self):
+        source = (
+            'SPOKEN LANGUAGE CONTRACT: Spanish. '
+            '{"integrated_multimodal_description":"A woman crosses a stormy plaza.",'
+            '"overall_soundscape":"Rain, thunder and hurried footsteps.",'
+            '"non_diegetic_music":"Low strings rise into a sharp brass hit."}'
+        )
+        plans = [{
+            "scene_goal": "Reveal the threat",
+            "environment": "a stormy plaza",
+            "video_prompt": source,
+            "_director_audio_plan": {"mode": "music_driven"},
+        }]
+
+        enforce_direct_video_on_clip_plans(
+            plans,
+            "IMMUTABLE NOIR WORLD.",
+        )
+
+        self.assertIn("[Shot 1]", plans[0]["video_prompt"])
+        self.assertIn("A woman crosses a stormy plaza", plans[0]["video_prompt"])
+        self.assertNotIn('{"integrated_multimodal_description"', plans[0]["video_prompt"])
+        self.assertIn("Rain, thunder and hurried footsteps", plans[0]["video_prompt"])
+        self.assertIn("Low strings rise into a sharp brass hit", plans[0]["video_prompt"])
+        self.assertEqual(
+            plans[0]["_director_h3_source_prompt"], plans[0]["video_prompt"],
+        )
+
+        director_pipeline._preflight_h3_director_prompts(
+            "minimax_h3_legacy", plans,
+        )
+        compiled = plans[0]["video_prompt"]
+        self.assertEqual(compiled.count("overall_soundscape:"), 1)
+        self.assertEqual(compiled.count("non_diegetic_music:"), 1)
+        self.assertIn("Rain, thunder and hurried footsteps", compiled)
+        self.assertIn("Low strings rise into a sharp brass hit", compiled)
+        self.assertNotIn("Natural scene-appropriate stereo ambience", compiled)
+
+    def test_direct_video_never_leaks_global_audio_meta_into_soundscape(self):
+        plans = [{
+            "scene_goal": "A silent cave reveal",
+            "environment": "a wet stone cave",
+            "video_prompt": "A traveler raises a lantern and stays silent.",
+            "audio_plan": {"mode": "ambient_only", "ambience": "distant cave drips"},
+        }]
+        enforce_direct_video_on_clip_plans(
+            plans,
+            "Dark adventure cinematography.",
+            audio_direction=(
+                "Natural synchronized production sound matching the visible "
+                "environment and actions; include explicitly described dialogue "
+                "or music, otherwise use ambience and sound effects only."
+            ),
+        )
+        soundscape = plans[0]["video_prompt"].split(
+            "overall_soundscape:", 1
+        )[1].split("non_diegetic_music:", 1)[0].casefold()
+        self.assertIn("distant cave drips", soundscape)
+        self.assertNotIn("dialogue", soundscape)
+        self.assertNotIn("music", soundscape)
     def test_choruses_reuse_signature_set_with_controlled_coverage(self):
         clips = [
             {"label": "verse"},
@@ -235,6 +329,130 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         self.assertEqual(len(plan.shots), 2)
         self.assertIn("Missing clip indexes: 2", calls[1]["prompt"])
         self.assertNotIn("Missing clip indexes: 1", calls[1]["prompt"])
+
+    def test_music_video_performer_uses_driving_audio_not_lyric_ledger(self):
+        plan = MusicVideoPlanner(
+            llm_generate=lambda **kwargs: json.dumps([_music_shot(1)]),
+        ).plan(
+            clips=[{
+                "start": 0.0,
+                "end": 4.0,
+                "label": "verse",
+                "beat_count": 8,
+                "dominant_speaker": "lead",
+            }],
+            lyrics=[{
+                "start": 0.0,
+                "end": 8.0,
+                "text": "Uno dos tres cuatro cinco seis",
+                "speaker": "lead",
+            }],
+            scene_description="A single performer in a cave.",
+            bpm=90,
+            music_video_treatment={"mode": "performance", "performer_presence": 100, "lip_sync": "frequent"},
+        )
+
+        shot = plan.shots[0]
+        self.assertEqual(shot.dialogue_beats or [], [])
+        self.assertEqual(shot.audio_plan.mode, "audio_driven")
+        self.assertTrue(shot.audio_plan.lip_sync_critical)
+
+    def test_music_video_lip_sync_none_stays_mute(self):
+        plan = MusicVideoPlanner(
+            llm_generate=lambda **kwargs: json.dumps([_music_shot(1)]),
+        ).plan(
+            clips=[{
+                "start": 0.0,
+                "end": 4.0,
+                "label": "verse",
+                "beat_count": 8,
+            }],
+            lyrics=[{
+                "start": 0.0,
+                "end": 4.0,
+                "text": "Uno dos tres",
+                "speaker": "lead",
+            }],
+            scene_description="A single performer in a cave.",
+            bpm=90,
+            music_video_treatment={"mode": "performance", "performer_presence": 100, "lip_sync": "none"},
+        )
+
+        shot = plan.shots[0]
+        self.assertEqual(shot.dialogue_beats or [], [])
+        self.assertEqual(shot.audio_plan.mode, "music_driven")
+        self.assertFalse(shot.audio_plan.lip_sync_critical)
+
+    def test_music_video_plans_large_timelines_in_bounded_ordered_batches(self):
+        calls = []
+
+        def generate(**kwargs):
+            calls.append(kwargs)
+            match = re.search(r"Requested clip indexes: ([0-9, ]+)", kwargs["prompt"])
+            self.assertIsNotNone(match)
+            requested = [int(value) for value in match.group(1).split(", ")]
+            shots = [_music_shot(index) for index in requested]
+            # Regression fake: providers truncate any response above 8 objects.
+            return json.dumps(shots[:8] if len(shots) > 8 else shots)
+
+        clips = [
+            {"start": index * 4, "end": (index + 1) * 4, "label": "verse", "beat_count": 8}
+            for index in range(41)
+        ]
+        plan = MusicVideoPlanner(llm_generate=generate).plan(
+            clips=clips,
+            scene_description="A long-form performance crossing one coherent city.",
+            bpm=120,
+        )
+
+        self.assertEqual(len(calls), 6)
+        self.assertTrue(all(call["json_schema"]["maxItems"] <= 8 for call in calls))
+        self.assertTrue(all(call["max_new_tokens"] <= 8 * 700 + 768 for call in calls))
+        self.assertEqual(len(plan.shots), 41)
+        self.assertEqual(
+            [shot.scene_goal for shot in plan.shots],
+            [f"Complete narrative beat {index}" for index in range(1, 42)],
+        )
+        self.assertEqual(len({shot.shot_id for shot in plan.shots}), 41)
+
+    def test_music_video_uses_individual_fallback_only_for_still_missing_tail(self):
+        calls = []
+
+        def generate(**kwargs):
+            calls.append(kwargs)
+            return json.dumps([
+                _music_shot(1 if len(calls) == 1 else 2 if len(calls) == 2 else 3),
+            ])
+
+        plan = MusicVideoPlanner(llm_generate=generate).plan(
+            clips=[
+                {"start": 0, "end": 4, "label": "intro", "beat_count": 8},
+                {"start": 4, "end": 8, "label": "verse", "beat_count": 8},
+                {"start": 8, "end": 12, "label": "chorus", "beat_count": 8},
+            ],
+            scene_description="A concise story about a living archive.",
+            bpm=120,
+        )
+
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(plan.shots), 3)
+        self.assertIn("Missing clip indexes: 2, 3", calls[1]["prompt"])
+        self.assertIn("Missing clip indexes: 3", calls[2]["prompt"])
+        self.assertNotIn("Missing clip indexes: 2, 3", calls[2]["prompt"])
+
+    def test_music_video_rejects_duplicate_batch_indexes_without_overwrite(self):
+        first = _music_shot(1)
+        duplicate = _music_shot(1)
+        duplicate["scene_goal"] = "This duplicate must not overwrite the first plan"
+        slots, missing, alternatives = MusicVideoPlanner._partition_batch_shot_plans(
+            [first, duplicate, _music_shot(2)],
+            2,
+            [0, 1],
+        )
+
+        self.assertEqual(missing, [])
+        self.assertEqual(alternatives, [])
+        self.assertEqual(slots[0]["scene_goal"], first["scene_goal"])
 
     def test_music_video_persists_surplus_plans_as_alternatives(self):
         def generate(**_kwargs):

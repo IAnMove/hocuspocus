@@ -22,51 +22,48 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react'
-import { Fragment, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
-
-type ClipFit = 'fit' | 'fill'
-type Transition =
-  | 'none'
-  | 'crossfade'
-  | 'fade-black'
-  | 'wipe-left'
-  | 'slide-left'
-  | 'slide-right'
-  | 'circle-open'
-  | 'dissolve'
-  | 'pixelize'
-  | 'blur'
-  | 'zoom-in'
-  | 'later-clock'
-  | 'later-tropical'
-  | 'later-cinematic'
-
-type InterstitialTransition = 'later-clock' | 'later-tropical' | 'later-cinematic'
+import { ModalShell } from '../../components/common/ModalShell'
+import {
+  clearVideoEditorReplacementResult,
+  clearVideoEditorReplacementTarget,
+  outputNameFromEditorClip,
+  readVideoEditorReplacementResult,
+  writeVideoEditorReplacementTarget,
+} from './replacementHandoff'
+import { VIDEO_EDITOR_PENDING_SOURCE_KEY, editorSourcePath } from './editorHandoff'
+import {
+  applyTransitionToGaps,
+  editorClipRecoveryMessage,
+  normalizeEditorClips,
+  splitClipAtTime,
+  TIMELINE_TRIM_PX_PER_SEC,
+  trimClipFromDelta,
+  type ClipFit,
+  type EditorClip,
+  type Transition,
+} from './editorClipNormalization'
+import {
+  clipIndexAtTime,
+  clipTimelineStart,
+  effectiveDuration,
+  formatPlayheadTime,
+  isInterstitialTransition,
+  parsePlayheadSeconds,
+  sequenceTotalDuration,
+  sourceTimeAtSequenceTime,
+  transitionDurationAfter,
+  transitionTimelineStart,
+  type InterstitialTransition,
+} from './editorTimeline'
 
 interface SequenceStyle {
   opacity: number
   clipPath: string
   transform: string
   filter: string
-}
-
-interface EditorClip extends api.VideoEditorProbe {
-  id: string
-  name: string
-  source: string
-  previewUrl: string
-  thumbnailUrl: string
-  trimStart: number
-  trimEnd: number
-  volume: number
-  muted: boolean
-  fit: ClipFit
-  transition: Transition
-  transitionDuration: number
-  transitionText: string
-  transitionTextSize: number
 }
 
 interface ResolutionOption {
@@ -92,6 +89,17 @@ interface SequenceInterstitial {
   progress: number
 }
 
+interface PendingEditorSource {
+  name?: string
+  url: string
+}
+
+interface PendingEditorSequence {
+  projectName?: string
+  resolution?: ResolutionOption
+  clips?: Array<{ name?: string; url?: string }>
+}
+
 const RESOLUTIONS: ResolutionOption[] = [
   { label: 'Landscape 480p', width: 864, height: 480 },
   { label: 'Landscape 720p', width: 1280, height: 720 },
@@ -105,7 +113,61 @@ const RESOLUTIONS: ResolutionOption[] = [
 
 const VIDEO_ACCEPT = '.mp4,.webm,.mov,.mkv,.avi,.m4v'
 const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
+const VIDEO_EDITOR_PENDING_SEQUENCE_KEY = 'maestro-video-editor-pending-sequence'
+const VIDEO_EDITOR_EXPORT_KEY = 'maestro-video-editor-export-v1'
 const MAESTRO_PICKER_PAGE_SIZE = 24
+const VIDEO_EDITOR_ACTIVE_STATUSES = new Set<api.VideoEditorExportJob['status']>([
+  'queued',
+  'waiting_resource',
+  'running',
+  'cancelling',
+])
+
+const isVideoEditorJobActive = (job: api.VideoEditorExportJob | null): boolean => (
+  Boolean(job && VIDEO_EDITOR_ACTIVE_STATUSES.has(job.status))
+)
+
+function videoEditorExportStorageKey(workspace: string | null | undefined): string {
+  return `${VIDEO_EDITOR_EXPORT_KEY}:${encodeURIComponent(workspace || 'default')}`
+}
+
+function readVideoEditorExportId(workspace: string | null | undefined): string | null {
+  try {
+    const value = window.localStorage.getItem(videoEditorExportStorageKey(workspace))
+    return value && value.trim() ? value : null
+  } catch {
+    return null
+  }
+}
+
+function writeVideoEditorExportId(workspace: string | null | undefined, jobId: string): void {
+  try {
+    window.localStorage.setItem(videoEditorExportStorageKey(workspace), jobId)
+  } catch {
+    // A full browser quota must not prevent an export from continuing.
+  }
+}
+
+function clearVideoEditorExportId(workspace: string | null | undefined): void {
+  try {
+    window.localStorage.removeItem(videoEditorExportStorageKey(workspace))
+  } catch {
+    // Ignore storage failures; the server remains the source of truth.
+  }
+}
+
+function pendingVideoEditorExport(jobId: string): api.VideoEditorExportJob {
+  return {
+    job_id: jobId,
+    status: 'queued',
+    progress: 0,
+    message: 'Reconnecting to export…',
+    filename: null,
+    url: null,
+    error: null,
+  }
+}
+
 const TRANSITIONS: Array<{ value: Transition; label: string; description: string }> = [
   { value: 'none', label: 'Hard cut', description: 'Immediate cut with no overlap.' },
   { value: 'crossfade', label: 'Crossfade', description: 'One shot dissolves smoothly into the next.' },
@@ -123,13 +185,6 @@ const TRANSITIONS: Array<{ value: Transition; label: string; description: string
   { value: 'later-cinematic', label: 'Momentos después · Cine', description: 'Inserts an elegant cinematic intertitle between the two clips.' },
 ]
 
-const TRANSITION_VALUES = new Set<Transition>(TRANSITIONS.map(option => option.value))
-const INTERSTITIAL_TRANSITIONS = new Set<Transition>([
-  'later-clock',
-  'later-tropical',
-  'later-cinematic',
-])
-
 const DEFAULT_SEQUENCE_STYLE: SequenceStyle = {
   opacity: 1,
   clipPath: 'inset(0 0 0 0)',
@@ -139,10 +194,6 @@ const DEFAULT_SEQUENCE_STYLE: SequenceStyle = {
 
 function sequenceStyle(patch: Partial<SequenceStyle> = {}): SequenceStyle {
   return { ...DEFAULT_SEQUENCE_STYLE, ...patch }
-}
-
-function isInterstitialTransition(value: Transition): value is InterstitialTransition {
-  return INTERSTITIAL_TRANSITIONS.has(value)
 }
 
 function FittedCardText({
@@ -322,10 +373,215 @@ function clipId(): string {
 }
 
 function formatTime(value: number): string {
-  if (!Number.isFinite(value)) return '0:00.0'
-  const minutes = Math.floor(value / 60)
-  const seconds = value - minutes * 60
-  return `${minutes}:${seconds.toFixed(1).padStart(4, '0')}`
+  return formatPlayheadTime(value)
+}
+
+function SequenceScrubber({
+  duration,
+  time,
+  disabled,
+  onScrub,
+}: {
+  duration: number
+  time: number
+  disabled?: boolean
+  onScrub: (nextTime: number, phase: 'start' | 'move' | 'end') => void
+}) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef(false)
+  const ratio = duration > 0 ? Math.max(0, Math.min(1, time / duration)) : 0
+
+  const timeAt = (clientX: number) => {
+    const track = trackRef.current
+    if (!track || duration <= 0) return 0
+    const rect = track.getBoundingClientRect()
+    return Math.max(0, Math.min(duration, ((clientX - rect.left) / Math.max(1, rect.width)) * duration))
+  }
+
+  return (
+    <div
+      ref={trackRef}
+      role="slider"
+      tabIndex={disabled ? -1 : 0}
+      aria-label="Timeline playhead"
+      aria-valuemin={0}
+      aria-valuemax={Number(duration.toFixed(2))}
+      aria-valuenow={Number(Math.min(duration, Math.max(0, time)).toFixed(2))}
+      aria-valuetext={`${time.toFixed(2)} seconds`}
+      aria-disabled={disabled || undefined}
+      data-testid="timeline-playhead"
+      className="relative h-7 min-w-0 flex-1 cursor-pointer rounded-full bg-black/50 touch-none focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+      onPointerDown={event => {
+        if (disabled) return
+        event.preventDefault()
+        draggingRef.current = true
+        event.currentTarget.setPointerCapture(event.pointerId)
+        onScrub(timeAt(event.clientX), 'start')
+      }}
+      onPointerMove={event => {
+        if (!draggingRef.current || disabled) return
+        onScrub(timeAt(event.clientX), 'move')
+      }}
+      onPointerUp={event => {
+        if (!draggingRef.current) return
+        draggingRef.current = false
+        onScrub(timeAt(event.clientX), 'end')
+      }}
+      onPointerCancel={() => { draggingRef.current = false }}
+      onKeyDown={event => {
+        if (disabled) return
+        const step = event.shiftKey ? 1 : event.altKey ? 0.01 : 0.1
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+          event.preventDefault()
+          onScrub(Math.max(0, time - step), 'end')
+        } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+          event.preventDefault()
+          onScrub(Math.min(duration, time + step), 'end')
+        } else if (event.key === 'Home') {
+          event.preventDefault()
+          onScrub(0, 'end')
+        } else if (event.key === 'End') {
+          event.preventDefault()
+          onScrub(duration, 'end')
+        }
+      }}
+    >
+      <div
+        className="absolute inset-y-0 left-0 rounded-full bg-sky-400/35"
+        style={{ width: `${ratio * 100}%` }}
+      />
+      <div
+        className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-400 shadow"
+        style={{ left: `${ratio * 100}%` }}
+      />
+    </div>
+  )
+}
+
+const MIN_TRIM_DURATION = 0.05
+
+function ClipTrimBar({
+  duration,
+  start,
+  end,
+  onChange,
+}: {
+  duration: number
+  start: number
+  end: number
+  onChange: (next: { trimStart?: number; trimEnd?: number }) => void
+}) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef<'start' | 'end' | null>(null)
+  const [dragging, setDragging] = useState<'start' | 'end' | null>(null)
+  const safeDuration = Math.max(MIN_TRIM_DURATION, duration)
+  const startPercent = Math.max(0, Math.min(100, (start / safeDuration) * 100))
+  const endPercent = Math.max(startPercent, Math.min(100, (end / safeDuration) * 100))
+
+  const applyValue = (handle: 'start' | 'end', rawValue: number) => {
+    const value = Math.round(Math.max(0, Math.min(safeDuration, rawValue)) * 100) / 100
+    if (handle === 'start') {
+      onChange({ trimStart: Math.min(value, end - MIN_TRIM_DURATION) })
+    } else {
+      onChange({ trimEnd: Math.max(value, start + MIN_TRIM_DURATION) })
+    }
+  }
+
+  const valueAt = (clientX: number) => {
+    const bounds = trackRef.current?.getBoundingClientRect()
+    if (!bounds?.width) return start
+    return Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width)) * safeDuration
+  }
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const requested = (event.target as HTMLElement).closest<HTMLElement>('[data-trim-handle]')
+      ?.dataset.trimHandle
+    const value = valueAt(event.clientX)
+    const handle = requested === 'start' || requested === 'end'
+      ? requested
+      : Math.abs(value - start) <= Math.abs(value - end) ? 'start' : 'end'
+    event.currentTarget.setPointerCapture(event.pointerId)
+    draggingRef.current = handle
+    setDragging(handle)
+    applyValue(handle, value)
+  }
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (draggingRef.current) applyValue(draggingRef.current, valueAt(event.clientX))
+  }
+
+  const finishDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    draggingRef.current = null
+    setDragging(null)
+  }
+
+  const keyboardStep = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    handle: 'start' | 'end',
+    current: number,
+  ) => {
+    const direction = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0
+    if (!direction) return
+    event.preventDefault()
+    applyValue(handle, current + direction * (event.shiftKey ? 0.5 : 0.05))
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-bg-tertiary/70 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3 text-[10px] tabular-nums">
+        <span className="text-text-muted">Recorte no destructivo</span>
+        <span className="text-text-secondary">
+          Conserva {formatTime(Math.max(0, end - start))} · quita {formatTime(start + Math.max(0, duration - end))}
+        </span>
+      </div>
+      <div
+        ref={trackRef}
+        className="relative h-12 touch-none cursor-pointer select-none"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+      >
+        <div
+          className="absolute inset-x-0 top-4 h-4 overflow-hidden rounded border border-white/10 bg-black/55"
+          style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent 0 7%, rgba(255,255,255,.08) 7.2% 7.8%)' }}
+        />
+        <div
+          className="absolute top-4 h-4 border-y border-accent-blue/70 bg-accent-blue/35"
+          style={{ left: `${startPercent}%`, width: `${endPercent - startPercent}%` }}
+        />
+        {(['start', 'end'] as const).map(handle => {
+          const value = handle === 'start' ? start : end
+          const percent = handle === 'start' ? startPercent : endPercent
+          return (
+            <button
+              key={handle}
+              type="button"
+              role="slider"
+              data-trim-handle={handle}
+              aria-label={handle === 'start' ? 'Punto de entrada' : 'Punto de salida'}
+              aria-valuemin={handle === 'start' ? 0 : start + MIN_TRIM_DURATION}
+              aria-valuemax={handle === 'start' ? end - MIN_TRIM_DURATION : safeDuration}
+              aria-valuenow={Number(value.toFixed(2))}
+              aria-valuetext={formatTime(value)}
+              onKeyDown={event => keyboardStep(event, handle, value)}
+              className={`absolute top-1 z-10 h-10 w-4 -translate-x-1/2 cursor-ew-resize rounded border shadow-lg focus:outline-none focus:ring-2 focus:ring-accent-blue ${dragging === handle ? 'border-white bg-accent-blue' : 'border-accent-blue bg-bg-secondary'}`}
+              style={{ left: `${percent}%` }}
+            >
+              <span className="mx-auto block h-5 w-px bg-white/70" />
+            </button>
+          )
+        })}
+      </div>
+      <div className="flex justify-between text-[9px] text-text-muted tabular-nums">
+        <span>Entrada {formatTime(start)}</span>
+        <span>Salida {formatTime(end)}</span>
+      </div>
+    </div>
+  )
 }
 
 function greatestCommonDivisor(left: number, right: number): number {
@@ -417,34 +673,6 @@ function ExportPreviewCanvas({
   )
 }
 
-function effectiveDuration(clip: EditorClip): number {
-  return Math.max(0, clip.trimEnd - clip.trimStart)
-}
-
-function transitionDurationAfter(clips: EditorClip[], index: number): number {
-  const current = clips[index]
-  const next = clips[index + 1]
-  if (!current || !next || current.transition === 'none') return 0
-  if (isInterstitialTransition(current.transition)) {
-    return Math.max(0.5, Math.min(current.transitionDuration, 5))
-  }
-  return Math.max(
-    0.05,
-    Math.min(current.transitionDuration, effectiveDuration(current) * 0.45, effectiveDuration(next) * 0.45),
-  )
-}
-
-function clipTimelineStart(clips: EditorClip[], index: number): number {
-  let start = 0
-  for (let cursor = 0; cursor < index; cursor++) {
-    const transitionDuration = transitionDurationAfter(clips, cursor)
-    start += effectiveDuration(clips[cursor]) + (
-      isInterstitialTransition(clips[cursor].transition) ? transitionDuration : -transitionDuration
-    )
-  }
-  return start
-}
-
 function wait(ms: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
@@ -454,35 +682,45 @@ function loadEditorDraft(): {
   projectName: string
   resolution: ResolutionOption
   fps: number
+  warning: string | null
 } {
-  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30 }
+  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30, warning: null }
   try {
     const saved = JSON.parse(window.localStorage.getItem(VIDEO_EDITOR_DRAFT_KEY) || 'null')
     if (!saved || !Array.isArray(saved.clips)) return fallback
     const resolution = RESOLUTIONS.find(option =>
       option.width === saved.resolution?.width && option.height === saved.resolution?.height,
     ) || RESOLUTIONS[0]
+    const normalized = normalizeEditorClips(saved.clips, {
+      idFactory: clipId,
+      thumbnailUrl: api.getVideoEditorThumbnailUrl,
+    })
     return {
-      clips: saved.clips
-        .filter((clip: EditorClip) => typeof clip?.source === 'string')
-        .map((clip: EditorClip) => ({
-          ...clip,
-          thumbnailUrl: typeof clip.thumbnailUrl === 'string' && clip.thumbnailUrl
-            ? clip.thumbnailUrl
-            : api.getVideoEditorThumbnailUrl(clip.source),
-          transition: TRANSITION_VALUES.has(clip.transition) ? clip.transition : 'none',
-          transitionDuration: Number.isFinite(clip.transitionDuration) ? clip.transitionDuration : 0.5,
-          transitionText: typeof clip.transitionText === 'string' ? clip.transitionText : 'Momentos después…',
-          transitionTextSize: Number.isFinite(clip.transitionTextSize)
-            ? Math.max(50, Math.min(160, clip.transitionTextSize))
-            : 100,
-        })),
+      clips: normalized.clips,
       projectName: typeof saved.projectName === 'string' ? saved.projectName : fallback.projectName,
       resolution,
       fps: [24, 25, 30, 50, 60].includes(saved.fps) ? saved.fps : 30,
+      warning: editorClipRecoveryMessage(normalized),
     }
   } catch {
     return fallback
+  }
+}
+
+function persistEditorDraft(
+  clips: EditorClip[],
+  projectName: string,
+  resolution: ResolutionOption,
+  fps: number,
+): boolean {
+  try {
+    window.localStorage.setItem(VIDEO_EDITOR_DRAFT_KEY, JSON.stringify({
+      clips, projectName, resolution, fps, savedAt: new Date().toISOString(),
+    }))
+    return true
+  } catch {
+    // A full browser quota must not interrupt editing.
+    return false
   }
 }
 
@@ -505,12 +743,23 @@ export function VideoEditorPanel() {
   })
   const sequencePlayingRef = useRef(false)
   const sequenceSlotSeekRef = useRef<Array<number | null>>([null, null])
+  const scrubbingRef = useRef(false)
+  const pendingSeekRef = useRef<number | null>(null)
+  const pendingSeekAtRef = useRef(0)
   const mountedRef = useRef(true)
+  const exportPollingRef = useRef<string | null>(null)
+  const exportPollEpochRef = useRef(0)
+  const exportSubmittingRef = useRef(false)
 
   const [clips, setClips] = useState<EditorClip[]>(draft.clips)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
+  const [bulkTransition, setBulkTransition] = useState<Transition>('crossfade')
+  const timelineScrollRef = useRef<HTMLDivElement>(null)
+  const dragScrollFrameRef = useRef<number | null>(null)
+  const dragScrollDirRef = useRef<-1 | 0 | 1>(0)
+  const trimmingRef = useRef(false)
   const [projectName, setProjectName] = useState(draft.projectName)
   const [resolution, setResolution] = useState(draft.resolution)
   const [fps, setFps] = useState(draft.fps)
@@ -518,6 +767,7 @@ export function VideoEditorPanel() {
   const [playing, setPlaying] = useState(false)
   const [sequenceMode, setSequenceMode] = useState(false)
   const [sequenceTime, setSequenceTime] = useState(0)
+  const [playheadDraft, setPlayheadDraft] = useState<string | null>(null)
   const [sequenceSlotIndices, setSequenceSlotIndices] = useState<Array<number | null>>([null, null])
   const [sequenceStyles, setSequenceStyles] = useState([
     sequenceStyle(),
@@ -531,24 +781,28 @@ export function VideoEditorPanel() {
   const [maestroVideos, setMaestroVideos] = useState<api.ApiOutput[]>([])
   const [maestroVideoTotal, setMaestroVideoTotal] = useState(0)
   const [pickerLoading, setPickerLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(null)
+  const [pickerSelected, setPickerSelected] = useState<string[]>([])
+  const pickerAnchorRef = useRef<number | null>(null)
+  const pickerSelectedSet = useMemo(() => new Set(pickerSelected), [pickerSelected])
+  const [error, setError] = useState<string | null>(draft.warning)
+  const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(() => {
+    const jobId = readVideoEditorExportId(activeWorkspace)
+    return jobId ? pendingVideoEditorExport(jobId) : null
+  })
   const [capturingFrame, setCapturingFrame] = useState(false)
   const [capturedFrame, setCapturedFrame] = useState<api.VideoEditorScreenshot | null>(null)
+  const [preparingReplacement, setPreparingReplacement] = useState(false)
+  const [pendingHandoff, setPendingHandoff] = useState<'source' | 'sequence' | null>(null)
+  const handoffProcessingRef = useRef(false)
 
   const selected = clips.find(clip => clip.id === selectedId) || clips[0] || null
   const selectedIndex = selected ? clips.findIndex(clip => clip.id === selected.id) : -1
-  const totalDuration = useMemo(() => {
-    const raw = clips.reduce((total, clip) => total + effectiveDuration(clip), 0)
-    const transitionDelta = clips.reduce(
-      (total, clip, index) => {
-        const duration = transitionDurationAfter(clips, index)
-        return total + (isInterstitialTransition(clip.transition) ? duration : -duration)
-      },
-      0,
-    )
-    return Math.max(0, raw + transitionDelta)
-  }, [clips])
+  const totalDuration = useMemo(() => sequenceTotalDuration(clips), [clips])
+  const playheadSeconds = sequenceMode
+    ? sequenceTime
+    : selected && selectedIndex >= 0
+      ? clipTimelineStart(clips, selectedIndex) + Math.max(0, previewTime - selected.trimStart)
+      : 0
 
   useEffect(() => {
     mountedRef.current = true
@@ -560,13 +814,7 @@ export function VideoEditorPanel() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      try {
-        window.localStorage.setItem(VIDEO_EDITOR_DRAFT_KEY, JSON.stringify({
-          clips, projectName, resolution, fps, savedAt: new Date().toISOString(),
-        }))
-      } catch {
-        // A full browser quota must not interrupt editing.
-      }
+      persistEditorDraft(clips, projectName, resolution, fps)
     }, 600)
     return () => window.clearTimeout(timer)
   }, [clips, projectName, resolution, fps])
@@ -594,15 +842,21 @@ export function VideoEditorPanel() {
     setClips(current => current.map(clip => clip.id === id ? { ...clip, ...patch } : clip))
   }
 
-  const addSource = async (source: string, previewUrl: string, name: string, thumbnailUrl?: string | null) => {
-    const media = await api.probeVideoEditorClip(source)
-    const clip: EditorClip = {
+  const createClipFromSource = useCallback(async (
+    source: string,
+    previewUrl: string,
+    name: string,
+    thumbnailUrl?: string | null,
+  ): Promise<EditorClip> => {
+    const resolvedSource = editorSourcePath(source) || source
+    const media = await api.probeVideoEditorClip(resolvedSource, activeWorkspace)
+    return {
       ...media,
       id: clipId(),
       name,
-      source,
+      source: resolvedSource,
       previewUrl,
-      thumbnailUrl: thumbnailUrl || api.getVideoEditorThumbnailUrl(source),
+      thumbnailUrl: thumbnailUrl || api.getVideoEditorThumbnailUrl(resolvedSource),
       trimStart: 0,
       trimEnd: media.duration,
       volume: 1,
@@ -613,65 +867,189 @@ export function VideoEditorPanel() {
       transitionText: 'Momentos después…',
       transitionTextSize: 100,
     }
+  }, [activeWorkspace])
+
+  const addSource = useCallback(async (
+    source: string,
+    previewUrl: string,
+    name: string,
+    thumbnailUrl?: string | null,
+  ) => {
+    const clip = await createClipFromSource(source, previewUrl, name, thumbnailUrl)
     setClips(current => [...current, clip])
     setSelectedId(clip.id)
-  }
+  }, [createClipFromSource])
+
+  const processPendingHandoff = useCallback(async (
+    kind: 'source' | 'sequence',
+    handoff: PendingEditorSource | PendingEditorSequence,
+  ) => {
+    if (handoffProcessingRef.current) return
+    const rawSources = kind === 'sequence' ? (handoff as PendingEditorSequence).clips || [] : null
+    const pendingSources = kind === 'sequence'
+      ? rawSources?.every(item => typeof item?.url === 'string' && item.url.trim())
+        ? rawSources as Array<{ name?: string; url: string }>
+        : []
+      : (typeof (handoff as PendingEditorSource).url === 'string'
+          && (handoff as PendingEditorSource).url.trim()
+        ? [{
+            name: (handoff as PendingEditorSource).name || 'comic animatic',
+            url: (handoff as PendingEditorSource).url,
+          }]
+        : [])
+    if (!pendingSources.length) {
+      setError('The editor hand-off does not contain any valid video sources. It is still available to retry.')
+      return
+    }
+
+    const sequence = kind === 'sequence' ? handoff as PendingEditorSequence : null
+    const requestedResolution = sequence && RESOLUTIONS.find(option =>
+      option.width === sequence.resolution?.width && option.height === sequence.resolution?.height)
+    const nextProjectName = sequence?.projectName || projectName
+    const nextResolution = requestedResolution || resolution
+    const nextClips: EditorClip[] = []
+
+    handoffProcessingRef.current = true
+    setAdding(true)
+    setError(null)
+    try {
+      for (let index = 0; index < pendingSources.length; index++) {
+        const item = pendingSources[index]
+        setAddProgress(kind === 'sequence'
+          ? `Opening Series shot ${index + 1}/${pendingSources.length}`
+          : `Opening ${item.name || 'comic animatic'}`)
+        nextClips.push(await createClipFromSource(item.url, item.url, item.name || `Series shot ${index + 1}`))
+      }
+
+      if (clips.length && !window.confirm(
+        kind === 'sequence'
+          ? `The editor already contains ${clips.length} clip${clips.length === 1 ? '' : 's'}. Replace this montage with the hand-off?`
+          : `The editor already contains ${clips.length} clip${clips.length === 1 ? '' : 's'}. Add the hand-off to this montage?`,
+      )) return
+
+      const committedClips = kind === 'sequence' ? nextClips : [...clips, ...nextClips]
+      if (!persistEditorDraft(committedClips, nextProjectName, nextResolution, fps)) {
+        throw new Error('The editor draft could not be saved. The hand-off was kept for Retry.')
+      }
+      setClips(committedClips)
+      setSelectedId((kind === 'sequence' ? committedClips[0] : nextClips[0])?.id || null)
+      if (sequence?.projectName) setProjectName(nextProjectName)
+      if (requestedResolution) setResolution(nextResolution)
+      window.localStorage.removeItem(
+        kind === 'sequence' ? VIDEO_EDITOR_PENDING_SEQUENCE_KEY : VIDEO_EDITOR_PENDING_SOURCE_KEY,
+      )
+      setPendingHandoff(null)
+      setError(null)
+    } catch (reason) {
+      setError(`Could not open the hand-off: ${(reason as Error).message}. The hand-off and current draft were kept; Retry when the source is available.`)
+    } finally {
+      handoffProcessingRef.current = false
+      setAdding(false)
+      setAddProgress('')
+    }
+  }, [clips, createClipFromSource, fps, projectName, resolution])
 
   useEffect(() => {
-    let pending: { name?: string; url?: string } | null = null
-    let pendingSequence: {
-      projectName?: string
-      resolution?: ResolutionOption
-      clips?: Array<{ name?: string; url?: string }>
-    } | null = null
+    let pending: PendingEditorSource | null = null
+    let pendingSequence: PendingEditorSequence | null = null
     try {
-      pending = JSON.parse(window.localStorage.getItem('maestro-video-editor-pending-source') || 'null')
-      if (pending?.url) window.localStorage.removeItem('maestro-video-editor-pending-source')
-      pendingSequence = JSON.parse(
-        window.localStorage.getItem('maestro-video-editor-pending-sequence') || 'null',
-      )
-      if (pendingSequence?.clips?.length) {
-        window.localStorage.removeItem('maestro-video-editor-pending-sequence')
-      }
+      pending = JSON.parse(window.localStorage.getItem(VIDEO_EDITOR_PENDING_SOURCE_KEY) || 'null')
+      pendingSequence = JSON.parse(window.localStorage.getItem(VIDEO_EDITOR_PENDING_SEQUENCE_KEY) || 'null')
     } catch {
       pending = null
       pendingSequence = null
     }
     if (pendingSequence?.clips?.length) {
-      const sources = pendingSequence.clips.filter(
-        (item): item is { name?: string; url: string } => Boolean(item?.url),
-      )
-      if (!sources.length) return
-      const requestedResolution = RESOLUTIONS.find(option =>
-        option.width === pendingSequence?.resolution?.width
-        && option.height === pendingSequence?.resolution?.height)
-      setClips([])
-      if (pendingSequence.projectName) setProjectName(pendingSequence.projectName)
-      if (requestedResolution) setResolution(requestedResolution)
-      setAdding(true)
-      void (async () => {
-        for (let index = 0; index < sources.length; index++) {
-          const item = sources[index]
-          setAddProgress(`Opening Series shot ${index + 1}/${sources.length}`)
-          await addSource(item.url, item.url, item.name || `Series shot ${index + 1}`)
-        }
-      })().catch(reason => setError((reason as Error).message)).finally(() => {
-        setAdding(false)
-        setAddProgress('')
-      })
+      setPendingHandoff('sequence')
+      void processPendingHandoff('sequence', pendingSequence)
       return
     }
-    if (!pending?.url) return
+    if (pending?.url) {
+      setPendingHandoff('source')
+      void processPendingHandoff('source', pending)
+    }
+  }, [processPendingHandoff])
+
+  useEffect(() => {
+    const replacement = readVideoEditorReplacementResult()
+    if (!replacement) return
+    const target = clips.find(clip => clip.id === replacement.clipId)
+    if (!target) {
+      clearVideoEditorReplacementResult()
+      clearVideoEditorReplacementTarget()
+      setError(`La posición original ${replacement.clipIndex + 1} ya no está disponible en el montaje.`)
+      return
+    }
+
     setAdding(true)
-    setAddProgress(`Opening ${pending.name || 'comic animatic'}`)
-    void addSource(pending.url, pending.url, pending.name || 'Comic animatic')
-      .catch(reason => setError((reason as Error).message))
+    setAddProgress(`Reemplazando clip ${replacement.clipIndex + 1}: ${target.name}`)
+    void api.probeVideoEditorClip(replacement.source)
+      .then(media => {
+        setClips(current => {
+          const next = current.map(clip => clip.id === replacement.clipId
+            ? {
+                ...clip,
+                ...media,
+                name: replacement.outputName,
+                source: replacement.source,
+                previewUrl: replacement.source,
+                thumbnailUrl: api.getVideoEditorThumbnailUrl(replacement.source),
+                trimStart: 0,
+                trimEnd: media.duration,
+              }
+            : clip)
+          persistEditorDraft(next, projectName, resolution, fps)
+          return next
+        })
+        clearVideoEditorReplacementResult()
+        clearVideoEditorReplacementTarget()
+        setSelectedId(replacement.clipId)
+        setError(null)
+      })
+      .catch(reason => setError(`No se pudo reemplazar el clip ${replacement.clipIndex + 1}: ${(reason as Error).message}`))
       .finally(() => {
         setAdding(false)
         setAddProgress('')
       })
-    // The hand-off is intentionally consumed once when the editor mounts.
+    // Keep a failed result available for another mount; clear it only after
+    // the replacement is safely persisted into the editor draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const openSelectedInVideoCreation = async () => {
+    if (!selected || selectedIndex < 0 || preparingReplacement) return
+    setPreparingReplacement(true)
+    setError(null)
+    setSequencePlaying(false)
+    videoRef.current?.pause()
+
+    const outputName = outputNameFromEditorClip(selected.source, selected.name)
+    try {
+      const metadata = await api.fetchOutputMetadata(outputName, activeWorkspace)
+      if (!metadata.params) throw new Error('Este clip no conserva ajustes de generación reutilizables.')
+
+      const store = useStore.getState()
+      store.setSidebarMode('studio')
+      store.setGenerationMode('video')
+      useStore.setState({ selectedOutputMeta: metadata, metadataLoading: false })
+      await useStore.getState().loadSettingsFromOutput()
+      useStore.getState().setGenerationMode('video')
+      useStore.getState().setSidebarMode('studio')
+
+      persistEditorDraft(clips, projectName, resolution, fps)
+      writeVideoEditorReplacementTarget({
+        clipId: selected.id,
+        clipIndex: selectedIndex,
+        originalName: selected.name,
+        outputName,
+        requestedAt: Date.now(),
+      })
+      useStore.getState().setMediaFilter('videos')
+    } catch (reason) {
+      setError(`No se pudo abrir el clip en Creación de vídeo: ${(reason as Error).message}`)
+      setPreparingReplacement(false)
+    }
+  }
 
   const addFiles = async (files: File[]) => {
     const videos = files.filter(file => file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v)$/i.test(file.name))
@@ -697,14 +1075,22 @@ export function VideoEditorPanel() {
     if (failures.length) setError(failures.join('\n'))
   }
 
+  const closeMaestroPicker = () => {
+    setPickerOpen(false)
+    setPickerSelected([])
+    pickerAnchorRef.current = null
+  }
+
   const openMaestroPicker = async () => {
     setPickerOpen(true)
+    setPickerSelected([])
+    pickerAnchorRef.current = null
     setPickerLoading(true)
     setError(null)
     setMaestroVideos([])
     setMaestroVideoTotal(0)
     try {
-      const result = await api.fetchOutputs(MAESTRO_PICKER_PAGE_SIZE, 0, { mediaType: 'video' })
+      const result = await api.fetchOutputs(MAESTRO_PICKER_PAGE_SIZE, 0, { mediaType: 'video', workspace: activeWorkspace })
       setMaestroVideos(result.outputs)
       setMaestroVideoTotal(result.total)
     } catch (reason) {
@@ -722,7 +1108,7 @@ export function VideoEditorPanel() {
       const result = await api.fetchOutputs(
         MAESTRO_PICKER_PAGE_SIZE,
         maestroVideos.length,
-        { mediaType: 'video' },
+        { mediaType: 'video', workspace: activeWorkspace },
       )
       setMaestroVideos(current => {
         const known = new Set(current.map(output => output.name))
@@ -736,20 +1122,64 @@ export function VideoEditorPanel() {
     }
   }
 
-  const chooseMaestroVideo = async (output: api.ApiOutput) => {
-    setAdding(true)
-    setPickerOpen(false)
-    setError(null)
-    setAddProgress(`Adding ${output.name}`)
-    try {
-      const source = api.getFileUrl(output.name)
-      await addSource(source, source, output.name, output.thumbnail_url || api.getOutputThumbnailUrl(output.name))
-    } catch (reason) {
-      setError((reason as Error).message)
-    } finally {
-      setAdding(false)
-      setAddProgress('')
+  const toggleMaestroVideo = (output: api.ApiOutput, event: ReactMouseEvent<HTMLButtonElement>) => {
+    const index = maestroVideos.findIndex(item => item.name === output.name)
+    if (index < 0) return
+    if (event.shiftKey && pickerAnchorRef.current !== null) {
+      const start = Math.min(pickerAnchorRef.current, index)
+      const end = Math.max(pickerAnchorRef.current, index)
+      const range = maestroVideos.slice(start, end + 1).map(item => item.name)
+      setPickerSelected(current => {
+        const seen = new Set(current)
+        const next = [...current]
+        for (const name of range) {
+          if (!seen.has(name)) {
+            seen.add(name)
+            next.push(name)
+          }
+        }
+        return next
+      })
+      return
     }
+    pickerAnchorRef.current = index
+    setPickerSelected(current => (
+      current.includes(output.name)
+        ? current.filter(name => name !== output.name)
+        : [...current, output.name]
+    ))
+  }
+
+  const addSelectedMaestroVideos = async () => {
+    const selected = pickerSelected
+      .map(name => maestroVideos.find(item => item.name === name))
+      .filter((item): item is api.ApiOutput => Boolean(item))
+    if (!selected.length) {
+      setError('Select one or more videos.')
+      return
+    }
+    setAdding(true)
+    closeMaestroPicker()
+    setError(null)
+    const failures: string[] = []
+    for (let index = 0; index < selected.length; index++) {
+      const output = selected[index]
+      setAddProgress(`Adding ${index + 1} of ${selected.length}: ${output.name}`)
+      try {
+        const source = api.getFileUrl(output.name, activeWorkspace)
+        await addSource(
+          source,
+          source,
+          output.name,
+          output.thumbnail_url || api.getOutputThumbnailUrl(output.name, activeWorkspace),
+        )
+      } catch (reason) {
+        failures.push(`${output.name}: ${(reason as Error).message}`)
+      }
+    }
+    setAdding(false)
+    setAddProgress('')
+    if (failures.length) setError(failures.join('\n'))
   }
 
   const reorder = (id: string, direction: -1 | 1) => {
@@ -777,34 +1207,108 @@ export function VideoEditorPanel() {
     })
     setDraggedId(null)
     setDropIndex(null)
+    stopTimelineDragScroll()
+  }
+
+  const stopTimelineDragScroll = () => {
+    if (dragScrollFrameRef.current !== null) {
+      cancelAnimationFrame(dragScrollFrameRef.current)
+      dragScrollFrameRef.current = null
+    }
+    dragScrollDirRef.current = 0
+  }
+
+  const tickTimelineDragScroll = () => {
+    const scroller = timelineScrollRef.current
+    if (!scroller || !dragScrollDirRef.current) {
+      dragScrollFrameRef.current = null
+      return
+    }
+    scroller.scrollLeft += dragScrollDirRef.current * 3.2
+    dragScrollFrameRef.current = requestAnimationFrame(tickTimelineDragScroll)
+  }
+
+  const updateTimelineDragScroll = (clientX: number) => {
+    const scroller = timelineScrollRef.current
+    if (!scroller) return
+    const bounds = scroller.getBoundingClientRect()
+    const edge = 56
+    let direction: -1 | 0 | 1 = 0
+    if (clientX < bounds.left + edge) direction = -1
+    else if (clientX > bounds.right - edge) direction = 1
+    dragScrollDirRef.current = direction
+    if (direction && dragScrollFrameRef.current === null) {
+      dragScrollFrameRef.current = requestAnimationFrame(tickTimelineDragScroll)
+    }
+  }
+
+  const applyAllGapTransitions = () => {
+    if (clips.length < 2) return
+    setClips(current => applyTransitionToGaps(current, bulkTransition))
+    setSelectedTransitionIndex(0)
+    setError(null)
   }
 
   const splitSelected = () => {
-    if (!selected) return
-    const cut = videoRef.current?.currentTime ?? previewTime
-    if (cut <= selected.trimStart + 0.05 || cut >= selected.trimEnd - 0.05) {
-      setError('Move the preview playhead inside the clip before splitting.')
+    if (!clips.length) return
+    let target = selected
+    let cut = videoRef.current?.currentTime ?? previewTime
+    if (sequenceMode) {
+      const clipIndex = clipIndexAtTime(clips, sequenceTime)
+      const start = clipTimelineStart(clips, clipIndex)
+      const local = Math.max(0, sequenceTime - start)
+      target = clips[clipIndex]
+      cut = target.trimStart + local
+    }
+    if (!target) return
+    const parts = splitClipAtTime(target, cut, clipId())
+    if (!parts) {
+      setError('Move the playhead inside the clip, away from the very start and end, then Split.')
       return
     }
-    const second: EditorClip = {
-      ...selected,
-      id: clipId(),
-      name: `${selected.name} (part 2)`,
-      trimStart: cut,
-    }
+    const [left, right] = parts
     setClips(current => {
-      const index = current.findIndex(clip => clip.id === selected.id)
+      const index = current.findIndex(clip => clip.id === target.id)
+      if (index < 0) return current
       const next = [...current]
-      next[index] = {
-        ...selected,
-        name: `${selected.name} (part 1)`,
-        trimEnd: cut,
-        transition: 'none',
-      }
-      next.splice(index + 1, 0, second)
+      next[index] = left
+      next.splice(index + 1, 0, right)
       return next
     })
-    setSelectedId(second.id)
+    setSequencePlaying(false)
+    setSequenceMode(false)
+    setSelectedTransitionIndex(null)
+    setSelectedId(right.id)
+    setPreviewTime(right.trimStart)
+    setError(null)
+  }
+
+  const beginTimelineTrim = (
+    event: ReactPointerEvent<HTMLElement>,
+    clipIdValue: string,
+    edge: 'start' | 'end',
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    trimmingRef.current = true
+    let lastX = event.clientX
+    const move = (pointer: PointerEvent) => {
+      const deltaSeconds = (pointer.clientX - lastX) / TIMELINE_TRIM_PX_PER_SEC
+      lastX = pointer.clientX
+      if (Math.abs(deltaSeconds) < 0.0005) return
+      setClips(current => current.map(clip => (
+        clip.id === clipIdValue ? trimClipFromDelta(clip, edge, deltaSeconds) : clip
+      )))
+    }
+    const finish = () => {
+      trimmingRef.current = false
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
   }
 
   const clipVolume = (clip: EditorClip): number => (
@@ -875,6 +1379,15 @@ export function VideoEditorPanel() {
 
   const startSequenceAt = (clipIndex: number, sourceTime?: number, autoplay = true) => {
     if (!clips[clipIndex]) return
+    const clip = clips[clipIndex]
+    const seekTo = sourceTime ?? clip.trimStart
+    const previous = sequenceRuntimeRef.current
+    const keepMounted = (
+      sequenceMode
+      && previous.clipIndex === clipIndex
+      && previous.activeSlot === 0
+      && sequenceSlotIndices[0] === clipIndex
+    )
     sequencePlayingRef.current = autoplay
     videoRef.current?.pause()
     const nextIndex = clipIndex + 1 < clips.length ? clipIndex + 1 : null
@@ -888,7 +1401,7 @@ export function VideoEditorPanel() {
       ended: false,
     }
     sequenceSlotSeekRef.current = [
-      sourceTime ?? clips[clipIndex].trimStart,
+      seekTo,
       nextIndex !== null ? clips[nextIndex].trimStart : null,
     ]
     setPlaying(autoplay)
@@ -899,62 +1412,135 @@ export function VideoEditorPanel() {
       sequenceStyle({ opacity: 0 }),
     ])
     setSequenceInterstitial(null)
-    setSelectedId(clips[clipIndex].id)
+    setSelectedId(clip.id)
     setSelectedTransitionIndex(null)
-    const local = (sourceTime ?? clips[clipIndex].trimStart) - clips[clipIndex].trimStart
-    setSequenceTime(clipTimelineStart(clips, clipIndex) + Math.max(0, local))
+    const clock = clipTimelineStart(clips, clipIndex) + Math.max(0, seekTo - clip.trimStart)
+    pendingSeekRef.current = clock
+    pendingSeekAtRef.current = performance.now()
+    setSequenceTime(clock)
+    if (!keepMounted) return
+    const video = sequenceRefs.current[0]
+    if (!video) return
+    video.currentTime = seekTo
+    if (autoplay) void video.play().catch(() => undefined)
+    else video.pause()
   }
 
-  const seekSequence = (value: number) => {
+  const seekSequence = (value: number, autoplay?: boolean) => {
     if (!clips.length) return
     const clamped = Math.max(0, Math.min(totalDuration, value))
-    let clipIndex = 0
-    for (let index = clips.length - 1; index >= 0; index--) {
-      if (clamped >= clipTimelineStart(clips, index)) {
-        clipIndex = index
-        break
-      }
-    }
-    const cardStart = clipTimelineStart(clips, clipIndex) + effectiveDuration(clips[clipIndex])
-    if (
-      isInterstitialTransition(clips[clipIndex].transition)
-      && clips[clipIndex + 1]
-      && clamped >= cardStart
-    ) {
-      const autoplay = sequencePlayingRef.current
-      startSequenceAt(clipIndex, clips[clipIndex].trimEnd - 0.01, autoplay)
-      const runtime = sequenceRuntimeRef.current
-      runtime.interstitial = true
-      runtime.interstitialElapsed = Math.min(
-        transitionDurationAfter(clips, clipIndex),
-        Math.max(0, clamped - cardStart),
+    const play = autoplay ?? sequencePlayingRef.current
+    const located = sourceTimeAtSequenceTime(clips, clamped)
+    const clip = clips[located.clipIndex]
+    if (!clip) return
+    pendingSeekRef.current = clamped
+    pendingSeekAtRef.current = performance.now()
+    setSequenceTime(clamped)
+
+    if (located.interstitial) {
+      const alreadyThere = (
+        sequenceMode
+        && sequenceRuntimeRef.current.clipIndex === located.clipIndex
+        && sequenceRuntimeRef.current.interstitial
       )
-      runtime.interstitialLastFrame = autoplay ? performance.now() : null
+      if (!alreadyThere) startSequenceAt(located.clipIndex, clip.trimEnd - 0.01, false)
+      const runtime = sequenceRuntimeRef.current
+      const duration = transitionDurationAfter(clips, located.clipIndex)
+      sequencePlayingRef.current = play
+      setPlaying(play)
+      runtime.interstitial = true
+      runtime.transitioning = false
+      runtime.ended = false
+      runtime.interstitialElapsed = located.interstitialElapsed
+      runtime.interstitialLastFrame = play ? performance.now() : null
+      sequenceRefs.current[0]?.pause()
+      sequenceRefs.current[1]?.pause()
       setSequenceInterstitial({
-        transition: clips[clipIndex].transition as InterstitialTransition,
-        text: clips[clipIndex].transitionText,
-        textSize: clips[clipIndex].transitionTextSize,
-        progress: runtime.interstitialElapsed / transitionDurationAfter(clips, clipIndex),
+        transition: clip.transition as InterstitialTransition,
+        text: clip.transitionText,
+        textSize: clip.transitionTextSize,
+        progress: duration > 0 ? located.interstitialElapsed / duration : 1,
       })
       setSequenceTime(clamped)
       return
     }
-    const local = clamped - clipTimelineStart(clips, clipIndex)
-    const sourceTime = Math.min(
-      clips[clipIndex].trimEnd - 0.01,
-      clips[clipIndex].trimStart + Math.max(0, local),
+
+    const runtime = sequenceRuntimeRef.current
+    const overlap = transitionDurationAfter(clips, located.clipIndex)
+    const start = clipTimelineStart(clips, located.clipIndex)
+    const inOverlap = (
+      !isInterstitialTransition(clip.transition)
+      && overlap > 0
+      && clamped >= start + effectiveDuration(clip) - overlap
     )
-    startSequenceAt(clipIndex, sourceTime, sequencePlayingRef.current)
+    const sameClip = (
+      sequenceMode
+      && runtime.clipIndex === located.clipIndex
+      && !runtime.ended
+      && !runtime.interstitial
+      && !runtime.transitioning
+      && !inOverlap
+    )
+    if (sameClip) {
+      sequencePlayingRef.current = play
+      setPlaying(play)
+      runtime.ended = false
+      const active = sequenceRefs.current[runtime.activeSlot]
+      sequenceSlotSeekRef.current[runtime.activeSlot] = located.sourceTime
+      if (active) {
+        if (Math.abs(active.currentTime - located.sourceTime) <= 0.005) {
+          pendingSeekRef.current = null
+          pendingSeekAtRef.current = 0
+        }
+        active.currentTime = located.sourceTime
+        if (play) void active.play().catch(() => setError('The browser could not start timeline playback.'))
+        else active.pause()
+      }
+      setSelectedId(clip.id)
+      return
+    }
+    startSequenceAt(located.clipIndex, located.sourceTime, play)
+    pendingSeekRef.current = clamped
+    pendingSeekAtRef.current = performance.now()
     setSequenceTime(clamped)
+  }
+
+  const playbackStartForSelection = () => {
+    if (selectedTransitionIndex !== null && clips[selectedTransitionIndex] && clips[selectedTransitionIndex + 1]) {
+      return transitionTimelineStart(clips, selectedTransitionIndex)
+    }
+    if (selectedIndex >= 0) return clipTimelineStart(clips, selectedIndex)
+    return 0
   }
 
   const togglePlayback = () => {
     if (!clips.length) return
-    if (!sequenceMode || sequenceTime >= totalDuration - 0.03) {
-      startSequenceAt(0)
+    if (sequencePlayingRef.current) {
+      setSequencePlaying(false)
       return
     }
-    setSequencePlaying(!sequencePlayingRef.current)
+    if (sequenceMode && sequenceTime < totalDuration - 0.03) {
+      setSequencePlaying(true)
+      return
+    }
+    seekSequence(playbackStartForSelection(), true)
+  }
+
+  const selectTimelineClip = (index: number) => {
+    if (!clips[index] || trimmingRef.current) return
+    setSequencePlaying(false)
+    setSelectedTransitionIndex(null)
+    setPlayheadDraft(null)
+    seekSequence(clipTimelineStart(clips, index), false)
+    setSelectedId(clips[index].id)
+  }
+
+  const selectTimelineTransition = (index: number) => {
+    if (!clips[index] || !clips[index + 1]) return
+    setSequencePlaying(false)
+    setPlayheadDraft(null)
+    seekSequence(transitionTimelineStart(clips, index), false)
+    setSelectedTransitionIndex(index)
   }
 
   const handleSequenceLoaded = (
@@ -1032,6 +1618,29 @@ export function VideoEditorPanel() {
     const renderFrame = () => {
       const runtime = sequenceRuntimeRef.current
       if (runtime.ended) return
+      if (scrubbingRef.current) {
+        if (pendingSeekRef.current !== null) setSequenceTime(pendingSeekRef.current)
+        sequenceFrameRef.current = requestAnimationFrame(renderFrame)
+        return
+      }
+      if (pendingSeekRef.current !== null) {
+        const target = sourceTimeAtSequenceTime(clips, pendingSeekRef.current)
+        const activeVideo = sequenceRefs.current[runtime.activeSlot]
+        const arrived = Boolean(
+          activeVideo
+          && !target.interstitial
+          && Math.abs(activeVideo.currentTime - target.sourceTime) <= 0.08
+        )
+        const stale = pendingSeekAtRef.current > 0 && performance.now() - pendingSeekAtRef.current > 400
+        if (arrived || stale) {
+          pendingSeekRef.current = null
+          pendingSeekAtRef.current = 0
+        } else {
+          setSequenceTime(pendingSeekRef.current)
+          sequenceFrameRef.current = requestAnimationFrame(renderFrame)
+          return
+        }
+      }
       const currentClip = clips[runtime.clipIndex]
       const activeVideo = sequenceRefs.current[runtime.activeSlot]
       if (!currentClip || !activeVideo) {
@@ -1253,9 +1862,67 @@ export function VideoEditorPanel() {
     }
   }, [clips, sequenceMode, totalDuration])
 
+  const pollExport = useCallback(async (jobId: string) => {
+    if (!jobId || exportPollingRef.current === jobId) return
+    exportPollingRef.current = jobId
+    const epoch = ++exportPollEpochRef.current
+    try {
+      let status = await api.fetchVideoEditorExport(jobId)
+      while (mountedRef.current && epoch === exportPollEpochRef.current) {
+        if (!mountedRef.current || epoch !== exportPollEpochRef.current) return
+        setExportJob(status)
+        writeVideoEditorExportId(activeWorkspace, jobId)
+        if (status.status === 'completed') {
+          await refreshOutputs()
+          return
+        }
+        if (status.status === 'failed' || status.status === 'cancelled') {
+          clearVideoEditorExportId(activeWorkspace)
+          return
+        }
+        await wait(1000)
+        if (!mountedRef.current || epoch !== exportPollEpochRef.current) return
+        status = await api.fetchVideoEditorExport(jobId)
+      }
+    } catch (reason) {
+      if (mountedRef.current && epoch === exportPollEpochRef.current) {
+        setError(`Could not reconnect to export ${jobId}: ${(reason as Error).message}`)
+      }
+    } finally {
+      if (exportPollingRef.current === jobId) exportPollingRef.current = null
+    }
+  }, [activeWorkspace, refreshOutputs])
+
+  useEffect(() => {
+    exportPollEpochRef.current += 1
+    exportPollingRef.current = null
+    const jobId = readVideoEditorExportId(activeWorkspace)
+    setExportJob(jobId ? pendingVideoEditorExport(jobId) : null)
+    if (jobId) void pollExport(jobId)
+    return () => {
+      exportPollEpochRef.current += 1
+      exportPollingRef.current = null
+    }
+  }, [activeWorkspace, pollExport])
+
   const startExport = async () => {
-    if (!clips.length || exportJob?.status === 'queued' || exportJob?.status === 'running') return
-    setError(null)
+    if (!clips.length || exportSubmittingRef.current || isVideoEditorJobActive(exportJob)) return
+    const normalized = normalizeEditorClips(clips, {
+      idFactory: clipId,
+      thumbnailUrl: api.getVideoEditorThumbnailUrl,
+    })
+    if (!normalized.clips.length) {
+      setClips([])
+      setError('No valid clips remain. Restore a source with a finite duration before exporting.')
+      return
+    }
+    const recoveryMessage = editorClipRecoveryMessage(normalized)
+    if (recoveryMessage) {
+      setClips(normalized.clips)
+      persistEditorDraft(normalized.clips, projectName, resolution, fps)
+    }
+    setError(recoveryMessage)
+    exportSubmittingRef.current = true
     setExportJob({
       job_id: '',
       status: 'queued',
@@ -1271,7 +1938,8 @@ export function VideoEditorPanel() {
         width: resolution.width,
         height: resolution.height,
         fps,
-        clips: clips.map(clip => ({
+        workspace: activeWorkspace,
+        clips: normalized.clips.map(clip => ({
           name: clip.name,
           source: clip.source,
           trim_start: clip.trimStart,
@@ -1285,20 +1953,36 @@ export function VideoEditorPanel() {
           transition_text_size: clip.transitionTextSize,
         })),
       })
-      while (mountedRef.current) {
-        const status = await api.fetchVideoEditorExport(started.job_id)
-        setExportJob(status)
-        if (status.status === 'completed') {
-          await refreshOutputs()
-          break
-        }
-        if (status.status === 'failed') break
-        await wait(1000)
-      }
+      writeVideoEditorExportId(activeWorkspace, started.job_id)
+      if (mountedRef.current) setExportJob(started)
+      void pollExport(started.job_id)
     } catch (reason) {
       const message = (reason as Error).message
       setError(message)
+      clearVideoEditorExportId(activeWorkspace)
       setExportJob(current => current ? { ...current, status: 'failed', error: message, message } : null)
+    } finally {
+      exportSubmittingRef.current = false
+    }
+  }
+
+  const cancelExport = async () => {
+    if (!exportJob?.job_id || !isVideoEditorJobActive(exportJob) || exportJob.status === 'cancelling') return
+    setExportJob(current => current ? {
+      ...current,
+      status: 'cancelling',
+      phase: 'cancelling',
+      message: 'Cancelling at the next FFmpeg safe boundary…',
+    } : current)
+    try {
+      const cancelled = await api.cancelVideoEditorExport(exportJob.job_id)
+      writeVideoEditorExportId(activeWorkspace, exportJob.job_id)
+      setExportJob(cancelled)
+      if (isVideoEditorJobActive(cancelled)) void pollExport(cancelled.job_id)
+      else if (cancelled.status === 'cancelled') clearVideoEditorExportId(activeWorkspace)
+    } catch (reason) {
+      const message = (reason as Error).message
+      setError(message)
     }
   }
 
@@ -1321,6 +2005,7 @@ export function VideoEditorPanel() {
         source: clip.source,
         time: sourceTime,
         name: projectName,
+        workspace: activeWorkspace,
       })
       setCapturedFrame(result)
       await refreshOutputs()
@@ -1333,7 +2018,8 @@ export function VideoEditorPanel() {
 
   return (
     <div
-      className="h-full min-h-[620px] flex flex-col bg-bg-secondary border border-border rounded-xl overflow-hidden"
+      data-testid="video-editor-panel"
+      className="h-full min-h-0 min-w-0 flex flex-col bg-bg-secondary border border-border rounded-xl overflow-hidden"
       onDragOver={event => {
         if (event.dataTransfer.types.includes('Files')) event.preventDefault()
       }}
@@ -1355,15 +2041,15 @@ export function VideoEditorPanel() {
         }}
       />
 
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-bg-tertiary/40">
-        <Film size={16} className="text-accent-blue" />
+      <div role="toolbar" aria-label="Video editor tools" className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border bg-bg-tertiary/40">
+        <Film size={16} className="shrink-0 text-accent-blue" />
         <input
           value={projectName}
           onChange={event => setProjectName(event.target.value)}
-          className="w-40 md:w-56 bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
+          className="min-w-0 w-32 sm:w-40 md:w-56 bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
           aria-label="Project name"
         />
-        <div className="flex-1" />
+        <div className="hidden flex-1 sm:block" />
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={adding}
@@ -1376,21 +2062,33 @@ export function VideoEditorPanel() {
           disabled={adding}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover disabled:opacity-50"
         >
-          <FolderOpen size={13} /> From Maestro
+          <FolderOpen size={13} /> From Loreframe Lab
         </button>
         <button
           onClick={startExport}
-          disabled={!clips.length || exportJob?.status === 'queued' || exportJob?.status === 'running'}
+          disabled={!clips.length || isVideoEditorJobActive(exportJob)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 disabled:opacity-40"
         >
-          {exportJob?.status === 'queued' || exportJob?.status === 'running'
+          {isVideoEditorJobActive(exportJob)
             ? <Loader2 size={13} className="animate-spin" />
             : <Download size={13} />}
           Export MP4
         </button>
+        {isVideoEditorJobActive(exportJob) && (
+          <button
+            onClick={() => void cancelExport()}
+            disabled={exportJob?.status === 'cancelling'}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+          >
+            {exportJob?.status === 'cancelling'
+              ? <Loader2 size={13} className="animate-spin" />
+              : <X size={13} />}
+            {exportJob?.status === 'cancelling' ? 'Cancelling…' : 'Cancel'}
+          </button>
+        )}
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border">
           <div className="flex-1 min-h-[280px] flex items-center justify-center p-4 bg-black/70 relative">
             {sequenceMode ? (
@@ -1416,6 +2114,10 @@ export function VideoEditorPanel() {
                       playsInline
                       preload="auto"
                       onLoadedMetadata={event => handleSequenceLoaded(slot as 0 | 1, clipIndex, event.currentTarget)}
+                      onSeeked={() => {
+                        pendingSeekRef.current = null
+                        pendingSeekAtRef.current = 0
+                      }}
                     />
                   )
                 })}
@@ -1475,13 +2177,14 @@ export function VideoEditorPanel() {
             )}
           </div>
 
-          <div className="px-3 py-2 border-t border-border bg-bg-tertiary/30">
+          <div className="px-3 py-3 border-t border-border bg-bg-tertiary/30">
             <div className="flex items-center gap-2">
               <button
                 onClick={togglePlayback}
                 disabled={!clips.length}
                 className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-40"
-                title="Play the complete timeline from beginning to end"
+                aria-label={playing ? 'Pause' : 'Play'}
+                title="Play from the selected clip, transition, or playhead"
               >
                 {playing ? <Pause size={15} /> : <Play size={15} />}
               </button>
@@ -1493,24 +2196,54 @@ export function VideoEditorPanel() {
               >
                 <RotateCcw size={13} />
               </button>
-              <span className="text-[10px] text-text-muted tabular-nums w-[98px]">
-                {formatTime(sequenceMode ? sequenceTime : 0)} / {formatTime(totalDuration)}
+              <span className="text-[10px] text-text-muted tabular-nums">
+                {formatPlayheadTime(playheadSeconds)} / {formatPlayheadTime(totalDuration)}
               </span>
-              <input
-                type="range"
-                min={0}
-                max={totalDuration || 1}
-                step={0.01}
-                value={sequenceMode ? Math.min(totalDuration, sequenceTime) : 0}
-                onChange={event => seekSequence(Number(event.target.value))}
+              <SequenceScrubber
+                duration={totalDuration}
+                time={Math.min(totalDuration, playheadSeconds)}
                 disabled={!clips.length}
-                className="flex-1"
+                onScrub={(next, phase) => {
+                  scrubbingRef.current = phase !== 'end'
+                  setPlayheadDraft(null)
+                  setSequencePlaying(false)
+                  seekSequence(next, false)
+                  if (phase === 'end') pendingSeekAtRef.current = performance.now()
+                }}
               />
+              <label className="flex items-center gap-1 text-[10px] text-text-muted">
+                s
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={Number(totalDuration.toFixed(2))}
+                  step={0.01}
+                  aria-label="Playhead seconds"
+                  data-testid="playhead-seconds"
+                  disabled={!clips.length}
+                  value={playheadDraft ?? playheadSeconds.toFixed(2)}
+                  onChange={event => setPlayheadDraft(event.target.value)}
+                  onBlur={() => {
+                    if (playheadDraft === null) return
+                    const parsed = parsePlayheadSeconds(playheadDraft)
+                    setPlayheadDraft(null)
+                    if (parsed === null) return
+                    setSequencePlaying(false)
+                    seekSequence(parsed, false)
+                  }}
+                  onKeyDown={event => {
+                    if (event.key !== 'Enter') return
+                    event.currentTarget.blur()
+                  }}
+                  className="w-[4.6rem] rounded border border-border bg-bg-secondary px-1.5 py-1 text-[11px] tabular-nums text-text-primary"
+                />
+              </label>
               <button
                 onClick={splitSelected}
-                disabled={!selected || sequenceMode}
+                disabled={!clips.length}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-hover disabled:opacity-40"
-                title="Split selected clip at the preview playhead"
+                title="Split the clip at the current playhead"
               >
                 <Scissors size={11} /> Split
               </button>
@@ -1518,7 +2251,7 @@ export function VideoEditorPanel() {
                 onClick={takeScreenshot}
                 disabled={!selected || capturingFrame}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-hover disabled:opacity-40"
-                title="Save the exact current source frame as a reusable PNG in Maestro Outputs"
+                title="Save the exact current source frame as a reusable PNG in Loreframe Lab Outputs"
               >
                 {capturingFrame
                   ? <Loader2 size={11} className="animate-spin" />
@@ -1536,7 +2269,7 @@ export function VideoEditorPanel() {
           </div>
         </section>
 
-        <aside className="min-h-0 overflow-y-auto p-3 space-y-4 bg-bg-secondary">
+        <aside aria-label="Video editor inspector" className="min-h-0 overflow-y-auto p-3 space-y-4 bg-bg-secondary">
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">Output</label>
             <select
@@ -1760,9 +2493,32 @@ export function VideoEditorPanel() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void openSelectedInVideoCreation()}
+                disabled={preparingReplacement}
+                className="mb-3 flex w-full items-center justify-center gap-1.5 rounded border border-accent-blue/40 bg-accent-blue/10 px-2 py-2 text-[10px] font-medium text-accent-blue transition-colors hover:bg-accent-blue/20 disabled:opacity-50"
+                title="Carga el prompt, modelo, duración y formato de este clip en Creación de vídeo para elegir después su reemplazo"
+              >
+                {preparingReplacement
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <Film size={12} />}
+                {preparingReplacement ? 'Cargando ajustes de generación…' : 'Rehacer en Creación de vídeo'}
+              </button>
+
+              <ClipTrimBar
+                duration={selected.duration}
+                start={selected.trimStart}
+                end={selected.trimEnd}
+                onChange={patch => patchClip(selected.id, patch)}
+              />
+              <p className="mt-2 text-[9px] leading-relaxed text-text-muted">
+                Arrastra los tiradores para fijar la entrada y la salida. El vídeo original no se modifica; estos cortes solo se aplican a la previsualización y al MP4 exportado.
+              </p>
+
+              <div className="mt-2 grid grid-cols-2 gap-2">
                 <label className="text-[10px] text-text-muted">
-                  Trim start
+                  Entrada exacta
                   <input
                     type="number"
                     min={0}
@@ -1776,7 +2532,7 @@ export function VideoEditorPanel() {
                   />
                 </label>
                 <label className="text-[10px] text-text-muted">
-                  Trim end
+                  Salida exacta
                   <input
                     type="number"
                     min={selected.trimStart + 0.05}
@@ -1790,6 +2546,15 @@ export function VideoEditorPanel() {
                   />
                 </label>
               </div>
+              {(selected.trimStart > 0.001 || selected.trimEnd < selected.duration - 0.001) && (
+                <button
+                  type="button"
+                  onClick={() => patchClip(selected.id, { trimStart: 0, trimEnd: selected.duration })}
+                  className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-border px-2 py-1.5 text-[10px] text-text-muted hover:bg-bg-hover hover:text-text-secondary"
+                >
+                  <RotateCcw size={11} /> Restaurar clip completo
+                </button>
+              )}
 
               <div className="flex items-center gap-2 mt-3">
                 <button
@@ -1879,17 +2644,19 @@ export function VideoEditorPanel() {
                     ? 'border-red-500/30 bg-red-500/5'
                     : exportJob.status === 'completed'
                       ? 'border-green-500/30 bg-green-500/5'
+                      : exportJob.status === 'cancelled'
+                        ? 'border-border bg-bg-secondary'
                       : 'border-accent-blue/30 bg-accent-blue/5'
                 }`}>
                   <div className="flex items-center gap-1.5 text-[10px]">
                     {exportJob.status === 'completed'
                       ? <Check size={12} className="text-green-400" />
-                      : exportJob.status === 'failed'
+                      : exportJob.status === 'failed' || exportJob.status === 'cancelled'
                         ? <X size={12} className="text-red-400" />
                         : <Loader2 size={12} className="animate-spin text-accent-blue" />}
                     <span className="truncate">{exportJob.message}</span>
                   </div>
-                  {(exportJob.status === 'queued' || exportJob.status === 'running') && (
+                  {isVideoEditorJobActive(exportJob) && (
                     <div className="h-1 bg-bg-active rounded mt-2 overflow-hidden">
                       <div className="h-full bg-accent-blue" style={{ width: `${exportJob.progress}%` }} />
                     </div>
@@ -1906,8 +2673,29 @@ export function VideoEditorPanel() {
                 </div>
               )}
               {error && (
-                <div className="whitespace-pre-wrap text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2">
-                  {error}
+                <div className="space-y-2">
+                  <div className="whitespace-pre-wrap text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2">
+                    {error}
+                  </div>
+                  {pendingHandoff && !adding && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          const key = pendingHandoff === 'sequence'
+                            ? VIDEO_EDITOR_PENDING_SEQUENCE_KEY
+                            : VIDEO_EDITOR_PENDING_SOURCE_KEY
+                          const handoff = JSON.parse(window.localStorage.getItem(key) || 'null')
+                          if (handoff) void processPendingHandoff(pendingHandoff, handoff)
+                        } catch (reason) {
+                          setError(`Could not retry the hand-off: ${(reason as Error).message}`)
+                        }
+                      }}
+                      className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded border border-red-500/30 text-[10px] text-red-300 hover:bg-red-500/10"
+                    >
+                      <RotateCcw size={11} /> Retry hand-off
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1915,12 +2703,41 @@ export function VideoEditorPanel() {
         </aside>
       </div>
 
-      <div className="h-32 shrink-0 border-t border-border bg-bg-tertiary/30 flex flex-col">
-        <div className="h-7 flex items-center px-3 border-b border-border text-[10px] text-text-muted">
+      <div role="region" aria-label="Video editor timeline" className="h-40 shrink-0 border-t border-border bg-bg-tertiary/30 flex flex-col">
+        <div className="flex h-9 items-center gap-2 px-3 border-b border-border text-[10px] text-text-muted">
           <span>Timeline · {clips.length} {clips.length === 1 ? 'clip' : 'clips'} · {formatTime(totalDuration)}</span>
-          <span className="ml-auto">Drag clips to reorder</span>
+          <label className="ml-auto flex items-center gap-1.5">
+            <span>All gaps</span>
+            <select
+              aria-label="Default transition for all gaps"
+              value={bulkTransition}
+              onChange={event => setBulkTransition(event.target.value as Transition)}
+              className="max-w-[11rem] rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-[10px] text-text-secondary"
+            >
+              {TRANSITIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={applyAllGapTransitions}
+              disabled={clips.length < 2}
+              className="rounded border border-purple-500/40 px-2 py-0.5 text-[10px] text-purple-300 hover:bg-purple-500/10 disabled:opacity-40"
+            >
+              Apply to all
+            </button>
+          </label>
         </div>
-        <div className="flex-1 overflow-x-auto p-2">
+        <div
+          ref={timelineScrollRef}
+          className="flex-1 overflow-x-auto p-2"
+          onDragOver={event => {
+            if (!draggedId && !event.dataTransfer.types.includes('text/x-maestro-video-clip')) return
+            event.preventDefault()
+            updateTimelineDragScroll(event.clientX)
+          }}
+          onDrop={() => stopTimelineDragScroll()}
+        >
           {clips.length ? (
             <div className="h-full flex items-stretch gap-1 min-w-max">
               {clips.map((clip, index) => {
@@ -1931,6 +2748,10 @@ export function VideoEditorPanel() {
                       <button
                         draggable
                         onDragStart={event => {
+                          if (trimmingRef.current) {
+                            event.preventDefault()
+                            return
+                          }
                           event.dataTransfer.effectAllowed = 'move'
                           event.dataTransfer.setData('text/x-maestro-video-clip', clip.id)
                           setDraggedId(clip.id)
@@ -1938,10 +2759,12 @@ export function VideoEditorPanel() {
                         onDragEnd={() => {
                           setDraggedId(null)
                           setDropIndex(null)
+                          stopTimelineDragScroll()
                         }}
                         onDragOver={event => {
                           event.preventDefault()
                           event.dataTransfer.dropEffect = 'move'
+                          updateTimelineDragScroll(event.clientX)
                           const bounds = event.currentTarget.getBoundingClientRect()
                           setDropIndex(index + (event.clientX > bounds.left + bounds.width / 2 ? 1 : 0))
                         }}
@@ -1953,11 +2776,10 @@ export function VideoEditorPanel() {
                           dropAtIndex(insertionIndex, event.dataTransfer.getData('text/x-maestro-video-clip'))
                         }}
                         onClick={() => {
-                          setSequencePlaying(false)
-                          setSequenceMode(false)
-                          setSelectedTransitionIndex(null)
-                          setSelectedId(clip.id)
+                          if (trimmingRef.current) return
+                          selectTimelineClip(index)
                         }}
+                        aria-label={`Select clip ${index + 1}: ${clip.name}`}
                         className={`relative h-full w-full overflow-hidden rounded-lg border text-left transition-colors ${
                           selected?.id === clip.id && selectedTransitionIndex === null
                             ? 'border-accent-blue ring-1 ring-accent-blue/50'
@@ -1988,6 +2810,18 @@ export function VideoEditorPanel() {
                             <p className="text-[9px] text-white/60">{formatTime(effectiveDuration(clip))}</p>
                           </div>
                         </div>
+                        <span
+                          role="separator"
+                          aria-label={`Trim start of ${clip.name}`}
+                          onPointerDown={event => beginTimelineTrim(event, clip.id, 'start')}
+                          className="absolute inset-y-0 left-0 z-30 w-2.5 cursor-ew-resize rounded-l-lg bg-accent-blue/0 hover:bg-accent-blue/50"
+                        />
+                        <span
+                          role="separator"
+                          aria-label={`Trim end of ${clip.name}`}
+                          onPointerDown={event => beginTimelineTrim(event, clip.id, 'end')}
+                          className="absolute inset-y-0 right-0 z-30 w-2.5 cursor-ew-resize rounded-r-lg bg-accent-blue/0 hover:bg-accent-blue/50"
+                        />
                       </button>
                       <button
                         type="button"
@@ -2015,10 +2849,9 @@ export function VideoEditorPanel() {
                           dropAtIndex(index + 1, event.dataTransfer.getData('text/x-maestro-video-clip'))
                         }}
                         onClick={() => {
-                          setSequencePlaying(false)
-                          setSequenceMode(false)
-                          setSelectedTransitionIndex(index)
+                          selectTimelineTransition(index)
                         }}
+                        aria-label={`Select transition ${index + 1}`}
                         className={`w-14 shrink-0 rounded-lg border flex flex-col items-center justify-center gap-1 transition-colors ${
                           selectedTransitionIndex === index
                             ? 'border-purple-400 bg-purple-500/15 text-purple-300'
@@ -2076,20 +2909,23 @@ export function VideoEditorPanel() {
       </div>
 
       {pickerOpen && (
-        <div
+        <ModalShell
+          open
+          title="Add Loreframe Lab videos"
+          onClose={closeMaestroPicker}
           className="fixed inset-0 z-[80] bg-black/65 flex items-center justify-center p-4"
           onMouseDown={event => {
-            if (event.currentTarget === event.target) setPickerOpen(false)
+            if (event.currentTarget === event.target) closeMaestroPicker()
           }}
         >
           <div className="w-full max-w-4xl max-h-[78vh] bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <FolderOpen size={15} className="text-accent-blue" />
-              <span className="text-sm font-medium">Add a Maestro video</span>
+              <span className="text-sm font-medium">Add Loreframe Lab videos</span>
               {maestroVideoTotal > 0 && (
                 <span className="text-[10px] text-text-muted">{maestroVideos.length} / {maestroVideoTotal}</span>
               )}
-              <button onClick={() => setPickerOpen(false)} className="ml-auto p-1 rounded hover:bg-bg-hover">
+              <button type="button" onClick={closeMaestroPicker} aria-label="Close Loreframe Lab video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
                 <X size={15} />
               </button>
             </div>
@@ -2099,27 +2935,45 @@ export function VideoEditorPanel() {
                   <Loader2 size={22} className="animate-spin" />
                 </div>
               ) : maestroVideos.length ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {maestroVideos.map(output => (
-                    <button
-                      key={output.name}
-                      onClick={() => void chooseMaestroVideo(output)}
-                      className="rounded-lg overflow-hidden border border-border bg-bg-tertiary hover:border-accent-blue text-left"
-                    >
-                      {output.thumbnail_url ? (
-                        <img
-                          src={output.thumbnail_url}
-                          alt={output.name}
-                          className="w-full aspect-video object-cover bg-black"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <div className="flex aspect-video items-center justify-center bg-black text-text-muted"><Film size={20} /></div>
-                      )}
-                      <p className="p-2 text-[10px] text-text-secondary truncate">{output.name}</p>
-                    </button>
-                  ))}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" role="listbox" aria-multiselectable="true" aria-label="Loreframe Lab videos">
+                  {maestroVideos.map(output => {
+                    const selected = pickerSelectedSet.has(output.name)
+                    return (
+                      <button
+                        key={output.name}
+                        type="button"
+                        role="option"
+                        aria-label={output.name}
+                        aria-selected={selected}
+                        onClick={event => toggleMaestroVideo(output, event)}
+                        className={`relative rounded-lg overflow-hidden border text-left ${
+                          selected
+                            ? 'border-accent-blue ring-1 ring-accent-blue/50 bg-accent-blue/10'
+                            : 'border-border bg-bg-tertiary hover:border-accent-blue'
+                        }`}
+                      >
+                        <span className={`absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded border ${
+                          selected
+                            ? 'border-accent-blue bg-accent-blue text-white'
+                            : 'border-white/50 bg-black/50 text-transparent'
+                        }`}>
+                          <Check size={12} />
+                        </span>
+                        {output.thumbnail_url ? (
+                          <img
+                            src={output.thumbnail_url}
+                            alt=""
+                            className="w-full aspect-video object-cover bg-black"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <div className="flex aspect-video items-center justify-center bg-black text-text-muted"><Film size={20} /></div>
+                        )}
+                        <p className="p-2 text-[10px] text-text-secondary truncate">{output.name}</p>
+                      </button>
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="min-h-48 flex items-center justify-center text-xs text-text-muted">
@@ -2140,8 +2994,43 @@ export function VideoEditorPanel() {
                 </div>
               )}
             </div>
+            {maestroVideos.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-border bg-bg-tertiary/40">
+                <button
+                  type="button"
+                  onClick={() => setPickerSelected(maestroVideos.map(item => item.name))}
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover"
+                >
+                  Select all shown
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickerSelected([])
+                    pickerAnchorRef.current = null
+                  }}
+                  disabled={!pickerSelected.length}
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover disabled:opacity-40"
+                >
+                  Clear
+                </button>
+                <span className="text-[10px] text-text-muted">
+                  {pickerSelected.length} selected · click to toggle, Shift-click for a range
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void addSelectedMaestroVideos()}
+                  disabled={!pickerSelected.length || adding}
+                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 disabled:opacity-40"
+                >
+                  {pickerSelected.length
+                    ? `Add ${pickerSelected.length} ${pickerSelected.length === 1 ? 'video' : 'videos'}`
+                    : 'Add videos'}
+                </button>
+              </div>
+            )}
           </div>
-        </div>
+        </ModalShell>
       )}
     </div>
   )

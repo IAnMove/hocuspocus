@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Heart, Film, Search, X, Box, PersonStanding, BookOpen, Library } from 'lucide-react'
+import { Heart, Film, Search, X, Box, PersonStanding, BookOpen, Library, Palette, Layers, ShieldAlert } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
 import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
@@ -8,17 +8,24 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
   { value: 'all', label: 'All', shortLabel: 'All' },
   { value: 'images', label: 'Images', shortLabel: 'Img' },
   { value: 'videos', label: 'Videos', shortLabel: 'Vid' },
+  { value: 'videoclips', label: 'Videoclips', shortLabel: 'Clip' },
+  { value: 'trailers', label: 'Tráilers', shortLabel: 'Trail' },
+  { value: 'series_episodes', label: 'Capítulos', shortLabel: 'Cap' },
   { value: 'audio', label: 'Audio', shortLabel: 'Aud' },
   { value: 'model3d', label: '3D', shortLabel: '3D', icon: 'box' },
   { value: 'scenes', label: 'Scenes', shortLabel: 'Scn', icon: 'film' },
   { value: 'stories', label: 'Story Lab', shortLabel: 'Lab', icon: 'library' },
   { value: 'series', label: 'Series Lab', shortLabel: 'Series', icon: 'library' },
+  { value: 'workspaces', label: 'Workspaces', shortLabel: 'Work', icon: 'layers' },
+  { value: 'characters', label: 'Character Creator', shortLabel: 'Char', icon: 'person' },
+  { value: 'styles', label: 'Hoja de estilos', shortLabel: 'Styles', icon: 'palette' },
   { value: 'comics', label: 'Comics', shortLabel: 'Comic', icon: 'book' },
   { value: 'videoeditor', label: 'Video Editor', shortLabel: 'Edit', icon: 'film' },
   { value: 'scene3d', label: '3D Video', shortLabel: '3DV', icon: 'film' },
   { value: 'animate3d', label: 'Animate', shortLabel: 'Anim', icon: 'person' },
   { value: 'avatars', label: 'Edits', shortLabel: 'Edit' },
   { value: 'multiclip', label: 'Multi-clip', shortLabel: 'MC', icon: 'film' },
+  { value: 'auditdev', label: 'Auditoría interna dev', shortLabel: 'Audit', icon: 'shield' },
   { value: 'favorites', label: 'Favorites', shortLabel: '', icon: 'heart' },
 ]
 
@@ -28,16 +35,43 @@ export function TabFilter() {
   const searchQuery = useStore(s => s.outputSearchQuery)
   const setSearchQuery = useStore(s => s.setOutputSearchQuery)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [draftQuery, setDraftQuery] = useState(searchQuery)
   const searchRef = useRef<HTMLInputElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounceRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (searchOpen && searchRef.current) searchRef.current.focus()
   }, [searchOpen])
 
+  useEffect(() => () => {
+    if (debounceRef.current !== null) window.clearTimeout(debounceRef.current)
+    // Unmounting the filter must not leave a hidden backend search active.
+    // Set the store directly so teardown does not start a needless reload.
+    useStore.setState({ outputSearchQuery: '', selectedOutput: 0 })
+  }, [])
+
+  const cancelPendingSearch = () => {
+    if (debounceRef.current === null) return
+    window.clearTimeout(debounceRef.current)
+    debounceRef.current = null
+  }
+
   const handleSearchChange = (val: string) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => setSearchQuery(val), 400)
+    setDraftQuery(val)
+    cancelPendingSearch()
+    debounceRef.current = window.setTimeout(() => {
+      debounceRef.current = null
+      setSearchQuery(val)
+    }, 400)
+  }
+
+  const closeSearch = () => {
+    cancelPendingSearch()
+    setDraftQuery('')
+    setSearchOpen(false)
+    // A pending draft has never reached the store, so avoid an unnecessary
+    // normal-output reload when the canonical query is already empty.
+    if (useStore.getState().outputSearchQuery) setSearchQuery('')
   }
 
   return (
@@ -59,7 +93,8 @@ export function TabFilter() {
             className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-xs font-medium transition-all flex items-center gap-1 whitespace-nowrap shrink-0 ${
               mediaFilter === tab.value
                 ? tab.value === 'favorites' ? 'bg-red-500/20 text-chip-red'
-                : tab.value === 'multiclip' ? 'bg-purple-500/20 text-chip-purple'
+                : tab.value === 'multiclip' || tab.value === 'videoclips' || tab.value === 'trailers' || tab.value === 'series_episodes' ? 'bg-purple-500/20 text-chip-purple'
+                : tab.value === 'auditdev' ? 'bg-amber-500/20 text-amber-200'
                 : 'bg-bg-active text-text-primary'
                 : 'text-text-muted hover:text-text-secondary'
             }`}
@@ -70,6 +105,9 @@ export function TabFilter() {
             {tab.icon === 'person' && <PersonStanding size={11} />}
             {tab.icon === 'book' && <BookOpen size={11} />}
             {tab.icon === 'library' && <Library size={11} />}
+            {tab.icon === 'palette' && <Palette size={11} />}
+            {tab.icon === 'layers' && <Layers size={11} />}
+            {tab.icon === 'shield' && <ShieldAlert size={11} />}
             <span className="hidden md:inline">{tab.label}</span>
             <span className="md:hidden">{tab.shortLabel}</span>
           </button>
@@ -83,19 +121,20 @@ export function TabFilter() {
           <input
             ref={searchRef}
             type="text"
-            defaultValue={searchQuery}
+            value={draftQuery}
             onChange={e => handleSearchChange(e.target.value)}
             placeholder="Search..."
             className="bg-transparent text-xs text-text-primary placeholder:text-text-muted focus:outline-none w-24 md:w-36"
           />
-          <button onClick={() => { setSearchOpen(false); if (searchQuery) setSearchQuery('') }}
+          <button type="button" onClick={closeSearch} aria-label="Close search"
             className="text-text-muted hover:text-text-secondary">
             <X size={12} />
           </button>
         </div>
       ) : (
         <button
-          onClick={() => setSearchOpen(true)}
+          type="button"
+          onClick={() => { setDraftQuery(searchQuery); setSearchOpen(true) }}
           className={`p-1.5 rounded-lg transition-colors ${searchQuery ? 'text-accent-blue bg-accent-blue/10' : 'text-text-muted hover:text-text-secondary hover:bg-bg-hover'}`}
           title="Search outputs"
         >

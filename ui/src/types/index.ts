@@ -270,11 +270,20 @@ export interface GenerationDetails {
   guidance?: number
   frames?: number
   duration_seconds?: number
+  dialogue_words?: number
+  dialogue_syllables?: number
+  dialogue_seconds_per_syllable?: number
+  dialogue_duration_calculated?: number
+  dialogue_duration_minimum_limited?: boolean
   repeat?: number
   profile?: string
   flow_shift?: number
   audio_shift?: number
   turbo?: boolean
+  cache?: boolean
+  cache_type?: string
+  lora_count?: number
+  loras?: string[]
   clip_count?: number
   text_provider?: string
   text_model?: string
@@ -290,7 +299,7 @@ export interface GenerationDetails {
 
 export interface GenerationJob {
   id: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   progress: number
   step: number
   totalSteps: number
@@ -334,8 +343,14 @@ export interface OutputFile {
   favorite: boolean
   size: number
   created_at: number
+  /** Unix timestamp for when generation and output publication finished. */
+  completed_at?: number
+  /** Metadata is exact; file is a best-effort fallback for legacy/imports. */
+  completion_time_source?: 'metadata' | 'file'
   /** Static preview for 3D output cards; never a live model viewer. */
   thumbnail_url?: string | null
+  /** Assembled production result, never a component clip. */
+  result_kind?: VideoResultKind | null
 }
 
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'
@@ -526,7 +541,8 @@ export interface Scene {
   }
 }
 
-export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites'
+export type VideoResultKind = 'music_video' | 'trailer' | 'series_episode' | 'chapter'
+export type MediaFilter = 'all' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'animate3d' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces' | 'characters' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
 export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
 export type ScailResolutionProfile = '480p' | '512p' | '704p'
@@ -755,10 +771,14 @@ export interface OutputMetadata {
   params: Record<string, unknown> | null
   upload_filenames?: Record<string, string>
   job_id?: string
+  task_id?: string | null
+  root_task_id?: string | null
   generation_time?: number
   generation_timings?: OutputGenerationTimings
   director_pipeline_id?: string
   created_at?: number
+  completed_at?: number
+  finished_at?: number
 }
 
 export interface VideoExtraInfo {
@@ -1256,8 +1276,9 @@ export interface PartialClipPlan {
 
 export interface DirectorClipImage {
   clipIndex: number
+  shotId?: string
   prompt: string
-  file: File
+  file: File | null
   filename: string
 }
 
@@ -1268,7 +1289,14 @@ export interface DirectorImageGenProgress {
   status: 'generating' | 'polling' | 'downloading' | 'done' | 'error'
 }
 
-export type DirectorSkill = 'music_video' | 'short_film' | 'podcast' | 'viral_video' | 'comic'
+// `comic` is the UI workflow selector; `comic_movie` is the canonical
+// Director V2 planner value returned by the backend.
+export const DIRECTOR_SKILLS = ['music_video', 'short_film', 'podcast', 'viral_video', 'comic', 'comic_movie'] as const
+export type DirectorSkill = typeof DIRECTOR_SKILLS[number]
+
+export function isDirectorSkill(value: unknown): value is DirectorSkill {
+  return typeof value === 'string' && (DIRECTOR_SKILLS as readonly string[]).includes(value)
+}
 export type ShortFilmPath = 'audio' | 'story'
 
 export interface ShortFilmCharacter {
@@ -1379,16 +1407,207 @@ export interface ProductionPlan {
   continuity_notes?: string[]
 }
 
+export interface DirectorV2PlanRequest {
+  skill_type: DirectorSkill
+  activity_id?: string
+  workspace?: string
+  plan_job_id?: string
+  scene_description?: string
+  story_description?: string
+  clips?: unknown[]
+  lyrics?: unknown[]
+  bpm?: number
+  reference_image_path?: string
+  character_ref_paths?: string[]
+  character_ref_labels?: string[]
+  location_ref_paths?: string[]
+  location_ref_labels?: string[]
+  speaker_mappings?: Record<string, unknown>
+  characters?: Array<{ name: string; description: string }>
+  audio_path?: string
+  target_duration?: number
+  target_scenes?: number
+  narrative_mode?: boolean
+  fps?: number
+  frames_steps?: number
+  frames_minimum?: number
+  concept?: string
+  visual_style?: string
+  preserve_visual_style?: boolean
+  character_visual_style?: string
+  allow_clip_text?: boolean
+  platform?: string
+  style?: string
+  prompt_type?: string
+  image_model?: string
+  video_model?: string
+  h3_reference_mode?: 'first_frame' | 'references'
+  h3_audio_prompt?: string
+  seamless?: boolean
+  multishot_lora_mode?: boolean
+  music_video_treatment?: MusicVideoTreatment
+  director_flags?: Record<string, boolean>
+}
+
+export interface DirectorV2PlanProgress {
+  id: string
+  status: 'running' | 'completed' | 'failed'
+  phase: string
+  current: number
+  total: number
+  detail: string
+  stream_text?: string
+  stream_done?: boolean
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    calls?: number
+  }
+}
+
 export interface DirectorV2PlanResponse {
   clip_plans: Array<{ video_prompt: string; image_prompt: string }>
   production_plan: ProductionPlan
   skill_type: DirectorSkill
+  plan_job_id?: string
+}
+
+export interface DirectorV2PlanJob {
+  jobId: string
+  workspace: string
+  skillType: DirectorSkill
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  phase: string
+  message: string
+  total: number
+  completedIndices: number[]
+  missingIndices: number[]
+  completedBatches: Array<{ indices: number[]; completedAt: number }>
+  activeBatch: number[]
+  calls: number
+  usage: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    calls?: number
+  }
+  error?: string | null
+  result?: DirectorV2PlanResponse | null
+  createdAt: number
+  updatedAt: number
+  finishedAt?: number | null
+}
+
+export interface DirectorV2PlanFailureDetail {
+  code: 'director_plan_incomplete'
+  message: string
+  job: DirectorV2PlanJob
+  resume: {
+    action: 'resume_missing'
+    method: 'POST'
+    path: string
+  }
+  imagesQueued: false
+}
+
+/** Runtime boundary for durable Director job snapshots returned on failures. */
+export function isDirectorV2PlanJob(value: unknown): value is DirectorV2PlanJob {
+  if (!value || typeof value !== 'object') return false
+  const job = value as Record<string, unknown>
+  const statuses = ['queued', 'running', 'completed', 'failed', 'cancelled']
+  const isNumberArray = (items: unknown): items is number[] => (
+    Array.isArray(items) && items.every(item => Number.isInteger(item))
+  )
+  return typeof job.jobId === 'string'
+    && typeof job.workspace === 'string'
+    && isDirectorSkill(job.skillType)
+    && typeof job.status === 'string'
+    && statuses.includes(job.status)
+    && typeof job.phase === 'string'
+    && typeof job.message === 'string'
+    && typeof job.total === 'number'
+    && isNumberArray(job.completedIndices)
+    && isNumberArray(job.missingIndices)
+    && Array.isArray(job.completedBatches)
+    && isNumberArray(job.activeBatch)
+    && typeof job.calls === 'number'
+    && !!job.usage
+    && typeof job.usage === 'object'
+    && typeof job.createdAt === 'number'
+    && typeof job.updatedAt === 'number'
+}
+
+/** Runtime boundary for the structured partial-plan failure contract. */
+export function isDirectorV2PlanFailureDetail(value: unknown): value is DirectorV2PlanFailureDetail {
+  if (!value || typeof value !== 'object') return false
+  const detail = value as Record<string, unknown>
+  const resume = detail.resume as Record<string, unknown> | undefined
+  return detail.code === 'director_plan_incomplete'
+    && typeof detail.message === 'string'
+    && isDirectorV2PlanJob(detail.job)
+    && !!resume
+    && resume.action === 'resume_missing'
+    && resume.method === 'POST'
+    && typeof resume.path === 'string'
+    && detail.imagesQueued === false
+}
+
+/** Runtime boundary for the Director v2 response returned by the backend. */
+export function isDirectorV2PlanResponse(value: unknown): value is DirectorV2PlanResponse {
+  if (!value || typeof value !== 'object') return false
+  const response = value as Record<string, unknown>
+  const productionPlan = response.production_plan
+  if (!productionPlan || typeof productionPlan !== 'object') return false
+  const plan = productionPlan as Record<string, unknown>
+  return isDirectorSkill(response.skill_type)
+    && isDirectorSkill(plan.skill_type)
+    && Array.isArray(response.clip_plans)
+    && response.clip_plans.every(clip => {
+      if (!clip || typeof clip !== 'object') return false
+      const item = clip as Record<string, unknown>
+      return typeof item.video_prompt === 'string' && typeof item.image_prompt === 'string'
+    })
+    && Array.isArray(plan.shots)
+    && (response.plan_job_id === undefined || typeof response.plan_job_id === 'string')
 }
 
 // ── Director Pipeline Dashboard ──────────────────────────────────────────
 
+export interface PipelineVideoAttempt {
+  id: string
+  filename: string
+  created_at: number
+  seed?: number | null
+  prompt?: string
+  model_type?: string
+  resolution?: string
+  video_length?: number | null
+  source?: 'original' | 'regenerated' | 'studio' | 'recovered' | string
+}
+
+export interface PlannedDirectorClip {
+  start?: number
+  end?: number
+  duration_sec?: number
+  duration_frames?: number
+  section_label?: string
+  suggested_prompt_hint?: string
+  _director_h3_source_prompt?: string
+  _director_audio_plan?: Record<string, unknown>
+  _director_dialogue_beats?: Array<Record<string, unknown>>
+  _director_subjects_on_screen?: Array<Record<string, unknown>>
+  _director_duration_sec?: number
+  _director_h3_prompt_mode?: string
+  _director_project_context?: string
+  [key: string]: unknown
+}
+
 export interface PipelineClipState {
   index: number
+  shot_id?: string
+  seed?: number
+  duration_seconds?: number
   planned_clip: PlannedClip | null
   image_prompt: string
   video_prompt: string
@@ -1402,6 +1621,9 @@ export interface PipelineClipState {
   start_image_filename: string | null
   keyframe_filenames: string[]
   video_filename: string | null
+  video_attempts?: PipelineVideoAttempt[]
+  /** Explicit user choice. Legacy checkpoints use video_filename implicitly. */
+  selected_video_filename?: string | null
   video_stale?: boolean
   tag: 'good' | 'needs_work' | null
   image_gen_time_sec: number | null
@@ -1410,6 +1632,11 @@ export interface PipelineClipState {
   h3_segment_prompts?: string[]
   h3_segments?: H3SegmentState[]
   h3_prompt_validation?: 'optimized' | 'deterministic_fallback' | 'direct_video_contract' | null
+  _director_h3_source_prompt?: string
+  _director_audio_plan?: Record<string, unknown>
+  _director_dialogue_beats?: Array<Record<string, unknown>>
+  _director_subjects_on_screen?: Array<Record<string, unknown>>
+  _director_h3_prompt_mode?: string
 }
 
 export interface H3SegmentState {
@@ -1489,6 +1716,8 @@ export interface SavedPipelineState {
   created_at: number
   completed_at: number | null
   status: string
+  phase?: string
+  error?: string | null
   pipeline_type: string
   generation_mode?: 'image_guided' | 'direct_video'
   direct_video_master_prompt?: string
@@ -1501,6 +1730,7 @@ export interface SavedPipelineState {
   seamless: boolean
   image_model: string
   video_model: string
+  video_params?: Record<string, unknown>
   h3_reference_manifest?: H3ShotReferenceManifest[]
   h3_prompt_validation?: {
     status: 'optimized' | 'deterministic_fallback' | 'direct_video_contract'
@@ -1512,6 +1742,13 @@ export interface SavedPipelineState {
   shot_image_guidance?: DirectorShotImageGuidance
   llm_log: PipelineLlmLog | null
   clips: PipelineClipState[]
+  planned_clips?: PlannedDirectorClip[]
+  clip_plans?: Array<Record<string, unknown>>
+  character_ref_paths?: string[]
+  location_ref_paths?: string[]
+  image_loras?: Record<string, unknown>
+  video_loras?: Record<string, unknown>
+  queue_source?: 'clips' | 'clip_plans' | 'planned'
   output_files: string[]
   final_output_filename?: string
   prompt_generation_time_sec?: number | null
@@ -1527,6 +1764,7 @@ export interface SavedPipelineState {
 export interface PipelineListItem {
   id: string
   status: string
+  phase?: string
   pipeline_type: string
   generation_mode?: 'image_guided' | 'direct_video'
   comic_id?: string | null
@@ -1535,5 +1773,6 @@ export interface PipelineListItem {
   output_count: number
   scene_description: string
   workspace: string
+  error?: string | null
   repair_status?: PipelineRepairStatus | null
 }

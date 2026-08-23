@@ -7,11 +7,20 @@ import unittest
 
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-LAUNCH_PATH = os.path.join(ROOT, "app", "launch.py")
+LAUNCH_PATH = os.path.join(ROOT, "app", "_launch_runtime.py")
 CLIENT_PATH = os.path.join(ROOT, "ui", "src", "api", "client.ts")
 STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
 STORY_PATH = os.path.join(
     ROOT, "ui", "src", "features", "stories", "StoryLabPanel.tsx",
+)
+STORY_MODEL_PATH = os.path.join(
+    ROOT, "ui", "src", "features", "stories", "model.ts",
+)
+STORY_STORE_PATH = os.path.join(
+    ROOT, "ui", "src", "features", "stories", "store.ts",
+)
+STORY_TYPES_PATH = os.path.join(
+    ROOT, "ui", "src", "features", "stories", "types.ts",
 )
 
 
@@ -87,13 +96,56 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn("Landscape", story)
         self.assertIn("Portrait / Shorts", story)
         self.assertIn("20-step ConvRot recipe", story)
-        self.assertIn("api.fetchModelOptions(videoModel)", story)
+        self.assertIn("api.fetchModelOptions(model)", story)
+        self.assertIn("resolveSupportedVideoFormat(", story)
         self.assertIn("setDirectorResolution(generationSettings.resolution)", story)
         self.assertIn("setDirectorAspectRatio(generationSettings.aspectRatio)", story)
         self.assertGreaterEqual(story.count("resolution: storyVideoResolution"), 3)
         self.assertGreaterEqual(story.count("aspectRatio: storyVideoAspectRatio"), 3)
         self.assertIn("production.targetSnapshot?.resolution", story)
         self.assertIn("production.targetSnapshot?.aspectRatio", story)
+
+    def test_story_video_override_is_durable_local_and_explicitly_handed_to_director(self):
+        story = _source(STORY_PATH)
+        model = _source(STORY_MODEL_PATH)
+        story_store = _source(STORY_STORE_PATH)
+        types = _source(STORY_TYPES_PATH)
+
+        self.assertIn("export interface StoryVideoOverride", types)
+        self.assertIn("videoOverride: StoryVideoOverride", types)
+        self.assertIn("model: 'minimax_h3_legacy'", model)
+        self.assertIn("model: ''", model)
+        self.assertIn("instead of silently changing it", model)
+        self.assertIn("useGlobalProfile: true", story_store)
+        self.assertIn("selectStoryVideoModel", story)
+        self.assertIn("setStoryVideoFormat", story)
+        self.assertGreaterEqual(story.count("disabled={!storyVideoOptionsReady}"), 3)
+        self.assertIn("provider: { ...project.provider, useGlobalProfile: false }", story)
+        self.assertNotIn("const selectDirectorVideoModel = useStore", story)
+        self.assertIn("await director.selectDirectorVideoModel(filmVideoModel)", story)
+        self.assertIn("await store.selectDirectorVideoModel(generationSettings.videoModel)", story)
+        self.assertIn("director.setDirectorResolution(storyVideoResolution)", story)
+        self.assertIn("director.setDirectorAspectRatio(storyVideoAspectRatio)", story)
+
+    def test_global_video_format_hydration_is_race_safe_and_override_aware(self):
+        store = _source(STORE_PATH)
+        helper = store[store.index(
+            "async function _syncGlobalProductionVideoFormat",
+        ):store.index("export const useStore", store.index(
+            "async function _syncGlobalProductionVideoFormat",
+        ))]
+
+        self.assertIn("_globalModelSelectionModes.has('video')", helper)
+        self.assertIn("before.selectedModelPerMode.video !== modelType", helper)
+        self.assertIn("requestSeq !== _productionProfileVideoFormatSeq", helper)
+        self.assertIn("latest.selectedModelPerMode.video !== modelType", helper)
+        self.assertIn("resolveSupportedVideoFormat", helper)
+        self.assertIn("directorResolution: format.resolution", helper)
+        self.assertIn("directorAspectRatio: format.aspectRatio", helper)
+        self.assertGreaterEqual(
+            store.count("_syncGlobalProductionVideoFormat("),
+            4,
+        )
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import unittest
 
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_LAUNCH_PATH = os.path.join(_ROOT, "app", "launch.py")
+_LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
 _SERVICES_PANEL_PATH = os.path.join(
     _ROOT,
     "ui",

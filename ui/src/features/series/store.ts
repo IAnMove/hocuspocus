@@ -20,7 +20,7 @@ interface SeriesState {
   renderRecovery: SeriesJobStatus[]
   loadWorkspace: (workspace: string) => Promise<void>
   reload: () => Promise<void>
-  openSeries: (seriesId: string) => void
+  openSeries: (seriesId: string) => Promise<void>
   openEpisode: (episodeId: string) => void
   patchSeries: (patch: Partial<SeriesProject>) => void
   updateSeries: (updater: (series: SeriesProject) => SeriesProject) => void
@@ -90,7 +90,14 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
     if (workspace === get().workspace && (get().loading || get().hydrated)) return
     window.clearTimeout(saveTimer)
     if (get().dirty) {
-      try { await get().saveNow() } catch { /* the error remains visible */ }
+      try {
+        await get().saveNow()
+      } catch {
+        // Keep the current workspace selected when its edits cannot be saved.
+        // Switching here would hide the unsaved project and make recovery
+        // unnecessarily difficult.
+        return
+      }
     }
     set({ workspace, loading: true, hydrated: false, error: null })
     try {
@@ -122,12 +129,24 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
     await get().loadWorkspace(workspace)
   },
 
-  openSeries: seriesId => {
-    const series = get().library.seriesById[seriesId]
+  openSeries: async seriesId => {
+    if (seriesId === get().activeSeriesId) return
+    window.clearTimeout(saveTimer)
+    if (get().dirty) {
+      try {
+        await get().saveNow()
+      } catch {
+        // Stay on the edited project. Its visible save error explains why
+        // navigation did not proceed and prevents silently abandoning changes.
+        return
+      }
+    }
+    const state = get()
+    const series = state.library.seriesById[seriesId]
     if (!series) return
     const episodeId = firstEpisodeId(series)
     set({ activeSeriesId: seriesId, activeEpisodeId: episodeId, serverRevision: series.revision, error: null })
-    rememberSelection(get().workspace, seriesId, episodeId)
+    rememberSelection(state.workspace, seriesId, episodeId)
   },
 
   openEpisode: episodeId => {
@@ -194,9 +213,10 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
     window.clearTimeout(saveTimer)
     const state = get()
     const project = selectedSeries(state)
+    const projectId = project?.id || ''
     if (state.saving && saveInFlight) {
       const saved = await saveInFlight
-      return get().dirty ? get().saveNow() : saved
+      return get().activeSeriesId === projectId && get().dirty ? get().saveNow() : saved
     }
     if (!project || !state.dirty) return project
     const snapshotUpdatedAt = project.updatedAt
@@ -209,20 +229,21 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
         ))
         if (!saved) throw new Error('Series Lab returned an invalid project')
         const latest = get()
-        const current = selectedSeries(latest)
+        const current = latest.library.seriesById[projectId] || null
         const untouchedDuringSave = current?.updatedAt === snapshotUpdatedAt
         const visible = untouchedDuringSave ? saved : current ? { ...current, revision: saved.revision } : saved
+        const stillActive = latest.activeSeriesId === projectId
         set({
           library: {
             ...latest.library,
             seriesById: { ...latest.library.seriesById, [saved.id]: visible },
           },
-          serverRevision: saved.revision,
-          dirty: !untouchedDuringSave,
+          serverRevision: stillActive ? saved.revision : latest.serverRevision,
+          dirty: stillActive ? !untouchedDuringSave : latest.dirty,
           saving: false,
           error: null,
         })
-        if (!untouchedDuringSave) {
+        if (stillActive && !untouchedDuringSave) {
           window.clearTimeout(saveTimer)
           saveTimer = window.setTimeout(() => { void get().saveNow() }, 100)
         }
@@ -238,7 +259,7 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
       }
     })()
     const saved = await saveInFlight
-    return get().dirty ? get().saveNow() : saved
+    return get().activeSeriesId === projectId && get().dirty ? get().saveNow() : saved
   },
 
   newSeries: async () => {

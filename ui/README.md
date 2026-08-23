@@ -1,73 +1,80 @@
-# React + TypeScript + Vite
+# Loreframe Lab UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This directory contains the React 19, TypeScript, Tailwind CSS and Zustand
+frontend for Loreframe Lab. It is built into `ui/dist` and served by the
+FastAPI application; it is not a separate production service.
 
-Currently, two official plugins are available:
+Loreframe Lab is an experimental, non-commercial fork of
+[Blizaine/Maestro](https://github.com/Blizaine/Maestro), which in turn builds
+on [Wan2GP](https://github.com/deepbeepmeep/Wan2GP). See the
+[project README](../README.md) and [license summary](../LICENSE) before using
+or redistributing it.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Requirements
 
-## React Compiler
+- Node.js 20, matching CI.
+- npm and the committed `package-lock.json`.
+- For live API calls, a Loreframe Lab backend running at
+  `http://127.0.0.1:7860` (the Vite development proxy target).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The normal Pinokio **Install**, **Start** and **Update** actions manage these
+steps for end users. The commands below are for frontend development.
 
-## Expanding the ESLint configuration
+## Development
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Run all commands from this `ui` directory:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm ci
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Vite serves the development UI at `http://127.0.0.1:3000` and proxies `/api`
+and `/classic` to `http://127.0.0.1:7860`. Start the backend from the project
+root with Pinokio or with its existing Python environment:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+app/env/bin/python app/launch.py
 ```
+
+## Quality checks
+
+```bash
+npm run test
+npm run lint -- --max-warnings=0
+npm run build
+npm run budget
+```
+
+`npm run check` runs the same test, lint, type-check/build and bundle-budget
+sequence used by CI. The build output is `ui/dist`; do not edit it manually.
+
+## Architecture
+
+- `src/api/client.ts` is the typed HTTP boundary. Browser code should use it
+  instead of creating feature-specific URL conventions.
+- `src/stores/useStore.ts` is the public Zustand facade. Extracted reducers
+  and slices live beside it and must preserve that facade for existing views.
+- `src/features/` owns large workflows such as Series Lab, Story Lab and the
+  video editor.
+- `src/components/` contains reusable application and navigation UI.
+- `tests/` uses Node's test runner, jsdom and Testing Library for behavioural
+  regression tests.
+- `scripts/check-build-budget.mjs` prevents accidental growth of the entry
+  bundle and verifies that heavy overlays remain lazy-loaded.
+
+The browser uses same-origin `/api/v1/...` routes in production. Authentication
+for an explicitly shared LAN server is supplied by the application session;
+do not store provider keys or bearer tokens in frontend source or fixtures.
+
+## Adding a change
+
+1. Put feature code in the owning feature directory and keep API calls in
+   `src/api/client.ts`.
+2. Add a behavioural regression test under `tests/`.
+3. Run `npm run check`.
+4. If an API contract changes, update its backend Pydantic contract and the
+   generated/checked TypeScript contract in the same change.
+
+For application setup, API examples in JavaScript, Python and curl, model
+notes and troubleshooting, use the [root documentation](../README.md).

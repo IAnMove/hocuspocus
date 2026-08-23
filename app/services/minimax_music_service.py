@@ -5,11 +5,14 @@ from __future__ import annotations
 import base64
 import json
 import os
+import threading
 import time
 import uuid
-from typing import Any
+from typing import Any, Callable
 
 import requests
+
+from . import resource_scheduler
 
 
 API_URL = "https://api.minimax.io/v1/music_generation"
@@ -42,7 +45,7 @@ def _audio_bytes(response: dict[str, Any], session: requests.Session) -> bytes:
     if not audio:
         raise MiniMaxMusicError("MiniMax Music returned an empty audio file")
     if len(audio) > 100 * 1024 * 1024:
-        raise MiniMaxMusicError("MiniMax Music audio exceeds Maestro's 100 MB limit")
+        raise MiniMaxMusicError("MiniMax Music audio exceeds Loreframe Lab's 100 MB limit")
     return audio
 
 
@@ -57,6 +60,9 @@ def generate_candidates(
     model: str = MODEL,
     reference_audio_path: str | None = None,
     session: requests.Session | None = None,
+    task_id: str | None = None,
+    root_task_id: str | None = None,
+    cancelled: Callable[[], bool] | None = None,
 ) -> list[dict[str, Any]]:
     """Generate and persist 1–3 independently sampled song candidates."""
     if not str(api_key).strip():
@@ -85,6 +91,8 @@ def generate_candidates(
             reference_audio = base64.b64encode(handle.read()).decode("ascii")
         lyrics = lyrics[:1000]
     count = max(1, min(3, int(count or 1)))
+    task_id = str(task_id or "").strip()[:200] or None
+    root_task_id = str(root_task_id or task_id or "").strip()[:200] or None
     os.makedirs(output_dir, exist_ok=True)
     client = session or requests.Session()
     headers = {
@@ -106,8 +114,26 @@ def generate_candidates(
         payload["is_instrumental"] = bool(instrumental)
     results: list[dict[str, Any]] = []
     for index in range(count):
+        candidate_task_id = (
+            task_id
+            if task_id and count == 1
+            else f"{task_id}-candidate-{index + 1}" if task_id
+            else (
+                f"minimax-music-{threading.get_ident()}-"
+                f"{time.time_ns()}-{index + 1}"
+            )
+        )
         try:
-            raw = client.post(API_URL, headers=headers, json=payload, timeout=(20, 600))
+            lane = resource_scheduler.remote_lane("minimax", API_URL)
+            with resource_scheduler.coordinator.acquire(
+                lane,
+                task_id=candidate_task_id,
+                description=f"MiniMax Music candidate {index + 1}/{count}",
+                cancelled=cancelled,
+            ):
+                raw = client.post(
+                    API_URL, headers=headers, json=payload, timeout=(20, 600),
+                )
         except requests.RequestException as exc:
             raise MiniMaxMusicError(f"MiniMax Music request failed: {exc}") from exc
         try:
@@ -137,6 +163,9 @@ def generate_candidates(
             "trace_id": response.get("trace_id"),
             "created_at": time.time(),
         }
+        if task_id:
+            metadata["task_id"] = candidate_task_id
+            metadata["root_task_id"] = root_task_id or candidate_task_id
         with open(f"{path}.json", "w", encoding="utf-8") as handle:
             json.dump(metadata, handle, ensure_ascii=False, indent=2)
         results.append({
@@ -145,5 +174,9 @@ def generate_candidates(
             "duration_seconds": metadata["duration_seconds"],
             "provider": "minimax",
             "model": model,
+            **({
+                "task_id": candidate_task_id,
+                "root_task_id": root_task_id or candidate_task_id,
+            } if task_id else {}),
         })
     return results

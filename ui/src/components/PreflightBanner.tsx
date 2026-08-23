@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { fetchPreflight, type PreflightCheck } from '../api/client'
+import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
 
 /**
  * PreflightBanner — one-time environment sanity check shown at the top
@@ -15,7 +16,7 @@ import { fetchPreflight, type PreflightCheck } from '../api/client'
 export function PreflightBanner() {
   const [checks, setChecks] = useState<PreflightCheck[]>([])
   const [dismissed, setDismissed] = useState(
-    () => sessionStorage.getItem('maestro_preflight_dismissed') === '1'
+    () => safeStorageGet('session', 'maestro_preflight_dismissed') === '1'
   )
 
   useEffect(() => {
@@ -49,7 +50,7 @@ export function PreflightBanner() {
       </div>
       <button
         onClick={() => {
-          sessionStorage.setItem('maestro_preflight_dismissed', '1')
+          safeStorageSet('session', 'maestro_preflight_dismissed', '1')
           setDismissed(true)
         }}
         className="shrink-0 p-0.5 rounded text-text-muted hover:text-text-primary transition-colors"

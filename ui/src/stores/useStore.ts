@@ -1,10 +1,23 @@
 import { create } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan } from '../types'
+import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, LlmStatus, LlmModelOption, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanJob, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, resolveSupportedVideoFormat } from '../lib/productionProfile'
+import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
+import { createActivityPublicationGate } from '../lib/activityPublication'
+import { isGenerationJobActive } from '../lib/generationJobState'
+import { mapDirectorClipImages } from '../lib/directorClipImages'
+import { llmActivityPreview } from '../lib/llmActivityPreview'
+import { createDirectorSlice } from './directorSlice'
+import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
+import {
+  extractSingleClipStudioParams,
+  isJoinedSequenceOutput,
+  splitStudioClipPrompts,
+} from '../features/studio/studioRestore'
+import { GALLERY_LIST_FILTERS, galleryListQuery } from '../lib/galleryListQuery'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -22,6 +35,64 @@ const _directorRepairPolls = new Map<string, DirectorRepairPoll>()
 const _directorRepairDiscoveries = new Map<string, object>()
 let _dashboardPipelineLoadToken = 0
 let _dashboardPipelineListLoadToken = 0
+let _workspaceRequestEpoch = 0
+let _workspaceListRequestEpoch = 0
+let _pendingWorkspaceTransitionEpoch: number | null = null
+let _outputRequestEpoch = 0
+let _outputAbortController: AbortController | null = null
+let _metadataRequestEpoch = 0
+let _metadataAbortController: AbortController | null = null
+
+type WorkspaceOutputRequest = {
+  workspace: string
+  workspaceEpoch: number
+  requestEpoch: number
+  controller: AbortController
+}
+
+function _workspaceName(state: { activeWorkspace: string; browsingUploads: boolean }): string {
+  return state.browsingUploads ? '__uploads__' : state.activeWorkspace
+}
+
+function _beginWorkspaceTransition(): number {
+  _workspaceRequestEpoch += 1
+  _pendingWorkspaceTransitionEpoch = null
+  // Workspace-list responses also carry the server-side active workspace.
+  // Invalidate any list read that predates this explicit transition.
+  _workspaceListRequestEpoch += 1
+  _outputAbortController?.abort()
+  _outputAbortController = null
+  _metadataAbortController?.abort()
+  _metadataAbortController = null
+  _metadataRequestEpoch += 1
+  return _workspaceRequestEpoch
+}
+
+function _beginOutputRequest(workspace: string): WorkspaceOutputRequest {
+  _outputAbortController?.abort()
+  const request: WorkspaceOutputRequest = {
+    workspace,
+    workspaceEpoch: _workspaceRequestEpoch,
+    requestEpoch: ++_outputRequestEpoch,
+    controller: new AbortController(),
+  }
+  _outputAbortController = request.controller
+  return request
+}
+
+function _isCurrentOutputRequest(
+  get: () => { activeWorkspace: string; browsingUploads: boolean },
+  request: WorkspaceOutputRequest,
+): boolean {
+  return request.workspaceEpoch === _workspaceRequestEpoch
+    && request.requestEpoch === _outputRequestEpoch
+    && !request.controller.signal.aborted
+    && _workspaceName(get()) === request.workspace
+}
+
+function _finishOutputRequest(request: WorkspaceOutputRequest): void {
+  if (_outputAbortController === request.controller) _outputAbortController = null
+}
 
 type OutpaintAspect = 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 
@@ -1004,7 +1075,7 @@ function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], m
 
 export interface ForegroundActivity {
   id: string
-  status: 'queued' | 'running' | 'completed' | 'failed'
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   phase: string
   message: string
   title?: string
@@ -1014,6 +1085,7 @@ export interface ForegroundActivity {
   total?: number
   progress?: number
   detailMessage?: string
+  detailVolatile?: boolean
   detailCurrent?: number
   detailTotal?: number
   tokenUsage?: {
@@ -1313,10 +1385,15 @@ interface AppState {
   dashboardPipelineList: PipelineListItem[]
   dashboardSelectedPipeline: SavedPipelineState | null
   dashboardLoading: boolean
-  setDashboardOpen: (open: boolean) => void
-  loadPipelineList: () => Promise<void>
+  dashboardLoadError: string | null
+  dashboardRetryPipelineId: string | null
+  setDashboardOpen: (open: boolean, preferredPipelineId?: string) => void
+  loadPipelineList: (preferredPipelineId?: string) => Promise<void>
   loadSavedPipeline: (pid: string) => Promise<void>
+  retryDashboardLoad: () => Promise<void>
   tagClip: (pid: string, clipIndex: number, tag: string | null) => Promise<void>
+  updateClipPrompt: (pid: string, clipIndex: number, body: { video_prompt?: string; image_prompt?: string; soundtrack_drive?: boolean }) => Promise<void>
+  selectClipVideo: (pid: string, clipIndex: number, filename: string) => Promise<void>
   startPipelineRepair: (pid: string) => Promise<PipelineRepairState>
   cancelPipelineRepair: (pid: string) => Promise<PipelineRepairState>
   pollPipelineRepair: (pid: string, operationId: string) => void
@@ -1505,11 +1582,13 @@ interface AppState {
   // Multi-clip state
   clips: MultiClip[]
   singlePromptMode: boolean
+  studioFocusedClipIndex: number
   setClipPrompt: (index: number, prompt: string) => void
   setClipStartImage: (index: number, file: File | null) => void
   addClipKeyframe: (index: number, file: File) => void
   removeClipKeyframe: (index: number, keyframeIndex: number) => void
   setSinglePromptMode: (v: boolean) => void
+  setStudioFocusedClipIndex: (index: number) => void
   syncClipCount: () => void
 
   // Generation state (queue)
@@ -1617,8 +1696,14 @@ interface AppState {
   setSelectedOutput: (i: number) => void
   mediaFilter: MediaFilter
   outputSearchQuery: string
+  galleryFeedAtTop: boolean
+  galleryRefreshPending: boolean
+  galleryToast: { id: number; message: string } | null
   setMediaFilter: (f: MediaFilter) => void
   setOutputSearchQuery: (q: string) => void
+  setGalleryFeedAtTop: (atTop: boolean) => void
+  clearGalleryToast: () => void
+  maybeRefreshGallery: (opts?: { message?: string; force?: boolean }) => Promise<void>
   filteredOutputs: () => OutputFile[]
   outputsLoading: boolean
   loadOutputs: () => Promise<void>
@@ -1677,6 +1762,7 @@ interface AppState {
   setDirectorMusicVideoTreatment: (partial: Partial<MusicVideoTreatment>) => void
   directorClipPlans: ClipPlan[]
   directorSceneDescription: string
+  directorSpokenLanguage: string
   directorLoading: boolean
   /** Sub-status for the current loading phase (e.g. "Loading
    *  transcription model (first use downloads ~300MB)..."). Set by
@@ -1685,6 +1771,9 @@ interface AppState {
    *  "Analyzing audio..." in the UI when null. */
   directorLoadingMessage: string | null
   directorError: string | null
+  /** Durable partial plan shown after a provider failure. It contains no
+   * prompts, only saved/missing indexes and the resume identifier. */
+  directorPlanRecovery: DirectorV2PlanJob | null
   directorReferenceImage: File | null
   directorReferenceImagePath: string | null
   directorCharacterRefs: File[]
@@ -1787,6 +1876,7 @@ interface AppState {
   directorAddH3AudioRef: (file: File) => void
   directorRemoveH3AudioRef: (index: number) => void
   directorPlanPrompts: () => Promise<void>
+  directorResumePlan: () => Promise<void>
   directorPlanVideoPrompts: () => Promise<void>
   directorGenerateStartImages: () => Promise<void>
   directorApplyToClips: () => void
@@ -1815,6 +1905,7 @@ interface AppState {
   shortFilmSetPreserveVisualStyle: (v: boolean) => void
   setDirectorCharacterVisualStyle: (style: string) => void
   setDirectorAllowClipText: (v: boolean) => void
+  setDirectorSpokenLanguage: (language: string) => void
   shortFilmUploadAndAnalyze: (file: File) => Promise<void>
   shortFilmSetPacingBias: (bias: number) => Promise<void>
   shortFilmPlanPrompts: () => Promise<void>
@@ -1841,6 +1932,14 @@ interface AppState {
   pollPipelineStatus: () => void
 }
 
+const CLIENT_ACTIVITY_TERMINAL_STATUSES = new Set<ForegroundActivity['status']>([
+  'completed',
+  'failed',
+  'cancelled',
+])
+const _canonicalClientTaskWrites = createKeyedWriteSequencer()
+const _activityPublicationGate = createActivityPublicationGate<ForegroundActivity>()
+
 function beginAppActivity(
   get: () => AppState,
   options: {
@@ -1858,7 +1957,7 @@ function beginAppActivity(
     message: string,
     current = 0,
     total = options.total || 0,
-    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailCurrent' | 'detailTotal' | 'tokenUsage' | 'generationDetails'>>,
+    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailVolatile' | 'detailCurrent' | 'detailTotal' | 'tokenUsage' | 'generationDetails'>>,
   ) => get().upsertActivity({
     id,
     kind: options.kind,
@@ -1877,6 +1976,9 @@ function beginAppActivity(
     id,
     report,
     finish: (message = 'Complete') => {
+      const clearVolatileDetail = get().activities[id]?.detailVolatile
+        ? { detailMessage: '', detailVolatile: false }
+        : {}
       get().upsertActivity({
         id,
         kind: options.kind,
@@ -1886,11 +1988,15 @@ function beginAppActivity(
         message,
         current: options.total || 1,
         total: options.total || 1,
+        ...clearVolatileDetail,
       })
       window.setTimeout(() => get().removeActivity(id), 4000)
     },
     fail: (error: unknown, phase = options.phase) => {
       const message = error instanceof Error ? error.message : String(error)
+      const clearVolatileDetail = get().activities[id]?.detailVolatile
+        ? { detailMessage: '', detailVolatile: false }
+        : {}
       get().upsertActivity({
         id,
         kind: options.kind,
@@ -1899,6 +2005,7 @@ function beginAppActivity(
         phase,
         message,
         error: message,
+        ...clearVolatileDetail,
       })
     },
   }
@@ -1952,6 +2059,7 @@ interface VideoSubModeStash {
   slidingWindowOverlap: number
   clips: MultiClip[]
   singlePromptMode: boolean
+  studioFocusedClipIndex: number
 }
 
 const captureVideoSubModeStash = (s: AppState): VideoSubModeStash => ({
@@ -1971,6 +2079,7 @@ const captureVideoSubModeStash = (s: AppState): VideoSubModeStash => ({
   slidingWindowOverlap: s.slidingWindowOverlap,
   clips: s.clips,
   singlePromptMode: s.singlePromptMode,
+  studioFocusedClipIndex: s.studioFocusedClipIndex,
 })
 
 // The "input spec" — everything the Inputs panel + prompt box write into
@@ -2124,8 +2233,13 @@ function computeFilteredOutputs(outputs: OutputFile[], mediaFilter: MediaFilter)
     // for any legacy outputs that predate the edit_sub_mode tagging.
     _foCachedResult = outputs.filter(o => !!o.edit_sub_mode || o.mode === 'avatar')
   } else if (mediaFilter === 'multiclip') {
-    // Backend already filters to multiclip + sliding window finals — pass through
-    _foCachedResult = outputs
+    _foCachedResult = outputs.filter(o => o.type === 'video' && /multiclip|_mv\.mp4|_series_assembly|_movie\./i.test(o.name))
+  } else if (mediaFilter === 'videoclips') {
+    _foCachedResult = outputs.filter(o => o.type === 'video' && o.result_kind === 'music_video')
+  } else if (mediaFilter === 'trailers') {
+    _foCachedResult = outputs.filter(o => o.type === 'video' && o.result_kind === 'trailer')
+  } else if (mediaFilter === 'series_episodes') {
+    _foCachedResult = outputs.filter(o => o.type === 'video' && (o.result_kind === 'series_episode' || o.result_kind === 'chapter'))
   } else if (mediaFilter === 'favorites') {
     _foCachedResult = outputs.filter(o => o.favorite)
   } else {
@@ -2134,7 +2248,63 @@ function computeFilteredOutputs(outputs: OutputFile[], mediaFilter: MediaFilter)
   return _foCachedResult
 }
 
+let _productionProfileVideoFormatSeq = 0
+
+/** Keep Director/Story Lab's canvas aligned with a globally inherited model.
+ *
+ * Model selections and the production profile are hydrated by independent
+ * requests at boot.  Resolve the format after either one settles, and reject
+ * a late response if the user selected a project/model override meanwhile.
+ */
+async function _syncGlobalProductionVideoFormat(
+  profile: ProductionProfile,
+  get: () => AppState,
+  set: (partial: Partial<AppState>) => void,
+): Promise<void> {
+  const requestSeq = ++_productionProfileVideoFormatSeq
+  const modelType = profile.video.model.trim()
+  const requestedResolution = profile.video.settings.resolution
+  const requestedAspect = profile.video.settings.aspectRatio
+  const before = get()
+  if (
+    !modelType
+    || !_globalModelSelectionModes.has('video')
+    || before.selectedModelPerMode.video !== modelType
+  ) return
+
+  let options: ModelOptions
+  try {
+    options = before.modelOptions?.model_type === modelType
+      ? before.modelOptions
+      : await api.fetchModelOptions(modelType)
+  } catch {
+    // The selector remains usable while the backend/model catalog reconnects.
+    return
+  }
+
+  const latest = get()
+  if (
+    requestSeq !== _productionProfileVideoFormatSeq
+    || !_globalModelSelectionModes.has('video')
+    || latest.selectedModelPerMode.video !== modelType
+    || latest.productionProfile.video.model !== modelType
+    || latest.productionProfile.video.settings.resolution !== requestedResolution
+    || latest.productionProfile.video.settings.aspectRatio !== requestedAspect
+  ) return
+
+  const format = resolveSupportedVideoFormat(
+    options,
+    requestedResolution,
+    requestedAspect,
+  )
+  set({
+    directorResolution: format.resolution,
+    directorAspectRatio: format.aspectRatio,
+  })
+}
+
 export const useStore = create<AppState>((set, get) => ({
+  ...createDirectorSlice(partial => set(partial as never)),
   // Generation mode
   generationMode: 'video',
   editSubMode: 'retake' as import('../types').EditSubMode,
@@ -2764,6 +2934,7 @@ export const useStore = create<AppState>((set, get) => ({
             slidingWindowOverlap: saved.slidingWindowOverlap,
             clips: saved.clips,
             singlePromptMode: saved.singlePromptMode,
+            studioFocusedClipIndex: saved.studioFocusedClipIndex ?? 0,
           })
         } else {
           set(s => ({
@@ -2790,7 +2961,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (value === 2) {
         get().syncClipCount()
       } else {
-        set({ clips: [], singlePromptMode: false })
+        set({ clips: [], singlePromptMode: false, studioFocusedClipIndex: 0 })
       }
     }
     // Snapshot the changed param into the current mode's IN-MEMORY
@@ -2861,23 +3032,33 @@ export const useStore = create<AppState>((set, get) => ({
   dashboardPipelineList: [],
   dashboardSelectedPipeline: null,
   dashboardLoading: false,
-  setDashboardOpen: (open) => {
-    set({ dashboardOpen: open })
+  dashboardLoadError: null,
+  dashboardRetryPipelineId: null,
+  setDashboardOpen: (open, preferredPipelineId) => {
+    set({ dashboardOpen: open, dashboardLoadError: null, dashboardRetryPipelineId: null })
     if (open) {
-      get().loadPipelineList()
-      const selected = get().dashboardSelectedPipeline
-      if (selected) get().loadSavedPipeline(selected.pipeline_id)
+      get().loadPipelineList(preferredPipelineId)
+      if (preferredPipelineId) {
+        get().loadSavedPipeline(preferredPipelineId)
+      } else {
+        const selected = get().dashboardSelectedPipeline
+        if (selected) get().loadSavedPipeline(selected.pipeline_id)
+      }
     }
   },
-  loadPipelineList: async () => {
+  loadPipelineList: async (preferredPipelineId) => {
     const loadToken = ++_dashboardPipelineListLoadToken
+    const retryPipelineId = preferredPipelineId || get().dashboardSelectedPipeline?.pipeline_id || null
     try {
       const { pipelines } = await api.fetchPipelineList()
       if (loadToken !== _dashboardPipelineListLoadToken) return
-      set({ dashboardPipelineList: pipelines })
+      set({ dashboardPipelineList: pipelines, dashboardLoadError: null, dashboardRetryPipelineId: null })
       // Opening Productions should take the user straight back to live work,
       // even if an older production was selected the last time it was open.
-      const active = pipelines.find(pipeline => pipeline.status === 'running')
+      const preferred = preferredPipelineId
+        ? pipelines.find(pipeline => pipeline.id === preferredPipelineId)
+        : undefined
+      const active = preferred || pipelines.find(pipeline => pipeline.status === 'running')
       if (active && get().dashboardSelectedPipeline?.pipeline_id !== active.id) {
         await get().loadSavedPipeline(active.id)
       }
@@ -2911,7 +3092,7 @@ export const useStore = create<AppState>((set, get) => ({
                 ? { ...entry, repair_status: repair?.status || null }
                 : entry),
           }))
-          void get().loadOutputs()
+          void get().maybeRefreshGallery()
         }).catch(e => {
           console.warn(`Failed to reconnect Director repair for ${item.id}:`, e)
         }).finally(() => {
@@ -2923,23 +3104,37 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (e) {
       if (loadToken !== _dashboardPipelineListLoadToken) return
       console.error('Failed to load pipeline list:', e)
+      set({
+        dashboardLoadError: e instanceof Error ? e.message : 'Failed to load pipeline list',
+        dashboardRetryPipelineId: retryPipelineId,
+      })
     }
   },
   loadSavedPipeline: async (pid) => {
     const loadToken = ++_dashboardPipelineLoadToken
-    set({ dashboardLoading: true })
+    set({ dashboardLoading: true, dashboardLoadError: null, dashboardRetryPipelineId: pid })
     try {
       const pipeline = await api.fetchSavedPipeline(pid)
       if (loadToken !== _dashboardPipelineLoadToken) return
-      set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false })
+      set({ dashboardSelectedPipeline: pipeline, dashboardLoading: false, dashboardLoadError: null, dashboardRetryPipelineId: null })
       if (_repairNeedsPolling(pipeline.repair)) {
         get().pollPipelineRepair(pid, pipeline.repair!.operation_id)
       }
     } catch (e) {
       if (loadToken !== _dashboardPipelineLoadToken) return
+      const message = e instanceof Error ? e.message : 'Failed to load pipeline'
+      const stillWriting = /not found|404/i.test(message)
       console.error('Failed to load pipeline:', e)
-      set({ dashboardLoading: false })
+      set({
+        dashboardLoading: false,
+        dashboardLoadError: stillWriting ? null : message,
+        dashboardRetryPipelineId: pid,
+      })
     }
+  },
+  retryDashboardLoad: async () => {
+    const state = get()
+    await get().loadPipelineList(state.dashboardRetryPipelineId || state.dashboardSelectedPipeline?.pipeline_id || undefined)
   },
   deletePipeline: async (pid) => {
     // Clear the selection AND drop the pid from the list in the same
@@ -2958,6 +3153,20 @@ export const useStore = create<AppState>((set, get) => ({
     // Pipeline media were gallery items too — refresh the feed.
     get().loadOutputs()
     get().loadWorkspaces()
+  },
+  updateClipPrompt: async (pid, clipIndex, body) => {
+    const pipeline = await api.updatePipelineClipPrompt(pid, clipIndex, body)
+    set(s => {
+      if (!s.dashboardSelectedPipeline || s.dashboardSelectedPipeline.pipeline_id !== pid) {
+        return { dashboardSelectedPipeline: pipeline }
+      }
+      return { dashboardSelectedPipeline: pipeline }
+    })
+  },
+  selectClipVideo: async (pid, clipIndex, filename) => {
+    await api.selectPipelineClipVideo(pid, clipIndex, filename)
+    const pipeline = await api.fetchSavedPipeline(pid)
+    set({ dashboardSelectedPipeline: pipeline })
   },
   tagClip: async (pid, clipIndex, tag) => {
     try {
@@ -3141,6 +3350,8 @@ export const useStore = create<AppState>((set, get) => ({
       directorError: null,
     })
     get().pollPipelineStatus()
+    void get().loadSavedPipeline(pid)
+    void get().loadPipelineList(pid)
   },
 
   // ── Recipes (one-click Studio presets) ────────────────────────────
@@ -3256,14 +3467,14 @@ export const useStore = create<AppState>((set, get) => ({
           video_prompt: c.video_prompt || '',
           image_prompt: c.image_prompt || '',
         })),
-        directorClipImages: pipeline.clips
-          .filter(c => c.start_image_filename)
-          .map((c, i) => ({
-            clipIndex: i,
-            prompt: c.image_prompt || '',
-            file: null as unknown as File,
-            filename: c.start_image_filename!,
+        directorClipImages: mapDirectorClipImages(
+          pipeline.clips.map(c => ({
+            index: c.index,
+            shot_id: c.shot_id,
+            image_prompt: c.image_prompt,
+            filename: c.start_image_filename,
           })),
+        ),
         directorStep: 'review_video',
         directorAutoMode: pipeline.auto_mode,
         directorSeamless: pipeline.seamless,
@@ -3693,6 +3904,14 @@ export const useStore = create<AppState>((set, get) => ({
       // instead of the model's.
       const mt = initialModelType || get().params.model_type
       _persistModelSelections(get().selectedModelPerMode)
+      // Profile and model-selection hydration are intentionally parallel.
+      // Whichever request settles second re-applies the inherited Story /
+      // Director canvas, without touching an explicit video override.
+      void _syncGlobalProductionVideoFormat(
+        get().productionProfile,
+        get,
+        partial => set(partial),
+      )
       if (mt) {
         // Restore saved LoRA state for this mode if the model matches
         const savedLora = saved?.savedLoraPerMode?.[mode]
@@ -3926,7 +4145,9 @@ export const useStore = create<AppState>((set, get) => ({
       phase: '', message: tool === 'upscale' ? 'Submitting upscale...' : 'Submitting revoice...',
       outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
     }
-    set(st => ({ isGenerating: true, jobs: [newJob, ...st.jobs] }))
+    set(st => {
+      return prependJob(st.jobs, newJob)
+    })
 
     try {
       const result = tool === 'upscale'
@@ -3950,26 +4171,25 @@ export const useStore = create<AppState>((set, get) => ({
               ..._jobTimingPatch(status),
             }),
           }))
-          if (status.status === 'running') get().refreshOutputs()
+          if (status.status === 'running') void get().maybeRefreshGallery()
           if (status.status === 'completed') {
             clearInterval(pollInterval)
             set(st => {
-              const remaining = st.jobs.filter(j => j.id !== result.job_id)
-              return { jobs: remaining, isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued') }
+              return removeJob(st.jobs, j => j.id === result.job_id)
             })
-            get().loadOutputs()
+            void get().maybeRefreshGallery({ message: 'New output ready' })
           } else if (status.status === 'failed' || status.status === 'cancelled') {
             clearInterval(pollInterval)
-            set(st => ({ isGenerating: st.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')) }))
+            // Keep the terminal tile visible so the user can inspect or dismiss it.
+            set(st => withJobs(st.jobs))
           }
         } catch { /* ignore poll errors */ }
       }, 2000)
     } catch (e) {
       const msg = e instanceof Error ? e.message : (tool === 'upscale' ? 'Upscale failed' : 'Revoice failed')
-      set(st => ({
-        jobs: st.jobs.map(j => j === newJob ? { ...j, id: j.id || `tool-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-        isGenerating: st.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
-      }))
+      set(st => updateJob(st.jobs, j => j === newJob, j => ({
+        ...j, id: j.id || `tool-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+      })))
       console.error(`Tool ${tool} failed:`, msg)
     }
   },
@@ -4187,6 +4407,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Multi-clip state
   clips: [],
   singlePromptMode: false,
+  studioFocusedClipIndex: 0,
   setClipPrompt: (index, prompt) => {
     const clips = [...get().clips]
     if (clips[index]) {
@@ -4220,6 +4441,9 @@ export const useStore = create<AppState>((set, get) => ({
     set({ clips })
   },
   setSinglePromptMode: (v) => set({ singlePromptMode: v }),
+  setStudioFocusedClipIndex: (index) => set({
+    studioFocusedClipIndex: Number.isFinite(index) ? Math.floor(index) : 0,
+  }),
   syncClipCount: () => {
     const { params, durationSeconds, slidingWindowSeconds, slidingWindowOverlap, modelOptions } = get()
     if (params.image_mode !== 2) return
@@ -4322,7 +4546,9 @@ export const useStore = create<AppState>((set, get) => ({
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
       phase: '', message: 'Submitting blend...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        return prependJob(s.jobs, newJob)
+      })
 
       try {
         const result = await api.submitBlend({
@@ -4365,24 +4591,19 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
-                }
+                return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
-              set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
@@ -4391,10 +4612,9 @@ export const useStore = create<AppState>((set, get) => ({
         // Submit itself failed (pre-queue). Convert the placeholder to a
         // failed state in place so the user sees what went wrong instead of
         // the tile silently disappearing.
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Blend failed:', msg)
       }
       return
@@ -4461,7 +4681,9 @@ export const useStore = create<AppState>((set, get) => ({
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
       phase: '', message: 'Submitting outpaint...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        return prependJob(s.jobs, newJob)
+      })
 
       // Sliding window size: the Advanced Settings slider stores seconds.
       // Convert to frames using the loaded model's fps so the same value
@@ -4517,24 +4739,19 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
-                }
+                return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
-              set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
@@ -4543,10 +4760,9 @@ export const useStore = create<AppState>((set, get) => ({
         // Submit itself failed (pre-queue). Convert the placeholder to a
         // failed state in place so the user sees what went wrong instead of
         // the tile silently disappearing.
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Outpaint failed:', msg)
       }
       return
@@ -4568,7 +4784,9 @@ export const useStore = create<AppState>((set, get) => ({
         id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
         phase: '', message: 'Submitting repaint...', outputFiles: [], error: null, oomInfo: null,
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        return prependJob(s.jobs, newJob)
+      })
 
       try {
         const repaintModel = (state.params.model_type as string) || ''
@@ -4627,33 +4845,25 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
-                }
+                return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
-              set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Repaint failed'
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob
-            ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg }
-            : j),
-          isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Repaint failed:', msg)
       }
       return
@@ -4672,7 +4882,9 @@ export const useStore = create<AppState>((set, get) => ({
         id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
         phase: '', message: 'Submitting recast...', outputFiles: [], error: null, oomInfo: null,
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        return prependJob(s.jobs, newJob)
+      })
 
       try {
         // Honor the selector's Recast SCAIL-2 choice (dedicated Fast vs
@@ -4743,31 +4955,25 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
-                }
+                return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
-              set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Recast failed'
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Recast failed:', msg)
       }
       return
@@ -4783,7 +4989,9 @@ export const useStore = create<AppState>((set, get) => ({
       id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
       phase: '', message: 'Submitting...', outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
       }
-      set(s => ({ isGenerating: true, jobs: [newJob, ...s.jobs] }))
+      set(s => {
+        return prependJob(s.jobs, newJob)
+      })
 
       try {
         let result: { job_id: string }
@@ -4880,24 +5088,19 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return {
-                  jobs: remaining,
-                  isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
-                }
+                return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
               // stays visible with the error message — user dismisses via X.
-              set(s => ({
-                isGenerating: s.jobs.some(j => j.id !== result.job_id && (j.status === 'running' || j.status === 'queued')),
-              }))
+              set(s => withJobs(s.jobs))
             }
           } catch { /* ignore poll errors */ }
         }, 2000)
@@ -4906,10 +5109,9 @@ export const useStore = create<AppState>((set, get) => ({
         // Submit itself failed (pre-queue). Convert the placeholder to a
         // failed state in place so the user sees what went wrong instead of
         // the tile silently disappearing.
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-          isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
-        }))
+        set(s => updateJob(s.jobs, j => j === newJob, j => ({
+          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+        })))
         console.error('Edit generation failed:', msg)
       }
       return  // Don't fall through to normal generation
@@ -5654,10 +5856,9 @@ export const useStore = create<AppState>((set, get) => ({
       generationDetails: _generationDetailsFromParams(params, state.models),
     }
 
-    set(s => ({
-      isGenerating: true,
-      jobs: [newJob, ...s.jobs],
-    }))
+    set(s => {
+      return prependJob(s.jobs, newJob)
+    })
 
     try {
       const { job_id, h3_window_plan } = await api.submitGeneration(params)
@@ -5708,13 +5909,14 @@ export const useStore = create<AppState>((set, get) => ({
               error: status.error,
               oomInfo: status.oom_info ?? null,
               taskTimings: status.task_timings ?? [],
+              h3WindowPlan: status.h3_window_plan ?? j.h3WindowPlan ?? null,
               ..._jobTimingPatch(status),
             }),
           }))
 
           // Refresh gallery during generation to show sliding window progress
           if (status.status === 'running') {
-            get().refreshOutputs()
+            void get().maybeRefreshGallery()
           }
 
           if (status.status === 'completed') {
@@ -5722,20 +5924,15 @@ export const useStore = create<AppState>((set, get) => ({
             // Completed job — remove the placeholder, real output now in gallery
             set(s => {
               const remaining = s.jobs.filter(j => j.id !== job_id)
-              return {
-                jobs: remaining,
-                isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
-              }
+              return withJobs(remaining)
             })
-            get().loadOutputs()
+            void get().maybeRefreshGallery({ message: 'New output ready' })
           } else if (status.status === 'failed' || status.status === 'cancelled') {
             clearInterval(pollInterval)
             // Keep the failed/cancelled job in the queue so its placeholder
             // card stays visible with the error message. User dismisses via
             // the X button on the tile.
-            set(s => ({
-              isGenerating: s.jobs.some(j => j.id !== job_id && (j.status === 'running' || j.status === 'queued')),
-            }))
+            set(s => withJobs(s.jobs))
           }
         } catch (e) {
           console.error('Status poll error:', e)
@@ -5747,39 +5944,48 @@ export const useStore = create<AppState>((set, get) => ({
       // Submit itself failed (pre-queue). Convert the placeholder to a failed
       // state in place so the user sees what happened, rather than making the
       // tile disappear and leaving them to wonder.
-      set(s => ({
-        jobs: s.jobs.map(j => j === newJob ? { ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg } : j),
-        isGenerating: s.jobs.some(j => j !== newJob && (j.status === 'running' || j.status === 'queued')),
-      }))
+      set(s => updateJob(s.jobs, j => j === newJob, j => ({
+        ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
+      })))
     }
   },
 
   stopGeneration: (jobId) => {
+    const currentJobs = get().jobs
     const targetIds = jobId
-      ? [jobId]
-      : get().jobs
-          .filter(j => j.id && (j.status === 'running' || j.status === 'queued'))
+      ? currentJobs
+          .filter(j => j.id === jobId && isGenerationJobActive(j.status) && j.status !== 'cancelling')
+          .map(j => j.id)
+      : currentJobs
+          .filter(j => j.id && isGenerationJobActive(j.status) && j.status !== 'cancelling')
           .map(j => j.id)
     if (targetIds.length === 0) return
+    const previousStatuses = new Map(
+      currentJobs
+        .filter(j => targetIds.includes(j.id))
+        .map(j => [j.id, j.status] as const),
+    )
 
     // Keep the job visible while the worker unwinds. Removing it immediately
     // made a still-running model download look as if Cancel had done nothing
     // and hid backend errors. Existing status polling will publish the final
     // cancelled state once the endpoint acknowledges the request.
     const targets = new Set(targetIds)
-    set(s => ({
-      jobs: s.jobs.map(j => targets.has(j.id)
-        ? { ...j, message: 'Cancelling…', phase: 'Cancelling' }
-        : j),
-      isGenerating: s.jobs.some(j => j.status === 'running' || j.status === 'queued'),
-    }))
+    set(s => markJobsCancelling(s.jobs, targets))
     targetIds.forEach(id => {
       void api.cancelJob(id).catch(e => {
         const message = e instanceof Error ? e.message : 'Cancel failed'
         console.error('Cancel failed:', e)
         set(s => ({
           jobs: s.jobs.map(j => j.id === id
-            ? { ...j, message: `Cancel failed: ${message}`, phase: j.phase }
+            ? {
+                ...j,
+                status: j.status === 'cancelling'
+                  ? (previousStatuses.get(id) ?? 'running')
+                  : j.status,
+                message: `Cancel failed: ${message}`,
+                phase: j.phase,
+              }
             : j),
         }))
       })
@@ -5789,13 +5995,7 @@ export const useStore = create<AppState>((set, get) => ({
   // UI-only removal of a job tile (e.g. dismissing a failed/cancelled
   // placeholder). No backend call — the job is already terminal.
   dismissJob: (jobId) => {
-    set(s => {
-      const remaining = s.jobs.filter(j => j.id !== jobId)
-      return {
-        jobs: remaining,
-        isGenerating: remaining.some(j => j.status === 'running' || j.status === 'queued'),
-      }
-    })
+    set(s => removeJob(s.jobs, j => j.id === jobId))
   },
 
   reconnectJobs: async () => {
@@ -5826,10 +6026,7 @@ export const useStore = create<AppState>((set, get) => ({
             generationDetails: j.generation_details,
           }))
         if (newJobs.length > 0) {
-          set(s => ({
-            jobs: [...s.jobs, ...newJobs],
-            isGenerating: true,
-          }))
+          set(s => withJobs([...s.jobs, ...newJobs]))
           // Start polling for each reconnected job
           newJobs.forEach(job => {
             const pollInterval = setInterval(async () => {
@@ -5848,24 +6045,19 @@ export const useStore = create<AppState>((set, get) => ({
                     error: status.error,
                     oomInfo: status.oom_info ?? null,
                     taskTimings: status.task_timings ?? [],
+                    h3WindowPlan: status.h3_window_plan ?? j.h3WindowPlan ?? null,
                     ..._jobTimingPatch(status),
                   }),
                 }))
                 if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
                   clearInterval(pollInterval)
-                  set(s => {
-                    const remaining = s.jobs.filter(j => j.id !== job.id)
-                    return { jobs: remaining, isGenerating: remaining.length > 0 }
-                  })
-                  get().loadOutputs()
+                  set(s => removeJob(s.jobs, j => j.id === job.id))
+                  void get().maybeRefreshGallery({ message: 'New output ready' })
                 }
               } catch {
                 // Job may have been cleaned up
                 clearInterval(pollInterval)
-                set(s => {
-                  const remaining = s.jobs.filter(j => j.id !== job.id)
-                  return { jobs: remaining, isGenerating: remaining.length > 0 }
-                })
+                set(s => removeJob(s.jobs, j => j.id === job.id))
               }
             }, 2000)
           })
@@ -6632,6 +6824,11 @@ export const useStore = create<AppState>((set, get) => ({
         productionProfileConfigured: result.configured,
         productionProfileLoading: false,
       })
+      await _syncGlobalProductionVideoFormat(
+        result.profile,
+        get,
+        partial => set(partial),
+      )
     } catch (e) {
       console.error('Failed to load production profile:', e)
       set({ productionProfileLoading: false })
@@ -6668,6 +6865,11 @@ export const useStore = create<AppState>((set, get) => ({
         const activeModel = get().selectedModelPerMode[activeMode]
         if (activeModel) await get().loadModelOptions(activeModel)
       }
+      await _syncGlobalProductionVideoFormat(
+        result.profile,
+        get,
+        partial => set(partial),
+      )
       // The global text profile is also the provider used by generic tools.
       await get().loadServicesConfig()
       await get().loadLlmModels()
@@ -6983,101 +7185,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Director (Music Video Director)
   sidebarMode: 'studio' as const,
-  directorStep: 'upload',
-  directorAudioFile: null,
-  directorAudioPath: null,
-  directorAnalysis: null,
-  directorPlannedClips: [],
-  directorEnergyBias: 0,
-  directorPacingProfile: 'balanced',
-  directorMusicVideoTreatment: {
-    generation_mode: 'image_guided',
-    direct_video_master_prompt: DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
-    mode: 'hybrid',
-    performer_presence: 60,
-    lip_sync: 'frequent',
-    recurring_sets: ['Main performance set', 'Story world', 'Bridge contrast set'],
-    wardrobe: '',
-    palette: '',
-    camera_language: 'Controlled cinematic movement; intimate verses and bold chorus coverage',
-    recurring_motif: '',
-    chorus_signature: 'Return to the main performance set with direct-to-camera delivery and the boldest lighting',
-    surrealism: 35,
-    forbidden_elements: '',
-  },
-  setDirectorMusicVideoTreatment: (partial) => set(state => ({
-    directorMusicVideoTreatment: { ...state.directorMusicVideoTreatment, ...partial },
-    ...(partial.generation_mode === 'direct_video' ? { directorSeamless: false } : {}),
-  })),
-  directorClipPlans: [],
-  directorSceneDescription: '',
-  directorLoading: false,
-  directorLoadingMessage: null,
-  directorError: null,
-  directorReferenceImage: null,
-  directorReferenceImagePath: null,
-  directorCharacterRefs: [],
-  directorCharacterRefPaths: [],
-  directorCharacterRefLabels: [],
-  directorLocationRefs: [],
-  directorLocationRefPaths: [],
-  directorLocationRefLabels: [],
-  directorH3VideoRefs: [],
-  directorH3VideoRefPaths: [],
-  directorH3AudioRefs: [],
-  directorH3AudioRefPaths: [],
-  directorVoiceRef: null,
-  directorVoiceRefPath: null,
-  directorIdentityGuidanceScale: 3.0,
-  setDirectorVoiceRef: (file) => {
-    if (file) {
-      set({ directorVoiceRef: file, directorVoiceRefPath: null })
-    } else {
-      set({ directorVoiceRef: null, directorVoiceRefPath: null })
-    }
-  },
-  setDirectorIdentityGuidanceScale: (v) => set({ directorIdentityGuidanceScale: v }),
-  directorClipImages: [],
-  directorImageGenProgress: null,
-  directorSpeakers: [],
-  directorSpeakerMappings: [],
-  // Defaults per user preference (2026-06): Auto ON (hands-off pipeline is
-  // the common flow), Seamless OFF (separate per-clip generations are easier
-  // to retake/review than one rolling-window render).
-  directorAutoMode: true,
-  directorSeamless: false,
-  directorShotImageGuidance: 'auto' as DirectorShotImageGuidance,
-  directorLlmLog: [],
   directorSkill: null,
-  directorMusicSource: null,
-  directorSongDescription: '',
-  directorSongInstrumental: false,
-  directorSongStyle: '',
-  directorSongLyrics: '',
-  directorSongDuration: 120,
-  directorTrackGenerating: false,
-  setDirectorMusicSource: (s) => set({ directorMusicSource: s }),
-  setDirectorSongDescription: (v) => set({ directorSongDescription: v }),
-  setDirectorSongInstrumental: (v) => set({ directorSongInstrumental: v }),
-  setDirectorSongStyle: (v) => set({ directorSongStyle: v }),
-  setDirectorSongLyrics: (v) => set({ directorSongLyrics: v }),
-  setDirectorSongDuration: (v) => set({ directorSongDuration: v }),
-  directorResolution: '720p' as ResolutionPreset,
-  directorAspectRatio: '16:9' as AspectRatio,
-  directorVideoInferenceStepsByModel: {},
-  directorVideoMaxShotFramesByModel: {},
-  directorH3TurboModeByModel: {},
-  shortFilmCharacters: [],
-  shortFilmPath: null,
-  shortFilmTargetDuration: 30,
-  directorWritingProvider: 'maestro',
-  directorWritingModel: '',
-  directorWritingBaseUrl: '',
-  shortFilmNarrative: false,
-  shortFilmVisualStyle: '',
-  shortFilmPreserveVisualStyle: true,
-  directorCharacterVisualStyle: '',
-  directorAllowClipText: false,
   llmStreamText: '',
   llmStreamDone: true,
   foregroundActivity: null,
@@ -7086,27 +7194,48 @@ export const useStore = create<AppState>((set, get) => ({
   pipelineStatus: null,
   activeDirectorPipelines: [],
   pipelinePolling: false,
-  upsertActivity: (activity) => set(state => {
-    const previous = state.activities[activity.id]
+  upsertActivity: (activity) => {
+    const previous = get().activities[activity.id]
+    if (
+      previous
+      && CLIENT_ACTIVITY_TERMINAL_STATUSES.has(previous.status)
+      && !CLIENT_ACTIVITY_TERMINAL_STATUSES.has(activity.status)
+    ) return
     const now = Date.now()
-    return {
-      activities: {
-        ...state.activities,
-        [activity.id]: {
-          ...previous,
-          ...activity,
-          startedAt: previous?.startedAt || activity.startedAt || now,
-          updatedAt: activity.updatedAt || now,
-        },
-      },
+    const published = {
+      ...previous,
+      ...activity,
+      workspace: get().activeWorkspace,
+      startedAt: previous?.startedAt || activity.startedAt || now,
+      updatedAt: activity.updatedAt || now,
     }
-  }),
-  removeActivity: (activityId) => set(state => {
-    if (!state.activities[activityId]) return {}
-    const activities = { ...state.activities }
-    delete activities[activityId]
-    return { activities }
-  }),
+    // Keep each client root's running -> terminal -> dismissal writes ordered.
+    // Different activities still publish concurrently, and observability never
+    // blocks the foreground operation.
+    _activityPublicationGate.publish(published, latest => {
+      void _canonicalClientTaskWrites.enqueue(activity.id, async () => {
+        await api.upsertCanonicalClientTask(latest as unknown as Record<string, unknown>)
+      }).catch(() => undefined)
+    })
+    set(state => ({
+      activities: { ...state.activities, [activity.id]: published },
+    }))
+  },
+  removeActivity: (activityId) => {
+    const activity = get().activities[activityId]
+    if (!activity || !CLIENT_ACTIVITY_TERMINAL_STATUSES.has(activity.status)) return
+    const workspace = get().activeWorkspace
+    void _canonicalClientTaskWrites.enqueue(activityId, async () => {
+      await api.dismissCanonicalTask(api.canonicalClientTaskId(activityId), workspace)
+    }).catch(() => undefined)
+    _activityPublicationGate.clear(activityId)
+    set(state => {
+      if (!state.activities[activityId]) return {}
+      const activities = { ...state.activities }
+      delete activities[activityId]
+      return { activities }
+    })
+  },
   // Compatibility bridge for older feature panels. New workflows should use
   // the registry directly so concurrent activities cannot overwrite one another.
   setForegroundActivity: (activity) => set(state => {
@@ -7129,18 +7258,6 @@ export const useStore = create<AppState>((set, get) => ({
     activities[activity.id] = normalized
     return { foregroundActivity: normalized, activities }
   }),
-  setDirectorAutoMode: (v) => set({ directorAutoMode: v }),
-  setDirectorSeamless: (v) => set({ directorSeamless: v }),
-  setDirectorShotImageGuidance: (v) => set({ directorShotImageGuidance: v }),
-  directorAppendLlmLog: (stage, text) => set(s => {
-    const t = (text || '').trim()
-    if (!t) return {}
-    const last = s.directorLlmLog[s.directorLlmLog.length - 1]
-    // Skip exact repeats (the poll can fire the done-transition more than
-    // once for the same stream when stages restart back-to-back).
-    if (last && last.stage === stage && last.text === t) return {}
-    return { directorLlmLog: [...s.directorLlmLog, { stage, text: t }] }
-  }),
   setDirectorSkill: (skill) => {
     set({ directorSkill: skill, ...(skill === 'music_video' ? { directorPacingProfile: 'balanced' as const } : {}) })
     // Music director default for image-to-video reference strength is
@@ -7161,33 +7278,6 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
   },
-  setDirectorResolution: (preset) => set({ directorResolution: preset }),
-  setDirectorAspectRatio: (ratio) => set({ directorAspectRatio: ratio }),
-  setDirectorVideoInferenceSteps: (modelType, steps) => set(s => {
-    const next = { ...s.directorVideoInferenceStepsByModel }
-    if (steps == null || !Number.isFinite(steps)) {
-      delete next[modelType]
-    } else {
-      next[modelType] = Math.max(1, Math.min(50, Math.round(steps)))
-    }
-    return { directorVideoInferenceStepsByModel: next }
-  }),
-  setDirectorVideoMaxShotFrames: (modelType, frames) => set(s => {
-    const next = { ...s.directorVideoMaxShotFramesByModel }
-    if (frames == null || !Number.isFinite(frames) || frames <= 0) {
-      delete next[modelType]
-    } else {
-      next[modelType] = Math.round(frames)
-    }
-    return { directorVideoMaxShotFramesByModel: next }
-  }),
-  setDirectorH3TurboMode: (modelType, enabled) => set(s => ({
-    directorH3TurboModeByModel: {
-      ...s.directorH3TurboModeByModel,
-      [modelType]: enabled,
-    },
-  })),
-
   selectDirectorImageModel: (modelType) => {
     _globalModelSelectionModes.delete('image')
     set(s => ({
@@ -7361,6 +7451,7 @@ export const useStore = create<AppState>((set, get) => ({
       directorAudioFile: file,
       directorStep: 'analyze',
     })
+    let analysisStarted = false
     try {
       const uploaded = await api.uploadAudio(file)
       const shouldTrim = Number.isFinite(opts?.trimStart)
@@ -7385,6 +7476,7 @@ export const useStore = create<AppState>((set, get) => ({
             end: Number(opts?.trimEnd),
           })
         : uploaded
+      analysisStarted = true
       await get().directorAnalyzeAndPlan(prepared.path, {
         transcribe: true,
         lyricsHint: opts?.lyricsHint,
@@ -7392,6 +7484,7 @@ export const useStore = create<AppState>((set, get) => ({
         activityId,
       })
     } catch (e: unknown) {
+      if (analysisStarted) return
       const msg = e instanceof Error ? e.message : 'Upload failed'
       console.error('Director upload failed:', e)
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
@@ -7415,8 +7508,11 @@ export const useStore = create<AppState>((set, get) => ({
   // identical regardless of where the audio came from.
   directorAnalyzeAndPlan: async (audioPath, opts) => {
     const transcribe = opts?.transcribe !== false
-    let activityId = opts?.activityId
+    const activityId = opts?.activityId
       || `director-audio:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+    let frontendActivityOpen = true
+    let backendAccepted = false
+    let postActivity: ReturnType<typeof beginAppActivity> | null = null
     const analysisSteps: Record<string, number> = {
       loading_audio: 2,
       detecting_beats: 3,
@@ -7430,6 +7526,7 @@ export const useStore = create<AppState>((set, get) => ({
       finalizing: 8,
     }
     const reportActivity = (phase: string, message: string, current?: number) => {
+      if (!frontendActivityOpen) return
       get().upsertActivity({
         id: activityId,
         kind: 'audio_analysis',
@@ -7455,17 +7552,27 @@ export const useStore = create<AppState>((set, get) => ({
         transcribe,
         extract_vocals: transcribe,
         lyrics_hint: opts?.lyricsHint || undefined,
+        workspace: get().activeWorkspace,
       })
-      if (activityId !== accepted.job_id) get().removeActivity(activityId)
-      activityId = accepted.job_id
-      reportActivity('queued', 'Audio analysis queued…', 1)
+      backendAccepted = true
+      get().upsertActivity({
+        id: activityId,
+        kind: 'audio_analysis',
+        title: 'Prepare music video',
+        status: 'completed',
+        phase: 'handed_off',
+        message: `Continuing as recoverable audio job ${accepted.job_id}`,
+        current: 1,
+        total: 1,
+      })
+      frontendActivityOpen = false
+      window.setTimeout(() => get().removeActivity(activityId), 4000)
       void get().reconnectJobs()
 
       let analysis: AudioAnalysisResult | null = null
       for (;;) {
         const status = await api.fetchAudioAnalysisJob(accepted.job_id)
         set({ directorLoadingMessage: status.message })
-        reportActivity(status.phase || 'analyzing_audio', status.message, status.step)
         if (status.status === 'completed') {
           analysis = status.result
           break
@@ -7476,11 +7583,24 @@ export const useStore = create<AppState>((set, get) => ({
       }
       if (!analysis) throw new Error('Audio analysis completed without a result')
 
+      postActivity = beginAppActivity(get, {
+        kind: 'director_audio_structure',
+        title: 'Prepare music video',
+        phase: 'classifying_sections',
+        message: 'Preparing the editable song structure…',
+        total: 2,
+      })
+
       // Try LLM-based section classification (falls back to heuristic)
       if (analysis.lyrics && analysis.lyrics.length > 0) {
         try {
           set({ directorLoadingMessage: 'Identifying sections (LLM)...' })
-          reportActivity('classifying_sections', 'Classifying verses, choruses and bridges…', 8)
+          postActivity.report(
+            'classifying_sections',
+            'Classifying verses, choruses and bridges…',
+            0,
+            2,
+          )
           const classified = await api.classifySections({
             analysis,
             lyrics_hint: (opts?.classifyLyricsHint ?? opts?.lyricsHint) || undefined,
@@ -7517,7 +7637,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Plan beat-aligned clip structure
       set({ directorLoadingMessage: 'Planning clip structure...' })
-      reportActivity('planning_clips', 'Planning beat-aligned clips…', 9)
+      postActivity.report('planning_clips', 'Planning beat-aligned clips…', 1, 2)
       const structure = await api.planClipStructure({
         analysis,
         energy_bias: get().directorEnergyBias,
@@ -7536,35 +7656,28 @@ export const useStore = create<AppState>((set, get) => ({
         directorLoading: false,
         directorLoadingMessage: null,
       })
-      get().upsertActivity({
-        id: activityId,
-        kind: 'audio_analysis',
-        title: 'Prepare music video',
-        status: 'completed',
-        phase: 'ready_for_structure_review',
-        message: `${structure.clips.length} clips planned — review the pacing`,
-        current: 10,
-        total: 10,
-      })
-      window.setTimeout(() => get().removeActivity(activityId), 5000)
+      postActivity.finish(`${structure.clips.length} clips planned — review the pacing`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Analysis failed'
       console.error('Director analysis failed:', e)
+      postActivity?.fail(e, 'preparing_structure')
       if (msg === 'Audio analysis cancelled') {
         set({ directorLoading: false, directorLoadingMessage: null, directorError: null, directorStep: 'upload' })
-        get().removeActivity(activityId)
         return
       }
       set({ directorLoading: false, directorLoadingMessage: null, directorError: msg, directorStep: 'upload' })
-      get().upsertActivity({
-        id: activityId,
-        kind: 'audio_analysis',
-        title: 'Prepare music video',
-        status: 'failed',
-        phase: 'analyzing_audio',
-        message: msg,
-        error: msg,
-      })
+      if (!backendAccepted) {
+        frontendActivityOpen = false
+        get().upsertActivity({
+          id: activityId,
+          kind: 'audio_analysis',
+          title: 'Prepare music video',
+          status: 'failed',
+          phase: 'analyzing_audio',
+          message: msg,
+          error: msg,
+        })
+      }
       throw e
     }
   },
@@ -7890,7 +8003,7 @@ export const useStore = create<AppState>((set, get) => ({
       message: 'Preparing visual references…',
       total: 3,
     })
-    set({ directorLoading: true, directorError: null, directorStep: 'plan' })
+    set({ directorLoading: true, directorError: null, directorPlanRecovery: null, directorStep: 'plan' })
     try {
       // Upload all reference images
       const { refImagePath, charPaths, locPaths } = directVideo
@@ -7926,8 +8039,7 @@ export const useStore = create<AppState>((set, get) => ({
             try {
               const progress = await api.getDirectorV2PlanProgress(activity.id)
               if (progress) {
-                const streamed = (progress.stream_text || '').replace(/\s+/g, ' ').trim()
-                const streamPreview = streamed.slice(-1200)
+                const streamPreview = llmActivityPreview(progress.stream_text)
                 const detail = (
                   progress.phase === 'writing_scenes' && streamPreview
                     ? streamPreview
@@ -7940,6 +8052,7 @@ export const useStore = create<AppState>((set, get) => ({
                   3,
                   {
                     detailMessage: detail,
+                    detailVolatile: Boolean(streamPreview),
                     detailCurrent: progress.current || 0,
                     detailTotal: progress.total || directorPlannedClips.length,
                     tokenUsage: progress.usage ? {
@@ -7955,10 +8068,11 @@ export const useStore = create<AppState>((set, get) => ({
             await new Promise(resolve => window.setTimeout(resolve, 800))
           }
         })()
-        let result: api.DirectorV2PlanResponse
+        let result: DirectorV2PlanResponse
         try {
           result = await api.directorV2Plan({
             activity_id: activity.id,
+            workspace: get().activeWorkspace,
             skill_type: 'music_video',
             clips: directorPlannedClips,
             scene_description: directorSceneDescription,
@@ -8007,6 +8121,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorClipPlans: plans,
         directorStep: directVideo ? 'review_video' : 'review',
         directorLoading: false,
+        directorPlanRecovery: null,
       })
       activity.finish(`${plans.length} visual shot plans ready for review`)
 
@@ -8021,8 +8136,66 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Planning failed'
       console.error('Director planning failed:', e)
-      set({ directorLoading: false, directorError: msg, directorStep: 'style' })
+      set({
+        directorLoading: false,
+        directorError: msg,
+        directorPlanRecovery: e instanceof api.DirectorV2PlanError ? e.job : null,
+        directorStep: 'style',
+      })
       activity.fail(e, 'planning')
+    }
+  },
+
+  directorResumePlan: async () => {
+    const recovery = get().directorPlanRecovery
+    if (!recovery || recovery.status === 'completed') return
+    if (recovery.workspace !== get().activeWorkspace) {
+      set({ directorError: `This plan belongs to workspace “${recovery.workspace}”. Switch back to resume it.` })
+      return
+    }
+    const activity = beginAppActivity(get, {
+      kind: 'director_planning',
+      title: 'Music Video Director',
+      phase: 'resuming',
+      message: `Resuming ${recovery.missingIndices.length} missing clip plans…`,
+      total: recovery.total,
+    })
+    set({ directorLoading: true, directorError: null, directorStep: 'plan' })
+    try {
+      const result = await api.resumeDirectorV2PlanJob(
+        recovery.jobId,
+        recovery.workspace,
+        activity.id,
+      )
+      const plans = result.clip_plans.map(plan => ({
+        video_prompt: plan.video_prompt || '',
+        image_prompt: plan.image_prompt || '',
+      }))
+      const directVideo = get().directorMusicVideoTreatment.generation_mode === 'direct_video'
+      set({
+        directorClipPlans: plans,
+        directorStep: directVideo ? 'review_video' : 'review',
+        directorLoading: false,
+        directorPlanRecovery: null,
+      })
+      activity.finish(`${plans.length} visual shot plans ready for review`)
+
+      // Rendering is intentionally gated behind a complete resumed response.
+      // A failed/partial response never reaches either generation action.
+      if (get().directorAutoMode) {
+        if (directVideo) get().directorGenerate()
+        else get().directorGenerateStartImages()
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Planning resume failed'
+      console.error('Director planning resume failed:', e)
+      set({
+        directorLoading: false,
+        directorError: msg,
+        directorPlanRecovery: e instanceof api.DirectorV2PlanError ? e.job : recovery,
+        directorStep: 'style',
+      })
+      activity.fail(e, 'resuming')
     }
   },
 
@@ -8514,6 +8687,7 @@ export const useStore = create<AppState>((set, get) => ({
       directorSceneDescription: '',
       directorLoading: false,
       directorError: null,
+      directorPlanRecovery: null,
       directorReferenceImage: null,
       directorReferenceImagePath: null,
       directorCharacterRefs: [],
@@ -8555,6 +8729,7 @@ export const useStore = create<AppState>((set, get) => ({
       shortFilmPreserveVisualStyle: true,
       directorCharacterVisualStyle: '',
       directorAllowClipText: false,
+      directorSpokenLanguage: 'Español de España',
       // Detach this editor session from any prior recoverable pipeline. The
       // backend job is intentionally not cancelled and remains in Dashboard,
       // but its poller must not overwrite the next story loaded into Director.
@@ -8574,6 +8749,7 @@ export const useStore = create<AppState>((set, get) => ({
   shortFilmSetPreserveVisualStyle: (v) => set({ shortFilmPreserveVisualStyle: v }),
   setDirectorCharacterVisualStyle: (style) => set({ directorCharacterVisualStyle: style }),
   setDirectorAllowClipText: (v) => set({ directorAllowClipText: v }),
+  setDirectorSpokenLanguage: (language) => set({ directorSpokenLanguage: language }),
 
   shortFilmUploadAndAnalyze: async (file) => {
     const activity = beginAppActivity(get, {
@@ -8722,6 +8898,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (useV2) {
         const result = await api.directorV2Plan({
+          workspace: get().activeWorkspace,
           skill_type: 'short_film',
           clips: directorPlannedClips,
           scene_description: directorSceneDescription,
@@ -8879,6 +9056,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (useV2) {
         const result = await api.directorV2Plan({
+          workspace: get().activeWorkspace,
           skill_type: 'short_film',
           scene_description: directorSceneDescription,
           story_description: directorSceneDescription,
@@ -9014,39 +9192,78 @@ export const useStore = create<AppState>((set, get) => ({
   activeWorkspace: 'default',
   browsingUploads: false,
   loadWorkspaces: async () => {
+    const listRequestEpoch = ++_workspaceListRequestEpoch
+    const pendingTransitionAtStart = _pendingWorkspaceTransitionEpoch
     try {
       const data = await api.fetchWorkspaces()
-      set({ workspaces: data.workspaces, activeWorkspace: data.active })
+      if (
+        listRequestEpoch !== _workspaceListRequestEpoch
+        || pendingTransitionAtStart !== _pendingWorkspaceTransitionEpoch
+        || pendingTransitionAtStart !== null
+      ) return
+      const previousWorkspace = get().activeWorkspace
+      const browsingUploads = get().browsingUploads
+      if (previousWorkspace !== data.active && !browsingUploads) {
+        _beginWorkspaceTransition()
+        set({
+          workspaces: data.workspaces,
+          activeWorkspace: data.active,
+          outputs: [],
+          outputsTotal: 0,
+          selectedOutput: 0,
+          selectedOutputMeta: null,
+          metadataLoading: false,
+        })
+        void get().loadOutputs()
+      } else {
+        set({ workspaces: data.workspaces, activeWorkspace: data.active })
+      }
     } catch (e) {
       console.error('Failed to load workspaces:', e)
     }
   },
   switchWorkspace: async (name) => {
+    const transitionEpoch = _beginWorkspaceTransition()
     // Virtual "Uploads" view: browse the uploads folder WITHOUT touching
     // the server-side active workspace — generations keep saving to the
     // real workspace; uploads are read-only in the gallery.
     if (name === '__uploads__') {
-      set({ browsingUploads: true, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
-      get().loadOutputs()
+      set({ browsingUploads: true, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null, metadataLoading: false })
+      void get().loadOutputs()
       return
     }
+    _pendingWorkspaceTransitionEpoch = transitionEpoch
     try {
       await api.setActiveWorkspace(name)
-      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
-      get().loadOutputs()
-      get().loadWorkspaces()
+      if (transitionEpoch !== _workspaceRequestEpoch) return
+      _pendingWorkspaceTransitionEpoch = null
+      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null, metadataLoading: false })
+      void get().loadOutputs()
+      void get().loadWorkspaces()
     } catch (e) {
+      if (transitionEpoch === _workspaceRequestEpoch) {
+        _pendingWorkspaceTransitionEpoch = null
+        set({ outputsLoading: false, metadataLoading: false })
+      }
       console.error('Failed to switch workspace:', e)
     }
   },
   createWorkspace: async (name) => {
+    const transitionEpoch = _beginWorkspaceTransition()
+    _pendingWorkspaceTransitionEpoch = transitionEpoch
     try {
       await api.createWorkspace(name)
       await api.setActiveWorkspace(name)
-      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
-      get().loadOutputs()
-      get().loadWorkspaces()
+      if (transitionEpoch !== _workspaceRequestEpoch) return
+      _pendingWorkspaceTransitionEpoch = null
+      set({ browsingUploads: false, activeWorkspace: name, outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null, metadataLoading: false })
+      void get().loadOutputs()
+      void get().loadWorkspaces()
     } catch (e) {
+      if (transitionEpoch === _workspaceRequestEpoch) {
+        _pendingWorkspaceTransitionEpoch = null
+        set({ outputsLoading: false, metadataLoading: false })
+      }
       console.error('Failed to create workspace:', e)
       throw e
     }
@@ -9057,12 +9274,15 @@ export const useStore = create<AppState>((set, get) => ({
     // its switched_to_default answer is authoritative (a client-side
     // activeWorkspace comparison could disagree after a desync and would
     // widen it by force-resetting state the server never changed).
+    const workspaceEpoch = _workspaceRequestEpoch
     const result = await api.deleteWorkspace(name)
+    if (workspaceEpoch !== _workspaceRequestEpoch) return
     if (result.switched_to_default) {
-      set({ browsingUploads: false, activeWorkspace: 'default', outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null })
-      get().loadOutputs()
+      _beginWorkspaceTransition()
+      set({ browsingUploads: false, activeWorkspace: 'default', outputs: [], outputsTotal: 0, selectedOutput: 0, selectedOutputMeta: null, metadataLoading: false })
+      void get().loadOutputs()
     }
-    get().loadWorkspaces()
+    void get().loadWorkspaces()
   },
 
   storageDashboardOpen: false,
@@ -9091,22 +9311,47 @@ export const useStore = create<AppState>((set, get) => ({
   },
   mediaFilter: 'all',
   outputSearchQuery: '',
+  galleryFeedAtTop: true,
+  galleryRefreshPending: false,
+  galleryToast: null,
   setMediaFilter: (f) => {
     const prevFilter = get().mediaFilter
-    set({ mediaFilter: f, selectedOutput: 0 })
-    // Backend-filtered modes: reload from server to get ALL matches
-    const backendFilters: MediaFilter[] = ['favorites', 'multiclip']
-    if (backendFilters.includes(f) || backendFilters.includes(prevFilter)) {
+    set({ mediaFilter: f, selectedOutput: 0, galleryFeedAtTop: true })
+    if (GALLERY_LIST_FILTERS.has(f) || GALLERY_LIST_FILTERS.has(prevFilter)) {
       get().loadOutputs()
       return
     }
-    // Load metadata for first item in new filtered list
     const filtered = get().filteredOutputs()
     if (filtered.length > 0) {
       get().loadOutputMetadata(filtered[0].name)
     } else {
       set({ selectedOutputMeta: null })
     }
+  },
+  setGalleryFeedAtTop: (atTop) => {
+    const wasTop = get().galleryFeedAtTop
+    set({ galleryFeedAtTop: atTop })
+    if (atTop && !wasTop && get().galleryRefreshPending) {
+      set({ galleryRefreshPending: false })
+      void get().loadOutputs()
+    }
+  },
+  clearGalleryToast: () => set({ galleryToast: null }),
+  maybeRefreshGallery: async (opts) => {
+    const filter = get().mediaFilter
+    if (opts?.message) {
+      set({ galleryToast: { id: Date.now(), message: opts.message } })
+    }
+    if (!GALLERY_LIST_FILTERS.has(filter)) {
+      set({ galleryRefreshPending: true })
+      return
+    }
+    if (!get().galleryFeedAtTop && !opts?.force) {
+      set({ galleryRefreshPending: true })
+      return
+    }
+    set({ galleryRefreshPending: false })
+    await get().refreshOutputs()
   },
   setOutputSearchQuery: (q) => {
     set({ outputSearchQuery: q, selectedOutput: 0 })
@@ -9125,37 +9370,51 @@ export const useStore = create<AppState>((set, get) => ({
   outputsLoading: false,
   loadOutputs: async () => {
     const PAGE_SIZE = 100
-    const { mediaFilter, outputSearchQuery, browsingUploads } = get()
-    const isBackendFilter = mediaFilter === 'favorites' || mediaFilter === 'multiclip' || outputSearchQuery.trim()
-    const ws = browsingUploads ? '__uploads__' : undefined
-    set({ outputsLoading: true })
+    const { mediaFilter, outputSearchQuery } = get()
+    const workspace = _workspaceName(get())
+    const request = _beginOutputRequest(workspace)
+    const query = galleryListQuery(mediaFilter, outputSearchQuery)
+    set({ outputsLoading: true, galleryRefreshPending: false })
     try {
-      const { outputs: apiOutputs, total } = isBackendFilter
-        ? await api.fetchOutputs(0, 0, {
-            favoritesOnly: mediaFilter === 'favorites',
-            multiclipOnly: mediaFilter === 'multiclip',
-            search: outputSearchQuery.trim() || undefined,
-            workspace: ws,
+      const { outputs: apiOutputs, total } = query.useServerList
+        ? await api.fetchOutputs(query.resultKind || query.favoritesOnly || query.multiclipOnly || query.search ? 0 : PAGE_SIZE, 0, {
+            favoritesOnly: query.favoritesOnly,
+            multiclipOnly: query.multiclipOnly,
+            resultKind: query.resultKind,
+            mediaType: query.mediaType,
+            search: query.search,
+            workspace,
+            signal: request.controller.signal,
           })
-        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace: ws })
+        : await api.fetchOutputs(PAGE_SIZE, 0, { workspace, signal: request.controller.signal })
+      if (!_isCurrentOutputRequest(get, request)) return
       const outputs: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
         type: o.type,
         mode: (o.mode as OutputFile['mode']) || null,
         edit_sub_mode: (o.edit_sub_mode as OutputFile['edit_sub_mode']) || null,
+        result_kind: (o.result_kind as OutputFile['result_kind']) || null,
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
+        completed_at: o.completed_at,
+        completion_time_source: o.completion_time_source,
         thumbnail_url: o.thumbnail_url || null,
       }))
-      set({ outputs, outputsTotal: total, selectedOutput: 0, outputsLoading: false })
+      const previousName = get().filteredOutputs()[get().selectedOutput]?.name
+      const found = previousName ? outputs.findIndex(item => item.name === previousName) : -1
+      const nextIndex = found >= 0 ? found : 0
+      set({ outputs, outputsTotal: total, selectedOutput: nextIndex, outputsLoading: false })
       if (outputs.length > 0) {
-        get().loadOutputMetadata(outputs[0].name)
+        void get().loadOutputMetadata(outputs[nextIndex].name)
       }
     } catch (e) {
+      if (!_isCurrentOutputRequest(get, request)) return
       console.error('Failed to load outputs:', e)
       set({ outputsLoading: false })
+    } finally {
+      _finishOutputRequest(request)
     }
   },
 
@@ -9165,10 +9424,20 @@ export const useStore = create<AppState>((set, get) => ({
     const current = get().outputs
     const total = get().outputsTotal
     if (current.length >= total) return // All loaded
+    const workspace = _workspaceName(get())
+    const request = _beginOutputRequest(workspace)
     try {
+      const query = galleryListQuery(get().mediaFilter, get().outputSearchQuery)
       const { outputs: apiOutputs, total: newTotal } = await api.fetchOutputs(PAGE_SIZE, current.length, {
-        workspace: get().browsingUploads ? '__uploads__' : undefined,
+        workspace,
+        mediaType: query.mediaType,
+        resultKind: query.resultKind,
+        favoritesOnly: query.favoritesOnly,
+        multiclipOnly: query.multiclipOnly,
+        search: query.search,
+        signal: request.controller.signal,
       })
+      if (!_isCurrentOutputRequest(get, request)) return
       const more: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
@@ -9178,7 +9447,10 @@ export const useStore = create<AppState>((set, get) => ({
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
+        completed_at: o.completed_at,
+        completion_time_source: o.completion_time_source,
         thumbnail_url: o.thumbnail_url || null,
+        result_kind: (o.result_kind as OutputFile['result_kind']) || null,
       }))
       // Deduplicate (in case items shifted during generation)
       const existingNames = new Set(current.map(o => o.name))
@@ -9188,14 +9460,28 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch {
       // Silent fail
+    } finally {
+      _finishOutputRequest(request)
     }
   },
 
   // Incremental refresh: only fetch the newest items to detect new outputs during generation
   refreshOutputs: async () => {
+    const workspace = _workspaceName(get())
+    const request = _beginOutputRequest(workspace)
+    const query = galleryListQuery(get().mediaFilter, get().outputSearchQuery)
     try {
       // Only fetch first page — new outputs appear at the top (newest first)
-      const { outputs: apiOutputs, total } = await api.fetchOutputs(50, 0)
+      const { outputs: apiOutputs, total } = await api.fetchOutputs(50, 0, {
+        workspace,
+        mediaType: query.mediaType,
+        resultKind: query.resultKind,
+        favoritesOnly: query.favoritesOnly,
+        multiclipOnly: query.multiclipOnly,
+        search: query.search,
+        signal: request.controller.signal,
+      })
+      if (!_isCurrentOutputRequest(get, request)) return
       const fresh: OutputFile[] = apiOutputs.map(o => ({
         name: o.name,
         url: o.url,
@@ -9205,7 +9491,10 @@ export const useStore = create<AppState>((set, get) => ({
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
+        completed_at: o.completed_at,
+        completion_time_source: o.completion_time_source,
         thumbnail_url: o.thumbnail_url || null,
+        result_kind: (o.result_kind as OutputFile['result_kind']) || null,
       }))
       const current = get().outputs
       const currentNames = new Set(current.map(o => o.name))
@@ -9221,11 +9510,23 @@ export const useStore = create<AppState>((set, get) => ({
           && latest.favorite === output.favorite
           && latest.size === output.size
           && latest.created_at === output.created_at
+          && latest.completed_at === output.completed_at
+          && latest.completion_time_source === output.completion_time_source
           && latest.thumbnail_url === output.thumbnail_url
+          && latest.result_kind === output.result_kind
         return unchanged ? output : latest
       })
       const existingChanged = updatedCurrent.some((output, index) => output !== current[index])
       if (newItems.length > 0 || existingChanged || total !== get().outputsTotal) {
+        const watchingGallery = GALLERY_LIST_FILTERS.has(get().mediaFilter)
+        if (!watchingGallery || !get().galleryFeedAtTop) {
+          set({ galleryRefreshPending: true })
+          if (newItems.length > 0 && !get().galleryToast) {
+            const noun = newItems.length === 1 ? 'item' : 'items'
+            set({ galleryToast: { id: Date.now(), message: `${newItems.length} new ${noun} ready` } })
+          }
+          return
+        }
         // Prepend new items (newest first), update files that were first seen
         // while still being written, and shift selection to keep the same
         // logical item active.
@@ -9235,12 +9536,18 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch {
       // Silent fail for background refresh
+    } finally {
+      if (_isCurrentOutputRequest(get, request)) set({ outputsLoading: false })
+      _finishOutputRequest(request)
     }
   },
 
   toggleFavorite: async (name) => {
+    const workspace = _workspaceName(get())
+    const workspaceEpoch = _workspaceRequestEpoch
     try {
       const result = await api.toggleFavorite(name)
+      if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
       set(s => ({
         outputs: s.outputs.map(o => o.name === name ? { ...o, favorite: result.favorite } : o),
       }))
@@ -9254,16 +9561,25 @@ export const useStore = create<AppState>((set, get) => ({
   metadataLoading: false,
 
   loadOutputMetadata: async (name) => {
+    const workspace = _workspaceName(get())
+    const metadataRequestEpoch = ++_metadataRequestEpoch
+    _metadataAbortController?.abort()
+    const controller = new AbortController()
+    _metadataAbortController = controller
     set({ metadataLoading: true, selectedOutputMeta: null })
     try {
-      const meta = await api.fetchOutputMetadata(name)
+      const meta = await api.fetchOutputMetadata(name, workspace, controller.signal)
+      if (metadataRequestEpoch !== _metadataRequestEpoch || _workspaceName(get()) !== workspace) return
       set({ selectedOutputMeta: meta, metadataLoading: false })
     } catch (e) {
+      if (metadataRequestEpoch !== _metadataRequestEpoch || _workspaceName(get()) !== workspace) return
       // Diagnostic: surface metadata-fetch failures (the usual cause of a
       // "Load Settings does nothing" report on slow/VPN links) instead of
       // swallowing them silently.
       console.error('[LoadSettings] fetchOutputMetadata FAILED for', name, '-', e)
       set({ selectedOutputMeta: null, metadataLoading: false })
+    } finally {
+      if (_metadataAbortController === controller) _metadataAbortController = null
     }
   },
 
@@ -9433,6 +9749,19 @@ export const useStore = create<AppState>((set, get) => ({
     newParams.h3_audio_prompt = (p.h3_audio_prompt as string) || undefined
     newParams.h3_ref_image_size = (p.h3_ref_image_size as 'match' | 'max') ?? undefined
     newParams.h3_reference_mode = (p.h3_reference_mode as 'first_frame' | 'references') ?? undefined
+    newParams.h3_model_profile = (
+      p.h3_model_profile as GenerateParams['h3_model_profile']
+    ) ?? undefined
+    newParams.minimax_h3_references = Array.isArray(p.minimax_h3_references)
+      ? p.minimax_h3_references as GenerateParams['minimax_h3_references']
+      : []
+    newParams.minimax_h3_reference_detail = (
+      p.minimax_h3_reference_detail as GenerateParams['minimax_h3_reference_detail']
+    ) ?? undefined
+    newParams.minimax_h3_text_encoder = (
+      p.minimax_h3_text_encoder as GenerateParams['minimax_h3_text_encoder']
+    ) ?? undefined
+    newParams.minimax_h3_turbo_mode = Boolean(p.minimax_h3_turbo_mode)
     newParams.self_refiner_setting = (p.self_refiner_setting as number) ?? undefined
     newParams.audio_guide = (p.audio_guide as string) || ''
     newParams.audio_guide2 = (p.audio_guide2 as string) || ''
@@ -9492,33 +9821,15 @@ export const useStore = create<AppState>((set, get) => ({
     ) ? p.h3_window_plan as unknown as H3WindowPlan : null
 
     // Detect multi-clip output and reconstruct clips
-    if (p.multi_prompts_gen_type === 3 && Array.isArray(p.image_start)) {
-      // Director Mode joins per-clip prompts with `\n---CLIP_BOUNDARY---\n`
-      // (see app/launch.py:7279). Studio Mode multi-shot joins with plain
-      // `\n` (single-line prompts only). Split on the boundary token first
-      // so Director prompts that contain their own newlines survive; fall
-      // back to plain newline split for legacy Studio multi-clip sidecars
-      // that don't carry the boundary marker.
-      //
-      // Before this fix: every internal `\n` in a Director clip prompt
-      // became a clip break, doubling+ the clip count and leaving half of
-      // them with the literal string `---CLIP_BOUNDARY---` as their prompt.
-      // The visible symptom was "some prompts populate but others don't"
-      // and start-image indices going to the wrong clips.
-      const promptText = (p.prompt as string) || ''
-      const CLIP_BOUNDARY = '\n---CLIP_BOUNDARY---\n'
-      const promptLines = promptText.includes(CLIP_BOUNDARY)
-        ? promptText.split(CLIP_BOUNDARY).map(s => s.trim()).filter(Boolean)
-        : promptText.split('\n').map(s => s.trim()).filter(Boolean)
+    const selectedName = get().filteredOutputs()[get().selectedOutput]?.name || ''
+    const loadFullSequence = isJoinedSequenceOutput(selectedName)
+    if (p.multi_prompts_gen_type === 3 && Array.isArray(p.image_start) && loadFullSequence) {
+      // Director Mode joins per-clip prompts with `\n---CLIP_BOUNDARY---\n`.
+      // Structured H3 prompts contain their own newlines, so never split those
+      // on `\n` or Studio reconstructs dozens of fake clips.
+      const promptLines = splitStudioClipPrompts((p.prompt as string) || '')
       const imagePaths = p.image_start as string[]
-      // Per-clip durations (Director Mode populates this; Studio mode may not).
-      // Saved by app/launch.py as part of raw_params before per-clip split;
-      // survives onto the concat multiclip sidecar (see real sidecar example
-      // in app/outputs/Testing04/...multiclip.meta.json line 13-26).
       const perClipFrames = Array.isArray(p.per_clip_frames) ? (p.per_clip_frames as number[]) : []
-      // Per-clip keyframe images (Director Mode KFI feature). Array of arrays
-      // — each inner array holds the keyframe paths for that clip. Studio
-      // Mode multi-shot generations don't use this field today.
       const perClipKeyframes = Array.isArray(p.per_clip_keyframes) ? (p.per_clip_keyframes as string[][]) : []
       const clipCount = Math.max(promptLines.length, imagePaths.length, perClipFrames.length)
       const clips: MultiClip[] = []
@@ -9535,17 +9846,13 @@ export const useStore = create<AppState>((set, get) => ({
             .map(path => ({ file: null, path })),
         })
       }
-      set({ clips, singlePromptMode: false })
+      set({ clips, singlePromptMode: false, studioFocusedClipIndex: 0 })
       newParams.image_mode = 2
       newParams.multi_prompts_gen_type = 3
 
-      // Fetch clip images from their real storage location. User-provided
-      // images live in uploads, while Director comic frames live in outputs.
-      // Prefer the original sidecar path because it retains that distinction;
-      // fetchStoredAsset falls back for old basename-only sidecars.
       const uploadNames = Array.isArray(uploadFilenames?.image_start)
         ? uploadFilenames.image_start as string[]
-        : imagePaths.map(p => (p || '').replace(/\\/g, '/').split('/').pop() || '')
+        : imagePaths.map(path => (path || '').replace(/\\/g, '/').split('/').pop() || '')
       for (let i = 0; i < clipCount; i++) {
         const fname = uploadNames[i]
         if (fname) {
@@ -9562,11 +9869,24 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
     } else {
-      // Set or clear attachment paths from sidecar
-      newParams.image_start = p.image_start ? (p.image_start as string) : ''
-      set({ clips: [], singlePromptMode: false })
+      const extracted = (
+        p.multi_prompts_gen_type === 3 || Array.isArray(p.image_start)
+      ) ? extractSingleClipStudioParams(p) : null
+      if (extracted) {
+        newParams.prompt = extracted.prompt
+        newParams.image_start = extracted.imageStart
+        newParams.image_end = extracted.imageEnd
+        if (extracted.videoLength) newParams.video_length = extracted.videoLength
+        newParams.image_prompt_type = extracted.imagePromptType
+      } else {
+        newParams.image_start = p.image_start ? (p.image_start as string) : ''
+      }
+      newParams.multi_prompts_gen_type = 2
+      set({ clips: [], singlePromptMode: false, studioFocusedClipIndex: 0 })
     }
-    newParams.image_end = p.image_end ? (p.image_end as string) : ''
+    if (newParams.image_end === undefined) {
+      newParams.image_end = p.image_end ? (p.image_end as string) : ''
+    }
 
     // Rebuild lora weights from multipliers string
     const loraWeights: Record<string, number[]> = {}
@@ -9685,12 +10005,14 @@ export const useStore = create<AppState>((set, get) => ({
     // from the full path in params for sidecars missing upload_filenames.
     const startFile = (typeof uploadFilenames?.image_start === 'string'
       ? uploadFilenames.image_start
-      : null) || _deriveBase(p.image_start)
+      : null) || _deriveBase(newParams.image_start)
     const endFile = (typeof uploadFilenames?.image_end === 'string'
       ? uploadFilenames.image_end
-      : null) || _deriveBase(p.image_end)
+      : null) || _deriveBase(newParams.image_end)
     if (hadStartImage && startFile) {
-      api.fetchStoredAsset(typeof p.image_start === 'string' ? p.image_start : startFile)
+      api.fetchStoredAsset(typeof newParams.image_start === 'string' && newParams.image_start
+        ? newParams.image_start
+        : startFile)
         .then(r => r.ok ? r.blob() : null)
         .then(blob => {
           if (!blob) return
@@ -9700,7 +10022,9 @@ export const useStore = create<AppState>((set, get) => ({
         .catch(() => {})
     }
     if (hadEndImage && endFile) {
-      api.fetchStoredAsset(typeof p.image_end === 'string' ? p.image_end : endFile)
+      api.fetchStoredAsset(typeof newParams.image_end === 'string' && newParams.image_end
+        ? newParams.image_end
+        : endFile)
         .then(r => r.ok ? r.blob() : null)
         .then(blob => {
           if (!blob) return
@@ -10009,14 +10333,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   rejoinClipGroup: async (groupId) => {
+    const workspace = _workspaceName(get())
+    const workspaceEpoch = _workspaceRequestEpoch
     try {
       const result = await api.rejoinClips(groupId)
-      // Refresh outputs list to include the new concatenated file
-      const outputsRes = await fetch('/api/v1/outputs')
-      if (outputsRes.ok) {
-        const data = await outputsRes.json()
-        set({ outputs: data.files || [] })
-      }
+      if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
+      // Refresh through the epoch-aware, workspace-explicit gallery loader.
+      await get().loadOutputs()
+      if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
       // Select the new file
       const allOutputs = get().outputs
       const newIdx = allOutputs.findIndex(o => o.name === result.filename)
@@ -10034,9 +10358,12 @@ export const useStore = create<AppState>((set, get) => ({
     const idx = get().selectedOutput
     const output = outputs[idx]
     if (!output) return
+    const workspace = _workspaceName(get())
+    const workspaceEpoch = _workspaceRequestEpoch
 
     try {
       await api.deleteOutput(output.name)
+      if (workspaceEpoch !== _workspaceRequestEpoch || _workspaceName(get()) !== workspace) return
       // Remove from local state
       const allOutputs = get().outputs.filter(o => o.name !== output.name)
       const newIdx = Math.min(idx, Math.max(0, allOutputs.length - 1))
@@ -10056,10 +10383,7 @@ export const useStore = create<AppState>((set, get) => ({
   // ── Director Pipeline (server-side) ──────────────────────────────
   startDirectorPipeline: async (useCurrentPlans = false) => {
     const state = get()
-    const directVideo = (
-      state.directorSkill === 'music_video'
-      && state.directorMusicVideoTreatment.generation_mode === 'direct_video'
-    )
+    const directVideo = state.directorMusicVideoTreatment.generation_mode === 'direct_video'
     const { directorPlannedClips, directorSceneDescription,
             directorAudioPath, directorAnalysis, directorReferenceImagePath,
             directorAutoMode, directorSeamless, directorShotImageGuidance,
@@ -10243,9 +10567,15 @@ export const useStore = create<AppState>((set, get) => ({
 
     const pipelineParams: Record<string, unknown> = {
       pipeline_type: pipelineType,
+      production_kind: (
+        /cinematic story trailer|mandatory trailer arc/i.test(directorSceneDescription)
+          ? 'trailer'
+          : pipelineType === 'music_video' ? 'music_video' : undefined
+      ),
       auto_mode: useCurrentPlans ? true : directorAutoMode,
       workspace: get().activeWorkspace,
       scene_description: directorSceneDescription,
+      spoken_language: state.directorSpokenLanguage || undefined,
       audio_path: directorAudioPath,
       reference_image_path: refImagePath,
       character_ref_paths: charPaths.length > 0 ? charPaths : undefined,
@@ -10285,7 +10615,7 @@ export const useStore = create<AppState>((set, get) => ({
       preserve_visual_style: shortFilmPreserveVisualStyle,
       character_visual_style: directorCharacterVisualStyle || undefined,
       allow_clip_text: directorAllowClipText,
-      music_video_treatment: pipelineType === 'music_video'
+      music_video_treatment: pipelineType === 'music_video' || directVideo
         ? state.directorMusicVideoTreatment
         : undefined,
 
@@ -10344,6 +10674,7 @@ export const useStore = create<AppState>((set, get) => ({
         directorError: null,
       })
       get().pollPipelineStatus()
+      void get().loadPipelineList()
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Pipeline failed to start'
       set({ directorError: msg })
@@ -10437,14 +10768,10 @@ export const useStore = create<AppState>((set, get) => ({
           // image gen fails (e.g. incompatible LoRA architecture).
           // clipIndex is captured BEFORE filtering so it stays aligned to
           // the original clip plan position even when failed shots drop out.
-          const images = status.clip_images
-            .map((filename, i) => ({
-              clipIndex: i,
-              prompt: status.clip_plans?.[i]?.image_prompt || '',
-              file: null as unknown as File,
-              filename,
-            }))
-            .filter(img => img.filename && img.filename.length > 0)
+          const images = mapDirectorClipImages(
+            status.clip_images,
+            status.clip_plans || [],
+          )
           set({ directorClipImages: images })
         }
 
@@ -10521,7 +10848,7 @@ export const useStore = create<AppState>((set, get) => ({
             directorLoading: false,
             directorStep: 'review_video',
           })
-          get().loadOutputs()
+          void get().maybeRefreshGallery({ message: 'Production finished' })
           return  // Stop polling
         }
 

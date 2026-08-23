@@ -64,6 +64,11 @@ class TestQuietPollingAccessFilter(unittest.TestCase):
         )
         self.assertTrue(
             self.quiet_filter.filter(
+                _access_record("GET", "/api/v1/system-stats", 302)
+            )
+        )
+        self.assertTrue(
+            self.quiet_filter.filter(
                 _access_record("POST", "/api/v1/status/job-id", 200)
             )
         )

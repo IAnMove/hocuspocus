@@ -18,7 +18,7 @@ if _APP_DIR not in sys.path:
 
 
 def _load_functions(*names: str):
-    source = Path(__file__).parents[1].joinpath("app", "launch.py").read_text(encoding="utf-8")
+    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     selected = [
         copy.deepcopy(node)
@@ -26,7 +26,7 @@ def _load_functions(*names: str):
         if isinstance(node, ast.FunctionDef) and node.name in names
     ]
     namespace = {"json": json}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "launch.py", "exec"), namespace)
+    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
     return tuple(namespace[name] for name in names)
 
 

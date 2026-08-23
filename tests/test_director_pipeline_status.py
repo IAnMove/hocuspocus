@@ -128,6 +128,102 @@ class TestDirectorPipelineStatusReconnect(unittest.TestCase):
         self.assertIn("21 timed song segments", message)
         self.assertIn("video generation have not started", message)
 
+    def test_recent_pipeline_feed_keeps_terminal_memory_states(self):
+        pipeline_ids = ["terminaldone", "terminalfail", "terminalstop"]
+        statuses = ["completed", "failed", "cancelled"]
+        now = 1234.0
+        for index, (pipeline_id, status) in enumerate(
+            zip(pipeline_ids, statuses)
+        ):
+            pipeline._pipelines[pipeline_id] = {
+                "id": pipeline_id,
+                "workspace": "default",
+                "status": status,
+                "phase": status,
+                "created_at": now + index,
+                "updated_at": now + index + 10,
+                "_completed_at": now + index + 10,
+                "progress": {
+                    "current": 1,
+                    "total": 1,
+                    "message": status,
+                },
+                "clip_plans": [{"video_prompt": "shot"}],
+                "output_files": [f"{pipeline_id}.mp4"],
+                "params": {
+                    "pipeline_type": "music_video",
+                    "video_model": "minimax_h3_legacy",
+                },
+            }
+
+        try:
+            with tempfile.TemporaryDirectory() as output_dir:
+                recent = pipeline.list_recent_pipelines(
+                    output_dir,
+                    "default",
+                )
+        finally:
+            for pipeline_id in pipeline_ids:
+                pipeline._pipelines.pop(pipeline_id, None)
+
+        by_id = {item["id"]: item for item in recent}
+        self.assertEqual(
+            {pipeline_id: by_id[pipeline_id]["status"] for pipeline_id in pipeline_ids},
+            dict(zip(pipeline_ids, statuses)),
+        )
+        self.assertNotIn("params", by_id["terminaldone"])
+        self.assertEqual(
+            by_id["terminaldone"]["generation_details"]["video_model_type"],
+            "minimax_h3_legacy",
+        )
+
+    def test_recent_pipeline_feed_recovers_terminal_checkpoint(self):
+        with tempfile.TemporaryDirectory() as output_dir:
+            state_path = os.path.join(
+                output_dir,
+                "_director_pipeline_savedfinal.json",
+            )
+            with open(state_path, "w", encoding="utf-8") as handle:
+                json.dump({
+                    "pipeline_id": "savedfinal",
+                    "workspace": "default",
+                    "status": "failed",
+                    "phase": "failed",
+                    "created_at": 100.0,
+                    "updated_at": 120.0,
+                    "completed_at": 120.0,
+                    "error": "render failed",
+                    "progress": {
+                        "current": 1,
+                        "total": 2,
+                        "message": "render failed",
+                    },
+                    "pipeline_type": "music_video",
+                    "video_model": "minimax_h3_legacy",
+                    "clips": [{"video_filename": "clip-1.mp4"}, {}],
+                    "output_files": ["clip-1.mp4"],
+                    "_params_snapshot": {
+                        "pipeline_type": "music_video",
+                        "video_model": "minimax_h3_legacy",
+                        "video_params": {"resolution": "960x544"},
+                    },
+                }, handle)
+
+            recent = pipeline.list_recent_pipelines(
+                output_dir,
+                "default",
+            )
+
+        saved = next(item for item in recent if item["id"] == "savedfinal")
+        self.assertEqual(saved["status"], "failed")
+        self.assertEqual(saved["completed_at"], 120.0)
+        self.assertEqual(saved["error"], "render failed")
+        self.assertEqual(saved["output_files"], ["clip-1.mp4"])
+        self.assertEqual(
+            saved["generation_details"]["video_resolution"],
+            "960x544",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

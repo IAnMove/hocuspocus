@@ -36,6 +36,41 @@ _generation_queues: dict[
     deque[tuple[int, object, MutableMapping[str, Any]]],
 ] = {}
 _generation_queue_locks: dict[int, Any] = {}
+_job_state_observer: Callable[[Mapping[str, Any]], None] | None = None
+
+
+def set_job_state_observer(
+    observer: Callable[[Mapping[str, Any]], None] | None,
+) -> None:
+    """Register one best-effort observer for externally visible job changes.
+
+    The lifecycle layer stays independent from the canonical task registry.  A
+    host such as ``launch.py`` can subscribe after startup and translate the
+    already-atomic job snapshot into SSE/task updates.  Observer failures never
+    interfere with generation and callbacks run after lifecycle locks release.
+    """
+    global _job_state_observer
+    with _lifecycle_lock:
+        _job_state_observer = observer
+
+
+def _notify_job_state(job: MutableMapping[str, Any]) -> None:
+    with _lifecycle_lock:
+        observer = _job_state_observer
+        snapshot = dict(job)
+        if isinstance(snapshot.get("output_files"), list):
+            snapshot["output_files"] = list(snapshot["output_files"])
+        if isinstance(snapshot.get("clip_output_files"), dict):
+            snapshot["clip_output_files"] = dict(snapshot["clip_output_files"])
+    if observer is None:
+        return
+    try:
+        observer(snapshot)
+    except Exception:
+        # Observability must never turn a successful model transition into a
+        # failed generation.  The periodic canonical reconciler remains the
+        # recovery path if a registry write is temporarily unavailable.
+        pass
 
 
 @dataclass(frozen=True)
@@ -193,7 +228,9 @@ def call_with_sticky_interrupt(
 def is_cancel_requested(job: MutableMapping[str, Any]) -> bool:
     """Return whether cancellation is durable for ``job``."""
     with _lifecycle_lock:
-        return bool(job.get("cancel_requested")) or job.get("status") == "cancelled"
+        return bool(job.get("cancel_requested")) or job.get("status") in {
+            "cancelling", "cancelled",
+        }
 
 
 def snapshot_job(job: MutableMapping[str, Any]) -> dict[str, Any]:
@@ -248,52 +285,63 @@ def record_job_outputs(
             job["clip_output_files"] = clip_outputs
         if join_output_file:
             job["join_output_file"] = join_output_file
-        return list(merged)
+        result = list(merged)
+    _notify_job_state(job)
+    return result
 
 
 def try_start(job: MutableMapping[str, Any], **updates: Any) -> bool:
     """Atomically move a queued job to running unless it was cancelled."""
     if "status" in updates:
         raise ValueError("status must be changed through a lifecycle transition")
+    changed = False
+    started = False
     with _lifecycle_lock:
         if is_cancel_requested(job):
-            job["status"] = "cancelled"
-            job["message"] = "Cancelled"
-            job["finished_at"] = job.get("finished_at") or time.time()
-            return False
-        if job.get("status") != "queued":
-            return False
-        job.update(updates)
-        job["started_at"] = job.get("started_at") or time.time()
-        job["status"] = "running"
-        return True
+            changed = _acknowledge_cancel_locked(job)
+        elif job.get("status") == "queued":
+            job.update(updates)
+            job["started_at"] = job.get("started_at") or time.time()
+            job["status"] = "running"
+            changed = True
+            started = True
+    if changed:
+        _notify_job_state(job)
+    return started
 
 
 def try_requeue(job: MutableMapping[str, Any], **updates: Any) -> bool:
     """Return a multi-phase job to queued unless cancellation won first."""
     if "status" in updates:
         raise ValueError("status must be changed through a lifecycle transition")
+    changed = False
+    requeued = False
     with _lifecycle_lock:
         if is_cancel_requested(job):
-            job["status"] = "cancelled"
-            job["message"] = "Cancelled"
-            return False
-        if job.get("status") != "running":
-            return False
-        job.update(updates)
-        job["status"] = "queued"
-        return True
+            changed = _acknowledge_cancel_locked(job)
+        elif job.get("status") == "running":
+            job.update(updates)
+            job["status"] = "queued"
+            changed = True
+            requeued = True
+    if changed:
+        _notify_job_state(job)
+    return requeued
 
 
 def update_job(job: MutableMapping[str, Any], **updates: Any) -> bool:
     """Update a live job without replacing a terminal/cancelled message."""
     if "status" in updates:
         raise ValueError("status must be changed through a lifecycle transition")
+    updated = False
     with _lifecycle_lock:
         if is_cancel_requested(job) or job.get("status") != "running":
             return False
         job.update(updates)
-        return True
+        updated = True
+    if updated:
+        _notify_job_state(job)
+    return updated
 
 
 def register_abort_state(
@@ -325,16 +373,83 @@ def unregister_abort_state(
     active_states: MutableMapping[str, MutableMapping[str, Any]],
     state: MutableMapping[str, Any] | None = None,
 ) -> None:
-    """Remove only the abort state owned by the finishing worker."""
+    """Remove only the abort state owned by the finishing worker.
+
+    Releasing the matching state is also the worker's cancellation
+    acknowledgement.  A stale worker must never settle a newer phase, so the
+    terminal transition requires ownership of both the public active state and
+    the private registration.
+    """
+    acknowledged_job: MutableMapping[str, Any] | None = None
     with _lifecycle_lock:
         current = active_states.get(job_id)
-        if current is not None and (state is None or current is state):
+        owns_active_state = current is not None and (
+            state is None or current is state
+        )
+        if owns_active_state:
             active_states.pop(job_id, None)
         registration = _registrations.get(job_id)
-        if registration is not None and (
+        owns_registration = registration is not None and (
             state is None or registration[1] is state
-        ):
+        )
+        if owns_registration:
             _registrations.pop(job_id, None)
+        if (
+            owns_active_state
+            and owns_registration
+            and registration is not None
+            and current is registration[1]
+            and _acknowledge_cancel_locked(registration[0])
+        ):
+            acknowledged_job = registration[0]
+    if acknowledged_job is not None:
+        _notify_job_state(acknowledged_job)
+
+
+def _acknowledge_cancel_locked(
+    job: MutableMapping[str, Any],
+    updates: Mapping[str, Any] | None = None,
+) -> bool:
+    """Settle a requested cancellation while ``_lifecycle_lock`` is held."""
+    if job.get("status") in TERMINAL_STATUSES or not is_cancel_requested(job):
+        return False
+    if updates:
+        job.update(updates)
+    # Cancellation is absorbing.  Neutral settlement metadata is allowed, but
+    # no caller can turn an acknowledged cancellation into completed/failed or
+    # replace the stable terminal message.
+    job["cancel_requested"] = True
+    job["status"] = "cancelled"
+    job["phase"] = "cancelled"
+    job["message"] = "Cancelled"
+    job["finished_at"] = job.get("finished_at") or time.time()
+    return True
+
+
+def _has_active_registration_locked(
+    job: MutableMapping[str, Any],
+) -> bool:
+    """Return whether a worker still owns a registered abort state."""
+    return any(registration[0] is job for registration in _registrations.values())
+
+
+def acknowledge_cancel(
+    job: MutableMapping[str, Any],
+    **updates: Any,
+) -> bool:
+    """Acknowledge that a cancelling worker has stopped and released work.
+
+    This is the explicit settlement path for workers that do not own an abort
+    state and exit without a normal ``finish_job`` call.  It is idempotent and
+    refuses to cancel a job unless a durable cancellation request already won.
+    """
+    if "status" in updates:
+        raise ValueError("status must be changed through a lifecycle transition")
+    with _lifecycle_lock:
+        changed = _acknowledge_cancel_locked(job, updates)
+    if changed:
+        _notify_job_state(job)
+    return changed
 
 
 def request_cancel(
@@ -344,14 +459,16 @@ def request_cancel(
     active_states: MutableMapping[str, MutableMapping[str, Any]] | None = None,
 ) -> CancelResult:
     """Atomically request cancellation and signal the matching active state."""
+    result: CancelResult
     with _lifecycle_lock:
         status = job.get("status")
         if status in TERMINAL_STATUSES:
             return CancelResult(False, False, False)
+        if status == "cancelling":
+            return CancelResult(False, False, False)
 
         was_running = status == "running"
         job["cancel_requested"] = True
-        job["message"] = "Cancelled"
 
         abort_signalled = False
         state = active_states.get(job_id) if active_states is not None and job_id else None
@@ -371,10 +488,22 @@ def request_cancel(
                 except Exception:
                     pass
 
-        job["status"] = "cancelled"
-        job["finished_at"] = job.get("finished_at") or time.time()
+        if was_running:
+            # The request is durable and inference has been signalled, but the
+            # worker still owns its resource until finish/unregister/explicit
+            # acknowledgement.  Do not publish a terminal timestamp early.
+            job["status"] = "cancelling"
+            job["phase"] = "cancelling"
+            job["message"] = "Cancelling…"
+            job["finished_at"] = None
+        else:
+            # Queued/waiting jobs own no active model invocation and can settle
+            # synchronously without a worker acknowledgement.
+            _acknowledge_cancel_locked(job)
 
-        return CancelResult(True, was_running, abort_signalled)
+        result = CancelResult(True, was_running, abort_signalled)
+    _notify_job_state(job)
+    return result
 
 
 def finish_job(
@@ -387,18 +516,26 @@ def finish_job(
         raise ValueError(f"Invalid terminal job status: {status}")
     if "status" in updates:
         raise ValueError("status must be changed through a lifecycle transition")
+    changed = False
+    published = False
     with _lifecycle_lock:
         if is_cancel_requested(job):
-            job["status"] = "cancelled"
-            job["message"] = "Cancelled"
+            # A late completed/failed result is only an acknowledgement that
+            # the cancelling worker reached its terminal boundary. If it still
+            # owns an abort-state registration, keep `cancelling` until
+            # unregister_abort_state confirms the worker has released it.
+            # Workers without a registration settle directly here.
+            if not _has_active_registration_locked(job):
+                changed = _acknowledge_cancel_locked(job)
+        elif job.get("status") == "running":
+            job.update(updates)
             job["finished_at"] = job.get("finished_at") or time.time()
-            return False
-        if job.get("status") != "running":
-            return False
-        job.update(updates)
-        job["finished_at"] = job.get("finished_at") or time.time()
-        job["status"] = status
-        return True
+            job["status"] = status
+            changed = True
+            published = True
+    if changed:
+        _notify_job_state(job)
+    return published
 
 
 def register_generation_job(

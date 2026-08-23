@@ -52,7 +52,7 @@ def test_h3_internal_continuations_use_character_refs_and_stable_seeds(tmp_path:
     assert submitted[1]["image_refs"][1:] == [str(portrait)]
     assert submitted[0]["seed"] == submitted[1]["seed"] - 1
     assert submitted[0]["seed"] >= 0
-    assert all("IDENTITY CONTINUITY LOCK" in item["prompt"] for item in submitted)
+    assert all("Same faces and wardrobe throughout" in item["prompt"] for item in submitted)
     assert "exact first frame" not in submitted[1]["prompt"].casefold()
 
 
@@ -61,5 +61,5 @@ def test_h3_identity_contract_stays_before_native_audio_clause():
         "She turns toward camera.\nAudio: quiet wind."
     )
 
-    assert prompt.index("IDENTITY CONTINUITY LOCK") < prompt.index("Audio:")
+    assert prompt.index("Same faces and wardrobe throughout") < prompt.index("Audio:")
     assert prompt.endswith("Audio: quiet wind.")

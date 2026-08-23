@@ -4,7 +4,7 @@ export const DEFAULT_PRODUCTION_PROFILE: ProductionProfile = {
   version: 1,
   text: { provider: 'minimax', model: 'MiniMax-M3' },
   image: { provider: 'minimax', model: 'image-01' },
-  music: { provider: 'minimax', model: 'music-3.0' },
+  music: { provider: 'local', model: 'ace_step_v1_5_xl_sft_lm_4b' },
   video: {
     provider: 'local',
     model: 'minimax_h3_legacy',

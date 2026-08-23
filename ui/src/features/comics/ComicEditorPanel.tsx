@@ -499,7 +499,7 @@ function AssetsPanel() {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-1">
-        <button className={`${button} ${source === 'maestro' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSource('maestro')}>Maestro</button>
+        <button className={`${button} ${source === 'maestro' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSource('maestro')}>Loreframe Lab</button>
         <button className={`${button} ${source === 'project' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSource('project')}>Project</button>
       </div>
       <button className={`${button} w-full`} onClick={() => fileRef.current?.click()} disabled={busy}>
@@ -508,7 +508,7 @@ function AssetsPanel() {
       <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={event => uploadFiles(event.target.files)} />
       <div className="rounded-lg border border-border bg-bg-tertiary/40 p-2 space-y-2">
         <div className="grid grid-cols-2 gap-1">
-          <button className={`${button} ${provider === 'maestro' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('maestro')}>Maestro local</button>
+          <button className={`${button} ${provider === 'maestro' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('maestro')}>Loreframe Lab local</button>
           <button className={`${button} ${provider === 'minimax' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('minimax')}>MiniMax</button>
         </div>
         <textarea className={input} rows={3} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Describe this panel image…" />
@@ -1145,7 +1145,7 @@ export function ComicDirectorPanel({
       for (let index = 0; index < tasks.length; index++) {
         const task = tasks[index]
         report(`Generating artwork for panel ${index + 1} of ${tasks.length} with ${
-          director.provider === 'minimax' ? 'MiniMax' : 'Maestro'
+          director.provider === 'minimax' ? 'MiniMax' : 'Loreframe Lab'
         }…`, { current: index + 1, total: tasks.length })
         setProgress(`Generating panel ${index + 1} / ${tasks.length}`)
         const currentDirector = useComicStore.getState().project.director!
@@ -1190,7 +1190,7 @@ export function ComicDirectorPanel({
             assignedNames,
           )
           if (asset) {
-            report(`Recovered finished artwork for panel ${index + 1} from Maestro outputs.`, {
+            report(`Recovered finished artwork for panel ${index + 1} from Loreframe Lab outputs.`, {
               current: index + 1,
               total: tasks.length,
             })
@@ -1198,7 +1198,7 @@ export function ComicDirectorPanel({
         }
         if (!asset) {
           if (existingJobId) {
-            report(`Reconnecting to Maestro job ${existingJobId} for panel ${index + 1}…`, {
+            report(`Reconnecting to Loreframe Lab job ${existingJobId} for panel ${index + 1}…`, {
               current: index + 1,
               total: tasks.length,
             })
@@ -1554,8 +1554,8 @@ export function ComicDirectorPanel({
     setElapsedSeconds(0)
     setActivity({
       state: 'running',
-      message: 'Submitting the planning job to Maestro…',
-      steps: ['Submitting the planning job to Maestro…'],
+      message: 'Submitting the planning job to Loreframe Lab…',
+      steps: ['Submitting the planning job to Loreframe Lab…'],
     })
     try {
       const { plan } = await api.planComic({
@@ -1787,7 +1787,7 @@ export function ComicDirectorPanel({
         <div className="mt-1 text-[11px] text-text-primary">
           {externalWritingLlm
             ? `Comic override · ${request.writingProvider === 'deepseek' ? 'DeepSeek' : request.writingProvider === 'minimax' ? 'MiniMax' : request.writingProvider === 'openai' ? 'OpenAI' : 'Custom compatible'} · ${request.writingModel || 'Choose a model'}`
-            : `Maestro default · ${planningLlmProviderLabel[planningLlmProvider] || planningLlmProvider} · ${planningLlmModel}`}
+            : `Loreframe Lab default · ${planningLlmProviderLabel[planningLlmProvider] || planningLlmProvider} · ${planningLlmModel}`}
         </div>
         <div className="mt-0.5 text-[9px] text-text-muted">
           {externalWritingLlm
@@ -1948,7 +1948,7 @@ export function ComicDirectorPanel({
         )}
       </select>
       <p className="mt-1 text-[9px] text-text-muted">
-        Local entries run through Maestro in image mode. MiniMax is an external image generator
+        Local entries run through Loreframe Lab in image mode. MiniMax is an external image generator
         in the same queue and uses the configured MiniMax API key.
       </p>
       </Field>
@@ -1964,7 +1964,7 @@ export function ComicDirectorPanel({
           Current plan will generate with <b className="text-text-primary">
             {project.director.provider === 'minimax'
               ? 'MiniMax image-01'
-              : `Maestro · ${project.director.imageModel || 'no image model selected'}`}
+              : `Loreframe Lab · ${project.director.imageModel || 'no image model selected'}`}
           </b>.
         </p>
       )}
@@ -2531,7 +2531,7 @@ export function ComicEditorPanel() {
       if (withPreview) {
         await checkpointCurrent('Manual save', useComicStore.getState())
         useStore.getState().loadOutputs()
-        notify({ kind: 'ok', text: 'Comic saved in the active Maestro workspace.' })
+        notify({ kind: 'ok', text: 'Comic saved in the active Loreframe Lab workspace.' })
       }
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
@@ -2571,7 +2571,7 @@ export function ComicEditorPanel() {
         asset.missing = false
       }
       useComicStore.getState().setProject(parsed)
-      notify({ kind: 'ok', text: 'Comic imported; embedded legacy assets were persisted in Maestro.' })
+      notify({ kind: 'ok', text: 'Comic imported; embedded legacy assets were persisted in Loreframe Lab.' })
     } catch (error) {
       notify({ kind: 'error', text: (error as Error).message })
     } finally {

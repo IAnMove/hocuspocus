@@ -8,6 +8,7 @@ export type LocalImageOptions = {
   existingJobId?: string
   onJobSubmitted?: (jobId: string) => void
   onPollRetry?: (attempt: number, error: string) => void
+  /** Kept for caller compatibility; provider jobs are not resubmitted automatically. */
   onProviderRetry?: (attempt: number, error: string) => void
   strictReference?: boolean
   /** Identity references may influence a new composition; edit references are the source canvas itself. */
@@ -28,23 +29,69 @@ const compactProviderPrompt = (value: string, limit = 1450): string => {
   return `${prefix.slice(0, lastBoundary > limit * 0.65 ? lastBoundary : limit).replace(/[\s,;:-]+$/, '')}.`
 }
 
+type ImageTaskIdentity = {
+  jobId?: string | null
+  taskId?: string | null
+  rootTaskId?: string | null
+}
+
+const validIdentityValue = (value: string | null | undefined): string | undefined => {
+  const normalized = String(value || '').trim()
+  return normalized || undefined
+}
+
+function mergeTaskIdentity(
+  current: ImageTaskIdentity,
+  next: ImageTaskIdentity,
+): ImageTaskIdentity {
+  return {
+    jobId: validIdentityValue(next.jobId) || validIdentityValue(current.jobId),
+    taskId: validIdentityValue(next.taskId) || validIdentityValue(current.taskId),
+    rootTaskId: validIdentityValue(next.rootTaskId) || validIdentityValue(current.rootTaskId),
+  }
+}
+
+function withTaskIdentity(asset: ComicAsset, identity: ImageTaskIdentity): ComicAsset {
+  const existing = asset.metadata || {}
+  const jobId = validIdentityValue(identity.jobId)
+    || validIdentityValue(existing.jobId as string | undefined)
+    || validIdentityValue(existing.job_id as string | undefined)
+  const taskId = validIdentityValue(identity.taskId)
+    || validIdentityValue(existing.taskId as string | undefined)
+    || validIdentityValue(existing.task_id as string | undefined)
+  const rootTaskId = validIdentityValue(identity.rootTaskId)
+    || validIdentityValue(existing.rootTaskId as string | undefined)
+    || validIdentityValue(existing.root_task_id as string | undefined)
+    || taskId
+  if (!jobId && !taskId && !rootTaskId) return asset
+  return {
+    ...asset,
+    metadata: {
+      ...existing,
+      ...(jobId ? { jobId } : {}),
+      ...(taskId ? { taskId } : {}),
+      ...(rootTaskId ? { rootTaskId } : {}),
+    },
+  }
+}
+
 function localAsset(
   name: string,
   prompt: string,
   model: string,
-  jobId?: string,
+  identity: ImageTaskIdentity = {},
+  workspace?: string,
 ): ComicAsset {
-  return {
+  return withTaskIdentity({
     id: comicId('asset'),
     name,
     kind: 'local',
-    source: `/api/v1/file/${encodeURIComponent(name)}`,
+    source: api.getFileUrl(name, workspace),
     prompt,
     provider: 'maestro',
     model,
     createdAt: new Date().toISOString(),
-    metadata: jobId ? { jobId } : undefined,
-  }
+  }, identity)
 }
 
 export async function findCompletedLocalImage(
@@ -52,17 +99,22 @@ export async function findCompletedLocalImage(
   model: string,
   excludedNames: Set<string>,
 ): Promise<ComicAsset | null> {
-  const { outputs } = await api.fetchOutputs(50, 0)
+  const workspace = useStore.getState().activeWorkspace
+  const { outputs } = await api.fetchOutputs(50, 0, { workspace })
   const candidates = outputs.filter(output =>
     output.type === 'image' && !excludedNames.has(output.name))
   for (const output of candidates) {
     try {
-      const metadata = await api.fetchOutputMetadata(output.name)
+      const metadata = await api.fetchOutputMetadata(output.name, workspace)
       if (
         metadata.params?.prompt === prompt &&
         metadata.params?.model_type === model
       ) {
-        return localAsset(output.name, prompt, model, metadata.job_id)
+        return localAsset(output.name, prompt, model, {
+          jobId: metadata.job_id,
+          taskId: metadata.task_id,
+          rootTaskId: metadata.root_task_id,
+        }, workspace)
       }
     } catch {
       // One unreadable gallery sidecar must not prevent recovery from the rest.
@@ -80,10 +132,10 @@ async function runLocalImage(
 ): Promise<ComicAsset> {
   const maestro = useStore.getState()
   const selected = modelType || maestro.selectedModelPerMode.image || maestro.params.model_type
-  if (!selected) throw new Error('Select an image model in Maestro first')
+  if (!selected) throw new Error('Select an image model in Loreframe Lab first')
   const model = maestro.models.find(item => item.model_type === selected)
   if (model && getModelMode(model.model_type, model.family) !== 'image') {
-    throw new Error(`"${selected}" is a video model. Select a Maestro image model or MiniMax`)
+    throw new Error(`"${selected}" is a video model. Select a Loreframe Lab image model or MiniMax`)
   }
   const imageParams = maestro.savedParamsPerMode.image || {}
   const referenceParams: Record<string, unknown> = {}
@@ -96,8 +148,8 @@ async function runLocalImage(
       if (options.strictReference) {
         throw new Error(
           options.referenceMode === 'edit'
-            ? 'This Maestro model cannot edit a source image. Choose Qwen Image Edit or another reference-capable image editor.'
-            : 'This Maestro model does not support identity references. Choose a reference-capable local model or MiniMax Image.',
+            ? 'This Loreframe Lab model cannot edit a source image. Choose Qwen Image Edit or another reference-capable image editor.'
+            : 'This Loreframe Lab model does not support identity references. Choose a reference-capable local model or MiniMax Image.',
         )
       }
     } else {
@@ -141,22 +193,32 @@ async function runLocalImage(
       }
     }
   }
-  const jobId = options.existingJobId || (await api.submitGeneration({
-    ...maestro.params,
-    ...imageParams,
-    ...referenceParams,
-    ...(options.resolution ? { resolution: options.resolution } : {}),
-    prompt,
-    negative_prompt: negativePrompt,
-    model_type: selected,
-    image_mode: 1,
-    generation_mode: 'image',
-    comic_panel: true,
-    comic_panel_id: options.panelId,
-    provider: 'maestro',
-    repeat_generation: 1,
-    workspace: maestro.activeWorkspace,
-  })).job_id
+  let identity: ImageTaskIdentity = { jobId: options.existingJobId }
+  if (!options.existingJobId) {
+    const submitted = await api.submitGeneration({
+      ...maestro.params,
+      ...imageParams,
+      ...referenceParams,
+      ...(options.resolution ? { resolution: options.resolution } : {}),
+      prompt,
+      negative_prompt: negativePrompt,
+      model_type: selected,
+      image_mode: 1,
+      generation_mode: 'image',
+      comic_panel: true,
+      comic_panel_id: options.panelId,
+      provider: 'maestro',
+      repeat_generation: 1,
+      workspace: maestro.activeWorkspace,
+    })
+    identity = {
+      jobId: submitted.job_id,
+      taskId: submitted.task_id,
+      rootTaskId: submitted.root_task_id,
+    }
+  }
+  const jobId = validIdentityValue(identity.jobId)
+  if (!jobId) throw new Error('Loreframe Lab did not return an image job ID')
   if (!options.existingJobId) options.onJobSubmitted?.(jobId)
   let consecutivePollFailures = 0
   for (;;) {
@@ -165,11 +227,16 @@ async function runLocalImage(
     try {
       status = await api.fetchJobStatus(jobId)
       consecutivePollFailures = 0
+      identity = mergeTaskIdentity(identity, {
+        jobId: status.job_id,
+        taskId: status.task_id,
+        rootTaskId: status.root_task_id,
+      })
     } catch (error) {
       consecutivePollFailures += 1
       options.onPollRetry?.(consecutivePollFailures, (error as Error).message)
       if (consecutivePollFailures >= 20) {
-        throw new Error(`Could not reconnect to Maestro job ${jobId}; the job ID was preserved`)
+        throw new Error(`Could not reconnect to Loreframe Lab job ${jobId}; the job ID was preserved`)
       }
       continue
     }
@@ -181,7 +248,7 @@ async function runLocalImage(
       if (!path) throw new Error('Image job completed without an image')
       const name = fileName(path)
       maestro.loadOutputs()
-      return localAsset(name, prompt, selected, jobId)
+      return localAsset(name, prompt, selected, identity, maestro.activeWorkspace)
     }
   }
 }
@@ -196,23 +263,52 @@ export async function generateImageAsset(
 ): Promise<ComicAsset> {
   if (provider === 'minimax') {
     const providerPrompt = compactProviderPrompt(prompt)
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let job: api.MiniMaxImageJob
+    if (options?.existingJobId) {
+      job = await api.fetchMiniMaxImageJob(options.existingJobId)
+    } else {
+      job = await api.startMiniMaxImageJob({
+        prompt: providerPrompt,
+        aspect_ratio: options?.aspectRatio || '1:1',
+        subject_reference: reference,
+        workspace: useStore.getState().activeWorkspace,
+      })
+      options?.onJobSubmitted?.(job.jobId)
+    }
+    let identity: ImageTaskIdentity = {
+      jobId: job.jobId,
+      taskId: job.taskId,
+      rootTaskId: job.rootTaskId,
+    }
+    let pollFailures = 0
+    while (!['completed', 'failed', 'cancelled'].includes(job.status)) {
+      await wait(pollFailures ? Math.min(10000, 1500 * pollFailures) : 1000)
       try {
-        const result = await api.generateComicWithMiniMax({
-          prompt: providerPrompt,
-          aspect_ratio: options?.aspectRatio || '1:1',
-          subject_reference: reference,
+        job = await api.fetchMiniMaxImageJob(job.jobId)
+        identity = mergeTaskIdentity(identity, {
+          jobId: job.jobId,
+          taskId: job.taskId,
+          rootTaskId: job.rootTaskId,
         })
-        return result.asset
+        pollFailures = 0
       } catch (error) {
-        const message = (error as Error).message
-        const permanent = /invalid param|prompt length|unauthorized|forbidden|insufficient|quota/i.test(message)
-        const transient = /\bHTTP 50[234]\b|bad gateway|temporar|timed? ?out|connection/i.test(message)
-        if (attempt >= 3 || permanent || !transient) throw error
-        options?.onProviderRetry?.(attempt, message)
-        await wait(attempt * 2500)
+        pollFailures += 1
+        options?.onPollRetry?.(pollFailures, (error as Error).message)
+        if (pollFailures >= 20) {
+          throw new Error(
+            `Could not reconnect to MiniMax image job ${job.jobId}; the job ID was preserved`,
+          )
+        }
       }
     }
+    if (job.status === 'completed' && job.result?.asset) {
+      return withTaskIdentity(job.result.asset, identity)
+    }
+    if (job.status === 'cancelled') throw new Error('MiniMax image generation was cancelled')
+    throw new Error(
+      `${job.statusCode ? `HTTP ${job.statusCode}: ` : ''}`
+      + (job.error || job.message || 'MiniMax image generation failed'),
+    )
   }
   return runLocalImage(prompt, model, reference, negativePrompt, options)
 }

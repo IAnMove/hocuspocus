@@ -62,8 +62,7 @@ function ViewUpload({ view, value, busy, required, onUpload, onRemove }: {
 }
 
 export function Hunyuan3DPanel() {
-  const loadOutputs = useStore(state => state.loadOutputs)
-  const setMediaFilter = useStore(state => state.setMediaFilter)
+  const activeWorkspace = useStore(state => state.activeWorkspace)
   const enabledModels = useStore(state => state.enabledModels)
   const toggleModelEnabled = useStore(state => state.toggleModelEnabled)
   const modelId = useStore(state => state.params.model_type)
@@ -119,7 +118,7 @@ export function Hunyuan3DPanel() {
   const loadRetextureSources = useCallback(async () => {
     setSourcesLoading(true)
     try {
-      const { outputs: files } = await fetchOutputs(0, 0, { search: '.glb' })
+      const { outputs: files } = await fetchOutputs(0, 0, { search: '.glb', workspace: activeWorkspace })
       setRetextureSources(files
         .filter(file => file.type === 'model3d' && /\.glb$/i.test(file.name))
         .map(file => ({ path: file.name, name: file.name, thumbnail: file.thumbnail_url })))
@@ -128,7 +127,7 @@ export function Hunyuan3DPanel() {
     } finally {
       setSourcesLoading(false)
     }
-  }, [])
+  }, [activeWorkspace])
 
   useEffect(() => {
     if (operation === 'retexture') void loadRetextureSources()
@@ -239,12 +238,11 @@ export function Hunyuan3DPanel() {
   useEffect(() => {
     if (job?.status === 'completed' && completedJobRef.current !== job.job_id) {
       completedJobRef.current = job.job_id
-      void loadOutputs()
+      void useStore.getState().maybeRefreshGallery({ message: '3D model ready' })
       if (job.operation === 'retexture') void loadRetextureSources()
-      setMediaFilter('model3d')
     }
     if (job?.status === 'failed') setError(job.error || job.message)
-  }, [job, loadOutputs, loadRetextureSources, setMediaFilter])
+  }, [job, loadRetextureSources])
 
   const run = async () => {
     setError(null)
@@ -313,7 +311,7 @@ export function Hunyuan3DPanel() {
       ) : !installed ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
           <p className="text-xs font-medium text-amber-300">Hunyuan3D runtime is not installed</p>
-          <p className="text-[10px] text-text-muted mt-1 leading-relaxed">Stop Maestro and run its standard <strong>Install</strong> or <strong>Update</strong> action. The runtime stays inside Maestro; model weights download on first use.</p>
+          <p className="text-[10px] text-text-muted mt-1 leading-relaxed">Stop Loreframe Lab and run its standard <strong>Install</strong> or <strong>Update</strong> action. The runtime stays inside Loreframe Lab; model weights download on first use.</p>
         </div>
       ) : (
         <>
@@ -403,7 +401,7 @@ export function Hunyuan3DPanel() {
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={compile} onChange={event => setCompile(event.target.checked)} /> Torch compile</label>
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={reduceFace} onChange={event => setReduceFace(event.target.checked)} /> Simplify mesh</label>
               </div>
-              <p className="text-[9px] text-text-muted">Higher octree/texture resolutions and PBR consume substantially more VRAM. CPU offload is recommended while other Maestro models are in use.</p>
+              <p className="text-[9px] text-text-muted">Higher octree/texture resolutions and PBR consume substantially more VRAM. CPU offload is recommended while other Loreframe Lab models are in use.</p>
             </div>
           )}
 

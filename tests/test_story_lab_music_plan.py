@@ -10,14 +10,14 @@ from pathlib import Path
 
 
 def _load_functions(*names: str):
-    source = Path(__file__).parents[1].joinpath("app", "launch.py").read_text(encoding="utf-8")
+    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     selected = [
         node for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name in names
     ]
     namespace = {"copy": copy, "re": re}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "launch.py", "exec"), namespace)
+    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
     return tuple(namespace[name] for name in names)
 
 
@@ -189,6 +189,29 @@ class TestStoryLabMusicPlan(unittest.TestCase):
         beats = schema["properties"]["beats"]
         self.assertEqual(beats["minItems"], 3)
         self.assertEqual(beats["maxItems"], 8)
+
+    def test_trailer_structure_uses_a_six_to_twelve_beat_movie_arc(self):
+        schema = _story_lab_schema("beats", "trailer")
+        beats = schema["properties"]["beats"]
+        self.assertEqual(beats["minItems"], 6)
+        self.assertEqual(beats["maxItems"], 12)
+
+        project = {"projectType": "trailer", "characters": []}
+        result = {"beats": [
+            {
+                "id": f"trailer-{index}",
+                "stage": stage,
+                "title": stage.title(),
+                "summary": f"Trailer moment {index}",
+                "goal": "Build the movie promise",
+                "conflict": "The threat closes in",
+                "turn": "Leave a new unresolved question",
+            }
+            for index, stage in enumerate([
+                "cold open", "promise", "disruption", "escalation", "breath", "final hook",
+            ], start=1)
+        ]}
+        self.assertIsNone(_story_stage_problem(result, "structure", project))
 
 
 if __name__ == "__main__":

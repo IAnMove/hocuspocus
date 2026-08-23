@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .spoken_language import infer_h3_spoken_language
+
 
 FIRST_FRAME_REFERENCE = (
     "For the target video, at 0.00 seconds into the target video, <Picture 1> "
@@ -37,10 +39,13 @@ def normalize_reference_mode(value: str | None) -> str:
     mode = str(value or "first_frame").strip().lower()
     mode = {
         "fl2va": "first_frame",
+        "text": "direct",
+        "text_to_video": "direct",
+        "t2v": "direct",
         "ref2va": "references",
         "reference": "references",
     }.get(mode, mode)
-    return mode if mode in {"first_frame", "references"} else "first_frame"
+    return mode if mode in {"direct", "first_frame", "references"} else "first_frame"
 
 
 def is_structured_h3_prompt(prompt: str, reference_mode: str | None = None) -> bool:
@@ -48,6 +53,8 @@ def is_structured_h3_prompt(prompt: str, reference_mode: str | None = None) -> b
     mode = normalize_reference_mode(reference_mode)
     fields = _REFERENCE_FIELDS if mode == "references" else _FIRST_FRAME_FIELDS
     if mode == "first_frame" and FIRST_FRAME_REFERENCE not in text:
+        return False
+    if mode == "direct" and FIRST_FRAME_REFERENCE in text:
         return False
     return all(field in text for field in fields)
 
@@ -95,23 +102,6 @@ def _strip_legacy_contracts(prompt: str) -> str:
     # Audio is represented by the official soundscape fields below.
     text = re.sub(r"\s*\bAudio\s*:.*$", "", text, flags=re.I | re.S).strip()
     return text
-
-
-def _language_name(text: str) -> str:
-    if re.search(r"[\u3040-\u30ff\u3400-\u9fff]", text):
-        return "Japanese"
-    if re.search(r"[\u0400-\u04ff]", text):
-        return "Russian"
-    if re.search(r"[\u0600-\u06ff]", text):
-        return "Arabic"
-    if re.search(r"[\uac00-\ud7af]", text):
-        return "Korean"
-    lower = f" {_clean(text).casefold()} "
-    if re.search(r"[¿¡ñáéíóúü]", lower) or any(
-        token in lower for token in (" que ", " por ", " para ", " una ", " el ", " la ")
-    ):
-        return "Spanish"
-    return "English"
 
 
 def _subject_definitions(plan: dict) -> tuple[list[str], list[str]]:
@@ -170,13 +160,10 @@ def _dialogue_sentences(plan: dict, subject_ids: list[str]) -> list[str]:
             continue
         speaker = _clean(raw.get("speaker_name") or raw.get("speaker_id"))
         speaker_id = subject_ids[min(index, len(subject_ids) - 1)] if subject_ids else "S1"
-        delivery = _clean(raw.get("delivery"))
         cue = f"({speaker_id})"
         if speaker:
             cue += f" {speaker}"
-        cue += f" says <d>[{_language_name(spoken)}] {spoken}</d>"
-        if delivery:
-            cue += f" with {delivery} delivery"
+        cue += f" says <d>[{infer_h3_spoken_language(spoken)}] {spoken}</d>"
         sentences.append(cue + ".")
     return sentences
 
@@ -193,8 +180,8 @@ def _integrated_description(plan: dict, prompt: str) -> str:
     )
     definitions, subject_ids = _subject_definitions(plan)
     action = _strip_legacy_contracts(prompt)
-    if not action:
-        action_beats = [_clean(item) for item in _items(plan.get("action_beats")) if _clean(item)]
+    action_beats = [_clean(item) for item in _items(plan.get("action_beats")) if _clean(item)]
+    if (not action or len(action) > 700) and action_beats:
         action = " Then ".join(action_beats)
     if not action:
         action = _clean(plan.get("scene_goal")) or "The staged action unfolds naturally."
@@ -217,10 +204,7 @@ def _integrated_description(plan: dict, prompt: str) -> str:
     ending = _clean(clean_visual_field(plan.get("ending_beat")))
     if ending and ending.casefold() not in action.casefold():
         parts.append(f"The shot ends on {ending.rstrip('.')}.")
-    parts.append(
-        "IDENTITY CONTINUITY LOCK: recurring people keep the same facial geometry, age, "
-        "hairline, wardrobe and distinguishing features throughout occlusion and re-entry."
-    )
+    parts.append("Same faces and wardrobe throughout.")
     return " ".join(parts)
 
 
@@ -233,23 +217,27 @@ def _sound_fields(plan: dict, audio_direction: str) -> tuple[str, str]:
         soundscape_parts.append(ambience)
     if effects:
         soundscape_parts.append("Synchronized effects: " + ", ".join(effects))
-    if audio.get("lip_sync_critical"):
-        soundscape_parts.append("Clear foreground voices with precise lip sync and natural delivery")
-    vocal_style = _clean(audio.get("vocal_style"))
-    if vocal_style:
-        soundscape_parts.append(f"Vocal delivery: {vocal_style}")
+    # Dialogue, language, delivery and lip sync belong beside the exact <d>
+    # block in integrated_multimodal_description. Keeping a generic voice cue
+    # in the full-clip soundscape can make H3 extend a short line with invented
+    # speech before or after the authored words.
     direction = _clean(audio_direction)
-    if direction:
+    # The global UI audio preference can contain meta instructions such as
+    # "include dialogue or music" or "only explicitly described sounds".
+    # Those are not diegetic ambience and H3 treats them as audible events.
+    if (
+        direction
+        and not re.search(
+            r"\b(?:dialogue|voice|voices|speech|vocal|lyrics?|singing|music|song|"
+            r"explicitly described|remain silent)\b",
+            direction,
+            flags=re.I,
+        )
+    ):
         soundscape_parts.append(direction)
-    if not soundscape_parts:
-        soundscape_parts.append("Natural stereo production sound synchronized to visible actions")
-
-    mode = _clean(audio.get("mode")).lower()
-    if mode in {"music_driven", "audio_driven"}:
-        music = "The selected song segment remains the timing and editorial anchor; do not invent a competing melody."
-    else:
-        music = "None unless explicitly motivated by the scene."
-    return "; ".join(soundscape_parts).rstrip("."), music
+    # Temporary: never describe ambience, effects, silence, or music. H3
+    # treats those sentences as audible events. Dialogue lives only in <d>.
+    return "N/A", "N/A"
 
 
 def format_minimax_h3_prompt(
@@ -267,7 +255,8 @@ def format_minimax_h3_prompt(
     mode = normalize_reference_mode(reference_mode)
     text = str(prompt or "").strip()
     if is_structured_h3_prompt(text, mode):
-        return text
+        from .h3_dialogue import apply_h3_no_sound_description
+        return apply_h3_no_sound_description(text)
 
     shot = dict(plan or {})
     description = _integrated_description(shot, text)
@@ -279,7 +268,8 @@ def format_minimax_h3_prompt(
             "(S1) the principal subject from the supplied references; "
             "(E1) the referenced environment and its stable visual design"
         )
-        return "\n".join((
+        from .h3_dialogue import apply_h3_no_sound_description
+        return apply_h3_no_sound_description("\n".join((
             f"subject_definitions: {defined}",
             "summary: [reference generation] Compose one new continuous shot from the supplied references.",
             (
@@ -290,18 +280,30 @@ def format_minimax_h3_prompt(
             f"detailed_description: {description}",
             f"overall_soundscape: {soundscape}.",
             f"non_diegetic_music: {music}",
-        ))
+        )))
 
-    return "\n".join((
-        FIRST_FRAME_REFERENCE,
-        (
-            "integrated_multimodal_description: The referenced picture is the exact opening frame. "
-            "Its visible composition, identity, wardrobe, environment, colors and proportions are "
-            f"authoritative and must not be stretched or redesigned. {description}"
-        ),
+    integrated = (
+        description
+        if mode == "direct"
+        else (
+            "The referenced picture is the exact opening frame. Its visible composition, "
+            "identity, wardrobe, environment, colors and proportions are authoritative and "
+            f"must not be stretched or redesigned. {description}"
+        )
+    )
+    fields = (
+        f"integrated_multimodal_description: {integrated}",
         f"overall_soundscape: {soundscape}.",
         f"non_diegetic_music: {music}",
-    ))
+    )
+    from .h3_dialogue import apply_h3_no_sound_description
+
+    if mode == "direct":
+        return apply_h3_no_sound_description("\n".join(fields))
+    return apply_h3_no_sound_description("\n".join((
+        FIRST_FRAME_REFERENCE,
+        *fields,
+    )))
 
 
 def adapt_clip_plans_for_h3(
