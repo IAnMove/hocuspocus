@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, ChevronDown, Cpu, Layers3, Loader2, Palette, Play, RefreshCw, Square, Upload, X } from 'lucide-react'
+import { Box, ChevronDown, Cpu, Images, Layers3, Loader2, Palette, Play, RefreshCw, Square, Upload, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { ModelSelector } from './ModelSelector'
 import {
@@ -9,12 +9,13 @@ import {
   fetchHunyuan3DJob,
   startHunyuan3DJob,
   uploadImage,
+  type ApiOutput,
   type Hunyuan3DCapabilities,
   type Hunyuan3DJob,
 } from '../../api/client'
 
 type ViewName = 'front' | 'left' | 'right' | 'back'
-type UploadedView = { path: string; name: string; url: string }
+type UploadedView = { path: string; name: string; url: string; workspace?: string }
 type RetextureSource = { path: string; name: string; thumbnail?: string | null }
 
 const viewLabels: Record<ViewName, string> = {
@@ -24,12 +25,13 @@ const viewLabels: Record<ViewName, string> = {
   back: 'Back',
 }
 
-function ViewUpload({ view, value, busy, required, onUpload, onRemove }: {
+function ViewUpload({ view, value, busy, required, onUpload, onBrowse, onRemove }: {
   view: ViewName
   value?: UploadedView
   busy: boolean
   required?: boolean
   onUpload: (file: File) => void
+  onBrowse: () => void
   onRemove: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -41,16 +43,22 @@ function ViewUpload({ view, value, busy, required, onUpload, onRemove }: {
       {value ? (
         <div className="relative aspect-square rounded-lg overflow-hidden border border-border bg-bg-primary group">
           <img src={value.url} alt={viewLabels[view]} className="w-full h-full object-cover" />
-          <button onClick={onRemove} className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors" title={`Remove ${viewLabels[view]} view`}>
+          <button type="button" onClick={onRemove} className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors" aria-label={`Remove ${viewLabels[view]} image`}>
             <X size={11} />
           </button>
           <div className="absolute inset-x-0 bottom-0 bg-black/60 px-1.5 py-1 text-[9px] text-white truncate">{value.name}</div>
         </div>
       ) : (
-        <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="w-full aspect-square rounded-lg border border-dashed border-border bg-bg-primary hover:border-accent-blue text-text-muted hover:text-accent-blue transition-colors flex flex-col items-center justify-center gap-1 disabled:opacity-50">
-          {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-          <span className="text-[9px]">{busy ? 'Uploading' : 'Add image'}</span>
-        </button>
+        <div className="flex aspect-square w-full flex-col gap-1 rounded-lg border border-dashed border-border bg-bg-primary p-1">
+          <button type="button" disabled={busy} onClick={() => inputRef.current?.click()} aria-label={`Upload ${viewLabels[view]} image from disk`} className="flex min-h-0 flex-1 flex-col items-center justify-center gap-0.5 rounded text-text-muted transition-colors hover:bg-bg-hover hover:text-accent-blue disabled:opacity-50">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            <span className="text-[8px]">{busy ? 'Uploading' : 'Upload'}</span>
+          </button>
+          <button type="button" disabled={busy} onClick={onBrowse} aria-label={`Choose ${viewLabels[view]} image from Loreframe`} className="flex min-h-0 flex-1 flex-col items-center justify-center gap-0.5 rounded border-t border-border text-text-muted transition-colors hover:bg-bg-hover hover:text-accent-blue disabled:opacity-50">
+            <Images size={14} />
+            <span className="text-[8px]">Loreframe</span>
+          </button>
+        </div>
       )}
       <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={event => {
         const file = event.target.files?.[0]
@@ -78,6 +86,9 @@ export function Hunyuan3DPanel() {
   const [capabilityError, setCapabilityError] = useState<string | null>(null)
   const [views, setViews] = useState<Partial<Record<ViewName, UploadedView>>>({})
   const [uploadingView, setUploadingView] = useState<ViewName | null>(null)
+  const [imageSources, setImageSources] = useState<ApiOutput[]>([])
+  const [imagePickerView, setImagePickerView] = useState<ViewName | null>(null)
+  const [imagesLoading, setImagesLoading] = useState(false)
   const [preset, setPreset] = useState('balanced')
   const [textureMode, setTextureMode] = useState('v2-turbo')
   const [steps, setSteps] = useState(5)
@@ -98,6 +109,7 @@ export function Hunyuan3DPanel() {
   const [job, setJob] = useState<Hunyuan3DJob | null>(null)
   const [error, setError] = useState<string | null>(null)
   const completedJobRef = useRef<string | null>(null)
+  const imageLoadRef = useRef(0)
   const modelInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -127,6 +139,56 @@ export function Hunyuan3DPanel() {
     } finally {
       setSourcesLoading(false)
     }
+  }, [activeWorkspace])
+
+  const loadImageSources = useCallback(async () => {
+    const requestId = ++imageLoadRef.current
+    setImagesLoading(true)
+    setError(null)
+    try {
+      const { outputs: files } = await fetchOutputs(200, 0, {
+        mediaType: 'image',
+        workspace: activeWorkspace,
+      })
+      if (requestId === imageLoadRef.current) setImageSources(files.filter(file => file.type === 'image'))
+    } catch (err) {
+      if (requestId !== imageLoadRef.current) return
+      setImageSources([])
+      setError(err instanceof Error ? err.message : 'Could not load Loreframe images')
+    } finally {
+      if (requestId === imageLoadRef.current) setImagesLoading(false)
+    }
+  }, [activeWorkspace])
+
+  const openImagePicker = (view: ViewName) => {
+    setImagePickerView(view)
+    void loadImageSources()
+  }
+
+  const selectImageSource = (view: ViewName, file: ApiOutput) => {
+    setViews(current => ({
+      ...current,
+      [view]: { path: file.name, name: file.name, url: file.url, workspace: activeWorkspace },
+    }))
+    setImagePickerView(null)
+  }
+
+  useEffect(() => {
+    imageLoadRef.current += 1
+    setImagesLoading(false)
+    setImageSources([])
+    setImagePickerView(null)
+    setViews(current => {
+      const next = { ...current }
+      let changed = false
+      for (const view of Object.keys(next) as ViewName[]) {
+        if (next[view]?.workspace && next[view]?.workspace !== activeWorkspace) {
+          delete next[view]
+          changed = true
+        }
+      }
+      return changed ? next : current
+    })
   }, [activeWorkspace])
 
   useEffect(() => {
@@ -254,6 +316,7 @@ export function Hunyuan3DPanel() {
         preset,
         model_id: modelId,
         prompt: prompt.trim(),
+        workspace: activeWorkspace,
         images,
         texture_mode: textureMode,
         num_inference_steps: steps,
@@ -360,9 +423,37 @@ export function Hunyuan3DPanel() {
             </div>
             <div className={`grid gap-2 ${isMultiview ? 'grid-cols-4' : 'grid-cols-1 max-w-[92px]'}`}>
               {(isMultiview ? (['front', 'left', 'right', 'back'] as ViewName[]) : (['front'] as ViewName[])).map(view => (
-                <ViewUpload key={view} view={view} value={views[view]} busy={uploadingView === view} required={isMultiview && view === 'front'} onUpload={file => void uploadView(view, file)} onRemove={() => setViews(current => ({ ...current, [view]: undefined }))} />
+                <ViewUpload key={view} view={view} value={views[view]} busy={uploadingView === view} required={isMultiview && view === 'front'} onUpload={file => void uploadView(view, file)} onBrowse={() => openImagePicker(view)} onRemove={() => setViews(current => ({ ...current, [view]: undefined }))} />
               ))}
             </div>
+            {imagePickerView && (
+              <div className="mt-2 rounded-lg border border-accent-blue/30 bg-bg-primary p-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-medium text-text-primary">Loreframe images · {viewLabels[imagePickerView]}</div>
+                    <p className="text-[8px] text-text-muted">Newest 200 images in the active workspace.</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button type="button" disabled={imagesLoading} onClick={() => void loadImageSources()} aria-label="Refresh Loreframe images" className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary disabled:opacity-50"><RefreshCw size={11} className={imagesLoading ? 'animate-spin' : ''} /></button>
+                    <button type="button" onClick={() => setImagePickerView(null)} aria-label="Close Loreframe image picker" className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary"><X size={11} /></button>
+                  </div>
+                </div>
+                {imagesLoading ? (
+                  <div className="flex items-center justify-center gap-1.5 py-5 text-[9px] text-text-muted"><Loader2 size={12} className="animate-spin" /> Loading Loreframe images…</div>
+                ) : imageSources.length ? (
+                  <div role="listbox" aria-label={`Loreframe images for ${viewLabels[imagePickerView]} view`} className="grid max-h-52 grid-cols-3 gap-1.5 overflow-y-auto pr-0.5">
+                    {imageSources.map(file => (
+                      <button key={file.name} type="button" role="option" aria-selected={views[imagePickerView]?.path === file.name} aria-label={file.name} onClick={() => selectImageSource(imagePickerView, file)} title={file.name} className="relative aspect-square overflow-hidden rounded border border-border bg-bg-tertiary hover:border-accent-blue focus:border-accent-blue">
+                        <img src={file.thumbnail_url || file.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                        <span className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1 py-0.5 text-[7px] text-white">{file.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="py-4 text-center text-[9px] text-text-muted">No images in this Loreframe workspace yet.</p>
+                )}
+              </div>
+            )}
           </div>
 
           <button onClick={() => setAdvancedOpen(value => !value)} className="flex items-center justify-between w-full rounded-lg bg-bg-tertiary border border-border px-3 py-2 text-[11px] text-text-secondary hover:text-text-primary">

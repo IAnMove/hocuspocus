@@ -2041,6 +2041,28 @@ def generate(
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
 
+    # MiniMax M-series completions use max_completion_tokens, reasoning_split
+    # and a provider-specific thinking switch. The generic request below uses
+    # max_tokens and can let M3 consume the entire recipe budget as hidden
+    # reasoning, returning an empty content field. Reuse the hardened
+    # compatible-provider path, which also retries one confirmed empty
+    # response with a larger bounded budget.
+    if _provider == "minimax":
+        return generate_openai_compatible(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model_id=_model_id,
+            base_url=_remote_url or "https://api.minimax.io",
+            api_key=_api_key,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            json_schema=json_schema,
+            image_paths=image_paths,
+        )
+
     # Cancel idle timer during active request — prevents auto-unload mid-generation.
     # Timer is reset at the END of the request (after response is received).
     _cancel_idle_timer()
@@ -2055,6 +2077,29 @@ def generate(
     if json_schema is not None:
         enable_thinking = False
         thinking_budget = 0
+        # Providers without a dependable schema envelope still need the exact
+        # contract in context. Local llama-server and Ollama receive the
+        # schema as a token-level grammar below. OpenAI/DeepSeek use JSON
+        # object mode because this API accepts schemas with optional fields,
+        # while their strict dialect may reject those before generation.
+        # MiniMax, Anthropic and unknown compatible servers get the same
+        # compact prompt copy plus local validation/repair at the caller.
+        prompt_needs_schema = (
+            _provider != "local"
+            and not _is_ollama_remote()
+        )
+        if prompt_needs_schema:
+            compact_schema = json.dumps(
+                json_schema,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            system_prompt = (
+                f"{system_prompt.rstrip()}\n\n"
+                "Return exactly one JSON value matching this schema. "
+                "Do not wrap it in markdown:\n"
+                f"{compact_schema}"
+            ).strip()
 
     # Per-model thinking mode (Gemma vs Qwen)
     system_prompt, enable_thinking, thinking_budget = _prepare_thinking(system_prompt, enable_thinking, thinking_budget)
@@ -2154,6 +2199,8 @@ def generate(
             # detailed schema after generation.
             payload["response_format"] = {"type": "json_object"}
             print("[LLM] DeepSeek JSON output enabled")
+        elif _provider == "openai":
+            payload["response_format"] = {"type": "json_object"}
         else:
             print(f"[LLM] json_schema requested but provider={_provider} — sending unconstrained (grammar is local llama-server only)")
 

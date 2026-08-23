@@ -2,7 +2,7 @@
 
 Agent operations guide for Loreframe Lab’s programmatic compositor.
 
-This document is **phase 1**. It explains how the existing tools work so an LLM can plan and assemble scenes. It does not add an “intention → finished clip” pipeline (phase 2) and it does not hook Story Lab / trailers / videoclips / series (phase 3).
+This document is the agent operations guide. **Phase 2** is in the 3D Video tab: Recipe runner (intent → JSON → generate assets → mount → Record/Save). It does not hook Story Lab / trailers / videoclips / series (phase 3).
 
 UI tab: **3D Video** (`mediaFilter: scene3d`). Code: `ui/src/components/Sidebar/SceneAnimatorPanel.tsx`. Scene type: `ui/src/types/index.ts` (`Scene`, `SceneLayer`).
 
@@ -121,7 +121,7 @@ Base URL: the running Lab (`http://127.0.0.1:<port>`). Workspace query: `?worksp
 }
 ```
 
-H3 lattice: 17n+5 frames, min 124 (~5.17 s), max 345 (~14.4 s). Dialogue only as `<d>[Spanish] …</d>`. Mute shots: no `<d>`, plus closed-lips visual (compiler adds it). **Do not describe sound.**
+H3 lattice: 17n+5 frames. The Recipe runner chooses 124 (~5.17 s), 243 (~10.1 s), or 362 (~15.1 s) from the longest shot that uses the plate. It also maps the compositor canvas to a validated H3 canvas: 16:9 → `960x544`, 9:16 → `544x960`, square → `736x736`. Dialogue only as `<d>[Spanish] …</d>`. Mute shots: no `<d>`, plus closed-lips visual (compiler adds it). **Do not describe sound.**
 
 Poll `GET /api/v1/status/{job_id}` until `completed`. Output name is in `output_files`.
 
@@ -166,6 +166,8 @@ Photo-to-3D (best identity). Character Creator already does: H3 orbit → stills
 ```
 
 Image values are workspace filenames, upload names, or `/api/v1/file/...` **without** `?workspace=` (the resolver strips it, but filenames are safer).
+
+In **Hunyuan3D Studio**, every reference slot offers both **Upload** (local disk) and **Loreframe** (images already stored in the active workspace). The selected Loreframe filename is sent with that workspace, so no duplicate upload is needed.
 
 Poll `GET /api/v1/model3d/status/{job_id}`. Result `filename` is a `.glb`.
 
@@ -386,32 +388,22 @@ Need both in one sequence?
 
 ---
 
-## 11. Phase 2 / 3 (not built)
+## 11. Phase 2 / 3
 
-**Phase 2 — the page executes an LLM recipe and saves an MP4**
+**Phase 2 — built in the 3D Video tab (Recipe runner)**
 
-Do this **in the browser tab**, not as a Python overnight script. The canvas recorder already knows how to paint GLBs (it copies `model-viewer`’s canvas). A server-side 3D renderer is unnecessary.
+Do this **in the browser tab**, not as a Python overnight script. UI: `SceneRecipePanel`. Code: `ui/src/lib/sceneRecipe.ts`, `ui/src/lib/sceneRecipeAssets.ts`.
 
-1. **Recipe JSON** (LLM output only; no prose). Versioned object:
-   - `assets[]`: `{ id, kind: image|video|model3d, prompt, model/preset }`
-   - `scene`: width/height/fps/duration + layers that reference asset ids and a motion preset (`space-cruise`, …)
-   - `record: true`
-2. **Writer**: a small LLM call whose system prompt is this HOWUSEIT file + a JSON schema. User intent in, recipe out.
-3. **Runner in 3D Video** (new “Run recipe” control):
-   1. Create each asset with the existing generate / Hunyuan APIs. Poll until `completed`. Never run Hunyuan while H3 is sampling.
-   2. Rewrite layer `source` to `/api/v1/file/<filename>`.
-   3. `replaceScene(scene)` in Scene Animator and wait until each `model3d` layer has a paintable canvas.
-   4. Call the existing `record()` path, but on `MediaRecorder.onstop` **upload** the blob (`POST /api/v1/upload`) instead of only downloading.
-   5. Optional: transcode WebM → MP4 with the current FFmpeg lane, then `maybeRefreshGallery`.
-   6. `POST /api/v1/scenes` with a PNG from `paintScene` so the project is in **Scenes**.
-4. **Failure**: keep the partial scene + toast; do not jump tabs.
+1. **Interpretation contract**: the selected LLM receives a closed JSON Schema plus a multilingual virtual-production guide. It silently separates subjects, setting, chronological beats, format, camera and atmosphere; generation prompts are written in concise cinematic English while proper names and quoted dialogue are preserved.
+2. **Validation and repair**: local llama-server output is grammar-constrained. Other providers receive the exact schema in context. Loreframe then validates unique ids, asset/layer compatibility, supported presets, rig clips and references; one malformed response gets a bounded correction pass before any GPU job starts.
+3. **Manual**: pick GLBs/plates already in Outputs, **Write recipe**, **Compose**. Output sidecar prompts and embedded clip names are passed to the LLM as untrusted inventory descriptions, so it can understand assets whose filenames are vague. A requested rig profile is applied even to a manually loaded static GLB. Edit the inspector, then Record.
+4. **Auto**: **Generate + compose** creates missing plates/meshes. One `identity` per object — a UFO series uses **one** GLB and several `shots[]`. Static environments use image plates; inherently moving scenery can use an H3 video plate. Rain, fog, snow and particles use procedural effects instead of redundant generated overlays. Default `record`/`save` are false so you preview first.
+5. GPU jobs and Hunyuan poll with timeouts; **Cancel** aborts the run. If Lab dies (segfault), the runner errors instead of spinning forever.
+6. After compose, switch shots in the recipe panel without regenerating the mesh. A recipe rig `clip` is mounted into the Scene Animator and disables unintended turntable spin.
 
-That is enough for “UFO behind mountains, then a space cruise”: two compositor records + one H3 town plate, then Video Editor.
+Keep the 3D Video tab visible while it records. WebM is the recorded format; import it in Video Editor to join with H3 MP4s.
 
-**Phase 3 — optional compositor shots inside Story Lab / trailers / videoclips / series**  
-Director marks some shots `tool: compositor` with a mesh + plate + preset. Only after phase 2 returns an MP4 into the gallery / `result_kind` pipeline.
-
-Until then, agents follow this file **manually**: generate assets via API, tell the user the exact layer recipe, or import a scene JSON for them to record.
+**Phase 3 — not built.** Director marks some shots `tool: compositor` inside Story Lab / trailers / videoclips / series only after phase 2 clips are in the gallery.
 
 ---
 

@@ -2,6 +2,8 @@ import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, typ
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
+import { SceneRecipePanel } from './SceneRecipePanel'
+import type { SceneRecipe } from '../../lib/sceneRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { getSceneClipTime } from '../../lib/sceneClip'
@@ -925,7 +927,7 @@ export function SceneAnimatorPanel() {
   }
   const renderedLayerStates = (layer: AnimatorLayer, time = progress) => {
     const orbitCount = layer.animation.orbit ? Math.round(boundedNumber(layer.animation.orbit.count, 1, 1, 12)) : 1
-    const offsets = stripOffsets(layer, time * scene.duration)
+    const offsets = stripOffsets(layer, time * sceneRef.current.duration)
     const instances: LayerState[] = []
     for (let orbitIndex = 0; orbitIndex < orbitCount; orbitIndex += 1) {
       const orbit = layer.animation.orbit
@@ -1383,7 +1385,7 @@ export function SceneAnimatorPanel() {
       setMessage(localAssets > 0 ? `Scene JSON exported. ${localAssets} local asset${localAssets === 1 ? '' : 's'} will require reassignment when imported.` : 'Scene JSON exported.')
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Scene JSON could not be exported.') }
   }
-  const importScene = (text: string) => {
+  const importScene = (text: string, successMessage?: string) => {
     try {
       const incoming = parseSceneFile(text) as AnimatorScene
       const incomingIds = incoming.layers.map((layer, index) => {
@@ -1481,7 +1483,7 @@ export function SceneAnimatorPanel() {
       const previousObjectUrls = new Set(sceneRef.current.layers.flatMap(layer => [layer.source, layer.thumbnail].filter((value): value is string => Boolean(value?.startsWith('blob:')))))
       previousObjectUrls.forEach(url => URL.revokeObjectURL(url))
       const missingAssets = layers.filter(layer => layer.type !== 'camera' && layer.missingAsset).length
-      localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(`Scene imported: ${layers.length} layer${layers.length === 1 ? '' : 's'}.${missingAssets ? ` Reassign ${missingAssets} missing asset${missingAssets === 1 ? '' : 's'}.` : ''}`); setJsonOpen(false)
+      localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: incoming.fps === 60 ? 60 : 30, duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(successMessage ?? `Scene imported: ${layers.length} layer${layers.length === 1 ? '' : 's'}.${missingAssets ? ` Reassign ${missingAssets} missing asset${missingAssets === 1 ? '' : 's'}.` : ''}`); setJsonOpen(false)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Invalid scene JSON.') }
   }
   const importSceneFile = async (file: File) => {
@@ -1536,10 +1538,11 @@ export function SceneAnimatorPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyRevision])
   const paintScene = (canvas: HTMLCanvasElement, time: number) => {
+    const current = sceneRef.current
     const context = canvas.getContext('2d')
     if (!context) return false
     context.fillStyle = '#0b1020'; context.fillRect(0, 0, canvas.width, canvas.height)
-    scene.layers
+    current.layers
       .filter(layer => layer.visible && isVisualLayer(layer))
       .flatMap(layer => renderedLayerStates(layer, time).map((state, instanceIndex) => ({ layer, state, instanceIndex })))
       .sort((a, b) => a.state.z - b.state.z)
@@ -1574,23 +1577,27 @@ export function SceneAnimatorPanel() {
     })
     return true
   }
-  const record = () => {
-    if (recording) return
-    if (playing) { setMessage('Wait for Preview to finish before recording.'); return }
-    if (!scene.layers.some(layer => layer.visible && isVisualLayer(layer))) { setMessage('Add a visible visual layer before recording.'); return }
-    if (!('MediaRecorder' in window)) { setMessage('This browser cannot record the scene.'); return }
-    const canvas = document.createElement('canvas'); canvas.width = scene.width; canvas.height = scene.height; const context = canvas.getContext('2d'); if (!context) return
-    if (!('filter' in context) && scene.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) { setMessage('This browser can preview layer filters but cannot capture them. Use Chromium/Chrome to record this scene.'); return }
+  const recordToBlob = (download = true): Promise<Blob> => new Promise((resolve, reject) => {
+    if (recording) { reject(new Error('A recording is already in progress.')); return }
+    if (playing) { const error = new Error('Wait for Preview to finish before recording.'); setMessage(error.message); reject(error); return }
+    const current = sceneRef.current
+    const currentFps: SceneFrameRate = current.fps === 60 ? 60 : 30
+    if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) { const error = new Error('Add a visible visual layer before recording.'); setMessage(error.message); reject(error); return }
+    if (!('MediaRecorder' in window)) { const error = new Error('This browser cannot record the scene.'); setMessage(error.message); reject(error); return }
+    const canvas = document.createElement('canvas'); canvas.width = current.width; canvas.height = current.height; const context = canvas.getContext('2d'); if (!context) { reject(new Error('Could not create a recording canvas.')); return }
+    if (!('filter' in context) && current.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) { const error = new Error('This browser can preview layer filters but cannot capture them. Use Chromium/Chrome to record this scene.'); setMessage(error.message); reject(error); return }
     let stream: MediaStream | null = null
     let recorder: MediaRecorder | null = null
     const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm'
-    const videoBitsPerSecond = Math.round(Math.max(4_000_000, Math.min(60_000_000, scene.width * scene.height * fps * .12)))
+    const videoBitsPerSecond = Math.round(Math.max(4_000_000, Math.min(60_000_000, current.width * current.height * currentFps * .12)))
     try {
-      stream = canvas.captureStream(fps)
+      stream = canvas.captureStream(currentFps)
       recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond })
     } catch (error) {
       stream?.getTracks().forEach(track => track.stop())
-      setMessage(error instanceof Error ? `Recording could not start: ${error.message}` : 'Recording could not start in this browser.')
+      const message = error instanceof Error ? `Recording could not start: ${error.message}` : 'Recording could not start in this browser.'
+      setMessage(message)
+      reject(new Error(message))
       return
     }
     const captureStream = stream
@@ -1615,16 +1622,28 @@ export function SceneAnimatorPanel() {
       if (mediaRecorder.state !== 'inactive') {
         try { mediaRecorder.stop() } catch { clearCapture() }
       } else clearCapture()
+      reject(error instanceof Error ? error : new Error(detail))
     }
     mediaRecorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }
     mediaRecorder.onerror = event => fail((event as Event & { error?: DOMException }).error ?? new Error('MediaRecorder reported an error.'))
     mediaRecorder.onstop = () => {
       if (!failed && chunks.length > 0) {
-        const url = URL.createObjectURL(new Blob(chunks, { type: mime }))
-        const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${scene.width}x${scene.height}-${fps}fps-${Date.now()}.webm`; link.click()
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-      } else if (!failed) setMessage('Recording stopped without producing video data.')
+        const blob = new Blob(chunks, { type: mime })
+        if (download) {
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${current.width}x${current.height}-${currentFps}fps-${Date.now()}.webm`; link.click()
+          window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+        }
+        clearCapture()
+        resolve(blob)
+        return
+      }
       clearCapture()
+      if (!failed) {
+        const error = new Error('Recording stopped without producing video data.')
+        setMessage(error.message)
+        reject(error)
+      }
     }
     mediaRecorderRef.current = mediaRecorder
     recordingStreamRef.current = captureStream
@@ -1639,9 +1658,9 @@ export function SceneAnimatorPanel() {
         if (finishing) return
         finishing = true
         try {
-          const readyProgress = Math.min(1, syncedFrame / fps / scene.duration)
+          const readyProgress = Math.min(1, syncedFrame / currentFps / current.duration)
           setProgress(readyProgress); paintScene(canvas, readyProgress)
-          syncSceneMedia(scene.duration)
+          syncSceneMedia(current.duration)
           recordingAnimationRef.current = requestAnimationFrame(() => {
             try {
               setProgress(1); paintScene(canvas, 1)
@@ -1652,30 +1671,70 @@ export function SceneAnimatorPanel() {
       }
       const frame = (now: number) => {
         try {
-          const elapsed = Math.min(scene.duration, (now - started) / 1000)
-          if (elapsed >= scene.duration) { finish(); return }
-          const desiredFrame = Math.floor(elapsed * fps)
+          const elapsed = Math.min(current.duration, (now - started) / 1000)
+          if (elapsed >= current.duration) { finish(); return }
+          const desiredFrame = Math.floor(elapsed * currentFps)
           if (desiredFrame !== syncedFrame) {
-            const readyProgress = Math.min(1, syncedFrame / fps / scene.duration)
+            const readyProgress = Math.min(1, syncedFrame / currentFps / current.duration)
             setProgress(readyProgress); paintScene(canvas, readyProgress)
             syncedFrame = desiredFrame
-            syncSceneMedia(Math.min(scene.duration, desiredFrame / fps))
+            syncSceneMedia(Math.min(current.duration, desiredFrame / currentFps))
           }
           recordingAnimationRef.current = requestAnimationFrame(frame)
         } catch (error) { fail(error) }
       }
       recordingAnimationRef.current = requestAnimationFrame(frame)
     })
+  })
+  const record = () => { void recordToBlob(true).catch(() => undefined) }
+  const waitForModelViewers = async () => {
+    const root = canvasRef.current
+    if (!root) return
+    const deadline = Date.now() + 25000
+    while (Date.now() < deadline) {
+      const viewers = [...root.querySelectorAll('model-viewer')]
+      if (!viewers.length) return
+      const ready = viewers.every(viewer => {
+        const canvas = (viewer as HTMLElement).shadowRoot?.querySelector('canvas') as HTMLCanvasElement | null
+        return Boolean(canvas && canvas.width > 8 && canvas.height > 8)
+      })
+      if (ready) {
+        await new Promise(resolve => window.setTimeout(resolve, 400))
+        return
+      }
+      await new Promise(resolve => window.setTimeout(resolve, 250))
+    }
+    throw new Error('The 3D models did not paint in time. Keep the 3D Video tab visible and try again.')
+  }
+  const applyRecipeScene = async (recipe: SceneRecipe, nextScene: Scene, status: (message: string) => void) => {
+    importScene(JSON.stringify(nextScene), `Recipe scene loaded: ${nextScene.name}`)
+    await new Promise(resolve => window.setTimeout(resolve, 120))
+    status('Waiting for 3D models to paint…')
+    await waitForModelViewers()
+    if (recipe.record === true) {
+      status('Recording WebM…')
+      const blob = await recordToBlob(false)
+      const file = new File([blob], `${nextScene.name || 'scene'}.webm`, { type: blob.type || 'video/webm' })
+      status('Uploading recording…')
+      const uploaded = await uploadImage(file)
+      await loadOutputs()
+      setMessage(`Recorded and uploaded ${uploaded.filename}`)
+    }
+    if (recipe.save === true) {
+      status('Saving scene…')
+      await persistScene()
+    }
   }
   const persistScene = async () => {
-    if (!scene.layers.length) { setMessage('Add at least one layer before saving.'); return }
+    const current = sceneRef.current
+    if (!current.layers.length) { setMessage('Add at least one layer before saving.'); return }
     setSaving(true); setMessage(null)
     try {
       const preview = document.createElement('canvas')
-      const previewScale = Math.min(1, 1280 / Math.max(scene.width, scene.height))
-      preview.width = Math.max(1, Math.round(scene.width * previewScale)); preview.height = Math.max(1, Math.round(scene.height * previewScale))
+      const previewScale = Math.min(1, 1280 / Math.max(current.width, current.height))
+      preview.width = Math.max(1, Math.round(current.width * previewScale)); preview.height = Math.max(1, Math.round(current.height * previewScale))
       paintScene(preview, progress)
-      const layers = await Promise.all(scene.layers.map(async layer => {
+      const layers = await Promise.all(current.layers.map(async layer => {
         if (layer.type === 'camera') return layer
         if (!layer.source.startsWith('blob:')) return layer
         const file = localFilesRef.current[layer.id]
@@ -1683,7 +1742,7 @@ export function SceneAnimatorPanel() {
         const uploaded = await uploadImage(file)
         return { ...layer, source: uploaded.url, missingAsset: false }
       }))
-      const persisted = { ...scene, layers }
+      const persisted = { ...current, layers }
       const saved = await saveSceneOutput(persisted, preview.toDataURL('image/png'))
       replaceScene(persisted); localFilesRef.current = {}; await loadOutputs()
       setMessage(`Scene saved to Loreframe Lab as ${saved.name}`)
@@ -1790,6 +1849,7 @@ export function SceneAnimatorPanel() {
       />
     </section>
     <aside className="w-full shrink-0 border-t border-border bg-bg-secondary p-3 overflow-y-auto space-y-3 xl:w-[300px] xl:border-l xl:border-t-0">
+      <SceneRecipePanel disabled={playing || recording || saving} outputs={outputs} onApply={applyRecipeScene} />
       <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> Add layer</button>{addOpen && <div className="absolute z-[1100] mt-1 max-h-[75vh] w-full space-y-1 overflow-y-auto rounded border border-border bg-bg-primary p-1 shadow-xl"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">Add camera</button><div className="px-2 pt-1 text-[8px] font-medium uppercase tracking-wider text-text-muted">Atmospheric effect · 14 presets</div><div className="grid grid-cols-2 gap-1">{ATMOSPHERE_KINDS.map(kind => <button key={kind} onClick={() => addAtmosphere(kind)} title={`${ATMOSPHERE_LABELS[kind]} — ${ATMOSPHERE_DESCRIPTIONS[kind]}`} className="truncate rounded border border-border px-2 py-1.5 text-left text-[9px] text-purple-200 hover:border-purple-400/60 hover:bg-bg-hover">{ATMOSPHERE_LABELS[kind]}</button>)}</div><button onClick={() => { setPicker('model'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated 3D model</button><button onClick={() => { setAddOpen(false); modelInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import GLB</button><button onClick={() => { setPicker('media'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated image/video</button><button onClick={() => { setAddOpen(false); mediaInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import image/video</button><button onClick={() => { setAddOpen(false); overlayInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import transparent PNG/WebP</button></div>}</div>
       {picker && <div className="rounded border border-border bg-bg-primary p-2"><div className="mb-1 flex justify-between text-[10px] text-text-muted"><span>{picker === 'model' ? 'Generated 3D models' : 'Generated images & videos'}</span><button onClick={() => setPicker(null)}><Down size={13} /></button></div><div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">{(picker === 'model' ? generatedModels : generatedMedia).map(asset => <button key={asset.name} onClick={() => addLayer(asset.type === 'model3d' ? 'model3d' : asset.type === 'video' ? 'video' : 'image', asset.url, asset.name, asset.thumbnail_url ?? undefined)} className="overflow-hidden rounded border border-border text-left hover:border-accent-blue"><div className="aspect-square bg-bg-active">{asset.thumbnail_url || asset.type === 'image' ? <img src={asset.thumbnail_url ?? asset.url} alt="" className="h-full w-full object-cover" /> : <div className="h-full flex items-center justify-center"><Video size={16} /></div>}</div><span className="block truncate px-1 py-1 text-[9px]">{asset.name}</span></button>)}</div></div>}
       <input ref={modelInputRef} type="file" accept=".glb,model/gltf-binary" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign('model3d', file) }} /><input ref={mediaInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign(file.type.startsWith('video/') ? 'video' : 'image', file) }} /><input ref={overlayInputRef} type="file" accept="image/png,image/webp" multiple className="hidden" onChange={event => [...(event.target.files ?? [])].forEach(file => addOrReassign('overlay', file))} />

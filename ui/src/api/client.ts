@@ -4012,6 +4012,10 @@ export async function generateLlmText(params: {
   system_prompt?: string
   max_new_tokens?: number
   temperature?: number
+  top_p?: number
+  frequency_penalty?: number
+  presence_penalty?: number
+  json_schema?: Record<string, unknown>
 }): Promise<string> {
   const res = await fetch(`${BASE}/api/v1/llm/generate`, {
     method: 'POST',
@@ -4021,6 +4025,10 @@ export async function generateLlmText(params: {
       system_prompt: params.system_prompt || '',
       max_new_tokens: params.max_new_tokens ?? 1536,
       temperature: params.temperature ?? 0.3,
+      top_p: params.top_p ?? 0.9,
+      frequency_penalty: params.frequency_penalty ?? 0,
+      presence_penalty: params.presence_penalty ?? 0,
+      json_schema: params.json_schema,
     }),
   })
   if (!res.ok) {

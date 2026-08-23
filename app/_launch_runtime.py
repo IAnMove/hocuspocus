@@ -8237,6 +8237,13 @@ async def llm_generate(request: Request):
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
 
+    json_schema = body.get("json_schema")
+    if json_schema is not None:
+        if not isinstance(json_schema, dict):
+            raise HTTPException(status_code=400, detail="json_schema must be an object")
+        if len(json.dumps(json_schema, ensure_ascii=False)) > 100_000:
+            raise HTTPException(status_code=400, detail="json_schema is too large")
+
     _ensure_llm_loaded()
 
     try:
@@ -8246,7 +8253,10 @@ async def llm_generate(request: Request):
             max_new_tokens=body.get("max_new_tokens", 256),
             temperature=body.get("temperature", 0.7),
             top_p=body.get("top_p", 0.9),
+            frequency_penalty=body.get("frequency_penalty", 0.0),
+            presence_penalty=body.get("presence_penalty", 0.0),
             seed=body.get("seed"),
+            json_schema=json_schema,
         )
         return {"text": result}
     except Exception as e:

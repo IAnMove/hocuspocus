@@ -161,6 +161,8 @@ Three themes, switchable in Settings → System:
 ### 🧊 Native Hunyuan3D Studio
 Loreframe Lab includes an integrated **3D** section for text-to-3D, image-to-3D, and multi-image reconstruction. Hunyuan runs in an isolated environment inside Loreframe Lab, so its older Diffusers stack cannot conflict with the audio/video models. Each worker exits after export and releases its CUDA context and VRAM.
 
+Reference slots accept both images uploaded from disk and existing images selected directly from the active Loreframe workspace. This applies to the single front reference, all four multi-view slots, and the texture reference used by **Retexture GLB**.
+
 Included geometry variants:
 
 - **Hunyuan3D 2 Mini**: Turbo, Fast, and full-step 0.6B variants
