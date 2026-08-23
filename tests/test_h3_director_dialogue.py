@@ -16,6 +16,7 @@ if _APP_DIR not in sys.path:
 
 from services.director.h3_dialogue import (  # noqa: E402
     H3DialogueContractError,
+    apply_h3_no_sound_description,
     compile_h3_clip_plans,
     compile_h3_official_prompt,
     compile_h3_vocal_contract,
@@ -92,7 +93,8 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             repaired,
         )
         self.assertNotIn("coffee shop chatter", repaired.lower())
-        self.assertIn("No background or crowd voices are audible", repaired)
+        self.assertNotIn("No background or crowd voices are audible", repaired)
+        self.assertNotIn("Only these explicitly tagged lines are spoken", repaired)
         self.assertEqual(validate_h3_vocal_contract(repaired, self.beats), [])
         self.assertEqual(
             compile_h3_vocal_contract(repaired, self.subjects, self.beats)[0],
@@ -151,15 +153,19 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
                 self.beats[:1],
             )
 
-    def test_silent_shot_gets_an_explicit_silence_contract(self):
+    def test_silent_shot_does_not_narrate_silence_into_the_picture(self):
         compiled, _ = compile_h3_vocal_contract(
-            "A silent reaction. overall_soundscape: Air conditioning hum.",
+            "A silent reaction. Nadie habla. Silencio de voces. "
+            "overall_soundscape: Air conditioning hum.",
             [],
             [],
         )
 
-        self.assertIn("SILENCE AND VOCAL PERFORMANCE", compiled)
-        self.assertIn("No one speaks in this shot", compiled)
+        self.assertNotIn("SILENCE AND VOCAL PERFORMANCE", compiled)
+        self.assertNotIn("No one speaks", compiled)
+        self.assertNotIn("Silencio de voces", compiled)
+        self.assertNotIn("Nadie habla", compiled)
+        self.assertNotIn("<d>", compiled)
         self.assertEqual(validate_h3_vocal_contract(compiled), [])
 
     def test_final_clip_preflight_uses_structured_dialogue(self):
@@ -269,14 +275,10 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             duration_seconds=5.167,
         )
 
-        self.assertEqual(prompt.count("VOCAL TIMELINE LOCK:"), 1)
-        self.assertIn("the first tagged line is spoken exactly once", prompt)
-        self.assertIn("00:05.167", prompt)
-        self.assertIn("only the described ambience", prompt)
-        self.assertLess(
-            prompt.index("VOCAL TIMELINE LOCK:"),
-            prompt.index("overall_soundscape:"),
-        )
+        self.assertNotIn("VOCAL TIMELINE LOCK", prompt)
+        self.assertNotIn("spoken exactly once", prompt)
+        self.assertNotIn("remain silent", prompt.casefold())
+        self.assertIn("<d>[Spanish] Ya están aquí.</d>", prompt)
         self.assertEqual(
             validate_h3_prompt_contract(
                 prompt,
@@ -323,11 +325,70 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             duration_seconds=5.167,
         )
 
-        self.assertIn(
-            "From 00:00.000 to 00:05.167, all characters remain silent",
-            prompt,
-        )
+        self.assertNotIn("VOCAL TIMELINE LOCK", prompt)
+        self.assertNotIn("remain silent", prompt.casefold())
+        self.assertNotIn("No character speaks", prompt)
+        soundscape = prompt.split("overall_soundscape:", 1)[1].split(
+            "non_diegetic_music:", 1,
+        )[0]
+        self.assertIn("N/A", soundscape)
+        self.assertNotIn("Footsteps and room tone", prompt)
         self.assertNotIn("the first tagged line", prompt)
+
+    def test_no_sound_description_keeps_dialogue_and_blanks_audio_fields(self):
+        prompt = apply_h3_no_sound_description(
+            "integrated_multimodal_description: [Shot 1] Frodo opens the door "
+            "and says <d>[Spanish] Llegas tarde.</d> Everyone remains silent "
+            "afterward. Solo esa frase. "
+            "overall_soundscape: Door wood, quiet garden, kettle. "
+            "non_diegetic_music: Soft Shire strings"
+        )
+        visual = prompt.split("overall_soundscape:", 1)[0]
+        soundscape = prompt.split("overall_soundscape:", 1)[1].split(
+            "non_diegetic_music:", 1,
+        )[0]
+        music = prompt.split("non_diegetic_music:", 1)[1]
+        self.assertIn("<d>[Spanish] Llegas tarde.</d>", visual)
+        self.assertIn("Frodo opens the door", visual)
+        self.assertNotIn("remains silent", visual.casefold())
+        self.assertNotIn("solo esa frase", visual.casefold())
+        self.assertIn("N/A", soundscape)
+        self.assertNotIn("garden", soundscape.casefold())
+        self.assertIn("N/A", music)
+        self.assertNotIn("shire", music.casefold())
+
+    def test_mute_famous_character_still_gets_closed_lips_not_invented_speech(self):
+        prompt = apply_h3_no_sound_description(
+            "integrated_multimodal_description: [Shot 1] Stop-motion Aardman "
+            "claymation, plasticine puppets with visible fingerprints, 16:9, "
+            "Peter Jackson / Weta cinematic light. Not live action, not CGI "
+            "smooth, no rappers. Die Hard, Christmas cake not a shootout. "
+            "Die Hard, claymation Nakatomi Plaza at night, John McClane in a "
+            "tank top, bare feet, Christmas tree in the lobby, 1988 action "
+            "still as plasticine.\n\n"
+            "overall_soundscape: N/A\n\n"
+            "non_diegetic_music: N/A"
+        )
+        visual = prompt.split("overall_soundscape:", 1)[0].casefold()
+        self.assertIn("lips closed", visual)
+        self.assertIn("jaws still", visual)
+        self.assertNotIn("<d>", prompt.casefold())
+        self.assertNotIn("remain silent", visual)
+        self.assertNotIn("no one speaks", visual)
+        self.assertIn("N/A", prompt.split("overall_soundscape:", 1)[1])
+        again = apply_h3_no_sound_description(prompt)
+        self.assertEqual(again.count("keep lips closed and jaws still"), 1)
+
+    def test_closed_lips_lock_is_not_added_when_dialogue_is_authored(self):
+        prompt = apply_h3_no_sound_description(
+            "integrated_multimodal_description: [Shot 1] McClane smiles "
+            "<d>[Spanish] Yippee-ki-yay. ¿Un refresco?</d>\n\n"
+            "overall_soundscape: N/A\n\n"
+            "non_diegetic_music: N/A"
+        )
+        visual = prompt.split("overall_soundscape:", 1)[0]
+        self.assertIn("<d>[Spanish] Yippee-ki-yay. ¿Un refresco?</d>", visual)
+        self.assertNotIn("keep lips closed and jaws still", visual.casefold())
 
     def test_silent_clip_rewrites_vocal_actions_instead_of_contradicting_itself(self):
         prompt, _ = compile_h3_official_prompt(
@@ -354,7 +415,8 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
             soundscape,
             r"\b(?:jadeo|risa|grito|voz|voces)\b",
         )
-        self.assertIn("no character speaks", prompt.casefold())
+        self.assertNotIn("no character speaks", prompt.casefold())
+        self.assertNotIn("silencio", prompt.casefold())
 
     def test_silent_clip_rewrites_about_to_speak_and_song_delivery(self):
         prompt, _ = compile_h3_official_prompt(
@@ -437,7 +499,12 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
 
         compile_h3_clip_plans(plans)
 
-        self.assertIn("no character speaks", plans[0]["video_prompt"].casefold())
+        compiled = plans[0]["video_prompt"].casefold()
+        self.assertIn("works silently", compiled)
+        self.assertNotIn("nadie canta", compiled)
+        self.assertNotIn("no one speaks", compiled)
+        self.assertNotIn("no character speaks", compiled)
+        self.assertNotIn("silencio de voces", compiled)
 
     def test_final_preflight_accepts_spanish_nunca_habla(self):
         plans = [{
@@ -789,7 +856,8 @@ class TestH3DirectorDialogueCompiler(unittest.TestCase):
         soundscape = prompt.split("overall_soundscape:", 1)[1].split(
             "non_diegetic_music:", 1,
         )[0]
-        self.assertIn("empedrado", soundscape.casefold())
+        self.assertIn("N/A", soundscape)
+        self.assertNotIn("empedrado", soundscape.casefold())
         self.assertLess(len(prompt), 1600)
 
 

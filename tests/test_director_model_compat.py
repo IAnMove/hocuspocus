@@ -480,15 +480,16 @@ class TestDirectorModelAssessment(unittest.TestCase):
             "<d>[English] Identity theft is not a joke, Jim.</d>",
             plan.shots[0].video_prompt,
         )
-        self.assertIn(
+        self.assertNotIn(
             "Only these explicitly tagged lines are spoken",
             plan.shots[0].video_prompt,
         )
-        self.assertIn(
+        self.assertNotIn(
             "SILENCE AND VOCAL PERFORMANCE",
             plan.shots[1].video_prompt,
         )
-        self.assertIn("gibberish", plan.shots[1].video_prompt)
+        self.assertNotIn("No one speaks", plan.shots[1].video_prompt)
+        self.assertNotIn("<d>", plan.shots[1].video_prompt)
         self.assertEqual(
             plan.shots[0].metadata["continuity_group"],
             "dunder_mifflin_conference_room",
@@ -711,9 +712,7 @@ class TestDirectorModelAssessment(unittest.TestCase):
         )
         silence_prompt = (
             "integrated_multimodal_description: Jim looks into camera. "
-            "SILENCE AND VOCAL PERFORMANCE: No one speaks in this shot. "
-            "Generate no muttering, murmuring, gibberish, invented words, or "
-            "speech-like vocalizations. overall_soundscape: Quiet office. "
+            "overall_soundscape: Quiet office. "
             "non_diegetic_music: N/A."
         )
         plans = [
@@ -738,7 +737,8 @@ class TestDirectorModelAssessment(unittest.TestCase):
             )
 
         self.assertEqual(result[0]["video_prompt"], dialogue_prompt)
-        self.assertEqual(result[1]["video_prompt"], silence_prompt)
+        self.assertNotIn("<d>", result[1]["video_prompt"])
+        self.assertNotIn("SILENCE AND VOCAL PERFORMANCE", result[1]["video_prompt"])
 
     def test_h3_generated_image_polish_does_not_rewrite_video_prompt(self):
         plan = [{
@@ -1874,8 +1874,8 @@ class TestDirectorH3GenerationContract(unittest.TestCase):
         self.assertFalse(generated_slice)
         manifest = captured["per_clip_minimax_h3_references"][0]
         self.assertFalse(any(item.get("type") == "audio" for item in manifest))
-        self.assertIn("No character speaks", captured["prompt"])
         self.assertNotIn("<d>", captured["prompt"])
+        self.assertNotIn("No character speaks", captured["prompt"])
 
 
 class TestDirectorUICatalogContract(unittest.TestCase):

@@ -2066,7 +2066,7 @@ def generate(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and (_vision_available or _provider in ("remote", "openai")):
+    if image_paths and (_vision_available or _provider in ("remote", "openai", "minimax")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -2614,7 +2614,7 @@ def generate_streaming(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and (_vision_available or _provider in ("remote", "openai")):
+    if image_paths and (_vision_available or _provider in ("remote", "openai", "minimax")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -3380,8 +3380,9 @@ def enhance_prompt(
             "(S2), etc. speaker ID and use <d>[Language] literal words</d>. "
             "When the user requests a discussion without supplying lines, write "
             "short meaningful dialogue that fits the supplied Duration. Once the "
-            "last line ends, describe silent visible action and closed mouths; do "
-            "not invent more speech. No markdown, explanation, or LoRA filenames."
+            "last line ends, continue with visible action only. Do not describe "
+            "sound or silence. overall_soundscape and non_diegetic_music are N/A. "
+            "No markdown, explanation, or LoRA filenames."
         )
     else:
         system += "\n\nCRITICAL: Output ONLY the enhanced prompt text. No headers, no labels, no markdown, no explanation, no \"Enhancement Logic\", no \"Edit Prompt:\". No LoRA filenames (.safetensors). Just the raw prompt text."
@@ -3577,6 +3578,11 @@ def enhance_prompt(
         result = _strip_h3_untagged_dialogue_duplicates(result, prompt)
         result = _enforce_h3_soundscape_silence(result, prompt)
         result = _enforce_h3_music_request(result, prompt, reference_context)
+        try:
+            from services.director.h3_dialogue import apply_h3_no_sound_description
+        except ImportError:
+            from app.services.director.h3_dialogue import apply_h3_no_sound_description
+        result = apply_h3_no_sound_description(result)
     return result
 
 
@@ -3651,19 +3657,8 @@ def _h3_dialogue_schedule(prompt: str, duration_seconds: Optional[float]) -> tup
 
 
 def _build_h3_timed_silence_clause(prompt: str, duration_seconds: Optional[float]) -> str:
-    if not _h3_requests_speech(prompt):
-        return ""
-    duration, start, end = _h3_dialogue_schedule(prompt, duration_seconds)
-    return (
-        f"From 0.00 to {start:.2f} seconds, show active scene-appropriate nonverbal action rather "
-        "than idle staring; every mouth stays completely closed and the audio contains no human "
-        "voice. Begin the first tagged line at approximately "
-        f"{start:.2f} seconds and finish all <d> dialogue by approximately {end:.2f} seconds. "
-        f"From {end:.2f} to {duration:.2f} seconds, fill the remaining timeline with concrete "
-        "nonverbal action, reactions, camera development, ambience, and synchronized practical "
-        "effects. Outside the tagged interval there are no voices, whispers, grunts, audible "
-        "breathing, or speech-like vocalizations, and every mouth remains closed."
-    )
+    # Temporary: do not inject silence or sound instructions. H3 performs them.
+    return ""
 
 
 def _build_h3_dialogue_requirement(
@@ -3711,20 +3706,8 @@ def _h3_timed_silence_contract_satisfied(
     result: str,
     duration_seconds: Optional[float],
 ) -> bool:
-    """Require explicit non-vocal time allocation around requested speech."""
-    if not _h3_requests_speech(prompt):
-        return True
-    import re
-    text = str(result or "")
-    has_opening_interval = bool(re.search(r"(?i)\bfrom\s+0(?:\.0+)?\s+(?:to|until)", text))
-    has_closed_mouths = bool(re.search(r"(?i)\bmouths?\b.{0,50}\bclosed\b", text))
-    has_no_voice = bool(
-        re.search(r"(?i)\b(?:no|without)\s+(?:human\s+)?(?:voices?|speech|vocal)", text)
-    )
-    has_remaining_interval = bool(
-        re.search(r"(?i)\bfrom\s+\d+(?:\.\d+)?\s+(?:to|until)\s+\d+(?:\.\d+)?\s+seconds", text)
-    )
-    return has_opening_interval and has_closed_mouths and has_no_voice and has_remaining_interval
+    """Silence prose is no longer required; H3 performs those notes as speech."""
+    return True
 
 
 def _h3_voice_binding_contract_satisfied(
@@ -3810,10 +3793,6 @@ def _inject_missing_h3_dialogue(result: str, prompt: str, *, ref2va: bool) -> st
         f"The intended speaker (S{index}) says exactly once: <d>[English] {line}</d>."
         for index, line in enumerate(missing, start=1)
     )
-    additions += (
-        " These are the only spoken words in the video; before and after them, everyone remains "
-        "silent with mouths closed, with no other voices or speech-like vocalization."
-    )
     field = "detailed_description" if ref2va else "integrated_multimodal_description"
     next_field = "overall_soundscape"
     import re
@@ -3841,7 +3820,6 @@ def _inject_h3_generated_dialogue(result: str, fragment: str, *, ref2va: bool) -
     addition = (
         " The complete requested exchange is: "
         + " ".join(valid_lines)
-        + " No other words are spoken; afterward everyone remains silent with mouths closed."
     )
     field = "detailed_description" if ref2va else "integrated_multimodal_description"
     import re
@@ -3891,49 +3869,14 @@ def _strip_h3_untagged_dialogue_duplicates(result: str, prompt: str) -> str:
 
 
 def _enforce_h3_soundscape_silence(result: str, prompt: str) -> str:
-    """Keep the model from filling dialogue gaps with invented human noises."""
-    if not _h3_requests_speech(prompt):
-        return result
+    """Temporary: never describe sound. Keep the required label; value is N/A."""
     import re
-    if re.search(
-        r"(?i)\b(?:grunt|gasp|scream|laugh|sob|cry|audible breathing|nonverbal vocal)\w*\b",
-        str(prompt or ""),
-    ):
-        return result
-
-    pattern = re.compile(
-        r"(?ms)(^\s*overall_soundscape\s*:)(.*?)(?=^\s*non_diegetic_music\s*:)",
+    return re.sub(
+        r"(?ms)^\s*overall_soundscape\s*:.*?(?=^\s*non_diegetic_music\s*:)",
+        "overall_soundscape: N/A\n",
+        str(result or ""),
+        count=1,
     )
-    match = pattern.search(str(result or ""))
-    if not match:
-        return result
-    content = match.group(2).strip()
-    sentences = re.split(r"(?<=[.!?])\s+", content)
-    kept = []
-    for sentence in sentences:
-        has_negation = re.search(r"(?i)\b(?:no|not|without|never)\b", sentence)
-        if has_negation:
-            kept.append(sentence.strip())
-            continue
-        # Remove only comma/semicolon clauses that introduce vocal filler so a
-        # mixed sentence keeps its impacts, ambience, and debris sounds.
-        safe_segments = [
-            segment.strip()
-            for segment in re.split(r"[,;]", sentence)
-            if segment.strip()
-            and not re.search(
-                r"(?i)\b(?:grunt|gasp|whisper|scream|laugh|breath|voice|speech-like)\w*\b",
-                segment,
-            )
-        ]
-        if safe_segments:
-            kept.append(", ".join(safe_segments))
-    kept.append(
-        "Outside the tagged dialogue, no human voices, whispers, grunts, audible breathing, "
-        "or speech-like vocalizations occur"
-    )
-    replacement = match.group(1) + " " + ". ".join(kept).rstrip(".") + ".\n"
-    return result[:match.start()] + replacement + result[match.end():]
 
 
 def _enforce_h3_music_request(
@@ -3991,7 +3934,6 @@ def _build_h3_ref2va_tagged_fallback(
         )
     subject_mapping = " ".join(subject_bindings + [mapping])
     request = _compile_h3_explicit_dialogue(prompt)
-    timed_clause = _build_h3_timed_silence_clause(prompt, duration_seconds)
     return (
         f"subject_definitions: {subject_mapping}\n"
         "summary: A finished video matching the requested action, identity, setting, and explicitly "
@@ -3999,12 +3941,8 @@ def _build_h3_ref2va_tagged_fallback(
         f"retention_analysis: Preserve the mapped identity, motion, and audio roles exactly: {mapping}\n"
         f"detailed_description: The finished target video follows this request: {request} "
         "Reference pictures provide identity and appearance only, never their original background, "
-        "framing, pose, or an opening still. The scripted dialogue is the only speech; all mouths "
-        f"remain closed before and after it. {timed_clause}\n"
-        "overall_soundscape: Continuous scene-appropriate stereo ambience and synchronized practical "
-        "sound effects begin at the first frame and continue naturally underneath dialogue. Outside "
-        "tagged dialogue there are no human voices, whispers, grunts, audible breathing, or "
-        "speech-like vocalizations.\n"
+        "framing, pose, or an opening still.\n"
+        "overall_soundscape: N/A\n"
         "non_diegetic_music: N/A"
     )
 
@@ -4023,14 +3961,9 @@ def _build_h3_context_fallback(
         else ""
     )
     request = _compile_h3_explicit_dialogue(prompt)
-    timed_clause = _build_h3_timed_silence_clause(prompt, duration_seconds)
     return (
-        f"{alignment}integrated_multimodal_description: [Shot 1] {request} The scripted dialogue "
-        f"is the only speech; all mouths remain closed before and after it. {timed_clause}\n\n"
-        "overall_soundscape: Continuous scene-appropriate ambience and synchronized practical "
-        "sound effects begin at the first frame and continue naturally underneath dialogue. Outside "
-        "tagged dialogue there are no human voices, whispers, grunts, audible breathing, or "
-        "speech-like vocalizations.\n\n"
+        f"{alignment}integrated_multimodal_description: [Shot 1] {request}\n\n"
+        "overall_soundscape: N/A\n\n"
         "non_diegetic_music: N/A"
     )
 
@@ -4086,16 +4019,16 @@ def describe_image(
     prompt: str = "Describe this image in detail for use as a video generation prompt.",
     max_new_tokens: int = 256,
 ) -> str:
-    """Describe an image. Vision support requires multimodal GGUF (future)."""
+    """Describe an image with the loaded LLM when it accepts vision input."""
     if not os.path.isfile(image_path):
         raise FileNotFoundError(f"Image not found: {image_path}")
 
-    basename = os.path.basename(image_path)
     return generate(
-        prompt=f"The user has an image file named '{basename}'. {prompt}",
+        prompt=prompt,
         system_prompt="You are a helpful assistant that generates creative, detailed video prompts.",
         max_new_tokens=max_new_tokens,
         temperature=0.4,
+        image_paths=[image_path],
     )
 
 

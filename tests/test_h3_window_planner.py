@@ -109,10 +109,9 @@ class H3WindowPlannerTests(unittest.TestCase):
         self.assertNotIn("stops the truck", first)
         self.assertIn("braces both hands", second)
         self.assertIn("<d>[English] Look out!</d>", second)
-        self.assertIn("the first tagged line is spoken exactly once", second)
-        self.assertIn("00:05.125", second)
-        self.assertIn("all characters remain silent", first)
-        self.assertIn("all characters remain silent", final)
+        self.assertNotIn("the first tagged line is spoken exactly once", second)
+        self.assertNotIn("all characters remain silent", first)
+        self.assertNotIn("all characters remain silent", final)
         self.assertNotIn("Look out!", first)
         self.assertNotIn("Look out!", final)
         self.assertIn(plan["windows"][0]["closing_state"], compiled[1]["opening_state"])
@@ -120,7 +119,7 @@ class H3WindowPlannerTests(unittest.TestCase):
             self.assertEqual(item["prompt"].count("integrated_multimodal_description:"), 1)
             self.assertEqual(item["prompt"].count("overall_soundscape:"), 1)
             self.assertEqual(item["prompt"].count("non_diegetic_music:"), 1)
-            self.assertEqual(item["prompt"].count("VOCAL TIMELINE LOCK:"), 1)
+            self.assertEqual(item["prompt"].count("VOCAL TIMELINE LOCK:"), 0)
             self.assertIn("Clark Kent wears the same blue shirt", item["prompt"])
 
     def test_compiler_assigns_endpoint_images_to_the_correct_passes(self):

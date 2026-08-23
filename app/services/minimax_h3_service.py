@@ -49,9 +49,9 @@ TEXT_ENCODER = "qwen3vl_32b_minimax_h3_int4_convrot.safetensors"
 VIDEO_VAE = "minimax_h3_video_vae_fp16.safetensors"
 AUDIO_VAE = "minimax_h3_audio_vae_fp32.safetensors"
 
-DEFAULT_AUDIO_DIRECTION = (
-    "Only explicitly described sounds. If none are described, remain silent."
-)
+# Temporary: do not send a separate audio direction. H3 performs any written
+# audio note, including negative conditions such as "remain silent".
+DEFAULT_AUDIO_DIRECTION = ""
 
 MODEL_PROFILES = {
     # ``balanced`` is retained as a backwards-compatible saved-settings alias.
@@ -325,7 +325,7 @@ def ensure_audio_prompt(prompt: str, audio_direction: str = "") -> str:
         return normalized_prompt
     normalized_audio = " ".join(str(audio_direction or "").split())
     if not normalized_audio:
-        normalized_audio = DEFAULT_AUDIO_DIRECTION
+        return normalized_prompt
     prefix = f"{normalized_prompt}\n" if normalized_prompt else ""
     return f"{prefix}Audio: {normalized_audio}"
 

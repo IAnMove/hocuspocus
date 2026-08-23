@@ -235,15 +235,9 @@ def _sound_fields(plan: dict, audio_direction: str) -> tuple[str, str]:
         )
     ):
         soundscape_parts.append(direction)
-    if not soundscape_parts:
-        soundscape_parts.append("Silence")
-
-    mode = _clean(audio.get("mode")).lower()
-    if mode in {"music_driven", "audio_driven"}:
-        music = "The selected song segment remains the timing and editorial anchor; do not invent a competing melody."
-    else:
-        music = "N/A"
-    return "; ".join(soundscape_parts).rstrip("."), music
+    # Temporary: never describe ambience, effects, silence, or music. H3
+    # treats those sentences as audible events. Dialogue lives only in <d>.
+    return "N/A", "N/A"
 
 
 def format_minimax_h3_prompt(
@@ -261,7 +255,8 @@ def format_minimax_h3_prompt(
     mode = normalize_reference_mode(reference_mode)
     text = str(prompt or "").strip()
     if is_structured_h3_prompt(text, mode):
-        return text
+        from .h3_dialogue import apply_h3_no_sound_description
+        return apply_h3_no_sound_description(text)
 
     shot = dict(plan or {})
     description = _integrated_description(shot, text)
@@ -273,7 +268,8 @@ def format_minimax_h3_prompt(
             "(S1) the principal subject from the supplied references; "
             "(E1) the referenced environment and its stable visual design"
         )
-        return "\n".join((
+        from .h3_dialogue import apply_h3_no_sound_description
+        return apply_h3_no_sound_description("\n".join((
             f"subject_definitions: {defined}",
             "summary: [reference generation] Compose one new continuous shot from the supplied references.",
             (
@@ -284,7 +280,7 @@ def format_minimax_h3_prompt(
             f"detailed_description: {description}",
             f"overall_soundscape: {soundscape}.",
             f"non_diegetic_music: {music}",
-        ))
+        )))
 
     integrated = (
         description
@@ -300,12 +296,14 @@ def format_minimax_h3_prompt(
         f"overall_soundscape: {soundscape}.",
         f"non_diegetic_music: {music}",
     )
+    from .h3_dialogue import apply_h3_no_sound_description
+
     if mode == "direct":
-        return "\n".join(fields)
-    return "\n".join((
+        return apply_h3_no_sound_description("\n".join(fields))
+    return apply_h3_no_sound_description("\n".join((
         FIRST_FRAME_REFERENCE,
         *fields,
-    ))
+    )))
 
 
 def adapt_clip_plans_for_h3(

@@ -138,9 +138,9 @@ def test_short_line_gets_bounded_by_silence_for_the_full_h3_minimum():
     ]
     assert timeline["leading_silence_seconds"] >= 0.45
     assert timeline["trailing_silence_seconds"] > 1.0
-    assert "the first tagged line is spoken exactly once" in params["prompt"]
-    assert "00:05.167" in params["prompt"]
-    assert params["prompt"].count("VOCAL TIMELINE LOCK:") == 1
+    assert "the first tagged line is spoken exactly once" in timeline["text"]
+    assert "VOCAL TIMELINE LOCK" not in params["prompt"]
+    assert "<d>[Spanish] Ya están aquí.</d>" in params["prompt"]
 
 
 def test_vocal_timeline_reapplication_replaces_old_physical_boundary():
@@ -152,9 +152,8 @@ def test_vocal_timeline_reapplication_replaces_old_physical_boundary():
     first, _ = inject_h3_vocal_timeline(prompt, 5.0)
     second, timeline = inject_h3_vocal_timeline(first, 5.167)
 
-    assert second.count("VOCAL TIMELINE LOCK:") == 1
-    assert "00:05.167" in second
-    assert "00:05.000" not in second
+    assert "VOCAL TIMELINE LOCK" not in second
+    assert second.count("<d>") == 1
     assert timeline["intervals"][-1]["end_seconds"] == 5.167
 
 

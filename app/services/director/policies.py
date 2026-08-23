@@ -882,7 +882,7 @@ def compose_direct_video_prompt(
     ):
         sound_parts.append(direction)
     if not sound_parts:
-        sound_parts.append("Silence")
+        sound_parts.append("N/A")
     music = authored_music.strip(" .")
     if not music:
         music = " ".join(str(audio.get("music") or "").split()).strip(" .")

@@ -301,11 +301,12 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
 
         prompt = workflow["10"]["inputs"]["prompt"]
         self.assertIn("overall_soundscape:", prompt)
-        self.assertIn("Silence", prompt)
         soundscape = prompt.split("overall_soundscape:", 1)[1].split(
             "non_diegetic_music:", 1
-        )[0].casefold()
-        self.assertNotIn("dialogue", soundscape)
+        )[0]
+        self.assertIn("N/A", soundscape)
+        self.assertNotIn("Silence", soundscape)
+        self.assertNotIn("dialogue", soundscape.casefold())
 
     def test_structured_direct_prompt_reaches_h3_verbatim(self):
         source = (
@@ -316,7 +317,11 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
 
         workflow, _ = h3.build_workflow({**h3.DEFAULTS, "prompt": source}, "jobdirect")
 
-        self.assertEqual(workflow["10"]["inputs"]["prompt"], source)
+        final_prompt = workflow["10"]["inputs"]["prompt"]
+        self.assertIn("A silent machine starts.", final_prompt)
+        self.assertIn("overall_soundscape: N/A", final_prompt)
+        self.assertNotIn("Low mechanical hum", final_prompt)
+        self.assertNotIn("No human voices", final_prompt)
 
     def test_authored_audio_clause_is_not_duplicated(self):
         prompt = "A quiet beach. Audio: gentle waves and gulls."
@@ -327,7 +332,8 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         }, "jobaudioauthored")
 
         final_prompt = workflow["10"]["inputs"]["prompt"]
-        self.assertIn("overall_soundscape: gentle waves and gulls.", final_prompt)
+        self.assertIn("overall_soundscape: N/A", final_prompt)
+        self.assertNotIn("gentle waves", final_prompt)
         self.assertNotIn("loud machinery", final_prompt)
 
     def test_comfy_sampling_progress_is_exposed_to_maestro_jobs(self):

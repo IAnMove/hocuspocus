@@ -271,52 +271,14 @@ def ensure_ref2va_prompt_relationships(
         text,
     )
     relationship_block = " ".join(relationships)
-    if dialogue_counter:
-        duration = max(2.0, float(duration_seconds or 8.0))
-        speech_duration = min(
-            max(1.0, dialogue_word_count / 2.0),
-            max(1.0, duration * 0.55),
-        )
-        dialogue_start = min(
-            max(0.5, duration * 0.2),
-            max(0.25, duration - speech_duration - 0.75),
-        )
-        dialogue_end = min(duration - 0.25, dialogue_start + speech_duration)
-        dialogue_rule = (
-            f"From 0.00 to {dialogue_start:.2f} seconds, show active scene-appropriate nonverbal "
-            "action rather than idle staring; every mouth stays closed and the audio contains no "
-            f"human voice. Begin the first tagged line at {dialogue_start:.2f} seconds and finish "
-            f"all dialogue by {dialogue_end:.2f} seconds. From {dialogue_end:.2f} to "
-            f"{duration:.2f} seconds, fill the remaining timeline with concrete nonverbal action, "
-            "reactions, camera development, ambience, and synchronized practical effects. The tagged "
-            "lines are the only spoken words; outside them there are no voices, whispers, grunts, "
-            "audible breathing, or speech-like vocalizations, and every mouth remains closed."
-        )
-    else:
-        dialogue_rule = (
-            "Do not generate dialogue, voices, or speech-like vocalizations unless a <d> block is supplied."
-        )
-    has_mapped_music = any(item.get("audio_intent") in {"drive", "style"} for item in items)
-    requests_music = bool(re.search(r"\b(?:music|song|score|soundtrack)\b", text, re.IGNORECASE))
-    music_direction = (
-        "Use only the mapped audio reference according to its assigned retention role."
-        if has_mapped_music
-        else "Follow only the music explicitly requested in the target description."
-        if requests_music
-        else "N/A"
-    )
     return (
         f"subject_definitions: {relationship_block}\n"
         "summary: A finished video matching the requested action, identity, setting, and explicitly "
         "tagged dialogue.\n"
         f"retention_analysis: {relationship_block}\n"
-        f"detailed_description: The finished target video follows this request: {compiled_target} "
-        f"{dialogue_rule}\n"
-        "overall_soundscape: Continuous scene-appropriate stereo ambience and synchronized practical "
-        "sound effects begin at the first frame and continue naturally underneath any scripted dialogue. "
-        "Outside tagged dialogue there are no human voices, whispers, grunts, audible breathing, or "
-        "speech-like vocalizations.\n"
-        f"non_diegetic_music: {music_direction}"
+        f"detailed_description: The finished target video follows this request: {compiled_target}\n"
+        "overall_soundscape: N/A\n"
+        "non_diegetic_music: N/A"
     )
 
 

@@ -330,16 +330,9 @@ def inject_h3_vocal_timeline(prompt: Any, duration_seconds: float) -> tuple[str,
         duration_seconds,
         mapped_driving_audio=mapped_driving_audio,
     )
-    statement = f"VOCAL TIMELINE LOCK: {timeline['text']}"
-    boundary = _SOUND_FIELD.search(clean)
-    if boundary:
-        updated = (
-            f"{clean[:boundary.start()].rstrip()} {statement}\n\n"
-            f"{clean[boundary.start():].lstrip()}"
-        )
-    else:
-        updated = f"{clean} {statement}"
-    return re.sub(r"[ \t]+", " ", updated).strip(), timeline
+    # Keep the schedule as metadata only. Writing "remain silent" / "spoken
+    # exactly once" into the picture description makes H3 say those notes.
+    return re.sub(r"[ \t]+", " ", clean).strip(), timeline
 
 
 def apply_h3_vocal_timeline(

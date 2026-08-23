@@ -194,11 +194,6 @@ def compile_h3_window_prompts(
             )
             if sentence
         )
-        silence = (
-            "Only the tagged lines are spoken once in order. Outside those lines, everyone is silent with mouths closed; no background voices, muttering, or gibberish."
-            if dialogue
-            else "Everyone remains silent with mouths closed throughout this window; no voices, muttering, or gibberish."
-        )
 
         picture_instructions: list[str] = []
         if position > 0 or has_start_image:
@@ -220,19 +215,12 @@ def compile_h3_window_prompts(
             visual_parts.append(dialogue)
         visual_parts.extend(
             [
-                silence,
                 outcome_instruction,
                 f"The window ends with {closing}.",
             ]
         )
-        soundscape = ambient
-        if position > 0:
-            soundscape += "; the same ambience continues seamlessly without restarting"
-        if effects and effects.casefold() not in {"n/a", "none", "no one-time effect"}:
-            soundscape += f". Synchronized effects in this window: {effects}"
-        music_value = music
-        if music.casefold() != "n/a" and position > 0:
-            music_value = f"{music}; continue seamlessly from the preceding window without restarting"
+        soundscape = "N/A"
+        music_value = "N/A"
 
         prompt_parts = picture_instructions + [
             f"integrated_multimodal_description: {' '.join(visual_parts)}",
@@ -246,6 +234,9 @@ def compile_h3_window_prompts(
         from .minimax_h3_duration import inject_h3_vocal_timeline
 
         prompt, _ = inject_h3_vocal_timeline(prompt, duration)
+        from .director.h3_dialogue import apply_h3_no_sound_description
+
+        prompt = apply_h3_no_sound_description(prompt)
         compiled.append(
             {
                 **span,
