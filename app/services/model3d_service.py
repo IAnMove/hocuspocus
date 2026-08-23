@@ -253,6 +253,12 @@ _MAX_ACTIVE_JOBS = 4
 # pathological runs.
 _WORKER_INACTIVITY_LIMIT_SECONDS = 15 * 60
 _WORKER_TIME_LIMIT_SECONDS = 2 * 3600
+# Hunyuan decodes the occupancy volume in `num_chunks` points at once.
+# The UI used to allow 500000, which allocates a giant CUDA buffer and
+# can freeze the host via GPU OOM / swap. Official demos stay ≤ 20000.
+_MAX_DECODE_CHUNKS = 40000
+_MAX_CHUNKS_AT_OCTREE_384 = 24000
+_MAX_CHUNKS_AT_OCTREE_512 = 16000
 
 
 def _python_path() -> Path | None:
@@ -379,6 +385,16 @@ def capabilities() -> dict[str, Any]:
     }
 
 
+def _safe_decode_chunks(num_chunks: int, octree_resolution: int) -> int:
+    """Keep volume decode buffers from growing with octree cubed."""
+    cap = _MAX_DECODE_CHUNKS
+    if octree_resolution >= 512:
+        cap = min(cap, _MAX_CHUNKS_AT_OCTREE_512)
+    elif octree_resolution >= 384:
+        cap = min(cap, _MAX_CHUNKS_AT_OCTREE_384)
+    return max(1000, min(cap, int(num_chunks)))
+
+
 def _bounded_int(value: Any, default: int, low: int, high: int) -> int:
     try:
         return max(low, min(high, int(value)))
@@ -445,7 +461,7 @@ def _prepare_request(
         "num_inference_steps": _bounded_int(body.get("num_inference_steps", preset["num_inference_steps"]), preset["num_inference_steps"], 1, 100),
         "guidance_scale": _bounded_float(body.get("guidance_scale", preset["guidance_scale"]), preset["guidance_scale"], 0.0, 30.0),
         "octree_resolution": _bounded_int(body.get("octree_resolution", preset["octree_resolution"]), preset["octree_resolution"], 64, 512),
-        "num_chunks": _bounded_int(body.get("num_chunks", preset["num_chunks"]), preset["num_chunks"], 1000, 500000),
+        "num_chunks": _bounded_int(body.get("num_chunks", preset["num_chunks"]), preset["num_chunks"], 1000, _MAX_DECODE_CHUNKS),
         "texture_mode": texture_mode,
         "texture_resolution": _bounded_int(body.get("texture_resolution"), 512, 256, 1024),
         "remove_background": bool(body.get("remove_background", True)),
@@ -459,6 +475,9 @@ def _prepare_request(
     }
     if settings["mc_algo"] not in {"mc", "dmc"}:
         settings["mc_algo"] = "dmc"
+    settings["num_chunks"] = _safe_decode_chunks(
+        settings["num_chunks"], settings["octree_resolution"]
+    )
 
     return {
         "operation": operation,
@@ -604,6 +623,7 @@ def _run_job(job_id: str, output_dir: str) -> None:
 
     _update_job(
         job_id,
+        status="waiting_resource",
         phase="waiting_resource",
         message="Waiting for local GPU 0",
     )
@@ -736,6 +756,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         "HF_HUB_DOWNLOAD_TIMEOUT": "60",
         "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1",
         "TOKENIZERS_PARALLELISM": "false",
+        "PYTORCH_CUDA_ALLOC_CONF": env.get("PYTORCH_CUDA_ALLOC_CONF") or "expandable_segments:True",
     })
     lines: list[str] = []
     try:
