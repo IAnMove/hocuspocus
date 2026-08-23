@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, Loader2, PersonStanding, Plus, Upload, X } from 'lucide-react'
+import { Box, Camera, Loader2, PersonStanding, Plus, Upload, X, Zap } from 'lucide-react'
 import * as api from '../../api/client'
 import { getFileUrl } from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import {
   buildCharacterOrbitPrompt,
   CHARACTER_ORBIT_VIEWS,
+  CHARACTER_SHEET_FRAMES,
+  CHARACTER_SHEET_RESOLUTION,
+  CHARACTER_SHEET_STEPS,
+  needsVisionDescribe,
+  viewCaptureTime,
+  type HunyuanView,
   type OrbitRefRole,
   type OrbitSubjectKind,
 } from './orbitPrompt'
@@ -26,6 +32,7 @@ interface UploadedRef {
 
 interface CapturedView {
   id: string
+  hunyuan: HunyuanView
   label: string
   filename: string
   url: string
@@ -53,11 +60,17 @@ export function CharacterCreatorPanel() {
   const loadOutputs = useStore(s => s.loadOutputs)
   const [kind, setKind] = useState<OrbitSubjectKind>('character')
   const [refs, setRefs] = useState<UploadedRef[]>([])
+  const [aPrompt, setAPrompt] = useState('')
+  const [showAPrompt, setShowAPrompt] = useState(false)
+  const [useTurbo, setUseTurbo] = useState(false)
   const [busy, setBusy] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const [jobMessage, setJobMessage] = useState('')
   const [videoName, setVideoName] = useState<string | null>(null)
   const [views, setViews] = useState<CapturedView[]>([])
+  const [hunyuanJobId, setHunyuanJobId] = useState<string | null>(null)
+  const [hunyuanMessage, setHunyuanMessage] = useState('')
+  const [hunyuanGlb, setHunyuanGlb] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const modelType = useMemo(() => resolveOrbitModel(models), [models])
   const readyRefs = refs.filter(ref => Boolean(ref.file))
@@ -106,22 +119,40 @@ export function CharacterCreatorPanel() {
     setError(null)
     setViews([])
     setVideoName(null)
+    setHunyuanGlb(null)
+    setHunyuanMessage('')
     try {
       const uploaded: UploadedRef[] = []
       for (const ref of readyRefs) uploaded.push(await uploadRef(ref))
       setRefs(current => current.map(ref => uploaded.find(item => item.id === ref.id) || ref))
+      let resolvedAPrompt = aPrompt.trim()
+      if (needsVisionDescribe(resolvedAPrompt)) {
+        setJobMessage('MiniMax está describiendo la imagen…')
+        const described = await api.describeCharacterRefs({
+          kind,
+          image_paths: uploaded.map(ref => ref.path).filter((path): path is string => Boolean(path)),
+          roles: uploaded.map(ref => ref.role),
+          workspace: activeWorkspace,
+        })
+        resolvedAPrompt = described.a_prompt.trim()
+        setAPrompt(resolvedAPrompt)
+        setShowAPrompt(true)
+      }
       const submitted = await api.submitGeneration({
         model_type: modelType,
         generation_mode: 'video',
-        prompt: buildCharacterOrbitPrompt(kind, uploaded.map(ref => ({ role: ref.role }))),
+        prompt: buildCharacterOrbitPrompt(kind, uploaded.map(ref => ({ role: ref.role })), resolvedAPrompt),
         negative_prompt: 'motion blur, extra limbs, extra faces, readable text, watermark, floor line, backdrop shadows, music, speech, moving hair, moving cloth',
-        resolution: '864x480',
-        video_length: 124,
-        num_inference_steps: 20,
+        resolution: CHARACTER_SHEET_RESOLUTION,
+        video_length: CHARACTER_SHEET_FRAMES,
+        num_inference_steps: useTurbo ? 4 : CHARACTER_SHEET_STEPS,
         guidance_scale: 1,
         seed: -1,
         workspace: activeWorkspace,
         h3_reference_mode: 'references',
+        h3_ref_image_size: 'max',
+        minimax_h3_reference_detail: 'max',
+        minimax_h3_turbo_mode: useTurbo,
         image_refs: uploaded.map(ref => ref.path),
         minimax_h3_references: uploaded.map((ref, index) => ({
           id: ref.id,
@@ -136,9 +167,42 @@ export function CharacterCreatorPanel() {
         video_prompt_type: 'I',
       })
       setJobId(submitted.job_id)
-      setJobMessage('Orbit queued…')
+      setJobMessage('Órbita H3 en cola…')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
+      setBusy(false)
+    }
+  }
+
+  const takePhotos = async (sourceName: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const metadata = await api.fetchOutputMetadata(sourceName, activeWorkspace).catch(() => null)
+      const rawLength = metadata?.params?.video_length
+      const duration = typeof rawLength === 'number' && rawLength > 0
+        ? rawLength / 24
+        : CHARACTER_SHEET_FRAMES / 24
+      const captured: CapturedView[] = []
+      for (const view of CHARACTER_ORBIT_VIEWS) {
+        const shot = await api.captureVideoEditorFrame({
+          source: sourceName,
+          time: Math.min(viewCaptureTime(view.frame), Math.max(0, duration - 0.04)),
+          name: `${kind}_${view.id}`,
+        })
+        captured.push({
+          id: view.id,
+          hunyuan: view.hunyuan,
+          label: kind === 'object' ? view.objectLabel : view.label,
+          filename: shot.filename,
+          url: shot.url || getFileUrl(shot.filename),
+        })
+      }
+      setViews(captured)
+      void loadOutputs()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
       setBusy(false)
     }
   }
@@ -154,9 +218,10 @@ export function CharacterCreatorPanel() {
         if (status.status === 'completed') {
           const name = status.output_files.find(file => /\.(mp4|webm|mov)$/i.test(file)) || status.output_files[0] || null
           setVideoName(name)
-          setBusy(false)
           setJobId(null)
           void loadOutputs()
+          if (name) void takePhotos(name)
+          else setBusy(false)
           return
         }
         if (status.status === 'failed' || status.status === 'cancelled') {
@@ -178,43 +243,77 @@ export function CharacterCreatorPanel() {
     return () => { cancelled = true }
   }, [jobId, loadOutputs])
 
-  const takePhotos = async () => {
-    if (!videoName) return
+  const generateHunyuan = async () => {
+    const front = views.find(view => view.hunyuan === 'front')
+    if (!front) return
     setBusy(true)
     setError(null)
+    setHunyuanGlb(null)
     try {
-      const metadata = await api.fetchOutputMetadata(videoName, activeWorkspace).catch(() => null)
-      const rawLength = metadata?.params?.video_length
-      const duration = typeof rawLength === 'number' && rawLength > 0 ? rawLength / 24 : 5.17
-      const captured: CapturedView[] = []
-      for (const view of CHARACTER_ORBIT_VIEWS) {
-        const shot = await api.captureVideoEditorFrame({
-          source: videoName,
-          time: Math.max(0, duration * view.fraction),
-          name: `${kind}_${view.id}`,
-        })
-        captured.push({
-          id: view.id,
-          label: kind === 'object' ? view.objectLabel : view.label,
-          filename: shot.filename,
-          url: shot.url || getFileUrl(shot.filename),
-        })
-      }
-      setViews(captured)
-      void loadOutputs()
+      const images = Object.fromEntries(
+        views.map(view => [view.hunyuan, view.filename]),
+      ) as Partial<Record<HunyuanView, string>>
+      const job = await api.startHunyuan3DJob({
+        operation: 'generate',
+        preset: 'multiview',
+        model_id: 'hunyuan3d-2mv-turbo',
+        workspace: activeWorkspace,
+        images,
+        texture_mode: 'v2-turbo',
+        cpu_offload: true,
+        flashvdm: true,
+        remove_background: true,
+        output_format: 'glb',
+      })
+      setHunyuanJobId(job.job_id)
+      setHunyuanMessage(job.message || 'Hunyuan3D en cola…')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
-    } finally {
       setBusy(false)
     }
   }
+
+  useEffect(() => {
+    if (!hunyuanJobId) return
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const status = await api.fetchHunyuan3DJob(hunyuanJobId)
+        if (cancelled) return
+        setHunyuanMessage(status.message || status.status)
+        if (status.status === 'completed') {
+          setHunyuanGlb(status.filename)
+          setHunyuanJobId(null)
+          setBusy(false)
+          void loadOutputs()
+          if (status.filename) void import('@google/model-viewer')
+          return
+        }
+        if (status.status === 'failed' || status.status === 'cancelled') {
+          setError(status.error || `Hunyuan3D ${status.status}`)
+          setHunyuanJobId(null)
+          setBusy(false)
+          return
+        }
+        window.setTimeout(() => { void tick() }, 1500)
+      } catch (reason) {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : String(reason))
+          setHunyuanJobId(null)
+          setBusy(false)
+        }
+      }
+    }
+    void tick()
+    return () => { cancelled = true }
+  }, [hunyuanJobId, loadOutputs])
 
   return (
     <section aria-label="Character Creator" className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary">
       <header className="border-b border-border bg-bg-secondary px-3 py-2">
         <h2 className="text-sm font-semibold text-text-primary">Character Creator</h2>
         <p className="text-[10px] text-text-muted">
-          Como en Hugging Face: una sola imagen basta. Cara y ropa son opcionales. También vale un objeto.
+          Sube una imagen. MiniMax describe el sujeto y arma el prompt de órbita. No hace falta escribir nada.
         </p>
       </header>
       <div className="flex-1 overflow-y-auto p-3 md:p-4">
@@ -227,7 +326,7 @@ export function CharacterCreatorPanel() {
 
             <RefPicker
               label={kind === 'object' ? 'Imagen principal del objeto' : 'Imagen principal del sujeto'}
-              hint="Obligatoria. Puede ser la única: H3 orbita este sujeto y conserva su aspecto."
+              hint="Obligatoria. Una sola basta. MiniMax lee la foto y escribe el A Prompt."
               value={refs[0] || null}
               roleLocked="subject"
               onPick={file => {
@@ -241,7 +340,7 @@ export function CharacterCreatorPanel() {
               <RefPicker
                 key={ref.id}
                 label={`Referencia extra ${index + 1}`}
-                hint="Opcional. Di qué se toma de esta foto, como en el A Prompt de Hugging Face."
+                hint="Opcional. Cara, ropa, accesorio u otro ángulo."
                 value={ref}
                 onPick={file => setRefFile(ref.id, file, ref.role)}
                 onClear={() => clearRef(ref.id)}
@@ -268,25 +367,53 @@ export function CharacterCreatorPanel() {
               </button>
             )}
 
-            <p className="text-[10px] text-text-muted">Modelo: {modelType} · 124 frames · hasta {MAX_REFS} fotos · fondo gris</p>
+            <div className="space-y-1">
+              <button type="button" className={`${button} w-full`} onClick={() => setShowAPrompt(open => !open)}>
+                {showAPrompt ? 'Ocultar A Prompt' : 'A Prompt opcional'}
+              </button>
+              {showAPrompt && (
+                <textarea
+                  value={aPrompt}
+                  onChange={event => setAPrompt(event.target.value)}
+                  rows={5}
+                  placeholder="Vacío = MiniMax describe las fotos al generar."
+                  className="w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[11px] text-text-primary"
+                />
+              )}
+            </div>
+
+            <label className="flex items-center gap-2 text-[11px] text-text-secondary">
+              <input type="checkbox" checked={useTurbo} onChange={event => setUseTurbo(event.target.checked)} className="accent-violet-400" />
+              <Zap size={12} className={useTurbo ? 'text-violet-200' : 'text-text-muted'} />
+              Turbo LoRA (más rápido, menos fidelidad)
+            </label>
+
+            <p className="text-[10px] text-text-muted">
+              {modelType} · {CHARACTER_SHEET_RESOLUTION} 9:16 · {CHARACTER_SHEET_FRAMES} frames · grabs 2 / 21 / 42 / 63
+            </p>
             <button type="button" className={primary + ' w-full'} disabled={busy || readyRefs.length === 0} onClick={() => void generateOrbit()}>
               {busy && !videoName ? <Loader2 size={13} className="animate-spin" /> : <PersonStanding size={13} />}
               Generar órbita 360
             </button>
-            <button type="button" className={button + ' w-full'} disabled={busy || !videoName} onClick={() => void takePhotos()}>
-              {busy && videoName ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
+            <button type="button" className={button + ' w-full'} disabled={busy || !videoName} onClick={() => { if (videoName) void takePhotos(videoName) }}>
+              {busy && videoName && !hunyuanJobId ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
               Take photo · 4 vistas
             </button>
+            <button type="button" className={primary + ' w-full'} disabled={busy || views.length < 4} onClick={() => void generateHunyuan()}>
+              {busy && hunyuanJobId ? <Loader2 size={13} className="animate-spin" /> : <Box size={13} />}
+              Generar Hunyuan3D
+            </button>
             {jobMessage && <p className="text-[11px] text-text-secondary">{jobMessage}</p>}
+            {hunyuanMessage && <p className="text-[11px] text-text-secondary">{hunyuanMessage}</p>}
             {error && <p className="text-[11px] text-red-300">{error}</p>}
           </div>
 
           <div className="space-y-3">
             <div className="overflow-hidden rounded-xl border border-border bg-black">
               {videoName ? (
-                <video src={getFileUrl(videoName)} controls className="aspect-video w-full object-contain" />
+                <video src={getFileUrl(videoName)} controls className="mx-auto aspect-[9/16] max-h-[420px] w-full object-contain" />
               ) : (
-                <div className="flex aspect-video flex-col items-center justify-center gap-2 text-text-muted">
+                <div className="flex aspect-[9/16] max-h-[420px] flex-col items-center justify-center gap-2 text-text-muted">
                   <PersonStanding size={22} />
                   <span className="text-[11px]">Sube al menos una imagen y genera la órbita</span>
                 </div>
@@ -308,6 +435,18 @@ export function CharacterCreatorPanel() {
                 )
               })}
             </div>
+            {hunyuanGlb && (
+              <div className="overflow-hidden rounded-xl border border-border bg-bg-secondary">
+                <model-viewer
+                  src={getFileUrl(hunyuanGlb)}
+                  alt="Hunyuan3D"
+                  camera-controls
+                  auto-rotate
+                  shadow-intensity="1"
+                  className="h-72 w-full"
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
