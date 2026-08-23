@@ -1,6 +1,8 @@
 # Python virtual environment
 env/
 app/env/
+# Cloud Agent / local dev virtualenv created by .cursor/install.sh
+.venv/
 
 # Node.js dependencies
 ui/node_modules/
