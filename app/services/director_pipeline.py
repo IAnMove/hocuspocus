@@ -1206,6 +1206,14 @@ def persist_pipeline_output_timing(
     if pipeline_id:
         params.setdefault("director_pipeline_id", str(pipeline_id))
         metadata.setdefault("director_pipeline_id", str(pipeline_id))
+    snapshot = pipeline.get("params") if isinstance(pipeline.get("params"), dict) else {}
+    from services.output_result_kind import result_kind_for_pipeline
+    result_kind = result_kind_for_pipeline(snapshot)
+    if result_kind:
+        params.setdefault("pipeline_type", str(snapshot.get("pipeline_type") or ""))
+        params.setdefault("production_kind", str(snapshot.get("production_kind") or ""))
+        params.setdefault("result_kind", result_kind)
+        metadata.setdefault("result_kind", result_kind)
 
     temp_path = f"{meta_path}.{uuid.uuid4().hex[:8]}.tmp"
     try:
@@ -7825,7 +7833,6 @@ def _run_pipeline(pid: str, resume: bool = False):
         polish_mode = services.get("director_prompt_polish", "third_pass")
 
         # Snapshot pre-polish prompts for comparison
-        import copy
         _update_pipeline(pid, _clip_plans_pre_polish=copy.deepcopy(clip_plans))
 
         # On resume the saved clip_plans are ALREADY polished — re-polishing
@@ -13363,12 +13370,17 @@ def _run_minimax_h3_story_video(
             "MiniMax H3 rendered every segment, but final short-film assembly failed. "
             "The individual clips were preserved."
         )
+    from services.output_result_kind import result_kind_for_pipeline
+    result_kind = result_kind_for_pipeline(params)
     sidecar = {
         "params": {
             "model_type": video_model,
             "resolution": resolution,
             "source_clips": [os.path.basename(path) for path in clip_paths],
             "director_pipeline_id": pid,
+            "pipeline_type": str(params.get("pipeline_type") or ""),
+            "production_kind": str(params.get("production_kind") or ""),
+            "result_kind": result_kind,
             "director_generation_mode": (
                 "direct_video" if direct_video else "image_guided"
             ),
@@ -13377,6 +13389,7 @@ def _run_minimax_h3_story_video(
             ),
         },
         "generation_mode": "video",
+        "result_kind": result_kind,
         "created_at": time.time(),
     }
     with open(os.path.splitext(final_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
