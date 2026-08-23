@@ -101,6 +101,8 @@ Base URL: the running Lab (`http://127.0.0.1:<port>`). Workspace query: `?worksp
 
 `GET /api/v1/outputs?media_type=image|video|model3d|scene&limit=50`
 
+Assembled Director / Series joins also accept `result_kind=music_video|trailer|series_episode` (the Capítulos tab treats `chapter` as a match for `series_episode`). See [Video Editor / mixes](../video-editor/HOWUSEIT.md) §6.
+
 3D files are `.glb`. Scenes are `*.scene.json`.
 
 ### 5.2 MiniMax H3 video (plates, people, locations)
@@ -149,7 +151,24 @@ Text-to-3D (ship, saucer, prop):
 
 Presets: `eco` (mini turbo, no texture), `balanced` (2-turbo + texture), `quality` (2.1 + PBR, heavy), `multiview` (needs photos).
 
-Photo-to-3D (best identity). Character Creator already does: H3 orbit → stills at frames 2/21/42/63 → **hunyuan3d-2mv-turbo**. Direct API:
+Photo-to-3D (best identity). The **Characters** tab (`mediaFilter: characters`) already does: optional MiniMax-M3 vision A Prompt → H3 Ref2VA orbit (personaje or objeto; one subject image is enough, max 9 refs) → stills at frames 2/21/42/63 → **hunyuan3d-2mv-turbo**. Orbit canvas is `768x1344`, 124 frames, 25 steps (4 if Turbo LoRA).
+
+Vision A Prompt (hosted MiniMax-M3, not the local LLM; requires Settings → Services MiniMax key):
+
+`POST /api/v1/characters/describe-refs`
+
+```json
+{
+  "kind": "character",
+  "image_paths": ["subject.png"],
+  "roles": ["subject"],
+  "workspace": "default"
+}
+```
+
+`kind` is `character` or `object`. `roles` ∈ `subject` | `face` | `outfit` | `extra` | `accessory`. Response: `{ "a_prompt": "<Picture 1> - keep … Ignore …", "kind": "character" }`.
+
+Direct Hunyuan API:
 
 ```json
 {
@@ -207,7 +226,9 @@ Without a real PNG preview the endpoint rejects the body.
 
 ### 5.8 Video Editor (join plates)
 
-Import H3 MP4s + recorded WebM. Multi-select in **From Loreframe Lab**. Export MP4. Mix concat uses a 0.5 s freeze + 0.4 s crossfade when there is no driving audio.
+Import H3 MP4s + recorded WebM. Multi-select in **From Loreframe Lab**. Export MP4.
+
+Director / Series **auto-joins** (not the editor) use a 0.5 s last-frame freeze + ~0.4 s crossfade when there is no driving audio. Full probe/export/`result_kind` contract: [Video Editor / mixes](../video-editor/HOWUSEIT.md).
 
 ---
 
@@ -426,5 +447,7 @@ Until then, agents follow this file **manually**: generate assets via API, tell 
 | `app/services/model3d_service.py` | Hunyuan models and presets |
 | `app/services/rig_service.py` | Rig profiles and clips |
 | `docs/minimax-h3-prompting.md` | H3 prompt dialect |
+| `docs/video-editor/HOWUSEIT.md` | Cut compositor WebM with H3 MP4s; mix kinds |
+| `ui/src/features/characters/orbitPrompt.ts` | Orbit A/B prompts and still-frame indices |
 
 When in doubt: **one identity per mesh, one path per compositor shot, H3 never draws that mesh.**
