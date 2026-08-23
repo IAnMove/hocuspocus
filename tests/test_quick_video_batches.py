@@ -1,3 +1,4 @@
+import json
 import time
 
 from routers.quick_video_batches import (
@@ -306,3 +307,54 @@ def test_listing_batches_does_not_interrupt_a_live_worker(tmp_path):
     cancel(response["jobId"], "cancel", QuickVideoBatchActionRequest(workspace="default"))
     statuses["pipeline-1"] = "cancelled"
     assert _wait_for_terminal(router, response["jobId"])["status"] == "cancelled"
+
+
+def test_stale_cancelling_batch_does_not_resume_after_restart(tmp_path):
+    job_id = "quick-batch-deadc0de"
+    now = time.time()
+    checkpoint = {
+        "jobId": job_id,
+        "taskId": f"task-quick-video-batch-{job_id}",
+        "workspace": "default",
+        "title": "Night batch",
+        "status": "cancelling",
+        "stage": "cancelling",
+        "current": 0,
+        "total": 1,
+        "message": "Cancelling Quick Video batch…",
+        "error": None,
+        "continueOnError": True,
+        "settings": _payload(["No ejecutar"])["settings"],
+        "items": [{
+            "index": 0,
+            "idea": "No ejecutar",
+            "status": "running",
+            "stage": "running",
+            "message": "Director is working…",
+            "pipelineId": "pipeline-stale",
+            "outputFiles": [],
+            "finalOutput": None,
+            "error": None,
+            "createdAt": now,
+            "startedAt": now,
+            "finishedAt": None,
+            "progressCurrent": 0,
+            "progressTotal": 0,
+        }],
+        "createdAt": now,
+        "updatedAt": now,
+        "finishedAt": None,
+    }
+    store = tmp_path / ".quick-video-batches-v1"
+    store.mkdir()
+    (store / f"{job_id}.json").write_text(json.dumps(checkpoint), encoding="utf-8")
+
+    router, started = _app(tmp_path, {"pipeline-stale": "running"})
+    list_batches = _endpoint(router, "/api/v1/stories/quick-video-batches", "GET")
+    listed = list_batches("default")["jobs"][0]
+
+    assert listed["status"] == "cancelled"
+    assert listed["items"][0]["status"] == "cancelled"
+    assert started == []
+    time.sleep(0.1)
+    assert started == []

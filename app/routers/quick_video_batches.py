@@ -595,16 +595,36 @@ def create_quick_video_batch_router(
                 if job_id in active:
                     continue
                 jobs.setdefault(job_id, saved)
-            if saved.get("status") in ACTIVE:
-                with lock:
-                    job = jobs[job_id]
+                job = jobs[job_id]
+                status = str(job.get("status") or "")
+                if status == "cancelling":
+                    # The user already asked to stop. A process restart must
+                    # not rewrite this back to queued and burn another GPU run.
+                    now = time.time()
+                    for item in job.get("items", []):
+                        if item.get("status") in {"planning", "running"}:
+                            item["status"] = "cancelled"
+                            item["stage"] = "cancelled"
+                            item["message"] = "Quick Video cancelled."
+                            item["finishedAt"] = item.get("finishedAt") or now
+                    job["status"] = "cancelled"
+                    job["stage"] = "cancelled"
+                    job["message"] = "Quick Video batch cancelled."
+                    job["finishedAt"] = job.get("finishedAt") or now
+                    snapshot = save(job)
+                elif status in {"queued", "running"}:
                     for item in job.get("items", []):
                         if item.get("status") in {"planning", "running"}:
                             item["status"] = "interrupted"
                     job["status"] = "queued"
                     job["stage"] = "recovering"
                     job["message"] = "Recovering the overnight Quick Video queue…"
-                    save(job)
+                    snapshot = save(job)
+                else:
+                    snapshot = None
+            if snapshot and snapshot.get("status") == "cancelled":
+                publish(snapshot)
+            elif snapshot:
                 start_worker(job_id)
 
     @router.post("/api/v1/stories/quick-video-batches/start")
