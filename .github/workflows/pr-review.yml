@@ -1,0 +1,60 @@
+name: PR Review
+
+# Heuristic review posted on every PR. No LLM and no Cursor usage-based
+# billing — this is the in-repo stand-in for a Cursor Automation / Bugbot
+# pass when those require a payment method.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: Analyze pull request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Build diff and review
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BASE_SHA:-}" ] && [ -n "${HEAD_SHA:-}" ]; then
+            git diff --no-color --find-renames "${BASE_SHA}...${HEAD_SHA}" > /tmp/pr.diff
+          else
+            git diff --no-color --find-renames "origin/${GITHUB_REF_NAME:-main}...HEAD" > /tmp/pr.diff || \
+              git diff --no-color --find-renames HEAD > /tmp/pr.diff
+          fi
+          python scripts/analyze_pr.py --diff /tmp/pr.diff --out /tmp/review.md
+          python -m unittest tests/test_analyze_pr.py
+
+      - name: Post or update review comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          marker='<!-- loreframe-pr-review -->'
+          existing="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | contains(\"${marker}\")) | .id" | head -n 1 || true)"
+          if [ -n "${existing}" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" \
+              -F body=@/tmp/review.md
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              -F body=@/tmp/review.md
+          fi
