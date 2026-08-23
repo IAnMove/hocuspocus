@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  applyTransitionToGaps,
   editorClipRecoveryMessage,
   normalizeEditorClips,
+  splitClipAtTime,
+  trimClipFromDelta,
 } from '../src/features/video-editor/editorClipNormalization.ts'
 
 function validClip(overrides = {}) {
@@ -81,4 +84,40 @@ test('missing, string and non-finite durations are discarded with an explicit wa
   assert.deepEqual(result.clips.map(clip => clip.source), ['kept.mp4'])
   assert.equal(result.discardedCount, 4)
   assert.match(editorClipRecoveryMessage(result) || '', /4 discarded because source or duration was invalid/)
+})
+
+test('splitClipAtTime cuts one clip into two at the playhead and refuses the edges', () => {
+  const clip = validClip({ trimStart: 1, trimEnd: 9 })
+  assert.equal(splitClipAtTime(clip, 1.02, 'clip-b'), null)
+  assert.equal(splitClipAtTime(clip, 8.99, 'clip-b'), null)
+  const parts = splitClipAtTime(clip, 4, 'clip-b')
+  assert.ok(parts)
+  assert.equal(parts[0].trimStart, 1)
+  assert.equal(parts[0].trimEnd, 4)
+  assert.equal(parts[0].transition, 'none')
+  assert.equal(parts[1].id, 'clip-b')
+  assert.equal(parts[1].trimStart, 4)
+  assert.equal(parts[1].trimEnd, 9)
+})
+
+test('applyTransitionToGaps sets every join and leaves the last clip alone', () => {
+  const clips = [
+    validClip({ id: 'a', transition: 'none' }),
+    validClip({ id: 'b', transition: 'wipe-left' }),
+    validClip({ id: 'c', transition: 'crossfade' }),
+  ]
+  const next = applyTransitionToGaps(clips, 'fade-black')
+  assert.equal(next[0].transition, 'fade-black')
+  assert.equal(next[1].transition, 'fade-black')
+  assert.equal(next[2].transition, 'crossfade')
+})
+
+test('timeline edge trim moves slowly and will not collapse a clip', () => {
+  const clip = validClip({ trimStart: 2, trimEnd: 8, duration: 10 })
+  const shorterStart = trimClipFromDelta(clip, 'start', 1)
+  assert.equal(shorterStart.trimStart, 3)
+  const collapsed = trimClipFromDelta(clip, 'end', -20)
+  assert.equal(collapsed.trimEnd, 2.4)
+  const extended = trimClipFromDelta(clip, 'end', 5)
+  assert.equal(extended.trimEnd, 10)
 })

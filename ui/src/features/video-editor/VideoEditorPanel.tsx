@@ -22,7 +22,7 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react'
-import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { ModalShell } from '../../components/common/ModalShell'
@@ -33,10 +33,14 @@ import {
   readVideoEditorReplacementResult,
   writeVideoEditorReplacementTarget,
 } from './replacementHandoff'
-import { VIDEO_EDITOR_PENDING_SOURCE_KEY } from './editorHandoff'
+import { VIDEO_EDITOR_PENDING_SOURCE_KEY, editorSourcePath } from './editorHandoff'
 import {
+  applyTransitionToGaps,
   editorClipRecoveryMessage,
   normalizeEditorClips,
+  splitClipAtTime,
+  TIMELINE_TRIM_PX_PER_SEC,
+  trimClipFromDelta,
   type ClipFit,
   type EditorClip,
   type Transition,
@@ -696,6 +700,11 @@ export function VideoEditorPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
+  const [bulkTransition, setBulkTransition] = useState<Transition>('crossfade')
+  const timelineScrollRef = useRef<HTMLDivElement>(null)
+  const dragScrollFrameRef = useRef<number | null>(null)
+  const dragScrollDirRef = useRef<-1 | 0 | 1>(0)
+  const trimmingRef = useRef(false)
   const [projectName, setProjectName] = useState(draft.projectName)
   const [resolution, setResolution] = useState(draft.resolution)
   const [fps, setFps] = useState(draft.fps)
@@ -716,6 +725,9 @@ export function VideoEditorPanel() {
   const [maestroVideos, setMaestroVideos] = useState<api.ApiOutput[]>([])
   const [maestroVideoTotal, setMaestroVideoTotal] = useState(0)
   const [pickerLoading, setPickerLoading] = useState(false)
+  const [pickerSelected, setPickerSelected] = useState<string[]>([])
+  const pickerAnchorRef = useRef<number | null>(null)
+  const pickerSelectedSet = useMemo(() => new Set(pickerSelected), [pickerSelected])
   const [error, setError] = useState<string | null>(draft.warning)
   const [exportJob, setExportJob] = useState<api.VideoEditorExportJob | null>(() => {
     const jobId = readVideoEditorExportId(activeWorkspace)
@@ -785,14 +797,15 @@ export function VideoEditorPanel() {
     name: string,
     thumbnailUrl?: string | null,
   ): Promise<EditorClip> => {
-    const media = await api.probeVideoEditorClip(source)
+    const resolvedSource = editorSourcePath(source) || source
+    const media = await api.probeVideoEditorClip(resolvedSource, activeWorkspace)
     return {
       ...media,
       id: clipId(),
       name,
-      source,
+      source: resolvedSource,
       previewUrl,
-      thumbnailUrl: thumbnailUrl || api.getVideoEditorThumbnailUrl(source),
+      thumbnailUrl: thumbnailUrl || api.getVideoEditorThumbnailUrl(resolvedSource),
       trimStart: 0,
       trimEnd: media.duration,
       volume: 1,
@@ -803,7 +816,7 @@ export function VideoEditorPanel() {
       transitionText: 'Momentos después…',
       transitionTextSize: 100,
     }
-  }, [])
+  }, [activeWorkspace])
 
   const addSource = useCallback(async (
     source: string,
@@ -1011,8 +1024,16 @@ export function VideoEditorPanel() {
     if (failures.length) setError(failures.join('\n'))
   }
 
+  const closeMaestroPicker = () => {
+    setPickerOpen(false)
+    setPickerSelected([])
+    pickerAnchorRef.current = null
+  }
+
   const openMaestroPicker = async () => {
     setPickerOpen(true)
+    setPickerSelected([])
+    pickerAnchorRef.current = null
     setPickerLoading(true)
     setError(null)
     setMaestroVideos([])
@@ -1050,20 +1071,64 @@ export function VideoEditorPanel() {
     }
   }
 
-  const chooseMaestroVideo = async (output: api.ApiOutput) => {
-    setAdding(true)
-    setPickerOpen(false)
-    setError(null)
-    setAddProgress(`Adding ${output.name}`)
-    try {
-      const source = api.getFileUrl(output.name, activeWorkspace)
-      await addSource(source, source, output.name, output.thumbnail_url || api.getOutputThumbnailUrl(output.name, activeWorkspace))
-    } catch (reason) {
-      setError((reason as Error).message)
-    } finally {
-      setAdding(false)
-      setAddProgress('')
+  const toggleMaestroVideo = (output: api.ApiOutput, event: ReactMouseEvent<HTMLButtonElement>) => {
+    const index = maestroVideos.findIndex(item => item.name === output.name)
+    if (index < 0) return
+    if (event.shiftKey && pickerAnchorRef.current !== null) {
+      const start = Math.min(pickerAnchorRef.current, index)
+      const end = Math.max(pickerAnchorRef.current, index)
+      const range = maestroVideos.slice(start, end + 1).map(item => item.name)
+      setPickerSelected(current => {
+        const seen = new Set(current)
+        const next = [...current]
+        for (const name of range) {
+          if (!seen.has(name)) {
+            seen.add(name)
+            next.push(name)
+          }
+        }
+        return next
+      })
+      return
     }
+    pickerAnchorRef.current = index
+    setPickerSelected(current => (
+      current.includes(output.name)
+        ? current.filter(name => name !== output.name)
+        : [...current, output.name]
+    ))
+  }
+
+  const addSelectedMaestroVideos = async () => {
+    const selected = pickerSelected
+      .map(name => maestroVideos.find(item => item.name === name))
+      .filter((item): item is api.ApiOutput => Boolean(item))
+    if (!selected.length) {
+      setError('Select one or more videos.')
+      return
+    }
+    setAdding(true)
+    closeMaestroPicker()
+    setError(null)
+    const failures: string[] = []
+    for (let index = 0; index < selected.length; index++) {
+      const output = selected[index]
+      setAddProgress(`Adding ${index + 1} of ${selected.length}: ${output.name}`)
+      try {
+        const source = api.getFileUrl(output.name, activeWorkspace)
+        await addSource(
+          source,
+          source,
+          output.name,
+          output.thumbnail_url || api.getOutputThumbnailUrl(output.name, activeWorkspace),
+        )
+      } catch (reason) {
+        failures.push(`${output.name}: ${(reason as Error).message}`)
+      }
+    }
+    setAdding(false)
+    setAddProgress('')
+    if (failures.length) setError(failures.join('\n'))
   }
 
   const reorder = (id: string, direction: -1 | 1) => {
@@ -1091,34 +1156,122 @@ export function VideoEditorPanel() {
     })
     setDraggedId(null)
     setDropIndex(null)
+    stopTimelineDragScroll()
+  }
+
+  const stopTimelineDragScroll = () => {
+    if (dragScrollFrameRef.current !== null) {
+      cancelAnimationFrame(dragScrollFrameRef.current)
+      dragScrollFrameRef.current = null
+    }
+    dragScrollDirRef.current = 0
+  }
+
+  const tickTimelineDragScroll = () => {
+    const scroller = timelineScrollRef.current
+    if (!scroller || !dragScrollDirRef.current) {
+      dragScrollFrameRef.current = null
+      return
+    }
+    scroller.scrollLeft += dragScrollDirRef.current * 3.2
+    dragScrollFrameRef.current = requestAnimationFrame(tickTimelineDragScroll)
+  }
+
+  const updateTimelineDragScroll = (clientX: number) => {
+    const scroller = timelineScrollRef.current
+    if (!scroller) return
+    const bounds = scroller.getBoundingClientRect()
+    const edge = 56
+    let direction: -1 | 0 | 1 = 0
+    if (clientX < bounds.left + edge) direction = -1
+    else if (clientX > bounds.right - edge) direction = 1
+    dragScrollDirRef.current = direction
+    if (direction && dragScrollFrameRef.current === null) {
+      dragScrollFrameRef.current = requestAnimationFrame(tickTimelineDragScroll)
+    }
+  }
+
+  const applyAllGapTransitions = () => {
+    if (clips.length < 2) return
+    setClips(current => applyTransitionToGaps(current, bulkTransition))
+    setSelectedTransitionIndex(0)
+    setError(null)
+  }
+
+  const seekSelectedClip = (value: number) => {
+    if (!selected) return
+    const time = Math.max(selected.trimStart, Math.min(selected.trimEnd - 0.01, value))
+    if (videoRef.current) videoRef.current.currentTime = time
+    setPreviewTime(time)
+    setPlaying(false)
   }
 
   const splitSelected = () => {
-    if (!selected) return
-    const cut = videoRef.current?.currentTime ?? previewTime
-    if (cut <= selected.trimStart + 0.05 || cut >= selected.trimEnd - 0.05) {
-      setError('Move the preview playhead inside the clip before splitting.')
+    if (!clips.length) return
+    let target = selected
+    let cut = videoRef.current?.currentTime ?? previewTime
+    if (sequenceMode) {
+      let clipIndex = 0
+      for (let index = clips.length - 1; index >= 0; index--) {
+        if (sequenceTime >= clipTimelineStart(clips, index)) {
+          clipIndex = index
+          break
+        }
+      }
+      const start = clipTimelineStart(clips, clipIndex)
+      const local = Math.max(0, sequenceTime - start)
+      target = clips[clipIndex]
+      cut = target.trimStart + local
+    }
+    if (!target) return
+    const parts = splitClipAtTime(target, cut, clipId())
+    if (!parts) {
+      setError('Move the playhead inside the clip, away from the very start and end, then Split.')
       return
     }
-    const second: EditorClip = {
-      ...selected,
-      id: clipId(),
-      name: `${selected.name} (part 2)`,
-      trimStart: cut,
-    }
+    const [left, right] = parts
     setClips(current => {
-      const index = current.findIndex(clip => clip.id === selected.id)
+      const index = current.findIndex(clip => clip.id === target.id)
+      if (index < 0) return current
       const next = [...current]
-      next[index] = {
-        ...selected,
-        name: `${selected.name} (part 1)`,
-        trimEnd: cut,
-        transition: 'none',
-      }
-      next.splice(index + 1, 0, second)
+      next[index] = left
+      next.splice(index + 1, 0, right)
       return next
     })
-    setSelectedId(second.id)
+    setSequencePlaying(false)
+    setSequenceMode(false)
+    setSelectedTransitionIndex(null)
+    setSelectedId(right.id)
+    setPreviewTime(right.trimStart)
+    setError(null)
+  }
+
+  const beginTimelineTrim = (
+    event: ReactPointerEvent<HTMLElement>,
+    clipIdValue: string,
+    edge: 'start' | 'end',
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    trimmingRef.current = true
+    let lastX = event.clientX
+    const move = (pointer: PointerEvent) => {
+      const deltaSeconds = (pointer.clientX - lastX) / TIMELINE_TRIM_PX_PER_SEC
+      lastX = pointer.clientX
+      if (Math.abs(deltaSeconds) < 0.0005) return
+      setClips(current => current.map(clip => (
+        clip.id === clipIdValue ? trimClipFromDelta(clip, edge, deltaSeconds) : clip
+      )))
+    }
+    const finish = () => {
+      trimmingRef.current = false
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
   }
 
   const clipVolume = (clip: EditorClip): number => (
@@ -1710,6 +1863,7 @@ export function VideoEditorPanel() {
         source: clip.source,
         time: sourceTime,
         name: projectName,
+        workspace: activeWorkspace,
       })
       setCapturedFrame(result)
       await refreshOutputs()
@@ -1877,7 +2031,7 @@ export function VideoEditorPanel() {
             )}
           </div>
 
-          <div className="px-3 py-2 border-t border-border bg-bg-tertiary/30">
+          <div className="px-3 py-3 border-t border-border bg-bg-tertiary/30">
             <div className="flex items-center gap-2">
               <button
                 onClick={togglePlayback}
@@ -1896,23 +2050,32 @@ export function VideoEditorPanel() {
                 <RotateCcw size={13} />
               </button>
               <span className="text-[10px] text-text-muted tabular-nums w-[98px]">
-                {formatTime(sequenceMode ? sequenceTime : 0)} / {formatTime(totalDuration)}
+                {formatTime(sequenceMode ? sequenceTime : previewTime)} / {formatTime(sequenceMode || !selected ? totalDuration : selected.trimEnd)}
               </span>
-              <input
-                type="range"
-                min={0}
-                max={totalDuration || 1}
-                step={0.01}
-                value={sequenceMode ? Math.min(totalDuration, sequenceTime) : 0}
-                onChange={event => seekSequence(Number(event.target.value))}
-                disabled={!clips.length}
-                className="flex-1"
-              />
+              <label className="flex min-w-0 flex-1 items-center">
+                <input
+                  type="range"
+                  min={sequenceMode || !selected ? 0 : selected.trimStart}
+                  max={sequenceMode || !selected ? (totalDuration || 1) : Math.max(selected.trimStart + 0.05, selected.trimEnd)}
+                  step={0.01}
+                  value={sequenceMode || !selected
+                    ? Math.min(totalDuration, sequenceTime)
+                    : Math.min(selected.trimEnd, Math.max(selected.trimStart, previewTime))}
+                  onChange={event => {
+                    const next = Number(event.target.value)
+                    if (sequenceMode || !selected) seekSequence(next)
+                    else seekSelectedClip(next)
+                  }}
+                  disabled={!clips.length}
+                  aria-label="Timeline playhead"
+                  className="h-6 w-full cursor-pointer appearance-none bg-transparent accent-sky-400 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-track]:h-3 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-black/50 [&::-webkit-slider-runnable-track]:h-3 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-black/50 [&::-webkit-slider-thumb]:mt-[-4px] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-sky-400"
+                />
+              </label>
               <button
                 onClick={splitSelected}
-                disabled={!selected || sequenceMode}
+                disabled={!clips.length}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-hover disabled:opacity-40"
-                title="Split selected clip at the preview playhead"
+                title="Split the clip at the current playhead"
               >
                 <Scissors size={11} /> Split
               </button>
@@ -2372,12 +2535,41 @@ export function VideoEditorPanel() {
         </aside>
       </div>
 
-      <div role="region" aria-label="Video editor timeline" className="h-32 shrink-0 border-t border-border bg-bg-tertiary/30 flex flex-col">
-        <div className="h-7 flex items-center px-3 border-b border-border text-[10px] text-text-muted">
+      <div role="region" aria-label="Video editor timeline" className="h-40 shrink-0 border-t border-border bg-bg-tertiary/30 flex flex-col">
+        <div className="flex h-9 items-center gap-2 px-3 border-b border-border text-[10px] text-text-muted">
           <span>Timeline · {clips.length} {clips.length === 1 ? 'clip' : 'clips'} · {formatTime(totalDuration)}</span>
-          <span className="ml-auto">Drag clips to reorder</span>
+          <label className="ml-auto flex items-center gap-1.5">
+            <span>All gaps</span>
+            <select
+              aria-label="Default transition for all gaps"
+              value={bulkTransition}
+              onChange={event => setBulkTransition(event.target.value as Transition)}
+              className="max-w-[11rem] rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-[10px] text-text-secondary"
+            >
+              {TRANSITIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={applyAllGapTransitions}
+              disabled={clips.length < 2}
+              className="rounded border border-purple-500/40 px-2 py-0.5 text-[10px] text-purple-300 hover:bg-purple-500/10 disabled:opacity-40"
+            >
+              Apply to all
+            </button>
+          </label>
         </div>
-        <div className="flex-1 overflow-x-auto p-2">
+        <div
+          ref={timelineScrollRef}
+          className="flex-1 overflow-x-auto p-2"
+          onDragOver={event => {
+            if (!draggedId && !event.dataTransfer.types.includes('text/x-maestro-video-clip')) return
+            event.preventDefault()
+            updateTimelineDragScroll(event.clientX)
+          }}
+          onDrop={() => stopTimelineDragScroll()}
+        >
           {clips.length ? (
             <div className="h-full flex items-stretch gap-1 min-w-max">
               {clips.map((clip, index) => {
@@ -2388,6 +2580,10 @@ export function VideoEditorPanel() {
                       <button
                         draggable
                         onDragStart={event => {
+                          if (trimmingRef.current) {
+                            event.preventDefault()
+                            return
+                          }
                           event.dataTransfer.effectAllowed = 'move'
                           event.dataTransfer.setData('text/x-maestro-video-clip', clip.id)
                           setDraggedId(clip.id)
@@ -2395,10 +2591,12 @@ export function VideoEditorPanel() {
                         onDragEnd={() => {
                           setDraggedId(null)
                           setDropIndex(null)
+                          stopTimelineDragScroll()
                         }}
                         onDragOver={event => {
                           event.preventDefault()
                           event.dataTransfer.dropEffect = 'move'
+                          updateTimelineDragScroll(event.clientX)
                           const bounds = event.currentTarget.getBoundingClientRect()
                           setDropIndex(index + (event.clientX > bounds.left + bounds.width / 2 ? 1 : 0))
                         }}
@@ -2410,6 +2608,7 @@ export function VideoEditorPanel() {
                           dropAtIndex(insertionIndex, event.dataTransfer.getData('text/x-maestro-video-clip'))
                         }}
                         onClick={() => {
+                          if (trimmingRef.current) return
                           setSequencePlaying(false)
                           setSequenceMode(false)
                           setSelectedTransitionIndex(null)
@@ -2445,6 +2644,18 @@ export function VideoEditorPanel() {
                             <p className="text-[9px] text-white/60">{formatTime(effectiveDuration(clip))}</p>
                           </div>
                         </div>
+                        <span
+                          role="separator"
+                          aria-label={`Trim start of ${clip.name}`}
+                          onPointerDown={event => beginTimelineTrim(event, clip.id, 'start')}
+                          className="absolute inset-y-0 left-0 z-30 w-2.5 cursor-ew-resize rounded-l-lg bg-accent-blue/0 hover:bg-accent-blue/50"
+                        />
+                        <span
+                          role="separator"
+                          aria-label={`Trim end of ${clip.name}`}
+                          onPointerDown={event => beginTimelineTrim(event, clip.id, 'end')}
+                          className="absolute inset-y-0 right-0 z-30 w-2.5 cursor-ew-resize rounded-r-lg bg-accent-blue/0 hover:bg-accent-blue/50"
+                        />
                       </button>
                       <button
                         type="button"
@@ -2535,21 +2746,21 @@ export function VideoEditorPanel() {
       {pickerOpen && (
         <ModalShell
           open
-          title="Add a Loreframe Lab video"
-          onClose={() => setPickerOpen(false)}
+          title="Add Loreframe Lab videos"
+          onClose={closeMaestroPicker}
           className="fixed inset-0 z-[80] bg-black/65 flex items-center justify-center p-4"
           onMouseDown={event => {
-            if (event.currentTarget === event.target) setPickerOpen(false)
+            if (event.currentTarget === event.target) closeMaestroPicker()
           }}
         >
           <div className="w-full max-w-4xl max-h-[78vh] bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <FolderOpen size={15} className="text-accent-blue" />
-              <span className="text-sm font-medium">Add a Loreframe Lab video</span>
+              <span className="text-sm font-medium">Add Loreframe Lab videos</span>
               {maestroVideoTotal > 0 && (
                 <span className="text-[10px] text-text-muted">{maestroVideos.length} / {maestroVideoTotal}</span>
               )}
-              <button onClick={() => setPickerOpen(false)} aria-label="Close Loreframe Lab video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
+              <button type="button" onClick={closeMaestroPicker} aria-label="Close Loreframe Lab video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
                 <X size={15} />
               </button>
             </div>
@@ -2559,27 +2770,45 @@ export function VideoEditorPanel() {
                   <Loader2 size={22} className="animate-spin" />
                 </div>
               ) : maestroVideos.length ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {maestroVideos.map(output => (
-                    <button
-                      key={output.name}
-                      onClick={() => void chooseMaestroVideo(output)}
-                      className="rounded-lg overflow-hidden border border-border bg-bg-tertiary hover:border-accent-blue text-left"
-                    >
-                      {output.thumbnail_url ? (
-                        <img
-                          src={output.thumbnail_url}
-                          alt={output.name}
-                          className="w-full aspect-video object-cover bg-black"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <div className="flex aspect-video items-center justify-center bg-black text-text-muted"><Film size={20} /></div>
-                      )}
-                      <p className="p-2 text-[10px] text-text-secondary truncate">{output.name}</p>
-                    </button>
-                  ))}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" role="listbox" aria-multiselectable="true" aria-label="Loreframe Lab videos">
+                  {maestroVideos.map(output => {
+                    const selected = pickerSelectedSet.has(output.name)
+                    return (
+                      <button
+                        key={output.name}
+                        type="button"
+                        role="option"
+                        aria-label={output.name}
+                        aria-selected={selected}
+                        onClick={event => toggleMaestroVideo(output, event)}
+                        className={`relative rounded-lg overflow-hidden border text-left ${
+                          selected
+                            ? 'border-accent-blue ring-1 ring-accent-blue/50 bg-accent-blue/10'
+                            : 'border-border bg-bg-tertiary hover:border-accent-blue'
+                        }`}
+                      >
+                        <span className={`absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded border ${
+                          selected
+                            ? 'border-accent-blue bg-accent-blue text-white'
+                            : 'border-white/50 bg-black/50 text-transparent'
+                        }`}>
+                          <Check size={12} />
+                        </span>
+                        {output.thumbnail_url ? (
+                          <img
+                            src={output.thumbnail_url}
+                            alt=""
+                            className="w-full aspect-video object-cover bg-black"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <div className="flex aspect-video items-center justify-center bg-black text-text-muted"><Film size={20} /></div>
+                        )}
+                        <p className="p-2 text-[10px] text-text-secondary truncate">{output.name}</p>
+                      </button>
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="min-h-48 flex items-center justify-center text-xs text-text-muted">
@@ -2600,6 +2829,41 @@ export function VideoEditorPanel() {
                 </div>
               )}
             </div>
+            {maestroVideos.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-border bg-bg-tertiary/40">
+                <button
+                  type="button"
+                  onClick={() => setPickerSelected(maestroVideos.map(item => item.name))}
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover"
+                >
+                  Select all shown
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickerSelected([])
+                    pickerAnchorRef.current = null
+                  }}
+                  disabled={!pickerSelected.length}
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover disabled:opacity-40"
+                >
+                  Clear
+                </button>
+                <span className="text-[10px] text-text-muted">
+                  {pickerSelected.length} selected · click to toggle, Shift-click for a range
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void addSelectedMaestroVideos()}
+                  disabled={!pickerSelected.length || adding}
+                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 disabled:opacity-40"
+                >
+                  {pickerSelected.length
+                    ? `Add ${pickerSelected.length} ${pickerSelected.length === 1 ? 'video' : 'videos'}`
+                    : 'Add videos'}
+                </button>
+              </div>
+            )}
           </div>
         </ModalShell>
       )}

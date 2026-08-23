@@ -146,6 +146,57 @@ export function normalizeEditorClips(
   return { clips, repairedCount, discardedCount }
 }
 
+export const TIMELINE_MIN_TRIM_DURATION = 0.4
+export const TIMELINE_TRIM_PX_PER_SEC = 80
+
+export function splitClipAtTime(
+  clip: EditorClip,
+  cut: number,
+  newId: string,
+): [EditorClip, EditorClip] | null {
+  if (!Number.isFinite(cut)) return null
+  if (cut <= clip.trimStart + MIN_TRIM_DURATION || cut >= clip.trimEnd - MIN_TRIM_DURATION) return null
+  const base = clip.name.replace(/ \(part [12]\)$/i, '')
+  return [
+    { ...clip, name: `${base} (part 1)`, trimEnd: cut, transition: 'none' },
+    { ...clip, id: newId, name: `${base} (part 2)`, trimStart: cut },
+  ]
+}
+
+export function applyTransitionToGaps(clips: EditorClip[], transition: Transition): EditorClip[] {
+  if (clips.length < 2) return clips
+  const interstitial = transition.startsWith('later-')
+  return clips.map((clip, index) => {
+    if (index >= clips.length - 1) return clip
+    return {
+      ...clip,
+      transition,
+      transitionDuration: interstitial
+        ? Math.max(2, clip.transitionDuration || 2)
+        : Math.max(0.4, Math.min(clip.transitionDuration || 0.5, 2)),
+    }
+  })
+}
+
+export function trimClipFromDelta(
+  clip: EditorClip,
+  edge: 'start' | 'end',
+  deltaSeconds: number,
+  minDuration = TIMELINE_MIN_TRIM_DURATION,
+): EditorClip {
+  const floor = Math.max(MIN_TRIM_DURATION, minDuration)
+  if (edge === 'start') {
+    return {
+      ...clip,
+      trimStart: Math.min(clip.trimEnd - floor, Math.max(0, clip.trimStart + deltaSeconds)),
+    }
+  }
+  return {
+    ...clip,
+    trimEnd: Math.max(clip.trimStart + floor, Math.min(clip.duration, clip.trimEnd + deltaSeconds)),
+  }
+}
+
 export function editorClipRecoveryMessage(result: EditorClipNormalizationResult): string | null {
   const parts: string[] = []
   if (result.repairedCount) parts.push(`${result.repairedCount} repaired`)
