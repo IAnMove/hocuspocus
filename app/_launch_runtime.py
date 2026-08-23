@@ -204,7 +204,7 @@ if _services.get("auto_performance") and not _services.get("auto_performance_app
 sys.argv = _original_argv
 
 # --- FastAPI setup ---
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -773,6 +773,14 @@ def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
 
 def _is_legacy_h3_model(model_type: str | None) -> bool:
     return str(model_type or "").strip() == minimax_h3_service.MODEL_ID
+
+
+def _is_character_sheet_engine(body: dict | None) -> bool:
+    return (
+        isinstance(body, dict)
+        and str(body.get("character_sheet_engine") or "").strip()
+        == minimax_h3_service.CHARACTER_SHEET_ENGINE
+    )
 
 
 def _is_minimax_h3_model(model_type: str | None) -> bool:
@@ -11147,6 +11155,7 @@ async def generate(request: Request):
         _base_model_type = body.get("model_type")
     _generation_model_def = wgp.get_model_def(body["model_type"]) or {}
     if legacy_h3:
+        character_sheet = _is_character_sheet_engine(body)
         body.setdefault("resolution", minimax_h3_service.DEFAULTS["resolution"])
         body.setdefault("video_length", minimax_h3_service.DEFAULTS["video_length"])
         body.setdefault(
@@ -11156,28 +11165,44 @@ async def generate(request: Request):
         body.update({
             "h3_model_profile": "quality",
             "h3_allow_low_memory_fallback": False,
-            "num_inference_steps": 20,
+            "num_inference_steps": 25 if character_sheet else 20,
             "flow_shift": 12.0,
             "h3_audio_shift": 3.0,
             "guidance_scale": 1.0,
+            # The original Character Sheet workflow has a separate Turbo
+            # LoRA. Maestro's native Turbo adapter is not interchangeable, so
+            # never let that global checkbox leak into this isolated route.
             "minimax_h3_turbo_mode": False,
             "activated_loras": [],
             "loras_multipliers": "",
             "skip_steps_cache_type": "",
         })
-        for key in (
-            "minimax_h3_text_encoder",
-            "skip_steps_multiplier",
-            "skip_steps_start_step_perc",
-            "minimax_h3_window_storyboard",
-            "h3_window_prompts",
-            "h3_window_plan_signature",
-            "h3_window_plan",
-            "minimax_h3_references",
-            "per_clip_minimax_h3_references",
-            "minimax_h3_reference_detail",
-        ):
-            body.pop(key, None)
+        if character_sheet:
+            if not isinstance(body.get("image_refs"), list) or not any(body["image_refs"]):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Character Sheet engine requires at least one image reference.",
+                )
+            body.update({
+                "resolution": "768x1344",
+                "video_length": 124,
+                "h3_reference_mode": "references",
+                "h3_ref_image_size": "max",
+            })
+        else:
+            for key in (
+                "minimax_h3_text_encoder",
+                "skip_steps_multiplier",
+                "skip_steps_start_step_perc",
+                "minimax_h3_window_storyboard",
+                "h3_window_prompts",
+                "h3_window_plan_signature",
+                "h3_window_plan",
+                "minimax_h3_references",
+                "per_clip_minimax_h3_references",
+                "minimax_h3_reference_detail",
+            ):
+                body.pop(key, None)
 
     if _is_minimax_h3_model(body.get("model_type")):
         from services.minimax_h3_duration import (
@@ -26401,6 +26426,153 @@ def save_scene_output(body: dict):
     }
 
 
+@api.post("/api/v1/scenes/recordings")
+async def save_scene_recording(
+    file: UploadFile = File(...),
+    metadata: str = Form("{}"),
+):
+    """Convert a browser WebM capture to MP4 and publish it in Videos.
+
+    The sidecar deliberately keeps the exact user prompt, full LLM recipe,
+    compiled scene, and source assets so a rendered 3D clip remains fully
+    explainable and reproducible from the gallery.
+    """
+    from services.scene_recording import (
+        SceneRecordingTranscodeError,
+        transcode_scene_recording,
+    )
+
+    if file.size is not None and file.size > MAX_IMAGE_UPLOAD_BYTES:
+        await file.close()
+        raise HTTPException(status_code=413, detail="Recording is too large (max 500 MB)")
+    if len(metadata.encode("utf-8")) > 8 * 1024 * 1024:
+        await file.close()
+        raise HTTPException(status_code=413, detail="Scene recording metadata is too large")
+    try:
+        details = json.loads(metadata)
+    except json.JSONDecodeError as error:
+        await file.close()
+        raise HTTPException(status_code=400, detail="Invalid scene recording metadata") from error
+    if not isinstance(details, dict):
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene recording metadata must be an object")
+
+    scene = details.get("scene")
+    recipe = details.get("recipe")
+    prompt = details.get("prompt", "")
+    if not isinstance(scene, dict) or scene.get("version") != 1:
+        await file.close()
+        raise HTTPException(status_code=400, detail="A version 1 scene is required")
+    if recipe is not None and not isinstance(recipe, dict):
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene recipe must be an object")
+    if not isinstance(prompt, str) or len(prompt) > 200_000:
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene prompt must be text under 200,000 characters")
+    layers = scene.get("layers")
+    if not isinstance(layers, list) or len(layers) > 500:
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene layers must be a list of at most 500 items")
+
+    workspace = details.get("workspace") or None
+    out_dir = _workspace_dir(workspace)
+    os.makedirs(out_dir, exist_ok=True)
+    raw_name = str(scene.get("name") or "3D scene").strip()
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "3d-scene"
+    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+    output_name = f"{stamp}_{safe_name}_3d_{uuid.uuid4().hex[:6]}.mp4"
+    output_path = os.path.join(out_dir, output_name)
+    upload_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-recording.webm")
+    fps = 60 if scene.get("fps") == 60 else 30
+    started_at = time.time()
+
+    try:
+        await _stream_upload(file, upload_path, max_bytes=MAX_IMAGE_UPLOAD_BYTES)
+        async with _UPLOAD_TRANSCODE_SLOTS:
+            await asyncio.to_thread(
+                transcode_scene_recording,
+                upload_path,
+                output_path,
+                fps=fps,
+            )
+    except UploadTooLargeError as error:
+        raise HTTPException(status_code=413, detail="Recording is too large (max 500 MB)") from error
+    except SceneRecordingTranscodeError as error:
+        raise HTTPException(status_code=400, detail=f"Could not convert recording to MP4: {error}") from error
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Could not save MP4 recording: {error}") from error
+    finally:
+        try:
+            if os.path.isfile(upload_path):
+                os.remove(upload_path)
+        except OSError:
+            pass
+
+    completed_at = time.time()
+    width = int(scene.get("width") or 0)
+    height = int(scene.get("height") or 0)
+    duration = float(scene.get("duration") or 0)
+    source_assets = []
+    if isinstance(recipe, dict):
+        source_assets = recipe.get("assets") if isinstance(recipe.get("assets"), list) else []
+    if not source_assets:
+        source_assets = [
+            {
+                "id": layer.get("id"),
+                "name": layer.get("name"),
+                "kind": layer.get("type"),
+                "source": layer.get("source"),
+            }
+            for layer in layers
+            if isinstance(layer, dict) and layer.get("source")
+        ]
+    sidecar = {
+        "params": {
+            "model_type": "scene-animator-3d",
+            "generation_mode": "3d-scene-compositor",
+            "prompt": prompt,
+            "original_prompt": prompt,
+            "scene_recipe": recipe,
+            "scene": scene,
+            "source_assets": source_assets,
+            "resolution": f"{width}x{height}" if width and height else None,
+            "width": width,
+            "height": height,
+            "fps": fps,
+            "duration_seconds": duration,
+            "video_length": round(duration * fps) if duration > 0 else None,
+        },
+        "generation_mode": "video",
+        "tool": "scene-animator-3d",
+        "generation_time": round(completed_at - started_at, 3),
+        "created_at": completed_at,
+        "completed_at": completed_at,
+        "output_filename": output_name,
+    }
+    try:
+        with open(os.path.splitext(output_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
+            json.dump(sidecar, handle, ensure_ascii=False, indent=2)
+    except Exception as error:
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail=f"Could not save recording metadata: {error}") from error
+
+    with _output_scan_cache_lock:
+        _output_scan_cache.pop(out_dir, None)
+    return {
+        "name": output_name,
+        "type": "video",
+        "mode": "video",
+        "size": os.path.getsize(output_path),
+        "created_at": completed_at,
+        "completed_at": completed_at,
+        "url": f"/api/v1/file/{output_name}",
+        "thumbnail_url": f"/api/v1/outputs/thumbnail/{quote(output_name, safe='')}",
+    }
+
+
 # ============================================================================
 # Comics — native projects, MiniMax images, and Director planning
 # ============================================================================
@@ -35694,12 +35866,20 @@ async def upload_image(file: UploadFile = File(...)):
     # 6.4s of the performance.
     if ext in (".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"):
         try:
-            from shared.utils.utils import get_video_info
-            _fps, _w, _h, _frame_count = get_video_info(filepath)
+            from shared.utils.video_decode import probe_video_stream_metadata
+            _metadata = probe_video_stream_metadata(filepath)
+            if _metadata is not None:
+                _fps = float(_metadata.get("fps_float") or _metadata.get("fps") or 0)
+                _frame_count = int(_metadata.get("frame_count") or 0)
+                _duration = float(_metadata.get("duration") or 0)
+            else:
+                from shared.utils.utils import get_video_info
+                _fps, _w, _h, _frame_count = get_video_info(filepath)
+                _duration = float(_frame_count or 0) / float(_fps) if _fps else 0
             if _fps:
                 result["fps"] = float(_fps)
                 result["frame_count"] = int(_frame_count or 0)
-                result["duration_seconds"] = round(float(_frame_count or 0) / float(_fps), 3)
+                result["duration_seconds"] = round(_duration or (float(_frame_count or 0) / float(_fps)), 3)
             try:
                 import av as _av
 

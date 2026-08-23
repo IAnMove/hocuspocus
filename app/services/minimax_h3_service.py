@@ -30,6 +30,7 @@ import websocket as websocket_client
 # original isolated ComfyUI implementation available under an explicit model
 # id so a saved/native job can never silently cross the two inference stacks.
 MODEL_ID = "minimax_h3_legacy"
+CHARACTER_SHEET_ENGINE = "poopman333_6_panel"
 MODEL_NAME = "H3 Legacy Quality — ConvRot"
 HF_REPO = "Comfy-Org/MiniMax-H3"
 COMMUNITY_HF_REPO = "Abiray/Minimax-H3-nvfp4-INT4-INT8-Convrot"
@@ -381,6 +382,21 @@ def _ensure_models(pipeline: str, profile: str, progress: Callable[[str], None])
         destination = _model_path(relative)
         if destination.is_file():
             continue
+        # Maestro installations may already contain the exact ConvRot assets
+        # in app/ckpts (the native H3 installer uses that shared cache). Link
+        # those immutable files into the isolated Comfy tree before attempting
+        # a second 20+ GB download. The fallback copy is only for filesystems
+        # that do not support hard links.
+        shared_candidate = Path(__file__).resolve().parent.parent / "ckpts" / display_name
+        shared_comfy_tree = (SERVICE_DIR / "vendor" / "ComfyUI").resolve()
+        if COMFY_DIR.resolve() == shared_comfy_tree and shared_candidate.is_file():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.link(shared_candidate, destination)
+            except OSError:
+                shutil.copy2(shared_candidate, destination)
+            progress(f"Using shared MiniMax H3 asset: {display_name}")
+            continue
         progress(f"Downloading MiniMax H3 ({index}/{len(wanted)}): {display_name}")
         destination.parent.mkdir(parents=True, exist_ok=True)
         # Abiray publishes DiT files at the repository root, while ComfyUI
@@ -656,7 +672,13 @@ def _validate_timed_references(sources: list[str], label: str) -> None:
 
 def _base_sampling_graph(params: dict, model_name: str, text_encoder: str) -> dict:
     # Legacy Quality is a reproducible recipe, not an expert-tuning surface.
-    steps = 20
+    # The Character Sheet profile is the one deliberate exception: it mirrors
+    # PoopMan333's 6-panel Comfy workflow, whose scheduler uses 25 steps.
+    steps = (
+        25
+        if params.get("character_sheet_engine") == CHARACTER_SHEET_ENGINE
+        else 20
+    )
     seed = int(params.get("seed", -1))
     if seed < 0:
         seed = uuid.uuid4().int % (2**63 - 1)
@@ -706,7 +728,11 @@ def build_workflow(params: dict, job_id: str) -> tuple[dict, str]:
     params["requested_video_length"] = requested_length
     params["effective_resolution"] = f"{width}x{height}"
     params["effective_video_length"] = length
-    params["num_inference_steps"] = 20
+    params["num_inference_steps"] = (
+        25
+        if params.get("character_sheet_engine") == CHARACTER_SHEET_ENGINE
+        else 20
+    )
     params["flow_shift"] = 12.0
     params["h3_audio_shift"] = 3.0
 

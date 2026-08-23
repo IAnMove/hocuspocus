@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
-import { saveScene as saveSceneOutput, uploadImage } from '../../api/client'
+import { saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
 import { SceneRecipePanel } from './SceneRecipePanel'
 import type { SceneRecipe } from '../../lib/sceneRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
@@ -33,7 +33,7 @@ type Gesture = { id: string; mode: 'move' | 'resize' | 'orbit'; startX: number; 
 type LayerEffects = Required<NonNullable<SceneLayer['effects']>>
 type LayerStrip = Required<NonNullable<SceneLayer['strip']>>
 type Atmosphere = Required<NonNullable<SceneLayer['atmosphere']>>
-type ModelViewerAnimationElement = HTMLElement & { availableAnimations?: string[]; animationName?: string; currentTime: number; duration: number; pause: () => void }
+type ModelViewerAnimationElement = HTMLElement & { loaded?: boolean; availableAnimations?: string[]; animationName?: string; currentTime: number; duration: number; pause: () => void }
 
 const makePoint = (x: number, y: number, scale: number): Point => ({ x, y, scale })
 const CAMERA_PRESETS: CameraPreset[] = [
@@ -304,6 +304,14 @@ const isAnimatorLayerType = (value: unknown): value is AnimatorLayerType => valu
 const isVisualLayer = (layer: AnimatorLayer): layer is VisualAnimatorLayer => layer.type !== 'camera'
 const findLayerElements = (root: HTMLElement | null, id: string) => Array.from(root?.querySelectorAll<HTMLElement>('[data-layer-id]') ?? []).filter(element => element.dataset.layerId === id)
 const findLayerElement = (root: HTMLElement | null, id: string) => findLayerElements(root, id)[0] ?? null
+const modelViewerCanvas = (element: HTMLElement | null) => {
+  const root = element?.shadowRoot
+  if (!root) return null
+  const rendered = root.querySelector<HTMLCanvasElement>('#webgl-canvas')
+  if (rendered) return rendered
+  const canvases = Array.from(root.querySelectorAll<HTMLCanvasElement>('canvas'))
+  return canvases.find(canvas => canvas.getBoundingClientRect().width > 0) ?? canvases.at(-1) ?? null
+}
 const iconFor = (type: AnimatorLayerType) => type === 'camera' ? <Camera size={13} /> : type === 'effect' ? <CloudRain size={13} /> : type === 'model3d' ? <Box size={13} /> : type === 'video' ? <Video size={13} /> : <ImageIcon size={13} />
 const PARALLAX_PRESETS: Record<ParallaxPreset, number> = { background: .3, midground: .7, foreground: 1.2 }
 const RESOLUTIONS = [
@@ -438,6 +446,7 @@ function AtmospherePreview({ atmosphere, seconds, width, height, layerId }: { at
 export function SceneAnimatorPanel() {
   const outputs = useStore(s => s.outputs)
   const loadOutputs = useStore(s => s.loadOutputs)
+  const workspace = useStore(s => s.activeWorkspace)
   const [scene, setScene] = useState<AnimatorScene>(blankScene)
   const sceneRef = useRef(scene)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -445,6 +454,7 @@ export function SceneAnimatorPanel() {
   const [picker, setPicker] = useState<'model' | 'media' | null>(null)
   const [playing, setPlaying] = useState(false)
   const [recording, setRecording] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState(0)
   const [flash, setFlash] = useState<{ x: number; y: number } | null>(null)
@@ -465,6 +475,7 @@ export function SceneAnimatorPanel() {
   const animationRef = useRef<number | null>(null)
   const recordingAnimationRef = useRef<number | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recipeContextRef = useRef<{ prompt: string; recipe: SceneRecipe } | null>(null)
   const recordingStreamRef = useRef<MediaStream | null>(null)
   const modelInputRef = useRef<HTMLInputElement>(null)
   const mediaInputRef = useRef<HTMLInputElement>(null)
@@ -932,7 +943,12 @@ export function SceneAnimatorPanel() {
     for (let orbitIndex = 0; orbitIndex < orbitCount; orbitIndex += 1) {
       const orbit = layer.animation.orbit
       const instanceLayer = orbit && orbitCount > 1 ? { ...layer, animation: { ...layer.animation, orbit: { ...orbit, phase: orbit.phase + orbitIndex * 360 / orbitCount } } } : layer
-      const orbitState = layerState(instanceLayer, time)
+      let orbitState = layerState(instanceLayer, time)
+      if (layer.type === 'model3d' && layer.animation.spin) {
+        const timing = getSceneLayerTiming(layer)
+        const localSeconds = sceneTimeToLayerTime(layer, time * scene.duration) - timing.trimStart
+        orbitState = { ...orbitState, modelYaw: localSeconds * (layer.animation.rotationSpeed ?? 35) }
+      }
       for (const offset of offsets) {
         let state = { ...orbitState, x: orbitState.x + offset.x, y: orbitState.y + offset.y }
         if (orbit && orbit.facing && orbit.facing !== 'fixed') {
@@ -1561,7 +1577,7 @@ export function SceneAnimatorPanel() {
       if (layer.type === 'effect') {
         drawAtmosphere(context, normalizedAtmosphere(layer.atmosphere), time, width, height)
       } else if (layer.type === 'model3d') {
-        const viewer = findLayerElements(canvasRef.current, layer.id)[instanceIndex]?.shadowRoot?.querySelector('canvas') as HTMLCanvasElement | null
+        const viewer = modelViewerCanvas(findLayerElements(canvasRef.current, layer.id)[instanceIndex] ?? null)
         if (viewer) context.drawImage(viewer, -width / 2, -height / 2, width, height)
       } else {
         const media = findLayerElement(canvasRef.current, layer.id) as HTMLVideoElement | HTMLImageElement | null
@@ -1580,7 +1596,7 @@ export function SceneAnimatorPanel() {
     })
     return true
   }
-  const recordToBlob = (download = true): Promise<Blob> => new Promise((resolve, reject) => {
+  const recordToBlob = (): Promise<Blob> => new Promise((resolve, reject) => {
     if (recording) { reject(new Error('A recording is already in progress.')); return }
     if (playing) { const error = new Error('Wait for Preview to finish before recording.'); setMessage(error.message); reject(error); return }
     const current = sceneRef.current
@@ -1632,11 +1648,6 @@ export function SceneAnimatorPanel() {
     mediaRecorder.onstop = () => {
       if (!failed && chunks.length > 0) {
         const blob = new Blob(chunks, { type: mime })
-        if (download) {
-          const url = URL.createObjectURL(blob)
-          const link = document.createElement('a'); link.href = url; link.download = `maestro-scene-${current.width}x${current.height}-${currentFps}fps-${Date.now()}.webm`; link.click()
-          window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-        }
         clearCapture()
         resolve(blob)
         return
@@ -1689,39 +1700,75 @@ export function SceneAnimatorPanel() {
       recordingAnimationRef.current = requestAnimationFrame(frame)
     })
   })
-  const record = () => { void recordToBlob(true).catch(() => undefined) }
+  const publishRecording = async (blob: Blob, current: Scene) => {
+    const context = recipeContextRef.current
+    const saved = await saveSceneRecording(blob, {
+      scene: current,
+      prompt: context?.prompt ?? '',
+      recipe: context ? context.recipe as unknown as Record<string, unknown> : null,
+      workspace,
+    })
+    await loadOutputs()
+    setMessage(`MP4 saved in Videos as ${saved.name}`)
+    return saved
+  }
+  const record = () => {
+    if (publishing) return
+    setPublishing(true)
+    setMessage(null)
+    void waitForModelViewers()
+      .then(() => recordToBlob())
+      .then(blob => publishRecording(blob, sceneRef.current))
+      .catch(error => setMessage(error instanceof Error ? error.message : 'Failed to export MP4.'))
+      .finally(() => setPublishing(false))
+  }
   const waitForModelViewers = async () => {
     const root = canvasRef.current
     if (!root) return
     const deadline = Date.now() + 25000
+    const expectedModelIds = new Set(
+      sceneRef.current.layers
+        .filter(layer => layer.type === 'model3d' && layer.visible && !layer.missingAsset && layer.source)
+        .map(layer => layer.id),
+    )
+    if (!expectedModelIds.size) return
     while (Date.now() < deadline) {
-      const viewers = [...root.querySelectorAll('model-viewer')]
-      if (!viewers.length) return
-      const ready = viewers.every(viewer => {
-        const canvas = (viewer as HTMLElement).shadowRoot?.querySelector('canvas') as HTMLCanvasElement | null
-        return Boolean(canvas && canvas.width > 8 && canvas.height > 8)
+      const viewers = [...root.querySelectorAll<ModelViewerAnimationElement>('model-viewer')]
+      const ready = [...expectedModelIds].every(id => {
+        const matches = viewers.filter(viewer => viewer.dataset.layerId === id)
+        return matches.length > 0 && matches.every(viewer => {
+          const canvas = modelViewerCanvas(viewer)
+          return viewer.loaded === true && Boolean(canvas && canvas.width > 8 && canvas.height > 8)
+        })
       })
       if (ready) {
-        await new Promise(resolve => window.setTimeout(resolve, 400))
+        // `loaded` fires when the GLB is available, but model-viewer's WebGL
+        // renderer still needs a presentation cycle before its canvas can be
+        // copied into the recorder's 2D canvas. Two RAFs prevent the capture
+        // from starting with several seconds of transparent model frames.
+        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+        await new Promise(resolve => window.setTimeout(resolve, 250))
         return
       }
       await new Promise(resolve => window.setTimeout(resolve, 250))
     }
     throw new Error('The 3D models did not paint in time. Keep the 3D Video tab visible and try again.')
   }
-  const applyRecipeScene = async (recipe: SceneRecipe, nextScene: Scene, status: (message: string) => void) => {
+  const applyRecipeScene = async (recipe: SceneRecipe, nextScene: Scene, status: (message: string) => void, prompt: string) => {
+    recipeContextRef.current = { prompt, recipe }
     importScene(JSON.stringify(nextScene), `Recipe scene loaded: ${nextScene.name}`)
     await new Promise(resolve => window.setTimeout(resolve, 120))
     status('Waiting for 3D models to paint…')
     await waitForModelViewers()
+    if (recipe.record !== true && recipe.save !== true) {
+      status('3D models ready. Scene mounted; press Export MP4 when ready.')
+    }
     if (recipe.record === true) {
-      status('Recording WebM…')
-      const blob = await recordToBlob(false)
-      const file = new File([blob], `${nextScene.name || 'scene'}.webm`, { type: blob.type || 'video/webm' })
-      status('Uploading recording…')
-      const uploaded = await uploadImage(file)
-      await loadOutputs()
-      setMessage(`Recorded and uploaded ${uploaded.filename}`)
+      status('Recording scene…')
+      const blob = await recordToBlob()
+      status('Converting to MP4 and adding it to Videos…')
+      const saved = await publishRecording(blob, nextScene)
+      status(`MP4 ready in Videos: ${saved.name}`)
     }
     if (recipe.save === true) {
       status('Saving scene…')
@@ -1783,7 +1830,7 @@ export function SceneAnimatorPanel() {
       const media = atmosphere
         ? <AtmospherePreview atmosphere={atmosphere} seconds={progress * scene.duration} width={previewWidth} height={previewHeight} layerId={layer.id} />
         : layer.type === 'model3d'
-        ? <model-viewer data-layer-id={layer.id} src={layer.source} orientation={`0deg ${state.modelYaw ?? 0}deg 0deg`} camera-orbit={`${layer.transform.rotationY ?? 0}deg ${layer.transform.rotationX ?? 75}deg auto`} interaction-prompt="none" auto-rotate={layer.animation.spin && (playing || recording) ? true : undefined} rotation-per-second={`${layer.animation.rotationSpeed ?? 35}deg`} animation-name={layer.animation.clip || undefined} animation-crossfade-duration="0" onLoad={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} shadow-intensity="1" exposure="1" loading="eager" className="scene-animator-model pointer-events-none h-full w-full" />
+        ? <model-viewer data-layer-id={layer.id} src={layer.source} orientation={`0deg ${state.modelYaw ?? 0}deg 0deg`} camera-orbit={`${layer.transform.rotationY ?? 0}deg ${layer.transform.rotationX ?? 75}deg auto`} interaction-prompt="none" animation-name={layer.animation.clip || undefined} animation-crossfade-duration="0" onLoad={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} shadow-intensity="1" exposure="1" loading="eager" className="scene-animator-model pointer-events-none h-full w-full" />
         : layer.type === 'video'
           ? <video data-layer-id={layer.id} ref={isPrimary ? element => { videoRefs.current[layer.id] = element } : undefined} src={layer.source} muted playsInline preload="auto" onLoadedMetadata={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} className={`h-full w-full ${layer.fill ? 'object-cover' : 'object-contain'}`} />
           : <img data-layer-id={layer.id} src={layer.source} alt={layer.name} draggable={false} className={`h-full w-full select-none ${layer.fill ? 'object-cover' : 'object-contain'}`} />
@@ -1802,7 +1849,7 @@ export function SceneAnimatorPanel() {
 
   return <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-bg-tertiary xl:flex-row">
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex gap-2"><button onClick={play} disabled={!scene.layers.length || playing || recording} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording || playing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : 'Record WebM'}</button></div></div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex gap-2"><button onClick={play} disabled={!scene.layers.length || playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording || playing || publishing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording || publishing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : publishing ? 'Saving MP4…' : 'Export MP4'}</button></div></div>
       <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? `Autosaved ${new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Autosave waiting…'}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{label}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">Frame rate{([30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{rate} FPS</button>)}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary p-1.5">
@@ -1852,7 +1899,7 @@ export function SceneAnimatorPanel() {
       />
     </section>
     <aside className="w-full shrink-0 border-t border-border bg-bg-secondary p-3 overflow-y-auto space-y-3 xl:w-[300px] xl:border-l xl:border-t-0">
-      <SceneRecipePanel disabled={playing || recording || saving} outputs={outputs} onApply={applyRecipeScene} />
+      <SceneRecipePanel disabled={playing || recording || publishing || saving} outputs={outputs} onApply={applyRecipeScene} />
       <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> Add layer</button>{addOpen && <div className="absolute z-[1100] mt-1 max-h-[75vh] w-full space-y-1 overflow-y-auto rounded border border-border bg-bg-primary p-1 shadow-xl"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">Add camera</button><div className="px-2 pt-1 text-[8px] font-medium uppercase tracking-wider text-text-muted">Atmospheric effect · 14 presets</div><div className="grid grid-cols-2 gap-1">{ATMOSPHERE_KINDS.map(kind => <button key={kind} onClick={() => addAtmosphere(kind)} title={`${ATMOSPHERE_LABELS[kind]} — ${ATMOSPHERE_DESCRIPTIONS[kind]}`} className="truncate rounded border border-border px-2 py-1.5 text-left text-[9px] text-purple-200 hover:border-purple-400/60 hover:bg-bg-hover">{ATMOSPHERE_LABELS[kind]}</button>)}</div><button onClick={() => { setPicker('model'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated 3D model</button><button onClick={() => { setAddOpen(false); modelInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import GLB</button><button onClick={() => { setPicker('media'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated image/video</button><button onClick={() => { setAddOpen(false); mediaInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import image/video</button><button onClick={() => { setAddOpen(false); overlayInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import transparent PNG/WebP</button></div>}</div>
       {picker && <div className="rounded border border-border bg-bg-primary p-2"><div className="mb-1 flex justify-between text-[10px] text-text-muted"><span>{picker === 'model' ? 'Generated 3D models' : 'Generated images & videos'}</span><button onClick={() => setPicker(null)}><Down size={13} /></button></div><div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto">{(picker === 'model' ? generatedModels : generatedMedia).map(asset => <button key={asset.name} onClick={() => addLayer(asset.type === 'model3d' ? 'model3d' : asset.type === 'video' ? 'video' : 'image', asset.url, asset.name, asset.thumbnail_url ?? undefined)} className="overflow-hidden rounded border border-border text-left hover:border-accent-blue"><div className="aspect-square bg-bg-active">{asset.thumbnail_url || asset.type === 'image' ? <img src={asset.thumbnail_url ?? asset.url} alt="" className="h-full w-full object-cover" /> : <div className="h-full flex items-center justify-center"><Video size={16} /></div>}</div><span className="block truncate px-1 py-1 text-[9px]">{asset.name}</span></button>)}</div></div>}
       <input ref={modelInputRef} type="file" accept=".glb,model/gltf-binary" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign('model3d', file) }} /><input ref={mediaInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) addOrReassign(file.type.startsWith('video/') ? 'video' : 'image', file) }} /><input ref={overlayInputRef} type="file" accept="image/png,image/webp" multiple className="hidden" onChange={event => [...(event.target.files ?? [])].forEach(file => addOrReassign('overlay', file))} />

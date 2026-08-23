@@ -6,6 +6,7 @@ import {
   buildRecipeSystemPrompt,
   compileRecipeShot,
   compileSceneRecipe,
+  constrainManualRecipeToInventory,
   extractJsonObject,
   h3FramesForDuration,
   h3ResolutionForScene,
@@ -36,6 +37,11 @@ test('recipe JSON in a markdown fence still parses', () => {
   const recipe = parseSceneRecipeText('```json\n' + JSON.stringify(EXAMPLE_SAUCER_CRUISE_RECIPE) + '\n```')
   assert.equal(recipe.name, 'saucer-cruise')
   assert.equal(recipe.assets.length, 2)
+})
+
+test('recipe version accepts a numeric string from imperfect structured providers', () => {
+  const recipe = parseSceneRecipe({ ...EXAMPLE_SAUCER_CRUISE_RECIPE, version: '1' })
+  assert.equal(recipe.version, 1)
 })
 
 test('unknown motion and missing sources are rejected', () => {
@@ -93,6 +99,9 @@ test('LLM contract is closed-schema, multilingual and treats inventory as data',
   assert.match(prompt, /ANY language/)
   assert.match(prompt, /cinematic English/)
   assert.match(prompt, /untrusted data/)
+  assert.match(prompt, /Never invent rig_profile/)
+  assert.match(prompt, /2D screen-space roll/)
+  assert.match(prompt, /background image\/video plates static/)
   assert.match(prompt, /Robot de bronce/)
   assert.equal(SCENE_RECIPE_JSON_SCHEMA.additionalProperties, false)
   assert.deepEqual(SCENE_RECIPE_JSON_SCHEMA.required, ['version', 'name', 'record', 'save', 'assets', 'shots', 'scene'])
@@ -116,6 +125,49 @@ test('parser inserts a locked camera contract and rejects broken asset semantics
     assets: [{ id: 'mesh', kind: 'model3d', source: 'mesh.glb' }],
     scene: { layers: [{ id: 'bg', type: 'image', asset: 'mesh' }] },
   }), /is image but asset.*is model3d/)
+})
+
+test('one persistent model asset cannot be duplicated into parallel layers in a shot', () => {
+  assert.throws(() => parseSceneRecipe({
+    version: 1,
+    name: 'duplicated-hero',
+    record: false,
+    save: false,
+    assets: [{ id: 'alien', kind: 'model3d', source: 'alien.glb' }],
+    shots: [{
+      name: 'arrival',
+      duration: 5,
+      layers: [
+        { id: 'alien-glide', type: 'model3d', asset: 'alien', motion: 'glide' },
+        { id: 'alien-turn', type: 'model3d', asset: 'alien', motion: 'turntable' },
+      ],
+    }],
+    scene: {
+      width: 1280,
+      height: 720,
+      fps: 30,
+      duration: 5,
+      layers: [{ id: 'alien-glide', type: 'model3d', asset: 'alien', motion: 'glide' }],
+    },
+  }), /uses model3d asset "alien" more than once/)
+})
+
+test('manual inventory strips invented rigging while preserving compositor motion', () => {
+  const invented = parseSceneRecipe({
+    version: 1,
+    name: 'unrigged-alien',
+    record: false,
+    save: false,
+    assets: [{ id: 'alien', kind: 'model3d', source: 'invented.glb', rig_profile: 'prop', animations: ['breathe'] }],
+    shots: [{ name: 'arrival', duration: 5, layers: [{ id: 'alien-layer', type: 'model3d', asset: 'alien', motion: 'drift-right', clip: 'breathe' }] }],
+    scene: { width: 1280, height: 720, fps: 30, duration: 5, layers: [{ id: 'alien-layer', type: 'model3d', asset: 'alien', motion: 'drift-right', clip: 'breathe' }] },
+  })
+  const constrained = constrainManualRecipeToInventory(invented, [{ name: 'real.glb', kind: 'model3d', source: 'real.glb' }])
+  assert.equal(constrained.assets[0].source, 'real.glb')
+  assert.equal(constrained.assets[0].rig_profile, undefined)
+  assert.equal(constrained.assets[0].animations, undefined)
+  assert.equal(constrained.shots[0].layers.find(layer => layer.type === 'model3d').clip, undefined)
+  assert.equal(constrained.scene.layers.find(layer => layer.type === 'model3d').motion, 'drift-right')
 })
 
 test('rig clips are validated, attached to the asset and compiled without an unwanted spin', () => {

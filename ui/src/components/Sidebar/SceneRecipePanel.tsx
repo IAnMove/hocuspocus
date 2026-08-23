@@ -7,11 +7,15 @@ import {
   SCENE_RECIPE_JSON_SCHEMA,
   buildRecipeSystemPrompt,
   compileRecipeShot,
+  constrainManualRecipeToInventory,
   listRecipeShots,
-  parseSceneRecipe,
   parseSceneRecipeText,
+  RECIPE_RIG_ANIMATIONS,
+  RECIPE_RIG_PROFILES,
   withResolvedSources,
   type RecipeAssetKind,
+  type RecipeRigAnimation,
+  type RecipeRigProfile,
   type SceneRecipe,
   type SceneRecipeShot,
 } from '../../lib/sceneRecipe'
@@ -25,6 +29,8 @@ type LoadedAsset = {
   source: string
   previewUrl: string
   description?: string
+  rig_profile?: RecipeRigProfile
+  animations?: RecipeRigAnimation[]
 }
 
 type PickerKind = 'image' | 'model3d'
@@ -120,7 +126,7 @@ export function SceneRecipePanel({
 }: {
   disabled?: boolean
   outputs: ApiOutput[]
-  onApply: (recipe: SceneRecipe, scene: Scene, status: (message: string) => void) => Promise<void>
+  onApply: (recipe: SceneRecipe, scene: Scene, status: (message: string) => void, prompt: string) => Promise<void>
 }) {
   const workspace = useStore(s => s.activeWorkspace)
   const loadOutputs = useStore(s => s.loadOutputs)
@@ -149,7 +155,7 @@ export function SceneRecipePanel({
 
   const applyShot = async (recipe: SceneRecipe, shot: SceneRecipeShot, resolved: Record<string, string>) => {
     const scene = compileRecipeShot(recipe, shot, resolved, filename => getFileUrl(filename, workspace))
-    await onApply({ ...recipe, record: false, save: false }, scene, setStatus)
+    await onApply({ ...recipe, record: false, save: false }, scene, setStatus, intent.trim())
   }
 
   const addOutput = async (item: ApiOutput) => {
@@ -161,8 +167,18 @@ export function SceneRecipePanel({
     try {
       const metadata = await fetchOutputMetadata(item.name, workspace)
       const description = describeOutputParams(metadata.params)
-      if (!description) return
-      setSelected(current => current.map(asset => asset.source === item.name ? { ...asset, description } : asset))
+      const rawProfile = typeof metadata.params?.rig_profile === 'string' ? metadata.params.rig_profile : ''
+      const rigProfile = RECIPE_RIG_PROFILES.find(profile => profile === rawProfile)
+      const animations = Array.isArray(metadata.params?.animations)
+        ? metadata.params.animations.filter((animation): animation is RecipeRigAnimation => typeof animation === 'string' && RECIPE_RIG_ANIMATIONS.includes(animation as RecipeRigAnimation))
+        : []
+      if (!description && !animations.length) return
+      setSelected(current => current.map(asset => asset.source === item.name ? {
+        ...asset,
+        description,
+        rig_profile: rigProfile,
+        animations: animations.length ? animations : undefined,
+      } : asset))
     } catch {
       // Imported and legacy outputs may not have a readable sidecar. The exact
       // source and filename remain enough for manual composition.
@@ -210,6 +226,8 @@ export function SceneRecipePanel({
         kind: item.kind,
         source: item.source,
         description: item.description,
+        rig_profile: item.rig_profile,
+        animations: item.animations,
       }))
       const systemPrompt = buildRecipeSystemPrompt({ mode, inventory: loaded })
       let text = await generateLlmText({
@@ -221,32 +239,27 @@ export function SceneRecipePanel({
         frequency_penalty: 0.1,
         json_schema: SCENE_RECIPE_JSON_SCHEMA,
       })
-      let recipe: SceneRecipe
-      try {
-        recipe = parseSceneRecipeText(text)
-      } catch (validationError) {
-        const validationMessage = validationError instanceof Error ? validationError.message : String(validationError)
-        setStatus(`Repairing the LLM recipe: ${validationMessage}`)
-        text = await generateLlmText({
-          prompt: `Repair your previous recipe without changing the user's intent. Preserve every valid requested subject and action, fix the validation error, and return one complete replacement JSON object.\n\nUSER INTENT:\n${intent.trim()}\n\nVALIDATION ERROR:\n${validationMessage}\n\nPREVIOUS RECIPE:\n${text.slice(0, 16_000)}`,
-          system_prompt: systemPrompt,
-          max_new_tokens: 4000,
-          temperature: 0.05,
-          top_p: 0.8,
-          json_schema: SCENE_RECIPE_JSON_SCHEMA,
-        })
-        recipe = parseSceneRecipeText(text)
+      let recipe: SceneRecipe | null = null
+      for (let attempt = 0; attempt < 3 && !recipe; attempt += 1) {
+        try {
+          recipe = parseSceneRecipeText(text)
+        } catch (validationError) {
+          if (attempt >= 2) throw validationError
+          const validationMessage = validationError instanceof Error ? validationError.message : String(validationError)
+          setStatus(`Repairing the LLM recipe (${attempt + 1}/2): ${validationMessage}`)
+          text = await generateLlmText({
+            prompt: `Repair your previous recipe without changing the user's intent. Preserve every valid requested subject and action, fix the validation error, and return one complete replacement JSON object.\n\nUSER INTENT:\n${intent.trim()}\n\nVALIDATION ERROR:\n${validationMessage}\n\nPREVIOUS RECIPE:\n${text.slice(0, 16_000)}`,
+            system_prompt: systemPrompt,
+            max_new_tokens: 4000,
+            temperature: 0.05,
+            top_p: 0.8,
+            json_schema: SCENE_RECIPE_JSON_SCHEMA,
+          })
+        }
       }
+      if (!recipe) throw new Error('The LLM did not produce a valid recipe after two repairs.')
       if (mode === 'manual') {
-        const unused = [...selected]
-        recipe.assets = recipe.assets.map(asset => {
-          const index = unused.findIndex(item => item.source === asset.source || item.name === asset.source || item.name === asset.id)
-          const fallback = index < 0 ? unused.findIndex(item => item.kind === asset.kind) : index
-          if (fallback < 0) return { ...asset, prompt: undefined }
-          const match = unused.splice(fallback, 1)[0]
-          return { ...asset, kind: match.kind, source: match.source, prompt: undefined }
-        })
-        recipe = parseSceneRecipe(recipe)
+        recipe = constrainManualRecipeToInventory(recipe, selected)
       }
       setRecipeText(JSON.stringify(recipe, null, 2))
       setShots(listRecipeShots(recipe))
@@ -281,8 +294,8 @@ export function SceneRecipePanel({
       const nextShots = listRecipeShots(stored)
       setShots(nextShots)
       setActiveShot(0)
-      setStatus(`Mounted shot “${nextShots[0].name}”. Tweak it in the inspector, then Record.`)
       await applyShot(stored, nextShots[0], resolved)
+      setStatus(`Mounted shot “${nextShots[0].name}”. Tweak it in the inspector, then Record.`)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Camera, Loader2, PersonStanding, Plus, Upload, X, Zap } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Box, Camera, Loader2, PersonStanding, Plus, Upload, X } from 'lucide-react'
 import * as api from '../../api/client'
 import { getFileUrl } from '../../api/client'
 import { useStore } from '../../stores/useStore'
@@ -36,6 +36,7 @@ interface CapturedView {
   label: string
   filename: string
   url: string
+  time: number
 }
 
 const EXTRA_ROLES: Array<{ id: OrbitRefRole; label: string }> = [
@@ -46,7 +47,10 @@ const EXTRA_ROLES: Array<{ id: OrbitRefRole; label: string }> = [
 ]
 
 function resolveOrbitModel(models: Array<{ model_type: string }>): string {
-  const preferred = ['minimax_h3_ref2va', 'minimax_h3_ref2va_full', 'minimax_h3']
+  // Character Creator uses the isolated Comfy/ConvRot worker. It already
+  // contains the Ref2VA checkpoint used by PoopMan333's 6-panel workflow;
+  // native H3 remains the fallback for installations without Legacy assets.
+  const preferred = ['minimax_h3_legacy', 'minimax_h3_ref2va', 'minimax_h3_ref2va_full', 'minimax_h3']
   return preferred.find(id => models.some(model => model.model_type === id)) || 'minimax_h3_ref2va'
 }
 
@@ -57,17 +61,21 @@ function newId(): string {
 export function CharacterCreatorPanel() {
   const models = useStore(s => s.models)
   const activeWorkspace = useStore(s => s.activeWorkspace)
+  const outputFiles = useStore(s => s.outputs)
   const loadOutputs = useStore(s => s.loadOutputs)
   const [kind, setKind] = useState<OrbitSubjectKind>('character')
   const [refs, setRefs] = useState<UploadedRef[]>([])
   const [aPrompt, setAPrompt] = useState('')
   const [showAPrompt, setShowAPrompt] = useState(false)
-  const [useTurbo, setUseTurbo] = useState(false)
   const [busy, setBusy] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const [jobMessage, setJobMessage] = useState('')
   const [videoName, setVideoName] = useState<string | null>(null)
   const [views, setViews] = useState<CapturedView[]>([])
+  const [videoDuration, setVideoDuration] = useState(CHARACTER_SHEET_FRAMES / 24)
+  const [selectedViewId, setSelectedViewId] = useState<string | null>(null)
+  const [selectedTime, setSelectedTime] = useState(0)
+  const videoPreviewRef = useRef<HTMLVideoElement>(null)
   const [hunyuanJobId, setHunyuanJobId] = useState<string | null>(null)
   const [hunyuanMessage, setHunyuanMessage] = useState('')
   const [hunyuanGlb, setHunyuanGlb] = useState<string | null>(null)
@@ -142,17 +150,21 @@ export function CharacterCreatorPanel() {
         model_type: modelType,
         generation_mode: 'video',
         prompt: buildCharacterOrbitPrompt(kind, uploaded.map(ref => ({ role: ref.role })), resolvedAPrompt),
-        negative_prompt: 'motion blur, extra limbs, extra faces, readable text, watermark, floor line, backdrop shadows, music, speech, moving hair, moving cloth',
         resolution: CHARACTER_SHEET_RESOLUTION,
         video_length: CHARACTER_SHEET_FRAMES,
-        num_inference_steps: useTurbo ? 4 : CHARACTER_SHEET_STEPS,
+        // This is the isolated PoopMan333-compatible 6-panel recipe. Do not
+        // send the native H3 Turbo adapter here: it is a different LoRA and
+        // its low-step sampler produces the broken multi-shot result seen in
+        // the native runtime.
+        character_sheet_engine: 'poopman333_6_panel',
+        num_inference_steps: CHARACTER_SHEET_STEPS,
         guidance_scale: 1,
         seed: -1,
         workspace: activeWorkspace,
         h3_reference_mode: 'references',
         h3_ref_image_size: 'max',
         minimax_h3_reference_detail: 'max',
-        minimax_h3_turbo_mode: useTurbo,
+        minimax_h3_turbo_mode: false,
         image_refs: uploaded.map(ref => ref.path),
         minimax_h3_references: uploaded.map((ref, index) => ({
           id: ref.id,
@@ -174,7 +186,7 @@ export function CharacterCreatorPanel() {
     }
   }
 
-  const takePhotos = async (sourceName: string) => {
+  const takePhotos = useCallback(async (sourceName: string) => {
     setBusy(true)
     setError(null)
     try {
@@ -183,11 +195,13 @@ export function CharacterCreatorPanel() {
       const duration = typeof rawLength === 'number' && rawLength > 0
         ? rawLength / 24
         : CHARACTER_SHEET_FRAMES / 24
+      setVideoDuration(duration)
       const captured: CapturedView[] = []
       for (const view of CHARACTER_ORBIT_VIEWS) {
+        const time = Math.min(viewCaptureTime(view.frame), Math.max(0, duration - 0.04))
         const shot = await api.captureVideoEditorFrame({
           source: sourceName,
-          time: Math.min(viewCaptureTime(view.frame), Math.max(0, duration - 0.04)),
+          time,
           name: `${kind}_${view.id}`,
         })
         captured.push({
@@ -196,9 +210,37 @@ export function CharacterCreatorPanel() {
           label: kind === 'object' ? view.objectLabel : view.label,
           filename: shot.filename,
           url: shot.url || getFileUrl(shot.filename),
+          time,
         })
       }
       setViews(captured)
+      setSelectedViewId(captured[0]?.id || null)
+      setSelectedTime(captured[0]?.time || 0)
+      void loadOutputs()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setBusy(false)
+    }
+  }, [activeWorkspace, kind, loadOutputs])
+
+  const replaceSelectedView = async () => {
+    if (!videoName || !selectedViewId) return
+    const selected = views.find(view => view.id === selectedViewId)
+    if (!selected) return
+    setBusy(true)
+    setError(null)
+    try {
+      const time = Math.min(selectedTime, Math.max(0, videoDuration - 0.04))
+      const shot = await api.captureVideoEditorFrame({
+        source: videoName,
+        time,
+        name: `${kind}_${selected.id}_manual`,
+      })
+      setViews(current => current.map(view => view.id === selected.id
+        ? { ...view, filename: shot.filename, url: shot.url || getFileUrl(shot.filename), time }
+        : view,
+      ))
       void loadOutputs()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -206,6 +248,30 @@ export function CharacterCreatorPanel() {
       setBusy(false)
     }
   }
+
+  const restoredWorkspaceRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!outputFiles.length) return
+    if (restoredWorkspaceRef.current === activeWorkspace) return
+    restoredWorkspaceRef.current = activeWorkspace
+    let cancelled = false
+    const restoreLatestCharacterSheet = async () => {
+      try {
+        for (const output of outputFiles.filter(item => item.type === 'video').slice(0, 50)) {
+          const metadata = await api.fetchOutputMetadata(output.name, activeWorkspace).catch(() => null)
+          if (metadata?.params?.character_sheet_engine !== 'poopman333_6_panel') continue
+          if (cancelled) return
+          setVideoName(output.name)
+          await takePhotos(output.name)
+          return
+        }
+      } catch {
+        // Recovery is best effort; a fresh panel remains fully usable.
+      }
+    }
+    void restoreLatestCharacterSheet()
+    return () => { cancelled = true }
+  }, [activeWorkspace, outputFiles, takePhotos])
 
   useEffect(() => {
     if (!jobId) return
@@ -382,11 +448,9 @@ export function CharacterCreatorPanel() {
               )}
             </div>
 
-            <label className="flex items-center gap-2 text-[11px] text-text-secondary">
-              <input type="checkbox" checked={useTurbo} onChange={event => setUseTurbo(event.target.checked)} className="accent-violet-400" />
-              <Zap size={12} className={useTurbo ? 'text-violet-200' : 'text-text-muted'} />
-              Turbo LoRA (más rápido, menos fidelidad)
-            </label>
+            <p className="text-[10px] text-text-muted">
+              Motor Character Sheet ConvRot aislado · Turbo nativo desactivado para conservar la órbita de 6 paneles.
+            </p>
 
             <p className="text-[10px] text-text-muted">
               {modelType} · {CHARACTER_SHEET_RESOLUTION} 9:16 · {CHARACTER_SHEET_FRAMES} frames · grabs 2 / 21 / 42 / 63
@@ -411,7 +475,7 @@ export function CharacterCreatorPanel() {
           <div className="space-y-3">
             <div className="overflow-hidden rounded-xl border border-border bg-black">
               {videoName ? (
-                <video src={getFileUrl(videoName)} controls className="mx-auto aspect-[9/16] max-h-[420px] w-full object-contain" />
+                <video ref={videoPreviewRef} src={getFileUrl(videoName)} controls className="mx-auto aspect-[9/16] max-h-[420px] w-full object-contain" />
               ) : (
                 <div className="flex aspect-[9/16] max-h-[420px] flex-col items-center justify-center gap-2 text-text-muted">
                   <PersonStanding size={22} />
@@ -419,19 +483,57 @@ export function CharacterCreatorPanel() {
                 </div>
               )}
             </div>
+            {videoName && selectedViewId && (
+              <div className="rounded-xl border border-violet-400/30 bg-violet-500/5 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-medium text-text-primary">Ajustar captura: {views.find(view => view.id === selectedViewId)?.label || selectedViewId}</p>
+                    <p className="text-[10px] text-text-muted">Elige un instante del vídeo y sustituye solo esta vista.</p>
+                  </div>
+                  <span className="shrink-0 font-mono text-[11px] text-violet-200">{selectedTime.toFixed(2)}s</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={Math.max(0, videoDuration - 0.04)}
+                  step="0.04"
+                  value={Math.min(selectedTime, Math.max(0, videoDuration - 0.04))}
+                  onChange={event => {
+                    const time = Number(event.target.value)
+                    setSelectedTime(time)
+                    if (videoPreviewRef.current) videoPreviewRef.current.currentTime = time
+                  }}
+                  className="mt-3 w-full accent-violet-400"
+                  aria-label="Capture time"
+                />
+                <button type="button" className={button + ' mt-2 w-full'} disabled={busy} onClick={() => void replaceSelectedView()}>
+                  <Camera size={13} /> Take image y sustituir vista
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               {CHARACTER_ORBIT_VIEWS.map(view => {
                 const captured = views.find(item => item.id === view.id)
                 const label = kind === 'object' ? view.objectLabel : view.label
+                const selected = selectedViewId === view.id
                 return (
-                  <figure key={view.id} className="overflow-hidden rounded-lg border border-border bg-bg-secondary">
+                  <button
+                    key={view.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedViewId(view.id)
+                      if (captured) setSelectedTime(captured.time)
+                    }}
+                    className={`overflow-hidden rounded-lg border bg-bg-secondary text-left transition-colors ${selected ? 'border-violet-400 ring-1 ring-violet-400/50' : 'border-border hover:border-violet-400/50'}`}
+                    aria-label={`Seleccionar vista ${label}`}
+                  >
                     {captured ? (
                       <img src={captured.url} alt={label} className="aspect-[3/4] w-full object-cover" />
                     ) : (
                       <div className="flex aspect-[3/4] items-center justify-center text-[10px] text-text-muted">Sin foto</div>
                     )}
-                    <figcaption className="px-2 py-1 text-[10px] text-text-secondary">{label}</figcaption>
-                  </figure>
+                    <span className="block px-2 py-1 text-[10px] text-text-secondary">{label}{captured ? ` · ${captured.time.toFixed(2)}s` : ''}</span>
+                  </button>
                 )
               })}
             </div>

@@ -812,6 +812,29 @@ export async function saveScene(scene: import('../types').Scene, preview: string
   return res.json()
 }
 
+export async function saveSceneRecording(
+  recording: Blob,
+  details: {
+    scene: import('../types').Scene
+    prompt: string
+    recipe: Record<string, unknown> | null
+    workspace?: string
+  },
+): Promise<ApiOutput> {
+  const form = new FormData()
+  form.append('file', recording, `${details.scene.name || '3d-scene'}.webm`)
+  form.append('metadata', JSON.stringify(details))
+  const res = await fetch(`${BASE}/api/v1/scenes/recordings`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to save MP4 recording' }))
+    throw new Error(error.detail || 'Failed to save MP4 recording')
+  }
+  return res.json()
+}
+
 export function getFileUrl(filename: string, workspace?: string): string {
   const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
   return `${BASE}/api/v1/file/${encodeURIComponent(filename)}${query}`
