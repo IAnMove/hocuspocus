@@ -45,8 +45,19 @@ import {
   type EditorClip,
   type Transition,
 } from './editorClipNormalization'
-
-type InterstitialTransition = 'later-clock' | 'later-tropical' | 'later-cinematic'
+import {
+  clipIndexAtTime,
+  clipTimelineStart,
+  effectiveDuration,
+  formatPlayheadTime,
+  isInterstitialTransition,
+  parsePlayheadSeconds,
+  sequenceTotalDuration,
+  sourceTimeAtSequenceTime,
+  transitionDurationAfter,
+  transitionTimelineStart,
+  type InterstitialTransition,
+} from './editorTimeline'
 
 interface SequenceStyle {
   opacity: number
@@ -174,12 +185,6 @@ const TRANSITIONS: Array<{ value: Transition; label: string; description: string
   { value: 'later-cinematic', label: 'Momentos después · Cine', description: 'Inserts an elegant cinematic intertitle between the two clips.' },
 ]
 
-const INTERSTITIAL_TRANSITIONS = new Set<Transition>([
-  'later-clock',
-  'later-tropical',
-  'later-cinematic',
-])
-
 const DEFAULT_SEQUENCE_STYLE: SequenceStyle = {
   opacity: 1,
   clipPath: 'inset(0 0 0 0)',
@@ -189,10 +194,6 @@ const DEFAULT_SEQUENCE_STYLE: SequenceStyle = {
 
 function sequenceStyle(patch: Partial<SequenceStyle> = {}): SequenceStyle {
   return { ...DEFAULT_SEQUENCE_STYLE, ...patch }
-}
-
-function isInterstitialTransition(value: Transition): value is InterstitialTransition {
-  return INTERSTITIAL_TRANSITIONS.has(value)
 }
 
 function FittedCardText({
@@ -372,10 +373,89 @@ function clipId(): string {
 }
 
 function formatTime(value: number): string {
-  if (!Number.isFinite(value)) return '0:00.0'
-  const minutes = Math.floor(value / 60)
-  const seconds = value - minutes * 60
-  return `${minutes}:${seconds.toFixed(1).padStart(4, '0')}`
+  return formatPlayheadTime(value)
+}
+
+function SequenceScrubber({
+  duration,
+  time,
+  disabled,
+  onScrub,
+}: {
+  duration: number
+  time: number
+  disabled?: boolean
+  onScrub: (nextTime: number, phase: 'start' | 'move' | 'end') => void
+}) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const draggingRef = useRef(false)
+  const ratio = duration > 0 ? Math.max(0, Math.min(1, time / duration)) : 0
+
+  const timeAt = (clientX: number) => {
+    const track = trackRef.current
+    if (!track || duration <= 0) return 0
+    const rect = track.getBoundingClientRect()
+    return Math.max(0, Math.min(duration, ((clientX - rect.left) / Math.max(1, rect.width)) * duration))
+  }
+
+  return (
+    <div
+      ref={trackRef}
+      role="slider"
+      tabIndex={disabled ? -1 : 0}
+      aria-label="Timeline playhead"
+      aria-valuemin={0}
+      aria-valuemax={Number(duration.toFixed(2))}
+      aria-valuenow={Number(Math.min(duration, Math.max(0, time)).toFixed(2))}
+      aria-valuetext={`${time.toFixed(2)} seconds`}
+      aria-disabled={disabled || undefined}
+      data-testid="timeline-playhead"
+      className="relative h-7 min-w-0 flex-1 cursor-pointer rounded-full bg-black/50 touch-none focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+      onPointerDown={event => {
+        if (disabled) return
+        event.preventDefault()
+        draggingRef.current = true
+        event.currentTarget.setPointerCapture(event.pointerId)
+        onScrub(timeAt(event.clientX), 'start')
+      }}
+      onPointerMove={event => {
+        if (!draggingRef.current || disabled) return
+        onScrub(timeAt(event.clientX), 'move')
+      }}
+      onPointerUp={event => {
+        if (!draggingRef.current) return
+        draggingRef.current = false
+        onScrub(timeAt(event.clientX), 'end')
+      }}
+      onPointerCancel={() => { draggingRef.current = false }}
+      onKeyDown={event => {
+        if (disabled) return
+        const step = event.shiftKey ? 1 : event.altKey ? 0.01 : 0.1
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+          event.preventDefault()
+          onScrub(Math.max(0, time - step), 'end')
+        } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+          event.preventDefault()
+          onScrub(Math.min(duration, time + step), 'end')
+        } else if (event.key === 'Home') {
+          event.preventDefault()
+          onScrub(0, 'end')
+        } else if (event.key === 'End') {
+          event.preventDefault()
+          onScrub(duration, 'end')
+        }
+      }}
+    >
+      <div
+        className="absolute inset-y-0 left-0 rounded-full bg-sky-400/35"
+        style={{ width: `${ratio * 100}%` }}
+      />
+      <div
+        className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-400 shadow"
+        style={{ left: `${ratio * 100}%` }}
+      />
+    </div>
+  )
 }
 
 const MIN_TRIM_DURATION = 0.05
@@ -593,34 +673,6 @@ function ExportPreviewCanvas({
   )
 }
 
-function effectiveDuration(clip: EditorClip): number {
-  return Math.max(0, clip.trimEnd - clip.trimStart)
-}
-
-function transitionDurationAfter(clips: EditorClip[], index: number): number {
-  const current = clips[index]
-  const next = clips[index + 1]
-  if (!current || !next || current.transition === 'none') return 0
-  if (isInterstitialTransition(current.transition)) {
-    return Math.max(0.5, Math.min(current.transitionDuration, 5))
-  }
-  return Math.max(
-    0.05,
-    Math.min(current.transitionDuration, effectiveDuration(current) * 0.45, effectiveDuration(next) * 0.45),
-  )
-}
-
-function clipTimelineStart(clips: EditorClip[], index: number): number {
-  let start = 0
-  for (let cursor = 0; cursor < index; cursor++) {
-    const transitionDuration = transitionDurationAfter(clips, cursor)
-    start += effectiveDuration(clips[cursor]) + (
-      isInterstitialTransition(clips[cursor].transition) ? transitionDuration : -transitionDuration
-    )
-  }
-  return start
-}
-
 function wait(ms: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
@@ -691,6 +743,9 @@ export function VideoEditorPanel() {
   })
   const sequencePlayingRef = useRef(false)
   const sequenceSlotSeekRef = useRef<Array<number | null>>([null, null])
+  const scrubbingRef = useRef(false)
+  const pendingSeekRef = useRef<number | null>(null)
+  const pendingSeekAtRef = useRef(0)
   const mountedRef = useRef(true)
   const exportPollingRef = useRef<string | null>(null)
   const exportPollEpochRef = useRef(0)
@@ -712,6 +767,7 @@ export function VideoEditorPanel() {
   const [playing, setPlaying] = useState(false)
   const [sequenceMode, setSequenceMode] = useState(false)
   const [sequenceTime, setSequenceTime] = useState(0)
+  const [playheadDraft, setPlayheadDraft] = useState<string | null>(null)
   const [sequenceSlotIndices, setSequenceSlotIndices] = useState<Array<number | null>>([null, null])
   const [sequenceStyles, setSequenceStyles] = useState([
     sequenceStyle(),
@@ -741,17 +797,12 @@ export function VideoEditorPanel() {
 
   const selected = clips.find(clip => clip.id === selectedId) || clips[0] || null
   const selectedIndex = selected ? clips.findIndex(clip => clip.id === selected.id) : -1
-  const totalDuration = useMemo(() => {
-    const raw = clips.reduce((total, clip) => total + effectiveDuration(clip), 0)
-    const transitionDelta = clips.reduce(
-      (total, clip, index) => {
-        const duration = transitionDurationAfter(clips, index)
-        return total + (isInterstitialTransition(clip.transition) ? duration : -duration)
-      },
-      0,
-    )
-    return Math.max(0, raw + transitionDelta)
-  }, [clips])
+  const totalDuration = useMemo(() => sequenceTotalDuration(clips), [clips])
+  const playheadSeconds = sequenceMode
+    ? sequenceTime
+    : selected && selectedIndex >= 0
+      ? clipTimelineStart(clips, selectedIndex) + Math.max(0, previewTime - selected.trimStart)
+      : 0
 
   useEffect(() => {
     mountedRef.current = true
@@ -1198,26 +1249,12 @@ export function VideoEditorPanel() {
     setError(null)
   }
 
-  const seekSelectedClip = (value: number) => {
-    if (!selected) return
-    const time = Math.max(selected.trimStart, Math.min(selected.trimEnd - 0.01, value))
-    if (videoRef.current) videoRef.current.currentTime = time
-    setPreviewTime(time)
-    setPlaying(false)
-  }
-
   const splitSelected = () => {
     if (!clips.length) return
     let target = selected
     let cut = videoRef.current?.currentTime ?? previewTime
     if (sequenceMode) {
-      let clipIndex = 0
-      for (let index = clips.length - 1; index >= 0; index--) {
-        if (sequenceTime >= clipTimelineStart(clips, index)) {
-          clipIndex = index
-          break
-        }
-      }
+      const clipIndex = clipIndexAtTime(clips, sequenceTime)
       const start = clipTimelineStart(clips, clipIndex)
       const local = Math.max(0, sequenceTime - start)
       target = clips[clipIndex]
@@ -1342,6 +1379,15 @@ export function VideoEditorPanel() {
 
   const startSequenceAt = (clipIndex: number, sourceTime?: number, autoplay = true) => {
     if (!clips[clipIndex]) return
+    const clip = clips[clipIndex]
+    const seekTo = sourceTime ?? clip.trimStart
+    const previous = sequenceRuntimeRef.current
+    const keepMounted = (
+      sequenceMode
+      && previous.clipIndex === clipIndex
+      && previous.activeSlot === 0
+      && sequenceSlotIndices[0] === clipIndex
+    )
     sequencePlayingRef.current = autoplay
     videoRef.current?.pause()
     const nextIndex = clipIndex + 1 < clips.length ? clipIndex + 1 : null
@@ -1355,7 +1401,7 @@ export function VideoEditorPanel() {
       ended: false,
     }
     sequenceSlotSeekRef.current = [
-      sourceTime ?? clips[clipIndex].trimStart,
+      seekTo,
       nextIndex !== null ? clips[nextIndex].trimStart : null,
     ]
     setPlaying(autoplay)
@@ -1366,62 +1412,135 @@ export function VideoEditorPanel() {
       sequenceStyle({ opacity: 0 }),
     ])
     setSequenceInterstitial(null)
-    setSelectedId(clips[clipIndex].id)
+    setSelectedId(clip.id)
     setSelectedTransitionIndex(null)
-    const local = (sourceTime ?? clips[clipIndex].trimStart) - clips[clipIndex].trimStart
-    setSequenceTime(clipTimelineStart(clips, clipIndex) + Math.max(0, local))
+    const clock = clipTimelineStart(clips, clipIndex) + Math.max(0, seekTo - clip.trimStart)
+    pendingSeekRef.current = clock
+    pendingSeekAtRef.current = performance.now()
+    setSequenceTime(clock)
+    if (!keepMounted) return
+    const video = sequenceRefs.current[0]
+    if (!video) return
+    video.currentTime = seekTo
+    if (autoplay) void video.play().catch(() => undefined)
+    else video.pause()
   }
 
-  const seekSequence = (value: number) => {
+  const seekSequence = (value: number, autoplay?: boolean) => {
     if (!clips.length) return
     const clamped = Math.max(0, Math.min(totalDuration, value))
-    let clipIndex = 0
-    for (let index = clips.length - 1; index >= 0; index--) {
-      if (clamped >= clipTimelineStart(clips, index)) {
-        clipIndex = index
-        break
-      }
-    }
-    const cardStart = clipTimelineStart(clips, clipIndex) + effectiveDuration(clips[clipIndex])
-    if (
-      isInterstitialTransition(clips[clipIndex].transition)
-      && clips[clipIndex + 1]
-      && clamped >= cardStart
-    ) {
-      const autoplay = sequencePlayingRef.current
-      startSequenceAt(clipIndex, clips[clipIndex].trimEnd - 0.01, autoplay)
-      const runtime = sequenceRuntimeRef.current
-      runtime.interstitial = true
-      runtime.interstitialElapsed = Math.min(
-        transitionDurationAfter(clips, clipIndex),
-        Math.max(0, clamped - cardStart),
+    const play = autoplay ?? sequencePlayingRef.current
+    const located = sourceTimeAtSequenceTime(clips, clamped)
+    const clip = clips[located.clipIndex]
+    if (!clip) return
+    pendingSeekRef.current = clamped
+    pendingSeekAtRef.current = performance.now()
+    setSequenceTime(clamped)
+
+    if (located.interstitial) {
+      const alreadyThere = (
+        sequenceMode
+        && sequenceRuntimeRef.current.clipIndex === located.clipIndex
+        && sequenceRuntimeRef.current.interstitial
       )
-      runtime.interstitialLastFrame = autoplay ? performance.now() : null
+      if (!alreadyThere) startSequenceAt(located.clipIndex, clip.trimEnd - 0.01, false)
+      const runtime = sequenceRuntimeRef.current
+      const duration = transitionDurationAfter(clips, located.clipIndex)
+      sequencePlayingRef.current = play
+      setPlaying(play)
+      runtime.interstitial = true
+      runtime.transitioning = false
+      runtime.ended = false
+      runtime.interstitialElapsed = located.interstitialElapsed
+      runtime.interstitialLastFrame = play ? performance.now() : null
+      sequenceRefs.current[0]?.pause()
+      sequenceRefs.current[1]?.pause()
       setSequenceInterstitial({
-        transition: clips[clipIndex].transition as InterstitialTransition,
-        text: clips[clipIndex].transitionText,
-        textSize: clips[clipIndex].transitionTextSize,
-        progress: runtime.interstitialElapsed / transitionDurationAfter(clips, clipIndex),
+        transition: clip.transition as InterstitialTransition,
+        text: clip.transitionText,
+        textSize: clip.transitionTextSize,
+        progress: duration > 0 ? located.interstitialElapsed / duration : 1,
       })
       setSequenceTime(clamped)
       return
     }
-    const local = clamped - clipTimelineStart(clips, clipIndex)
-    const sourceTime = Math.min(
-      clips[clipIndex].trimEnd - 0.01,
-      clips[clipIndex].trimStart + Math.max(0, local),
+
+    const runtime = sequenceRuntimeRef.current
+    const overlap = transitionDurationAfter(clips, located.clipIndex)
+    const start = clipTimelineStart(clips, located.clipIndex)
+    const inOverlap = (
+      !isInterstitialTransition(clip.transition)
+      && overlap > 0
+      && clamped >= start + effectiveDuration(clip) - overlap
     )
-    startSequenceAt(clipIndex, sourceTime, sequencePlayingRef.current)
+    const sameClip = (
+      sequenceMode
+      && runtime.clipIndex === located.clipIndex
+      && !runtime.ended
+      && !runtime.interstitial
+      && !runtime.transitioning
+      && !inOverlap
+    )
+    if (sameClip) {
+      sequencePlayingRef.current = play
+      setPlaying(play)
+      runtime.ended = false
+      const active = sequenceRefs.current[runtime.activeSlot]
+      sequenceSlotSeekRef.current[runtime.activeSlot] = located.sourceTime
+      if (active) {
+        if (Math.abs(active.currentTime - located.sourceTime) <= 0.005) {
+          pendingSeekRef.current = null
+          pendingSeekAtRef.current = 0
+        }
+        active.currentTime = located.sourceTime
+        if (play) void active.play().catch(() => setError('The browser could not start timeline playback.'))
+        else active.pause()
+      }
+      setSelectedId(clip.id)
+      return
+    }
+    startSequenceAt(located.clipIndex, located.sourceTime, play)
+    pendingSeekRef.current = clamped
+    pendingSeekAtRef.current = performance.now()
     setSequenceTime(clamped)
+  }
+
+  const playbackStartForSelection = () => {
+    if (selectedTransitionIndex !== null && clips[selectedTransitionIndex] && clips[selectedTransitionIndex + 1]) {
+      return transitionTimelineStart(clips, selectedTransitionIndex)
+    }
+    if (selectedIndex >= 0) return clipTimelineStart(clips, selectedIndex)
+    return 0
   }
 
   const togglePlayback = () => {
     if (!clips.length) return
-    if (!sequenceMode || sequenceTime >= totalDuration - 0.03) {
-      startSequenceAt(0)
+    if (sequencePlayingRef.current) {
+      setSequencePlaying(false)
       return
     }
-    setSequencePlaying(!sequencePlayingRef.current)
+    if (sequenceMode && sequenceTime < totalDuration - 0.03) {
+      setSequencePlaying(true)
+      return
+    }
+    seekSequence(playbackStartForSelection(), true)
+  }
+
+  const selectTimelineClip = (index: number) => {
+    if (!clips[index] || trimmingRef.current) return
+    setSequencePlaying(false)
+    setSelectedTransitionIndex(null)
+    setPlayheadDraft(null)
+    seekSequence(clipTimelineStart(clips, index), false)
+    setSelectedId(clips[index].id)
+  }
+
+  const selectTimelineTransition = (index: number) => {
+    if (!clips[index] || !clips[index + 1]) return
+    setSequencePlaying(false)
+    setPlayheadDraft(null)
+    seekSequence(transitionTimelineStart(clips, index), false)
+    setSelectedTransitionIndex(index)
   }
 
   const handleSequenceLoaded = (
@@ -1499,6 +1618,29 @@ export function VideoEditorPanel() {
     const renderFrame = () => {
       const runtime = sequenceRuntimeRef.current
       if (runtime.ended) return
+      if (scrubbingRef.current) {
+        if (pendingSeekRef.current !== null) setSequenceTime(pendingSeekRef.current)
+        sequenceFrameRef.current = requestAnimationFrame(renderFrame)
+        return
+      }
+      if (pendingSeekRef.current !== null) {
+        const target = sourceTimeAtSequenceTime(clips, pendingSeekRef.current)
+        const activeVideo = sequenceRefs.current[runtime.activeSlot]
+        const arrived = Boolean(
+          activeVideo
+          && !target.interstitial
+          && Math.abs(activeVideo.currentTime - target.sourceTime) <= 0.08
+        )
+        const stale = pendingSeekAtRef.current > 0 && performance.now() - pendingSeekAtRef.current > 400
+        if (arrived || stale) {
+          pendingSeekRef.current = null
+          pendingSeekAtRef.current = 0
+        } else {
+          setSequenceTime(pendingSeekRef.current)
+          sequenceFrameRef.current = requestAnimationFrame(renderFrame)
+          return
+        }
+      }
       const currentClip = clips[runtime.clipIndex]
       const activeVideo = sequenceRefs.current[runtime.activeSlot]
       if (!currentClip || !activeVideo) {
@@ -1972,6 +2114,10 @@ export function VideoEditorPanel() {
                       playsInline
                       preload="auto"
                       onLoadedMetadata={event => handleSequenceLoaded(slot as 0 | 1, clipIndex, event.currentTarget)}
+                      onSeeked={() => {
+                        pendingSeekRef.current = null
+                        pendingSeekAtRef.current = 0
+                      }}
                     />
                   )
                 })}
@@ -2037,7 +2183,8 @@ export function VideoEditorPanel() {
                 onClick={togglePlayback}
                 disabled={!clips.length}
                 className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-40"
-                title="Play the complete timeline from beginning to end"
+                aria-label={playing ? 'Pause' : 'Play'}
+                title="Play from the selected clip, transition, or playhead"
               >
                 {playing ? <Pause size={15} /> : <Play size={15} />}
               </button>
@@ -2049,26 +2196,47 @@ export function VideoEditorPanel() {
               >
                 <RotateCcw size={13} />
               </button>
-              <span className="text-[10px] text-text-muted tabular-nums w-[98px]">
-                {formatTime(sequenceMode ? sequenceTime : previewTime)} / {formatTime(sequenceMode || !selected ? totalDuration : selected.trimEnd)}
+              <span className="text-[10px] text-text-muted tabular-nums">
+                {formatPlayheadTime(playheadSeconds)} / {formatPlayheadTime(totalDuration)}
               </span>
-              <label className="flex min-w-0 flex-1 items-center">
+              <SequenceScrubber
+                duration={totalDuration}
+                time={Math.min(totalDuration, playheadSeconds)}
+                disabled={!clips.length}
+                onScrub={(next, phase) => {
+                  scrubbingRef.current = phase !== 'end'
+                  setPlayheadDraft(null)
+                  setSequencePlaying(false)
+                  seekSequence(next, false)
+                  if (phase === 'end') pendingSeekAtRef.current = performance.now()
+                }}
+              />
+              <label className="flex items-center gap-1 text-[10px] text-text-muted">
+                s
                 <input
-                  type="range"
-                  min={sequenceMode || !selected ? 0 : selected.trimStart}
-                  max={sequenceMode || !selected ? (totalDuration || 1) : Math.max(selected.trimStart + 0.05, selected.trimEnd)}
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={Number(totalDuration.toFixed(2))}
                   step={0.01}
-                  value={sequenceMode || !selected
-                    ? Math.min(totalDuration, sequenceTime)
-                    : Math.min(selected.trimEnd, Math.max(selected.trimStart, previewTime))}
-                  onChange={event => {
-                    const next = Number(event.target.value)
-                    if (sequenceMode || !selected) seekSequence(next)
-                    else seekSelectedClip(next)
-                  }}
+                  aria-label="Playhead seconds"
+                  data-testid="playhead-seconds"
                   disabled={!clips.length}
-                  aria-label="Timeline playhead"
-                  className="h-6 w-full cursor-pointer appearance-none bg-transparent accent-sky-400 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-track]:h-3 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-black/50 [&::-webkit-slider-runnable-track]:h-3 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-black/50 [&::-webkit-slider-thumb]:mt-[-4px] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-sky-400"
+                  value={playheadDraft ?? playheadSeconds.toFixed(2)}
+                  onChange={event => setPlayheadDraft(event.target.value)}
+                  onBlur={() => {
+                    if (playheadDraft === null) return
+                    const parsed = parsePlayheadSeconds(playheadDraft)
+                    setPlayheadDraft(null)
+                    if (parsed === null) return
+                    setSequencePlaying(false)
+                    seekSequence(parsed, false)
+                  }}
+                  onKeyDown={event => {
+                    if (event.key !== 'Enter') return
+                    event.currentTarget.blur()
+                  }}
+                  className="w-[4.6rem] rounded border border-border bg-bg-secondary px-1.5 py-1 text-[11px] tabular-nums text-text-primary"
                 />
               </label>
               <button
@@ -2609,11 +2777,9 @@ export function VideoEditorPanel() {
                         }}
                         onClick={() => {
                           if (trimmingRef.current) return
-                          setSequencePlaying(false)
-                          setSequenceMode(false)
-                          setSelectedTransitionIndex(null)
-                          setSelectedId(clip.id)
+                          selectTimelineClip(index)
                         }}
+                        aria-label={`Select clip ${index + 1}: ${clip.name}`}
                         className={`relative h-full w-full overflow-hidden rounded-lg border text-left transition-colors ${
                           selected?.id === clip.id && selectedTransitionIndex === null
                             ? 'border-accent-blue ring-1 ring-accent-blue/50'
@@ -2683,10 +2849,9 @@ export function VideoEditorPanel() {
                           dropAtIndex(index + 1, event.dataTransfer.getData('text/x-maestro-video-clip'))
                         }}
                         onClick={() => {
-                          setSequencePlaying(false)
-                          setSequenceMode(false)
-                          setSelectedTransitionIndex(index)
+                          selectTimelineTransition(index)
                         }}
+                        aria-label={`Select transition ${index + 1}`}
                         className={`w-14 shrink-0 rounded-lg border flex flex-col items-center justify-center gap-1 transition-colors ${
                           selectedTransitionIndex === index
                             ? 'border-purple-400 bg-purple-500/15 text-purple-300'

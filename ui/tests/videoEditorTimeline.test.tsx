@@ -9,6 +9,8 @@ function installDom() {
     observe() {}
     disconnect() {}
   }
+  const raf = () => 1
+  const caf = () => {}
   Object.assign(globalThis, {
     window: dom.window,
     document: dom.window.document,
@@ -20,6 +22,20 @@ function installDom() {
     Event: dom.window.Event,
     MutationObserver: dom.window.MutationObserver,
     ResizeObserver: ResizeObserverStub,
+    requestAnimationFrame: raf,
+    cancelAnimationFrame: caf,
+  })
+  Object.assign(dom.window, {
+    requestAnimationFrame: raf,
+    cancelAnimationFrame: caf,
+  })
+  Object.defineProperty(dom.window.HTMLMediaElement.prototype, 'play', {
+    configurable: true,
+    value: () => Promise.resolve(),
+  })
+  Object.defineProperty(dom.window.HTMLMediaElement.prototype, 'pause', {
+    configurable: true,
+    value() {},
   })
   Object.defineProperty(dom.window, 'ResizeObserver', { configurable: true, value: ResizeObserverStub })
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
@@ -57,6 +73,52 @@ test('Video Editor can apply one transition to every gap', { concurrency: false 
   fireEvent.change(screen.getByLabelText('Default transition for all gaps'), { target: { value: 'crossfade' } })
   fireEvent.click(screen.getByRole('button', { name: 'Apply to all' }))
   assert.match(screen.getByTitle(/Transition: Crossfade/).textContent || '', /Crossfade/)
+  view.unmount()
+  cleanup()
+})
+
+function renderDraft() {
+  window.localStorage.clear()
+  window.localStorage.setItem('maestro-video-editor-draft-v1', JSON.stringify({
+    projectName: 'Playhead', resolution: { label: 'Landscape 480p', width: 864, height: 480 }, fps: 30,
+    clips: twoClips(),
+  }))
+}
+
+test('clicking a clip parks the playhead at that clip start', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
+  renderDraft()
+  const view = render(<VideoEditorPanel />)
+  fireEvent.click(screen.getByRole('button', { name: 'Select clip 2: Second' }))
+  assert.equal((screen.getByLabelText('Playhead seconds') as HTMLInputElement).value, '8.00')
+  fireEvent.click(screen.getByRole('button', { name: 'Play' }))
+  assert.ok(screen.getByRole('button', { name: 'Pause' }))
+  view.unmount()
+  cleanup()
+})
+
+test('clicking a transition parks the playhead at the join', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
+  renderDraft()
+  const view = render(<VideoEditorPanel />)
+  fireEvent.click(screen.getByRole('button', { name: 'Select transition 1' }))
+  assert.equal((screen.getByLabelText('Playhead seconds') as HTMLInputElement).value, '8.00')
+  view.unmount()
+  cleanup()
+})
+
+test('playhead seconds input seeks to an exact time', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
+  renderDraft()
+  const view = render(<VideoEditorPanel />)
+  const seconds = screen.getByLabelText('Playhead seconds') as HTMLInputElement
+  fireEvent.change(seconds, { target: { value: '3.25' } })
+  fireEvent.blur(seconds)
+  assert.equal((screen.getByLabelText('Playhead seconds') as HTMLInputElement).value, '3.25')
+  assert.equal(screen.getByTestId('timeline-playhead').getAttribute('aria-valuenow'), '3.25')
   view.unmount()
   cleanup()
 })
