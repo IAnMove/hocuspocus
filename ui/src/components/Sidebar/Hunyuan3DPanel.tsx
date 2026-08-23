@@ -62,9 +62,7 @@ function ViewUpload({ view, value, busy, required, onUpload, onRemove }: {
 }
 
 export function Hunyuan3DPanel() {
-  const loadOutputs = useStore(state => state.loadOutputs)
   const activeWorkspace = useStore(state => state.activeWorkspace)
-  const setMediaFilter = useStore(state => state.setMediaFilter)
   const enabledModels = useStore(state => state.enabledModels)
   const toggleModelEnabled = useStore(state => state.toggleModelEnabled)
   const modelId = useStore(state => state.params.model_type)
@@ -240,12 +238,11 @@ export function Hunyuan3DPanel() {
   useEffect(() => {
     if (job?.status === 'completed' && completedJobRef.current !== job.job_id) {
       completedJobRef.current = job.job_id
-      void loadOutputs()
+      void useStore.getState().maybeRefreshGallery({ message: '3D model ready' })
       if (job.operation === 'retexture') void loadRetextureSources()
-      setMediaFilter('model3d')
     }
     if (job?.status === 'failed') setError(job.error || job.message)
-  }, [job, loadOutputs, loadRetextureSources, setMediaFilter])
+  }, [job, loadRetextureSources])
 
   const run = async () => {
     setError(null)

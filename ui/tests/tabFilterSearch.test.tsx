@@ -37,6 +37,20 @@ function installDom() {
 
 installDom()
 
+test('video result filters are listed beside Videos', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  try {
+    render(<TabFilter />)
+    assert.ok(screen.getByRole('tab', { name: /Videoclips/i }))
+    assert.ok(screen.getByRole('tab', { name: /Tráilers/i }))
+    assert.ok(screen.getByRole('tab', { name: /Capítulos/i }))
+    assert.ok(screen.getByRole('tab', { name: /Auditoría interna dev/i }))
+  } finally {
+    cleanup()
+  }
+})
+
 test('closing or unmounting search cancels its hidden debounce', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')

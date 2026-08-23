@@ -78,9 +78,7 @@ function RigAnimationPreview({ animation, selected, recommended, onSelect }: { a
  *  3D output. Complements the 3D tab (which creates static meshes) and the
  *  scene animator (which moves the camera, not the mesh). */
 export function RigAnimatePanel() {
-  const loadOutputs = useStore(state => state.loadOutputs)
   const activeWorkspace = useStore(state => state.activeWorkspace)
-  const setMediaFilter = useStore(state => state.setMediaFilter)
   const [sources, setSources] = useState<RigSource[]>([])
   const [sourcesLoading, setSourcesLoading] = useState(true)
   const [capabilities, setCapabilities] = useState<RigCapabilities | null>(null)
@@ -181,12 +179,11 @@ export function RigAnimatePanel() {
 
   useEffect(() => {
     if (job?.status === 'completed') {
-      void loadOutputs()
+      void useStore.getState().maybeRefreshGallery({ message: 'Rigged model ready' })
       void loadSources()
-      setMediaFilter('model3d')
     }
     if (job?.status === 'failed') setError(job.error || job.message)
-  }, [job?.status, job?.error, job?.message, loadOutputs, loadSources, setMediaFilter])
+  }, [job?.status, job?.error, job?.message, loadSources])
 
   const toggleClip = (id: string) => {
     setSelectedClips(current => {

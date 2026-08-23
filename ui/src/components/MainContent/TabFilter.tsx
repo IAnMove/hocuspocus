@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Heart, Film, Search, X, Box, PersonStanding, BookOpen, Library, Palette, Layers } from 'lucide-react'
+import { Heart, Film, Search, X, Box, PersonStanding, BookOpen, Library, Palette, Layers, ShieldAlert } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import type { MediaFilter } from '../../types'
 import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
@@ -8,6 +8,9 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
   { value: 'all', label: 'All', shortLabel: 'All' },
   { value: 'images', label: 'Images', shortLabel: 'Img' },
   { value: 'videos', label: 'Videos', shortLabel: 'Vid' },
+  { value: 'videoclips', label: 'Videoclips', shortLabel: 'Clip' },
+  { value: 'trailers', label: 'Tráilers', shortLabel: 'Trail' },
+  { value: 'series_episodes', label: 'Capítulos', shortLabel: 'Cap' },
   { value: 'audio', label: 'Audio', shortLabel: 'Aud' },
   { value: 'model3d', label: '3D', shortLabel: '3D', icon: 'box' },
   { value: 'scenes', label: 'Scenes', shortLabel: 'Scn', icon: 'film' },
@@ -22,6 +25,7 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
   { value: 'animate3d', label: 'Animate', shortLabel: 'Anim', icon: 'person' },
   { value: 'avatars', label: 'Edits', shortLabel: 'Edit' },
   { value: 'multiclip', label: 'Multi-clip', shortLabel: 'MC', icon: 'film' },
+  { value: 'auditdev', label: 'Auditoría interna dev', shortLabel: 'Audit', icon: 'shield' },
   { value: 'favorites', label: 'Favorites', shortLabel: '', icon: 'heart' },
 ]
 
@@ -89,7 +93,8 @@ export function TabFilter() {
             className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-xs font-medium transition-all flex items-center gap-1 whitespace-nowrap shrink-0 ${
               mediaFilter === tab.value
                 ? tab.value === 'favorites' ? 'bg-red-500/20 text-chip-red'
-                : tab.value === 'multiclip' ? 'bg-purple-500/20 text-chip-purple'
+                : tab.value === 'multiclip' || tab.value === 'videoclips' || tab.value === 'trailers' || tab.value === 'series_episodes' ? 'bg-purple-500/20 text-chip-purple'
+                : tab.value === 'auditdev' ? 'bg-amber-500/20 text-amber-200'
                 : 'bg-bg-active text-text-primary'
                 : 'text-text-muted hover:text-text-secondary'
             }`}
@@ -102,6 +107,7 @@ export function TabFilter() {
             {tab.icon === 'library' && <Library size={11} />}
             {tab.icon === 'palette' && <Palette size={11} />}
             {tab.icon === 'layers' && <Layers size={11} />}
+            {tab.icon === 'shield' && <ShieldAlert size={11} />}
             <span className="hidden md:inline">{tab.label}</span>
             <span className="md:hidden">{tab.shortLabel}</span>
           </button>

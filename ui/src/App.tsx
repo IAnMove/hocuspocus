@@ -10,6 +10,7 @@ import { OomRecoveryBanner } from './components/OomRecoveryBanner'
 import { DownloadStatusBanner } from './components/DownloadStatusBanner'
 import { PreflightBanner } from './components/PreflightBanner'
 import { ActivityFooter } from './components/ActivityFooter'
+import { GalleryReadyToast } from './components/MainContent/GalleryReadyToast'
 import { WelcomeModal } from './components/WelcomeModal'
 import { QueueRecoveryDialog } from './components/QueueRecoveryDialog'
 import { RecipesOverlay } from './components/Recipes/RecipesOverlay'
@@ -34,7 +35,7 @@ export function LazyDirectorOverlay({ open }: { open: boolean }) {
 function AppContent() {
   const loadModels = useStore(s => s.loadModels)
   const loadOutputs = useStore(s => s.loadOutputs)
-  const refreshOutputs = useStore(s => s.refreshOutputs)
+  const maybeRefreshGallery = useStore(s => s.maybeRefreshGallery)
   const loadWorkspaces = useStore(s => s.loadWorkspaces)
   const reconnectJobs = useStore(s => s.reconnectJobs)
   const reconnectDirectorPipelines = useStore(s => s.reconnectDirectorPipelines)
@@ -77,7 +78,7 @@ function AppContent() {
       if (document.hidden || inFlight) return
       inFlight = true
       try {
-        await refreshOutputs()
+        await maybeRefreshGallery()
       } finally {
         inFlight = false
       }
@@ -91,7 +92,7 @@ function AppContent() {
       window.removeEventListener('focus', onVisible)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [refreshOutputs])
+  }, [maybeRefreshGallery])
 
   // Pinokio popup tabs can outlive the backend process. Reload once when the
   // server instance or the served React build changes so an old bundle cannot
@@ -170,6 +171,7 @@ function AppContent() {
         <Sidebar />
         <MainContent />
       </div>
+      <GalleryReadyToast />
       <ActivityFooter />
       <SettingsDrawer />
       <LoraBrowser />

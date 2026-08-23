@@ -17,6 +17,7 @@ import {
   isJoinedSequenceOutput,
   splitStudioClipPrompts,
 } from '../features/studio/studioRestore'
+import { GALLERY_LIST_FILTERS, galleryListQuery } from '../lib/galleryListQuery'
 
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
@@ -1695,8 +1696,14 @@ interface AppState {
   setSelectedOutput: (i: number) => void
   mediaFilter: MediaFilter
   outputSearchQuery: string
+  galleryFeedAtTop: boolean
+  galleryRefreshPending: boolean
+  galleryToast: { id: number; message: string } | null
   setMediaFilter: (f: MediaFilter) => void
   setOutputSearchQuery: (q: string) => void
+  setGalleryFeedAtTop: (atTop: boolean) => void
+  clearGalleryToast: () => void
+  maybeRefreshGallery: (opts?: { message?: string; force?: boolean }) => Promise<void>
   filteredOutputs: () => OutputFile[]
   outputsLoading: boolean
   loadOutputs: () => Promise<void>
@@ -2226,8 +2233,13 @@ function computeFilteredOutputs(outputs: OutputFile[], mediaFilter: MediaFilter)
     // for any legacy outputs that predate the edit_sub_mode tagging.
     _foCachedResult = outputs.filter(o => !!o.edit_sub_mode || o.mode === 'avatar')
   } else if (mediaFilter === 'multiclip') {
-    // Backend already filters to multiclip + sliding window finals — pass through
-    _foCachedResult = outputs
+    _foCachedResult = outputs.filter(o => o.type === 'video' && /multiclip|_mv\.mp4|_series_assembly|_movie\./i.test(o.name))
+  } else if (mediaFilter === 'videoclips') {
+    _foCachedResult = outputs.filter(o => o.type === 'video' && o.result_kind === 'music_video')
+  } else if (mediaFilter === 'trailers') {
+    _foCachedResult = outputs.filter(o => o.type === 'video' && o.result_kind === 'trailer')
+  } else if (mediaFilter === 'series_episodes') {
+    _foCachedResult = outputs.filter(o => o.type === 'video' && (o.result_kind === 'series_episode' || o.result_kind === 'chapter'))
   } else if (mediaFilter === 'favorites') {
     _foCachedResult = outputs.filter(o => o.favorite)
   } else {
@@ -3080,7 +3092,7 @@ export const useStore = create<AppState>((set, get) => ({
                 ? { ...entry, repair_status: repair?.status || null }
                 : entry),
           }))
-          void get().loadOutputs()
+          void get().maybeRefreshGallery()
         }).catch(e => {
           console.warn(`Failed to reconnect Director repair for ${item.id}:`, e)
         }).finally(() => {
@@ -4159,13 +4171,13 @@ export const useStore = create<AppState>((set, get) => ({
               ..._jobTimingPatch(status),
             }),
           }))
-          if (status.status === 'running') get().refreshOutputs()
+          if (status.status === 'running') void get().maybeRefreshGallery()
           if (status.status === 'completed') {
             clearInterval(pollInterval)
             set(st => {
               return removeJob(st.jobs, j => j.id === result.job_id)
             })
-            get().loadOutputs()
+            void get().maybeRefreshGallery({ message: 'New output ready' })
           } else if (status.status === 'failed' || status.status === 'cancelled') {
             clearInterval(pollInterval)
             // Keep the terminal tile visible so the user can inspect or dismiss it.
@@ -4579,14 +4591,14 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
@@ -4727,14 +4739,14 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
@@ -4833,14 +4845,14 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               set(s => withJobs(s.jobs))
@@ -4943,14 +4955,14 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               set(s => withJobs(s.jobs))
@@ -5076,14 +5088,14 @@ export const useStore = create<AppState>((set, get) => ({
                 ..._jobTimingPatch(status),
               }),
             }))
-            if (status.status === 'running') get().refreshOutputs()
+            if (status.status === 'running') void get().maybeRefreshGallery()
             if (status.status === 'completed') {
               clearInterval(pollInterval)
               set(s => {
                 const remaining = s.jobs.filter(j => j.id !== result.job_id)
                 return withJobs(remaining)
               })
-              get().loadOutputs()
+              void get().maybeRefreshGallery({ message: 'New output ready' })
             } else if (status.status === 'failed' || status.status === 'cancelled') {
               clearInterval(pollInterval)
               // Keep the failed/cancelled job in the queue so its placeholder
@@ -5904,7 +5916,7 @@ export const useStore = create<AppState>((set, get) => ({
 
           // Refresh gallery during generation to show sliding window progress
           if (status.status === 'running') {
-            get().refreshOutputs()
+            void get().maybeRefreshGallery()
           }
 
           if (status.status === 'completed') {
@@ -5914,7 +5926,7 @@ export const useStore = create<AppState>((set, get) => ({
               const remaining = s.jobs.filter(j => j.id !== job_id)
               return withJobs(remaining)
             })
-            get().loadOutputs()
+            void get().maybeRefreshGallery({ message: 'New output ready' })
           } else if (status.status === 'failed' || status.status === 'cancelled') {
             clearInterval(pollInterval)
             // Keep the failed/cancelled job in the queue so its placeholder
@@ -6040,7 +6052,7 @@ export const useStore = create<AppState>((set, get) => ({
                 if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
                   clearInterval(pollInterval)
                   set(s => removeJob(s.jobs, j => j.id === job.id))
-                  get().loadOutputs()
+                  void get().maybeRefreshGallery({ message: 'New output ready' })
                 }
               } catch {
                 // Job may have been cleaned up
@@ -9299,22 +9311,47 @@ export const useStore = create<AppState>((set, get) => ({
   },
   mediaFilter: 'all',
   outputSearchQuery: '',
+  galleryFeedAtTop: true,
+  galleryRefreshPending: false,
+  galleryToast: null,
   setMediaFilter: (f) => {
     const prevFilter = get().mediaFilter
-    set({ mediaFilter: f, selectedOutput: 0 })
-    // Backend-filtered modes: reload from server to get ALL matches
-    const backendFilters: MediaFilter[] = ['favorites', 'multiclip']
-    if (backendFilters.includes(f) || backendFilters.includes(prevFilter)) {
+    set({ mediaFilter: f, selectedOutput: 0, galleryFeedAtTop: true })
+    if (GALLERY_LIST_FILTERS.has(f) || GALLERY_LIST_FILTERS.has(prevFilter)) {
       get().loadOutputs()
       return
     }
-    // Load metadata for first item in new filtered list
     const filtered = get().filteredOutputs()
     if (filtered.length > 0) {
       get().loadOutputMetadata(filtered[0].name)
     } else {
       set({ selectedOutputMeta: null })
     }
+  },
+  setGalleryFeedAtTop: (atTop) => {
+    const wasTop = get().galleryFeedAtTop
+    set({ galleryFeedAtTop: atTop })
+    if (atTop && !wasTop && get().galleryRefreshPending) {
+      set({ galleryRefreshPending: false })
+      void get().loadOutputs()
+    }
+  },
+  clearGalleryToast: () => set({ galleryToast: null }),
+  maybeRefreshGallery: async (opts) => {
+    const filter = get().mediaFilter
+    if (opts?.message) {
+      set({ galleryToast: { id: Date.now(), message: opts.message } })
+    }
+    if (!GALLERY_LIST_FILTERS.has(filter)) {
+      set({ galleryRefreshPending: true })
+      return
+    }
+    if (!get().galleryFeedAtTop && !opts?.force) {
+      set({ galleryRefreshPending: true })
+      return
+    }
+    set({ galleryRefreshPending: false })
+    await get().refreshOutputs()
   },
   setOutputSearchQuery: (q) => {
     set({ outputSearchQuery: q, selectedOutput: 0 })
@@ -9336,14 +9373,16 @@ export const useStore = create<AppState>((set, get) => ({
     const { mediaFilter, outputSearchQuery } = get()
     const workspace = _workspaceName(get())
     const request = _beginOutputRequest(workspace)
-    const isBackendFilter = mediaFilter === 'favorites' || mediaFilter === 'multiclip' || outputSearchQuery.trim()
-    set({ outputsLoading: true })
+    const query = galleryListQuery(mediaFilter, outputSearchQuery)
+    set({ outputsLoading: true, galleryRefreshPending: false })
     try {
-      const { outputs: apiOutputs, total } = isBackendFilter
-        ? await api.fetchOutputs(0, 0, {
-            favoritesOnly: mediaFilter === 'favorites',
-            multiclipOnly: mediaFilter === 'multiclip',
-            search: outputSearchQuery.trim() || undefined,
+      const { outputs: apiOutputs, total } = query.useServerList
+        ? await api.fetchOutputs(query.resultKind || query.favoritesOnly || query.multiclipOnly || query.search ? 0 : PAGE_SIZE, 0, {
+            favoritesOnly: query.favoritesOnly,
+            multiclipOnly: query.multiclipOnly,
+            resultKind: query.resultKind,
+            mediaType: query.mediaType,
+            search: query.search,
             workspace,
             signal: request.controller.signal,
           })
@@ -9355,6 +9394,7 @@ export const useStore = create<AppState>((set, get) => ({
         type: o.type,
         mode: (o.mode as OutputFile['mode']) || null,
         edit_sub_mode: (o.edit_sub_mode as OutputFile['edit_sub_mode']) || null,
+        result_kind: (o.result_kind as OutputFile['result_kind']) || null,
         favorite: o.favorite || false,
         size: o.size,
         created_at: o.created_at,
@@ -9362,9 +9402,12 @@ export const useStore = create<AppState>((set, get) => ({
         completion_time_source: o.completion_time_source,
         thumbnail_url: o.thumbnail_url || null,
       }))
-      set({ outputs, outputsTotal: total, selectedOutput: 0, outputsLoading: false })
+      const previousName = get().filteredOutputs()[get().selectedOutput]?.name
+      const found = previousName ? outputs.findIndex(item => item.name === previousName) : -1
+      const nextIndex = found >= 0 ? found : 0
+      set({ outputs, outputsTotal: total, selectedOutput: nextIndex, outputsLoading: false })
       if (outputs.length > 0) {
-        void get().loadOutputMetadata(outputs[0].name)
+        void get().loadOutputMetadata(outputs[nextIndex].name)
       }
     } catch (e) {
       if (!_isCurrentOutputRequest(get, request)) return
@@ -9384,8 +9427,14 @@ export const useStore = create<AppState>((set, get) => ({
     const workspace = _workspaceName(get())
     const request = _beginOutputRequest(workspace)
     try {
+      const query = galleryListQuery(get().mediaFilter, get().outputSearchQuery)
       const { outputs: apiOutputs, total: newTotal } = await api.fetchOutputs(PAGE_SIZE, current.length, {
         workspace,
+        mediaType: query.mediaType,
+        resultKind: query.resultKind,
+        favoritesOnly: query.favoritesOnly,
+        multiclipOnly: query.multiclipOnly,
+        search: query.search,
         signal: request.controller.signal,
       })
       if (!_isCurrentOutputRequest(get, request)) return
@@ -9401,6 +9450,7 @@ export const useStore = create<AppState>((set, get) => ({
         completed_at: o.completed_at,
         completion_time_source: o.completion_time_source,
         thumbnail_url: o.thumbnail_url || null,
+        result_kind: (o.result_kind as OutputFile['result_kind']) || null,
       }))
       // Deduplicate (in case items shifted during generation)
       const existingNames = new Set(current.map(o => o.name))
@@ -9419,10 +9469,16 @@ export const useStore = create<AppState>((set, get) => ({
   refreshOutputs: async () => {
     const workspace = _workspaceName(get())
     const request = _beginOutputRequest(workspace)
+    const query = galleryListQuery(get().mediaFilter, get().outputSearchQuery)
     try {
       // Only fetch first page — new outputs appear at the top (newest first)
       const { outputs: apiOutputs, total } = await api.fetchOutputs(50, 0, {
         workspace,
+        mediaType: query.mediaType,
+        resultKind: query.resultKind,
+        favoritesOnly: query.favoritesOnly,
+        multiclipOnly: query.multiclipOnly,
+        search: query.search,
         signal: request.controller.signal,
       })
       if (!_isCurrentOutputRequest(get, request)) return
@@ -9438,6 +9494,7 @@ export const useStore = create<AppState>((set, get) => ({
         completed_at: o.completed_at,
         completion_time_source: o.completion_time_source,
         thumbnail_url: o.thumbnail_url || null,
+        result_kind: (o.result_kind as OutputFile['result_kind']) || null,
       }))
       const current = get().outputs
       const currentNames = new Set(current.map(o => o.name))
@@ -9456,10 +9513,20 @@ export const useStore = create<AppState>((set, get) => ({
           && latest.completed_at === output.completed_at
           && latest.completion_time_source === output.completion_time_source
           && latest.thumbnail_url === output.thumbnail_url
+          && latest.result_kind === output.result_kind
         return unchanged ? output : latest
       })
       const existingChanged = updatedCurrent.some((output, index) => output !== current[index])
       if (newItems.length > 0 || existingChanged || total !== get().outputsTotal) {
+        const watchingGallery = GALLERY_LIST_FILTERS.has(get().mediaFilter)
+        if (!watchingGallery || !get().galleryFeedAtTop) {
+          set({ galleryRefreshPending: true })
+          if (newItems.length > 0 && !get().galleryToast) {
+            const noun = newItems.length === 1 ? 'item' : 'items'
+            set({ galleryToast: { id: Date.now(), message: `${newItems.length} new ${noun} ready` } })
+          }
+          return
+        }
         // Prepend new items (newest first), update files that were first seen
         // while still being written, and shift selection to keep the same
         // logical item active.
@@ -10500,6 +10567,11 @@ export const useStore = create<AppState>((set, get) => ({
 
     const pipelineParams: Record<string, unknown> = {
       pipeline_type: pipelineType,
+      production_kind: (
+        /cinematic story trailer|mandatory trailer arc/i.test(directorSceneDescription)
+          ? 'trailer'
+          : pipelineType === 'music_video' ? 'music_video' : undefined
+      ),
       auto_mode: useCurrentPlans ? true : directorAutoMode,
       workspace: get().activeWorkspace,
       scene_description: directorSceneDescription,
@@ -10776,7 +10848,7 @@ export const useStore = create<AppState>((set, get) => ({
             directorLoading: false,
             directorStep: 'review_video',
           })
-          get().loadOutputs()
+          void get().maybeRefreshGallery({ message: 'Production finished' })
           return  // Stop polling
         }
 
