@@ -39,8 +39,8 @@ echo "==> [3/4] Python dependencies (CPU)"
 # CPU PyTorch build (no CUDA on Cloud Agent VMs).
 pip install --index-url https://download.pytorch.org/whl/cpu \
   torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0
-# Remaining CPU-importable test dependencies.
-pip install -r .cursor/requirements-cpu-test.txt
+# Remaining CPU-importable test dependencies — same list CI uses.
+pip install -r tests/requirements-cpu.txt
 
 echo "==> [4/4] UI toolchain (npm ci + build)"
 # Ensure node/npm from the nvm-managed base image is on PATH.
