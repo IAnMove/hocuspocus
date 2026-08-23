@@ -1,9 +1,26 @@
 name: CI
 
-# Fast, dependency-light checks that must pass on every push + PR.
-# The clean-repo guard is the important one for a public repo: it fails
-# the build if mature/explicit prose or locally-generated model guides
-# ever leak into tracked source (see scripts/verify_clean_repo.py).
+# What CI can and cannot verify for Loreframe Lab
+# ------------------------------------------------
+# Loreframe Lab is a local-first GPU app. The two things it does at runtime —
+# diffusion/video generation and Director LLM planning — CANNOT run on CI:
+#   * generation needs an NVIDIA GPU (CI runners are CPU-only), and
+#   * the planners talk to a local llama-server / external LLM that isn't here.
+#
+# So CI deliberately does NOT try to generate anything or call a real model.
+# Instead it runs the parts that are meaningful on a CPU box with no model
+# weights and no network to any LLM:
+#   * the clean-repo boundary guard (keeps weights/mature prose out of git),
+#   * a Python syntax check of the modules we edit,
+#   * the CPU test suite under tests/ — these use stubbed llm_generate fns and
+#     tiny fixtures, and any case that truly needs a GPU/model skips itself, and
+#   * the React/TypeScript UI: eslint, type-check and production build.
+#
+# The Python dependency list is intentionally the CPU-only subset shared with
+# the Cloud Agent dev environment (.cursor/requirements-cpu-test.txt); the heavy
+# GPU-only wheels from app/requirements.txt (flash-attn, xformers, torchcodec,
+# onnxruntime-gpu, …) are omitted because they need CUDA.
+
 on:
   push:
     branches: [main, dev]
@@ -11,49 +28,73 @@ on:
     branches: [main, dev]
   workflow_dispatch:
 
+# A newer push to the same branch/PR cancels the older in-flight run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  guard:
-    name: Clean-repo guard + Python checks
+  python:
+    name: Guard + syntax + CPU test suite
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+          cache: pip
+          cache-dependency-path: .cursor/requirements-cpu-test.txt
+
+      # Cheap, dependency-free checks first so obvious breakage fails fast.
       - name: Clean-repo boundary guard
         run: python scripts/verify_clean_repo.py
+
       - name: Python syntax check (our modules)
         # compileall only compiles (never imports), so it needs no deps and
         # skips heavy vendored model code. Covers the surface we edit.
         run: python -m compileall -q app/services app/launch.py scripts
-      - name: Install lightweight test dependencies
-        run: >-
-          python -m pip install
-          "starlette==0.46.1"
-          "numpy==2.2.6"
-          "opencv-python-headless==4.12.0.88"
-          "Pillow==11.3.0"
-          "requests==2.32.4"
+
+      - name: Install CPU test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # CPU PyTorch build (no CUDA on CI runners).
+          pip install --index-url https://download.pytorch.org/whl/cpu \
+            torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0
+          # CPU-importable subset of app/requirements.txt that the suite needs.
+          pip install -r .cursor/requirements-cpu-test.txt
+
       - name: Python unit tests
+        # ffmpeg is preinstalled on ubuntu-latest; media tests use it and any
+        # GPU/model-only case self-skips (skipUnless _requires_torch, etc.).
         run: python -m unittest discover -s tests -p "test_*.py"
+
       - name: JSON grammar regression tests
-        # These are standalone test functions, so unittest discovery does not
-        # execute them yet. Keep this explicit runner until they are migrated.
+        # Standalone test functions unittest discovery does not execute yet.
         run: python tests/test_call_llm_json_grammar.py
 
-  ui-build:
-    name: UI type-check + build
+  ui:
+    name: UI lint + type-check + build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: ui/package-lock.json
+
       - name: Install UI deps
         working-directory: ui
         run: npm ci
+
+      - name: Lint (eslint)
+        working-directory: ui
+        run: npm run lint
+
       - name: Type-check + build (tsc -b && vite build)
         working-directory: ui
         run: npm run build
