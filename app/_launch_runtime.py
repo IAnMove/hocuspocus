@@ -1366,7 +1366,7 @@ _DEFAULT_PRODUCTION_PROFILE = {
     "version": _PRODUCTION_PROFILE_VERSION,
     "text": {"provider": "minimax", "model": "MiniMax-M3"},
     "image": {"provider": "minimax", "model": "image-01"},
-    "music": {"provider": "minimax", "model": "music-3.0"},
+    "music": {"provider": "local", "model": "ace_step_v1_5_xl_sft_lm_4b"},
     "video": {
         "provider": "local",
         "model": "minimax_h3_legacy",
@@ -1427,6 +1427,7 @@ def _normalize_production_profile(value) -> dict:
     ).lower()
     if music_provider not in {"maestro", "local", "minimax"}:
         raise ValueError("Unsupported production music provider.")
+    music_model = _bounded_profile_text(music_profile.get("model"), "Music model")
     video_provider = _bounded_profile_text(
         video_profile.get("provider"), "Video provider",
     ).lower()
@@ -1478,7 +1479,7 @@ def _normalize_production_profile(value) -> dict:
         },
         "music": {
             "provider": music_provider,
-            "model": _bounded_profile_text(music_profile.get("model"), "Music model"),
+            "model": music_model,
         },
         "video": {
             "provider": video_provider,
@@ -7419,7 +7420,11 @@ def _resolve_model3d_input_path(value: str, workspace: str | None = None) -> str
     """Resolve a UI-provided upload/output path to a local file."""
     if not value:
         return None
-    value = value.strip()
+    from services.media_refs import parse_media_ref
+
+    value, workspace = parse_media_ref(value, workspace)
+    if not value:
+        return None
     if value.startswith("/api/v1/uploads/"):
         value = value.rsplit("/", 1)[-1]
         return _safe_join(os.path.join(os.getcwd(), "uploads"), value)
@@ -8944,6 +8949,59 @@ async def llm_describe_image(request: Request):
         return {"description": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.post("/api/v1/characters/describe-refs")
+async def describe_character_refs(request: Request):
+    """MiniMax-M3 vision → PoopMan333 A Prompt. Does not load the local LLM."""
+    from services import llm_service
+    from services.character_sheet import DESCRIBE_SCHEMA, describe_character_sheet
+
+    body = await request.json()
+    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    raw_paths = body.get("image_paths") or []
+    if not isinstance(raw_paths, list) or not raw_paths:
+        raise HTTPException(status_code=400, detail="image_paths is required")
+    image_paths = []
+    for value in raw_paths:
+        resolved = _resolve_model3d_input_path(str(value or ""), workspace)
+        if not resolved or not os.path.isfile(resolved):
+            raise HTTPException(status_code=400, detail="Character reference image not found")
+        image_paths.append(resolved)
+
+    services = wgp.server_config.get("services", {})
+    api_key = str(services.get("minimax_api_key") or "")
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Configure the MiniMax API key in Settings → Services first",
+        )
+
+    def complete(system_prompt: str, user_prompt: str, paths: list[str]) -> str:
+        return llm_service.generate_openai_compatible(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            model_id="MiniMax-M3",
+            base_url="https://api.minimax.io/v1",
+            api_key=api_key,
+            max_new_tokens=1200,
+            temperature=0.2,
+            json_schema=DESCRIBE_SCHEMA,
+            image_paths=paths,
+        )
+
+    try:
+        a_prompt = describe_character_sheet(
+            kind=body.get("kind") or "character",
+            image_paths=image_paths,
+            roles=body.get("roles") or None,
+            complete=complete,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"a_prompt": a_prompt, "kind": body.get("kind") or "character"}
 
 
 # ============================================================================
@@ -33584,7 +33642,7 @@ def _resolve_output_file(filename: str, workspace: str | None = None) -> str | N
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = "", workspace: str = "", media_type: str = ""):
+def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = ""):
     """List generated output files (newest first) from the active workspace.
 
     Supports pagination via limit/offset query params.
@@ -33703,6 +33761,11 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         # reflected immediately.
         sidecar_cache: dict[str, dict] = {}
         clip_groups: dict[str, dict] = {}
+        try:
+            from services.output_result_kind import classify_output_result_kind
+        except Exception:
+            def classify_output_result_kind(name, params=None, metadata=None):
+                return None
         for name, filepath, ext, mtime in raw_entries:
             meta_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".meta.json")
             if not os.path.isfile(meta_path):
@@ -33717,6 +33780,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 "mode": meta.get("generation_mode"),
                 "edit_sub_mode": params.get("edit_sub_mode"),
                 "multi_clip_info": params.get("multi_clip_info"),
+                "result_kind": classify_output_result_kind(name, params, meta),
                 "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
                 # Output sidecars are written only after the generated asset
                 # has been published.  Their historical ``created_at`` field
@@ -33790,6 +33854,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             # Surface edit_sub_mode so the gallery's Edits filter can
             # identify retake/inpaint/outpaint/restyle/edit_anything outputs.
             "edit_sub_mode": edit_sub_mode,
+            "result_kind": cached.get("result_kind"),
             "favorite": name in favs,
             "size": size,
             "created_at": mtime,
@@ -33809,6 +33874,20 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
 
     if media_type:
         files = [item for item in files if item["type"] == media_type]
+
+    wanted_kind = str(result_kind or "").strip()
+    if wanted_kind:
+        try:
+            from services.output_result_kind import result_kind_matches_filter
+        except Exception:
+            def result_kind_matches_filter(kind, wanted):
+                return str(kind or "") == str(wanted or "")
+        files = [
+            item for item in files
+            if item.get("type") == "video"
+            and result_kind_matches_filter(item.get("result_kind"), wanted_kind)
+        ]
+        return {"outputs": files, "total": len(files)}
 
     # Special filters: return ALL matches, bypass pagination
     if favorites_only:
@@ -34463,14 +34542,14 @@ def _finish_video_editor_cancelled(
 
 def _resolve_video_editor_source(source: str, workspace: str | None = None) -> str:
     """Resolve an editor reference without allowing access outside Maestro."""
-    from urllib.parse import unquote
+    from services.media_refs import parse_media_ref
 
     if not isinstance(source, str) or not source.strip():
         raise ValueError("Video source is missing")
-    decoded = unquote(source.strip())
-    resolved = _resolve_model3d_input_path(decoded, workspace)
+    path, workspace = parse_media_ref(source, workspace)
+    resolved = _resolve_model3d_input_path(path, workspace)
     if not resolved or not os.path.isfile(resolved):
-        raise ValueError(f"Video source could not be found: {os.path.basename(decoded)}")
+        raise ValueError(f"Video source could not be found: {os.path.basename(path) or path}")
     if os.path.splitext(resolved)[1].lower() not in _VIDEO_EDITOR_EXTENSIONS:
         raise ValueError(f"Unsupported video format: {os.path.splitext(resolved)[1] or 'unknown'}")
     return resolved
@@ -34495,7 +34574,10 @@ def probe_video_editor_source(body: dict):
     from services.video_editor import probe_media
 
     try:
-        resolved = _resolve_video_editor_source(body.get("source", ""))
+        resolved = _resolve_video_editor_source(
+            body.get("source", ""),
+            body.get("workspace"),
+        )
         return probe_media(resolved)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -34532,7 +34614,10 @@ def capture_video_editor_frame(body: dict):
     from services.video_editor import extract_frame
 
     try:
-        resolved = _resolve_video_editor_source(body.get("source", ""))
+        resolved = _resolve_video_editor_source(
+            body.get("source", ""),
+            body.get("workspace"),
+        )
         requested_time = float(body.get("time") or 0)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

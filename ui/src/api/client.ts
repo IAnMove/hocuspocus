@@ -71,6 +71,7 @@ export interface ApiOutput {
    *  introduced it. Optional so the type compiles even when the
    *  backend hasn't been updated to emit this yet. */
   edit_sub_mode?: string | null
+  result_kind?: 'music_video' | 'trailer' | 'series_episode' | 'chapter' | null
 }
 
 export interface ApiJobStatus {
@@ -420,7 +421,7 @@ export async function writeSong(params: {
   description: string
   instrumental?: boolean
   target?: 'ace-step' | 'minimax'
-  model?: 'music-3.0' | 'music-2.6' | 'music-cover'
+  model?: 'music-3.0' | 'music-2.6' | 'music-cover' | 'ace_step_v1_5_xl_sft_lm_4b'
   reference_song?: string
   style_direction?: string
   lyrics_direction?: string
@@ -482,7 +483,7 @@ export interface StoryMusicCandidateRequest {
   prompt: string
   lyrics: string
   count: 1 | 2 | 3
-  model?: 'music-3.0' | 'music-2.6' | 'music-cover'
+  model?: 'music-3.0' | 'music-2.6' | 'music-cover' | 'ace_step_v1_5_xl_sft_lm_4b'
   reference_audio_filename?: string
   instrumental?: boolean
   workspace?: string
@@ -780,12 +781,13 @@ export async function toggleFavorite(name: string): Promise<{ name: string; favo
 
 // --- Outputs ---
 
-export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
+export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; resultKind?: ApiOutput['result_kind']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
   const params = new URLSearchParams()
   if (limit > 0) params.set('limit', String(limit))
   if (offset > 0) params.set('offset', String(offset))
   if (opts?.favoritesOnly) params.set('favorites_only', 'true')
   if (opts?.multiclipOnly) params.set('multiclip_only', 'true')
+  if (opts?.resultKind) params.set('result_kind', opts.resultKind)
   if (opts?.search) params.set('search', opts.search)
   // "__uploads__" browses the uploads folder (virtual Uploads view)
   if (opts?.workspace) params.set('workspace', opts.workspace)
@@ -1144,11 +1146,11 @@ export interface VideoEditorExportJob {
   result?: { duration: number; clip_count: number }
 }
 
-export async function probeVideoEditorClip(source: string): Promise<VideoEditorProbe> {
+export async function probeVideoEditorClip(source: string, workspace?: string): Promise<VideoEditorProbe> {
   const res = await fetch(`${BASE}/api/v1/video-editor/probe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source }),
+    body: JSON.stringify({ source, workspace: workspace || undefined }),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Could not inspect video' }))
@@ -1174,6 +1176,7 @@ export async function captureVideoEditorFrame(payload: {
   source: string
   time: number
   name: string
+  workspace?: string
 }): Promise<VideoEditorScreenshot> {
   const res = await fetch(`${BASE}/api/v1/video-editor/screenshot`, {
     method: 'POST',
@@ -3823,6 +3826,24 @@ export interface Hunyuan3DJob {
   size?: number
 }
 
+export async function describeCharacterRefs(params: {
+  kind: 'character' | 'object'
+  image_paths: string[]
+  roles?: string[]
+  workspace?: string
+}): Promise<{ a_prompt: string; kind: string }> {
+  const res = await fetch(`${BASE}/api/v1/characters/describe-refs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Could not describe the reference images' }))
+    throw new Error(err.detail || 'Could not describe the reference images')
+  }
+  return res.json()
+}
+
 export async function fetchHunyuan3DCapabilities(): Promise<Hunyuan3DCapabilities> {
   const res = await fetch(`${BASE}/api/v1/model3d/capabilities`)
   if (!res.ok) throw new Error('Failed to fetch Hunyuan3D capabilities')
@@ -3835,6 +3856,7 @@ export async function startHunyuan3DJob(params: {
   preset?: string
   model_id?: string
   prompt?: string
+  workspace?: string
   images?: Partial<Record<'front' | 'left' | 'right' | 'back', string>>
   output_format?: string
   texture_mode?: string
