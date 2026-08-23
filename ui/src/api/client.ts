@@ -3815,7 +3815,7 @@ export interface Hunyuan3DCapabilities {
 export interface Hunyuan3DJob {
   job_id: string
   operation?: 'generate' | 'retexture'
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'waiting' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
   progress: number
   phase: string
   message: string

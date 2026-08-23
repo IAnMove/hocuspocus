@@ -27,7 +27,7 @@ Detects your GPU, VRAM, and RAM on first launch and picks the right profile, qua
 Direct access to every model and every knob:
 - **Video** — LTX-2.3, Wan1/2, Hunyuan, and many more.
 - **Image** — Flux 2 Klein 9B (default), Qwen Image Edit, and many more
-- **Audio** — TTS: Kugelaudio, Qwen3 TTS. Music: ACE-Step. SFX: MMAudio
+- **Audio** — TTS: Kugelaudio, Qwen3 TTS. Music: ACE-Step 1.5 XL (default for new Story Lab songs; MiniMax Music remains selectable). SFX: MMAudio
 - **Multi-clip generation** with per-clip prompts, seamless overlapping (sliding window) transitions, and shared LoRAs
 - **Blend video Mode** Remember Sora 1 blend mode, where you could overlap two videos, and use AI to blend them together?
 - **Frames Injection (KFI)** for character continuity in long videos
@@ -120,6 +120,7 @@ For a screenshot-led, end-to-end walkthrough, see **[Loreframe Lab / Experimenta
 - Character cards combine role, desire, need, flaw, arc, dialogue voice, wardrobe, visual invariants, negative prompts, multiple references, and a selected primary identity image.
 - Export/import a `.storypack` with the editable JSON and available visual assets. Each workspace has a multi-story autosaved library; generated plans and local concept jobs can resume from durable checkpoints after interruption.
 - **Productions** offers a review-first hand-off and a complete one-click generation for both media. Comic opens **Director → Comic** and creates a self-contained chapter rather than retelling the master plot; four pages remain the quick-test default, while page count and panels per page are configurable up to the Director limits. Short Film opens **Director → Short Film → Story** with an editable target duration and independently selectable image and video models, and inherits the Story project's selected writing provider instead of silently falling back to the global LLM. Its shot frames can use a local Loreframe Lab image model or the external MiniMax Image-01 API; the latter does not consume local VRAM and is distinct from the local MiniMax H3 video runtime. Both productions receive the full editable canon, structured cast, locations and labelled visual references. Character images remain attached through planning and MiniMax `image-01` uses the visually prioritised character as its single supported identity reference per request. Adaptation history preserves the selected models when reopening the staged target, or can restore its exact source as a new editable copy.
+- New **Videoclip** songs default to local **ACE-Step 1.5 XL** (`ace_step_v1_5_xl_sft_lm_4b`). MiniMax `music-2.6` / `music-3.0` stay available on the song model selector.
 - **Tráiler cinematográfico** is a standalone Story Lab project type beside **Videoclip**, so movie trailers never require a song. Its four-stage planner creates the concept, protagonists, world and a 6–12-beat trailer arc, then opens the dedicated 15–180 second Trailer Creator. It exposes theatrical, teaser and character formats; narration, dialogue or visual-only storytelling; spoiler and intensity controls; optional minimal title cards; and an editable six-part timed arc from cold open to unresolved final hook. Visual generation can create start frames, route approved references directly through H3 Ref2VA, or run as pure text-to-video without generating or sending any image. A trailer can be reviewed in Director or generated as a recoverable ordered pipeline, then replayed, regenerated clip-by-clip and joined from Story Lab's Assembly view.
 
 ### 💬 Comic Studio — script, characters, pages, translation and animatics
@@ -130,6 +131,15 @@ Build a comic as an editable production rather than a single flattened generatio
 - **Writing LLM override** keeps Loreframe Lab's internal model as the default, with separate DeepSeek, MiniMax, OpenAI, and custom-compatible profiles. DeepSeek offers V4 Pro or V4 Flash and automatically uses Flash for translation. MiniMax offers M3, M2.7, and M2.7 Highspeed, sharing its saved API key with image generation while keeping the writing and image model selectors independent. Provider keys remain in Settings and are never embedded in comic JSON.
 - **Video** keeps the fast FFmpeg animatic path and adds a generative **Comic → AI film** path. The latter gives the LLM the master canon and every planned scene, captures clean artwork without lettering, and reuses each panel as that shot's actual I2V first frame; it spends video generation time/credits but does not regenerate comic artwork. Per-panel duration and camera movement remain editable.
 - Comic and Video Editor drafts autosave locally; saved comics remain backward-compatible with older version-2 project JSON.
+
+### ✂️ Video Editor — cut Lab clips without regenerating
+The **Video Editor** tab assembles existing workspace or uploaded clips (H3 MP4s, compositor WebM, Series handoffs, comic animatics). Timeline trim, split, reorder, play-from-selection, and playhead scrub are local; only probe, thumbnails, frame grabs, and FFmpeg export hit the server.
+
+- Import from the gallery card, **From Loreframe Lab** picker, drag-and-drop (`POST /api/v1/upload`, 500 MB max), or a Series/comic handoff.
+- Export is a queued FFmpeg job (`POST /api/v1/video-editor/export`, 1–100 clips, even 240–3840 resolution, fps 24/25/30/50/60). Cancel waits for the current FFmpeg subprocess.
+- Editor exports are **not** mix-tab items. Assembled Director / Series movies get a `result_kind` (`music_video`, `trailer`, `series_episode`, `chapter`) and appear under **Videoclips**, **Tráilers**, **Capítulos**, or **Multi-clip**. Soft joins hold the last frame 0.5 s and crossfade ~0.4 s unless a driving soundtrack is attached.
+
+Operator contract, transitions, and pitfalls: **[Video Editor / mixes](docs/video-editor/HOWUSEIT.md)**.
 
 ### 🤖 Local LLM — built-in, no setup
 Loreframe Lab auto-downloads `llama-server` (~600 MB one-time) and your chosen GGUF model on first use. Defaults to **Gemma 4 4B (Recommended)** — fast, capable, and runs comfortably on smaller GPUs. Auto-detects CUDA and binds the LLM to GPU when available.
@@ -169,6 +179,8 @@ Included geometry variants:
 - **Hunyuan3D 2**: Turbo, Fast, and full-step 1.1B variants
 - **Hunyuan3D 2 Multi-view**: Turbo, Fast, and full-step models using front/left/right/back references
 - **Hunyuan3D 2.1**: high-fidelity 3.3B geometry with optional PBR materials
+
+The **Characters** tab builds a Hunyuan multi-view mesh from one subject or object photo: MiniMax-M3 vision writes the A Prompt (`POST /api/v1/characters/describe-refs`), H3 Ref2VA records a frozen 360° orbit (`768x1344`, 124 frames), then four stills at frames 2 / 21 / 42 / 63 become front / left / back / right for `hunyuan3d-2mv-turbo`. Details: **[3D Video compositor](docs/3d-video-compositor/HOWUSEIT.md)** §5.4.
 
 The advanced panel exposes inference steps, guidance, octree resolution, processing chunks, seed, texture model/resolution, CPU offload, FlashVDM, Torch compilation, DMC/Marching Cubes, mesh simplification, face target, and GLB/OBJ/PLY/STL export. Four presets provide sensible Low VRAM, Balanced, Quality/PBR, and Multi-view configurations.
 
@@ -252,8 +264,10 @@ job = requests.post(f"{base}/api/v1/model3d/generate", json={
 status = requests.get(f"{base}/api/v1/model3d/status/{job['job_id']}").json()
 ```
 
-### 📂 Workspaces
+### 📂 Workspaces (output directories)
 Multiple isolated output directories with a quick switcher in the sidebar. Useful for separating client projects, NSFW vs SFW, or experiments. Pinned and favorited outputs are tracked per workspace.
+
+The gallery **Workspaces** tab is a different feature: a Director **generation-thread** dashboard for the *active* output directory (inspect the shot queue, rewrite selected prompts from one instruction, toggle per-shot soundtrack drive vs mute, resume, rejoin). Operator contract: **[Workspaces tab](docs/workspaces/HOWUSEIT.md)**.
 
 ### 🔒 Mature mode + experimental gate
 - **NSFW mode** is opt-in with a disclaimer step. Disabled by default. Gates uncensored model variants, NSFW LoRAs in the CivitAI browser, and the Settings → Services NSFW toggle.
@@ -396,6 +410,7 @@ After clicking **Start**, the launcher shows an **Open Web UI** button once the 
 - **Activity footer** — persistent live job progress and access to current or past **Productions**
 - **Settings drawer** (gear icon) — model visibility, performance auto-tune, services (LLM, API keys, NSFW, theme)
 - **Pinokio menu** — Update, Reset, Install Inpaint Support, LoRA folder shortcuts
+- **Operator guides** — [HOWUSEIT index](docs/HOWUSEIT.md) (Video Editor, Workspaces tab, 3D compositor)
 
 ## Sharing on the local network
 

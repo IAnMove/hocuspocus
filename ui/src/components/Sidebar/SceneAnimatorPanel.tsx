@@ -951,7 +951,10 @@ export function SceneAnimatorPanel() {
         instances.push(applyCameraTransform(state, layer, time))
       }
     }
-    return instances.slice(0, 24)
+    // Each 3D copy is a live WebGL context. orbit(12) × strip(12) = 144
+    // viewers, which locks the GPU and can freeze the host.
+    const cap = layer.type === 'model3d' ? 4 : 24
+    return instances.slice(0, cap)
   }
   const moveLayerZ = (id: string, direction: 1 | -1) => updateScene(current => {
     const layers = normalizeZ(current.layers)
@@ -1918,7 +1921,7 @@ export function SceneAnimatorPanel() {
           {numberInput('Start phase %', selectedStrip.phase, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), phase: value } })), -1000, 1000, 1, selected.locked)}
         </div>
         <label className="text-[9px] text-text-muted">Direction<select value={selectedStrip.direction} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), direction: event.target.value as LayerStrip['direction'] } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="down">Top → bottom</option><option value="up">Bottom → top</option><option value="right">Left → right</option><option value="left">Right → left</option></select></label>
-        {selected.type === 'model3d' && selectedStrip.count > 6 && <p className="text-[8px] text-amber-200">Many GLB copies can be GPU-heavy. Reduce Copies if preview performance drops.</p>}
+        {selected.type === 'model3d' && selectedStrip.count > 4 && <p className="text-[8px] text-amber-200">Preview caps GLB copies at 4. Extra copies freeze the GPU.</p>}
       </div>}
       </>}
       {selected && <div className="space-y-2 rounded border border-border bg-bg-primary p-2">

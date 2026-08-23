@@ -656,3 +656,75 @@ const job = await fetch('/api/v1/comics/animatic', {
     panels: [{ source: '/api/v1/uploads/panel.png', duration: 3, motion: 'pull-out' }] }),
 }).then(response => response.json());
 ```
+
+## Video Editor HTTP API
+
+The React Video Editor (`ui/src/features/video-editor/`) keeps the timeline in the browser. The server only probes media, extracts frames, and queues FFmpeg exports. Strip `?workspace=` from gallery URLs before sending a `source` — `services.media_refs.parse_media_ref` does this on the server, but a filename-with-query will not resolve.
+
+Supported extensions: `.mp4`, `.webm`, `.mov`, `.mkv`, `.avi`, `.m4v`.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/video-editor/probe" \
+  -H "Content-Type: application/json" \
+  -d '{"source": "shot_a.mp4", "workspace": "default"}'
+```
+
+`POST /api/v1/video-editor/export` returns **202** and accepts 1–100 clips. Width/height must be even and in 240–3840. `fps` must be `24`, `25`, `30`, `50`, or `60`. Transition names: `none`, `crossfade`, `fade-black`, `wipe-left`, `slide-left`, `slide-right`, `circle-open`, `dissolve`, `pixelize`, `blur`, `zoom-in`, `later-clock`, `later-tropical`, `later-cinematic`. `transition_duration` is 0.05–5 seconds; `later-*` inserts a time card (duration also clamped to ≥0.5 s at render). Poll `GET /api/v1/video-editor/export/{job_id}`; cancel with `POST /api/v1/video-editor/export/{job_id}/cancel` (deferred to the next FFmpeg boundary).
+
+```python
+import requests
+
+base = "http://127.0.0.1:7860"
+job = requests.post(f"{base}/api/v1/video-editor/export", json={
+    "name": "final_cut",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "clips": [{
+        "source": "shot_a.mp4",
+        "trim_start": 0,
+        "trim_end": 4.2,
+        "fit": "fit",
+        "transition": "crossfade",
+        "transition_duration": 0.4,
+    }],
+}).json()
+status = requests.get(f"{base}/api/v1/video-editor/export/{job['job_id']}").json()
+```
+
+`POST /api/v1/video-editor/screenshot` writes a PNG (`generation_mode: "image"`) at `{source, time, name?, workspace?}`. Character Creator uses it for Hunyuan views.
+
+## Gallery mix kinds
+
+`GET /api/v1/outputs` accepts `result_kind=music_video|trailer|series_episode` (plus the existing `media_type`, `multiclip_only`, `favorites_only`, `search`, `workspace`, `limit`, `offset`). Classification lives in `services.output_result_kind` and applies only to **assembled** filenames (`multiclip`, `_mv.mp4`, `_movie.mp4`, `_rejoin_multiclip.mp4`, `_series_assembly`). Requesting `series_episode` also matches `chapter`. When `result_kind` is set, pagination is bypassed and every match is returned.
+
+`POST /api/v1/outputs/rejoin` (`{ "group_id", "audio_file"? }`) and `POST /api/v1/director/pipelines/{pid}/rejoin` concatenate generated shots. With two or more clips and no external driving audio, `services.mix_concat` holds the last frame 0.5 s and crossfades ~0.4 s; FFmpeg failure falls back to a hard concat.
+
+## Character sheet describe-refs
+
+`POST /api/v1/characters/describe-refs` uses hosted MiniMax-M3 vision (not the local LLM) and requires the MiniMax key in Settings → Services.
+
+```bash
+curl -X POST "$MAESTRO_URL/api/v1/characters/describe-refs" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "kind": "character",
+    "image_paths": ["subject.png"],
+    "roles": ["subject"],
+    "workspace": "default"
+  }'
+```
+
+`kind` is `character` or `object` (default `character`). `roles` are `subject`, `face`, `outfit`, `extra`, or `accessory`; missing/invalid roles become `subject` for index 0 and `extra` otherwise. Response: `{ "a_prompt", "kind" }`. `400` if `image_paths` is empty, a file is missing, or the API key is unset.
+
+## Director pipeline threads
+
+These routes always use the server active workspace. They do not accept `?workspace=`.
+
+- `GET /api/v1/director/pipelines` / `GET /api/v1/director/pipelines/active` / `GET /api/v1/director/pipelines/{pid}` — list or load. `{pid}` hydrates an empty `clips` array from `clip_plans` or `planned_clips` and sets `queue_source` to `clips`, `clip_plans`, or `planned`.
+- `PUT /api/v1/director/pipelines/{pid}/clips/{clip_index}/prompt` — optional `video_prompt`, `image_prompt`, `soundtrack_drive`. `true` writes an `audio_driven` / `lip_sync_critical` plan; `false` writes `music_driven` and clears `_director_dialogue_beats`. `409` while the pipeline is active.
+- `POST /api/v1/director/pipeline/{pid}/resume` and `POST /api/v1/director/pipeline/{pid}/continue` use the singular `pipeline` path.
+- Batch prompt rewrite is UI-only: loop `POST /api/v1/llm/generate` (local LLM) then PUT the chosen prompts.
+
+Operator notes: `docs/video-editor/HOWUSEIT.md` and `docs/workspaces/HOWUSEIT.md`.
+
