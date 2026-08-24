@@ -35,6 +35,35 @@ type LoadedAsset = {
 
 type PickerKind = 'image' | 'model3d'
 
+const INTENT_EXAMPLES = [
+  {
+    label: 'Character entrance',
+    text: 'Create a small armored explorer who walks into a misty forest and stops before a glowing stone door. Vertical, 8 seconds, slow camera push-in.',
+  },
+  {
+    label: 'Vehicle fly-by',
+    text: 'A silver saucer rises from behind a snowy ridge, pauses, then crosses left to right. Wide cinematic landscape, 8 seconds, gentle side camera.',
+  },
+  {
+    label: 'Product turntable',
+    text: 'A premium red sneaker rotates slowly at the center on a clean warm studio background. Fixed camera, 6 seconds, product reveal.',
+  },
+] as const
+
+function assetPlanLabel(asset: SceneRecipe['assets'][number]): string {
+  const type = asset.kind === 'model3d' ? '3D model' : asset.kind === 'video' ? 'moving plate' : 'still plate'
+  return asset.source ? `Use ${type}: ${asset.source}` : `Generate ${type}: ${asset.prompt || asset.id}`
+}
+
+function shotPlanLabel(shot: SceneRecipeShot): string {
+  const camera = shot.layers.find(layer => layer.type === 'camera')?.cameraPreset || 'camera-locked'
+  const action = shot.layers
+    .filter(layer => layer.type === 'model3d' || layer.type === 'image' || layer.type === 'video')
+    .map(layer => layer.motion || layer.asset || layer.id)
+    .join(' · ')
+  return `${camera}${action ? ` · ${action}` : ''}`
+}
+
 function previewForOutput(item: ApiOutput): string {
   if (item.thumbnail_url) return item.thumbnail_url
   if (item.type === 'image') return item.url
@@ -141,6 +170,7 @@ export function SceneRecipePanel({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [shots, setShots] = useState<SceneRecipeShot[]>([])
+  const [plannedRecipe, setPlannedRecipe] = useState<SceneRecipe | null>(null)
   const [activeShot, setActiveShot] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
   const recipeRef = useRef<SceneRecipe | null>(null)
@@ -264,6 +294,7 @@ export function SceneRecipePanel({
         recipe = constrainManualRecipeToInventory(recipe, selected)
       }
       setRecipeText(JSON.stringify(recipe, null, 2))
+      setPlannedRecipe(recipe)
       setShots(listRecipeShots(recipe))
       setActiveShot(0)
       setStatus(`Recipe ready: ${recipe.name} · ${listRecipeShots(recipe).length} shot(s). Preview and edit before recording.`)
@@ -352,8 +383,13 @@ export function SceneRecipePanel({
       <p className="text-[8px] text-text-muted">
         {mode === 'manual'
           ? 'Add plates and GLBs with previews, then ask the LLM to compose. Edit the scene, then Record.'
-          : 'Generates missing plates/meshes, but one identity per object (one UFO GLB for every shot). Preview before recording.'}
+          : 'Describe the scene normally. HocusPocus plans reusable 3D subjects, plates, camera and effects; review the plan before generation.'}
       </p>
+
+      <details className="rounded border border-border bg-bg-primary/45 px-2 py-1.5 text-[9px] text-text-muted">
+        <summary className="cursor-pointer font-medium text-text-secondary">How to describe a scene</summary>
+        <p className="mt-1 leading-relaxed">Mention subjects that must keep their identity, actions in order, the setting, and optionally camera, duration or format. Moving characters, vehicles and objects become separate reusable 3D assets; a fixed environment becomes one plate; fog, snow and rain become effects.</p>
+      </details>
 
       {mode === 'manual' && (
         <div className="space-y-2">
@@ -463,7 +499,7 @@ export function SceneRecipePanel({
       )}
 
       <label className="block text-[10px] text-text-muted">
-        Intent
+        Describe the scene
         <textarea
           rows={3}
           value={intent}
@@ -472,6 +508,19 @@ export function SceneRecipePanel({
           className="mt-1 w-full resize-y rounded border border-border bg-bg-primary px-2 py-1.5 text-[10px] text-text-primary"
         />
       </label>
+      <div className="flex flex-wrap gap-1" aria-label="Scene request examples">
+        {INTENT_EXAMPLES.map(example => (
+          <button
+            key={example.label}
+            type="button"
+            disabled={locked}
+            onClick={() => setIntent(example.text)}
+            className="rounded border border-border px-1.5 py-1 text-[8px] text-text-muted hover:border-cyan-400/60 hover:text-cyan-100 disabled:opacity-40"
+          >
+            {example.label}
+          </button>
+        ))}
+      </div>
       <div className="flex gap-1.5">
         <button
           type="button"
@@ -480,7 +529,7 @@ export function SceneRecipePanel({
           className="flex flex-1 items-center justify-center gap-1 rounded border border-border bg-bg-primary py-1.5 text-[10px] disabled:opacity-40"
         >
           {busy === 'write' ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-          Write recipe
+          Plan scene
         </button>
         <button
           type="button"
@@ -488,23 +537,40 @@ export function SceneRecipePanel({
           onClick={() => {
             setRecipeText(JSON.stringify(EXAMPLE_SAUCER_CRUISE_RECIPE, null, 2))
             setShots(listRecipeShots(EXAMPLE_SAUCER_CRUISE_RECIPE))
+            setPlannedRecipe(EXAMPLE_SAUCER_CRUISE_RECIPE)
           }}
           className="flex items-center justify-center gap-1 rounded border border-border bg-bg-primary px-2 py-1.5 text-[10px] disabled:opacity-40"
         >
           <FileJson size={11} /> Example
         </button>
       </div>
-      <label className="block text-[10px] text-text-muted">
-        Recipe JSON
+      {plannedRecipe && (
+        <section aria-label="Scene plan" className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.07] p-2">
+          <div className="text-[9px] font-medium uppercase tracking-wider text-cyan-100">Review plan · {plannedRecipe.shots?.length || 1} shot{(plannedRecipe.shots?.length || 1) === 1 ? '' : 's'}</div>
+          <div className="space-y-1">
+            {plannedRecipe.assets.map(asset => (
+              <p key={asset.id} className="text-[8px] leading-relaxed text-text-secondary"><span className="font-medium text-cyan-100">{asset.id}</span> — {assetPlanLabel(asset)}</p>
+            ))}
+          </div>
+          <div className="space-y-1 border-t border-cyan-400/15 pt-1">
+            {(plannedRecipe.shots?.length ? plannedRecipe.shots : [{ name: 'scene', duration: plannedRecipe.scene.duration, layers: plannedRecipe.scene.layers }]).map((shot, index) => (
+              <p key={`${shot.name}-${index}`} className="text-[8px] text-text-muted">{index + 1}. {shot.name} · {shot.duration || plannedRecipe.scene.duration || 5}s · {shotPlanLabel(shot)}</p>
+            ))}
+          </div>
+        </section>
+      )}
+      <details className="rounded border border-border bg-bg-primary/30 px-2 py-1.5">
+        <summary className="cursor-pointer text-[9px] text-text-muted">Advanced: edit recipe JSON</summary>
         <textarea
+          aria-label="Recipe JSON"
           rows={8}
           value={recipeText}
           disabled={locked}
-          onChange={event => setRecipeText(event.target.value)}
+          onChange={event => { setRecipeText(event.target.value); setPlannedRecipe(null) }}
           spellCheck={false}
           className="mt-1 w-full resize-y rounded border border-border bg-bg-primary px-2 py-1.5 font-mono text-[9px] text-text-primary"
         />
-      </label>
+      </details>
       <div className="flex gap-1.5">
         <button
           type="button"
