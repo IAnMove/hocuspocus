@@ -52,7 +52,7 @@ test('editorSourcePath strips workspace query from gallery file URLs', async () 
   assert.equal(editorSourcePath('opening.mp4'), 'opening.mp4')
 })
 
-test('Video Editor picker keeps multiple Loreframe videos selected until Add', { concurrency: false }, async () => {
+test('Video Editor picker keeps multiple HocusPocus videos selected until Add', { concurrency: false }, async () => {
   const { render, screen, waitFor, cleanup, fireEvent } = await import('@testing-library/react')
   const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
   dom.window.localStorage.clear()
@@ -83,8 +83,8 @@ test('Video Editor picker keeps multiple Loreframe videos selected until Add', {
   }) as typeof fetch
 
   const view = render(<VideoEditorPanel />)
-  fireEvent.click(screen.getByRole('button', { name: 'From Loreframe Lab' }))
-  await screen.findByRole('listbox', { name: 'Loreframe Lab videos' })
+  fireEvent.click(screen.getByRole('button', { name: 'From HocusPocus' }))
+  await screen.findByRole('listbox', { name: 'HocusPocus videos' })
   fireEvent.click(screen.getByRole('option', { name: 'minimax_h3_713afac9.mp4' }))
   fireEvent.click(screen.getByRole('option', { name: 'second_clip.mp4' }))
   assert.equal(screen.getByRole('option', { name: 'minimax_h3_713afac9.mp4' }).getAttribute('aria-selected'), 'true')

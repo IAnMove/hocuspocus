@@ -67,7 +67,7 @@ sys.argv = _wgp_argv
 # instead of hanging indefinitely; HF's resumable-download retry
 # layer picks up from the partial file. Also hooks tqdm to track
 # download progress for the UI's downloads-in-progress banner.
-print("[Loreframe Lab] Installing download stall protection...")
+print("[HocusPocus Lab] Installing download stall protection...")
 from services import safe_download  # noqa: F401 (side-effect import)
 
 # HuggingFace token-path robustness (fixes the "Permission denied:
@@ -89,7 +89,7 @@ if _hf_token_path:
     except FileNotFoundError:
         pass  # absent → huggingface_hub handles this gracefully (anonymous)
     except OSError as _hf_err:
-        print(f"[Loreframe Lab] HF_TOKEN_PATH is set but unreadable "
+        print(f"[HocusPocus Lab] HF_TOKEN_PATH is set but unreadable "
               f"({type(_hf_err).__name__}) — using anonymous HuggingFace "
               "access for public models.")
         os.environ.pop("HF_TOKEN_PATH", None)
@@ -105,7 +105,7 @@ if _hf_token_path:
             _hf_const.HF_TOKEN_PATH = os.path.join(tempfile.gettempdir(), "maestro_no_hf_token")
 
 # Now safe to import wgp - all module-level code will run with patched argv
-print("[Loreframe Lab] Importing WanGP engine...")
+print("[HocusPocus Lab] Importing WanGP engine...")
 import wgp
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import debug_trace
@@ -128,7 +128,7 @@ from models.minimax_h3.turbo import (
     MINIMAX_H3_TURBO_LORA_SHA256,
     MINIMAX_H3_TURBO_LORA_SIZE,
 )
-print(f"[Loreframe Lab] WanGP loaded: {len(wgp.displayed_model_types)} models available")
+print(f"[HocusPocus Lab] WanGP loaded: {len(wgp.displayed_model_types)} models available")
 # Base save path always comes from server_config["save_path"] (never from wgp.save_path which gets workspace-modified)
 
 # Apply active workspace on startup
@@ -168,9 +168,9 @@ if "auto_performance" not in _services:
     try:
         with open(wgp.server_config_filename, "w", encoding="utf-8") as _f:
             _f.write(json.dumps(wgp.server_config, indent=4))
-        print("[Loreframe Lab] Migration: existing config detected, auto_performance set to False (manual mode preserved)")
+        print("[HocusPocus Lab] Migration: existing config detected, auto_performance set to False (manual mode preserved)")
     except Exception as _e:
-        print(f"[Loreframe Lab] Migration: failed to persist auto_performance default: {_e}")
+        print(f"[HocusPocus Lab] Migration: failed to persist auto_performance default: {_e}")
 
 # First-boot auto-tune: a fresh install has auto_performance=True but the
 # recommended profile was only ever WRITTEN when the user opened Settings and
@@ -193,12 +193,12 @@ if _services.get("auto_performance") and not _services.get("auto_performance_app
             _services["auto_performance_applied"] = True
             with open(wgp.server_config_filename, "w", encoding="utf-8") as _f:
                 _f.write(json.dumps(wgp.server_config, indent=4))
-            print(f"[Loreframe Lab] First-boot auto-tune applied: {_rec.get('_recommendation_label', 'recommended profile')} "
+            print(f"[HocusPocus Lab] First-boot auto-tune applied: {_rec.get('_recommendation_label', 'recommended profile')} "
                   f"(video_profile={_rec.get('video_profile')}, vram_safety_coefficient={_rec.get('vram_safety_coefficient')})")
         else:
-            print("[Loreframe Lab] First-boot auto-tune skipped: no CUDA GPU detected.")
+            print("[HocusPocus Lab] First-boot auto-tune skipped: no CUDA GPU detected.")
     except Exception as _e:
-        print(f"[Loreframe Lab] First-boot auto-tune skipped ({_e}); using defaults until Settings → Performance is applied.")
+        print(f"[HocusPocus Lab] First-boot auto-tune skipped ({_e}); using defaults until Settings → Performance is applied.")
 
 # Restore argv
 sys.argv = _original_argv
@@ -215,7 +215,7 @@ from services.access_log_filter import install_quiet_access_filter
 # filters. Install early, then idempotently confirm it again before startup.
 install_quiet_access_filter()
 
-api = FastAPI(title="Loreframe Lab API", version="1.0.0")
+api = FastAPI(title="HocusPocus Lab API", version="1.0.0")
 
 debug_trace.configure(
     enabled=lambda: bool(
@@ -496,11 +496,11 @@ def _coordinated_generation_slot(
     model_type = str(params.get("model_type") or "").strip()
     if not description:
         if _is_legacy_h3_model(model_type):
-            description = "Loreframe Lab H3 Legacy generation"
+            description = "HocusPocus Lab H3 Legacy generation"
         elif model_type:
-            description = f"Loreframe Lab WGP generation · {model_type}"
+            description = f"HocusPocus Lab WGP generation · {model_type}"
         else:
-            description = "Loreframe Lab GPU generation"
+            description = "HocusPocus Lab GPU generation"
     with generation_slot(_gen_lock, job) as acquired:
         if not acquired:
             yield False
@@ -6567,7 +6567,7 @@ def delete_preset(preset_id: str):
 
 
 def _read_app_version() -> str:
-    """Maestro release version from the repo-root VERSION file."""
+    """HocusPocus release version from the repo-root VERSION file."""
     try:
         vpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "VERSION")
         with open(vpath, "r", encoding="utf-8") as f:
@@ -6645,7 +6645,7 @@ def _apply_linked_model_folders(folders):
         if not os.path.isdir(ap):
             raise HTTPException(status_code=400, detail=f"Folder does not exist: {ap}")
         if not is_external_root(ap):
-            raise HTTPException(status_code=400, detail=f"Folder is inside the Loreframe Lab install (already searched): {ap}")
+            raise HTTPException(status_code=400, detail=f"Folder is inside the HocusPocus Lab install (already searched): {ap}")
         ap_n = os.path.normcase(ap)
         if ap_n == primary_n:
             raise HTTPException(status_code=400, detail=f"Folder is the primary download root: {ap}")
@@ -7143,7 +7143,7 @@ def system_preflight():
             "id": "ffmpeg",
             "level": "error",
             "message": "ffmpeg was not found on PATH. Video and audio "
-                       "export will fail. Install ffmpeg and restart Loreframe Lab.",
+                       "export will fail. Install ffmpeg and restart HocusPocus Lab.",
         })
 
     # CUDA — the generation pipeline is NVIDIA-only.
@@ -7153,7 +7153,7 @@ def system_preflight():
             checks.append({
                 "id": "cuda",
                 "level": "error",
-                "message": "No CUDA GPU detected. Loreframe Lab's generation "
+                "message": "No CUDA GPU detected. HocusPocus Lab's generation "
                            "pipeline requires an NVIDIA GPU; generation will "
                            "not work on this machine.",
             })
@@ -7938,7 +7938,7 @@ async def storage_remove_linked(request: Request):
         raise HTTPException(status_code=404, detail="File not found.")
     target = os.path.abspath(path)
     if not wgp.fl.is_protected_path(target):
-        raise HTTPException(status_code=400, detail="That file is not in a linked install — use Reclaim for Loreframe Lab's own copies.")
+        raise HTTPException(status_code=400, detail="That file is not in a linked install — use Reclaim for HocusPocus Lab's own copies.")
     target_real = os.path.realpath(target)
     try:
         psize = os.path.getsize(target_real)
@@ -7968,11 +7968,11 @@ async def storage_remove_linked(request: Request):
         if surviving:
             break
     if not surviving:
-        raise HTTPException(status_code=409, detail="Loreframe Lab does not hold an identical copy of that file — refusing to remove the linked install's only version.")
+        raise HTTPException(status_code=409, detail="HocusPocus Lab does not hold an identical copy of that file — refusing to remove the linked install's only version.")
     from services.win_safe_files import recycle_file
     if not recycle_file(target):
         raise HTTPException(status_code=423, detail="Could not move the file to the Recycle Bin (it may be locked, or too large for the Bin). Nothing was deleted.")
-    print(f"[Storage] Removed linked duplicate to Recycle Bin: {target} ({psize} bytes; Loreframe Lab's copy: {surviving})")
+    print(f"[Storage] Removed linked duplicate to Recycle Bin: {target} ({psize} bytes; HocusPocus Lab's copy: {surviving})")
     return {"status": "ok", "freed_bytes": psize, "recycled": True, "surviving_copy": surviving}
 
 
@@ -8732,7 +8732,7 @@ async def llm_enhance_prompt(request: Request):
             print(f"[Enhance] Wan2GP enhancer failed, falling back to LLM: {e}")
             # Fall through to LLM
     elif enhancer_enabled > 0 and needs_h3_context_ir:
-        print("[Enhance] MiniMax H3 requires structured Context-IR; using Loreframe Lab's model-specific LLM guide")
+        print("[Enhance] MiniMax H3 requires structured Context-IR; using HocusPocus Lab's model-specific LLM guide")
 
     # Use our local LLM service
     from services import llm_service
@@ -18011,7 +18011,7 @@ async def repaint_endpoint(request: Request):
         shot_final_out_dir = None
         try:
             with _coordinated_generation_slot(
-                job, description="Loreframe Lab GPU preparation · repaint",
+                job, description="HocusPocus Lab GPU preparation · repaint",
             ) as acquired:
                 if not acquired:
                     return
@@ -18967,7 +18967,7 @@ async def recast_endpoint(request: Request):
             # the generation phase; a waiting job may slip its detection in
             # between, but everything stays strictly one-GPU-task-at-a-time.
             with _coordinated_generation_slot(
-                job, description="Loreframe Lab GPU preparation · recast",
+                job, description="HocusPocus Lab GPU preparation · recast",
             ) as acquired:
                 if not acquired:
                     return
@@ -20334,7 +20334,7 @@ def _prepare_and_run_outpaint(job_id):
         # CPU-bound, but taking the slot preserves submission order and avoids
         # stacking ffmpeg decoding on top of another active generation.
         with _coordinated_generation_slot(
-            job, description="Loreframe Lab GPU preparation · outpaint",
+            job, description="HocusPocus Lab GPU preparation · outpaint",
         ) as acquired:
             if not acquired:
                 return
@@ -23165,7 +23165,7 @@ def _run_tool_upscale(job_id: str):
     abort_state = {"abort": False}
     audio_tracks = []
     with _coordinated_generation_slot(
-        job, description="Loreframe Lab GPU tool · upscale",
+        job, description="HocusPocus Lab GPU tool · upscale",
     ) as acquired:
         if not acquired:
             return False
@@ -23341,7 +23341,7 @@ def _run_tool_revoice(job_id: str):
     abort_state = {"abort": False}
     final_path = None
     with _coordinated_generation_slot(
-        job, description="Loreframe Lab GPU tool · revoice",
+        job, description="HocusPocus Lab GPU tool · revoice",
     ) as acquired:
         if not acquired:
             return False
@@ -26878,7 +26878,7 @@ def _comic_reference_image_file(source: str, workspace: str | None = None) -> st
         from urllib.parse import unquote
         path = _safe_join(os.path.join(os.getcwd(), "uploads"), unquote(filename))
     if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=400, detail="Character reference must be a Loreframe Lab output or upload")
+        raise HTTPException(status_code=400, detail="Character reference must be a HocusPocus Lab output or upload")
     if os.path.getsize(path) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Character reference is too large")
     import mimetypes
@@ -31040,7 +31040,7 @@ api.include_router(create_series_assembly_router(
 
 
 def _quick_video_batch_reference_path(source: str, workspace: str) -> str | None:
-    """Resolve only Loreframe-owned image URLs used by a Quick Video batch."""
+    """Resolve only HocusPocus-owned image URLs used by a Quick Video batch."""
     from urllib.parse import unquote, urlparse
 
     parsed_path = urlparse(str(source or "")).path
@@ -31252,7 +31252,7 @@ def _story_import_upload_path(value: str) -> str:
     upload_dir = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
     candidate = os.path.realpath(str(value or ""))
     if candidate != upload_dir and not candidate.startswith(upload_dir + os.sep):
-        raise HTTPException(status_code=400, detail="Smart asset analysis only accepts Loreframe Lab uploads")
+        raise HTTPException(status_code=400, detail="Smart asset analysis only accepts HocusPocus Lab uploads")
     if not os.path.isfile(candidate):
         raise HTTPException(status_code=400, detail="One imported asset is no longer available")
     return candidate
@@ -31513,7 +31513,7 @@ lighting and story-specific color cues, but do not paste the global visual style
 field. Maestro applies that independent style at image render time when its lock is enabled.
 Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instruction asks."""
     system_prompt = (
-        "You are Loreframe Lab Story Architect: a professional story editor, character "
+        "You are HocusPocus Lab Story Architect: a professional story editor, character "
         "designer and production bible author. Return strict JSON only."
     )
     schema = _story_lab_schema(schema_scope, project_type)
@@ -32045,7 +32045,7 @@ def _load_minimax_music_job(job_id: str) -> dict | None:
                     status="interrupted",
                     phase="interrupted",
                     message=(
-                        "Loreframe Lab restarted while MiniMax Music was active. "
+                        "HocusPocus Lab restarted while MiniMax Music was active. "
                         "Existing outputs were preserved; start a new request only after checking them."
                     ),
                     error="Provider completion is unknown after restart",
@@ -32696,7 +32696,7 @@ continuity exclusions that do not conflict.
 Dialogue density: {body.get('dialogueDensity', 'medium')}
 Ending requirement: {body.get('ending') or 'a satisfying ending'}
 Locked character bible: {json.dumps(characters, ensure_ascii=False)}"""
-    system_prompt = """You are Loreframe Lab Comic Director, a professional comics writer, visual
+    system_prompt = """You are HocusPocus Lab Comic Director, a professional comics writer, visual
 storyteller and continuity editor. Return only the JSON object required by the supplied schema.
 Keep every field concise and use stable character IDs."""
     try:
@@ -33208,7 +33208,7 @@ Never add or remove a line.
 
 Source page text: {json.dumps({"panels": source_panels}, ensure_ascii=False)}""",
         system_prompt=(
-            "You are Loreframe Lab's meticulous comic letterer and translator. "
+            "You are HocusPocus Lab's meticulous comic letterer and translator. "
             "Return only the strict JSON requested by the schema."
         ),
         schema=schema,
@@ -33332,7 +33332,7 @@ At most {max_elements} text block{"s" if max_elements != 1 else ""} may appear i
 Never duplicate or paraphrase the same message across caption, dialogue and sound effect.
 Source page: {json.dumps(source, ensure_ascii=False)}""",
             system_prompt=(
-                "You are Loreframe Lab's comic lettering editor and literary translator. "
+                "You are HocusPocus Lab's comic lettering editor and literary translator. "
                 "Return only the strict JSON requested by the schema."
             ),
             schema=schema,
@@ -33445,7 +33445,7 @@ visual storytelling; never use dialogue to repeat what the image already shows.
 
 Existing plan: {json.dumps(plan, ensure_ascii=False)}""",
             system_prompt=(
-                "You are Loreframe Lab's senior comics editor. Build clear setup, inciting incident, "
+                "You are HocusPocus Lab's senior comics editor. Build clear setup, inciting incident, "
                 "progressive complications, reversal, crisis, climax and resolution. Return only strict JSON."
             ),
             schema=schema,
@@ -36559,9 +36559,9 @@ try:
         api, _demo, path="/classic",
         allowed_paths=[wgp.save_path, wgp.image_save_path, "icons"],
     )
-    print("[Loreframe Lab] Gradio classic UI mounted at /classic")
+    print("[HocusPocus Lab] Gradio classic UI mounted at /classic")
 except Exception as e:
-    print(f"[Loreframe Lab] WARNING: Could not mount Gradio UI at /classic: {e}")
+    print(f"[HocusPocus Lab] WARNING: Could not mount Gradio UI at /classic: {e}")
     traceback.print_exc()
 
 
@@ -36586,12 +36586,12 @@ _mimetypes.add_type("image/svg+xml", ".svg")
 _ui_dist = os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))
 if os.path.isdir(_ui_dist):
     api.mount("/", StaticFiles(directory=_ui_dist, html=True))
-    print(f"[Loreframe Lab] React UI serving from {_ui_dist}")
+    print(f"[HocusPocus Lab] React UI serving from {_ui_dist}")
 else:
     @api.get("/")
     def index():
         return {"message": "React UI not built. Run: cd ui && npm install && npm run build"}
-    print(f"[Loreframe Lab] React UI not found at {_ui_dist} - serving API only")
+    print(f"[HocusPocus Lab] React UI not found at {_ui_dist} - serving API only")
 
 
 # ============================================================================
@@ -36651,10 +36651,10 @@ def run_server():
     resolved_port = _first_bindable_port(host, port)
     if resolved_port is None:
         print(
-            f"\n[Loreframe Lab] ERROR: could not find a free port in "
-            f"{port}-{port + 20}. Another app (or a stale Loreframe Lab instance) "
+            f"\n[HocusPocus Lab] ERROR: could not find a free port in "
+            f"{port}-{port + 20}. Another app (or a stale HocusPocus Lab instance) "
             f"is holding them.\n"
-            f"  • Close the other program, or stop the existing Loreframe Lab from "
+            f"  • Close the other program, or stop the existing HocusPocus Lab from "
             f"the Pinokio menu, then Start again.\n"
             f"  • On Windows you can see what holds a port with: "
             f"netstat -ano | findstr :{port}\n",
@@ -36663,7 +36663,7 @@ def run_server():
         sys.exit(1)
     if resolved_port != port:
         print(
-            f"[Loreframe Lab] Port {port} was busy — using {resolved_port} instead.",
+            f"[HocusPocus Lab] Port {port} was busy — using {resolved_port} instead.",
             flush=True,
         )
         port = resolved_port
@@ -36676,7 +36676,7 @@ def run_server():
     display_host = "127.0.0.1" if host == "0.0.0.0" else host
 
     print(f"\n{'='*50}")
-    print(f"  Loreframe Lab UI: http://{display_host}:{port}/")
+    print(f"  HocusPocus Lab UI: http://{display_host}:{port}/")
     # Trailing slash required: the Gradio submount 404s the bare path.
     print(f"  Classic UI:    http://{display_host}:{port}/classic/")
     print(f"  API docs:      http://{display_host}:{port}/docs")
@@ -36694,7 +36694,7 @@ def run_server():
         # window between probe and uvicorn's own bind). Still fail loudly and
         # actionably rather than dumping a bare traceback into the launcher.
         print(
-            f"\n[Loreframe Lab] ERROR: failed to bind {host}:{port} ({e}). "
+            f"\n[HocusPocus Lab] ERROR: failed to bind {host}:{port} ({e}). "
             f"The port was taken just after we checked it — Start again to "
             f"pick a fresh port.\n",
             flush=True,

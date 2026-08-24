@@ -221,7 +221,7 @@ export function ComicWritingProviderFields({
           value={value.writingProvider || 'maestro'}
           onChange={event => selectProvider(event.target.value as ComicDirectorRequest['writingProvider'])}
         >
-          <option value="maestro">Loreframe Lab internal · default</option>
+          <option value="maestro">HocusPocus internal · default</option>
           <option value="deepseek">DeepSeek · only this comic</option>
           <option value="minimax">MiniMax · only this comic</option>
           <option value="openai">OpenAI · only this comic</option>
@@ -263,7 +263,7 @@ export function ComicWritingProviderFields({
         </p>
       </>}
       </fieldset>
-      {!external && <p className="text-[9px] text-text-muted">Uses Loreframe Lab&apos;s configured internal LLM. External selection never changes the global provider.</p>}
+      {!external && <p className="text-[9px] text-text-muted">Uses HocusPocus&apos;s configured internal LLM. External selection never changes the global provider.</p>}
     </div>
   )
 }
@@ -1573,7 +1573,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         </span>
         <span className="mt-1 block text-[9px] text-text-muted">
           {effectiveVideoModel.includes('ltx2')
-            ? 'LTX Distilled uses Loreframe Lab’s validated two-stage 8+3 recipe.'
+            ? 'LTX Distilled uses HocusPocus’s validated two-stage 8+3 recipe.'
             : effectiveVideoModel.includes('minimax')
               ? 'MiniMax is the actual generative engine; “model-driven I2V” below describes a shot method, not a different model.'
               : 'The selected engine is frozen into PRE and shown again before generation.'}
@@ -2581,7 +2581,7 @@ export function ComicVideoPreflightPanel({
       <div className="mx-auto max-w-2xl rounded-xl border border-dashed border-border bg-bg-secondary/60 p-8 text-center">
         <Eye size={28} className="mx-auto text-text-muted" />
         <h2 className="mt-3 text-base font-semibold text-text-primary">No prepared film PRE</h2>
-        <p className="mt-1 text-xs text-text-muted">Open Video → Configuration/Adaptation, prepare a PRE, and Loreframe Lab will open it here without covering the comic canvas.</p>
+        <p className="mt-1 text-xs text-text-muted">Open Video → Configuration/Adaptation, prepare a PRE, and HocusPocus will open it here without covering the comic canvas.</p>
       </div>
     )
   }

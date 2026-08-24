@@ -88,7 +88,7 @@ export function Sidebar() {
         onClick={() => setSidebarMode('director')}
         className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
           // bg-toggle-active is flat accent-blue in the Classic theme
-          // and a blue gradient in Loreframe Blue. The glow token stays
+          // and a blue gradient in HocusPocus Blue. The glow token stays
           // theme-aware without changing this component's layout.
           isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'
         }`}
@@ -100,7 +100,7 @@ export function Sidebar() {
         className={`${size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-3 py-1 text-xs'} rounded-md transition-all ${
           // Studio active intentionally uses bg-toggle-active too so the
           // currently-active mode reads with the same prominence in
-          // Loreframe Blue. Classic theme: flat
+          // HocusPocus Blue. Classic theme: flat
           // accent-blue (was bg-bg-active dark elevation — small change
           // that brings the two buttons into visual parity).
           !isDirector ? 'bg-toggle-active shadow-accent-glow text-white' : 'text-text-secondary hover:text-text-primary'

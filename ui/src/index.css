@@ -15,7 +15,7 @@ model-viewer.scene-animator-model {
  * cascades into every utility class without recompilation.
  *
  * The default values below are the original Maestro palette (cool
- * charcoal). Loreframe Blue reuses the legacy Golden Hour ids while
+ * charcoal). HocusPocus Blue reuses the legacy Golden Hour ids while
  * replacing its orange brand accents with blue and cyan. To add a new
  * theme, add another `[data-theme="..."]`
  * block below — no code changes elsewhere are required for elements
@@ -99,7 +99,7 @@ model-viewer.scene-animator-model {
 
   /* Cool accent — used for "AI" badges where we want a contrast
      against the dominant warm/cool palette. In default theme this
-     equals accent-blue; in Loreframe Blue it stays violet to contrast
+     equals accent-blue; in HocusPocus Blue it stays violet to contrast
      with the dominant blue controls. */
   --color-accent-cool-from: #3b82f6;
   --color-accent-cool-to: #6366f1;
@@ -107,7 +107,7 @@ model-viewer.scene-animator-model {
   /* CTA gradient — primary action buttons (e.g. Generate).
      In default theme both stops equal accent-green so the gradient
      renders as the original flat green (preserves the default look).
-     In Loreframe Blue the stops form a blue cinematic gradient.
+     In HocusPocus Blue the stops form a blue cinematic gradient.
      Components using `bg-cta` adapt automatically. */
   --color-gradient-cta-from: #22c55e;
   --color-gradient-cta-to: #22c55e;
@@ -115,7 +115,7 @@ model-viewer.scene-animator-model {
   /* Toggle-active gradient — used for active states on mode toggles
      (Director/Studio pill, similar). Default theme: both stops equal
      accent-blue so the active button renders as the original flat
-     blue. Loreframe Blue: shifts to a deeper blue gradient. Kept
+     blue. HocusPocus Blue: shifts to a deeper blue gradient. Kept
      separate from the CTA gradient so a future theme can choose
      different colors for primary actions vs active toggles. */
   --color-gradient-toggle-from: #3b82f6;
@@ -125,13 +125,13 @@ model-viewer.scene-animator-model {
      around the currently-selected media asset in the gallery.
      Default theme: both stops equal accent-blue, so the active frame
      reads as a flat blue ring (matches the prior border-accent-blue
-     behaviour). Loreframe Blue: blue→cyan diagonal gradient that
+     behaviour). HocusPocus Blue: blue→cyan diagonal gradient that
      reads like cool stage-light spill across the asset's edge. */
   --color-gradient-active-frame-from: #3b82f6;
   --color-gradient-active-frame-to: #3b82f6;
 
   /* Theme-aware glow shadows. Empty in default theme (no glow);
-     set to a cool blue bloom in Loreframe Blue for active rings. */
+     set to a cool blue bloom in HocusPocus Blue for active rings. */
   --shadow-accent-glow: 0 0 0 transparent;
   --shadow-active-ring: 0 0 0 2px var(--color-accent-blue);
 }
@@ -144,8 +144,8 @@ model-viewer.scene-animator-model {
   color-scheme: dark;
 }
 
-/* ─── Loreframe Blue theme ───────────────────────────────────────────────
- * Experimental Loreframe Lab palette. The legacy `golden-hour` id is
+/* ─── HocusPocus Blue theme ───────────────────────────────────────────────
+ * Experimental HocusPocus palette. The legacy `golden-hour` id is
  * intentionally retained so existing stored preferences keep working.
  * Near-black surfaces remain unchanged; brand actions, selections and
  * borders move from orange to electric blue and cyan. Functional success
@@ -195,7 +195,7 @@ model-viewer.scene-animator-model {
   --shadow-accent-glow: 0 0 18px rgba(37, 99, 235, 0.38);
 
   /* Active-ring shadow — minimal. The visual character of the active
-   * frame in Loreframe Blue lives ON the bezel itself (see the
+   * frame in HocusPocus Blue lives ON the bezel itself (see the
    * .frame-active-gradient override below — conic gradient with
    * spotlight stops). The shadow is a tiny outer wash so the bright
    * stops on the bezel "leak" a hint of blue without an obvious
@@ -203,7 +203,7 @@ model-viewer.scene-animator-model {
   --shadow-active-ring: 0 0 6px rgba(56, 189, 248, 0.16);
 }
 
-/* Loreframe Blue active-frame bezel: conic-gradient spotlight stops.
+/* HocusPocus Blue active-frame bezel: conic-gradient spotlight stops.
  *
  * The border line varies between electric blue and cyan as light catches
  * the edge. Crucially, the dim sections should still
@@ -237,9 +237,9 @@ model-viewer.scene-animator-model {
   background-clip: padding-box, border-box;
 }
 
-/* ─── Loreframe Blue light theme ─────────────────────────────────────────
+/* ─── HocusPocus Blue light theme ─────────────────────────────────────────
  * The legacy `ivory` id remains for stored-preference compatibility.
- * Cool paper surfaces and blue actions mirror Loreframe Blue in daylight.
+ * Cool paper surfaces and blue actions mirror HocusPocus Blue in daylight.
  *
  * The elevation ladder remains inverted relative to the dark themes.
  */
@@ -513,7 +513,7 @@ model-viewer.scene-animator-model {
      uses hardcoded white text + shadow-accent-glow halo, so the
      background needs to be dark enough that white text reads
      cleanly without competing with the glow. Range chosen to
-     roughly match Loreframe Blue's action-gradient luminance band
+     roughly match HocusPocus Blue's action-gradient luminance band
      (~0.08→0.27) so both themes feel similarly "lit" against
      their dark chrome without blowing out the foreground text. */
   --color-gradient-toggle-from: #4d4d4d;
@@ -528,7 +528,7 @@ model-viewer.scene-animator-model {
   --color-gradient-active-frame-from: #888888;
   --color-gradient-active-frame-to: #888888;
 
-  /* Glow shadows — subtle white wash, much dimmer than Loreframe
+  /* Glow shadows — subtle white wash, much dimmer than HocusPocus
      Blue's cool bloom. Maintains the active-asset focus signal
      without breaking the minimalist feel. */
   --shadow-accent-glow: 0 0 12px rgba(255, 255, 255, 0.18);
@@ -561,7 +561,7 @@ model-viewer.scene-animator-model {
    * Default theme: linear gradient with both stops the same colour
    * (= flat solid bezel, preserves prior look).
    *
-   * Loreframe Blue: see [data-theme="golden-hour"] block above — uses a
+   * HocusPocus Blue: see [data-theme="golden-hour"] block above — uses a
    * conic-gradient for "spotlights along the edge" effect.
    *
    * Use with `border-2 border-transparent` and a wrapping element

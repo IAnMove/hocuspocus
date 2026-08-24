@@ -56,9 +56,9 @@ function ViewUpload({ view, value, busy, required, onUpload, onBrowse, onRemove 
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
             <span className="text-[8px]">{busy ? 'Uploading' : 'Upload'}</span>
           </button>
-          <button type="button" disabled={busy} onClick={onBrowse} aria-label={`Choose ${viewLabels[view]} image from Loreframe`} className="flex min-h-0 flex-1 flex-col items-center justify-center gap-0.5 rounded border-t border-border text-text-muted transition-colors hover:bg-bg-hover hover:text-accent-blue disabled:opacity-50">
+          <button type="button" disabled={busy} onClick={onBrowse} aria-label={`Choose ${viewLabels[view]} image from HocusPocus`} className="flex min-h-0 flex-1 flex-col items-center justify-center gap-0.5 rounded border-t border-border text-text-muted transition-colors hover:bg-bg-hover hover:text-accent-blue disabled:opacity-50">
             <Images size={14} />
-            <span className="text-[8px]">Loreframe</span>
+            <span className="text-[8px]">HocusPocus</span>
           </button>
         </div>
       )}
@@ -156,7 +156,7 @@ export function Hunyuan3DPanel() {
     } catch (err) {
       if (requestId !== imageLoadRef.current) return
       setImageSources([])
-      setError(err instanceof Error ? err.message : 'Could not load Loreframe images')
+      setError(err instanceof Error ? err.message : 'Could not load HocusPocus images')
     } finally {
       if (requestId === imageLoadRef.current) setImagesLoading(false)
     }
@@ -376,7 +376,7 @@ export function Hunyuan3DPanel() {
       ) : !installed ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
           <p className="text-xs font-medium text-amber-300">Hunyuan3D runtime is not installed</p>
-          <p className="text-[10px] text-text-muted mt-1 leading-relaxed">Stop Loreframe Lab and run its standard <strong>Install</strong> or <strong>Update</strong> action. The runtime stays inside Loreframe Lab; model weights download on first use.</p>
+          <p className="text-[10px] text-text-muted mt-1 leading-relaxed">Stop HocusPocus and run its standard <strong>Install</strong> or <strong>Update</strong> action. The runtime stays inside HocusPocus; model weights download on first use.</p>
         </div>
       ) : (
         <>
@@ -432,18 +432,18 @@ export function Hunyuan3DPanel() {
               <div className="mt-2 rounded-lg border border-accent-blue/30 bg-bg-primary p-2">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
-                    <div className="text-[10px] font-medium text-text-primary">Loreframe images · {viewLabels[imagePickerView]}</div>
+                    <div className="text-[10px] font-medium text-text-primary">HocusPocus images · {viewLabels[imagePickerView]}</div>
                     <p className="text-[8px] text-text-muted">Newest 200 images in the active workspace.</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button type="button" disabled={imagesLoading} onClick={() => void loadImageSources()} aria-label="Refresh Loreframe images" className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary disabled:opacity-50"><RefreshCw size={11} className={imagesLoading ? 'animate-spin' : ''} /></button>
-                    <button type="button" onClick={() => setImagePickerView(null)} aria-label="Close Loreframe image picker" className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary"><X size={11} /></button>
+                    <button type="button" disabled={imagesLoading} onClick={() => void loadImageSources()} aria-label="Refresh HocusPocus images" className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary disabled:opacity-50"><RefreshCw size={11} className={imagesLoading ? 'animate-spin' : ''} /></button>
+                    <button type="button" onClick={() => setImagePickerView(null)} aria-label="Close HocusPocus image picker" className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary"><X size={11} /></button>
                   </div>
                 </div>
                 {imagesLoading ? (
-                  <div className="flex items-center justify-center gap-1.5 py-5 text-[9px] text-text-muted"><Loader2 size={12} className="animate-spin" /> Loading Loreframe images…</div>
+                  <div className="flex items-center justify-center gap-1.5 py-5 text-[9px] text-text-muted"><Loader2 size={12} className="animate-spin" /> Loading HocusPocus images…</div>
                 ) : imageSources.length ? (
-                  <div role="listbox" aria-label={`Loreframe images for ${viewLabels[imagePickerView]} view`} className="grid max-h-52 grid-cols-3 gap-1.5 overflow-y-auto pr-0.5">
+                  <div role="listbox" aria-label={`HocusPocus images for ${viewLabels[imagePickerView]} view`} className="grid max-h-52 grid-cols-3 gap-1.5 overflow-y-auto pr-0.5">
                     {imageSources.map(file => (
                       <button key={file.name} type="button" role="option" aria-selected={views[imagePickerView]?.path === file.name} aria-label={file.name} onClick={() => selectImageSource(imagePickerView, file)} title={file.name} className="relative aspect-square overflow-hidden rounded border border-border bg-bg-tertiary hover:border-accent-blue focus:border-accent-blue">
                         <img src={file.thumbnail_url || file.url} alt="" className="h-full w-full object-cover" loading="lazy" />
@@ -452,7 +452,7 @@ export function Hunyuan3DPanel() {
                     ))}
                   </div>
                 ) : (
-                  <p className="py-4 text-center text-[9px] text-text-muted">No images in this Loreframe workspace yet.</p>
+                  <p className="py-4 text-center text-[9px] text-text-muted">No images in this HocusPocus workspace yet.</p>
                 )}
               </div>
             )}
@@ -494,7 +494,7 @@ export function Hunyuan3DPanel() {
                 <label className="flex items-center gap-1.5" title="First compile can pin RAM for a long time. Leave off unless you know you need it."><input type="checkbox" checked={compile} onChange={event => setCompile(event.target.checked)} /> Torch compile</label>
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={reduceFace} onChange={event => setReduceFace(event.target.checked)} /> Simplify mesh</label>
               </div>
-              <p className="text-[9px] text-text-muted">Higher octree/texture resolutions and PBR consume substantially more VRAM. Chunks above 16k at octree 512 can freeze the GPU. CPU offload is recommended while other Loreframe Lab models are in use.</p>
+              <p className="text-[9px] text-text-muted">Higher octree/texture resolutions and PBR consume substantially more VRAM. Chunks above 16k at octree 512 can freeze the GPU. CPU offload is recommended while other HocusPocus models are in use.</p>
             </div>
           )}
 

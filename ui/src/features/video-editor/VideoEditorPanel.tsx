@@ -2062,7 +2062,7 @@ export function VideoEditorPanel() {
           disabled={adding}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover disabled:opacity-50"
         >
-          <FolderOpen size={13} /> From Loreframe Lab
+          <FolderOpen size={13} /> From HocusPocus
         </button>
         <button
           onClick={startExport}
@@ -2251,7 +2251,7 @@ export function VideoEditorPanel() {
                 onClick={takeScreenshot}
                 disabled={!selected || capturingFrame}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-hover disabled:opacity-40"
-                title="Save the exact current source frame as a reusable PNG in Loreframe Lab Outputs"
+                title="Save the exact current source frame as a reusable PNG in HocusPocus Outputs"
               >
                 {capturingFrame
                   ? <Loader2 size={11} className="animate-spin" />
@@ -2911,7 +2911,7 @@ export function VideoEditorPanel() {
       {pickerOpen && (
         <ModalShell
           open
-          title="Add Loreframe Lab videos"
+          title="Add HocusPocus videos"
           onClose={closeMaestroPicker}
           className="fixed inset-0 z-[80] bg-black/65 flex items-center justify-center p-4"
           onMouseDown={event => {
@@ -2921,11 +2921,11 @@ export function VideoEditorPanel() {
           <div className="w-full max-w-4xl max-h-[78vh] bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <FolderOpen size={15} className="text-accent-blue" />
-              <span className="text-sm font-medium">Add Loreframe Lab videos</span>
+              <span className="text-sm font-medium">Add HocusPocus videos</span>
               {maestroVideoTotal > 0 && (
                 <span className="text-[10px] text-text-muted">{maestroVideos.length} / {maestroVideoTotal}</span>
               )}
-              <button type="button" onClick={closeMaestroPicker} aria-label="Close Loreframe Lab video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
+              <button type="button" onClick={closeMaestroPicker} aria-label="Close HocusPocus video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
                 <X size={15} />
               </button>
             </div>
@@ -2935,7 +2935,7 @@ export function VideoEditorPanel() {
                   <Loader2 size={22} className="animate-spin" />
                 </div>
               ) : maestroVideos.length ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" role="listbox" aria-multiselectable="true" aria-label="Loreframe Lab videos">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" role="listbox" aria-multiselectable="true" aria-label="HocusPocus videos">
                   {maestroVideos.map(output => {
                     const selected = pickerSelectedSet.has(output.name)
                     return (

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Menu, Settings } from 'lucide-react'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { MainContent } from './components/MainContent/MainContent'
@@ -15,6 +15,7 @@ import { WelcomeModal } from './components/WelcomeModal'
 import { QueueRecoveryDialog } from './components/QueueRecoveryDialog'
 import { RecipesOverlay } from './components/Recipes/RecipesOverlay'
 import { BrandIdentity } from './components/BrandIdentity'
+import { HocusPocusIntro } from './components/HocusPocusIntro'
 import { LanAuthGate } from './components/LanAuthGate'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
@@ -33,6 +34,7 @@ export function LazyDirectorOverlay({ open }: { open: boolean }) {
 }
 
 function AppContent() {
+  const [introComplete, setIntroComplete] = useState(false)
   const loadModels = useStore(s => s.loadModels)
   const loadOutputs = useStore(s => s.loadOutputs)
   const maybeRefreshGallery = useStore(s => s.maybeRefreshGallery)
@@ -194,10 +196,11 @@ function AppContent() {
           downloads in amber so users know the system is recovering
           rather than frozen. */}
       <DownloadStatusBanner />
-      {/* WelcomeModal — one-time first-run orientation (localStorage-gated). */}
-      <WelcomeModal />
+      {/* The startup mark hands over to the existing first-run / updates dialog. */}
+      {introComplete && <WelcomeModal />}
       {/* Explicit choice after an interrupted Pinokio/server session. */}
       <QueueRecoveryDialog />
+      {!introComplete && <HocusPocusIntro onComplete={() => setIntroComplete(true)} />}
     </div>
   )
 }

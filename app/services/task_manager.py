@@ -494,7 +494,7 @@ class TaskRegistry:
         task = {
             "id": task_id, "root_id": root_id, "parent_id": parent_id,
             "kind": str(fields.get("kind") or "workflow")[:120],
-            "title": str(fields.get("title") or "Loreframe Lab task")[:500],
+            "title": str(fields.get("title") or "HocusPocus Lab task")[:500],
             "workflow": str(fields.get("workflow") or fields.get("kind") or "workflow")[:160],
             "status": status, "phase": str(fields.get("phase") or status)[:160],
             "message": str(fields.get("message") or "Queued")[:2000],

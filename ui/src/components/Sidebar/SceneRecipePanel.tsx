@@ -401,7 +401,7 @@ export function SceneRecipePanel({
             <div className="rounded border border-border bg-bg-primary p-2">
               <div className="mb-1.5 flex items-center justify-between gap-1">
                 <span className="text-[10px] text-text-muted">
-                  {picker === 'model3d' ? 'GLBs from Loreframe' : 'Images & videos from Loreframe'}
+                  {picker === 'model3d' ? 'GLBs from HocusPocus' : 'Images & videos from HocusPocus'}
                 </span>
                 <button type="button" onClick={() => setPicker(null)} className="text-text-muted hover:text-text-primary"><X size={12} /></button>
               </div>

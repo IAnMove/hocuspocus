@@ -43,10 +43,10 @@ test('WelcomeModal renders and dismisses when localStorage throws', { concurrenc
 
   try {
     render(<WelcomeModal />)
-    assert.ok(screen.getByText('Welcome to Loreframe Lab'))
-    fireEvent.click(screen.getByRole('button', { name: 'Get started' }))
-    assert.equal(screen.queryByText('Welcome to Loreframe Lab'), null)
-    assert.equal(safeStorageGet('local', 'maestro_welcome_seen_v1'), '1')
+    assert.ok(screen.getByText('Novedades de HocusPocus'))
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar al estudio' }))
+    assert.equal(screen.queryByText('Novedades de HocusPocus'), null)
+    assert.equal(safeStorageGet('local', 'hocuspocus_welcome_seen_v1'), '1')
   } finally {
     cleanup()
     Object.defineProperty(window, 'localStorage', { configurable: true, value: original })

@@ -350,7 +350,7 @@ export function buildRecipeSystemPrompt(options: {
 - Reuse a matching inventory source when available; otherwise generate only assets needed by a layer.
 - Emit exactly ONE model3d asset per persistent object identity, then reuse its asset id in every shot.
 - Do not set a made-up source. A generated asset has a prompt and no source.`
-  return `You are Loreframe Lab's senior virtual-production planner. Convert one natural-language request, in ANY language, into a technically valid 3D Video compositor recipe. Return exactly one JSON object and nothing else.
+  return `You are HocusPocus's senior virtual-production planner. Convert one natural-language request, in ANY language, into a technically valid 3D Video compositor recipe. Return exactly one JSON object and nothing else.
 
 SILENT PLANNING PROCESS:
 1. Extract the requested format, persistent subjects, setting, chronological actions, mood, camera language and effects. Do not omit a requested beat.

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Sparkles, Download, Cpu, ShieldAlert, X } from 'lucide-react'
 import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
 
-const SEEN_KEY = 'maestro_welcome_seen_v1'
+const SEEN_KEY = 'hocuspocus_welcome_seen_v1'
 
 /**
  * WelcomeModal — a one-time first-run intro. Sets the expectations that
@@ -35,10 +35,10 @@ export function WelcomeModal() {
             <Sparkles size={22} className="text-accent-blue" />
           </div>
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-text-primary">Welcome to Loreframe Lab</h2>
+            <h2 className="text-base font-semibold text-text-primary">Novedades de HocusPocus</h2>
             <p className="text-xs text-text-muted mt-0.5">
-              A local AI studio for video, images, and music — including a Director mode
-              that plans a whole music video or short film from a sentence.
+              Tu estudio local de IA para vídeo, imágenes, audio y 3D. Estas son las claves
+              para arrancar bien una producción.
             </p>
           </div>
           <button onClick={dismiss} className="p-1 rounded text-text-muted hover:text-text-primary" aria-label="Close">
@@ -71,7 +71,7 @@ export function WelcomeModal() {
             onClick={dismiss}
             className="px-5 py-2 text-xs bg-accent-blue text-white rounded-lg hover:bg-accent-blue-hover transition-colors font-medium"
           >
-            Get started
+            Entrar al estudio
           </button>
         </div>
       </div>

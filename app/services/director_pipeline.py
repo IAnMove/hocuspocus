@@ -71,7 +71,7 @@ def _workspace_output_dir(workspace: str) -> str:
     """Resolve a Director workspace without importing the HTTP launcher.
 
     The runtime launcher owns ``_workspace_dir``; importing ``launch`` here
-    breaks the deferred Loreframe entrypoint because ``launch.py`` is only the
+    breaks the deferred HocusPocus entrypoint because ``launch.py`` is only the
     compatibility application module.  Director is also used from a worker,
     so it should resolve the same configured output root locally.
     """
@@ -1532,8 +1532,8 @@ def _normalize_interrupted_repair(state: dict, pid: str) -> bool:
         "status": "interrupted",
         "phase": "interrupted",
         "clip_index": None,
-        "message": "Repair was interrupted when Loreframe Lab stopped. Start Repair again to continue.",
-        "error": "Loreframe Lab stopped before the repair finished.",
+        "message": "Repair was interrupted when HocusPocus Lab stopped. Start Repair again to continue.",
+        "error": "HocusPocus Lab stopped before the repair finished.",
         "updated_at": now,
         "completed_at": now,
     })
@@ -5929,7 +5929,7 @@ def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
         "completed": "Director generation completed",
         "cancelled": "Director generation cancelled",
         "failed": "Director generation failed",
-        "crashed": "Director generation was interrupted when Loreframe Lab stopped",
+        "crashed": "Director generation was interrupted when HocusPocus Lab stopped",
     }.get(saved_status, "Saved Director generation")
     return {
         "id": pid,
@@ -5956,7 +5956,7 @@ def get_pipeline_status(pid: str, out_dir: str) -> Optional[dict]:
         ],
         "output_files": saved.get("output_files", []) or [],
         "error": saved.get("error") or (
-            "Loreframe Lab no longer has a live worker for this Director run."
+            "HocusPocus Lab no longer has a live worker for this Director run."
             if saved_status == "crashed" else None
         ),
         "pause_reason": None,

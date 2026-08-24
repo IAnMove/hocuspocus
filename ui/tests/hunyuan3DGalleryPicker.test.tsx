@@ -38,7 +38,7 @@ const capabilities = {
   active_jobs: 0,
 }
 
-test('Hunyuan3D keeps disk upload and can use a Loreframe image in the active workspace', { concurrency: false }, async () => {
+test('Hunyuan3D keeps disk upload and can use a HocusPocus image in the active workspace', { concurrency: false }, async () => {
   const { render, screen, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
   const { Hunyuan3DPanel } = await import('../src/components/Sidebar/Hunyuan3DPanel.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
@@ -81,11 +81,11 @@ test('Hunyuan3D keeps disk upload and can use a Loreframe image in the active wo
 
   try {
     render(<Hunyuan3DPanel />)
-    await screen.findByRole('button', { name: 'Choose Front image from Loreframe' })
+    await screen.findByRole('button', { name: 'Choose Front image from HocusPocus' })
     assert.ok(screen.getByRole('button', { name: 'Upload Front image from disk' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Front image from Loreframe' }))
-    await screen.findByRole('listbox', { name: 'Loreframe images for Front view' })
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Front image from HocusPocus' }))
+    await screen.findByRole('listbox', { name: 'HocusPocus images for Front view' })
     fireEvent.click(screen.getByRole('option', { name: 'bronze_robot_reference.png' }))
     assert.ok(screen.getByText('bronze_robot_reference.png'))
 
