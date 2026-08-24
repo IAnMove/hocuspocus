@@ -286,6 +286,13 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
           },
         },
         required: ['id', 'kind'],
+        // Keep the structured-output grammar aligned with parseSceneRecipe.
+        // Without this, an LLM can emit a syntactically valid asset such as
+        // { id: 'ridge_background', kind: 'image' } that cannot be resolved.
+        anyOf: [
+          { required: ['source'] },
+          { required: ['prompt'] },
+        ],
         additionalProperties: false,
       },
     },
@@ -352,6 +359,13 @@ export function buildRecipeSystemPrompt(options: {
 - Do not set a made-up source. A generated asset has a prompt and no source.`
   return `You are HocusPocus's senior virtual-production planner. Convert one natural-language request, in ANY language, into a technically valid 3D Video compositor recipe. Return exactly one JSON object and nothing else.
 
+NON-NEGOTIABLE ASSET CHECK (perform immediately before output):
+- Every entry in assets MUST contain a non-empty literal "source" copied from inventory OR a non-empty English "prompt". Never output an asset that has neither field.
+- A source is an existing file only. Never invent filenames, URLs or sources.
+- For a generated background, write an explicit prompt, for example: "Empty misty mountain ridge at dawn, wide landscape plate, no spacecraft, no characters, no text." Do not use the asset id as a prompt.
+- For a generated model3d, write only the isolated object/character needed for the GLB: no scenery, no camera move, no duplicate subjects, no text.
+- For a generated video, write only genuinely moving environment/action that cannot be a static plate. Specify that it contains no controllable GLB hero.
+
 SILENT PLANNING PROCESS:
 1. Extract the requested format, persistent subjects, setting, chronological actions, mood, camera language and effects. Do not omit a requested beat.
 2. Break sequential actions into ordered shots. Keep the same asset id for the same subject across all shots.
@@ -365,7 +379,7 @@ OUTPUT CONTRACT:
 - Always output assets, at least one shot, and scene. scene.layers must duplicate the first shot's layers so preview is deterministic.
 - Every shot needs one camera layer and at least one visible image, video, model3d or overlay layer.
 - Visual layers reference an existing asset id through "asset". Effects use "atmosphere" and no asset. Camera layers use "cameraPreset" and no asset.
-- Asset ids, layer ids and shot names are unique and stable. Every asset needs exactly one of source or prompt; source wins when inventory supplies it.
+- Asset ids, layer ids and shot names are unique and stable. Every asset needs a source or prompt; source wins when inventory supplies it.
 - Within one shot, reference each model3d asset from exactly one model3d layer. Keep sequential movement, turns and pauses on that single layer; never duplicate a persistent object into parallel layers.
 - A top-level layer "clip" selects a rigged skeletal animation. When clip is used, its model3d asset must have rig_profile and include that clip in animations.
 - Do not invent people, vehicles, creatures, text, logos or extra hero objects that the request does not mention. Examples and filenames are format/data only; never copy their content into an unrelated request.

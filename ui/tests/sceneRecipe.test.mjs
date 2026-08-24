@@ -102,9 +102,14 @@ test('LLM contract is closed-schema, multilingual and treats inventory as data',
   assert.match(prompt, /Never invent rig_profile/)
   assert.match(prompt, /2D screen-space roll/)
   assert.match(prompt, /background image\/video plates static/)
+  assert.match(prompt, /NON-NEGOTIABLE ASSET CHECK/)
   assert.match(prompt, /Robot de bronce/)
   assert.equal(SCENE_RECIPE_JSON_SCHEMA.additionalProperties, false)
   assert.deepEqual(SCENE_RECIPE_JSON_SCHEMA.required, ['version', 'name', 'record', 'save', 'assets', 'shots', 'scene'])
+  assert.deepEqual(SCENE_RECIPE_JSON_SCHEMA.properties.assets.items.anyOf, [
+    { required: ['source'] },
+    { required: ['prompt'] },
+  ])
 })
 
 test('parser inserts a locked camera contract and rejects broken asset semantics', () => {

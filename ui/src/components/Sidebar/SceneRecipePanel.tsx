@@ -130,7 +130,9 @@ export function SceneRecipePanel({
 }) {
   const workspace = useStore(s => s.activeWorkspace)
   const loadOutputs = useStore(s => s.loadOutputs)
-  const [mode, setMode] = useState<'manual' | 'auto'>('manual')
+  // A natural-language request should work without first understanding the
+  // asset picker. Manual remains available for deterministic compositions.
+  const [mode, setMode] = useState<'manual' | 'auto'>('auto')
   const [intent, setIntent] = useState('Same saucer: first it rises behind the ridge, then it cruises left to right.')
   const [recipeText, setRecipeText] = useState(JSON.stringify(EXAMPLE_SAUCER_CRUISE_RECIPE, null, 2))
   const [selected, setSelected] = useState<LoadedAsset[]>([])
