@@ -55,8 +55,17 @@ test('run travel uses multi-plane strip motion without claiming a rigged run', (
   const hero = scene.layers.find(layer => layer.id === 'hero')
   assert.equal(scene.duration, 12)
   assert.equal(background?.strip?.speed, 12)
+  assert.equal(background?.strip?.direction, 'left')
+  assert.equal(background?.strip?.seamOccluder?.enabled, true)
   assert.equal(foreground?.strip?.speed, 58)
+  assert.equal(foreground?.strip?.direction, 'left')
   assert.equal(hero?.animation.clip, undefined)
+})
+
+test('run travel scrolls the world opposite the requested facing', () => {
+  const left = createNarrativeScene('run-travel-parallax', { ...assets, controls: { direction: 'left' } })
+  assert.equal(left.layers.find(layer => layer.id === 'plate')?.strip?.direction, 'right')
+  assert.equal(left.layers.find(layer => layer.id === 'foreground')?.strip?.direction, 'right')
 })
 
 test('narrative controls alter the editable template scene without adding hidden layers', () => {

@@ -1,4 +1,5 @@
 import type { Scene, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType } from '../types'
+import { suggestSeamOccluderKind } from './seamOccluder'
 
 export type NarrativeSceneId =
   | 'inner-thought'
@@ -215,7 +216,10 @@ export const applyNarrativeSceneControls = (scene: Scene, controls: NarrativeSce
             : isHero ? { ...layer.animation, start: { ...layer.animation.start, x: layer.animation.start.x + movement }, end: { ...layer.animation.end, x: layer.animation.end.x + movement }, keyframes: layer.animation.keyframes?.map(shift) }
               : layer.animation
       const transform = isHero ? { ...layer.transform, x: layer.transform.x + movement } : layer.transform
-      return { ...layer, transform, animation, effects: layer.type === 'camera' ? layer.effects : { ...layer.effects, ...palettePatch, ...(isHero ? moodPatch : {}) } }
+      const strip = layer.strip?.enabled && scene.narrative?.templateId === 'run-travel-parallax'
+        ? { ...layer.strip, direction: (controls.direction === 'left' ? 'right' : 'left') as NonNullable<SceneLayer['strip']>['direction'] }
+        : layer.strip
+      return { ...layer, transform, animation, strip, effects: layer.type === 'camera' ? layer.effects : { ...layer.effects, ...palettePatch, ...(isHero ? moodPatch : {}) } }
     }),
   }
 }
@@ -263,9 +267,23 @@ export const createNarrativeScene = (id: NarrativeSceneId, input: NarrativeTempl
     const foreground = input.foreground?.source ? baseLayer('foreground', input.foreground.name ?? 'Foreground', input.foreground.type ?? 'image', input.foreground.source, 15, duration, point(50, 50, 1.3, .35), point(50, 50, 1.3, .35), { fill: true, parallax: 1.7, strip: { enabled: true, count: 4, spacing: 100, direction: 'right', speed: 36, phase: 0 }, effects: { blur: .25 } }) : undefined
     layers = [withKeyframes(plate, buildDriftKeyframes('plate-transit', duration, point(58, 53, 1.1), point(42, 47, 1.18), { bob: .06 })), withKeyframes(hero, buildDriftKeyframes('hero-transit', duration, point(24, 57, .65), point(76, 44, 1.02), { bob: .55, pulse: .01, rotation: .65 })), ...(foreground ? [foreground] : []), cameraLayer(duration, point(48, 52, 1), point(52, 48, 1.07, 1, 1), buildDriftKeyframes('camera-transit', duration, point(48, 52, 1), point(52, 48, 1.07, 1, 1), { bob: .1, rotation: .15 }))]
   } else {
-    plate.strip = { enabled: true, count: 4, spacing: 100, direction: 'right', speed: 12, phase: 0 }
+    // A right-facing runner only looks like they are going forward if the
+    // world scrolls the other way. `direction: 'left'` flips that pair.
+    const scrollDirection = input.controls?.direction === 'left' ? 'right' : 'left'
+    plate.strip = {
+      enabled: true,
+      count: 4,
+      spacing: 100,
+      direction: scrollDirection,
+      speed: 12,
+      phase: 0,
+      seamOccluder: {
+        enabled: true,
+        kind: suggestSeamOccluderKind([input.plate?.name, template.title, template.description].filter(Boolean).join(' ')),
+      },
+    }
     const runner = withKeyframes(heroLayer(input, duration, point(38, 54, .88), point(39, 54, .9), { effects: { glow: .15, brightness: 1, saturation: 1.04, contrast: 1.08 } }), buildDriftKeyframes('hero-run', duration, point(38, 54, .88, 1, -2), point(39, 54, .9, 1, 2), { bob: .9, rotation: 1.5, curve: 'linear' }))
-    const foreground = input.foreground?.source ? baseLayer('foreground', input.foreground.name ?? 'Foreground', input.foreground.type ?? 'image', input.foreground.source, 15, duration, point(50, 50, 1.3, .4), point(50, 50, 1.3, .4), { fill: true, parallax: 1.7, strip: { enabled: true, count: 4, spacing: 100, direction: 'right', speed: 58, phase: 0 }, effects: { blur: .35 } }) : undefined
+    const foreground = input.foreground?.source ? baseLayer('foreground', input.foreground.name ?? 'Foreground', input.foreground.type ?? 'image', input.foreground.source, 15, duration, point(50, 50, 1.3, .4), point(50, 50, 1.3, .4), { fill: true, parallax: 1.7, strip: { enabled: true, count: 4, spacing: 100, direction: scrollDirection, speed: 58, phase: 0 }, effects: { blur: .35 } }) : undefined
     layers = [plate, runner, ...(foreground ? [foreground] : []), cameraLayer(duration, point(50, 50, 1), point(50, 50, 1.018), buildDriftKeyframes('camera-run', duration, point(50, 50, 1), point(50, 50, 1.018), { bob: .05, curve: 'linear' }))]
   }
 

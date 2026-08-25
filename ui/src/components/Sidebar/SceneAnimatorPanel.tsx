@@ -1,17 +1,19 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
+import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { useStore } from '../../stores/useStore'
 import { generateLlmText, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
 import { SceneRecipePanel } from './SceneRecipePanel'
 import type { SceneRecipe } from '../../lib/sceneRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
+import { SceneLibraryDialog } from './SceneLibraryDialog'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
+import { paintSeamOccluder, seamOccluderDataUri, SEAM_OCCLUDER_KINDS, type SeamOccluderKind } from '../../lib/seamOccluder'
 import type { Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
 
@@ -34,7 +36,9 @@ type CameraPreset = { id: string; label: string; start: Point; end: Point; durat
 type PhotoMotionPreset = CameraPreset & { description: string }
 type Gesture = { id: string; mode: 'move' | 'resize' | 'orbit'; startX: number; startY: number; x: number; y: number; scale: number; rotationX: number; rotationY: number }
 type LayerEffects = Required<NonNullable<SceneLayer['effects']>>
-type LayerStrip = Required<NonNullable<SceneLayer['strip']>>
+type LayerStrip = Required<Omit<NonNullable<SceneLayer['strip']>, 'seamOccluder'>> & {
+  seamOccluder: { enabled: boolean; kind: SeamOccluderKind }
+}
 type Atmosphere = Required<NonNullable<SceneLayer['atmosphere']>>
 type ModelViewerAnimationElement = HTMLElement & { loaded?: boolean; availableAnimations?: string[]; animationName?: string; currentTime: number; duration: number; pause: () => void }
 type SpeechRecognizer = { lang: string; continuous: boolean; interimResults: boolean; start: () => void; stop: () => void; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null }
@@ -87,7 +91,7 @@ const PRESETS: Preset[] = ([
 
 const DEFAULT_COMPOSITION: NonNullable<Scene['composition']> = { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }
 const DEFAULT_EFFECTS: LayerEffects = { blur: 0, brightness: 1, contrast: 1, saturation: 1, hue: 0, glow: 0, shadow: 0, blendMode: 'normal', mask: 'none', maskRadius: 12 }
-const DEFAULT_STRIP: LayerStrip = { enabled: false, count: 5, spacing: 24, direction: 'down', speed: 18, phase: 0 }
+const DEFAULT_STRIP: LayerStrip = { enabled: false, count: 5, spacing: 24, direction: 'down', speed: 18, phase: 0, seamOccluder: { enabled: false, kind: 'pole' } }
 const ATMOSPHERE_KINDS: SceneAtmosphereKind[] = ['rain', 'snow', 'dust', 'embers', 'fog', 'smoke', 'ash', 'fireflies', 'confetti', 'bokeh', 'sparkles', 'bubbles', 'speedlines', 'leaves']
 const ATMOSPHERE_LABELS: Record<SceneAtmosphereKind, string> = {
   rain: 'Cinematic rain',
@@ -166,6 +170,10 @@ const normalizedStrip = (value: SceneLayer['strip'] | undefined): LayerStrip => 
   direction: ['up', 'down', 'left', 'right'].includes(value?.direction ?? '') ? value?.direction as LayerStrip['direction'] : DEFAULT_STRIP.direction,
   speed: boundedNumber(value?.speed, DEFAULT_STRIP.speed, 0, 300),
   phase: boundedNumber(value?.phase, DEFAULT_STRIP.phase, -1000, 1000),
+  seamOccluder: {
+    enabled: value?.seamOccluder?.enabled === true,
+    kind: SEAM_OCCLUDER_KINDS.includes(value?.seamOccluder?.kind as SeamOccluderKind) ? value!.seamOccluder!.kind as SeamOccluderKind : 'pole',
+  },
 })
 const normalizedAtmosphere = (value: SceneLayer['atmosphere'] | undefined): Atmosphere => {
   const kind = ATMOSPHERE_KINDS.includes(value?.kind as SceneAtmosphereKind) ? value!.kind : 'rain'
@@ -496,6 +504,7 @@ export function SceneAnimatorPanel() {
   const [historyRevision, setHistoryRevision] = useState(0)
   const historyRevisionRef = useRef(0)
   const [lastAutosaveAt, setLastAutosaveAt] = useState<number | null>(null)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const [previewWidth, setPreviewWidth] = useState(1280)
   const [clipsByLayer, setClipsByLayer] = useState<Record<string, string[]>>({})
   const [clipDurationsByLayer, setClipDurationsByLayer] = useState<Record<string, number>>({})
@@ -1011,6 +1020,19 @@ export function SceneAnimatorPanel() {
     // viewers, which locks the GPU and can freeze the host.
     const cap = layer.type === 'model3d' ? 4 : 24
     return instances.slice(0, cap)
+  }
+  const seamCoverStates = (layer: AnimatorLayer, time = progress) => {
+    const strip = normalizedStrip(layer.strip)
+    if (!strip.enabled || !strip.seamOccluder.enabled) return []
+    const offsets = stripOffsets({ ...layer, strip: { ...strip, phase: strip.phase + strip.spacing / 2 } }, time * sceneRef.current.duration)
+    const base = layerState(layer, time)
+    return offsets.map(offset => applyCameraTransform({
+      ...base,
+      x: base.x + offset.x,
+      y: 82,
+      scale: 1,
+      opacity: Math.min(1, base.opacity),
+    }, layer, time))
   }
   const moveLayerZ = (id: string, direction: 1 | -1) => updateScene(current => {
     const layers = normalizeZ(current.layers)
@@ -1578,16 +1600,29 @@ export function SceneAnimatorPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
+    if (!scene.layers.length) return
     const timer = window.setTimeout(() => {
-      try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(scene)); setLastAutosaveAt(Date.now()) } catch { setMessage('Autosave could not be written in this browser.') }
+      try {
+        localStorage.setItem(AUTOSAVE_KEY, serializeSceneFile(scene))
+        setLastAutosaveAt(Date.now())
+      } catch {
+        setMessage('Autosave could not be written in this browser.')
+      }
     }, 700)
     return () => window.clearTimeout(timer)
   }, [scene])
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') return
+      if (!(event.ctrlKey || event.metaKey)) return
       const target = event.target as HTMLElement | null
       if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+      const key = event.key.toLowerCase()
+      if (key === 's') {
+        event.preventDefault()
+        void persistScene()
+        return
+      }
+      if (key !== 'z') return
       event.preventDefault()
       if (event.shiftKey) redoScene(); else undoScene()
     }
@@ -1635,6 +1670,19 @@ export function SceneAnimatorPanel() {
       }
       context.restore()
     })
+    current.layers
+      .filter(layer => layer.visible && isVisualLayer(layer) && normalizedStrip(layer.strip).seamOccluder.enabled)
+      .forEach(layer => {
+        const kind = normalizedStrip(layer.strip).seamOccluder.kind
+        seamCoverStates(layer, time).forEach(state => {
+          context.save()
+          context.globalAlpha = state.opacity
+          context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100)
+          context.rotate(state.rotation * Math.PI / 180)
+          paintSeamOccluder(context, kind, canvas.width, canvas.height)
+          context.restore()
+        })
+      })
     return true
   }
   // Compatibility fallback for browsers without WebCodecs. Chromium uses the
@@ -2141,7 +2189,11 @@ export function SceneAnimatorPanel() {
           ? <video data-layer-id={layer.id} ref={isPrimary ? element => { videoRefs.current[layer.id] = element } : undefined} src={layer.source} muted playsInline preload="auto" onLoadedMetadata={() => syncSceneMedia(progressRef.current * sceneRef.current.duration)} className={`h-full w-full ${layer.fill ? 'object-cover' : 'object-contain'}`} />
           : <img data-layer-id={layer.id} src={layer.source} alt={layer.name} draggable={false} className={`h-full w-full select-none ${layer.fill ? 'object-cover' : 'object-contain'}`} />
       return <div key={`${layer.id}-${index}`} style={common} onPointerDown={layer.type === 'effect' ? undefined : edgeMove} onPointerMove={layer.type === 'effect' ? undefined : moveGesture} onPointerUp={layer.type === 'effect' ? undefined : endGesture} onPointerCancel={layer.type === 'effect' ? undefined : endGesture} className={`absolute touch-none ${layer.type === 'effect' ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing'} ${selection && isPrimary ? 'ring-2 ring-accent-blue ring-inset' : ''}`}><div className="h-full w-full" style={maskStyle}><div className="h-full w-full" style={effectStyle}>{media}</div></div>{selection && isPrimary && layer.type !== 'effect' && <button aria-label="Resize layer" onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
-    })
+    }).concat(seamCoverStates(layer).map((state, index) => {
+      const kind = normalizedStrip(layer.strip).seamOccluder.kind
+      const cover: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: '8%', height: '92%', opacity: state.opacity, zIndex: 18, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)`, pointerEvents: 'none' }
+      return <div key={`${layer.id}-seam-${index}`} className="absolute" style={cover}><img src={seamOccluderDataUri(kind)} alt="" draggable={false} className="h-full w-full object-contain object-bottom select-none" /></div>
+    }))
   }
   const activeCamera = activeCameraLayer()
   const selectedEffects = selected && isVisualLayer(selected) ? normalizedEffects(selected.effects) : null
@@ -2155,7 +2207,7 @@ export function SceneAnimatorPanel() {
 
   return <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-bg-tertiary xl:flex-row">
     <section className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex gap-2"><button onClick={play} disabled={!scene.layers.length || playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording || playing || publishing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording || publishing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : publishing ? 'Saving MP4…' : 'Export MP4'}</button></div></div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-1.5 text-xs font-medium"><Film size={15} className="text-accent-blue" /><input value={scene.name} onChange={event => updateScene(current => ({ ...current, name: event.target.value }))} aria-label="Scene name" className="w-44 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium hover:border-border focus:border-accent-blue focus:outline-none" /><span className="text-[10px] font-normal text-text-muted">{scene.width}×{scene.height}</span></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setLibraryOpen(true)} disabled={playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><FolderOpen size={12} /> Open scene</button><button type="button" onClick={() => void persistScene()} disabled={saving || !scene.layers.length || playing || recording || publishing} className="rounded border border-accent-blue/40 bg-accent-blue/10 px-2.5 py-1.5 text-[10px] text-accent-blue flex items-center gap-1 disabled:opacity-50">{saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}{saving ? 'Saving…' : 'Save scene'}</button><button onClick={play} disabled={!scene.layers.length || playing || recording || publishing} className="rounded border border-border bg-bg-primary px-2.5 py-1.5 text-[10px] flex items-center gap-1 disabled:opacity-50"><Play size={12} /> Preview</button><button onClick={record} disabled={recording || playing || publishing} className="rounded bg-cta px-2.5 py-1.5 text-[10px] text-white flex items-center gap-1 disabled:opacity-50">{recording || publishing ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{recording ? 'Recording…' : publishing ? 'Saving MP4…' : 'Export MP4'}</button></div></div>
       <div className="mb-2 flex items-center justify-end gap-1.5"><button type="button" onClick={undoScene} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Undo2 size={12} /></button><button type="button" onClick={redoScene} disabled={!canRedo} title="Redo (Ctrl/Cmd+Shift+Z)" className="rounded border border-border bg-bg-primary p-1.5 disabled:opacity-30"><Redo2 size={12} /></button><span className="ml-1 text-[8px] text-text-muted">{lastAutosaveAt ? `Autosaved ${new Date(lastAutosaveAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Autosave waiting…'}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1">{RESOLUTIONS.map(([label, width, height]) => <button key={label} disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, width, height }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${scene.width === width && scene.height === height ? 'border-accent-blue bg-accent-blue/15 text-accent-blue' : 'border-border bg-bg-primary text-text-muted'}`}>{label}</button>)}<span className="ml-auto flex items-center gap-1 pl-2 text-[8px] text-text-muted">Frame rate{([30, 60] as SceneFrameRate[]).map(rate => <button key={rate} type="button" disabled={playing || recording} onClick={() => updateScene(current => ({ ...current, fps: rate }))} className={`rounded border px-1.5 py-1 text-[9px] disabled:opacity-40 ${fps === rate ? 'border-purple-300 bg-purple-400/10 text-purple-200' : 'border-border bg-bg-primary text-text-muted'}`}>{rate} FPS</button>)}</span></div>
       <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary p-1.5">
@@ -2305,6 +2357,8 @@ export function SceneAnimatorPanel() {
           {numberInput('Start phase %', selectedStrip.phase, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), phase: value } })), -1000, 1000, 1, selected.locked)}
         </div>
         <label className="text-[9px] text-text-muted">Direction<select value={selectedStrip.direction} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), direction: event.target.value as LayerStrip['direction'] } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="down">Top → bottom</option><option value="up">Bottom → top</option><option value="right">Left → right</option><option value="left">Right → left</option></select></label>
+        <label className="text-[9px] text-text-muted">Seam cover<select value={selectedStrip.seamOccluder.enabled ? selectedStrip.seamOccluder.kind : 'off'} disabled={selected.locked || !selectedStrip.enabled} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { enabled: event.target.value !== 'off', kind: event.target.value === 'off' ? normalizedStrip(layer.strip).seamOccluder.kind : event.target.value as SeamOccluderKind } } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="off">Off</option><option value="pole">Pole / post</option><option value="lamp">Lamp</option><option value="tree">Tree</option><option value="column">Column</option></select></label>
+        <p className="text-[8px] text-text-muted">A foreground silhouette stays locked to each tile join so a looping plate never shows its seam.</p>
         {selected.type === 'model3d' && selectedStrip.count > 4 && <p className="text-[8px] text-amber-200">Preview caps GLB copies at 4. Extra copies freeze the GPU.</p>}
       </div>}
       </>}
@@ -2331,7 +2385,7 @@ export function SceneAnimatorPanel() {
         </div>
         <div className="grid grid-cols-2 gap-1.5">
           <button onClick={exportScene} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><Download size={11} /> Export scene</button>
-          <button onClick={() => sceneInputRef.current?.click()} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> Import scene</button>
+          <button onClick={() => setLibraryOpen(true)} className="rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FolderOpen size={11} /> Open scene</button>
         </div>
         <input ref={sceneInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void importSceneFile(file) }} />
         <button onClick={() => setJsonOpen(value => !value)} className="w-full rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> {jsonOpen ? 'Close movement JSON' : 'Movement JSON tools'}</button>
@@ -2340,5 +2394,15 @@ export function SceneAnimatorPanel() {
       </div>
       {message && <p className="text-[10px] text-text-secondary">{message}</p>}
     </aside>
+    <SceneLibraryDialog
+      open={libraryOpen}
+      workspace={workspace}
+      onClose={() => setLibraryOpen(false)}
+      onPickFile={() => { setLibraryOpen(false); sceneInputRef.current?.click() }}
+      onOpenScene={(next, label) => {
+        importScene(JSON.stringify(next), `Opened ${label}`)
+        setLibraryOpen(false)
+      }}
+    />
   </div>
 }

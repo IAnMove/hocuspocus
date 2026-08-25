@@ -456,6 +456,11 @@ export interface SceneLayer {
     speed: number
     /** Initial offset along the selected axis, in scene percent. */
     phase?: number
+    /** Foreground silhouette locked to each tile join so a looping plate never shows its seam. */
+    seamOccluder?: {
+      enabled: boolean
+      kind: 'pole' | 'lamp' | 'tree' | 'column'
+    }
   }
   transform: {
     x: number
