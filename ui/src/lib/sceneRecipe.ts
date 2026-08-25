@@ -817,7 +817,9 @@ export function compileSceneRecipe(
     }
     const start = layer.animation?.start || preset?.start || { x: 50, y: 50, scale: layer.type === 'model3d' ? 0.7 : 1, opacity: 1, rotation: 0 }
     const end = layer.animation?.end || preset?.end || start
-    const layerDuration = layer.animation?.duration || preset?.duration || duration
+    // A recipe shot owns its timeline. Camera presets commonly last five
+    // seconds, but must not silently extend an explicit shorter shot.
+    const layerDuration = Math.min(duration, layer.animation?.duration || preset?.duration || duration)
     const atmosphere = layer.type === 'effect'
       ? ATMOSPHERE_DEFAULTS[layer.atmosphere || 'fog']
       : undefined

@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Play, Plus, Redo2, Trash2, Undo2, Unlock, Video } from 'lucide-react'
+import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { useStore } from '../../stores/useStore'
 import { saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
 import { SceneRecipePanel } from './SceneRecipePanel'
@@ -1556,7 +1557,7 @@ export function SceneAnimatorPanel() {
     // Rebind when history changes so keyboard state and buttons stay aligned.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyRevision])
-  const paintScene = (canvas: HTMLCanvasElement, time: number) => {
+  const paintScene = (canvas: HTMLCanvasElement, time: number, exportModelCanvases?: Map<string, HTMLCanvasElement[]>) => {
     const current = sceneRef.current
     const context = canvas.getContext('2d')
     if (!context) return false
@@ -1577,7 +1578,8 @@ export function SceneAnimatorPanel() {
       if (layer.type === 'effect') {
         drawAtmosphere(context, normalizedAtmosphere(layer.atmosphere), time, width, height)
       } else if (layer.type === 'model3d') {
-        const viewer = modelViewerCanvas(findLayerElements(canvasRef.current, layer.id)[instanceIndex] ?? null)
+        const viewer = exportModelCanvases?.get(layer.id)?.[instanceIndex]
+          ?? modelViewerCanvas(findLayerElements(canvasRef.current, layer.id)[instanceIndex] ?? null)
         if (viewer) context.drawImage(viewer, -width / 2, -height / 2, width, height)
       } else {
         const media = findLayerElement(canvasRef.current, layer.id) as HTMLVideoElement | HTMLImageElement | null
@@ -1596,7 +1598,9 @@ export function SceneAnimatorPanel() {
     })
     return true
   }
-  const recordToBlob = (): Promise<Blob> => new Promise((resolve, reject) => {
+  // Compatibility fallback for browsers without WebCodecs. Chromium uses the
+  // deterministic MP4 path below so slow WebGL frames never change timing.
+  const recordCompatibilityWebm = (): Promise<Blob> => new Promise((resolve, reject) => {
     if (recording) { reject(new Error('A recording is already in progress.')); return }
     if (playing) { const error = new Error('Wait for Preview to finish before recording.'); setMessage(error.message); reject(error); return }
     const current = sceneRef.current
@@ -1700,6 +1704,159 @@ export function SceneAnimatorPanel() {
       recordingAnimationRef.current = requestAnimationFrame(frame)
     })
   })
+  const nextPaint = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+
+  const createExportModelStage = async (current: AnimatorScene) => {
+    const host = document.createElement('div')
+    // model-viewer renders at its CSS size. Keep a separate, almost invisible
+    // stage at the final output size instead of upscaling the small editor
+    // preview canvas into the recording.
+    host.style.cssText = 'position:fixed;left:0;top:0;z-index:-1;display:flex;flex-wrap:wrap;gap:1px;opacity:.001;pointer-events:none;contain:layout style paint;'
+    document.body.append(host)
+    const viewers = new Map<string, ModelViewerAnimationElement[]>()
+    const canvases = new Map<string, HTMLCanvasElement[]>()
+    const models = current.layers.filter((layer): layer is VisualAnimatorLayer => layer.visible && layer.type === 'model3d' && !layer.missingAsset && Boolean(layer.source))
+
+    for (const layer of models) {
+      const scales = [layer.transform.scale, layer.animation.start.scale, layer.animation.end.scale, ...getSceneKeyframes(layer).map(frame => frame.scale)]
+      const maxScale = Math.max(.01, ...scales)
+      const instanceCount = Math.max(1, renderedLayerStates(layer, 0).length)
+      const width = Math.min(4096, Math.max(64, Math.ceil(current.width * .52 * maxScale)))
+      const height = Math.min(4096, Math.max(64, Math.ceil(current.height * .75 * maxScale)))
+      const entries: ModelViewerAnimationElement[] = []
+      for (let index = 0; index < instanceCount; index += 1) {
+        const viewer = document.createElement('model-viewer') as ModelViewerAnimationElement
+        viewer.setAttribute('src', layer.source)
+        viewer.setAttribute('camera-orbit', `${layer.transform.rotationY ?? 0}deg ${layer.transform.rotationX ?? 75}deg auto`)
+        viewer.setAttribute('orientation', '0deg 0deg 0deg')
+        viewer.setAttribute('interaction-prompt', 'none')
+        viewer.setAttribute('shadow-intensity', '1')
+        viewer.setAttribute('exposure', '1')
+        viewer.style.cssText = `display:block;width:${width}px;height:${height}px;`
+        host.append(viewer)
+        entries.push(viewer)
+      }
+      viewers.set(layer.id, entries)
+    }
+
+    const deadline = Date.now() + 30000
+    while (Date.now() < deadline) {
+      let ready = true
+      for (const entries of viewers.values()) {
+        for (const viewer of entries) {
+          const canvas = modelViewerCanvas(viewer)
+          if (viewer.loaded !== true || !canvas || canvas.width < 64 || canvas.height < 64) { ready = false; break }
+        }
+        if (!ready) break
+      }
+      if (ready) break
+      await new Promise(resolve => window.setTimeout(resolve, 80))
+    }
+    for (const [id, entries] of viewers) {
+      const rendered = entries.map(viewer => modelViewerCanvas(viewer)).filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas))
+      if (rendered.length !== entries.length) {
+        host.remove()
+        throw new Error('The high-resolution 3D export stage did not paint in time.')
+      }
+      canvases.set(id, rendered)
+    }
+    await nextPaint()
+
+    return {
+      canvases,
+      async renderFrame(time: number) {
+        for (const layer of models) {
+          const entries = viewers.get(layer.id) ?? []
+          const states = renderedLayerStates(layer, time)
+          entries.forEach((viewer, index) => {
+            const state = states[index] ?? states[0]
+            viewer.setAttribute('orientation', `0deg ${state?.modelYaw ?? 0}deg 0deg`)
+            if (layer.animation.clip) {
+              viewer.setAttribute('animation-name', layer.animation.clip)
+              const clipTime = getSceneClipTime(layer, time * current.duration, Math.max(.001, viewer.duration || 0))
+              viewer.currentTime = clipTime
+              viewer.pause()
+            }
+          })
+        }
+        // WebGL updates asynchronously after orientation/currentTime changes.
+        // Two presentation cycles ensure the copied canvas is the requested frame.
+        await nextPaint()
+      },
+      dispose() { host.remove() },
+    }
+  }
+
+  const recordToBlob = async (): Promise<Blob> => {
+    if (recording) throw new Error('A recording is already in progress.')
+    if (playing) throw new Error('Wait for Preview to finish before recording.')
+    if (!('VideoEncoder' in window) || typeof VideoEncoder.isConfigSupported !== 'function') {
+      setMessage('This browser lacks deterministic WebCodecs export; using compatibility recording.')
+      return recordCompatibilityWebm()
+    }
+    const current = sceneRef.current
+    const fps: SceneFrameRate = current.fps === 60 ? 60 : 30
+    if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) throw new Error('Add a visible visual layer before recording.')
+    const canvas = document.createElement('canvas')
+    canvas.width = current.width
+    canvas.height = current.height
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Could not create a recording canvas.')
+    if (!('filter' in context) && current.layers.some(layer => isVisualLayer(layer) && hasCanvasFilterEffects(normalizedEffects(layer.effects)))) {
+      throw new Error('This browser cannot render the scene filters at export quality. Use Chromium/Chrome to record this scene.')
+    }
+
+    const frameDurationUs = Math.round(1_000_000 / fps)
+    const frameCount = Math.max(1, Math.round(current.duration * fps))
+    const bitrate = Math.round(Math.max(8_000_000, Math.min(80_000_000, current.width * current.height * fps * .22)))
+    const supported = await VideoEncoder.isConfigSupported({ codec: 'avc1.640028', width: current.width, height: current.height, bitrate, framerate: fps, avc: { format: 'avc' } })
+    if (!supported.supported || !supported.config) {
+      throw new Error('This browser cannot encode a deterministic H.264 MP4 at the selected resolution.')
+    }
+
+    const target = new ArrayBufferTarget()
+    const muxer = new Muxer({
+      target,
+      video: { codec: 'avc', width: current.width, height: current.height, frameRate: fps },
+      fastStart: 'in-memory',
+      firstTimestampBehavior: 'strict',
+    })
+    let encoderError: Error | null = null
+    const encoder = new VideoEncoder({
+      output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
+      error: error => { encoderError = error instanceof Error ? error : new Error(String(error)) },
+    })
+    encoder.configure(supported.config)
+    const exportStage = await createExportModelStage(current)
+    try {
+      resetSceneMedia()
+      setRecording(true)
+      setProgress(0)
+      setMessage(`Rendering ${frameCount} exact frames at ${fps} FPS…`)
+      for (let index = 0; index < frameCount; index += 1) {
+        if (encoderError) throw encoderError
+        const time = Math.min(current.duration, index / fps)
+        syncSceneMedia(time)
+        await exportStage.renderFrame(time)
+        if (!paintScene(canvas, time, exportStage.canvases)) throw new Error('Could not paint export frame.')
+        const frame = new VideoFrame(canvas, { timestamp: index * frameDurationUs, duration: frameDurationUs })
+        encoder.encode(frame, { keyFrame: index % Math.max(1, fps * 2) === 0 })
+        frame.close()
+        if (encoder.encodeQueueSize > 8) await encoder.flush()
+        setProgress((index + 1) / frameCount)
+      }
+      await encoder.flush()
+      if (encoderError) throw encoderError
+      muxer.finalize()
+      return new Blob([target.buffer], { type: 'video/mp4' })
+    } finally {
+      encoder.close()
+      exportStage.dispose()
+      Object.values(videoRefs.current).forEach(video => video?.pause())
+      setRecording(false)
+    }
+  }
+
   const publishRecording = async (blob: Blob, current: Scene) => {
     const context = recipeContextRef.current
     const saved = await saveSceneRecording(blob, {

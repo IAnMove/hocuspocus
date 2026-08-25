@@ -84,6 +84,8 @@ test('example UFO series shares one saucer identity across shots and does not au
   assert.equal(rise.layers[2].source, cruise.layers[2].source)
   assert.equal(rise.layers[2].animation.start.y, -12)
   assert.equal(cruise.layers[2].animation.start.x, 8)
+  assert.equal(rise.duration, 4)
+  assert.equal(rise.layers[0].animation.duration, 4)
 })
 
 test('LLM contract is closed-schema, multilingual and treats inventory as data', () => {

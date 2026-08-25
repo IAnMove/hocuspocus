@@ -818,11 +818,12 @@ export async function saveSceneRecording(
     scene: import('../types').Scene
     prompt: string
     recipe: Record<string, unknown> | null
-    workspace?: string
+  workspace?: string
   },
 ): Promise<ApiOutput> {
   const form = new FormData()
-  form.append('file', recording, `${details.scene.name || '3d-scene'}.webm`)
+  const extension = recording.type.includes('mp4') ? 'mp4' : 'webm'
+  form.append('file', recording, `${details.scene.name || '3d-scene'}.${extension}`)
   form.append('metadata', JSON.stringify(details))
   const res = await fetch(`${BASE}/api/v1/scenes/recordings`, {
     method: 'POST',
