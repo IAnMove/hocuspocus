@@ -539,6 +539,19 @@ export interface Scene {
     snap: boolean
     safeArea: 'none' | 'action' | 'title' | 'vertical' | 'all'
   }
+  /** Durable, serializable record of copilot edits. Kept with the scene so
+   * save/export can retain the exact human intent and applied operations. */
+  copilotAudit?: Array<{
+    id: string
+    createdAt: string
+    scope: 'layer' | 'scene'
+    selectedLayerId?: string
+    intent: string
+    summary: string
+    operations: Array<Record<string, unknown>>
+    validation: 'applied'
+    model?: string
+  }>
 }
 
 export type VideoResultKind = 'music_video' | 'trailer' | 'series_episode' | 'chapter'
