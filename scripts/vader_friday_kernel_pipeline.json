@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-21-18h38m12s_seed590064009_[Estrofa]Obi-Wan despleg\u00f3 un viernes, un kernel lleno de oopspanic, stack trace, dmesg en rojo, A.wav",
+  "pipeline": {
+    "pipeline_id": "96a07fba",
+    "task_id": "task-director-96a07fba",
+    "root_task_id": "task-director-96a07fba"
+  },
+  "clip_count": 4
+}

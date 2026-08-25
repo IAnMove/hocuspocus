@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-21-19h43m32s_seed875519062_[Estrofa]El Consejo lee el pull request, mil comentarios, cero mergeAnakin pide write access, le n.wav",
+  "pipeline": {
+    "pipeline_id": "deb88c89",
+    "task_id": "task-director-deb88c89",
+    "root_task_id": "task-director-deb88c89"
+  },
+  "clip_count": 5
+}

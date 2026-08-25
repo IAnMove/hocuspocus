@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SkipForward } from 'lucide-react'
 
-const INTRO_DURATION_MS = 2800
+export const INTRO_DURATION_MS = 4500
+const INTRO_FADE_MS = 360
 
 interface HocusPocusIntroProps {
   onComplete: () => void
@@ -10,20 +11,29 @@ interface HocusPocusIntroProps {
 /** A short boot identity before the existing first-run / release notes dialog. */
 export function HocusPocusIntro({ onComplete }: HocusPocusIntroProps) {
   const [leaving, setLeaving] = useState(false)
+  const onCompleteRef = useRef(onComplete)
+  const finishedRef = useRef(false)
+  onCompleteRef.current = onComplete
 
   const finish = () => {
-    if (leaving) return
+    if (finishedRef.current) return
+    finishedRef.current = true
     setLeaving(true)
-    window.setTimeout(onComplete, 360)
+    window.setTimeout(() => onCompleteRef.current(), INTRO_FADE_MS)
   }
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setLeaving(true)
-      window.setTimeout(onComplete, 360)
-    }, INTRO_DURATION_MS)
-    return () => window.clearTimeout(timer)
-  }, [onComplete])
+    const fadeTimer = window.setTimeout(() => setLeaving(true), INTRO_DURATION_MS)
+    const doneTimer = window.setTimeout(() => {
+      if (finishedRef.current) return
+      finishedRef.current = true
+      onCompleteRef.current()
+    }, INTRO_DURATION_MS + INTRO_FADE_MS)
+    return () => {
+      window.clearTimeout(fadeTimer)
+      window.clearTimeout(doneTimer)
+    }
+  }, [])
 
   return (
     <section

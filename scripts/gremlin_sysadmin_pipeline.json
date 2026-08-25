@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-20-17h17m34s_seed671395397_[Estrofa]Tres reglas en el rack, tres reglas en la pielno mojes el mogwai, no riegues el paneldes.wav",
+  "pipeline": {
+    "pipeline_id": "53c5eae3",
+    "task_id": "task-director-53c5eae3",
+    "root_task_id": "task-director-53c5eae3"
+  },
+  "clip_count": 4
+}

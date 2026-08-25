@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-20-13h48m57s_seed520219708_[Estrofa]La colina es verde, la puerta es redondael pan est\u00e1 caliente, la pipa no se apagapies p.wav",
+  "pipeline": {
+    "pipeline_id": "5187197c",
+    "task_id": "task-director-5187197c",
+    "root_task_id": "task-director-5187197c"
+  },
+  "clip_count": 4
+}

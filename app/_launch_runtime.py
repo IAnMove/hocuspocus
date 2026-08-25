@@ -30,6 +30,13 @@ import os
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
+_app_dir_for_identity = os.path.dirname(os.path.abspath(__file__))
+if _app_dir_for_identity not in sys.path:
+    sys.path.insert(0, _app_dir_for_identity)
+from app_identity import read_app_version
+
+APP_VERSION = read_app_version()
+
 import torch
 import glob
 import hashlib
@@ -215,7 +222,7 @@ from services.access_log_filter import install_quiet_access_filter
 # filters. Install early, then idempotently confirm it again before startup.
 install_quiet_access_filter()
 
-api = FastAPI(title="HocusPocus Lab API", version="1.0.0")
+api = FastAPI(title="HocusPocus Lab API", version=APP_VERSION or "0.0.0")
 
 debug_trace.configure(
     enabled=lambda: bool(
@@ -784,7 +791,7 @@ def _is_character_sheet_engine(body: dict | None) -> bool:
 
 
 def _is_minimax_h3_model(model_type: str | None) -> bool:
-    """Recognize every native H3 variant from the v1.6.5 model registry."""
+    """Recognize every native H3 variant from the current model registry."""
     candidate = str(model_type or "").strip()
     if not candidate:
         return False
@@ -6566,25 +6573,12 @@ def delete_preset(preset_id: str):
     return {"deleted": preset_id}
 
 
-def _read_app_version() -> str:
-    """HocusPocus release version from the repo-root VERSION file."""
-    try:
-        vpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "VERSION")
-        with open(vpath, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    except OSError:
-        return ""
-
-
-_APP_VERSION = _read_app_version()
-
-
 @api.get("/api/v1/system-config")
 def get_system_config():
     """Return system-level settings for the UI System tab."""
     cfg = wgp.server_config
     return {
-        "app_version": _APP_VERSION,
+        "app_version": APP_VERSION,
         "attention_mode": cfg.get("attention_mode", "auto"),
         "transformer_quantization": cfg.get("transformer_quantization", "int8"),
         "vae_config": cfg.get("vae_config", 0),

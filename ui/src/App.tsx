@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Menu, Settings } from 'lucide-react'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { MainContent } from './components/MainContent/MainContent'
@@ -35,6 +35,7 @@ export function LazyDirectorOverlay({ open }: { open: boolean }) {
 
 function AppContent() {
   const [introComplete, setIntroComplete] = useState(false)
+  const completeIntro = useCallback(() => setIntroComplete(true), [])
   const loadModels = useStore(s => s.loadModels)
   const loadOutputs = useStore(s => s.loadOutputs)
   const maybeRefreshGallery = useStore(s => s.maybeRefreshGallery)
@@ -200,7 +201,7 @@ function AppContent() {
       {introComplete && <WelcomeModal />}
       {/* Explicit choice after an interrupted Pinokio/server session. */}
       <QueueRecoveryDialog />
-      {!introComplete && <HocusPocusIntro onComplete={() => setIntroComplete(true)} />}
+      {!introComplete && <HocusPocusIntro onComplete={completeIntro} />}
     </div>
   )
 }
