@@ -36,6 +36,17 @@ test('the first narrative templates compile to editable 10+ second ordinary scen
   }
 })
 
+test('every standard template has its own editable narrative composition', () => {
+  for (const template of NARRATIVE_SCENE_TEMPLATES.filter(template => !template.experimental)) {
+    const scene = createNarrativeScene(template.id, { ...assets, prop: assets.hero })
+    assert.equal(scene.name, template.title)
+    assert.ok(scene.layers.some(layer => layer.type === 'camera'))
+    assert.ok(scene.layers.some(layer => layer.animation.keyframes?.length >= 3 || layer.animation.spin))
+    const animated = scene.layers.filter(layer => layer.type !== 'camera' && layer.animation.keyframes?.length)
+    assert.ok(animated.some(layer => JSON.stringify(evaluateSceneLayer(layer, scene.duration * .1)) !== JSON.stringify(evaluateSceneLayer(layer, scene.duration * .9))))
+  }
+})
+
 test('run travel uses multi-plane strip motion without claiming a rigged run', () => {
   const scene = createNarrativeScene('run-travel-parallax', assets)
   const background = scene.layers.find(layer => layer.id === 'plate')
