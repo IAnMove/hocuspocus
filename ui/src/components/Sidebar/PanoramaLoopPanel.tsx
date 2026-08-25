@@ -48,7 +48,12 @@ async function prepareTripleTile(file: File, seamPercent: number): Promise<Prepa
 
 /** A deliberately small image-side entry point for seamless horizontal backgrounds. */
 export function PanoramaLoopPanel() {
-  const selectedModel = useStore(state => state.selectedModelPerMode.image || state.params.model_type)
+  const selectedModel = useStore(state => {
+    const remembered = state.selectedModelPerMode.image
+    // MiniMax may remain selected for ordinary image creation, but this tool
+    // needs a local reference-capable editor and uses the active local model.
+    return remembered && !remembered.startsWith('minimax:') ? remembered : state.params.model_type
+  })
   const loadOutputs = useStore(state => state.loadOutputs)
   const [source, setSource] = useState<File | null>(null)
   const [prepared, setPrepared] = useState<PreparedPanorama | null>(null)
