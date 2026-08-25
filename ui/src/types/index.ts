@@ -552,6 +552,11 @@ export interface Scene {
     validation: 'applied'
     model?: string
   }>
+  /** Template provenance remains with an editable scene and its exported MP4 metadata. */
+  narrative?: {
+    templateId: string
+    controls: Record<string, string | number | boolean | undefined>
+  }
 }
 
 export type VideoResultKind = 'music_video' | 'trailer' | 'series_episode' | 'chapter'

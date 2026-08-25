@@ -245,5 +245,5 @@ export const createNarrativeScene = (id: NarrativeSceneId, input: NarrativeTempl
     layers = [plate, runner, ...(foreground ? [foreground] : []), cameraLayer(duration, point(50, 50, 1), point(50, 50, 1.018), buildDriftKeyframes('camera-run', duration, point(50, 50, 1), point(50, 50, 1.018), { bob: .05, curve: 'linear' }))]
   }
 
-  return applyNarrativeSceneControls({ version: 1, name: template.title, width: input.width ?? 1280, height: input.height ?? 720, fps: input.fps ?? 30, duration, layers, composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' } }, input.controls)
+  return applyNarrativeSceneControls({ version: 1, name: template.title, width: input.width ?? 1280, height: input.height ?? 720, fps: input.fps ?? 30, duration, layers, composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }, narrative: { templateId: template.id, controls: { ...input.controls } } }, input.controls)
 }

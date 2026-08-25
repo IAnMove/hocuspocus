@@ -67,4 +67,5 @@ test('narrative controls alter the editable template scene without adding hidden
   assert.equal(tunedHero?.transform.x, plainHero.transform.x + 14)
   assert.ok((tunedHero?.effects?.glow ?? 0) > (plainHero?.effects?.glow ?? 0))
   assert.ok((tunedHero?.effects?.saturation ?? 0) > (plainHero?.effects?.saturation ?? 0))
+  assert.deepEqual(tuned.narrative, { templateId: 'inner-thought', controls: { mood: 'dreamy', intensity: 3, palette: 'neon', voiceSpace: 'left', camera: 'push', direction: 'right' } })
 })
