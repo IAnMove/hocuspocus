@@ -556,6 +556,10 @@ export interface Scene {
   narrative?: {
     templateId: string
     controls: Record<string, string | number | boolean | undefined>
+    /** The exact existing assets assigned when the template was mounted. */
+    assets?: Array<{ slot: string; source: string; name?: string; type?: SceneLayerType }>
+    /** Deterministic human-readable direction used to compile this template. */
+    prompt?: string
   }
 }
 

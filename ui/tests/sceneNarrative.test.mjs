@@ -67,5 +67,12 @@ test('narrative controls alter the editable template scene without adding hidden
   assert.equal(tunedHero?.transform.x, plainHero.transform.x + 14)
   assert.ok((tunedHero?.effects?.glow ?? 0) > (plainHero?.effects?.glow ?? 0))
   assert.ok((tunedHero?.effects?.saturation ?? 0) > (plainHero?.effects?.saturation ?? 0))
-  assert.deepEqual(tuned.narrative, { templateId: 'inner-thought', controls: { mood: 'dreamy', intensity: 3, palette: 'neon', voiceSpace: 'left', camera: 'push', direction: 'right' } })
+  assert.deepEqual({ templateId: tuned.narrative?.templateId, controls: tuned.narrative?.controls }, { templateId: 'inner-thought', controls: { mood: 'dreamy', intensity: 3, palette: 'neon', voiceSpace: 'left', camera: 'push', direction: 'right' } })
+})
+
+test('narrative provenance records the assigned assets and compiled direction', () => {
+  const next = createNarrativeScene('inner-thought', { hero: { source: '/hero.glb', type: 'model3d', name: 'Explorer' }, plate: { source: '/space.png', type: 'image', name: 'Space' }, controls: { mood: 'dreamy', camera: 'drift' } })
+  assert.deepEqual(next.narrative?.assets?.map(asset => asset.slot), ['hero', 'plate'])
+  assert.match(next.narrative?.prompt ?? '', /Inner thought/)
+  assert.match(next.narrative?.prompt ?? '', /mood: dreamy/)
 })

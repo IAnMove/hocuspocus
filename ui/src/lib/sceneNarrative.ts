@@ -56,6 +56,14 @@ type MotionPoint = Pick<SceneKeyframe, 'x' | 'y' | 'scale' | 'opacity' | 'rotati
 const at = (id: string, time: number, point: MotionPoint, curve: SceneCurve = 'ease'): SceneKeyframe => ({ id, time, curve, ...point })
 const point = (x: number, y: number, scale: number, opacity = 1, rotation = 0): MotionPoint => ({ x, y, scale, opacity, rotation })
 const durationOf = (input: NarrativeTemplateInput, fallback: 10 | 12) => Math.max(10, Math.min(60, input.duration ?? fallback))
+const narrativeProvenance = (template: NarrativeSceneTemplate, input: NarrativeTemplateInput) => {
+  const assets = (['hero', 'plate', 'prop', 'foreground'] as const).flatMap(slot => {
+    const asset = input[slot]
+    return asset?.source ? [{ slot, source: asset.source, name: asset.name, type: asset.type }] : []
+  })
+  const controls = Object.entries(input.controls ?? {}).filter(([, value]) => value !== undefined).map(([key, value]) => `${key}: ${value}`).join(', ')
+  return { assets, prompt: `${template.title}. ${template.description}${controls ? ` Direction — ${controls}.` : ''}` }
+}
 
 /** A deterministic triangle oscillator. `time` is always scene time in seconds. */
 export const sceneTriangleWave = (time: number, frequency: number, phase = 0) => {
@@ -245,5 +253,5 @@ export const createNarrativeScene = (id: NarrativeSceneId, input: NarrativeTempl
     layers = [plate, runner, ...(foreground ? [foreground] : []), cameraLayer(duration, point(50, 50, 1), point(50, 50, 1.018), buildDriftKeyframes('camera-run', duration, point(50, 50, 1), point(50, 50, 1.018), { bob: .05, curve: 'linear' }))]
   }
 
-  return applyNarrativeSceneControls({ version: 1, name: template.title, width: input.width ?? 1280, height: input.height ?? 720, fps: input.fps ?? 30, duration, layers, composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }, narrative: { templateId: template.id, controls: { ...input.controls } } }, input.controls)
+  return applyNarrativeSceneControls({ version: 1, name: template.title, width: input.width ?? 1280, height: input.height ?? 720, fps: input.fps ?? 30, duration, layers, composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }, narrative: { templateId: template.id, controls: { ...input.controls }, ...narrativeProvenance(template, input) } }, input.controls)
 }
