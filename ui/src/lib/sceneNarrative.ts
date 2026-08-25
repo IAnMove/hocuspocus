@@ -39,6 +39,16 @@ export type NarrativeTemplateInput = {
   height?: number
   fps?: 30 | 60
   duration?: number
+  controls?: NarrativeSceneControls
+}
+
+export type NarrativeSceneControls = {
+  mood?: 'calm' | 'tense' | 'dreamy' | 'heroic'
+  intensity?: 1 | 2 | 3
+  direction?: 'left' | 'right'
+  camera?: 'restrained' | 'push' | 'drift'
+  palette?: 'natural' | 'cool' | 'warm' | 'neon'
+  voiceSpace?: 'left' | 'right' | 'center'
 }
 
 type MotionPoint = Pick<SceneKeyframe, 'x' | 'y' | 'scale' | 'opacity' | 'rotation'>
@@ -156,6 +166,36 @@ const withKeyframes = (layer: SceneLayer, keyframes: SceneKeyframe[]) => ({
   animation: { ...layer.animation, start: keyframes[0], end: keyframes[keyframes.length - 1], keyframes },
 })
 
+/** Applies narrative knobs to the ordinary scene graph created by a template. */
+export const applyNarrativeSceneControls = (scene: Scene, controls: NarrativeSceneControls = {}): Scene => {
+  const intensity = controls.intensity ?? 2
+  const palette = controls.palette ?? 'natural'
+  const mood = controls.mood ?? 'calm'
+  const heroShift = controls.voiceSpace === 'left' ? 14 : controls.voiceSpace === 'right' ? -14 : 0
+  const direction = controls.direction === 'left' ? -1 : 1
+  return {
+    ...scene,
+    layers: scene.layers.map(layer => {
+      const isHero = layer.id === 'hero' || layer.id === 'prop' || layer.id === 'landmark'
+      const isCamera = layer.type === 'camera'
+      const palettePatch = palette === 'cool' ? { hue: 12, saturation: .9 } : palette === 'warm' ? { hue: -10, saturation: 1.08 } : palette === 'neon' ? { hue: 42, saturation: 1.35, contrast: 1.12 } : {}
+      const moodPatch = mood === 'tense' ? { contrast: 1.15, saturation: .82 } : mood === 'dreamy' ? { glow: .65 + intensity * .25, saturation: 1.12 } : mood === 'heroic' ? { glow: .35 + intensity * .18, contrast: 1.13, saturation: 1.12 } : { brightness: .98 + intensity * .02 }
+      const movement = isHero ? heroShift : 0
+      const shift = (frame: SceneKeyframe) => ({ ...frame, x: frame.x + movement, rotation: frame.rotation + (isHero ? direction * (controls.direction ? .6 : 0) : 0) })
+      const animation = isCamera && controls.camera === 'restrained'
+        ? { ...layer.animation, keyframes: layer.animation.keyframes?.map(frame => ({ ...frame, scale: 1 + (frame.scale - 1) * .45 })) }
+        : isCamera && controls.camera === 'push'
+          ? { ...layer.animation, keyframes: layer.animation.keyframes?.map((frame, index, frames) => ({ ...frame, scale: frame.scale + index / Math.max(1, (frames?.length ?? 1) - 1) * .08 })) }
+          : isCamera && controls.camera === 'drift'
+            ? { ...layer.animation, keyframes: layer.animation.keyframes?.map((frame, index) => ({ ...frame, x: frame.x + Math.sin(index * 1.7) * 1.3, y: frame.y + Math.cos(index * 1.7) * .7 })) }
+            : isHero ? { ...layer.animation, start: { ...layer.animation.start, x: layer.animation.start.x + movement }, end: { ...layer.animation.end, x: layer.animation.end.x + movement }, keyframes: layer.animation.keyframes?.map(shift) }
+              : layer.animation
+      const transform = isHero ? { ...layer.transform, x: layer.transform.x + movement } : layer.transform
+      return { ...layer, transform, animation, effects: layer.type === 'camera' ? layer.effects : { ...layer.effects, ...palettePatch, ...(isHero ? moodPatch : {}) } }
+    }),
+  }
+}
+
 /** Produces only ordinary, directly editable Scene Animator layers. */
 export const createNarrativeScene = (id: NarrativeSceneId, input: NarrativeTemplateInput): Scene => {
   const template = getNarrativeTemplate(id)
@@ -205,5 +245,5 @@ export const createNarrativeScene = (id: NarrativeSceneId, input: NarrativeTempl
     layers = [plate, runner, ...(foreground ? [foreground] : []), cameraLayer(duration, point(50, 50, 1), point(50, 50, 1.018), buildDriftKeyframes('camera-run', duration, point(50, 50, 1), point(50, 50, 1.018), { bob: .05, curve: 'linear' }))]
   }
 
-  return { version: 1, name: template.title, width: input.width ?? 1280, height: input.height ?? 720, fps: input.fps ?? 30, duration, layers, composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' } }
+  return applyNarrativeSceneControls({ version: 1, name: template.title, width: input.width ?? 1280, height: input.height ?? 720, fps: input.fps ?? 30, duration, layers, composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' } }, input.controls)
 }

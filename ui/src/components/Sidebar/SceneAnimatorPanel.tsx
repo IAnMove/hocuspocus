@@ -471,6 +471,12 @@ export function SceneAnimatorPanel() {
   const [narrativePlate, setNarrativePlate] = useState('')
   const [narrativeProp, setNarrativeProp] = useState('')
   const [narrativeForeground, setNarrativeForeground] = useState('')
+  const [narrativeMood, setNarrativeMood] = useState<NonNullable<NarrativeTemplateInput['controls']>['mood']>('calm')
+  const [narrativeIntensity, setNarrativeIntensity] = useState<1 | 2 | 3>(2)
+  const [narrativeDirection, setNarrativeDirection] = useState<NonNullable<NarrativeTemplateInput['controls']>['direction']>('right')
+  const [narrativeCamera, setNarrativeCamera] = useState<NonNullable<NarrativeTemplateInput['controls']>['camera']>('restrained')
+  const [narrativePalette, setNarrativePalette] = useState<NonNullable<NarrativeTemplateInput['controls']>['palette']>('natural')
+  const [narrativeVoiceSpace, setNarrativeVoiceSpace] = useState<NonNullable<NarrativeTemplateInput['controls']>['voiceSpace']>('center')
   const [copilotIntent, setCopilotIntent] = useState('')
   const [copilotBusy, setCopilotBusy] = useState(false)
   const [copilotProposal, setCopilotProposal] = useState<SceneCopilotProposal | null>(null)
@@ -1987,7 +1993,7 @@ export function SceneAnimatorPanel() {
       type: item.type === 'model3d' ? 'model3d' as const : item.type === 'video' ? 'video' as const : 'image' as const,
       name: item.name,
     } : undefined
-    const input: NarrativeTemplateInput = { hero: asInput(hero), plate: asInput(plate), prop: asInput(prop), foreground: asInput(foreground), width: scene.width, height: scene.height, fps }
+    const input: NarrativeTemplateInput = { hero: asInput(hero), plate: asInput(plate), prop: asInput(prop), foreground: asInput(foreground), width: scene.width, height: scene.height, fps, controls: { mood: narrativeMood, intensity: narrativeIntensity, direction: narrativeDirection, camera: narrativeCamera, palette: narrativePalette, voiceSpace: narrativeVoiceSpace } }
     const next = createNarrativeScene(narrativeTemplateId, input) as AnimatorScene
     updateScene(() => next)
     setSelectedId(next.layers.find(layer => layer.id === 'hero')?.id ?? next.layers.find(layer => layer.type !== 'camera')?.id ?? null)
@@ -2126,6 +2132,14 @@ export function SceneAnimatorPanel() {
         <label className="block text-[9px] text-text-muted">Background<select value={narrativePlate} onChange={event => setNarrativePlate(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">Choose asset…</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.type === 'video' ? 'Video · ' : 'Image · '}{asset.name}</option>)}</select></label>
         {narrativeTemplate.assetSlots.some(slot => slot.id === 'prop') && <label className="block text-[9px] text-text-muted">Object / portal{narrativeTemplate.assetSlots.find(slot => slot.id === 'prop')?.required ? '' : ' (optional)'}<select value={narrativeProp} onChange={event => setNarrativeProp(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">None</option>{narrativeVisuals.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
         {narrativeTemplate.assetSlots.some(slot => slot.id === 'foreground') && <label className="block text-[9px] text-text-muted">Foreground (optional)<select value={narrativeForeground} onChange={event => setNarrativeForeground(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">None</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
+        <div className="grid grid-cols-2 gap-1 text-[9px] text-text-muted">
+          {narrativeTemplate.controls.includes('mood') && <label>Mood<select value={narrativeMood} onChange={event => setNarrativeMood(event.target.value as typeof narrativeMood)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="calm">Calm</option><option value="tense">Tense</option><option value="dreamy">Dreamy</option><option value="heroic">Heroic</option></select></label>}
+          {narrativeTemplate.controls.includes('intensity') && <label>Intensity<select value={narrativeIntensity} onChange={event => setNarrativeIntensity(Number(event.target.value) as 1 | 2 | 3)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value={1}>Low</option><option value={2}>Medium</option><option value={3}>High</option></select></label>}
+          {narrativeTemplate.controls.includes('direction') && <label>Direction<select value={narrativeDirection} onChange={event => setNarrativeDirection(event.target.value as typeof narrativeDirection)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="right">Right</option><option value="left">Left</option></select></label>}
+          {narrativeTemplate.controls.includes('camera') && <label>Camera<select value={narrativeCamera} onChange={event => setNarrativeCamera(event.target.value as typeof narrativeCamera)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="restrained">Restrained</option><option value="push">Push</option><option value="drift">Drift</option></select></label>}
+          {narrativeTemplate.controls.includes('palette') && <label>Palette<select value={narrativePalette} onChange={event => setNarrativePalette(event.target.value as typeof narrativePalette)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="natural">Natural</option><option value="cool">Cool</option><option value="warm">Warm</option><option value="neon">Neon</option></select></label>}
+          {narrativeTemplate.controls.includes('voiceSpace') && <label>Voice space<select value={narrativeVoiceSpace} onChange={event => setNarrativeVoiceSpace(event.target.value as typeof narrativeVoiceSpace)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="center">Center</option><option value="left">Left</option><option value="right">Right</option></select></label>}
+        </div>
         <button type="button" disabled={playing || recording || publishing} onClick={mountNarrativeTemplate} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/20 disabled:opacity-40">Mount editable scene</button>
       </div>
       <SceneRecipePanel disabled={playing || recording || publishing || saving} outputs={outputs} onApply={applyRecipeScene} />

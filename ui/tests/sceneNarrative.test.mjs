@@ -57,3 +57,14 @@ test('run travel uses multi-plane strip motion without claiming a rigged run', (
   assert.equal(foreground?.strip?.speed, 58)
   assert.equal(hero?.animation.clip, undefined)
 })
+
+test('narrative controls alter the editable template scene without adding hidden layers', () => {
+  const plain = createNarrativeScene('inner-thought', assets)
+  const tuned = createNarrativeScene('inner-thought', { ...assets, controls: { mood: 'dreamy', intensity: 3, palette: 'neon', voiceSpace: 'left', camera: 'push', direction: 'right' } })
+  const plainHero = plain.layers.find(layer => layer.id === 'hero')
+  const tunedHero = tuned.layers.find(layer => layer.id === 'hero')
+  assert.equal(tuned.layers.length, plain.layers.length)
+  assert.equal(tunedHero?.transform.x, plainHero.transform.x + 14)
+  assert.ok((tunedHero?.effects?.glow ?? 0) > (plainHero?.effects?.glow ?? 0))
+  assert.ok((tunedHero?.effects?.saturation ?? 0) > (plainHero?.effects?.saturation ?? 0))
+})
