@@ -2026,13 +2026,13 @@ export function SceneAnimatorPanel() {
     try {
       const text = await generateLlmText({
         prompt: `USER INTENT:\n${copilotIntent.trim()}`,
-        system_prompt: buildSceneCopilotSystemPrompt(sceneRef.current, selected),
+        system_prompt: buildSceneCopilotSystemPrompt(sceneRef.current, selected, clipsByLayer[selected.id] ?? []),
         max_new_tokens: 1200,
         temperature: .1,
         top_p: .8,
         json_schema: SCENE_COPILOT_JSON_SCHEMA,
       })
-      setCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, selected.id)); setCopilotProposalRevision(historyRevisionRef.current)
+      setCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, selected.id, 'layer', clipsByLayer[selected.id] ?? [])); setCopilotProposalRevision(historyRevisionRef.current)
     } catch (error) {
       setCopilotError(error instanceof Error ? error.message : 'The copilot could not prepare this edit.')
     } finally {

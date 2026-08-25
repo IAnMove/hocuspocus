@@ -10,6 +10,7 @@ export type SceneEditOperation =
   | { op: 'set_orientation'; layerId: string; rotationX?: number; rotationY?: number }
   | { op: 'set_motion_preset'; layerId: string; preset: SceneMotionPreset; duration?: number }
   | { op: 'set_keyframes'; layerId: string; keyframes: SceneKeyframe[] }
+  | { op: 'set_rig_clip'; layerId: string; clip: string; loop?: boolean; speed?: number }
   | { op: 'set_camera_motion'; layerId: string; preset: 'restrained' | 'push' | 'drift'; duration?: number }
   | { op: 'set_scene_grade'; layerId: 'scene'; palette: 'natural' | 'cool' | 'warm' | 'neon'; mood?: 'calm' | 'tense' | 'dreamy' | 'heroic'; intensity?: 1 | 2 | 3 }
   | { op: 'set_relationship'; layerId: string; relationship: 'parent' | 'follow' | 'lookAt' | 'none'; targetLayerId?: string; offsetX?: number; offsetY?: number; strength?: number; rotationOffset?: number }
@@ -47,18 +48,19 @@ export const SCENE_COPILOT_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object', additionalProperties: false, required: ['summary', 'scope', 'operations', 'needsConfirmation'],
   properties: {
     summary: { type: 'string', maxLength: 500 }, scope: { enum: ['layer', 'scene'] }, needsConfirmation: { type: 'boolean' },
-    operations: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['op', 'layerId'], properties: { op: { enum: ['set_transform', 'set_effects', 'set_parallax', 'set_orientation', 'set_motion_preset', 'set_keyframes', 'set_camera_motion', 'set_scene_grade', 'set_relationship'] }, layerId: { type: 'string' }, patch: { type: 'object' }, value: { type: 'number' }, rotationX: { type: 'number' }, rotationY: { type: 'number' }, preset: { enum: ['thinking_drift', 'living_drift', 'run_bob', 'float', 'restrained', 'push', 'drift'] }, duration: { type: 'number' }, keyframes: { type: 'array', minItems: 2, maxItems: 16 }, palette: { enum: ['natural', 'cool', 'warm', 'neon'] }, mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] }, intensity: { enum: [1, 2, 3] }, relationship: { enum: ['parent', 'follow', 'lookAt', 'none'] }, targetLayerId: { type: 'string' }, offsetX: { type: 'number' }, offsetY: { type: 'number' }, strength: { type: 'number' }, rotationOffset: { type: 'number' } } } },
+    operations: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['op', 'layerId'], properties: { op: { enum: ['set_transform', 'set_effects', 'set_parallax', 'set_orientation', 'set_motion_preset', 'set_keyframes', 'set_rig_clip', 'set_camera_motion', 'set_scene_grade', 'set_relationship'] }, layerId: { type: 'string' }, patch: { type: 'object' }, value: { type: 'number' }, rotationX: { type: 'number' }, rotationY: { type: 'number' }, preset: { enum: ['thinking_drift', 'living_drift', 'run_bob', 'float', 'restrained', 'push', 'drift'] }, duration: { type: 'number' }, keyframes: { type: 'array', minItems: 2, maxItems: 16 }, clip: { type: 'string' }, loop: { type: 'boolean' }, speed: { type: 'number' }, palette: { enum: ['natural', 'cool', 'warm', 'neon'] }, mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] }, intensity: { enum: [1, 2, 3] }, relationship: { enum: ['parent', 'follow', 'lookAt', 'none'] }, targetLayerId: { type: 'string' }, offsetX: { type: 'number' }, offsetY: { type: 'number' }, strength: { type: 'number' }, rotationOffset: { type: 'number' } } } },
   },
 }
 
-export const buildSceneCopilotSystemPrompt = (scene: Scene, selected: SceneLayer) => [
+export const buildSceneCopilotSystemPrompt = (scene: Scene, selected: SceneLayer, verifiedClips: string[] = []) => [
   'You are HocusPocus selected-item 3D scene copilot. Return one JSON object only.',
   'Edit ONLY the selected layer. scope must be layer; every layerId must match it exactly.',
   'Never generate assets, alter the camera/other layers, delete, change global duration, relationships, or invent rig clips.',
-  'Allowed ops: set_transform, set_effects, set_parallax, set_orientation (model3d only), set_motion_preset, set_keyframes.',
+  `Allowed ops: set_transform, set_effects, set_parallax, set_orientation (model3d only), set_motion_preset, set_keyframes${verifiedClips.length ? ', set_rig_clip (only from VERIFIED_CLIPS)' : ''}.`,
   'Use 1–3 restrained operations. Emotional language maps to transform, motion and effects.',
   `SCENE=${JSON.stringify({ duration: scene.duration, fps: scene.fps ?? 30, width: scene.width, height: scene.height, layers: scene.layers.map(layer => ({ id: layer.id, name: layer.name, type: layer.type })) })}`,
   `SELECTED=${JSON.stringify({ id: selected.id, name: selected.name, type: selected.type, transform: selected.transform, animation: selected.animation, effects: selected.effects ?? {}, parallax: selected.parallax ?? 1, limitation: selected.type === 'model3d' ? 'No invented rig clip.' : undefined })}`,
+  `VERIFIED_CLIPS=${JSON.stringify(verifiedClips)}`,
 ].join('\n')
 
 /** Scene-wide requests expose only camera movement, visual grade and explicit layer relationships. */
@@ -78,7 +80,7 @@ const numericPatch = (raw: unknown, allowed: readonly string[], label: string) =
   return values
 }
 
-export const parseSceneCopilotProposal = (text: string, scene: Scene, selectedLayerId?: string, expectedScope: SceneCopilotScope = 'layer'): SceneCopilotProposal => {
+export const parseSceneCopilotProposal = (text: string, scene: Scene, selectedLayerId?: string, expectedScope: SceneCopilotScope = 'layer', verifiedClips: string[] = []): SceneCopilotProposal => {
   const raw = objectFrom(text)
   if (!record(raw) || raw.scope !== expectedScope || typeof raw.summary !== 'string' || typeof raw.needsConfirmation !== 'boolean' || !Array.isArray(raw.operations) || raw.operations.length < 1 || raw.operations.length > 6) throw new Error('The copilot proposal has an invalid envelope.')
   if (expectedScope === 'scene') {
@@ -150,6 +152,10 @@ export const parseSceneCopilotProposal = (text: string, scene: Scene, selectedLa
         return { id: `${selectedLayerId}-copilot-${frameIndex}`, time: number(frame.time, 0, 3600, 'keyframe.time'), x: number(frame.x, -500, 500, 'keyframe.x'), y: number(frame.y, -500, 500, 'keyframe.y'), scale: number(frame.scale, .01, 20, 'keyframe.scale'), opacity: number(frame.opacity, 0, 1, 'keyframe.opacity'), rotation: number(frame.rotation, -36000, 36000, 'keyframe.rotation'), curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(String(frame.curve)) ? frame.curve as SceneKeyframe['curve'] : selected.animation.curve }
       }).sort((a, b) => a.time - b.time) }
     }
+    if (value.op === 'set_rig_clip') {
+      if (selected.type !== 'model3d' || typeof value.clip !== 'string' || !verifiedClips.includes(value.clip)) throw new Error('Rig clip must be one of the verified clips for the selected 3D model.')
+      return { op: 'set_rig_clip', layerId: selectedLayerId, clip: value.clip, loop: value.loop === undefined ? true : Boolean(value.loop), speed: value.speed === undefined ? 1 : number(value.speed, .05, 8, 'clip.speed') }
+    }
     throw new Error(`Unsupported operation: ${value.op}`)
   })
   return { summary: raw.summary.trim().slice(0, 500), scope: 'layer', operations, needsConfirmation: raw.needsConfirmation }
@@ -198,6 +204,7 @@ export const applySceneCopilotProposal = (scene: Scene, proposal: SceneCopilotPr
     if (operation.op === 'set_parallax') return current.type === 'camera' ? current : { ...current, parallax: operation.value }
     if (operation.op === 'set_orientation') return { ...current, transform: { ...current.transform, ...(operation.rotationX === undefined ? {} : { rotationX: operation.rotationX }), ...(operation.rotationY === undefined ? {} : { rotationY: operation.rotationY }) } }
     if (operation.op === 'set_motion_preset') return motion(current, operation.preset, operation.duration)
+    if (operation.op === 'set_rig_clip') return { ...current, animation: { ...current.animation, clip: operation.clip, clipLoop: operation.loop, clipSpeed: operation.speed, clipOffset: 0, clipTrimStart: 0, clipTrimEnd: undefined } }
     if (operation.op === 'set_keyframes') {
       const first = operation.keyframes[0]; const last = operation.keyframes[operation.keyframes.length - 1]
       return { ...current, transform: { ...current.transform, x: last.x, y: last.y, scale: last.scale, opacity: last.opacity, rotation: last.rotation }, animation: { ...current.animation, start: first, end: last, keyframes: operation.keyframes, duration: Math.max(current.animation.duration, last.time), trimEnd: Math.max(current.animation.duration, last.time) } }
@@ -214,6 +221,7 @@ export const describeSceneCopilotProposal = (scene: Scene, proposal: SceneCopilo
   if (operation.op === 'set_effects') return `${label}: ${Object.entries(operation.patch).map(([key, value]) => `${key} → ${value}`).join(', ')}`
   if (operation.op === 'set_motion_preset') return `${label}: ${operation.preset.replace('_', ' ')} motion`
   if (operation.op === 'set_keyframes') return `${label}: ${operation.keyframes.length} keyframes`
+  if (operation.op === 'set_rig_clip') return `${label}: rig clip ${operation.clip}`
   if (operation.op === 'set_camera_motion') return `${label}: ${operation.preset} camera`
   if (operation.op === 'set_relationship') return `${label}: ${operation.relationship === 'none' ? 'relationship removed' : `${operation.relationship} → ${layerById(scene, operation.targetLayerId!).name}`}`
   return `${label}: ${operation.op.replaceAll('_', ' ')}`

@@ -18,7 +18,13 @@ test('copilot validates and applies normal editable scene operations', () => {
 })
 
 test('copilot rejects invented rig operations', () => {
-  assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Run', scope: 'layer', needsConfirmation: false, operations: [{ op: 'set_rig_clip', layerId: 'hero' }] }), scene, 'hero'), /Unsupported operation/)
+  assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Run', scope: 'layer', needsConfirmation: false, operations: [{ op: 'set_rig_clip', layerId: 'hero' }] }), scene, 'hero'), /verified clips/)
+})
+
+test('copilot accepts only a verified rig clip for the selected 3D model', () => {
+  const proposal = parseSceneCopilotProposal(JSON.stringify({ summary: 'Use the real run clip.', scope: 'layer', needsConfirmation: false, operations: [{ op: 'set_rig_clip', layerId: 'hero', clip: 'Run', loop: true, speed: 1.1 }] }), scene, 'hero', 'layer', ['Idle', 'Run'])
+  assert.equal(applySceneCopilotProposal(scene, proposal).layers[0].animation.clip, 'Run')
+  assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Invent it.', scope: 'layer', needsConfirmation: false, operations: [{ op: 'set_rig_clip', layerId: 'hero', clip: 'Sprint' }] }), scene, 'hero', 'layer', ['Idle', 'Run']), /verified clips/)
 })
 
 test('scene scope is limited to camera motion and a global grade', () => {
