@@ -36,3 +36,12 @@ test('scene scope rejects transforms and non-camera targets', () => {
   assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Move hero', scope: 'scene', needsConfirmation: false, operations: [{ op: 'set_transform', layerId: 'hero', patch: { x: 20 } }] }), sceneWithCamera, undefined, 'scene'), /does not allow/)
   assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Camera', scope: 'scene', needsConfirmation: false, operations: [{ op: 'set_camera_motion', layerId: 'hero', preset: 'push' }] }), sceneWithCamera, undefined, 'scene'), /camera layer/)
 })
+
+test('scene scope validates confirmed relationships between existing visual layers', () => {
+  const richer = { ...sceneWithCamera, layers: [...sceneWithCamera.layers, { id: 'halo', name: 'Halo', type: 'image', source: '/halo.png', visible: true, z: 12, transform: { x: 67, y: 54, scale: 1, opacity: 1, rotation: 0 }, animation: { start: { x: 67, y: 54, scale: 1 }, end: { x: 67, y: 54, scale: 1 }, duration: 10, curve: 'ease' } }] }
+  const proposal = parseSceneCopilotProposal(JSON.stringify({ summary: 'Attach halo.', scope: 'scene', needsConfirmation: true, operations: [{ op: 'set_relationship', layerId: 'halo', relationship: 'follow', targetLayerId: 'hero', offsetX: 0, offsetY: -4, strength: 1 }] }), richer, undefined, 'scene')
+  const halo = applySceneCopilotProposal(richer, proposal).layers.find(layer => layer.id === 'halo')
+  assert.equal(halo.relationship?.type, 'follow')
+  assert.equal(halo.relationship?.targetLayerId, 'hero')
+  assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Attach halo.', scope: 'scene', needsConfirmation: false, operations: [{ op: 'set_relationship', layerId: 'halo', relationship: 'follow', targetLayerId: 'hero' }] }), richer, undefined, 'scene'), /require confirmation/)
+})

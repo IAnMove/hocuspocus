@@ -12,6 +12,7 @@ export type SceneEditOperation =
   | { op: 'set_keyframes'; layerId: string; keyframes: SceneKeyframe[] }
   | { op: 'set_camera_motion'; layerId: string; preset: 'restrained' | 'push' | 'drift'; duration?: number }
   | { op: 'set_scene_grade'; layerId: 'scene'; palette: 'natural' | 'cool' | 'warm' | 'neon'; mood?: 'calm' | 'tense' | 'dreamy' | 'heroic'; intensity?: 1 | 2 | 3 }
+  | { op: 'set_relationship'; layerId: string; relationship: 'parent' | 'follow' | 'lookAt' | 'none'; targetLayerId?: string; offsetX?: number; offsetY?: number; strength?: number; rotationOffset?: number }
 
 export type SceneCopilotProposal = { summary: string; scope: SceneCopilotScope; operations: SceneEditOperation[]; needsConfirmation: boolean }
 
@@ -31,12 +32,22 @@ const layerById = (scene: Scene, id: string) => {
   if (!layer) throw new Error('The selected layer no longer exists.')
   return layer
 }
+const wouldCreateRelationshipCycle = (scene: Scene, layerId: string, targetId: string) => {
+  let cursor: string | undefined = targetId
+  const seen = new Set<string>()
+  while (cursor && !seen.has(cursor)) {
+    if (cursor === layerId) return true
+    seen.add(cursor)
+    cursor = scene.layers.find(layer => layer.id === cursor)?.relationship?.targetLayerId
+  }
+  return false
+}
 
 export const SCENE_COPILOT_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object', additionalProperties: false, required: ['summary', 'scope', 'operations', 'needsConfirmation'],
   properties: {
     summary: { type: 'string', maxLength: 500 }, scope: { enum: ['layer', 'scene'] }, needsConfirmation: { type: 'boolean' },
-    operations: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['op', 'layerId'], properties: { op: { enum: ['set_transform', 'set_effects', 'set_parallax', 'set_orientation', 'set_motion_preset', 'set_keyframes', 'set_camera_motion', 'set_scene_grade'] }, layerId: { type: 'string' }, patch: { type: 'object' }, value: { type: 'number' }, rotationX: { type: 'number' }, rotationY: { type: 'number' }, preset: { enum: ['thinking_drift', 'living_drift', 'run_bob', 'float', 'restrained', 'push', 'drift'] }, duration: { type: 'number' }, keyframes: { type: 'array', minItems: 2, maxItems: 16 }, palette: { enum: ['natural', 'cool', 'warm', 'neon'] }, mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] }, intensity: { enum: [1, 2, 3] } } } },
+    operations: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['op', 'layerId'], properties: { op: { enum: ['set_transform', 'set_effects', 'set_parallax', 'set_orientation', 'set_motion_preset', 'set_keyframes', 'set_camera_motion', 'set_scene_grade', 'set_relationship'] }, layerId: { type: 'string' }, patch: { type: 'object' }, value: { type: 'number' }, rotationX: { type: 'number' }, rotationY: { type: 'number' }, preset: { enum: ['thinking_drift', 'living_drift', 'run_bob', 'float', 'restrained', 'push', 'drift'] }, duration: { type: 'number' }, keyframes: { type: 'array', minItems: 2, maxItems: 16 }, palette: { enum: ['natural', 'cool', 'warm', 'neon'] }, mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] }, intensity: { enum: [1, 2, 3] }, relationship: { enum: ['parent', 'follow', 'lookAt', 'none'] }, targetLayerId: { type: 'string' }, offsetX: { type: 'number' }, offsetY: { type: 'number' }, strength: { type: 'number' }, rotationOffset: { type: 'number' } } } },
   },
 }
 
@@ -50,14 +61,14 @@ export const buildSceneCopilotSystemPrompt = (scene: Scene, selected: SceneLayer
   `SELECTED=${JSON.stringify({ id: selected.id, name: selected.name, type: selected.type, transform: selected.transform, animation: selected.animation, effects: selected.effects ?? {}, parallax: selected.parallax ?? 1, limitation: selected.type === 'model3d' ? 'No invented rig clip.' : undefined })}`,
 ].join('\n')
 
-/** Scene-wide requests deliberately expose only camera movement and a visual grade. */
+/** Scene-wide requests expose only camera movement, visual grade and explicit layer relationships. */
 export const buildSceneScopeCopilotSystemPrompt = (scene: Scene) => [
   'You are HocusPocus scene-level 3D copilot. Return one JSON object only.',
-  'scope must be scene. You may make only a restrained camera move or a visual grade.',
-  'Allowed ops: set_camera_motion (must target an existing camera layer) and set_scene_grade (layerId must be "scene").',
-  'Never add, remove, replace, move, transform, animate or reparent assets/layers. Never change duration, fps, sources, rigs, audio, or relationships.',
-  'Use 1–2 operations. needsConfirmation must be true when the intent could materially change the look.',
-  `SCENE=${JSON.stringify({ duration: scene.duration, fps: scene.fps ?? 30, width: scene.width, height: scene.height, cameras: scene.layers.filter(layer => layer.type === 'camera').map(layer => ({ id: layer.id, name: layer.name, animation: layer.animation })), visualLayers: scene.layers.filter(layer => layer.type !== 'camera').map(layer => ({ id: layer.id, name: layer.name, type: layer.type, effects: layer.effects ?? {} })) })}`,
+  'scope must be scene. You may make only a restrained camera move, visual grade, or explicit relationship between existing visual layers.',
+  'Allowed ops: set_camera_motion (existing camera), set_scene_grade (layerId "scene"), set_relationship (existing non-camera layers only).',
+  'Never add, remove, replace, move, transform, animate or reparent assets/layers except the declared relationship. Never change duration, fps, sources, rigs, or audio.',
+  'Use 1–2 operations. needsConfirmation must be true for every set_relationship.',
+  `SCENE=${JSON.stringify({ duration: scene.duration, fps: scene.fps ?? 30, width: scene.width, height: scene.height, cameras: scene.layers.filter(layer => layer.type === 'camera').map(layer => ({ id: layer.id, name: layer.name, animation: layer.animation })), visualLayers: scene.layers.filter(layer => layer.type !== 'camera').map(layer => ({ id: layer.id, name: layer.name, type: layer.type, relationship: layer.relationship, effects: layer.effects ?? {} })) })}`,
 ].join('\n')
 
 const numericPatch = (raw: unknown, allowed: readonly string[], label: string) => {
@@ -84,6 +95,17 @@ export const parseSceneCopilotProposal = (text: string, scene: Scene, selectedLa
         if (value.mood !== undefined && !['calm', 'tense', 'dreamy', 'heroic'].includes(String(value.mood))) throw new Error('Unsupported scene mood.')
         const intensity = value.intensity === undefined ? undefined : number(value.intensity, 1, 3, 'grade.intensity') as 1 | 2 | 3
         return { op: 'set_scene_grade', layerId: 'scene', palette: value.palette as 'natural' | 'cool' | 'warm' | 'neon', mood: value.mood as 'calm' | 'tense' | 'dreamy' | 'heroic' | undefined, intensity }
+      }
+      if (value.op === 'set_relationship') {
+        if (!raw.needsConfirmation) throw new Error('Scene relationships always require confirmation.')
+        const layer = layerById(scene, value.layerId)
+        if (layer.type === 'camera' || layer.locked) throw new Error('Relationships require an unlocked visual layer.')
+        if (!['parent', 'follow', 'lookAt', 'none'].includes(String(value.relationship))) throw new Error('Unsupported relationship.')
+        if (value.relationship === 'none') return { op: 'set_relationship', layerId: layer.id, relationship: 'none' }
+        if (typeof value.targetLayerId !== 'string') throw new Error('A relationship target is required.')
+        const target = layerById(scene, value.targetLayerId)
+        if (target.type === 'camera' || target.id === layer.id || wouldCreateRelationshipCycle(scene, layer.id, target.id)) throw new Error('The relationship target is not valid.')
+        return { op: 'set_relationship', layerId: layer.id, relationship: value.relationship as 'parent' | 'follow' | 'lookAt', targetLayerId: target.id, offsetX: value.offsetX === undefined ? 0 : number(value.offsetX, -500, 500, 'relationship.offsetX'), offsetY: value.offsetY === undefined ? 0 : number(value.offsetY, -500, 500, 'relationship.offsetY'), strength: value.strength === undefined ? 1 : number(value.strength, 0, 1, 'relationship.strength'), rotationOffset: value.rotationOffset === undefined ? 0 : number(value.rotationOffset, -360, 360, 'relationship.rotationOffset') }
       }
       throw new Error(`Scene scope does not allow ${value.op}.`)
     })
@@ -161,6 +183,7 @@ export const applySceneCopilotProposal = (scene: Scene, proposal: SceneCopilotPr
         const moodPatch = operation.mood === 'tense' ? { contrast: 1.15, saturation: .82 } : operation.mood === 'dreamy' ? { glow: .65 + intensity * .25, saturation: 1.12 } : operation.mood === 'heroic' ? { glow: .35 + intensity * .18, contrast: 1.13, saturation: 1.12 } : operation.mood === 'calm' ? { brightness: .98 + intensity * .02 } : {}
         return { ...currentScene, layers: currentScene.layers.map(layer => layer.type === 'camera' ? layer : { ...layer, effects: { ...layer.effects, ...palettePatch, ...moodPatch } }) }
       }
+      if (operation.op === 'set_relationship') return { ...currentScene, layers: currentScene.layers.map(layer => layer.id !== operation.layerId ? layer : { ...layer, relationship: operation.relationship === 'none' ? undefined : { type: operation.relationship, targetLayerId: operation.targetLayerId!, offsetX: operation.offsetX, offsetY: operation.offsetY, strength: operation.strength, rotationOffset: operation.rotationOffset }, animation: { ...layer.animation, orbit: undefined } }) }
       return currentScene
     }, scene)
   }
@@ -192,5 +215,6 @@ export const describeSceneCopilotProposal = (scene: Scene, proposal: SceneCopilo
   if (operation.op === 'set_motion_preset') return `${label}: ${operation.preset.replace('_', ' ')} motion`
   if (operation.op === 'set_keyframes') return `${label}: ${operation.keyframes.length} keyframes`
   if (operation.op === 'set_camera_motion') return `${label}: ${operation.preset} camera`
+  if (operation.op === 'set_relationship') return `${label}: ${operation.relationship === 'none' ? 'relationship removed' : `${operation.relationship} → ${layerById(scene, operation.targetLayerId!).name}`}`
   return `${label}: ${operation.op.replaceAll('_', ' ')}`
 })

@@ -2227,8 +2227,8 @@ export function SceneAnimatorPanel() {
         <button type="button" disabled={playing || recording || publishing} onClick={mountNarrativeTemplate} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/20 disabled:opacity-40">Mount editable scene</button>
       </div>
       <div className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.04] p-2">
-        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-cyan-100">Instruct scene</span><span className="text-[8px] text-cyan-200/80">Camera + grade only</span></div>
-        <p className="text-[8px] leading-relaxed text-text-muted">Ask for a restrained global camera move or a visual mood. It cannot add, remove, move, or replace assets.</p>
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-cyan-100">Instruct scene</span><span className="text-[8px] text-cyan-200/80">Camera + grade + links</span></div>
+        <p className="text-[8px] leading-relaxed text-text-muted">Ask for a restrained global camera move, visual mood, or an explicit link between existing layers. Links always require confirmation; it cannot add, remove, move, or replace assets.</p>
         <textarea value={sceneCopilotIntent} disabled={sceneCopilotBusy} onChange={event => setSceneCopilotIntent(event.target.value)} placeholder="Make the camera drift slowly and give the whole scene a cool, dreamy tone…" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
         <button type="button" disabled={!sceneCopilotIntent.trim() || sceneCopilotBusy} onClick={() => void proposeSceneCopilotEdit()} className="w-full rounded border border-cyan-300/50 bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-100 disabled:opacity-40">{sceneCopilotBusy ? 'Planning scene edit…' : 'Propose scene changes'}</button>
         {sceneCopilotError && <p className="text-[8px] text-red-300">{sceneCopilotError}</p>}
