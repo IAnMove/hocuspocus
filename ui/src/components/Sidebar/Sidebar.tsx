@@ -33,6 +33,7 @@ import { ToolsPanel } from './ToolsPanel'
 import { Hunyuan3DPanel } from './Hunyuan3DPanel'
 import { HardwareStatusBar } from './HardwareStatusBar'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
+import { PanoramaLoopPanel } from './PanoramaLoopPanel'
 import { BrandIdentity } from '../BrandIdentity'
 
 export function Sidebar() {
@@ -199,6 +200,7 @@ export function Sidebar() {
 
         {/* Image mode: reference images */}
         {isImage && modelOptions?.image_ref_choices && <ImageRefSection />}
+        {isImage && <PanoramaLoopPanel />}
 
         {/* Video/Image mode: audio controls (soundtrack, control video, etc.).
             In Frames mode (video, image_mode 0) the unified InputsPanel routes
