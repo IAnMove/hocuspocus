@@ -10,6 +10,8 @@ export type SceneEditOperation =
   | { op: 'set_orientation'; layerId: string; rotationX?: number; rotationY?: number }
   | { op: 'set_motion_preset'; layerId: string; preset: SceneMotionPreset; duration?: number }
   | { op: 'set_keyframes'; layerId: string; keyframes: SceneKeyframe[] }
+  | { op: 'set_camera_motion'; layerId: string; preset: 'restrained' | 'push' | 'drift'; duration?: number }
+  | { op: 'set_scene_grade'; layerId: 'scene'; palette: 'natural' | 'cool' | 'warm' | 'neon'; mood?: 'calm' | 'tense' | 'dreamy' | 'heroic'; intensity?: 1 | 2 | 3 }
 
 export type SceneCopilotProposal = { summary: string; scope: SceneCopilotScope; operations: SceneEditOperation[]; needsConfirmation: boolean }
 
@@ -33,8 +35,8 @@ const layerById = (scene: Scene, id: string) => {
 export const SCENE_COPILOT_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object', additionalProperties: false, required: ['summary', 'scope', 'operations', 'needsConfirmation'],
   properties: {
-    summary: { type: 'string', maxLength: 500 }, scope: { const: 'layer' }, needsConfirmation: { type: 'boolean' },
-    operations: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['op', 'layerId'], properties: { op: { enum: ['set_transform', 'set_effects', 'set_parallax', 'set_orientation', 'set_motion_preset', 'set_keyframes'] }, layerId: { type: 'string' }, patch: { type: 'object' }, value: { type: 'number' }, rotationX: { type: 'number' }, rotationY: { type: 'number' }, preset: { enum: ['thinking_drift', 'living_drift', 'run_bob', 'float'] }, duration: { type: 'number' }, keyframes: { type: 'array', minItems: 2, maxItems: 16 } } } },
+    summary: { type: 'string', maxLength: 500 }, scope: { enum: ['layer', 'scene'] }, needsConfirmation: { type: 'boolean' },
+    operations: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['op', 'layerId'], properties: { op: { enum: ['set_transform', 'set_effects', 'set_parallax', 'set_orientation', 'set_motion_preset', 'set_keyframes', 'set_camera_motion', 'set_scene_grade'] }, layerId: { type: 'string' }, patch: { type: 'object' }, value: { type: 'number' }, rotationX: { type: 'number' }, rotationY: { type: 'number' }, preset: { enum: ['thinking_drift', 'living_drift', 'run_bob', 'float', 'restrained', 'push', 'drift'] }, duration: { type: 'number' }, keyframes: { type: 'array', minItems: 2, maxItems: 16 }, palette: { enum: ['natural', 'cool', 'warm', 'neon'] }, mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] }, intensity: { enum: [1, 2, 3] } } } },
   },
 }
 
@@ -48,6 +50,16 @@ export const buildSceneCopilotSystemPrompt = (scene: Scene, selected: SceneLayer
   `SELECTED=${JSON.stringify({ id: selected.id, name: selected.name, type: selected.type, transform: selected.transform, animation: selected.animation, effects: selected.effects ?? {}, parallax: selected.parallax ?? 1, limitation: selected.type === 'model3d' ? 'No invented rig clip.' : undefined })}`,
 ].join('\n')
 
+/** Scene-wide requests deliberately expose only camera movement and a visual grade. */
+export const buildSceneScopeCopilotSystemPrompt = (scene: Scene) => [
+  'You are HocusPocus scene-level 3D copilot. Return one JSON object only.',
+  'scope must be scene. You may make only a restrained camera move or a visual grade.',
+  'Allowed ops: set_camera_motion (must target an existing camera layer) and set_scene_grade (layerId must be "scene").',
+  'Never add, remove, replace, move, transform, animate or reparent assets/layers. Never change duration, fps, sources, rigs, audio, or relationships.',
+  'Use 1–2 operations. needsConfirmation must be true when the intent could materially change the look.',
+  `SCENE=${JSON.stringify({ duration: scene.duration, fps: scene.fps ?? 30, width: scene.width, height: scene.height, cameras: scene.layers.filter(layer => layer.type === 'camera').map(layer => ({ id: layer.id, name: layer.name, animation: layer.animation })), visualLayers: scene.layers.filter(layer => layer.type !== 'camera').map(layer => ({ id: layer.id, name: layer.name, type: layer.type, effects: layer.effects ?? {} })) })}`,
+].join('\n')
+
 const numericPatch = (raw: unknown, allowed: readonly string[], label: string) => {
   if (!record(raw)) throw new Error(`${label} must be an object.`)
   const values = Object.entries(raw).filter(([key]) => allowed.includes(key))
@@ -55,9 +67,29 @@ const numericPatch = (raw: unknown, allowed: readonly string[], label: string) =
   return values
 }
 
-export const parseSceneCopilotProposal = (text: string, scene: Scene, selectedLayerId: string): SceneCopilotProposal => {
+export const parseSceneCopilotProposal = (text: string, scene: Scene, selectedLayerId?: string, expectedScope: SceneCopilotScope = 'layer'): SceneCopilotProposal => {
   const raw = objectFrom(text)
-  if (!record(raw) || raw.scope !== 'layer' || typeof raw.summary !== 'string' || typeof raw.needsConfirmation !== 'boolean' || !Array.isArray(raw.operations) || raw.operations.length < 1 || raw.operations.length > 6) throw new Error('The copilot proposal has an invalid envelope.')
+  if (!record(raw) || raw.scope !== expectedScope || typeof raw.summary !== 'string' || typeof raw.needsConfirmation !== 'boolean' || !Array.isArray(raw.operations) || raw.operations.length < 1 || raw.operations.length > 6) throw new Error('The copilot proposal has an invalid envelope.')
+  if (expectedScope === 'scene') {
+    const operations = raw.operations.map((value, index): SceneEditOperation => {
+      if (!record(value) || typeof value.op !== 'string' || typeof value.layerId !== 'string') throw new Error(`Operation ${index + 1} is invalid.`)
+      if (value.op === 'set_camera_motion') {
+        const camera = layerById(scene, value.layerId)
+        if (camera.type !== 'camera') throw new Error('Scene camera motion must target an existing camera layer.')
+        if (!['restrained', 'push', 'drift'].includes(String(value.preset))) throw new Error('Unsupported scene camera preset.')
+        return { op: 'set_camera_motion', layerId: camera.id, preset: value.preset as 'restrained' | 'push' | 'drift', duration: value.duration === undefined ? undefined : number(value.duration, 1, 60, 'camera.duration') }
+      }
+      if (value.op === 'set_scene_grade') {
+        if (value.layerId !== 'scene' || !['natural', 'cool', 'warm', 'neon'].includes(String(value.palette))) throw new Error('Scene grade must target scene and use a supported palette.')
+        if (value.mood !== undefined && !['calm', 'tense', 'dreamy', 'heroic'].includes(String(value.mood))) throw new Error('Unsupported scene mood.')
+        const intensity = value.intensity === undefined ? undefined : number(value.intensity, 1, 3, 'grade.intensity') as 1 | 2 | 3
+        return { op: 'set_scene_grade', layerId: 'scene', palette: value.palette as 'natural' | 'cool' | 'warm' | 'neon', mood: value.mood as 'calm' | 'tense' | 'dreamy' | 'heroic' | undefined, intensity }
+      }
+      throw new Error(`Scene scope does not allow ${value.op}.`)
+    })
+    return { summary: raw.summary.trim().slice(0, 500), scope: 'scene', operations, needsConfirmation: raw.needsConfirmation }
+  }
+  if (!selectedLayerId) throw new Error('A selected layer is required for layer scope.')
   const selected = layerById(scene, selectedLayerId)
   if (selected.locked) throw new Error('Unlock the selected layer before asking the copilot to modify it.')
   const operations = raw.operations.map((value, index): SceneEditOperation => {
@@ -111,6 +143,27 @@ const motion = (layer: SceneLayer, preset: SceneMotionPreset, duration?: number)
 }
 
 export const applySceneCopilotProposal = (scene: Scene, proposal: SceneCopilotProposal): Scene => {
+  if (proposal.scope === 'scene') {
+    return proposal.operations.reduce((currentScene, operation) => {
+      if (operation.op === 'set_camera_motion') {
+        return { ...currentScene, layers: currentScene.layers.map(layer => {
+          if (layer.id !== operation.layerId) return layer
+          const duration = operation.duration ?? Math.max(10, layer.animation.duration, currentScene.duration)
+          const start = { x: layer.animation.start.x, y: layer.animation.start.y, scale: layer.animation.start.scale, opacity: layer.animation.start.opacity ?? 1, rotation: layer.animation.start.rotation ?? 0 }
+          const end = operation.preset === 'push' ? { ...start, scale: start.scale + .1 } : operation.preset === 'drift' ? { ...start, x: start.x + 2, y: start.y - 1, scale: start.scale + .03 } : { ...start, scale: start.scale + .025 }
+          const keyframes = buildDriftKeyframes(`${layer.id}-scene-${operation.preset}`, duration, start, end, operation.preset === 'drift' ? { bob: .35, pulse: .006 } : { pulse: .002 })
+          return { ...layer, transform: { ...layer.transform, ...end }, animation: { ...layer.animation, start: keyframes[0], end: keyframes[keyframes.length - 1], keyframes, duration, trimEnd: duration, curve: 'ease' } }
+        }) }
+      }
+      if (operation.op === 'set_scene_grade') {
+        const intensity = operation.intensity ?? 2
+        const palettePatch = operation.palette === 'cool' ? { hue: 12, saturation: .9 } : operation.palette === 'warm' ? { hue: -10, saturation: 1.08 } : operation.palette === 'neon' ? { hue: 42, saturation: 1.35, contrast: 1.12 } : { hue: 0, saturation: 1 }
+        const moodPatch = operation.mood === 'tense' ? { contrast: 1.15, saturation: .82 } : operation.mood === 'dreamy' ? { glow: .65 + intensity * .25, saturation: 1.12 } : operation.mood === 'heroic' ? { glow: .35 + intensity * .18, contrast: 1.13, saturation: 1.12 } : operation.mood === 'calm' ? { brightness: .98 + intensity * .02 } : {}
+        return { ...currentScene, layers: currentScene.layers.map(layer => layer.type === 'camera' ? layer : { ...layer, effects: { ...layer.effects, ...palettePatch, ...moodPatch } }) }
+      }
+      return currentScene
+    }, scene)
+  }
   const layers = scene.layers.map(layer => proposal.operations.reduce((current, operation) => {
     if (operation.layerId !== current.id) return current
     if (operation.op === 'set_transform') {
@@ -122,17 +175,22 @@ export const applySceneCopilotProposal = (scene: Scene, proposal: SceneCopilotPr
     if (operation.op === 'set_parallax') return current.type === 'camera' ? current : { ...current, parallax: operation.value }
     if (operation.op === 'set_orientation') return { ...current, transform: { ...current.transform, ...(operation.rotationX === undefined ? {} : { rotationX: operation.rotationX }), ...(operation.rotationY === undefined ? {} : { rotationY: operation.rotationY }) } }
     if (operation.op === 'set_motion_preset') return motion(current, operation.preset, operation.duration)
-    const first = operation.keyframes[0]; const last = operation.keyframes[operation.keyframes.length - 1]
-    return { ...current, transform: { ...current.transform, x: last.x, y: last.y, scale: last.scale, opacity: last.opacity, rotation: last.rotation }, animation: { ...current.animation, start: first, end: last, keyframes: operation.keyframes, duration: Math.max(current.animation.duration, last.time), trimEnd: Math.max(current.animation.duration, last.time) } }
+    if (operation.op === 'set_keyframes') {
+      const first = operation.keyframes[0]; const last = operation.keyframes[operation.keyframes.length - 1]
+      return { ...current, transform: { ...current.transform, x: last.x, y: last.y, scale: last.scale, opacity: last.opacity, rotation: last.rotation }, animation: { ...current.animation, start: first, end: last, keyframes: operation.keyframes, duration: Math.max(current.animation.duration, last.time), trimEnd: Math.max(current.animation.duration, last.time) } }
+    }
+    return current
   }, layer))
   return { ...scene, duration: Math.max(scene.duration, ...layers.map(layer => layer.animation.duration)), layers }
 }
 
 export const describeSceneCopilotProposal = (scene: Scene, proposal: SceneCopilotProposal) => proposal.operations.map(operation => {
+  if (operation.op === 'set_scene_grade') return `Scene grade: ${operation.palette}${operation.mood ? ` / ${operation.mood}` : ''}`
   const label = layerById(scene, operation.layerId).name
   if (operation.op === 'set_transform') return `${label}: ${Object.entries(operation.patch).map(([key, value]) => `${key} → ${value}`).join(', ')}`
   if (operation.op === 'set_effects') return `${label}: ${Object.entries(operation.patch).map(([key, value]) => `${key} → ${value}`).join(', ')}`
   if (operation.op === 'set_motion_preset') return `${label}: ${operation.preset.replace('_', ' ')} motion`
   if (operation.op === 'set_keyframes') return `${label}: ${operation.keyframes.length} keyframes`
+  if (operation.op === 'set_camera_motion') return `${label}: ${operation.preset} camera`
   return `${label}: ${operation.op.replaceAll('_', ' ')}`
 })

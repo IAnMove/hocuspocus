@@ -3,6 +3,7 @@ import test from 'node:test'
 import { applySceneCopilotProposal, parseSceneCopilotProposal } from '../src/lib/sceneCopilot.ts'
 
 const scene = { version: 1, name: 'Thought', width: 1280, height: 720, fps: 30, duration: 10, layers: [{ id: 'hero', name: 'Hero', type: 'model3d', source: '/hero.glb', visible: true, z: 10, transform: { x: 67, y: 54, scale: .9, opacity: 1, rotation: 0 }, animation: { start: { x: 67, y: 54, scale: .9 }, end: { x: 67, y: 54, scale: .9 }, duration: 10, curve: 'ease' } }] }
+const sceneWithCamera = { ...scene, layers: [...scene.layers, { id: 'camera', name: 'Camera', type: 'camera', source: '', visible: true, z: 20, transform: { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 }, animation: { start: { x: 50, y: 50, scale: 1 }, end: { x: 50, y: 50, scale: 1 }, duration: 10, curve: 'ease' } }] }
 
 test('copilot rejects an operation outside the selected layer', () => {
   assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Move camera', scope: 'layer', needsConfirmation: false, operations: [{ op: 'set_transform', layerId: 'camera', patch: { x: 20 } }] }), scene, 'hero'), /selected layer/)
@@ -18,4 +19,20 @@ test('copilot validates and applies normal editable scene operations', () => {
 
 test('copilot rejects invented rig operations', () => {
   assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Run', scope: 'layer', needsConfirmation: false, operations: [{ op: 'set_rig_clip', layerId: 'hero' }] }), scene, 'hero'), /Unsupported operation/)
+})
+
+test('scene scope is limited to camera motion and a global grade', () => {
+  const proposal = parseSceneCopilotProposal(JSON.stringify({ summary: 'A cool drifting thought.', scope: 'scene', needsConfirmation: true, operations: [{ op: 'set_camera_motion', layerId: 'camera', preset: 'drift', duration: 12 }, { op: 'set_scene_grade', layerId: 'scene', palette: 'cool', mood: 'dreamy', intensity: 2 }] }), sceneWithCamera, undefined, 'scene')
+  const next = applySceneCopilotProposal(sceneWithCamera, proposal)
+  const hero = next.layers.find(layer => layer.id === 'hero')
+  const camera = next.layers.find(layer => layer.id === 'camera')
+  assert.equal(hero.source, '/hero.glb')
+  assert.equal(hero.transform.x, 67)
+  assert.equal(hero.effects?.hue, 12)
+  assert.ok(camera.animation.keyframes.length >= 5)
+})
+
+test('scene scope rejects transforms and non-camera targets', () => {
+  assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Move hero', scope: 'scene', needsConfirmation: false, operations: [{ op: 'set_transform', layerId: 'hero', patch: { x: 20 } }] }), sceneWithCamera, undefined, 'scene'), /does not allow/)
+  assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Camera', scope: 'scene', needsConfirmation: false, operations: [{ op: 'set_camera_motion', layerId: 'hero', preset: 'push' }] }), sceneWithCamera, undefined, 'scene'), /camera layer/)
 })

@@ -10,7 +10,7 @@ import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
-import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
+import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
 import type { Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
@@ -484,6 +484,10 @@ export function SceneAnimatorPanel() {
   const [copilotProposal, setCopilotProposal] = useState<SceneCopilotProposal | null>(null)
   const [copilotError, setCopilotError] = useState<string | null>(null)
   const [copilotListening, setCopilotListening] = useState(false)
+  const [sceneCopilotIntent, setSceneCopilotIntent] = useState('')
+  const [sceneCopilotBusy, setSceneCopilotBusy] = useState(false)
+  const [sceneCopilotProposal, setSceneCopilotProposal] = useState<SceneCopilotProposal | null>(null)
+  const [sceneCopilotError, setSceneCopilotError] = useState<string | null>(null)
   const [chainFromPlayhead, setChainFromPlayhead] = useState(false)
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -2044,6 +2048,39 @@ export function SceneAnimatorPanel() {
     setMessage(`Copilot applied: ${copilotProposal.summary}`)
     setCopilotProposal(null)
   }
+  const proposeSceneCopilotEdit = async () => {
+    if (!sceneCopilotIntent.trim()) return
+    setSceneCopilotBusy(true); setSceneCopilotError(null); setSceneCopilotProposal(null)
+    try {
+      const text = await generateLlmText({
+        prompt: `USER INTENT:\n${sceneCopilotIntent.trim()}`,
+        system_prompt: buildSceneScopeCopilotSystemPrompt(sceneRef.current),
+        max_new_tokens: 900,
+        temperature: .1,
+        top_p: .8,
+        json_schema: SCENE_COPILOT_JSON_SCHEMA,
+      })
+      setSceneCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, undefined, 'scene'))
+    } catch (error) {
+      setSceneCopilotError(error instanceof Error ? error.message : 'The copilot could not prepare this scene edit.')
+    } finally {
+      setSceneCopilotBusy(false)
+    }
+  }
+  const applySceneCopilotEdit = () => {
+    if (!sceneCopilotProposal) return
+    const proposal = sceneCopilotProposal
+    updateScene(current => ({
+      ...(applySceneCopilotProposal(current, proposal) as AnimatorScene),
+      copilotAudit: [...(current.copilotAudit ?? []), {
+        id: uid(), createdAt: new Date().toISOString(), scope: 'scene' as const,
+        intent: sceneCopilotIntent.trim(), summary: proposal.summary,
+        operations: proposal.operations.map(operation => ({ ...operation })), validation: 'applied' as const, model: 'configured-llm',
+      }].slice(-100),
+    }))
+    setMessage(`Scene copilot applied: ${proposal.summary}`)
+    setSceneCopilotProposal(null)
+  }
   const dictateCopilotIntent = () => {
     const root = window as unknown as { SpeechRecognition?: SpeechRecognizerConstructor; webkitSpeechRecognition?: SpeechRecognizerConstructor }
     const Recognition = root.SpeechRecognition ?? root.webkitSpeechRecognition
@@ -2173,6 +2210,14 @@ export function SceneAnimatorPanel() {
           {narrativeTemplate.controls.includes('voiceSpace') && <label>Voice space<select value={narrativeVoiceSpace} onChange={event => setNarrativeVoiceSpace(event.target.value as typeof narrativeVoiceSpace)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="center">Center</option><option value="left">Left</option><option value="right">Right</option></select></label>}
         </div>
         <button type="button" disabled={playing || recording || publishing} onClick={mountNarrativeTemplate} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/20 disabled:opacity-40">Mount editable scene</button>
+      </div>
+      <div className="space-y-1.5 rounded border border-cyan-400/30 bg-cyan-400/[.04] p-2">
+        <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-cyan-100">Instruct scene</span><span className="text-[8px] text-cyan-200/80">Camera + grade only</span></div>
+        <p className="text-[8px] leading-relaxed text-text-muted">Ask for a restrained global camera move or a visual mood. It cannot add, remove, move, or replace assets.</p>
+        <textarea value={sceneCopilotIntent} disabled={sceneCopilotBusy} onChange={event => setSceneCopilotIntent(event.target.value)} placeholder="Make the camera drift slowly and give the whole scene a cool, dreamy tone…" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <button type="button" disabled={!sceneCopilotIntent.trim() || sceneCopilotBusy} onClick={() => void proposeSceneCopilotEdit()} className="w-full rounded border border-cyan-300/50 bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-100 disabled:opacity-40">{sceneCopilotBusy ? 'Planning scene edit…' : 'Propose scene changes'}</button>
+        {sceneCopilotError && <p className="text-[8px] text-red-300">{sceneCopilotError}</p>}
+        {sceneCopilotProposal && <div className="space-y-1 rounded border border-cyan-300/25 bg-black/15 p-1.5"><p className="text-[9px] text-cyan-100">{sceneCopilotProposal.summary}</p><ul className="space-y-0.5 text-[8px] text-text-secondary">{describeSceneCopilotProposal(scene, sceneCopilotProposal).map(line => <li key={line}>• {line}</li>)}</ul><div className="flex gap-1"><button type="button" onClick={applySceneCopilotEdit} className="flex-1 rounded bg-cyan-400/20 px-1.5 py-1 text-[9px] text-cyan-100">Apply</button><button type="button" onClick={() => setSceneCopilotProposal(null)} className="rounded border border-border px-1.5 py-1 text-[9px] text-text-muted">Discard</button></div></div>}
       </div>
       <SceneRecipePanel disabled={playing || recording || publishing || saving} outputs={outputs} onApply={applyRecipeScene} />
       <div className="relative"><button onClick={() => setAddOpen(value => !value)} className="w-full rounded bg-accent-blue px-2.5 py-2 text-xs text-white flex items-center justify-center gap-1"><Plus size={13} /> Add layer</button>{addOpen && <div className="absolute z-[1100] mt-1 max-h-[75vh] w-full space-y-1 overflow-y-auto rounded border border-border bg-bg-primary p-1 shadow-xl"><button onClick={addCamera} className="w-full rounded px-2 py-1.5 text-left text-[11px] text-cyan-200 hover:bg-bg-hover">Add camera</button><div className="px-2 pt-1 text-[8px] font-medium uppercase tracking-wider text-text-muted">Atmospheric effect · 14 presets</div><div className="grid grid-cols-2 gap-1">{ATMOSPHERE_KINDS.map(kind => <button key={kind} onClick={() => addAtmosphere(kind)} title={`${ATMOSPHERE_LABELS[kind]} — ${ATMOSPHERE_DESCRIPTIONS[kind]}`} className="truncate rounded border border-border px-2 py-1.5 text-left text-[9px] text-purple-200 hover:border-purple-400/60 hover:bg-bg-hover">{ATMOSPHERE_LABELS[kind]}</button>)}</div><button onClick={() => { setPicker('model'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated 3D model</button><button onClick={() => { setAddOpen(false); modelInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import GLB</button><button onClick={() => { setPicker('media'); setAddOpen(false) }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Select generated image/video</button><button onClick={() => { setAddOpen(false); mediaInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import image/video</button><button onClick={() => { setAddOpen(false); overlayInputRef.current?.click() }} className="w-full rounded px-2 py-1.5 text-left text-[11px] hover:bg-bg-hover">Import transparent PNG/WebP</button></div>}</div>
