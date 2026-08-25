@@ -6588,39 +6588,34 @@ def concatenate_multi_clip_videos(
         )
         pad_audio = False
 
-    # Check if clips have embedded audio (e.g., LTX-2.3 generated video+audio)
-    clips_have_audio = False
-    if not audio_path:
-        try:
-            ffprobe_bin = ffmpeg_bin.replace("ffmpeg", "ffprobe")
-            probe_result = subprocess.run(
-                [ffprobe_bin, "-i", valid_paths[0].replace("\\", "/"),
-                 "-show_streams", "-select_streams", "a", "-loglevel", "error"],
-                capture_output=True, text=True, timeout=10,
-            )
-            clips_have_audio = "codec_type=audio" in probe_result.stdout or len(probe_result.stdout.strip()) > 0
-        except Exception:
-            try:
-                probe_result = subprocess.run(
-                    [ffmpeg_bin, "-i", valid_paths[0].replace("\\", "/"), "-f", "null", "-"],
-                    capture_output=True, text=True, timeout=10,
-                )
-                clips_have_audio = "Audio:" in probe_result.stderr
-            except Exception:
-                pass
-
-    use_clip_audio = clips_have_audio and not audio_path
-    audio_label = "with embedded audio" if use_clip_audio else ("with external audio" if audio_path else "video only")
     try:
         from services.mix_concat import (
+            build_hard_concat_filter,
             concat_with_tail_hold_and_crossfade,
+            probe_clip_audio_flags,
+            probe_duration_seconds,
             should_use_hold_crossfade,
         )
     except ImportError:
         from app.services.mix_concat import (
+            build_hard_concat_filter,
             concat_with_tail_hold_and_crossfade,
+            probe_clip_audio_flags,
+            probe_duration_seconds,
             should_use_hold_crossfade,
         )
+
+    # Probe every clip. A video-only bumper (or mute H3 shot) in slot 0
+    # used to hide later dialogue; a later video-only clip crashed ffmpeg
+    # when slot 0 had audio. Recast / Repaint / Outpaint always land here.
+    audio_flags: list[bool] = []
+    clips_have_audio = False
+    if not audio_path:
+        audio_flags = probe_clip_audio_flags(valid_paths, ffmpeg_bin)
+        clips_have_audio = any(audio_flags)
+
+    use_clip_audio = clips_have_audio and not audio_path
+    audio_label = "with embedded audio" if use_clip_audio else ("with external audio" if audio_path else "video only")
     if should_use_hold_crossfade(
         n,
         has_driving_audio=bool(audio_path),
@@ -6672,9 +6667,17 @@ def concatenate_multi_clip_videos(
 
     # Build filter_complex string
     if use_clip_audio:
-        # Concat both video and audio streams from each clip
-        filter_inputs = "".join(f"[{i}:v][{i}:a]" for i in range(n))
-        filter_str = f"{filter_inputs}concat=n={n}:v=1:a=1[outv][outa]"
+        silent_durations = None
+        if audio_flags and not all(audio_flags):
+            silent_durations = [
+                probe_duration_seconds(path, ffmpeg_bin) or 1.0
+                for path in valid_paths
+            ]
+        filter_str, _maps_audio = build_hard_concat_filter(
+            n,
+            audio_flags=audio_flags or [True] * n,
+            silent_durations=silent_durations,
+        )
         cmd += ["-filter_complex", filter_str]
         cmd += ["-map", "[outv]", "-map", "[outa]"]
         cmd += ["-c:a", "aac"]

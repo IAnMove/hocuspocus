@@ -252,3 +252,97 @@ def concat_with_tail_hold_and_crossfade(
         output_path,
         abort_callback=abort_callback,
     )
+
+
+def probe_clip_has_audio(path: str, ffmpeg_bin: str = "ffmpeg") -> bool:
+    """True when *path* has at least one audio stream.
+
+    Fail open on a flaky probe so a later dialogue clip is not dropped
+    just because ffprobe could not inspect this file.
+    """
+    ffprobe_bin = ffmpeg_bin.replace("ffmpeg", "ffprobe")
+    try:
+        probe = subprocess.run(
+            [
+                ffprobe_bin, "-i", path, "-show_streams",
+                "-select_streams", "a", "-loglevel", "error",
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        stdout = probe.stdout or ""
+        return "codec_type=audio" in stdout or bool(stdout.strip())
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            probe = subprocess.run(
+                [ffmpeg_bin, "-i", path, "-f", "null", "-"],
+                capture_output=True, text=True, timeout=10,
+            )
+            return "Audio:" in (probe.stderr or "")
+        except (OSError, subprocess.TimeoutExpired):
+            return True
+
+
+def probe_clip_audio_flags(
+    paths: Sequence[str],
+    ffmpeg_bin: str = "ffmpeg",
+) -> list[bool]:
+    """Per-clip audio presence. Do not trust only the first file."""
+    return [probe_clip_has_audio(path, ffmpeg_bin) for path in paths]
+
+
+def build_hard_concat_filter(
+    clip_count: int,
+    *,
+    audio_flags: Sequence[bool] | None = None,
+    silent_durations: Sequence[float] | None = None,
+) -> tuple[str, bool]:
+    """Return ``(filter_complex, maps_embedded_audio)`` for a hard concat.
+
+    Recast / Repaint / Outpaint skip the hold-crossfade and land here, as
+    does the soft-join fallback. If only some clips have audio, missing
+    streams become stereo silence so ``concat=a=1`` stays legal and later
+    dialogue is not discarded.
+    """
+    count = int(clip_count)
+    if count < 1:
+        raise ValueError("need at least one clip")
+    flags = (
+        [bool(flag) for flag in audio_flags]
+        if audio_flags is not None
+        else None
+    )
+    if flags is not None and len(flags) != count:
+        raise ValueError("audio_flags length must match clip_count")
+    mix_audio = bool(flags and any(flags))
+    if not mix_audio:
+        inputs = "".join(f"[{index}:v]" for index in range(count))
+        return f"{inputs}concat=n={count}:v=1:a=0[outv]", False
+    if flags is not None and all(flags):
+        inputs = "".join(f"[{index}:v][{index}:a]" for index in range(count))
+        return f"{inputs}concat=n={count}:v=1:a=1[outv][outa]", True
+
+    durations = [max(0.1, float(value)) for value in (silent_durations or [])]
+    if len(durations) != count:
+        raise ValueError("silent_durations length must match clip_count")
+    parts: list[str] = []
+    mapped: list[str] = []
+    for index, has_stream in enumerate(flags or []):
+        if has_stream:
+            parts.append(
+                f"[{index}:a]aresample=48000,"
+                f"aformat=sample_fmts=fltp:channel_layouts=stereo[a{index}]"
+            )
+        else:
+            parts.append(
+                f"anullsrc=channel_layout=stereo:sample_rate=48000"
+                f":d={durations[index]:.3f},"
+                f"aformat=sample_fmts=fltp:channel_layouts=stereo[a{index}]"
+            )
+        mapped.append(f"[{index}:v][a{index}]")
+    filter_str = (
+        ";".join(parts)
+        + ";"
+        + "".join(mapped)
+        + f"concat=n={count}:v=1:a=1[outv][outa]"
+    )
+    return filter_str, True
