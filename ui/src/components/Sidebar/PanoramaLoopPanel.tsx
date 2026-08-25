@@ -66,6 +66,33 @@ export function PanoramaLoopPanel() {
 
   useEffect(() => () => { if (prepared) URL.revokeObjectURL(prepared.url) }, [prepared])
 
+  useEffect(() => {
+    const encoded = window.sessionStorage.getItem('hocuspocus:panorama-loop-source')
+    if (!encoded) return
+    window.sessionStorage.removeItem('hocuspocus:panorama-loop-source')
+    let queued: { url?: string; name?: string }
+    try { queued = JSON.parse(encoded) as { url?: string; name?: string } } catch { return }
+    const sourceUrl = queued.url
+    if (!sourceUrl) return
+    void (async () => {
+      try {
+        const response = await fetch(sourceUrl)
+        if (!response.ok) throw new Error('The selected 3D Video background is no longer available.')
+        const blob = await response.blob()
+        const extension = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'
+        const file = new File([blob], queued.name || `3d-video-background.${extension}`, { type: blob.type || 'image/jpeg' })
+        setSource(file)
+        const next = await prepareTripleTile(file, seamPercent)
+        setPrepared(previous => { if (previous) URL.revokeObjectURL(previous.url); return next })
+        setMessage('Background received from 3D Video. Review the seams, then generate a loopable variation.')
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Could not receive the selected 3D Video background.')
+      }
+    })()
+  // Consume the hand-off once when the Image panel mounts.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const prompt = useMemo(() => buildInfinitePanoramaPrompt({ subject, style, foregroundOccluder: occluder }), [subject, style, occluder])
   const prepare = async (file: File) => {
     setSource(file); setMessage(null)
