@@ -13,6 +13,7 @@ test('narrative library exposes ten standard scenes plus the travel experiment',
   assert.equal(NARRATIVE_SCENE_TEMPLATES.length, 11)
   assert.equal(NARRATIVE_SCENE_TEMPLATES.filter(template => !template.experimental).length, 10)
   assert.ok(NARRATIVE_SCENE_TEMPLATES.every(template => template.defaultDuration >= 10))
+  assert.ok(NARRATIVE_SCENE_TEMPLATES.every(template => template.constraints.includes('continuous_motion') && template.previewPrompt && typeof template.createScene === 'function'))
 })
 
 test('drift keyframes keep long motion alive near the end of a shot', () => {

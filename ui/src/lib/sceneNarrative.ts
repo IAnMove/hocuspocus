@@ -27,6 +27,9 @@ export type NarrativeSceneTemplate = {
   defaultDuration: 10 | 12
   assetSlots: NarrativeAssetSlot[]
   controls: Array<'mood' | 'intensity' | 'direction' | 'camera' | 'palette' | 'voiceSpace'>
+  constraints: Array<'continuous_motion' | 'hero_visible_late' | 'existing_assets_only' | 'no_invented_rig'>
+  previewPrompt: string
+  createScene: (input: NarrativeTemplateInput) => Scene
   experimental?: boolean
 }
 
@@ -153,7 +156,7 @@ const cameraLayer = (duration: number, start: MotionPoint, end: MotionPoint, key
   animation: { ...defaults(duration, start, end, keyframes), keyframes },
 })
 
-export const NARRATIVE_SCENE_TEMPLATES: NarrativeSceneTemplate[] = [
+const NARRATIVE_SCENE_TEMPLATE_DATA: Array<Omit<NarrativeSceneTemplate, 'constraints' | 'previewPrompt' | 'createScene'>> = [
   { id: 'inner-thought', title: 'Inner thought', description: 'Space for a voice-over and a contemplative drifting subject.', defaultDuration: 10, assetSlots: [{ id: 'hero', label: 'Character', types: ['model3d', 'image', 'video'], required: true }, { id: 'plate', label: 'Background', types: ['image', 'video'], required: true }], controls: ['mood', 'intensity', 'voiceSpace', 'camera'] },
   { id: 'hero-arrival', title: 'Hero arrival', description: 'An entrance that settles into a living pose.', defaultDuration: 12, assetSlots: [{ id: 'hero', label: 'Character', types: ['model3d', 'image', 'video'], required: true }, { id: 'plate', label: 'Background', types: ['image', 'video'], required: true }], controls: ['intensity', 'direction', 'camera'] },
   { id: 'character-turntable', title: 'Character presentation', description: 'A controlled silhouette and costume reveal.', defaultDuration: 10, assetSlots: [{ id: 'hero', label: 'Character', types: ['model3d', 'image', 'video'], required: true }, { id: 'plate', label: 'Background', types: ['image', 'video'], required: true }], controls: ['direction', 'palette', 'camera'] },
@@ -166,6 +169,19 @@ export const NARRATIVE_SCENE_TEMPLATES: NarrativeSceneTemplate[] = [
   { id: 'surreal-transit', title: 'Surreal transit', description: 'Independent subject and world movement for journeys.', defaultDuration: 12, assetSlots: [{ id: 'hero', label: 'Character', types: ['model3d', 'image', 'video'], required: true }, { id: 'plate', label: 'Background', types: ['image', 'video'], required: true }, { id: 'foreground', label: 'Optional foreground', types: ['image', 'video'], required: false }], controls: ['intensity', 'direction', 'palette', 'camera'] },
   { id: 'run-travel-parallax', title: 'Run / travel parallax', description: 'A stylised movement illusion; it does not invent a running rig.', defaultDuration: 12, assetSlots: [{ id: 'hero', label: 'Running-pose character', types: ['model3d', 'image', 'video'], required: true }, { id: 'plate', label: 'Seamless background', types: ['image', 'video'], required: true }, { id: 'foreground', label: 'Optional foreground strip', types: ['image', 'video'], required: false }], controls: ['intensity', 'direction', 'camera'], experimental: true },
 ]
+
+/** Registry entries compile into the same ordinary Scene graph the user edits. */
+export const NARRATIVE_SCENE_TEMPLATES: NarrativeSceneTemplate[] = NARRATIVE_SCENE_TEMPLATE_DATA.map(template => ({
+  ...template,
+  constraints: [
+    'continuous_motion',
+    'existing_assets_only',
+    ...(template.assetSlots.some(slot => slot.id === 'hero' || slot.id === 'prop') ? ['no_invented_rig' as const] : []),
+    ...(template.assetSlots.some(slot => slot.id === 'hero') ? ['hero_visible_late' as const] : []),
+  ],
+  previewPrompt: `${template.title}: ${template.description}`,
+  createScene: input => createNarrativeScene(template.id, input),
+}))
 
 export const getNarrativeTemplate = (id: NarrativeSceneId) => NARRATIVE_SCENE_TEMPLATES.find(template => template.id === id)
 
