@@ -13,6 +13,12 @@ export type SceneLayerTiming = {
 
 const lerp = (a: number, b: number, amount: number) => a + (b - a) * amount
 
+/** Converts real media seconds into the normalized scene coordinate used by preview layers. */
+export const sceneProgressFromSeconds = (seconds: number, duration: number) => {
+  const safeDuration = Math.max(.001, Number.isFinite(duration) ? duration : .001)
+  return Math.max(0, Math.min(1, (Number.isFinite(seconds) ? seconds : 0) / safeDuration))
+}
+
 export const applySceneCurve = (amount: number, curve: SceneCurve) => {
   const value = Math.max(0, Math.min(1, amount))
   if (curve === 'ease') return value * value * (3 - 2 * value)

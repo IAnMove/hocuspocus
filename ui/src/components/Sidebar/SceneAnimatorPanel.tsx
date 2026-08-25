@@ -12,7 +12,7 @@ import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
-import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
+import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
 import { paintSeamOccluder, seamOccluderDataUri, SEAM_OCCLUDER_KINDS, type SeamOccluderKind } from '../../lib/seamOccluder'
 import type { Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
@@ -1631,14 +1631,16 @@ export function SceneAnimatorPanel() {
     // Rebind when history changes so keyboard state and buttons stay aligned.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyRevision])
-  const paintScene = (canvas: HTMLCanvasElement, time: number, exportModelCanvases?: Map<string, HTMLCanvasElement[]>) => {
+  const paintScene = (canvas: HTMLCanvasElement, progress: number, exportModelCanvases?: Map<string, HTMLCanvasElement[]>) => {
     const current = sceneRef.current
+    const sceneProgress = Math.max(0, Math.min(1, progress))
+    const sceneSeconds = sceneProgress * current.duration
     const context = canvas.getContext('2d')
     if (!context) return false
     context.fillStyle = '#0b1020'; context.fillRect(0, 0, canvas.width, canvas.height)
     current.layers
       .filter(layer => layer.visible && isVisualLayer(layer))
-      .flatMap(layer => renderedLayerStates(layer, time).map((state, instanceIndex) => ({ layer, state, instanceIndex })))
+      .flatMap(layer => renderedLayerStates(layer, sceneProgress).map((state, instanceIndex) => ({ layer, state, instanceIndex })))
       .sort((a, b) => a.state.z - b.state.z)
       .forEach(({ layer, state, instanceIndex }) => {
       const effects = normalizedEffects(layer.effects)
@@ -1650,7 +1652,7 @@ export function SceneAnimatorPanel() {
       context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100); context.rotate(state.rotation * Math.PI / 180)
       applyLayerMask(context, effects, width, height)
       if (layer.type === 'effect') {
-        drawAtmosphere(context, normalizedAtmosphere(layer.atmosphere), time, width, height)
+        drawAtmosphere(context, normalizedAtmosphere(layer.atmosphere), sceneSeconds, width, height)
       } else if (layer.type === 'model3d') {
         const viewer = exportModelCanvases?.get(layer.id)?.[instanceIndex]
           ?? modelViewerCanvas(findLayerElements(canvasRef.current, layer.id)[instanceIndex] ?? null)
@@ -1674,7 +1676,7 @@ export function SceneAnimatorPanel() {
       .filter(layer => layer.visible && isVisualLayer(layer) && normalizedStrip(layer.strip).seamOccluder.enabled)
       .forEach(layer => {
         const kind = normalizedStrip(layer.strip).seamOccluder.kind
-        seamCoverStates(layer, time).forEach(state => {
+        seamCoverStates(layer, sceneProgress).forEach(state => {
           context.save()
           context.globalAlpha = state.opacity
           context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100)
@@ -1851,16 +1853,16 @@ export function SceneAnimatorPanel() {
 
     return {
       canvases,
-      async renderFrame(time: number) {
+      async renderFrame(progress: number) {
         for (const layer of models) {
           const entries = viewers.get(layer.id) ?? []
-          const states = renderedLayerStates(layer, time)
+          const states = renderedLayerStates(layer, progress)
           entries.forEach((viewer, index) => {
             const state = states[index] ?? states[0]
             viewer.setAttribute('orientation', `0deg ${state?.modelYaw ?? 0}deg 0deg`)
             if (layer.animation.clip) {
               viewer.setAttribute('animation-name', layer.animation.clip)
-              const clipTime = getSceneClipTime(layer, time * current.duration, Math.max(.001, viewer.duration || 0))
+              const clipTime = getSceneClipTime(layer, progress * current.duration, Math.max(.001, viewer.duration || 0))
               viewer.currentTime = clipTime
               viewer.pause()
             }
@@ -1922,10 +1924,11 @@ export function SceneAnimatorPanel() {
       setMessage(`Rendering ${frameCount} exact frames at ${fps} FPS…`)
       for (let index = 0; index < frameCount; index += 1) {
         if (encoderError) throw encoderError
-        const time = Math.min(current.duration, index / fps)
-        syncSceneMedia(time)
-        await exportStage.renderFrame(time)
-        if (!paintScene(canvas, time, exportStage.canvases)) throw new Error('Could not paint export frame.')
+        const seconds = Math.min(current.duration, index / fps)
+        const progress = sceneProgressFromSeconds(seconds, current.duration)
+        syncSceneMedia(seconds)
+        await exportStage.renderFrame(progress)
+        if (!paintScene(canvas, progress, exportStage.canvases)) throw new Error('Could not paint export frame.')
         const frame = new VideoFrame(canvas, { timestamp: index * frameDurationUs, duration: frameDurationUs })
         encoder.encode(frame, { keyFrame: index % Math.max(1, fps * 2) === 0 })
         frame.close()

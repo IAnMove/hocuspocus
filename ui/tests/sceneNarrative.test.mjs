@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { NARRATIVE_SCENE_TEMPLATES, buildDriftKeyframes, createNarrativeScene } from '../src/lib/sceneNarrative.ts'
-import { evaluateSceneLayer } from '../src/lib/sceneTimeline.ts'
+import { evaluateSceneLayer, sceneProgressFromSeconds } from '../src/lib/sceneTimeline.ts'
 
 const assets = {
   hero: { source: '/hero.glb', type: 'model3d', name: 'Explorer' },
@@ -21,6 +21,13 @@ test('drift keyframes keep long motion alive near the end of a shot', () => {
   assert.ok(frames.length >= 5)
   assert.notDeepEqual(frames.at(-1), frames.at(-2))
   assert.notEqual(frames.find(frame => frame.time >= 8)?.x, frames.find(frame => frame.time >= 6)?.x)
+})
+
+test('export seconds map exactly to the normalized preview timeline', () => {
+  assert.equal(sceneProgressFromSeconds(0, 10), 0)
+  assert.equal(sceneProgressFromSeconds(5, 10), .5)
+  assert.equal(sceneProgressFromSeconds(10, 10), 1)
+  assert.equal(sceneProgressFromSeconds(25, 10), 1)
 })
 
 test('the first narrative templates compile to editable 10+ second ordinary scenes', () => {
