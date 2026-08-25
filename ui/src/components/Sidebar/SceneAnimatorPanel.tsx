@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, typ
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { useStore } from '../../stores/useStore'
-import { generateLlmText, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
+import { fetchJobStatus, generateLlmText, saveScene as saveSceneOutput, saveSceneRecording, submitGeneration, uploadImage } from '../../api/client'
 import { SceneRecipePanel } from './SceneRecipePanel'
 import type { SceneRecipe } from '../../lib/sceneRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
@@ -460,6 +460,7 @@ export function SceneAnimatorPanel() {
   const outputs = useStore(s => s.outputs)
   const loadOutputs = useStore(s => s.loadOutputs)
   const workspace = useStore(s => s.activeWorkspace)
+  const selectedSpeechModel = useStore(s => s.selectedModelPerAudioSubMode.speech ?? 'kugelaudio_0_open')
   const [scene, setScene] = useState<AnimatorScene>(blankScene)
   const sceneRef = useRef(scene)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -498,6 +499,9 @@ export function SceneAnimatorPanel() {
   const [sceneCopilotProposal, setSceneCopilotProposal] = useState<SceneCopilotProposal | null>(null)
   const [sceneCopilotProposalRevision, setSceneCopilotProposalRevision] = useState<number | null>(null)
   const [sceneCopilotError, setSceneCopilotError] = useState<string | null>(null)
+  const [sceneAudioPrompt, setSceneAudioPrompt] = useState('')
+  const [sceneAudioBusy, setSceneAudioBusy] = useState(false)
+  const [sceneAudioError, setSceneAudioError] = useState<string | null>(null)
   const [chainFromPlayhead, setChainFromPlayhead] = useState(false)
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -543,6 +547,7 @@ export function SceneAnimatorPanel() {
   const snapCoordinate = (value: number) => composition.snap ? Math.round(value / Math.max(1, composition.gridSize)) * Math.max(1, composition.gridSize) : value
   const generatedModels = outputs.filter(output => output.type === 'model3d' && /\.glb$/i.test(output.name))
   const generatedMedia = outputs.filter(output => output.type === 'image' || output.type === 'video')
+  const generatedAudio = outputs.filter(output => output.type === 'audio')
   const narrativeVisuals = outputs.filter(output => output.type === 'model3d' || output.type === 'image' || output.type === 'video')
   const narrativeTemplate = getNarrativeTemplate(narrativeTemplateId)!
   const previewShortSide = Math.min(previewWidth, previewWidth * scene.height / Math.max(1, scene.width))
@@ -2070,6 +2075,36 @@ export function SceneAnimatorPanel() {
     setSelectedKeyframeId(null); setSelectedEventId(null); setSelectedPresetId(''); setProgress(0)
     setMessage(`${narrativeTemplate.title} mounted as an editable ${next.duration}-second scene.`)
   }
+  const attachSceneAudio = (filename: string, name = filename, kind: 'speech' | 'music' | 'sfx' | 'audio' = 'audio', prompt?: string, model?: string) => {
+    if (!filename) return
+    updateScene(current => {
+      if ((current.audioTracks ?? []).some(track => track.filename === filename)) return current
+      return { ...current, audioTracks: [...(current.audioTracks ?? []), { id: uid(), filename, name, kind, startTime: 0, volume: 1, prompt, model }] }
+    })
+  }
+  const generateSceneSpeech = async () => {
+    const prompt = sceneAudioPrompt.trim()
+    if (!prompt) return
+    setSceneAudioBusy(true); setSceneAudioError(null)
+    try {
+      const submitted = await submitGeneration({ model_type: selectedSpeechModel, generation_mode: 'audio', prompt, video_length: 0, image_mode: 0, multi_prompts_gen_type: 2, duration_seconds: sceneRef.current.duration, _audio_sub_mode: 'speech' })
+      const deadline = Date.now() + 15 * 60_000
+      let status = await fetchJobStatus(submitted.job_id)
+      while (!['completed', 'failed', 'cancelled'].includes(status.status) && Date.now() < deadline) {
+        await new Promise(resolve => window.setTimeout(resolve, 1000))
+        status = await fetchJobStatus(submitted.job_id)
+      }
+      if (status.status !== 'completed') throw new Error(status.error || (Date.now() >= deadline ? 'Audio generation timed out.' : 'Audio generation did not complete.'))
+      const filename = status.output_files.find(file => /\.(wav|mp3|m4a|aac|flac|ogg)$/i.test(file)) ?? status.output_files[0]
+      if (!filename) throw new Error('The audio model completed without an output file.')
+      attachSceneAudio(filename, filename.replace(/\.[^.]+$/, ''), 'speech', prompt, selectedSpeechModel)
+      setSceneAudioPrompt(''); await loadOutputs(); setMessage('Generated speech attached to this scene.')
+    } catch (error) {
+      setSceneAudioError(error instanceof Error ? error.message : 'Could not generate scene speech.')
+    } finally {
+      setSceneAudioBusy(false)
+    }
+  }
   const proposeCopilotEdit = async () => {
     if (!selected || !copilotIntent.trim()) return
     if (selected.locked) { setCopilotError('Unlock this layer before asking the copilot to change it.'); return }
@@ -2288,6 +2323,15 @@ export function SceneAnimatorPanel() {
         <button type="button" disabled={!sceneCopilotIntent.trim() || sceneCopilotBusy} onClick={() => void proposeSceneCopilotEdit()} className="w-full rounded border border-cyan-300/50 bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-100 disabled:opacity-40">{sceneCopilotBusy ? 'Planning scene edit…' : 'Propose scene changes'}</button>
         {sceneCopilotError && <p className="text-[8px] text-red-300">{sceneCopilotError}</p>}
         {sceneCopilotProposal && <div className="space-y-1 rounded border border-cyan-300/25 bg-black/15 p-1.5"><p className="text-[9px] text-cyan-100">{sceneCopilotProposal.summary}</p><ul className="space-y-0.5 text-[8px] text-text-secondary">{describeSceneCopilotProposal(scene, sceneCopilotProposal).map(line => <li key={line}>• {line}</li>)}</ul><div className="flex gap-1"><button type="button" onClick={applySceneCopilotEdit} className="flex-1 rounded bg-cyan-400/20 px-1.5 py-1 text-[9px] text-cyan-100">Apply</button><button type="button" onClick={() => setSceneCopilotProposal(null)} className="rounded border border-border px-1.5 py-1 text-[9px] text-text-muted">Discard</button></div></div>}
+      </div>
+      <div className="space-y-1.5 rounded border border-amber-400/30 bg-amber-400/[.04] p-2">
+        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-amber-100">Scene audio</span><span className="text-[8px] text-amber-200/75">Rendered into MP4</span></div>
+        <p className="text-[8px] leading-relaxed text-text-muted">Generate narration with the installed audio model, or attach an existing audio output. Prompt, model, start time and volume stay with the scene and its exported metadata.</p>
+        <textarea value={sceneAudioPrompt} disabled={sceneAudioBusy || playing || recording || publishing} onChange={event => setSceneAudioPrompt(event.target.value)} placeholder="A calm inner voice: ‘I know this place…’" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
+        <button type="button" disabled={!sceneAudioPrompt.trim() || sceneAudioBusy || playing || recording || publishing} onClick={() => void generateSceneSpeech()} className="w-full rounded border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100 disabled:opacity-40">{sceneAudioBusy ? 'Generating narration…' : `Generate speech · ${selectedSpeechModel}`}</button>
+        {generatedAudio.length > 0 && <label className="block text-[9px] text-text-muted">Attach existing output<select defaultValue="" onChange={event => { const output = generatedAudio.find(item => item.name === event.target.value); if (output) attachSceneAudio(output.name, output.name.replace(/\.[^.]+$/, ''), 'audio'); event.currentTarget.value = '' }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">Choose audio…</option>{generatedAudio.map(output => <option key={output.name} value={output.name}>{output.name}</option>)}</select></label>}
+        {(scene.audioTracks ?? []).length > 0 && <div className="space-y-1 rounded border border-amber-300/15 bg-black/15 p-1.5">{scene.audioTracks!.map(track => <div key={track.id} className="grid grid-cols-[1fr_44px_44px_18px] items-center gap-1 text-[8px]"><span title={track.prompt ?? track.name} className="truncate text-amber-100">{track.kind} · {track.name}</span><label className="text-text-muted">at<input aria-label={`Start ${track.name}`} type="number" min="0" max={scene.duration} step="0.1" value={track.startTime} onChange={event => { const startTime = Number(event.target.value); if (Number.isFinite(startTime)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, startTime: Math.max(0, Math.min(current.duration, startTime)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><label className="text-text-muted">vol<input aria-label={`Volume ${track.name}`} type="number" min="0" max="2" step="0.1" value={track.volume} onChange={event => { const volume = Number(event.target.value); if (Number.isFinite(volume)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, volume: Math.max(0, Math.min(2, volume)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><button type="button" title={`Remove ${track.name}`} onClick={() => updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).filter(item => item.id !== track.id) }))} className="mt-3 text-red-300"><Trash2 size={12} /></button></div>)}</div>}
+        {sceneAudioError && <p className="text-[8px] text-red-300">{sceneAudioError}</p>}
       </div>
       {selected && <div className="space-y-1 rounded border border-fuchsia-400/20 bg-fuchsia-400/[.025] p-2"><div className="text-[9px] text-fuchsia-100">Suggestions for {selected.name}</div><div className="flex flex-wrap gap-1">{copilotSuggestions.map(suggestion => <button key={suggestion} type="button" disabled={copilotBusy || selected.locked} onClick={() => { setCopilotIntent(suggestion); setCopilotError(null) }} className="rounded border border-fuchsia-300/25 px-1.5 py-0.5 text-left text-[8px] text-fuchsia-100 hover:bg-fuchsia-400/10 disabled:opacity-40">{suggestion}</button>)}</div></div>}
       <SceneRecipePanel disabled={playing || recording || publishing || saving} outputs={outputs} onApply={applyRecipeScene} />

@@ -538,6 +538,17 @@ export interface Scene {
   fps?: SceneFrameRate
   duration: number
   layers: SceneLayer[]
+  /** Real generated/imported audio assets mixed into the exported scene MP4. */
+  audioTracks?: Array<{
+    id: string
+    filename: string
+    name: string
+    kind: 'speech' | 'music' | 'sfx' | 'audio'
+    startTime: number
+    volume: number
+    prompt?: string
+    model?: string
+  }>
   composition?: {
     showGrid: boolean
     gridSize: number

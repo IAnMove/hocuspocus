@@ -3,6 +3,10 @@ import test from 'node:test'
 import React from 'react'
 import { JSDOM } from 'jsdom'
 
+// tsx's Node test transform uses the classic JSX factory for nested UI files.
+// Vite uses the automatic runtime in production, so expose the factory only here.
+Object.assign(globalThis, { React })
+
 const dom = new JSDOM('<!doctype html><html><body /></html>', { url: 'http://localhost/' })
 Object.assign(globalThis, {
   window: dom.window,

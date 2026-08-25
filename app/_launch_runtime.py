@@ -26471,6 +26471,31 @@ async def save_scene_recording(
     workspace = details.get("workspace") or None
     out_dir = _workspace_dir(workspace)
     os.makedirs(out_dir, exist_ok=True)
+    raw_audio_tracks = scene.get("audioTracks") or []
+    if not isinstance(raw_audio_tracks, list) or len(raw_audio_tracks) > 8:
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene audio tracks must be a list of at most 8 items")
+    audio_tracks = []
+    for index, raw_track in enumerate(raw_audio_tracks):
+        if not isinstance(raw_track, dict):
+            await file.close()
+            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} is invalid")
+        filename = str(raw_track.get("filename") or "").strip()
+        # A filename, rather than a host path, keeps the browser metadata safe.
+        if not filename or os.path.basename(filename) != filename:
+            await file.close()
+            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} has an invalid filename")
+        audio_path = _safe_join(out_dir, filename)
+        if not audio_path or not os.path.isfile(audio_path):
+            await file.close()
+            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} was not found in this workspace")
+        try:
+            start_time = max(0.0, min(3600.0, float(raw_track.get("startTime", 0))))
+            volume = max(0.0, min(2.0, float(raw_track.get("volume", 1))))
+        except (TypeError, ValueError):
+            await file.close()
+            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} has invalid timing")
+        audio_tracks.append({"path": audio_path, "start_time": start_time, "volume": volume})
     raw_name = str(scene.get("name") or "3D scene").strip()
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "3d-scene"
     stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
@@ -26488,6 +26513,8 @@ async def save_scene_recording(
                 upload_path,
                 output_path,
                 fps=fps,
+                audio_tracks=audio_tracks,
+                duration=float(scene.get("duration") or 0),
             )
     except UploadTooLargeError as error:
         raise HTTPException(status_code=413, detail="Recording is too large (max 500 MB)") from error
@@ -26529,6 +26556,7 @@ async def save_scene_recording(
             "scene_recipe": recipe,
             "scene": scene,
             "source_assets": source_assets,
+            "audio_tracks": scene.get("audioTracks") or [],
             "resolution": f"{width}x{height}" if width and height else None,
             "width": width,
             "height": height,

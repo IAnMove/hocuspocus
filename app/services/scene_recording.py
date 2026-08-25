@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import Iterable, Mapping
 
 
 class SceneRecordingTranscodeError(RuntimeError):
@@ -16,17 +17,21 @@ def build_scene_recording_command(
     destination: str,
     *,
     fps: int,
+    audio_tracks: Iterable[Mapping[str, object]] = (),
+    duration: float | None = None,
 ) -> list[str]:
     """Build a broadly playable H.264/yuv420p MP4 transcode command."""
 
     normalized_fps = 60 if int(fps) == 60 else 30
-    return [
+    tracks = list(audio_tracks)
+    command = [
         "ffmpeg",
         "-v",
         "error",
         "-y",
         "-i",
         source,
+        *[part for track in tracks for part in ("-i", str(track["path"]))],
         "-map",
         "0:v:0",
         "-vf",
@@ -42,11 +47,26 @@ def build_scene_recording_command(
         "18",
         "-pix_fmt",
         "yuv420p",
-        "-an",
-        "-movflags",
-        "+faststart",
-        destination,
     ]
+    if tracks:
+        filters = []
+        labels = []
+        for index, track in enumerate(tracks, start=1):
+            start_ms = max(0, round(float(track.get("start_time", 0)) * 1000))
+            volume = max(0, min(2, float(track.get("volume", 1))))
+            label = f"audio{index}"
+            filters.append(f"[{index}:a]aresample=48000,adelay={start_ms}|{start_ms},volume={volume:.3f}[{label}]")
+            labels.append(f"[{label}]")
+        mixed = "".join(labels) + f"amix=inputs={len(labels)}:duration=longest:normalize=0,apad"
+        if duration and duration > 0:
+            mixed += f",atrim=0:{float(duration):.3f}"
+        command.extend(["-filter_complex", ";".join(filters + [f"{mixed}[mixed_audio]"]), "-map", "[mixed_audio]", "-c:a", "aac", "-b:a", "192k"])
+    else:
+        command.append("-an")
+    if duration and duration > 0:
+        command.extend(["-t", f"{float(duration):.3f}"])
+    command.extend(["-movflags", "+faststart", destination])
+    return command
 
 
 def transcode_scene_recording(
@@ -54,6 +74,8 @@ def transcode_scene_recording(
     destination: str | os.PathLike[str],
     *,
     fps: int,
+    audio_tracks: Iterable[Mapping[str, object]] = (),
+    duration: float | None = None,
     timeout: float = 1800,
 ) -> None:
     """Transcode atomically, exposing the MP4 only after FFmpeg succeeds."""
@@ -70,6 +92,8 @@ def transcode_scene_recording(
                 str(source_path),
                 str(temporary_path),
                 fps=fps,
+                audio_tracks=audio_tracks,
+                duration=duration,
             ),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

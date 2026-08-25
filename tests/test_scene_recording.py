@@ -21,6 +21,17 @@ def test_command_finalizes_browser_webm_as_compatible_mp4():
     assert command[-1] == "scene.mp4"
 
 
+def test_command_mixes_scene_audio_without_shortening_the_video():
+    command = scene_recording.build_scene_recording_command(
+        "capture.webm", "scene.mp4", fps=30, duration=10,
+        audio_tracks=[{"path": "voice.wav", "start_time": 2, "volume": 0.7}],
+    )
+    assert command.count("-i") == 2
+    assert "[1:a]aresample=48000,adelay=2000|2000,volume=0.700[audio1]" in command[command.index("-filter_complex") + 1]
+    assert "-c:a" in command and command[command.index("-c:a") + 1] == "aac"
+    assert "-shortest" not in command
+
+
 def test_transcode_is_atomic(monkeypatch, tmp_path: Path):
     source = tmp_path / "capture.webm"
     destination = tmp_path / "scene.mp4"
