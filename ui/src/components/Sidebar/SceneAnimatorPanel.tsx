@@ -482,16 +482,19 @@ export function SceneAnimatorPanel() {
   const [copilotIntent, setCopilotIntent] = useState('')
   const [copilotBusy, setCopilotBusy] = useState(false)
   const [copilotProposal, setCopilotProposal] = useState<SceneCopilotProposal | null>(null)
+  const [copilotProposalRevision, setCopilotProposalRevision] = useState<number | null>(null)
   const [copilotError, setCopilotError] = useState<string | null>(null)
   const [copilotListening, setCopilotListening] = useState(false)
   const [sceneCopilotIntent, setSceneCopilotIntent] = useState('')
   const [sceneCopilotBusy, setSceneCopilotBusy] = useState(false)
   const [sceneCopilotProposal, setSceneCopilotProposal] = useState<SceneCopilotProposal | null>(null)
+  const [sceneCopilotProposalRevision, setSceneCopilotProposalRevision] = useState<number | null>(null)
   const [sceneCopilotError, setSceneCopilotError] = useState<string | null>(null)
   const [chainFromPlayhead, setChainFromPlayhead] = useState(false)
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [historyRevision, setHistoryRevision] = useState(0)
+  const historyRevisionRef = useRef(0)
   const [lastAutosaveAt, setLastAutosaveAt] = useState<number | null>(null)
   const [previewWidth, setPreviewWidth] = useState(1280)
   const [clipsByLayer, setClipsByLayer] = useState<Record<string, string[]>>({})
@@ -623,6 +626,7 @@ export function SceneAnimatorPanel() {
   }, [])
 
   useEffect(() => { sceneRef.current = scene }, [scene])
+  useEffect(() => { historyRevisionRef.current = historyRevision }, [historyRevision])
   const replaceScene = (next: AnimatorScene) => { sceneRef.current = next; setScene(next) }
   const updateScene = (updater: (current: AnimatorScene) => AnimatorScene) => {
     const current = sceneRef.current
@@ -2020,7 +2024,7 @@ export function SceneAnimatorPanel() {
         top_p: .8,
         json_schema: SCENE_COPILOT_JSON_SCHEMA,
       })
-      setCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, selected.id))
+      setCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, selected.id)); setCopilotProposalRevision(historyRevisionRef.current)
     } catch (error) {
       setCopilotError(error instanceof Error ? error.message : 'The copilot could not prepare this edit.')
     } finally {
@@ -2029,6 +2033,7 @@ export function SceneAnimatorPanel() {
   }
   const applyCopilotEdit = () => {
     if (!copilotProposal) return
+    if (copilotProposalRevision !== historyRevisionRef.current) { setCopilotProposal(null); setCopilotProposalRevision(null); setCopilotError('The scene changed while this proposal was being reviewed. Ask the copilot again.'); return }
     const proposal = copilotProposal
     const selectedLayerId = selected?.id
     updateScene(current => ({
@@ -2046,7 +2051,7 @@ export function SceneAnimatorPanel() {
       }].slice(-100),
     }))
     setMessage(`Copilot applied: ${copilotProposal.summary}`)
-    setCopilotProposal(null)
+    setCopilotProposal(null); setCopilotProposalRevision(null)
   }
   const proposeSceneCopilotEdit = async () => {
     if (!sceneCopilotIntent.trim()) return
@@ -2060,7 +2065,7 @@ export function SceneAnimatorPanel() {
         top_p: .8,
         json_schema: SCENE_COPILOT_JSON_SCHEMA,
       })
-      setSceneCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, undefined, 'scene'))
+      setSceneCopilotProposal(parseSceneCopilotProposal(text, sceneRef.current, undefined, 'scene')); setSceneCopilotProposalRevision(historyRevisionRef.current)
     } catch (error) {
       setSceneCopilotError(error instanceof Error ? error.message : 'The copilot could not prepare this scene edit.')
     } finally {
@@ -2069,6 +2074,7 @@ export function SceneAnimatorPanel() {
   }
   const applySceneCopilotEdit = () => {
     if (!sceneCopilotProposal) return
+    if (sceneCopilotProposalRevision !== historyRevisionRef.current) { setSceneCopilotProposal(null); setSceneCopilotProposalRevision(null); setSceneCopilotError('The scene changed while this proposal was being reviewed. Ask the copilot again.'); return }
     const proposal = sceneCopilotProposal
     updateScene(current => ({
       ...(applySceneCopilotProposal(current, proposal) as AnimatorScene),
@@ -2079,7 +2085,7 @@ export function SceneAnimatorPanel() {
       }].slice(-100),
     }))
     setMessage(`Scene copilot applied: ${proposal.summary}`)
-    setSceneCopilotProposal(null)
+    setSceneCopilotProposal(null); setSceneCopilotProposalRevision(null)
   }
   const dictateCopilotIntent = () => {
     const root = window as unknown as { SpeechRecognition?: SpeechRecognizerConstructor; webkitSpeechRecognition?: SpeechRecognizerConstructor }
