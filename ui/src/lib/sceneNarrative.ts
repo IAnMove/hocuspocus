@@ -32,9 +32,9 @@ export type NarrativeSceneTemplate = {
 
 export type NarrativeTemplateInput = {
   hero?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string }
-  plate?: { source: string; type?: Extract<SceneLayerType, 'image' | 'video'>; name?: string }
+  plate?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string }
   prop?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string }
-  foreground?: { source: string; type?: Extract<SceneLayerType, 'image' | 'video'>; name?: string }
+  foreground?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string }
   width?: number
   height?: number
   fps?: 30 | 60
