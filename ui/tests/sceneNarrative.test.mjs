@@ -9,9 +9,9 @@ const assets = {
   foreground: { source: '/foreground.png', type: 'image', name: 'Rocks' },
 }
 
-test('narrative library exposes ten standard scenes plus the travel experiment', () => {
-  assert.equal(NARRATIVE_SCENE_TEMPLATES.length, 11)
-  assert.equal(NARRATIVE_SCENE_TEMPLATES.filter(template => !template.experimental).length, 10)
+test('narrative library exposes every standard scene plus the travel experiment', () => {
+  assert.equal(NARRATIVE_SCENE_TEMPLATES.length, 28)
+  assert.equal(NARRATIVE_SCENE_TEMPLATES.filter(template => !template.experimental).length, 27)
   assert.ok(NARRATIVE_SCENE_TEMPLATES.every(template => template.defaultDuration >= 10))
   assert.ok(NARRATIVE_SCENE_TEMPLATES.every(template => template.constraints.includes('continuous_motion') && template.previewPrompt && typeof template.createScene === 'function'))
 })
