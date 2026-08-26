@@ -2,7 +2,7 @@
 
 Agent operations guide for Loreframe Lab’s programmatic compositor.
 
-This document is the agent operations guide. **Phase 2** is in the 3D Video tab: Recipe runner (intent → JSON → generate assets → mount → Record/Save). It does not hook Story Lab / trailers / videoclips / series (phase 3).
+This document is the agent operations guide. The **3D Video** tab provides the Recipe runner (intent → JSON → assets → editable scene → MP4), template mounting and the selected-layer copilot. Story Lab / trailers / videoclips remain separate consumers.
 
 UI tab: **3D Video** (`mediaFilter: scene3d`). Code: `ui/src/components/Sidebar/SceneAnimatorPanel.tsx`. Scene type: `ui/src/types/index.ts` (`Scene`, `SceneLayer`).
 
@@ -28,11 +28,11 @@ Do **not** ask H3 to “keep this exact GLB flying on a perfect path.” H3 will
 
 ## 2. Hard limits (read before planning)
 
-1. **Recording is browser-only.** There is no `POST /api/v1/scenes/render`. Record copies the live preview canvas (`MediaRecorder` → WebM download). The Scene Animator tab must be open, GLBs must be loaded in `model-viewer`, then the user (or a future browser driver) presses Record.
+1. **Frame rendering is browser-only.** There is no server-side scene renderer. Export samples the live compositor canvas in the browser; the Scene Animator tab must remain open and GLBs must be loaded in `model-viewer`.
 2. **Saving a scene to the gallery** (`POST /api/v1/scenes`) needs a PNG preview (`data:image/png;base64,...`). The UI paints one from the canvas. A headless agent cannot currently persist a scene without that preview.
 3. **Hunyuan and H3 both use the GPU.** Do not start a 3D job while H3 is sampling. Wait for idle jobs.
 4. **Transforms are 2.5D.** The ship moves on the frame (x/y %, scale, spin, orbit). It is not a 3D world with real depth. Parallax fakes depth. That is enough for Star Trek–style flybys.
-5. **Recorded WebM is a local download**, not an automatic gallery output. Import it into Video Editor (or upload) to join with H3 MP4s.
+5. **Export produces an MP4 in Videos.** The browser capture is validated/transcoded by the Lab and its sidecar stores the exported Scene plus a recipe reconstructed from the final edited scene. Import that MP4 into Video Editor to join it with H3 clips.
 6. **Coordinate space is percent of the frame.** `x: 50, y: 50` is centre. `x: -10` is off the left edge. `scale: 1` is “full layer size” (3D layers occupy ~52% × 75% of the frame at scale 1).
 
 ---
@@ -87,7 +87,7 @@ Camera shake lives on the **camera** layer: `animation.shake = { amount, frequen
 5. Assign motion presets (see §7).
 6. Optional: camera preset + atmosphere.
 7. **Save to Loreframe Lab** → writes `*.scene.json` + preview PNG (gallery tab **Scenes**).
-8. **Record** → WebM download. Then import into **Video Editor** with H3 clips.
+8. **Export MP4** → validated H.264 MP4 in **Videos**. Then import it into **Video Editor** with H3 clips.
 
 Motion JSON can be imported separately (2 MB max) via the panel’s movement loader.
 
