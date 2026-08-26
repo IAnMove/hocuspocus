@@ -26,7 +26,7 @@ type Props = {
   onUpdateTiming: (patch: Partial<Pick<SceneLayer['animation'], 'offset' | 'speed' | 'loop' | 'trimStart' | 'trimEnd'>>) => void
 }
 
-const CURVES: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce']
+const CURVES: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce', 'hold']
 
 function CurvePreview({ curve }: { curve: SceneCurve }) {
   const path = curve === 'ease'

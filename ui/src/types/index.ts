@@ -369,7 +369,7 @@ export type SceneAtmosphereKind =
   | 'bubbles'
   | 'speedlines'
   | 'leaves'
-export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
+export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce' | 'hold'
 export type SceneFrameRate = 30 | 60
 export type SceneBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken'
 export type SceneMask = 'none' | 'rounded' | 'ellipse'

@@ -156,7 +156,7 @@ export const parseSceneCopilotProposal = (text: string, scene: Scene, selectedLa
       if (!Array.isArray(value.keyframes) || value.keyframes.length < 2 || value.keyframes.length > 16) throw new Error('Keyframes must contain 2–16 points.')
       return { op: 'set_keyframes', layerId: selectedLayerId, keyframes: value.keyframes.map((frame, frameIndex) => {
         if (!record(frame)) throw new Error(`Keyframe ${frameIndex + 1} is invalid.`)
-        return { id: `${selectedLayerId}-copilot-${frameIndex}`, time: number(frame.time, 0, 3600, 'keyframe.time'), x: number(frame.x, -500, 500, 'keyframe.x'), y: number(frame.y, -500, 500, 'keyframe.y'), scale: number(frame.scale, .01, 20, 'keyframe.scale'), opacity: number(frame.opacity, 0, 1, 'keyframe.opacity'), rotation: number(frame.rotation, -36000, 36000, 'keyframe.rotation'), curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(String(frame.curve)) ? frame.curve as SceneKeyframe['curve'] : selected.animation.curve }
+        return { id: `${selectedLayerId}-copilot-${frameIndex}`, time: number(frame.time, 0, 3600, 'keyframe.time'), x: number(frame.x, -500, 500, 'keyframe.x'), y: number(frame.y, -500, 500, 'keyframe.y'), scale: number(frame.scale, .01, 20, 'keyframe.scale'), opacity: number(frame.opacity, 0, 1, 'keyframe.opacity'), rotation: number(frame.rotation, -36000, 36000, 'keyframe.rotation'), curve: ['linear', 'ease', 'dramatic', 'bounce', 'hold'].includes(String(frame.curve)) ? frame.curve as SceneKeyframe['curve'] : selected.animation.curve }
       }).sort((a, b) => a.time - b.time) }
     }
     if (value.op === 'set_rig_clip') {

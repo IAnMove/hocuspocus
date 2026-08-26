@@ -24,6 +24,7 @@ export const applySceneCurve = (amount: number, curve: SceneCurve) => {
   if (curve === 'ease') return value * value * (3 - 2 * value)
   if (curve === 'dramatic') return value * value
   if (curve === 'bounce') return Math.max(0, Math.min(1, value + Math.sin(value * Math.PI * 3) * (1 - value) * .18))
+  if (curve === 'hold') return value < .12 ? 0 : 1
   return value
 }
 
@@ -70,7 +71,7 @@ export const getSceneKeyframes = (layer: SceneLayer): SceneKeyframe[] => {
 
 export const normalizeSceneKeyframes = (value: unknown, layer: SceneLayer): SceneKeyframe[] | undefined => {
   if (!Array.isArray(value)) return undefined
-  const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce']
+  const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce', 'hold']
   const usedIds = new Set<string>()
   const frames = value.flatMap((raw, index) => {
     if (!raw || typeof raw !== 'object') return []

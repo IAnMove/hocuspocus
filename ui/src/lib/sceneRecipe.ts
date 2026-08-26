@@ -245,7 +245,7 @@ const recipeLayerSchema = {
         start: recipePointSchema,
         end: recipePointSchema,
         duration: { type: 'number', minimum: 0.1, maximum: 60 },
-        curve: { enum: ['linear', 'ease', 'dramatic', 'bounce'] },
+        curve: { enum: ['linear', 'ease', 'dramatic', 'bounce', 'hold'] },
         spin: { type: 'boolean' },
         rotationSpeed: { type: 'number', minimum: -720, maximum: 720 },
       },
@@ -522,7 +522,7 @@ function parseAnimation(value: unknown): SceneRecipeLayer['animation'] {
     start: parsePoint(raw.start),
     end: parsePoint(raw.end),
     duration: optionalNumber(raw.duration, 0.1, 60),
-    curve: ['linear', 'ease', 'dramatic', 'bounce'].includes(curve) ? curve : undefined,
+    curve: ['linear', 'ease', 'dramatic', 'bounce', 'hold'].includes(curve) ? curve : undefined,
     spin: typeof raw.spin === 'boolean' ? raw.spin : undefined,
     rotationSpeed: optionalNumber(raw.rotationSpeed, -720, 720),
   }
