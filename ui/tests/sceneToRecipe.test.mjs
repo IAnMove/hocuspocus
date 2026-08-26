@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sceneToRecipe } from '../src/lib/sceneToRecipe.ts'
 import { compileSceneRecipe, parseSceneRecipe } from '../src/lib/sceneRecipe.ts'
+import { createNarrativeScene } from '../src/lib/sceneNarrative.ts'
 
 const sceneFixture = () => ({
   version: 1,
@@ -73,4 +74,22 @@ test('a serialized edited scene survives parser and compiler round trip', () => 
   assert.equal(hero.effects.blur, 7)
   assert.equal(hero.animation.keyframes.length, 3)
   assert.equal(hero.animation.keyframes[1].curve, 'hold')
+})
+
+test('a real run-travel template remains a faithful recipe after compilation', () => {
+  const authored = createNarrativeScene('run-travel-parallax', {
+    hero: { name: 'Runner', type: 'image', source: '/assets/runner.png' },
+    plate: { name: 'Station', type: 'image', source: '/assets/station.png', seamlessHorizontal: true },
+    foreground: { name: 'Lamp', type: 'image', source: '/assets/lamp.png' },
+    duration: 10,
+  })
+  const recipe = parseSceneRecipe(JSON.parse(JSON.stringify(sceneToRecipe(authored))))
+  const scene = compileSceneRecipe(recipe, {}, source => source)
+  const sourceRunner = authored.layers.find(layer => layer.id === 'hero')
+  const runner = scene.layers.find(layer => layer.id === 'hero')
+  const plate = scene.layers.find(layer => layer.id === 'plate')
+  assert.deepEqual(runner.animation.keyframes, sourceRunner.animation.keyframes)
+  assert.equal(plate.strip.seamOccluder.enabled, true)
+  assert.equal(plate.strip.direction, 'left')
+  assert.equal(plate.seamlessHorizontal, true)
 })
