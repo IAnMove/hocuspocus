@@ -424,6 +424,9 @@ export interface SceneLayer {
    *  and values above 1 create foreground parallax. Camera zoom/roll still
    *  affect every visual layer. Ignored by camera layers. */
   parallax?: number
+  /** Author-confirmed horizontal continuity. Enables safe loop/cylinder tools;
+   * this is never inferred from an arbitrary filename at export time. */
+  seamlessHorizontal?: boolean
   relationship?: {
     type: 'parent' | 'follow' | 'lookAt'
     targetLayerId: string

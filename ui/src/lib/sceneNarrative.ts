@@ -50,7 +50,7 @@ export type NarrativeSceneTemplate = {
 
 export type NarrativeTemplateInput = {
   hero?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string }
-  plate?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string }
+  plate?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string; seamlessHorizontal?: boolean }
   prop?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string }
   foreground?: { source: string; type?: Extract<SceneLayerType, 'model3d' | 'image' | 'video'>; name?: string }
   width?: number
@@ -159,6 +159,7 @@ const plateLayer = (input: NarrativeTemplateInput, duration: number, id = 'plate
   return baseLayer(id, input.plate?.name ?? 'Environment', input.plate?.type ?? 'image', source, 0, duration, point(50, 50, 1), point(50, 50, 1.06), {
     fill: true,
     parallax,
+    seamlessHorizontal: input.plate?.seamlessHorizontal === true,
     effects: { brightness: .72, saturation: 1.06, contrast: 1.04 },
   })
 }

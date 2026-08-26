@@ -80,6 +80,13 @@ test('run travel uses multi-plane strip motion without claiming a rigged run', (
   assert.equal(hero?.animation.clip, undefined)
 })
 
+test('a plate must be explicitly marked loop-ready before advanced world tools may use it', () => {
+  const ordinary = createNarrativeScene('run-travel-parallax', assets)
+  const verified = createNarrativeScene('run-travel-parallax', { ...assets, plate: { ...assets.plate, seamlessHorizontal: true } })
+  assert.equal(ordinary.layers.find(layer => layer.id === 'plate')?.seamlessHorizontal, false)
+  assert.equal(verified.layers.find(layer => layer.id === 'plate')?.seamlessHorizontal, true)
+})
+
 test('run travel scrolls the world opposite the requested facing', () => {
   const left = createNarrativeScene('run-travel-parallax', { ...assets, controls: { direction: 'left' } })
   assert.equal(left.layers.find(layer => layer.id === 'plate')?.strip?.direction, 'right')
