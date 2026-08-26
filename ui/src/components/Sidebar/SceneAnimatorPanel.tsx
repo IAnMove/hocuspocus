@@ -2143,10 +2143,11 @@ export function SceneAnimatorPanel() {
     const plan = planCutoutDialogue(text, start, end, fps)
     const frames = applyCutoutDialogue({ open, closed }, plan)
     const beatId = uid()
+    const audioTrackId = (scene.audioTracks ?? []).find(track => track.kind === 'speech')?.id
     updateScene(current => ({
       ...current,
       layers: current.layers.map(layer => frames[layer.id] ? { ...layer, animation: { ...layer.animation, keyframes: frames[layer.id], duration: current.duration, curve: 'hold' } } : layer),
-      dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.includes(open.id)), { id: beatId, text, start, end, mouthLayerIds: Object.keys(frames), confidence: 'known-text' }],
+      dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.includes(open.id)), { id: beatId, text, start, end, mouthLayerIds: Object.keys(frames), ...(audioTrackId ? { audioTrackId } : {}), confidence: 'known-text' }],
     }))
     setSelectedId(open.id); setSelectedKeyframeId(null); setProgress(start / scene.duration)
     setMessage(`Animated ${plan.visemes.length} mouth beats from ${start.toFixed(1)}s to ${end.toFixed(1)}s. Edit the keyframes in the timeline if needed.`)
