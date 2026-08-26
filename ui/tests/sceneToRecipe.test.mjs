@@ -76,6 +76,17 @@ test('a serialized edited scene survives parser and compiler round trip', () => 
   assert.equal(hero.animation.keyframes[1].curve, 'hold')
 })
 
+test('a speaking beat round-trips with its editable mouth provenance', () => {
+  const authored = sceneFixture()
+  authored.layers[0].visible = true
+  authored.dialogueBeats = [{ id: 'line-1', text: 'Hola mundo', start: .5, end: 3, mouthLayerIds: ['hero'], audioTrackId: 'voice', confidence: 'known-text' }]
+  const recipe = parseSceneRecipe(JSON.parse(JSON.stringify(sceneToRecipe(authored))))
+  const scene = compileSceneRecipe(recipe, {}, source => source)
+  assert.deepEqual(scene.dialogueBeats, authored.dialogueBeats)
+  scene.dialogueBeats[0].mouthLayerIds.push('copy-only')
+  assert.deepEqual(recipe.dialogueBeats[0].mouthLayerIds, ['hero'])
+})
+
 test('a real run-travel template remains a faithful recipe after compilation', () => {
   const authored = createNarrativeScene('run-travel-parallax', {
     hero: { name: 'Runner', type: 'image', source: '/assets/runner.png' },

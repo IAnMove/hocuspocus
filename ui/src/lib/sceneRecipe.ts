@@ -49,6 +49,25 @@ const parseRecipeAudio = (raw: unknown): SceneRecipeAudio[] | undefined => {
   return tracks.length ? tracks : undefined
 }
 
+const parseDialogueBeats = (raw: unknown): SceneRecipeDialogueBeat[] | undefined => {
+  if (!Array.isArray(raw) || !raw.length) return undefined
+  const ids = new Set<string>()
+  const beats = raw.map((item, index) => {
+    if (!item || typeof item !== 'object') throw new Error(`Dialogue beat ${index + 1} is invalid.`)
+    const beat = item as Record<string, unknown>
+    const id = asString(beat.id) || `dialogue-${index + 1}`
+    const text = asString(beat.text)
+    const start = boundedNumber(beat.start, 0, 0, 60)
+    const end = boundedNumber(beat.end, start, .01, 60)
+    const mouthLayerIds = Array.isArray(beat.mouthLayerIds) ? beat.mouthLayerIds.map(asString).filter(Boolean) : []
+    if (!text || !mouthLayerIds.length || end <= start) throw new Error(`Dialogue beat "${id}" needs text, a positive range and mouth layer ids.`)
+    if (ids.has(id)) throw new Error('Each dialogue beat needs its own id.')
+    ids.add(id)
+    return { id, text, start, end, mouthLayerIds, audioTrackId: asString(beat.audioTrackId) || undefined, confidence: 'known-text' as const }
+  })
+  return beats.length ? beats : undefined
+}
+
 const PARALLAX_BAND = { background: .3, midground: .7, foreground: 1.2, subject: 1 }
 const parallaxForDepth = (rank: number, count: number): number => {
   if (count <= 1) return PARALLAX_BAND.subject
@@ -153,6 +172,19 @@ export interface SceneRecipeAudio {
   model?: string
 }
 
+/** A deterministic speaking beat whose actual mouth states live on ordinary
+ * layer keyframes. Kept in recipes so exports can explain why those frames
+ * exist and a saved scene can be reconstructed faithfully. */
+export interface SceneRecipeDialogueBeat {
+  id: string
+  text: string
+  start: number
+  end: number
+  mouthLayerIds: string[]
+  audioTrackId?: string
+  confidence: 'known-text'
+}
+
 export interface SceneRecipe {
   version: 1
   name: string
@@ -160,6 +192,7 @@ export interface SceneRecipe {
   save?: boolean
   assets: SceneRecipeAsset[]
   audio?: SceneRecipeAudio[]
+  dialogueBeats?: SceneRecipeDialogueBeat[]
   shots?: SceneRecipeShot[]
   scene: {
     width?: number
@@ -510,6 +543,18 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         },
         required: ['id', 'kind'],
         additionalProperties: false,
+      },
+    },
+    dialogueBeats: {
+      type: 'array', maxItems: 48,
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          id: { type: 'string', minLength: 1, maxLength: 120 }, text: { type: 'string', minLength: 1, maxLength: 2000 },
+          start: { type: 'number', minimum: 0, maximum: 60 }, end: { type: 'number', minimum: .01, maximum: 60 },
+          mouthLayerIds: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 120 } },
+          audioTrackId: { type: 'string', minLength: 1, maxLength: 120 }, confidence: { const: 'known-text' },
+        }, required: ['id', 'text', 'start', 'end', 'mouthLayerIds', 'confidence'],
       },
     },
     shots: {
@@ -1131,6 +1176,7 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
   if (!layers?.length) throw new Error('Recipe needs scene.layers or a first shot with layers.')
   const assetsById = new Map(assets.map(asset => [asset.id, asset]))
   const clipsByAsset = new Map<string, Set<RecipeRigAnimation>>()
+  const dialogueBeats = parseDialogueBeats(raw.dialogueBeats)
   validateLayerRelationships(layers, 'Scene')
   validateLayerAssets(layers, 'Scene', assetsById, clipsByAsset)
   shots?.forEach((shot, index) => {
@@ -1151,6 +1197,7 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
     save: raw.save === true,
     assets,
     audio: parseRecipeAudio(raw.audio),
+    dialogueBeats,
     shots,
     scene: {
       width: Math.round(boundedNumber(sceneRaw.width, 1280, 256, 3840)),
@@ -1215,7 +1262,11 @@ export function compileRecipeShot(
     }
     const scene = createNarrativeScene(template.id, input)
     const audioTracks = compileRecipeAudio(recipe, resolved, scene.duration)
-    return { ...scene, ...(audioTracks.length ? { audioTracks } : {}) }
+    return {
+      ...scene,
+      ...(audioTracks.length ? { audioTracks } : {}),
+      ...(recipe.dialogueBeats?.length ? { dialogueBeats: recipe.dialogueBeats.map(beat => ({ ...beat, mouthLayerIds: [...beat.mouthLayerIds] })) } : {}),
+    }
   }
   if (!shot.layers?.length) throw new Error(`Shot "${shot.name}" needs a template or layers.`)
   return compileSceneRecipe({
@@ -1397,6 +1448,7 @@ export function compileSceneRecipe(
     composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' },
     layers,
     ...(audioTracks.length ? { audioTracks } : {}),
+    ...(recipe.dialogueBeats?.length ? { dialogueBeats: recipe.dialogueBeats.map(beat => ({ ...beat, mouthLayerIds: [...beat.mouthLayerIds] })) } : {}),
   }
 }
 

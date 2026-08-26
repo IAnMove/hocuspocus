@@ -99,6 +99,7 @@ export function sceneToRecipe(scene: Scene): SceneRecipe {
       volume: track.volume,
       prompt: track.prompt,
     }]),
+    dialogueBeats: scene.dialogueBeats?.map(beat => ({ ...beat, mouthLayerIds: [...beat.mouthLayerIds] })),
     scene: {
       width: scene.width,
       height: scene.height,
