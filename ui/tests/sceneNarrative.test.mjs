@@ -122,3 +122,46 @@ test('narrative provenance serializes the gallery metadata used for evaluation',
   assert.notEqual(scene.narrative?.evaluationCues, template.evaluationCues)
   assert.doesNotThrow(() => JSON.stringify(scene))
 })
+
+test('an explicit short duration is honoured instead of clamped to ten seconds', () => {
+  // The T0 baseline measured 29% of requested shots asking for under ten
+  // seconds, always because the user asked. The old floor discarded every one.
+  const scene = createNarrativeScene('inner-thought', { ...assets, duration: 4 })
+  assert.equal(scene.duration, 4)
+  const hero = scene.layers.find(layer => layer.id === 'hero')
+  assert.ok(hero.animation.keyframes.length >= 3, 'a short beat still animates')
+  assert.notDeepEqual(
+    evaluateSceneLayer(hero, scene.duration * .1),
+    evaluateSceneLayer(hero, scene.duration * .9),
+    'a short beat still moves from end to end',
+  )
+})
+
+test('a template asked for nothing still defaults to a full narrative beat', () => {
+  assert.equal(createNarrativeScene('inner-thought', assets).duration, 10)
+  assert.equal(createNarrativeScene('run-travel-parallax', assets).duration, 12)
+})
+
+test('durations below the motion floor are raised, not honoured', () => {
+  // Under two seconds the drift helpers stop reading as movement.
+  assert.equal(createNarrativeScene('inner-thought', { ...assets, duration: 0.5 }).duration, 2)
+  assert.equal(createNarrativeScene('inner-thought', { ...assets, duration: 900 }).duration, 60)
+})
+
+test('every template survives a short beat, not just the one that was checked', () => {
+  // The floor removal touches one shared helper, so the blast radius is the
+  // whole library: any template whose motion only reads over ten seconds
+  // would now compile to a dead four-second shot without saying so.
+  const short = { ...assets, prop: assets.hero, duration: 4 }
+  for (const template of NARRATIVE_SCENE_TEMPLATES) {
+    const scene = createNarrativeScene(template.id, short)
+    assert.equal(scene.duration, 4, `${template.id} honours the requested duration`)
+    const animated = scene.layers.filter(layer => layer.type !== 'camera' && layer.animation.keyframes?.length)
+    const moves = animated.some(layer =>
+      JSON.stringify(evaluateSceneLayer(layer, 0.4)) !== JSON.stringify(evaluateSceneLayer(layer, 3.6)))
+    assert.ok(moves || scene.layers.some(layer => layer.animation.spin), `${template.id} still animates at 4s`)
+    for (const layer of scene.layers) {
+      assert.ok(layer.animation.trimEnd <= scene.duration + 0.001, `${template.id}/${layer.id} stays inside the shot`)
+    }
+  }
+})

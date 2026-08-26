@@ -112,7 +112,28 @@ const cutoutBlinkFrames = (id: string, duration: number) => {
 
 const at = (id: string, time: number, point: MotionPoint, curve: SceneCurve = 'ease'): SceneKeyframe => ({ id, time, curve, ...point })
 const point = (x: number, y: number, scale: number, opacity = 1, rotation = 0): MotionPoint => ({ x, y, scale, opacity, rotation })
-const durationOf = (input: NarrativeTemplateInput, fallback: 10 | 12) => Math.max(10, Math.min(60, input.duration ?? fallback))
+/**
+ * Ten seconds is the template's *default*, not a floor.
+ *
+ * It used to be both: `Math.max(10, …)` clamped every scene, including one
+ * built from an explicit shorter duration. The T0 selection baseline measured
+ * what that costs - 29% of requested shots asked for under ten seconds, every
+ * one of them because the user said so - so the clamp was silently discarding
+ * a correct answer in roughly three shots out of ten, and with it any rhythm
+ * the request described.
+ *
+ * Asked for a duration, honour it. Asked for nothing, a narrative beat still
+ * wants room to breathe, so the ten-second default stands.
+ *
+ * The lower bound of two seconds is what the motion helpers still read as
+ * motion: buildDriftKeyframes floors at four steps, so a two-second shot keeps
+ * a real curve rather than collapsing into a cut.
+ */
+const durationOf = (input: NarrativeTemplateInput, fallback: 10 | 12) => (
+  input.duration == null
+    ? Math.max(10, Math.min(60, fallback))
+    : Math.max(2, Math.min(60, input.duration))
+)
 const narrativeProvenance = (template: NarrativeSceneTemplate, input: NarrativeTemplateInput) => {
   const assets = (['hero', 'plate', 'prop', 'foreground'] as const).flatMap(slot => {
     const asset = input[slot]
