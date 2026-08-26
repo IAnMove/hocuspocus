@@ -79,7 +79,7 @@ export function sceneToRecipe(scene: Scene): SceneRecipe {
     if (!assetId) {
       assetId = `asset-${assetIndex++}`
       assetIds.set(key, assetId)
-      assets.push({ id: assetId, kind, source: layer.source })
+      assets.push({ id: assetId, kind, source: layer.source, ...(layer.seamlessHorizontal ? { seamlessHorizontal: true } : {}) })
     }
     return cloneLayer(layer, assetId)
   })

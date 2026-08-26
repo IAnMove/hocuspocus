@@ -31,6 +31,7 @@ type LoadedAsset = {
   description?: string
   rig_profile?: RecipeRigProfile
   animations?: RecipeRigAnimation[]
+  seamlessHorizontal?: boolean
 }
 
 type PickerKind = 'image' | 'model3d'
@@ -56,8 +57,10 @@ function assetPlanLabel(asset: SceneRecipe['assets'][number]): string {
 }
 
 function shotPlanLabel(shot: SceneRecipeShot): string {
-  const camera = shot.layers.find(layer => layer.type === 'camera')?.cameraPreset || 'camera-locked'
-  const action = shot.layers
+  if (shot.template) return `${shot.template} · ${Object.values(shot.slots ?? {}).join(' · ') || 'template slots'}`
+  const layers = shot.layers ?? []
+  const camera = layers.find(layer => layer.type === 'camera')?.cameraPreset || 'camera-locked'
+  const action = layers
     .filter(layer => layer.type === 'model3d' || layer.type === 'image' || layer.type === 'video')
     .map(layer => layer.motion || layer.asset || layer.id)
     .join(' · ')
@@ -204,12 +207,14 @@ export function SceneRecipePanel({
       const animations = Array.isArray(metadata.params?.animations)
         ? metadata.params.animations.filter((animation): animation is RecipeRigAnimation => typeof animation === 'string' && RECIPE_RIG_ANIMATIONS.includes(animation as RecipeRigAnimation))
         : []
-      if (!description && !animations.length) return
+      const seamlessHorizontal = metadata.params?.seamlessHorizontal === true || metadata.params?.seamless_horizontal === true
+      if (!description && !animations.length && !seamlessHorizontal) return
       setSelected(current => current.map(asset => asset.source === item.name ? {
         ...asset,
         description,
         rig_profile: rigProfile,
         animations: animations.length ? animations : undefined,
+        seamlessHorizontal: seamlessHorizontal || undefined,
       } : asset))
     } catch {
       // Imported and legacy outputs may not have a readable sidecar. The exact
@@ -260,6 +265,7 @@ export function SceneRecipePanel({
         description: item.description,
         rig_profile: item.rig_profile,
         animations: item.animations,
+        seamlessHorizontal: item.seamlessHorizontal,
       }))
       const systemPrompt = buildRecipeSystemPrompt({ mode, inventory: loaded })
       let text = await generateLlmText({

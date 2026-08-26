@@ -107,6 +107,8 @@ test('LLM contract is closed-schema, multilingual and treats inventory as data',
   assert.match(prompt, /NON-NEGOTIABLE ASSET CHECK/)
   assert.match(prompt, /animation\.keyframes/)
   assert.match(prompt, /seamOccluder/)
+  assert.match(prompt, /NARRATIVE_TEMPLATE_CATALOG/)
+  assert.match(prompt, /seamlessHorizontal is a verified inventory capability/)
   assert.match(prompt, /Robot de bronce/)
   assert.equal(SCENE_RECIPE_JSON_SCHEMA.additionalProperties, false)
   assert.deepEqual(SCENE_RECIPE_JSON_SCHEMA.required, ['version', 'name', 'record', 'save', 'assets', 'shots', 'scene'])
@@ -411,4 +413,50 @@ test('recipe transport preserves authored keyframes, hidden layers, blur and wor
   assert.equal(hero.animation.keyframes[1].curve, 'hold')
   assert.equal(hero.animation.offset, .5)
   assert.equal(scene.layers.find(layer => layer.id === 'alternate').visible, false)
+})
+
+test('a template recipe compiles a proven narrative composition from declared slots', () => {
+  const recipe = parseSceneRecipe({
+    version: 1, name: 'thought-beat', record: false, save: false,
+    assets: [
+      { id: 'hero', kind: 'image', source: 'hero.png' },
+      { id: 'room', kind: 'image', source: 'room.png' },
+    ],
+    shots: [{
+      name: 'thought', duration: 8, template: 'inner-thought',
+      slots: { hero: 'hero', plate: 'room' },
+      controls: { mood: 'dreamy', voiceSpace: 'right', camera: 'restrained' },
+    }],
+    // The scene fallback keeps older recipe consumers and manual editing valid;
+    // the selected shot itself is compiled from the template rather than these layers.
+    scene: { width: 1280, height: 720, fps: 30, duration: 8, layers: [
+      { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },
+      { id: 'fallback-plate', type: 'image', asset: 'room', fill: true },
+    ] },
+  })
+  const scene = compileRecipeShot(recipe, recipe.shots[0], { hero: 'hero.png', room: 'room.png' }, file => file)
+  assert.equal(scene.narrative.templateId, 'inner-thought')
+  assert.equal(scene.duration, 8)
+  assert.ok(scene.layers.find(layer => layer.id.includes('hero'))?.animation.keyframes.length >= 3)
+  assert.ok(scene.layers.find(layer => layer.id.includes('plate')))
+})
+
+test('the looping travel template only accepts a plate verified as seamless', () => {
+  const travel = seamlessHorizontal => ({
+    version: 1, name: 'travel', record: false, save: false,
+    assets: [
+      { id: 'runner', kind: 'image', source: 'runner.png' },
+      { id: 'world', kind: 'image', source: 'world.png', ...(seamlessHorizontal ? { seamlessHorizontal: true } : {}) },
+    ],
+    shots: [{ name: 'run', duration: 10, template: 'run-travel-parallax', slots: { hero: 'runner', plate: 'world' } }],
+    scene: { width: 1280, height: 720, fps: 30, duration: 10, layers: [
+      { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },
+      { id: 'fallback', type: 'image', asset: 'world', fill: true },
+    ] },
+  })
+  assert.throws(() => parseSceneRecipe(travel(false)), /explicitly verified as seamlessHorizontal/)
+  const recipe = parseSceneRecipe(travel(true))
+  const scene = compileRecipeShot(recipe, recipe.shots[0], { runner: 'runner.png', world: 'world.png' }, file => file)
+  assert.equal(scene.layers.find(layer => layer.seamlessHorizontal)?.seamlessHorizontal, true)
+  assert.equal(recipeAssetDuration(recipe, 'world'), 10)
 })
