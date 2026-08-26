@@ -107,3 +107,26 @@ Splitting List A from List B is a product call, not an implementation one: it
 sets how much of the format is contract and how much is convention. What is not
 optional is the third path — if neither list is acted on, the sidecar should stop
 describing the recipe as the clip's reproduction, because it is not one.
+
+## Resolution — recipe contract v1 (2026-08-26)
+
+Product decision: **List A is the v1 reproduction contract.** These fields now
+exist in the closed JSON schema, parser and compiler, and `sceneToRecipe()` is
+used when an edited scene is exported so the MP4 sidecar records the scene that
+was actually rendered rather than the earlier LLM plan.
+
+| Contract field | Status |
+|---|---|
+| `animation.keyframes`, events and layer timing | transported and compiled |
+| `strip`, `seamOccluder`, `seamlessHorizontal` | transported and compiled |
+| `relationship` | transported, validated for targets/cycles, and compiled |
+| `visible`, `locked`, local `effects` | transported and compiled |
+| skeletal clip timing | transported and compiled |
+| `audioTracks[].model` | transported |
+
+The documented List B remains intentional for v1: `thumbnail`, `missingAsset`,
+working `composition`, `copilotAudit`, narrative/gallery provenance,
+`animation.orbit` and detailed atmosphere tuning. These are either runtime/UI
+state or not yet language-addressable. A sidecar may still contain the full
+`scene` alongside its recipe, but only the contract rows above claim recipe
+reproduction.
