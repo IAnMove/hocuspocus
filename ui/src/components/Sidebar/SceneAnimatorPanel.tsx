@@ -13,7 +13,7 @@ import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
-import { paintSeamOccluder, seamOccluderDataUri, SEAM_OCCLUDER_KINDS, type SeamOccluderKind } from '../../lib/seamOccluder'
+import { normalizeSeamOccluder, paintSeamOccluder, seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
 import type { Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
@@ -38,7 +38,7 @@ type PhotoMotionPreset = CameraPreset & { description: string }
 type Gesture = { id: string; mode: 'move' | 'resize' | 'orbit'; startX: number; startY: number; x: number; y: number; scale: number; rotationX: number; rotationY: number }
 type LayerEffects = Required<NonNullable<SceneLayer['effects']>>
 type LayerStrip = Required<Omit<NonNullable<SceneLayer['strip']>, 'seamOccluder'>> & {
-  seamOccluder: { enabled: boolean; kind: SeamOccluderKind }
+  seamOccluder: { enabled: boolean; kind: SeamOccluderKind; scale: number; opacity: number }
 }
 type Atmosphere = Required<NonNullable<SceneLayer['atmosphere']>>
 type ModelViewerAnimationElement = HTMLElement & { loaded?: boolean; availableAnimations?: string[]; animationName?: string; currentTime: number; duration: number; pause: () => void }
@@ -92,7 +92,7 @@ const PRESETS: Preset[] = ([
 
 const DEFAULT_COMPOSITION: NonNullable<Scene['composition']> = { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }
 const DEFAULT_EFFECTS: LayerEffects = { blur: 0, brightness: 1, contrast: 1, saturation: 1, hue: 0, glow: 0, shadow: 0, blendMode: 'normal', mask: 'none', maskRadius: 12 }
-const DEFAULT_STRIP: LayerStrip = { enabled: false, count: 5, spacing: 24, direction: 'down', speed: 18, phase: 0, seamOccluder: { enabled: false, kind: 'pole' } }
+const DEFAULT_STRIP: LayerStrip = { enabled: false, count: 5, spacing: 24, direction: 'down', speed: 18, phase: 0, seamOccluder: { enabled: false, kind: 'pole', scale: 1, opacity: .82 } }
 const ATMOSPHERE_KINDS: SceneAtmosphereKind[] = ['rain', 'snow', 'dust', 'embers', 'fog', 'smoke', 'ash', 'fireflies', 'confetti', 'bokeh', 'sparkles', 'bubbles', 'speedlines', 'leaves']
 const ATMOSPHERE_LABELS: Record<SceneAtmosphereKind, string> = {
   rain: 'Cinematic rain',
@@ -171,10 +171,7 @@ const normalizedStrip = (value: SceneLayer['strip'] | undefined): LayerStrip => 
   direction: ['up', 'down', 'left', 'right'].includes(value?.direction ?? '') ? value?.direction as LayerStrip['direction'] : DEFAULT_STRIP.direction,
   speed: boundedNumber(value?.speed, DEFAULT_STRIP.speed, 0, 300),
   phase: boundedNumber(value?.phase, DEFAULT_STRIP.phase, -1000, 1000),
-  seamOccluder: {
-    enabled: value?.seamOccluder?.enabled === true,
-    kind: SEAM_OCCLUDER_KINDS.includes(value?.seamOccluder?.kind as SeamOccluderKind) ? value!.seamOccluder!.kind as SeamOccluderKind : 'pole',
-  },
+  seamOccluder: normalizeSeamOccluder(value?.seamOccluder),
 })
 const normalizedAtmosphere = (value: SceneLayer['atmosphere'] | undefined): Atmosphere => {
   const kind = ATMOSPHERE_KINDS.includes(value?.kind as SceneAtmosphereKind) ? value!.kind : 'rain'
@@ -1041,8 +1038,8 @@ export function SceneAnimatorPanel() {
       ...base,
       x: base.x + offset.x,
       y: 82,
-      scale: 1,
-      opacity: Math.min(1, base.opacity),
+      scale: strip.seamOccluder.scale,
+      opacity: Math.min(1, base.opacity * strip.seamOccluder.opacity),
     }, layer, time))
   }
   const moveLayerZ = (id: string, direction: 1 | -1) => updateScene(current => {
@@ -1692,7 +1689,7 @@ export function SceneAnimatorPanel() {
           context.globalAlpha = state.opacity
           context.translate(canvas.width * state.x / 100, canvas.height * state.y / 100)
           context.rotate(state.rotation * Math.PI / 180)
-          paintSeamOccluder(context, kind, canvas.width, canvas.height)
+          paintSeamOccluder(context, kind, canvas.width, canvas.height, normalizedStrip(layer.strip).seamOccluder.scale)
           context.restore()
         })
       })
@@ -2240,7 +2237,8 @@ export function SceneAnimatorPanel() {
       return <div key={`${layer.id}-${index}`} style={common} onPointerDown={layer.type === 'effect' ? undefined : edgeMove} onPointerMove={layer.type === 'effect' ? undefined : moveGesture} onPointerUp={layer.type === 'effect' ? undefined : endGesture} onPointerCancel={layer.type === 'effect' ? undefined : endGesture} className={`absolute touch-none ${layer.type === 'effect' ? 'pointer-events-none' : 'cursor-grab active:cursor-grabbing'} ${selection && isPrimary ? 'ring-2 ring-accent-blue ring-inset' : ''}`}><div className="h-full w-full" style={maskStyle}><div className="h-full w-full" style={effectStyle}>{media}</div></div>{selection && isPrimary && layer.type !== 'effect' && <button aria-label="Resize layer" onPointerDown={event => startGesture(event, layer, 'resize')} onPointerMove={moveGesture} onPointerUp={endGesture} className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-accent-blue shadow" />}</div>
     }).concat(seamCoverStates(layer).map((state, index) => {
       const kind = normalizedStrip(layer.strip).seamOccluder.kind
-      const cover: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: '8%', height: '92%', opacity: state.opacity, zIndex: 18, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)`, pointerEvents: 'none' }
+      const coverScale = normalizedStrip(layer.strip).seamOccluder.scale
+      const cover: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: `${8 * coverScale}%`, height: `${92 * coverScale}%`, opacity: state.opacity, zIndex: 18, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)`, pointerEvents: 'none' }
       return <div key={`${layer.id}-seam-${index}`} className="absolute" style={cover}><img src={seamOccluderDataUri(kind)} alt="" draggable={false} className="h-full w-full object-contain object-bottom select-none" /></div>
     }))
   }
@@ -2419,7 +2417,8 @@ export function SceneAnimatorPanel() {
           {numberInput('Start phase %', selectedStrip.phase, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), phase: value } })), -1000, 1000, 1, selected.locked)}
         </div>
         <label className="text-[9px] text-text-muted">Direction<select value={selectedStrip.direction} disabled={selected.locked} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), direction: event.target.value as LayerStrip['direction'] } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="down">Top → bottom</option><option value="up">Bottom → top</option><option value="right">Left → right</option><option value="left">Right → left</option></select></label>
-        <label className="text-[9px] text-text-muted">Seam cover<select value={selectedStrip.seamOccluder.enabled ? selectedStrip.seamOccluder.kind : 'off'} disabled={selected.locked || !selectedStrip.enabled} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { enabled: event.target.value !== 'off', kind: event.target.value === 'off' ? normalizedStrip(layer.strip).seamOccluder.kind : event.target.value as SeamOccluderKind } } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="off">Off</option><option value="pole">Pole / post</option><option value="lamp">Lamp</option><option value="tree">Tree</option><option value="column">Column</option></select></label>
+        <label className="text-[9px] text-text-muted">Seam cover<select value={selectedStrip.seamOccluder.enabled ? selectedStrip.seamOccluder.kind : 'off'} disabled={selected.locked || !selectedStrip.enabled} onChange={event => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, enabled: event.target.value !== 'off', kind: event.target.value === 'off' ? normalizedStrip(layer.strip).seamOccluder.kind : event.target.value as SeamOccluderKind } } }))} className="mt-0.5 w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-[10px] disabled:opacity-50"><option value="off">Off</option><option value="pole">Pole / post</option><option value="lamp">Lamp</option><option value="tree">Tree</option><option value="column">Column</option></select></label>
+        {selectedStrip.seamOccluder.enabled && <><>{numberInput('Cover scale', selectedStrip.seamOccluder.scale, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, scale: value } } })), .45, 1.8, .05, selected.locked)}</>{numberInput('Cover opacity', selectedStrip.seamOccluder.opacity, value => updateLayer(selected.id, layer => ({ ...layer, strip: { ...normalizedStrip(layer.strip), seamOccluder: { ...normalizedStrip(layer.strip).seamOccluder, opacity: value } } })), .2, 1, .05, selected.locked)}</>}
         <p className="text-[8px] text-text-muted">A foreground silhouette stays locked to each tile join so a looping plate never shows its seam.</p>
         {selected.type === 'model3d' && selectedStrip.count > 4 && <p className="text-[8px] text-amber-200">Preview caps GLB copies at 4. Extra copies freeze the GPU.</p>}
       </div>}

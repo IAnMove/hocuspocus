@@ -4,6 +4,8 @@ export type SeamOccluderKind = (typeof SEAM_OCCLUDER_KINDS)[number]
 export type SeamOccluderConfig = {
   enabled: boolean
   kind: SeamOccluderKind
+  scale: number
+  opacity: number
 }
 
 type StripLike = {
@@ -27,12 +29,14 @@ export function suggestSeamOccluderKind(text = ''): SeamOccluderKind {
   return 'pole'
 }
 
-export function normalizeSeamOccluder(value: unknown, fallback: SeamOccluderConfig = { enabled: false, kind: 'pole' }): SeamOccluderConfig {
+export function normalizeSeamOccluder(value: unknown, fallback: SeamOccluderConfig = { enabled: false, kind: 'pole', scale: 1, opacity: .82 }): SeamOccluderConfig {
   if (!value || typeof value !== 'object') return fallback
-  const raw = value as { enabled?: unknown; kind?: unknown }
+  const raw = value as { enabled?: unknown; kind?: unknown; scale?: unknown; opacity?: unknown }
   return {
     enabled: raw.enabled === true,
     kind: isKind(raw.kind) ? raw.kind : fallback.kind,
+    scale: typeof raw.scale === 'number' && Number.isFinite(raw.scale) ? Math.max(.45, Math.min(1.8, raw.scale)) : fallback.scale,
+    opacity: typeof raw.opacity === 'number' && Number.isFinite(raw.opacity) ? Math.max(.2, Math.min(1, raw.opacity)) : fallback.opacity,
   }
 }
 
@@ -60,9 +64,11 @@ export function paintSeamOccluder(
   kind: SeamOccluderKind,
   frameWidth: number,
   frameHeight: number,
+  scale = 1,
 ) {
-  const width = frameWidth * 0.085
-  const height = frameHeight * 0.94
+  const safeScale = Math.max(.45, Math.min(1.8, scale))
+  const width = frameWidth * 0.085 * safeScale
+  const height = frameHeight * 0.94 * safeScale
   context.save()
   context.fillStyle = '#0c0e14'
   context.translate(-width / 2, -height / 2)

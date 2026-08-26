@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createNarrativeScene } from '../src/lib/sceneNarrative.ts'
-import { seamOccluderPhase, suggestSeamOccluderKind } from '../src/lib/seamOccluder.ts'
+import { normalizeSeamOccluder, seamOccluderPhase, suggestSeamOccluderKind } from '../src/lib/seamOccluder.ts'
 
 test('station-like plates pick a lamp; forests pick a tree; default is a pole', () => {
   assert.equal(suggestSeamOccluderKind('Train station platform at night'), 'lamp')
@@ -13,6 +13,15 @@ test('station-like plates pick a lamp; forests pick a tree; default is a pole', 
 test('occluders sit on the tile join, half a spacing ahead of the plate', () => {
   assert.equal(seamOccluderPhase({ phase: 0, spacing: 100 }), 50)
   assert.equal(seamOccluderPhase({ phase: 12, spacing: 80 }), 52)
+})
+
+test('seam cover presentation is bounded so a bad recipe cannot create an opaque card', () => {
+  assert.deepEqual(normalizeSeamOccluder({ enabled: true, kind: 'tree', scale: 9, opacity: -4 }), {
+    enabled: true, kind: 'tree', scale: 1.8, opacity: .2,
+  })
+  assert.deepEqual(normalizeSeamOccluder({ enabled: true, kind: 'lamp', scale: .7, opacity: .65 }), {
+    enabled: true, kind: 'lamp', scale: .7, opacity: .65,
+  })
 })
 
 test('run-travel parallax enables a seam cover locked to the background strip', () => {

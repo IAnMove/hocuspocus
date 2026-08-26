@@ -460,6 +460,10 @@ export interface SceneLayer {
     seamOccluder?: {
       enabled: boolean
       kind: 'pole' | 'lamp' | 'tree' | 'column'
+      /** Relative size of the foreground cover. Defaults to 1. */
+      scale?: number
+      /** Allows a cover to blend with a photographed plate instead of reading as a black card. */
+      opacity?: number
     }
   }
   transform: {
@@ -572,6 +576,11 @@ export interface Scene {
   narrative?: {
     templateId: string
     controls: Record<string, string | number | boolean | undefined>
+    /** Gallery metadata copied from the selected template at mount time. */
+    category?: string
+    visualIntent?: string
+    referenceMotion?: string
+    evaluationCues?: string[]
     /** The exact existing assets assigned when the template was mounted. */
     assets?: Array<{ slot: string; source: string; name?: string; type?: SceneLayerType }>
     /** Deterministic human-readable direction used to compile this template. */
