@@ -11,7 +11,7 @@ import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
-import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
+import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
 import { normalizeSeamOccluder, paintSeamOccluder, seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
@@ -2080,7 +2080,9 @@ export function SceneAnimatorPanel() {
     } : undefined
     const input: NarrativeTemplateInput = { hero: asInput(hero), plate: plate ? { ...asInput(plate)!, seamlessHorizontal: narrativePlateLoopReady } : undefined, prop: asInput(prop), foreground: asInput(foreground), width: scene.width, height: scene.height, fps, controls: { mood: narrativeMood, intensity: narrativeIntensity, direction: narrativeDirection, camera: narrativeCamera, palette: narrativePalette, voiceSpace: narrativeVoiceSpace } }
     const next = createNarrativeScene(narrativeTemplateId, input) as AnimatorScene
-    updateScene(() => next)
+    // A template replaces the composition, not the scene's audio or its
+    // copilot history - neither of which it can produce. See carrySceneSidecars.
+    updateScene(current => carrySceneSidecars(current, next))
     setSelectedId(next.layers.find(layer => layer.id === 'hero')?.id ?? next.layers.find(layer => layer.type !== 'camera')?.id ?? null)
     setSelectedKeyframeId(null); setSelectedEventId(null); setSelectedPresetId(''); setProgress(0)
     setMessage(`${narrativeTemplate.title} mounted as an editable ${next.duration}-second scene.`)

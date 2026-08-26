@@ -285,6 +285,28 @@ export const NARRATIVE_SCENE_TEMPLATES: NarrativeSceneTemplate[] = NARRATIVE_SCE
 
 export const getNarrativeTemplate = (id: NarrativeSceneId) => NARRATIVE_SCENE_TEMPLATES.find(template => template.id === id)
 
+/**
+ * Carries the scene-level records a template has no way to express across a
+ * remount.
+ *
+ * `createNarrativeScene` builds a whole Scene out of slots and controls, so
+ * mounting one replaces everything on screen. Two things it cannot produce
+ * would go with it: the audio a scene was given, and the copilot audit trail.
+ * Neither is composition — they are records attached to the scene — and both
+ * disappeared silently, which is the worst way to lose something. Losing the
+ * audio also meant a template mount destroyed exactly what the recipe audio
+ * field was added to deliver.
+ *
+ * `layers`, `composition` and `narrative` are deliberately not carried. The
+ * template replaces the composition on purpose, and its provenance has to
+ * describe the mount that just happened rather than the one before it.
+ */
+export const carrySceneSidecars = <T extends Scene>(previous: T, next: T): T => ({
+  ...next,
+  ...(previous.audioTracks?.length ? { audioTracks: previous.audioTracks } : {}),
+  ...(previous.copilotAudit?.length ? { copilotAudit: previous.copilotAudit } : {}),
+})
+
 const withKeyframes = (layer: SceneLayer, keyframes: SceneKeyframe[]) => ({
   ...layer,
   animation: { ...layer.animation, start: keyframes[0], end: keyframes[keyframes.length - 1], keyframes },

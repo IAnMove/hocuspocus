@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { NARRATIVE_SCENE_TEMPLATES, buildDriftKeyframes, createNarrativeScene } from '../src/lib/sceneNarrative.ts'
+import { NARRATIVE_SCENE_TEMPLATES, buildDriftKeyframes, carrySceneSidecars, createNarrativeScene } from '../src/lib/sceneNarrative.ts'
 import { evaluateSceneLayer, sceneProgressFromSeconds } from '../src/lib/sceneTimeline.ts'
 
 const assets = {
@@ -164,4 +164,36 @@ test('every template survives a short beat, not just the one that was checked', 
       assert.ok(layer.animation.trimEnd <= scene.duration + 0.001, `${template.id}/${layer.id} stays inside the shot`)
     }
   }
+})
+
+const sceneWithSidecars = () => ({
+  ...createNarrativeScene('inner-thought', assets),
+  audioTracks: [{ id: 'bed', filename: 'sad.mp3', name: 'Sad piano', kind: 'music', startTime: 0, volume: .8 }],
+  copilotAudit: [{ id: 'edit-1', createdAt: '2026-08-26T00:00:00Z', scope: 'layer', intent: 'move him left', summary: 'moved', operations: [], validation: 'applied' }],
+})
+
+test('mounting a template keeps the audio and the copilot history it cannot produce', () => {
+  // Without this, mounting a template destroys exactly what the recipe audio
+  // field was added to deliver, and does it without saying anything.
+  const previous = sceneWithSidecars()
+  const mounted = carrySceneSidecars(previous, createNarrativeScene('emotional-close-up', assets))
+  assert.deepEqual(mounted.audioTracks, previous.audioTracks)
+  assert.deepEqual(mounted.copilotAudit, previous.copilotAudit)
+})
+
+test('mounting a template still replaces the composition and its provenance', () => {
+  const previous = sceneWithSidecars()
+  const next = createNarrativeScene('emotional-close-up', assets)
+  const mounted = carrySceneSidecars(previous, next)
+  assert.deepEqual(mounted.layers, next.layers)
+  assert.equal(mounted.narrative.templateId, 'emotional-close-up')
+  assert.equal(mounted.name, next.name)
+  assert.deepEqual(mounted.composition, next.composition)
+})
+
+test('a scene with nothing to carry gains no empty keys', () => {
+  const next = createNarrativeScene('emotional-close-up', assets)
+  const mounted = carrySceneSidecars(createNarrativeScene('inner-thought', assets), next)
+  assert.ok(!('audioTracks' in mounted), 'no empty audioTracks key')
+  assert.ok(!('copilotAudit' in mounted), 'no empty copilotAudit key')
 })
