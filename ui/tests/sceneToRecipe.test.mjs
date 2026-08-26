@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { sceneToRecipe } from '../src/lib/sceneToRecipe.ts'
+
+const sceneFixture = () => ({
+  version: 1,
+  name: 'edited-shot',
+  width: 1280,
+  height: 720,
+  fps: 30,
+  duration: 6,
+  layers: [{
+    id: 'hero',
+    name: 'Hero',
+    type: 'image',
+    source: '/assets/hero.png',
+    visible: false,
+    locked: true,
+    z: 20,
+    fill: false,
+    parallax: 1,
+    transform: { x: 48, y: 52, scale: 0.8, opacity: 1, rotation: 0 },
+    effects: { blur: 7, brightness: 1.1 },
+    animation: {
+      start: { x: 20, y: 50, scale: 0.7, opacity: 0, rotation: 0 },
+      end: { x: 80, y: 50, scale: 1, opacity: 1, rotation: 0 },
+      keyframes: [
+        { id: 'a', time: 0, x: 20, y: 50, scale: 0.7, opacity: 0, rotation: 0, curve: 'ease' },
+        { id: 'b', time: 2, x: 45, y: 49, scale: 0.9, opacity: 1, rotation: 1, curve: 'hold' },
+        { id: 'c', time: 6, x: 80, y: 50, scale: 1, opacity: 1, rotation: 0, curve: 'linear' },
+      ],
+      duration: 6,
+      curve: 'ease',
+      spin: false,
+    },
+  }],
+})
+
+test('sceneToRecipe preserves authored visibility, blur and keyframe tracks', () => {
+  const scene = sceneFixture()
+  const recipe = sceneToRecipe(scene)
+  const layer = recipe.scene.layers[0]
+  assert.equal(layer.visible, false)
+  assert.equal(layer.effects.blur, 7)
+  assert.deepEqual(layer.animation.keyframes, scene.layers[0].animation.keyframes)
+  assert.equal(recipe.assets[0].source, '/assets/hero.png')
+  assert.equal(layer.asset, recipe.assets[0].id)
+})
+
+test('sceneToRecipe is pure and copies nested authored state', () => {
+  const scene = sceneFixture()
+  const recipe = sceneToRecipe(scene)
+  const sourceFrame = scene.layers[0].animation.keyframes[0]
+  const recipeFrame = recipe.scene.layers[0].animation.keyframes[0]
+  recipeFrame.x = 999
+  recipe.scene.layers[0].effects.blur = 0
+  assert.equal(sourceFrame.x, 20)
+  assert.equal(scene.layers[0].effects.blur, 7)
+})
+
