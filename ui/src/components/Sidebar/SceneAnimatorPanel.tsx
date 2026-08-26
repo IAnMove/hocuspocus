@@ -5,6 +5,7 @@ import { useStore } from '../../stores/useStore'
 import { fetchJobStatus, generateLlmText, saveScene as saveSceneOutput, saveSceneRecording, submitGeneration, uploadImage } from '../../api/client'
 import { SceneRecipePanel } from './SceneRecipePanel'
 import type { SceneRecipe } from '../../lib/sceneRecipe'
+import { sceneToRecipe } from '../../lib/sceneToRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
 import { SceneLibraryDialog } from './SceneLibraryDialog'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
@@ -520,7 +521,7 @@ export function SceneAnimatorPanel() {
   const animationRef = useRef<number | null>(null)
   const recordingAnimationRef = useRef<number | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const recipeContextRef = useRef<{ prompt: string; recipe: SceneRecipe } | null>(null)
+  const recipeContextRef = useRef<{ prompt: string } | null>(null)
   const recordingStreamRef = useRef<MediaStream | null>(null)
   const modelInputRef = useRef<HTMLInputElement>(null)
   const mediaInputRef = useRef<HTMLInputElement>(null)
@@ -1967,7 +1968,10 @@ export function SceneAnimatorPanel() {
     const saved = await saveSceneRecording(blob, {
       scene: current,
       prompt: context?.prompt ?? '',
-      recipe: context ? context.recipe as unknown as Record<string, unknown> : null,
+      // A user can change every frame-affecting field after mounting the LLM
+      // recipe. Persist the current scene as the recipe, rather than calling
+      // the stale planning JSON a reproduction of the rendered MP4.
+      recipe: sceneToRecipe(current) as unknown as Record<string, unknown>,
       workspace,
     })
     await loadOutputs()
@@ -2017,7 +2021,7 @@ export function SceneAnimatorPanel() {
     throw new Error('The 3D models did not paint in time. Keep the 3D Video tab visible and try again.')
   }
   const applyRecipeScene = async (recipe: SceneRecipe, nextScene: Scene, status: (message: string) => void, prompt: string) => {
-    recipeContextRef.current = { prompt, recipe }
+    recipeContextRef.current = { prompt }
     importScene(JSON.stringify(nextScene), `Recipe scene loaded: ${nextScene.name}`)
     await new Promise(resolve => window.setTimeout(resolve, 120))
     status('Waiting for 3D models to paint…')

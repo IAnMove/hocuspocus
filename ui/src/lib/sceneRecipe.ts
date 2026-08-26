@@ -37,7 +37,7 @@ const parseRecipeAudio = (raw: unknown): SceneRecipeAudio[] | undefined => {
       source: typeof track.source === 'string' ? track.source : undefined,
       prompt: typeof track.prompt === 'string' ? track.prompt : undefined,
       name: typeof track.name === 'string' ? track.name : undefined,
-      startTime: boundedNumber(track.startTime, 0, 0, 30),
+      startTime: boundedNumber(track.startTime, 0, 0, 60),
       volume: boundedNumber(track.volume, 1, 0, 2),
       model: typeof track.model === 'string' ? track.model.slice(0, 160) : undefined,
     }]
@@ -494,7 +494,7 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
           prompt: { type: 'string', maxLength: 600 },
           name: { type: 'string', maxLength: 120 },
           model: { type: 'string', maxLength: 160 },
-          startTime: { type: 'number', minimum: 0, maximum: 30 },
+          startTime: { type: 'number', minimum: 0, maximum: 60 },
           volume: { type: 'number', minimum: 0, maximum: 2 },
         },
         required: ['id', 'kind'],
@@ -509,7 +509,7 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         type: 'object',
         properties: {
           name: { type: 'string', minLength: 1, maxLength: 100 },
-          duration: { type: 'number', minimum: 0.5, maximum: 30 },
+          duration: { type: 'number', minimum: 0.5, maximum: 60 },
           layers: { type: 'array', minItems: 1, maxItems: 24, items: recipeLayerSchema },
         },
         required: ['name', 'duration', 'layers'],
@@ -522,7 +522,7 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         width: { type: 'integer', minimum: 256, maximum: 3840 },
         height: { type: 'integer', minimum: 256, maximum: 3840 },
         fps: { enum: [30, 60] },
-        duration: { type: 'number', minimum: 0.5, maximum: 30 },
+        duration: { type: 'number', minimum: 0.5, maximum: 60 },
         mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] },
         palette: { enum: ['natural', 'cool', 'warm', 'neon'] },
         intensity: { enum: [1, 2, 3] },
@@ -1024,7 +1024,7 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
       const shot = item as Record<string, unknown>
       return {
         name: asString(shot.name) || `shot-${index + 1}`,
-        duration: boundedNumber(shot.duration, 5, 0.5, 30),
+        duration: boundedNumber(shot.duration, 5, 0.5, 60),
         layers: parseLayers(shot.layers, `Shot ${index + 1} layers`),
       }
     })
@@ -1064,7 +1064,7 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
       width: Math.round(boundedNumber(sceneRaw.width, 1280, 256, 3840)),
       height: Math.round(boundedNumber(sceneRaw.height, 720, 256, 3840)),
       fps: sceneRaw.fps === 60 ? 60 : 30,
-      duration: boundedNumber(sceneRaw.duration, shots?.[0]?.duration || 5, 0.5, 30),
+      duration: boundedNumber(sceneRaw.duration, shots?.[0]?.duration || 5, 0.5, 60),
       // Unknown values fall through as undefined rather than throwing: a
       // mistyped mood should cost the grade, not the whole recipe.
       mood: GRADE_MOODS.includes(sceneRaw.mood as SceneGradeMood) ? sceneRaw.mood as SceneGradeMood : undefined,

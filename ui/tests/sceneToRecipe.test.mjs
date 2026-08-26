@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sceneToRecipe } from '../src/lib/sceneToRecipe.ts'
+import { compileSceneRecipe, parseSceneRecipe } from '../src/lib/sceneRecipe.ts'
 
 const sceneFixture = () => ({
   version: 1,
@@ -58,3 +59,18 @@ test('sceneToRecipe is pure and copies nested authored state', () => {
   assert.equal(scene.layers[0].effects.blur, 7)
 })
 
+test('a serialized edited scene survives parser and compiler round trip', () => {
+  const authored = sceneFixture()
+  authored.layers.push({
+    ...authored.layers[0], id: 'plate', name: 'Plate', source: '/assets/plate.png', visible: true,
+    effects: undefined, animation: { ...authored.layers[0].animation, keyframes: undefined },
+  })
+  const recipe = parseSceneRecipe(JSON.parse(JSON.stringify(sceneToRecipe(authored))))
+  const scene = compileSceneRecipe(recipe, {}, source => source)
+  const hero = scene.layers.find(layer => layer.id === 'hero')
+  assert.equal(hero.visible, false)
+  assert.equal(hero.locked, true)
+  assert.equal(hero.effects.blur, 7)
+  assert.equal(hero.animation.keyframes.length, 3)
+  assert.equal(hero.animation.keyframes[1].curve, 'hold')
+})
