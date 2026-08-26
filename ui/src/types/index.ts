@@ -556,6 +556,17 @@ export interface Scene {
     prompt?: string
     model?: string
   }>
+  /** Authored limited-animation dialogue. Mouth layers remain ordinary layers
+   * whose opacity keyframes are generated from these editable beat records. */
+  dialogueBeats?: Array<{
+    id: string
+    text: string
+    start: number
+    end: number
+    mouthLayerIds: string[]
+    audioTrackId?: string
+    confidence: 'known-text'
+  }>
   composition?: {
     showGrid: boolean
     gridSize: number
