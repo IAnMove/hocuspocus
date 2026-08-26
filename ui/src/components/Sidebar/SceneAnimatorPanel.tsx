@@ -8,6 +8,7 @@ import type { SceneRecipe } from '../../lib/sceneRecipe'
 import { parseSceneFile, sceneFileName, serializeSceneFile } from '../../lib/sceneFile'
 import { SceneLibraryDialog } from './SceneLibraryDialog'
 import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
+import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
@@ -551,8 +552,13 @@ export function SceneAnimatorPanel() {
   const generatedMedia = outputs.filter(output => output.type === 'image' || output.type === 'video')
   const generatedAudio = outputs.filter(output => output.type === 'audio')
   const narrativeVisuals = outputs.filter(output => output.type === 'model3d' || output.type === 'image' || output.type === 'video')
-  const narrativeHeroIsBakedImage = /\.jpe?g$/i.test(narrativeHero)
   const narrativeTemplate = getNarrativeTemplate(narrativeTemplateId)!
+  const narrativeAssetByName = (name: string) => narrativeVisuals.find(asset => asset.name === name)
+  const narrativeSuitability = (role: 'hero' | 'plate' | 'prop' | 'foreground', name: string) => {
+    const asset = narrativeAssetByName(name)
+    const type = asset?.type === 'image' || asset?.type === 'video' || asset?.type === 'model3d' ? asset.type : undefined
+    return assessNarrativeAsset(role, type, name)
+  }
   const previewShortSide = Math.min(previewWidth, previewWidth * scene.height / Math.max(1, scene.width))
   const selectedModelId = selected?.type === 'model3d' ? selected.id : null
   const selectedModelSource = selected?.type === 'model3d' ? selected.source : null
@@ -2312,8 +2318,9 @@ export function SceneAnimatorPanel() {
         <div className="grid grid-cols-2 gap-1">{NARRATIVE_SCENE_TEMPLATES.map(template => <button key={template.id} type="button" disabled={playing || recording || publishing} onClick={() => setNarrativeTemplateId(template.id)} title={template.description} className={`rounded border p-1 text-left disabled:opacity-40 ${narrativeTemplateId === template.id ? 'border-fuchsia-300/70 bg-fuchsia-400/15 text-fuchsia-100' : 'border-border bg-bg-primary text-text-secondary hover:border-fuchsia-300/40'}`}><span className="block truncate text-[8px] font-medium">{template.experimental ? 'Experimental · ' : ''}{template.title}</span><span className="block text-[7px] text-text-muted">{template.defaultDuration}s · {template.assetSlots.filter(slot => slot.required).length} assets</span></button>)}</div>
         <p className="text-[8px] leading-relaxed text-text-muted">{narrativeTemplate.description}</p>
         <label className="block text-[9px] text-text-muted">Character / subject<select value={narrativeHero} onChange={event => setNarrativeHero(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">Choose asset…</option>{narrativeVisuals.map(asset => <option key={asset.name} value={asset.name}>{asset.type === 'model3d' ? '3D · ' : asset.type === 'video' ? 'Video · ' : 'Image · '}{asset.name}</option>)}</select></label>
-        {narrativeHeroIsBakedImage && <p className="rounded border border-amber-300/25 bg-amber-400/[.06] px-1.5 py-1 text-[8px] leading-relaxed text-amber-100">This JPG is a full rectangular image, not a cutout. It will keep its baked background; use a clean GLB, transparent PNG/WebP, or video with the subject already isolated for a character shot.</p>}
+        {narrativeHero && <p className={`rounded border px-1.5 py-1 text-[8px] leading-relaxed ${narrativeSuitability('hero', narrativeHero).level === 'warning' ? 'border-amber-300/25 bg-amber-400/[.06] text-amber-100' : 'border-emerald-300/20 bg-emerald-400/[.04] text-emerald-100'}`}>{narrativeSuitability('hero', narrativeHero).message}</p>}
         <label className="block text-[9px] text-text-muted">Background<select value={narrativePlate} onChange={event => setNarrativePlate(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">Choose asset…</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.type === 'video' ? 'Video · ' : 'Image · '}{asset.name}</option>)}</select></label>
+        {narrativePlate && narrativeSuitability('plate', narrativePlate).level !== 'ok' && <p className="rounded border border-cyan-300/20 bg-cyan-400/[.04] px-1.5 py-1 text-[8px] leading-relaxed text-cyan-100">{narrativeSuitability('plate', narrativePlate).message}</p>}
         {narrativeTemplate.assetSlots.some(slot => slot.id === 'prop') && <label className="block text-[9px] text-text-muted">Object / portal{narrativeTemplate.assetSlots.find(slot => slot.id === 'prop')?.required ? '' : ' (optional)'}<select value={narrativeProp} onChange={event => setNarrativeProp(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">None</option>{narrativeVisuals.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
         {narrativeTemplate.assetSlots.some(slot => slot.id === 'foreground') && <label className="block text-[9px] text-text-muted">Foreground (optional)<select value={narrativeForeground} onChange={event => setNarrativeForeground(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">None</option>{generatedMedia.map(asset => <option key={asset.name} value={asset.name}>{asset.name}</option>)}</select></label>}
         <div className="grid grid-cols-2 gap-1 text-[9px] text-text-muted">
