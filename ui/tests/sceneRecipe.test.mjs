@@ -313,3 +313,55 @@ test('an explicit parallax value is never overridden', () => {
 test('the depth vocabulary is offered to the model', () => {
   assert.match(buildRecipeSystemPrompt({ mode: 'auto', inventory: [] }), /parallax/i)
 })
+
+const withAudio = audio => parseSceneRecipe({ ...EXAMPLE_SAUCER_CRUISE_RECIPE, audio })
+const compileWithAudio = (audio, resolved = {}) => compileSceneRecipe(
+  withAudio(audio),
+  { stars: 'stars.png', saucer: 'saucer.glb', ...resolved },
+  filename => filename,
+)
+
+test('a requested music bed reaches the compiled scene', () => {
+  const scene = compileWithAudio([
+    { id: 'bed', kind: 'music', source: 'melancholy.mp3', prompt: 'slow melancholic piano', startTime: 0.5, volume: 0.6 },
+  ])
+  assert.equal(scene.audioTracks.length, 1)
+  assert.deepEqual(
+    { ...scene.audioTracks[0] },
+    { id: 'bed', filename: 'melancholy.mp3', name: 'slow melancholic piano', kind: 'music', startTime: 0.5, volume: 0.6, prompt: 'slow melancholic piano' },
+  )
+})
+
+test('a recipe without audio compiles without the key', () => {
+  assert.equal(compileWithAudio(undefined).audioTracks, undefined)
+})
+
+test('an audio id resolves through the same map as an asset', () => {
+  const scene = compileWithAudio([{ id: 'bed', kind: 'music' }], { bed: 'resolved-track.wav' })
+  assert.equal(scene.audioTracks[0].filename, 'resolved-track.wav')
+})
+
+test('an unresolved track fails loudly instead of exporting silence', () => {
+  // Nothing generates audio from the recipe path yet, so this must name what
+  // is missing rather than produce a mute MP4 nobody can explain.
+  assert.throws(
+    () => compileWithAudio([{ id: 'bed', kind: 'music', prompt: 'melancholic strings' }]),
+    /melancholic strings/,
+  )
+})
+
+test('audio is validated before anything is compiled', () => {
+  assert.throws(() => withAudio([{ id: 'a', kind: 'orchestra' }]), /speech, music or sfx/)
+  assert.throws(() => withAudio([{ id: 'a', kind: 'music' }, { id: 'a', kind: 'sfx' }]), /own id/)
+})
+
+test('start time is clamped to the scene rather than pushing audio past the end', () => {
+  const scene = compileWithAudio([{ id: 'bed', kind: 'sfx', source: 'hit.wav', startTime: 29 }])
+  assert.equal(scene.audioTracks[0].startTime, scene.duration)
+})
+
+test('the audio contract is offered to the model', () => {
+  const prompt = buildRecipeSystemPrompt({ mode: 'auto', inventory: [] })
+  assert.match(prompt, /Audio kinds: speech, music, sfx/)
+  assert.match(prompt, /never in assets/)
+})

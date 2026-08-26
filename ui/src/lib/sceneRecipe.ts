@@ -18,6 +18,34 @@ const GRADE_PALETTES: readonly SceneGradePalette[] = ['natural', 'cool', 'warm',
  * A two-layer shot keeps its subject at camera speed rather than pushing it
  * to 1.2 - a lone hero is not a foreground element, it is the subject.
  */
+const AUDIO_KINDS: readonly SceneRecipeAudio['kind'][] = ['speech', 'music', 'sfx']
+
+/** Rejects the whole track rather than half of it: a music bed at the wrong
+ *  volume is worse than one the user is told is missing. */
+const parseRecipeAudio = (raw: unknown): SceneRecipeAudio[] | undefined => {
+  if (!Array.isArray(raw) || !raw.length) return undefined
+  const tracks = raw.flatMap((item, index) => {
+    if (!item || typeof item !== 'object') return []
+    const track = item as Record<string, unknown>
+    const id = typeof track.id === 'string' && track.id.trim() ? track.id.trim() : `audio-${index + 1}`
+    if (!AUDIO_KINDS.includes(track.kind as SceneRecipeAudio['kind'])) {
+      throw new Error(`Audio track "${id}" must be speech, music or sfx.`)
+    }
+    return [{
+      id,
+      kind: track.kind as SceneRecipeAudio['kind'],
+      source: typeof track.source === 'string' ? track.source : undefined,
+      prompt: typeof track.prompt === 'string' ? track.prompt : undefined,
+      name: typeof track.name === 'string' ? track.name : undefined,
+      startTime: boundedNumber(track.startTime, 0, 0, 30),
+      volume: boundedNumber(track.volume, 1, 0, 2),
+    }]
+  })
+  const ids = tracks.map(track => track.id)
+  if (new Set(ids).size !== ids.length) throw new Error('Each audio track needs its own id.')
+  return tracks.length ? tracks : undefined
+}
+
 const PARALLAX_BAND = { background: .3, midground: .7, foreground: 1.2, subject: 1 }
 const parallaxForDepth = (rank: number, count: number): number => {
   if (count <= 1) return PARALLAX_BAND.subject
@@ -87,12 +115,32 @@ export interface SceneRecipeShot {
   layers: SceneRecipeLayer[]
 }
 
+/**
+ * A sound the request asked for. Kept out of `assets` on purpose: assets are
+ * things that become layers and can be generated to fill a gap, and audio is
+ * neither. The whole mixing chain downstream already works - adelay, per-track
+ * volume, amix and an AAC re-encode, with the exported MP4 verified to carry
+ * the stream - so this is only the missing way to ask for it.
+ */
+export interface SceneRecipeAudio {
+  id: string
+  kind: 'speech' | 'music' | 'sfx'
+  /** A resolved filename. Without one the id must resolve through `resolved`. */
+  source?: string
+  /** What to generate if it is ever missing. Nothing generates audio yet. */
+  prompt?: string
+  name?: string
+  startTime?: number
+  volume?: number
+}
+
 export interface SceneRecipe {
   version: 1
   name: string
   record?: boolean
   save?: boolean
   assets: SceneRecipeAsset[]
+  audio?: SceneRecipeAudio[]
   shots?: SceneRecipeShot[]
   scene: {
     width?: number
@@ -333,6 +381,24 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         additionalProperties: false,
       },
     },
+    audio: {
+      type: 'array',
+      maxItems: 6,
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', minLength: 1, maxLength: 64 },
+          kind: { enum: ['speech', 'music', 'sfx'] },
+          source: { type: 'string', maxLength: 400 },
+          prompt: { type: 'string', maxLength: 600 },
+          name: { type: 'string', maxLength: 120 },
+          startTime: { type: 'number', minimum: 0, maximum: 30 },
+          volume: { type: 'number', minimum: 0, maximum: 2 },
+        },
+        required: ['id', 'kind'],
+        additionalProperties: false,
+      },
+    },
     shots: {
       type: 'array',
       minItems: 1,
@@ -445,9 +511,11 @@ Rig clips: ${RECIPE_RIG_ANIMATIONS.join(', ')}
 Scene mood: calm, tense, dreamy, heroic
 Scene palette: natural, cool, warm, neon
 Scene intensity: 1, 2, 3
+Audio kinds: speech, music, sfx
 
 Semantic mapping hints:
 - Emotional or atmospheric words in the request set scene.mood and scene.palette. Melancholy/wistful -> mood dreamy with a cool palette; threat/dread -> tense; triumph/resolve -> heroic; warm nostalgia -> warm palette. Leave them unset only when the request is genuinely neutral, because an unset scene renders with flat neutral colour.
+- Requested music, narration or sound effects go in the top-level audio array, never in assets and never as a layer. Give each track an id, a kind, a startTime and a prompt describing the sound. Audio is requested, not drawn: it adds no layer and does not change the composition.
 - Depth/parallax requests set layer.parallax: lower is further away. Distant background 0.3, mid-ground 0.7, subject 1, foreground element passing close to the lens 1.2. Relative speed is the only depth cue this compositor has, so give layers distinct values whenever the request implies depth. Left unset, layers are banded automatically by z order.
 - rise/take off -> liftoff or diagonal-rise; descend/land -> landing; cross frame/fly past -> space-cruise, glide or pass-camera.
 - reveal/appear -> fade-reveal, portal-arrival or center-reveal; approach -> cinematic-push or zoom-in; depart -> exit-frame or zoom-out.
@@ -755,6 +823,7 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
     record: raw.record === true,
     save: raw.save === true,
     assets,
+    audio: parseRecipeAudio(raw.audio),
     shots,
     scene: {
       width: Math.round(boundedNumber(sceneRaw.width, 1280, 256, 3840)),
@@ -928,6 +997,24 @@ export function compileSceneRecipe(
       },
     }
   })
+  // Transported, never invented. Nothing generates audio from the recipe path
+  // yet, so an unresolved track is a hard failure with a nameable cause rather
+  // than a silently mute export.
+  const audioTracks = (recipe.audio ?? []).map(track => {
+    const source = track.source || resolved[track.id] || ''
+    if (!source) {
+      throw new Error(`Audio track "${track.id}" has no source. Attach or generate ${track.prompt ? `"${track.prompt}"` : `"${track.id}"`} first.`)
+    }
+    return {
+      id: track.id,
+      filename: source.split(/[\\/]/).pop() || source,
+      name: track.name || track.prompt || track.id,
+      kind: track.kind,
+      startTime: Math.max(0, Math.min(duration, track.startTime ?? 0)),
+      volume: Math.max(0, Math.min(2, track.volume ?? 1)),
+      prompt: track.prompt,
+    }
+  })
   return {
     version: 1,
     name: recipe.name,
@@ -937,6 +1024,7 @@ export function compileSceneRecipe(
     duration,
     composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' },
     layers,
+    ...(audioTracks.length ? { audioTracks } : {}),
   }
 }
 
