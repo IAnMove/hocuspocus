@@ -365,3 +365,15 @@ test('the audio contract is offered to the model', () => {
   assert.match(prompt, /Audio kinds: speech, music, sfx/)
   assert.match(prompt, /never in assets/)
 })
+
+test('the facing vocabulary is offered, with viewpoint separated from camera movement', () => {
+  // rotationY existed in the schema and worked; the prompt never named it, so
+  // "cámara lateral" had no route from the request to the render. A contract
+  // test because the failure mode is silent - the shot just faces the wrong way.
+  const prompt = buildRecipeSystemPrompt({ mode: 'auto', inventory: [] })
+  assert.match(prompt, /rotationY/)
+  for (const facing of ['front 0', 'three-quarter 35', 'profile 90', 'three-quarter-back 135', 'back 180']) {
+    assert.ok(prompt.includes(facing), `prompt offers ${facing}`)
+  }
+  assert.match(prompt, /never change which side of a subject is visible/)
+})

@@ -512,9 +512,11 @@ Scene mood: calm, tense, dreamy, heroic
 Scene palette: natural, cool, warm, neon
 Scene intensity: 1, 2, 3
 Audio kinds: speech, music, sfx
+Subject facing (model3d transform.rotationY, degrees): front 0, three-quarter 35, profile 90, three-quarter-back 135, back 180
 
 Semantic mapping hints:
 - Emotional or atmospheric words in the request set scene.mood and scene.palette. Melancholy/wistful -> mood dreamy with a cool palette; threat/dread -> tense; triumph/resolve -> heroic; warm nostalgia -> warm palette. Leave them unset only when the request is genuinely neutral, because an unset scene renders with flat neutral colour.
+- Where the subject faces is transform.rotationY on its model3d layer, not a camera preset. "Side camera", "from the side", "in profile" -> rotationY 90. "Three-quarter" -> 35. "From behind", "back to us" -> 180. Facing straight at the viewer -> 0. Camera presets move the camera; they never change which side of a subject is visible, so a shot described by viewpoint needs rotationY set explicitly.
 - Requested music, narration or sound effects go in the top-level audio array, never in assets and never as a layer. Give each track an id, a kind, a startTime and a prompt describing the sound. Audio is requested, not drawn: it adds no layer and does not change the composition.
 - Depth/parallax requests set layer.parallax: lower is further away. Distant background 0.3, mid-ground 0.7, subject 1, foreground element passing close to the lens 1.2. Relative speed is the only depth cue this compositor has, so give layers distinct values whenever the request implies depth. Left unset, layers are banded automatically by z order.
 - rise/take off -> liftoff or diagonal-rise; descend/land -> landing; cross frame/fly past -> space-cruise, glide or pass-camera.
