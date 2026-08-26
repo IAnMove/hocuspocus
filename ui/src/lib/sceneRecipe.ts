@@ -1,4 +1,4 @@
-import type { Scene, SceneAtmosphereKind, SceneCurve, SceneLayer, SceneLayerType } from '../types'
+import type { Scene, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../types'
 import { resolveSceneGrade } from './sceneGrade'
 import type { SceneGradeIntensity, SceneGradeMood, SceneGradePalette } from './sceneGrade'
 
@@ -39,6 +39,7 @@ const parseRecipeAudio = (raw: unknown): SceneRecipeAudio[] | undefined => {
       name: typeof track.name === 'string' ? track.name : undefined,
       startTime: boundedNumber(track.startTime, 0, 0, 30),
       volume: boundedNumber(track.volume, 1, 0, 2),
+      model: typeof track.model === 'string' ? track.model.slice(0, 160) : undefined,
     }]
   })
   const ids = tracks.map(track => track.id)
@@ -96,8 +97,15 @@ export interface SceneRecipeLayer {
   asset?: string
   source?: string
   fill?: boolean
+  /** Authored layer state. Hidden layers must remain hidden after a recipe round trip. */
+  visible?: boolean
+  locked?: boolean
   parallax?: number
   z?: number
+  seamlessHorizontal?: boolean
+  relationship?: SceneLayer['relationship']
+  strip?: SceneLayer['strip']
+  effects?: SceneLayer['effects']
   motion?: string
   cameraPreset?: string
   atmosphere?: SceneAtmosphereKind
@@ -132,6 +140,8 @@ export interface SceneRecipeAudio {
   name?: string
   startTime?: number
   volume?: number
+  /** Generation/voice model, retained for reproducibility in the scene sidecar. */
+  model?: string
 }
 
 export interface SceneRecipe {
@@ -298,6 +308,35 @@ const recipePointSchema = {
   additionalProperties: false,
 } as const
 
+const recipeKeyframeSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', minLength: 1, maxLength: 200 },
+    time: { type: 'number', minimum: 0, maximum: 3600 },
+    ...recipePointSchema.properties,
+    curve: { enum: ['linear', 'ease', 'dramatic', 'bounce', 'hold'] },
+  },
+  required: ['time', 'x', 'y', 'scale'],
+  additionalProperties: false,
+} as const
+
+const recipeEffectsSchema = {
+  type: 'object',
+  properties: {
+    blur: { type: 'number', minimum: 0, maximum: 50 },
+    brightness: { type: 'number', minimum: 0, maximum: 3 },
+    contrast: { type: 'number', minimum: 0, maximum: 3 },
+    saturation: { type: 'number', minimum: 0, maximum: 3 },
+    hue: { type: 'number', minimum: -360, maximum: 360 },
+    glow: { type: 'number', minimum: 0, maximum: 20 },
+    shadow: { type: 'number', minimum: 0, maximum: 20 },
+    blendMode: { enum: ['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken'] },
+    mask: { enum: ['none', 'rounded', 'ellipse'] },
+    maskRadius: { type: 'number', minimum: 0, maximum: 50 },
+  },
+  additionalProperties: false,
+} as const
+
 const recipeLayerSchema = {
   type: 'object',
   properties: {
@@ -307,8 +346,49 @@ const recipeLayerSchema = {
     asset: { type: 'string', maxLength: 120 },
     source: { type: 'string', maxLength: 1000 },
     fill: { type: 'boolean' },
+    visible: { type: 'boolean' },
+    locked: { type: 'boolean' },
     parallax: { type: 'number', minimum: 0, maximum: 2 },
     z: { type: 'number', minimum: -10000, maximum: 10000 },
+    seamlessHorizontal: { type: 'boolean' },
+    relationship: {
+      type: 'object',
+      properties: {
+        type: { enum: ['parent', 'follow', 'lookAt'] },
+        targetLayerId: { type: 'string', minLength: 1, maxLength: 80 },
+        offsetX: { type: 'number', minimum: -500, maximum: 500 },
+        offsetY: { type: 'number', minimum: -500, maximum: 500 },
+        strength: { type: 'number', minimum: 0, maximum: 1 },
+        rotationOffset: { type: 'number', minimum: -360, maximum: 360 },
+      },
+      required: ['type', 'targetLayerId'],
+      additionalProperties: false,
+    },
+    strip: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean' },
+        count: { type: 'integer', minimum: 1, maximum: 12 },
+        spacing: { type: 'number', minimum: 2, maximum: 200 },
+        direction: { enum: ['up', 'down', 'left', 'right'] },
+        speed: { type: 'number', minimum: 0, maximum: 300 },
+        phase: { type: 'number', minimum: -1000, maximum: 1000 },
+        seamOccluder: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            kind: { enum: ['pole', 'lamp', 'tree', 'column'] },
+            scale: { type: 'number', minimum: .45, maximum: 1.8 },
+            opacity: { type: 'number', minimum: .2, maximum: 1 },
+          },
+          required: ['enabled', 'kind'],
+          additionalProperties: false,
+        },
+      },
+      required: ['enabled', 'count', 'spacing', 'direction', 'speed'],
+      additionalProperties: false,
+    },
+    effects: recipeEffectsSchema,
     motion: { enum: Object.keys(RECIPE_MOTION_PRESETS) },
     cameraPreset: { enum: Object.keys(RECIPE_CAMERA_PRESETS) },
     atmosphere: { enum: ATMOSPHERE },
@@ -333,6 +413,27 @@ const recipeLayerSchema = {
         curve: { enum: ['linear', 'ease', 'dramatic', 'bounce', 'hold'] },
         spin: { type: 'boolean' },
         rotationSpeed: { type: 'number', minimum: -720, maximum: 720 },
+        keyframes: { type: 'array', minItems: 2, maxItems: 64, items: recipeKeyframeSchema },
+        events: {
+          type: 'array', maxItems: 64, items: {
+            type: 'object', properties: {
+              id: { type: 'string', minLength: 1, maxLength: 200 },
+              time: { type: 'number', minimum: 0, maximum: 3600 },
+              name: { type: 'string', minLength: 1, maxLength: 100 },
+              payload: { type: 'string', maxLength: 2000 },
+            }, required: ['time', 'name'], additionalProperties: false,
+          },
+        },
+        offset: { type: 'number', minimum: 0, maximum: 3600 },
+        speed: { type: 'number', minimum: .1, maximum: 8 },
+        loop: { type: 'boolean' },
+        trimStart: { type: 'number', minimum: 0, maximum: 3600 },
+        trimEnd: { type: 'number', minimum: .01, maximum: 3600 },
+        clipOffset: { type: 'number', minimum: 0, maximum: 3600 },
+        clipReverse: { type: 'boolean' },
+        clipLoop: { type: 'boolean' },
+        clipTrimStart: { type: 'number', minimum: 0, maximum: 3600 },
+        clipTrimEnd: { type: 'number', minimum: .01, maximum: 3600 },
       },
       additionalProperties: false,
     },
@@ -392,6 +493,7 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
           source: { type: 'string', maxLength: 400 },
           prompt: { type: 'string', maxLength: 600 },
           name: { type: 'string', maxLength: 120 },
+          model: { type: 'string', maxLength: 160 },
           startTime: { type: 'number', minimum: 0, maximum: 30 },
           volume: { type: 'number', minimum: 0, maximum: 2 },
         },
@@ -519,6 +621,9 @@ Semantic mapping hints:
 - Where the subject faces is transform.rotationY on its model3d layer, not a camera preset. "Side camera", "from the side", "in profile" -> rotationY 90. "Three-quarter" -> 35. "From behind", "back to us" -> 180. Facing straight at the viewer -> 0. Camera presets move the camera; they never change which side of a subject is visible, so a shot described by viewpoint needs rotationY set explicitly.
 - Requested music, narration or sound effects go in the top-level audio array, never in assets and never as a layer. Give each track an id, a kind, a startTime and a prompt describing the sound. Audio is requested, not drawn: it adds no layer and does not change the composition.
 - Depth/parallax requests set layer.parallax: lower is further away. Distant background 0.3, mid-ground 0.7, subject 1, foreground element passing close to the lens 1.2. Relative speed is the only depth cue this compositor has, so give layers distinct values whenever the request implies depth. Left unset, layers are banded automatically by z order.
+- For authored timing, animation.keyframes is a time-ordered array of two or more complete poses. Use it for holds, snaps, blinks, beats and motion that must not collapse into one start/end glide. Each keyframe has time, x, y, scale, opacity, rotation and curve. Use animation offset/speed/loop/trimStart/trimEnd only when the layer's local timeline needs it.
+- A repeatable moving world uses layer.strip with enabled, count, spacing, direction, speed and optional seamOccluder. Use it only when the plate is explicitly seamlessHorizontal: true. A seamOccluder is a pole, lamp, tree or column that masks the tile join; it is not a generated asset.
+- Use layer.effects for local blur, brightness, contrast, saturation, glow, shadow, blendMode or mask. Keep a hidden alternate layer hidden with visible:false; do not delete it. Existing visual layers may use relationship parent, follow or lookAt only when the request explicitly establishes that dependency.
 - rise/take off -> liftoff or diagonal-rise; descend/land -> landing; cross frame/fly past -> space-cruise, glide or pass-camera.
 - reveal/appear -> fade-reveal, portal-arrival or center-reveal; approach -> cinematic-push or zoom-in; depart -> exit-frame or zoom-out.
 - calm observational shot -> camera-locked or camera-dolly; follow horizontal action -> camera-pan-right/left; urgency -> camera-handheld or camera-whip-pan.
@@ -629,17 +734,111 @@ function parseTransform(value: unknown): SceneRecipeLayer['transform'] {
   }
 }
 
-function parseAnimation(value: unknown): SceneRecipeLayer['animation'] {
+const CURVES: readonly SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce', 'hold']
+const BLEND_MODES: readonly SceneBlendMode[] = ['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken']
+const MASKS: readonly SceneMask[] = ['none', 'rounded', 'ellipse']
+
+function parseKeyframes(value: unknown, layerId: string): SceneKeyframe[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const frames = value.flatMap((item, index) => {
+    if (!item || typeof item !== 'object') return []
+    const raw = item as Record<string, unknown>
+    if (typeof raw.time !== 'number' || !Number.isFinite(raw.time)) return []
+    const id = asString(raw.id) || `${layerId}-keyframe-${index + 1}`
+    const curve = asString(raw.curve) as SceneCurve
+    return [{
+      id,
+      time: boundedNumber(raw.time, 0, 0, 3600),
+      x: boundedNumber(raw.x, 50, -150, 250),
+      y: boundedNumber(raw.y, 50, -150, 250),
+      scale: boundedNumber(raw.scale, 1, .01, 20),
+      opacity: boundedNumber(raw.opacity, 1, 0, 1),
+      rotation: boundedNumber(raw.rotation, 0, -1080, 1080),
+      curve: CURVES.includes(curve) ? curve : 'linear' as SceneCurve,
+    }]
+  }).sort((a, b) => a.time - b.time)
+  const unique = frames.filter((frame, index) => !frames.slice(0, index).some(previous => previous.id === frame.id || Math.abs(previous.time - frame.time) < .000001))
+  return unique.length >= 2 ? unique : undefined
+}
+
+function parseEffects(value: unknown): SceneLayer['effects'] | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const blendMode = asString(raw.blendMode) as SceneBlendMode
+  const mask = asString(raw.mask) as SceneMask
+  const effects = {
+    blur: optionalNumber(raw.blur, 0, 50),
+    brightness: optionalNumber(raw.brightness, 0, 3),
+    contrast: optionalNumber(raw.contrast, 0, 3),
+    saturation: optionalNumber(raw.saturation, 0, 3),
+    hue: optionalNumber(raw.hue, -360, 360),
+    glow: optionalNumber(raw.glow, 0, 20),
+    shadow: optionalNumber(raw.shadow, 0, 20),
+    blendMode: BLEND_MODES.includes(blendMode) ? blendMode : undefined,
+    mask: MASKS.includes(mask) ? mask : undefined,
+    maskRadius: optionalNumber(raw.maskRadius, 0, 50),
+  }
+  return Object.values(effects).some(item => item !== undefined) ? effects : undefined
+}
+
+function parseRelationship(value: unknown): SceneLayer['relationship'] | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const type = asString(raw.type)
+  const targetLayerId = asString(raw.targetLayerId)
+  if (!targetLayerId || !['parent', 'follow', 'lookAt'].includes(type)) return undefined
+  return {
+    type: type as NonNullable<SceneLayer['relationship']>['type'], targetLayerId,
+    offsetX: optionalNumber(raw.offsetX, -500, 500), offsetY: optionalNumber(raw.offsetY, -500, 500),
+    strength: optionalNumber(raw.strength, 0, 1), rotationOffset: optionalNumber(raw.rotationOffset, -360, 360),
+  }
+}
+
+function parseStrip(value: unknown): SceneLayer['strip'] | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const direction = asString(raw.direction)
+  if (!['up', 'down', 'left', 'right'].includes(direction)) return undefined
+  const cover = raw.seamOccluder && typeof raw.seamOccluder === 'object' ? raw.seamOccluder as Record<string, unknown> : undefined
+  const kind = cover ? asString(cover.kind) : ''
+  return {
+    enabled: raw.enabled === true,
+    count: Math.round(boundedNumber(raw.count, 1, 1, 12)),
+    spacing: boundedNumber(raw.spacing, 100, 2, 200), direction: direction as NonNullable<SceneLayer['strip']>['direction'],
+    speed: boundedNumber(raw.speed, 0, 0, 300), phase: optionalNumber(raw.phase, -1000, 1000),
+    ...(cover && ['pole', 'lamp', 'tree', 'column'].includes(kind) ? { seamOccluder: {
+      enabled: cover.enabled === true, kind: kind as NonNullable<NonNullable<SceneLayer['strip']>['seamOccluder']>['kind'],
+      scale: optionalNumber(cover.scale, .45, 1.8), opacity: optionalNumber(cover.opacity, .2, 1),
+    } } : {}),
+  }
+}
+
+function parseAnimation(value: unknown, layerId: string): SceneRecipeLayer['animation'] {
   if (!value || typeof value !== 'object') return undefined
   const raw = value as Record<string, unknown>
   const curve = asString(raw.curve) as SceneCurve
+  const keyframes = parseKeyframes(raw.keyframes, layerId)
   return {
     start: parsePoint(raw.start),
     end: parsePoint(raw.end),
     duration: optionalNumber(raw.duration, 0.1, 60),
-    curve: ['linear', 'ease', 'dramatic', 'bounce', 'hold'].includes(curve) ? curve : undefined,
+    curve: CURVES.includes(curve) ? curve : undefined,
+    keyframes,
+    events: Array.isArray(raw.events) ? raw.events.flatMap((item, index) => {
+      if (!item || typeof item !== 'object') return []
+      const event = item as Record<string, unknown>
+      const name = asString(event.name)
+      if (!name || typeof event.time !== 'number' || !Number.isFinite(event.time)) return []
+      return [{ id: asString(event.id) || `event-${index + 1}`, time: boundedNumber(event.time, 0, 0, 3600), name: name.slice(0, 100), payload: asString(event.payload).slice(0, 2000) || undefined }]
+    }) : undefined,
+    offset: optionalNumber(raw.offset, 0, 3600), speed: optionalNumber(raw.speed, .1, 8), loop: typeof raw.loop === 'boolean' ? raw.loop : undefined,
+    trimStart: optionalNumber(raw.trimStart, 0, 3600), trimEnd: optionalNumber(raw.trimEnd, .01, 3600),
     spin: typeof raw.spin === 'boolean' ? raw.spin : undefined,
     rotationSpeed: optionalNumber(raw.rotationSpeed, -720, 720),
+    clipOffset: optionalNumber(raw.clipOffset, 0, 3600), clipSpeed: optionalNumber(raw.clipSpeed, .05, 8),
+    clipReverse: typeof raw.clipReverse === 'boolean' ? raw.clipReverse : undefined,
+    clipLoop: typeof raw.clipLoop === 'boolean' ? raw.clipLoop : undefined,
+    clipTrimStart: optionalNumber(raw.clipTrimStart, 0, 3600), clipTrimEnd: optionalNumber(raw.clipTrimEnd, .01, 3600),
   }
 }
 
@@ -672,8 +871,14 @@ function parseLayers(values: unknown, label: string): SceneRecipeLayer[] {
       asset: asString(layer.asset) || undefined,
       source: asString(layer.source) || undefined,
       fill: layer.fill === true,
+      visible: typeof layer.visible === 'boolean' ? layer.visible : undefined,
+      locked: typeof layer.locked === 'boolean' ? layer.locked : undefined,
       parallax: typeof layer.parallax === 'number' ? layer.parallax : undefined,
       z: typeof layer.z === 'number' ? layer.z : undefined,
+      seamlessHorizontal: typeof layer.seamlessHorizontal === 'boolean' ? layer.seamlessHorizontal : undefined,
+      relationship: parseRelationship(layer.relationship),
+      strip: parseStrip(layer.strip),
+      effects: parseEffects(layer.effects),
       motion: motion || undefined,
       cameraPreset: cameraPreset || undefined,
       atmosphere: atmosphere || undefined,
@@ -683,7 +888,7 @@ function parseLayers(values: unknown, label: string): SceneRecipeLayer[] {
         ? layer.clipLoop
         : typeof rawAnimation.clipLoop === 'boolean' ? rawAnimation.clipLoop : undefined,
       transform: parseTransform(layer.transform),
-      animation: parseAnimation(layer.animation),
+      animation: parseAnimation(layer.animation, id),
     }
   })
   const ids = parsed.map(layer => layer.id)
@@ -702,7 +907,7 @@ function validateLayerAssets(
   assetsById: Map<string, SceneRecipeAsset>,
   clipsByAsset: Map<string, Set<RecipeRigAnimation>>,
 ) {
-  const visible = layers.filter(layer => ['image', 'video', 'model3d', 'overlay'].includes(layer.type))
+  const visible = layers.filter(layer => layer.visible !== false && ['image', 'video', 'model3d', 'overlay'].includes(layer.type))
   if (!visible.length) throw new Error(`${label} needs at least one visual layer.`)
   const modelLayersByAsset = new Map<string, string>()
   for (const layer of layers) {
@@ -735,6 +940,30 @@ function validateLayerAssets(
     clips.add(layer.clip)
     clipsByAsset.set(asset.id, clips)
   }
+}
+
+function validateLayerRelationships(layers: SceneRecipeLayer[], label: string) {
+  const byId = new Map(layers.map(layer => [layer.id, layer]))
+  for (const layer of layers) {
+    const relationship = layer.relationship
+    if (!relationship) continue
+    const target = byId.get(relationship.targetLayerId)
+    if (layer.type === 'camera' || !target || target.type === 'camera' || target.id === layer.id) {
+      throw new Error(`${label} layer ${layer.id} has an invalid relationship target.`)
+    }
+  }
+  const visiting = new Set<string>()
+  const visited = new Set<string>()
+  const visit = (id: string): boolean => {
+    if (visiting.has(id)) return true
+    if (visited.has(id)) return false
+    visiting.add(id)
+    const targetId = byId.get(id)?.relationship?.targetLayerId
+    const cyclic = targetId ? visit(targetId) : false
+    visiting.delete(id); visited.add(id)
+    return cyclic
+  }
+  if (layers.some(layer => visit(layer.id))) throw new Error(`${label} relationships must not contain a cycle.`)
 }
 
 export function parseSceneRecipe(value: unknown): SceneRecipe {
@@ -812,8 +1041,12 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
   if (!layers?.length) throw new Error('Recipe needs scene.layers or shots[].')
   const assetsById = new Map(assets.map(asset => [asset.id, asset]))
   const clipsByAsset = new Map<string, Set<RecipeRigAnimation>>()
+  validateLayerRelationships(layers, 'Scene')
   validateLayerAssets(layers, 'Scene', assetsById, clipsByAsset)
-  shots?.forEach((shot, index) => validateLayerAssets(shot.layers, `Shot ${index + 1}`, assetsById, clipsByAsset))
+  shots?.forEach((shot, index) => {
+    validateLayerRelationships(shot.layers, `Shot ${index + 1}`)
+    validateLayerAssets(shot.layers, `Shot ${index + 1}`, assetsById, clipsByAsset)
+  })
   for (const [assetId, clips] of clipsByAsset) {
     const asset = assetsById.get(assetId)
     if (!asset) continue
@@ -948,11 +1181,13 @@ export function compileSceneRecipe(
     if ((layer.type === 'image' || layer.type === 'video' || layer.type === 'model3d' || layer.type === 'overlay') && !source) {
       throw new Error(`Layer ${layer.id} has no source. Generate or attach asset "${layer.asset || layer.id}".`)
     }
-    const start = layer.animation?.start || preset?.start || { x: 50, y: 50, scale: layer.type === 'model3d' ? 0.7 : 1, opacity: 1, rotation: 0 }
-    const end = layer.animation?.end || preset?.end || start
+    const authored = layer.animation ?? {}
+    const frames = authored.keyframes?.length && authored.keyframes.length >= 2 ? authored.keyframes : undefined
+    const start = authored.start || frames?.[0] || preset?.start || { x: 50, y: 50, scale: layer.type === 'model3d' ? 0.7 : 1, opacity: 1, rotation: 0 }
+    const end = authored.end || frames?.[frames.length - 1] || preset?.end || start
     // A recipe shot owns its timeline. Camera presets commonly last five
     // seconds, but must not silently extend an explicit shorter shot.
-    const layerDuration = Math.min(duration, layer.animation?.duration || preset?.duration || duration)
+    const layerDuration = Math.min(duration, authored.duration || preset?.duration || duration)
     const atmosphere = layer.type === 'effect'
       ? ATMOSPHERE_DEFAULTS[layer.atmosphere || 'fog']
       : undefined
@@ -961,9 +1196,13 @@ export function compileSceneRecipe(
       name: layer.name || layer.id,
       type: layer.type,
       source,
-      visible: true,
+      visible: layer.visible !== false,
       z: layer.z ?? (layer.type === 'camera' ? 1000 : index * 10),
+      locked: layer.locked,
       fill: layer.fill === true || layer.type === 'effect',
+      seamlessHorizontal: layer.seamlessHorizontal,
+      relationship: layer.relationship ? { ...layer.relationship } : undefined,
+      strip: layer.strip ? { ...layer.strip, seamOccluder: layer.strip.seamOccluder ? { ...layer.strip.seamOccluder } : undefined } : undefined,
       // An explicit value always wins: the model asked for that depth on purpose.
       parallax: layer.type === 'camera' ? undefined
         : (layer.parallax ?? parallaxForDepth(depthOrder.indexOf(layer.id), depthOrder.length)),
@@ -972,9 +1211,9 @@ export function compileSceneRecipe(
       // carries it. Mood is the subject's emotional register and goes only on
       // model3d, matching how the templates grade a hero against its plate —
       // pushing glow onto the background instead washes the frame out.
-      ...(grade && layer.type !== 'camera'
-        ? { effects: { ...grade.palettePatch, ...(layer.type === 'model3d' ? grade.moodPatch : {}) } }
-        : {}),
+      ...((grade || layer.effects) && layer.type !== 'camera'
+        ? { effects: { ...(grade?.palettePatch ?? {}), ...(layer.type === 'model3d' ? grade?.moodPatch ?? {} : {}), ...(layer.effects ?? {}) } }
+        : layer.effects ? { effects: { ...layer.effects } } : {}),
       transform: {
         x: layer.transform?.x ?? start.x,
         y: layer.transform?.y ?? start.y,
@@ -985,16 +1224,17 @@ export function compileSceneRecipe(
         rotationY: layer.type === 'model3d' ? (layer.transform?.rotationY ?? 0) : undefined,
       },
       animation: {
+        ...authored,
         start,
         end,
         duration: layerDuration,
-        curve: layer.animation?.curve || preset?.curve || 'linear',
-        spin: layer.animation?.spin ?? (layer.clip ? false : preset?.spin ?? (layer.type === 'model3d')),
-        rotationSpeed: layer.animation?.rotationSpeed ?? (layer.type === 'model3d' ? 25 : undefined),
+        curve: authored.curve || preset?.curve || 'linear',
+        spin: authored.spin ?? (layer.clip ? false : preset?.spin ?? (layer.type === 'model3d')),
+        rotationSpeed: authored.rotationSpeed ?? (layer.type === 'model3d' ? 25 : undefined),
         clip: layer.clip,
-        clipOffset: layer.clip ? 0 : undefined,
-        clipSpeed: layer.clip ? (layer.clipSpeed ?? 1) : undefined,
-        clipLoop: layer.clip ? (layer.clipLoop !== false) : undefined,
+        clipOffset: layer.clip ? (authored.clipOffset ?? 0) : undefined,
+        clipSpeed: layer.clip ? (layer.clipSpeed ?? authored.clipSpeed ?? 1) : undefined,
+        clipLoop: layer.clip ? (layer.clipLoop ?? authored.clipLoop ?? true) : undefined,
         ...(camera?.shake ? { shake: camera.shake } : {}),
       },
     }
@@ -1015,6 +1255,7 @@ export function compileSceneRecipe(
       startTime: Math.max(0, Math.min(duration, track.startTime ?? 0)),
       volume: Math.max(0, Math.min(2, track.volume ?? 1)),
       prompt: track.prompt,
+      ...(track.model ? { model: track.model } : {}),
     }
   })
   return {

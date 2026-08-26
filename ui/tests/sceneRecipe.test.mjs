@@ -105,6 +105,8 @@ test('LLM contract is closed-schema, multilingual and treats inventory as data',
   assert.match(prompt, /2D screen-space roll/)
   assert.match(prompt, /background image\/video plates static/)
   assert.match(prompt, /NON-NEGOTIABLE ASSET CHECK/)
+  assert.match(prompt, /animation\.keyframes/)
+  assert.match(prompt, /seamOccluder/)
   assert.match(prompt, /Robot de bronce/)
   assert.equal(SCENE_RECIPE_JSON_SCHEMA.additionalProperties, false)
   assert.deepEqual(SCENE_RECIPE_JSON_SCHEMA.required, ['version', 'name', 'record', 'save', 'assets', 'shots', 'scene'])
@@ -376,4 +378,37 @@ test('the facing vocabulary is offered, with viewpoint separated from camera mov
     assert.ok(prompt.includes(facing), `prompt offers ${facing}`)
   }
   assert.match(prompt, /never change which side of a subject is visible/)
+})
+
+test('recipe transport preserves authored keyframes, hidden layers, blur and world strips', () => {
+  const recipe = parseSceneRecipe({
+    version: 1, name: 'faithful-world', record: false, save: false,
+    assets: [{ id: 'plate', kind: 'image', source: 'plate.png' }, { id: 'hero', kind: 'image', source: 'hero.png' }],
+    shots: [{ name: 'travel', duration: 6, layers: [
+      { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },
+      { id: 'world', type: 'image', asset: 'plate', visible: true, seamlessHorizontal: true, strip: { enabled: true, count: 4, spacing: 100, direction: 'left', speed: 32, seamOccluder: { enabled: true, kind: 'lamp', scale: 1, opacity: .8 } } },
+      { id: 'hero', type: 'image', asset: 'hero', visible: true, effects: { blur: 1.1, brightness: .9 }, animation: { duration: 6, curve: 'hold', keyframes: [
+        { id: 'hero-a', time: 0, x: 40, y: 55, scale: .8, opacity: 1, rotation: 0, curve: 'hold' },
+        { id: 'hero-b', time: 2, x: 42, y: 54, scale: .82, opacity: 1, rotation: 0, curve: 'hold' },
+        { id: 'hero-c', time: 6, x: 45, y: 55, scale: .8, opacity: 1, rotation: 0, curve: 'linear' },
+      ], offset: .5, speed: 1.2, loop: true, trimStart: .5, trimEnd: 5.5 } },
+      { id: 'alternate', type: 'image', asset: 'hero', visible: false },
+    ] }],
+    scene: { width: 1280, height: 720, fps: 30, duration: 6, layers: [
+      { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },
+      { id: 'world', type: 'image', asset: 'plate', visible: true, seamlessHorizontal: true, strip: { enabled: true, count: 4, spacing: 100, direction: 'left', speed: 32, seamOccluder: { enabled: true, kind: 'lamp', scale: 1, opacity: .8 } } },
+      { id: 'hero', type: 'image', asset: 'hero', visible: true, effects: { blur: 1.1, brightness: .9 }, animation: { duration: 6, curve: 'hold', keyframes: [{ id: 'hero-a', time: 0, x: 40, y: 55, scale: .8, opacity: 1, rotation: 0, curve: 'hold' }, { id: 'hero-b', time: 2, x: 42, y: 54, scale: .82, opacity: 1, rotation: 0, curve: 'hold' }, { id: 'hero-c', time: 6, x: 45, y: 55, scale: .8, opacity: 1, rotation: 0, curve: 'linear' }], offset: .5, speed: 1.2, loop: true, trimStart: .5, trimEnd: 5.5 } },
+      { id: 'alternate', type: 'image', asset: 'hero', visible: false },
+    ] },
+  })
+  const scene = compileSceneRecipe(recipe, { plate: 'plate.png', hero: 'hero.png' }, file => file)
+  const world = scene.layers.find(layer => layer.id === 'world')
+  const hero = scene.layers.find(layer => layer.id === 'hero')
+  assert.equal(world.strip.seamOccluder.kind, 'lamp')
+  assert.equal(world.seamlessHorizontal, true)
+  assert.equal(hero.effects.blur, 1.1)
+  assert.equal(hero.animation.keyframes.length, 3)
+  assert.equal(hero.animation.keyframes[1].curve, 'hold')
+  assert.equal(hero.animation.offset, .5)
+  assert.equal(scene.layers.find(layer => layer.id === 'alternate').visible, false)
 })
