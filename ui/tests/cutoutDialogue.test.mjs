@@ -14,6 +14,13 @@ test('cutout dialogue is bounded, begins and ends closed', () => {
   assert.ok(plan.visemes.every(beat => beat.start >= 1 && beat.end <= 4))
 })
 
+test('a short aligned word still gets one readable open pulse', () => {
+  const plan = planCutoutDialogue('la', 1, 1.24, 30)
+  assert.equal(plan.visemes[0].state, 'closed')
+  assert.equal(plan.visemes.at(-1).state, 'closed')
+  assert.ok(plan.visemes.some(beat => beat.state !== 'closed'))
+})
+
 test('mouth layers receive complementary, editable opacity keyframes', () => {
   const plan = planCutoutDialogue('Una frase corta para hablar.', 0, 3, 30)
   const frames = applyCutoutDialogue({ open: layer('mouth-open'), closed: layer('mouth-closed') }, plan)

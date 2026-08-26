@@ -58,6 +58,22 @@ export function planCutoutDialogue(text: string, start: number, end: number, fps
   // or out of the shot does not freeze on an arbitrary open shape.
   visemes[0] = { ...visemes[0], state: 'closed' }
   visemes[visemes.length - 1] = { ...visemes[visemes.length - 1], state: 'closed' }
+  // Word-aligned transcription commonly supplies very short units ("la",
+  // "de", "sí"). A two-beat unit would otherwise become closed/closed
+  // after the edge guard. Preserve one readable centre pulse whenever the
+  // word has a vowel; its terminal closed keyframe still protects edits/cuts.
+  if (!visemes.some(beat => beat.state !== 'closed') && glyphs.some(glyph => VOWEL.test(glyph)) && available >= frame * 3) {
+    const middle = safeStart + available / 2
+    return {
+      start: safeStart,
+      end: safeEnd,
+      visemes: [
+        { start: safeStart, end: middle, state: 'closed' },
+        { start: middle, end: safeEnd, state: ROUND_VOWEL.test(glyphs.join('')) ? 'round' : 'wide' },
+        { start: safeEnd, end: safeEnd, state: 'closed' },
+      ],
+    }
+  }
   return { start: safeStart, end: safeEnd, visemes }
 }
 
