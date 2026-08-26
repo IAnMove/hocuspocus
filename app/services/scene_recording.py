@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -10,6 +11,71 @@ from typing import Iterable, Mapping
 
 class SceneRecordingTranscodeError(RuntimeError):
     """Raised when FFmpeg cannot finalize a browser recording."""
+
+
+def probe_scene_recording_output(path: str | os.PathLike[str]) -> dict[str, object]:
+    """Return machine-readable stream/container metadata for a finalized MP4."""
+
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-print_format", "json",
+                "-show_streams", "-show_format", os.fspath(path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise SceneRecordingTranscodeError("ffprobe is not available to verify the MP4") from error
+    if result.returncode != 0:
+        detail = (result.stderr or "ffprobe could not read the MP4").strip()
+        raise SceneRecordingTranscodeError(detail[-1000:])
+    try:
+        metadata = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as error:
+        raise SceneRecordingTranscodeError("ffprobe returned invalid metadata") from error
+    if not isinstance(metadata, dict):
+        raise SceneRecordingTranscodeError("ffprobe returned invalid metadata")
+    return metadata
+
+
+def validate_scene_recording_output(
+    path: str | os.PathLike[str],
+    *,
+    expected_duration: float | None = None,
+    expected_fps: int | None = None,
+    expected_audio: bool = False,
+    tolerance: float | None = None,
+) -> dict[str, object]:
+    """Validate the playable streams and timing of a finalized scene MP4."""
+
+    metadata = probe_scene_recording_output(path)
+    streams = metadata.get("streams")
+    if not isinstance(streams, list):
+        raise SceneRecordingTranscodeError("Finalized MP4 has no readable streams")
+    video = next((item for item in streams if isinstance(item, dict) and item.get("codec_type") == "video"), None)
+    if video is None or video.get("codec_name") != "h264":
+        raise SceneRecordingTranscodeError("Finalized MP4 has no H.264 video stream")
+    audio = [item for item in streams if isinstance(item, dict) and item.get("codec_type") == "audio"]
+    if expected_audio and not audio:
+        raise SceneRecordingTranscodeError("Finalized MP4 is missing the requested audio track")
+    if expected_duration is not None and expected_duration > 0:
+        format_data = metadata.get("format")
+        raw_duration = video.get("duration") or (format_data.get("duration") if isinstance(format_data, dict) else None)
+        try:
+            actual_duration = float(raw_duration)
+        except (TypeError, ValueError):
+            actual_duration = 0.0
+        allowed = tolerance if tolerance is not None else max(0.05, 1 / max(1, int(expected_fps or 30)))
+        if actual_duration <= 0 or abs(actual_duration - expected_duration) > allowed:
+            raise SceneRecordingTranscodeError(
+                f"Finalized MP4 duration {actual_duration:.3f}s differs from target {expected_duration:.3f}s"
+            )
+    if audio and any(item.get("codec_name") != "aac" for item in audio):
+        raise SceneRecordingTranscodeError("Finalized MP4 contains a non-AAC audio stream")
+    return metadata
 
 
 def build_scene_recording_command(
@@ -64,7 +130,8 @@ def build_scene_recording_command(
     else:
         command.append("-an")
     if duration and duration > 0:
-        command.extend(["-t", f"{float(duration):.3f}"])
+        target_frames = max(1, round(float(duration) * normalized_fps))
+        command.extend(["-t", f"{float(duration):.3f}", "-frames:v", str(target_frames)])
     command.extend(["-movflags", "+faststart", destination])
     return command
 
@@ -86,13 +153,14 @@ def transcode_scene_recording(
         f".{destination_path.stem}.{os.getpid()}.partial.mp4"
     )
     destination_path.parent.mkdir(parents=True, exist_ok=True)
+    tracks = list(audio_tracks)
     try:
         result = subprocess.run(
             build_scene_recording_command(
                 str(source_path),
                 str(temporary_path),
                 fps=fps,
-                audio_tracks=audio_tracks,
+                audio_tracks=tracks,
                 duration=duration,
             ),
             stdout=subprocess.PIPE,
@@ -108,6 +176,12 @@ def transcode_scene_recording(
         ):
             detail = (result.stderr or "FFmpeg did not produce an MP4").strip()
             raise SceneRecordingTranscodeError(detail[-1000:])
+        validate_scene_recording_output(
+            temporary_path,
+            expected_duration=duration,
+            expected_fps=fps,
+            expected_audio=bool(tracks),
+        )
         os.replace(temporary_path, destination_path)
     except subprocess.TimeoutExpired as error:
         raise SceneRecordingTranscodeError(

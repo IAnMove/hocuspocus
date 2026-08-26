@@ -30,6 +30,41 @@ def test_command_mixes_scene_audio_without_shortening_the_video():
     assert "[1:a]aresample=48000,adelay=2000|2000,volume=0.700[audio1]" in command[command.index("-filter_complex") + 1]
     assert "-c:a" in command and command[command.index("-c:a") + 1] == "aac"
     assert "-shortest" not in command
+    assert command[command.index("-frames:v") + 1] == "300"
+
+
+def test_validate_output_checks_h264_audio_and_target_duration(monkeypatch, tmp_path: Path):
+    output = tmp_path / "scene.mp4"
+    output.write_bytes(b"mp4")
+    monkeypatch.setattr(
+        scene_recording,
+        "probe_scene_recording_output",
+        lambda _path: {
+            "streams": [
+                {"codec_type": "video", "codec_name": "h264", "duration": "10.000"},
+                {"codec_type": "audio", "codec_name": "aac"},
+            ],
+            "format": {"duration": "10.000"},
+        },
+    )
+    metadata = scene_recording.validate_scene_recording_output(
+        output, expected_duration=10, expected_fps=30
+    )
+    assert metadata["format"]["duration"] == "10.000"
+
+
+def test_validate_output_rejects_duration_drift(monkeypatch, tmp_path: Path):
+    output = tmp_path / "scene.mp4"
+    output.write_bytes(b"mp4")
+    monkeypatch.setattr(
+        scene_recording,
+        "probe_scene_recording_output",
+        lambda _path: {
+            "streams": [{"codec_type": "video", "codec_name": "h264", "duration": "9.800"}],
+        },
+    )
+    with pytest.raises(scene_recording.SceneRecordingTranscodeError, match="differs from target"):
+        scene_recording.validate_scene_recording_output(output, expected_duration=10)
 
 
 def test_transcode_is_atomic(monkeypatch, tmp_path: Path):
@@ -43,6 +78,7 @@ def test_transcode_is_atomic(monkeypatch, tmp_path: Path):
         return SimpleNamespace(returncode=0, stderr="")
 
     monkeypatch.setattr(scene_recording.subprocess, "run", fake_run)
+    monkeypatch.setattr(scene_recording, "validate_scene_recording_output", lambda *_args, **_kwargs: {})
     scene_recording.transcode_scene_recording(source, destination, fps=30)
 
     assert destination.read_bytes() == b"mp4"
