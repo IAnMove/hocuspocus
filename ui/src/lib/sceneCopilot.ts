@@ -7,6 +7,7 @@ export type SceneEditOperation =
   | { op: 'set_transform'; layerId: string; patch: Partial<Pick<SceneLayer['transform'], 'x' | 'y' | 'scale' | 'opacity' | 'rotation'>> }
   | { op: 'set_effects'; layerId: string; patch: NonNullable<SceneLayer['effects']> }
   | { op: 'set_parallax'; layerId: string; value: number }
+  | { op: 'set_seam_occluder'; layerId: string; enabled: boolean; kind?: 'pole' | 'lamp' | 'tree' | 'column'; scale?: number; opacity?: number }
   | { op: 'set_orientation'; layerId: string; rotationX?: number; rotationY?: number }
   | { op: 'set_motion_preset'; layerId: string; preset: SceneMotionPreset; duration?: number }
   | { op: 'set_keyframes'; layerId: string; keyframes: SceneKeyframe[] }
@@ -48,7 +49,7 @@ export const SCENE_COPILOT_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object', additionalProperties: false, required: ['summary', 'scope', 'operations', 'needsConfirmation'],
   properties: {
     summary: { type: 'string', maxLength: 500 }, scope: { enum: ['layer', 'scene'] }, needsConfirmation: { type: 'boolean' },
-    operations: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['op', 'layerId'], properties: { op: { enum: ['set_transform', 'set_effects', 'set_parallax', 'set_orientation', 'set_motion_preset', 'set_keyframes', 'set_rig_clip', 'set_camera_motion', 'set_scene_grade', 'set_relationship'] }, layerId: { type: 'string' }, patch: { type: 'object' }, value: { type: 'number' }, rotationX: { type: 'number' }, rotationY: { type: 'number' }, preset: { enum: ['thinking_drift', 'living_drift', 'run_bob', 'float', 'restrained', 'push', 'drift'] }, duration: { type: 'number' }, keyframes: { type: 'array', minItems: 2, maxItems: 16 }, clip: { type: 'string' }, loop: { type: 'boolean' }, speed: { type: 'number' }, palette: { enum: ['natural', 'cool', 'warm', 'neon'] }, mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] }, intensity: { enum: [1, 2, 3] }, relationship: { enum: ['parent', 'follow', 'lookAt', 'none'] }, targetLayerId: { type: 'string' }, offsetX: { type: 'number' }, offsetY: { type: 'number' }, strength: { type: 'number' }, rotationOffset: { type: 'number' } } } },
+    operations: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['op', 'layerId'], properties: { op: { enum: ['set_transform', 'set_effects', 'set_parallax', 'set_seam_occluder', 'set_orientation', 'set_motion_preset', 'set_keyframes', 'set_rig_clip', 'set_camera_motion', 'set_scene_grade', 'set_relationship'] }, layerId: { type: 'string' }, patch: { type: 'object' }, value: { type: 'number' }, enabled: { type: 'boolean' }, kind: { enum: ['pole', 'lamp', 'tree', 'column'] }, scale: { type: 'number' }, opacity: { type: 'number' }, rotationX: { type: 'number' }, rotationY: { type: 'number' }, preset: { enum: ['thinking_drift', 'living_drift', 'run_bob', 'float', 'restrained', 'push', 'drift'] }, duration: { type: 'number' }, keyframes: { type: 'array', minItems: 2, maxItems: 16 }, clip: { type: 'string' }, loop: { type: 'boolean' }, speed: { type: 'number' }, palette: { enum: ['natural', 'cool', 'warm', 'neon'] }, mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] }, intensity: { enum: [1, 2, 3] }, relationship: { enum: ['parent', 'follow', 'lookAt', 'none'] }, targetLayerId: { type: 'string' }, offsetX: { type: 'number' }, offsetY: { type: 'number' }, strength: { type: 'number' }, rotationOffset: { type: 'number' } } } },
   },
 }
 
@@ -56,7 +57,7 @@ export const buildSceneCopilotSystemPrompt = (scene: Scene, selected: SceneLayer
   'You are HocusPocus selected-item 3D scene copilot. Return one JSON object only.',
   'Edit ONLY the selected layer. scope must be layer; every layerId must match it exactly.',
   'Never generate assets, alter the camera/other layers, delete, change global duration, relationships, or invent rig clips.',
-  `Allowed ops: set_transform, set_effects, set_parallax, set_orientation (model3d only), set_motion_preset, set_keyframes${verifiedClips.length ? ', set_rig_clip (only from VERIFIED_CLIPS)' : ''}.`,
+  `Allowed ops: set_transform, set_effects, set_parallax, set_seam_occluder (only a selected repeating visual layer), set_orientation (model3d only), set_motion_preset, set_keyframes${verifiedClips.length ? ', set_rig_clip (only from VERIFIED_CLIPS)' : ''}.`,
   'Use 1–3 restrained operations. Emotional language maps to transform, motion and effects.',
   `SCENE=${JSON.stringify({ duration: scene.duration, fps: scene.fps ?? 30, width: scene.width, height: scene.height, layers: scene.layers.map(layer => ({ id: layer.id, name: layer.name, type: layer.type })) })}`,
   `SELECTED=${JSON.stringify({ id: selected.id, name: selected.name, type: selected.type, transform: selected.transform, animation: selected.animation, effects: selected.effects ?? {}, parallax: selected.parallax ?? 1, limitation: selected.type === 'model3d' ? 'No invented rig clip.' : undefined })}`,
@@ -137,6 +138,12 @@ export const parseSceneCopilotProposal = (text: string, scene: Scene, selectedLa
       return { op: 'set_effects', layerId: selectedLayerId, patch }
     }
     if (value.op === 'set_parallax') return { op: 'set_parallax', layerId: selectedLayerId, value: number(value.value, 0, 4, 'parallax') }
+    if (value.op === 'set_seam_occluder') {
+      if (!selected.strip?.enabled) throw new Error('A seam cover can only be changed on the selected repeating layer.')
+      if (typeof value.enabled !== 'boolean') throw new Error('seam.enabled must be boolean.')
+      if (value.kind !== undefined && !['pole', 'lamp', 'tree', 'column'].includes(String(value.kind))) throw new Error('Unsupported seam cover kind.')
+      return { op: 'set_seam_occluder', layerId: selectedLayerId, enabled: value.enabled, kind: value.kind as 'pole' | 'lamp' | 'tree' | 'column' | undefined, scale: value.scale === undefined ? undefined : number(value.scale, .45, 1.8, 'seam.scale'), opacity: value.opacity === undefined ? undefined : number(value.opacity, .2, 1, 'seam.opacity') }
+    }
     if (value.op === 'set_orientation') {
       if (selected.type !== 'model3d') throw new Error('Orientation is only supported by selected 3D model layers.')
       return { op: 'set_orientation', layerId: selectedLayerId, rotationX: value.rotationX === undefined ? undefined : number(value.rotationX, 1, 179, 'orientation.rotationX'), rotationY: value.rotationY === undefined ? undefined : number(value.rotationY, -3600, 3600, 'orientation.rotationY') }
@@ -202,6 +209,16 @@ export const applySceneCopilotProposal = (scene: Scene, proposal: SceneCopilotPr
     }
     if (operation.op === 'set_effects') return { ...current, effects: { ...current.effects, ...operation.patch } }
     if (operation.op === 'set_parallax') return current.type === 'camera' ? current : { ...current, parallax: operation.value }
+    if (operation.op === 'set_seam_occluder') {
+      if (!current.strip) return current
+      const previous = current.strip.seamOccluder
+      return { ...current, strip: { ...current.strip, seamOccluder: {
+        enabled: operation.enabled,
+        kind: operation.kind ?? previous?.kind ?? 'pole',
+        ...(operation.scale === undefined ? (previous?.scale === undefined ? {} : { scale: previous.scale }) : { scale: operation.scale }),
+        ...(operation.opacity === undefined ? (previous?.opacity === undefined ? {} : { opacity: previous.opacity }) : { opacity: operation.opacity }),
+      } } }
+    }
     if (operation.op === 'set_orientation') return { ...current, transform: { ...current.transform, ...(operation.rotationX === undefined ? {} : { rotationX: operation.rotationX }), ...(operation.rotationY === undefined ? {} : { rotationY: operation.rotationY }) } }
     if (operation.op === 'set_motion_preset') return motion(current, operation.preset, operation.duration)
     if (operation.op === 'set_rig_clip') return { ...current, animation: { ...current.animation, clip: operation.clip, clipLoop: operation.loop, clipSpeed: operation.speed, clipOffset: 0, clipTrimStart: 0, clipTrimEnd: undefined } }
@@ -219,6 +236,7 @@ export const describeSceneCopilotProposal = (scene: Scene, proposal: SceneCopilo
   const label = layerById(scene, operation.layerId).name
   if (operation.op === 'set_transform') return `${label}: ${Object.entries(operation.patch).map(([key, value]) => `${key} → ${value}`).join(', ')}`
   if (operation.op === 'set_effects') return `${label}: ${Object.entries(operation.patch).map(([key, value]) => `${key} → ${value}`).join(', ')}`
+  if (operation.op === 'set_seam_occluder') return `${label}: seam cover ${operation.enabled ? `${operation.kind ?? 'kept'}${operation.scale ? ` ×${operation.scale}` : ''}${operation.opacity ? ` / ${Math.round(operation.opacity * 100)}%` : ''}` : 'off'}`
   if (operation.op === 'set_motion_preset') return `${label}: ${operation.preset.replace('_', ' ')} motion`
   if (operation.op === 'set_keyframes') return `${label}: ${operation.keyframes.length} keyframes`
   if (operation.op === 'set_rig_clip') return `${label}: rig clip ${operation.clip}`

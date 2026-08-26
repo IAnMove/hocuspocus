@@ -27,6 +27,14 @@ test('copilot accepts only a verified rig clip for the selected 3D model', () =>
   assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Invent it.', scope: 'layer', needsConfirmation: false, operations: [{ op: 'set_rig_clip', layerId: 'hero', clip: 'Sprint' }] }), scene, 'hero', 'layer', ['Idle', 'Run']), /verified clips/)
 })
 
+test('copilot can tune a selected loop seam cover without touching another layer', () => {
+  const loop = { ...scene, layers: [{ ...scene.layers[0], type: 'image', strip: { enabled: true, count: 4, spacing: 100, direction: 'left', speed: 12, seamOccluder: { enabled: true, kind: 'tree', scale: 1, opacity: .82 } } }] }
+  const proposal = parseSceneCopilotProposal(JSON.stringify({ summary: 'Use a smaller lamp.', scope: 'layer', needsConfirmation: false, operations: [{ op: 'set_seam_occluder', layerId: 'hero', enabled: true, kind: 'lamp', scale: .7, opacity: .65 }] }), loop, 'hero')
+  const cover = applySceneCopilotProposal(loop, proposal).layers[0].strip.seamOccluder
+  assert.deepEqual(cover, { enabled: true, kind: 'lamp', scale: .7, opacity: .65 })
+  assert.throws(() => parseSceneCopilotProposal(JSON.stringify({ summary: 'Add seam.', scope: 'layer', needsConfirmation: false, operations: [{ op: 'set_seam_occluder', layerId: 'hero', enabled: true }] }), scene, 'hero'), /repeating layer/)
+})
+
 test('scene scope is limited to camera motion and a global grade', () => {
   const proposal = parseSceneCopilotProposal(JSON.stringify({ summary: 'A cool drifting thought.', scope: 'scene', needsConfirmation: true, operations: [{ op: 'set_camera_motion', layerId: 'camera', preset: 'drift', duration: 12 }, { op: 'set_scene_grade', layerId: 'scene', palette: 'cool', mood: 'dreamy', intensity: 2 }] }), sceneWithCamera, undefined, 'scene')
   const next = applySceneCopilotProposal(sceneWithCamera, proposal)
