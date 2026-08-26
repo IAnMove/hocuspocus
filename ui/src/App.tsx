@@ -201,7 +201,7 @@ function AppContent() {
       {introComplete && <WelcomeModal />}
       {/* Explicit choice after an interrupted Pinokio/server session. */}
       <QueueRecoveryDialog />
-      {!introComplete && <HocusPocusIntro onComplete={completeIntro} />}
+      {!introComplete && <HocusPocusIntro onComplete={completeIntro} version={appVersion} />}
     </div>
   )
 }

@@ -12,6 +12,14 @@
          script below and by applyTheme() on switch. -->
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#0a0a0a" />
+    <!-- The boot plate (components/HocusPocusIntro.tsx) is the first
+         thing painted, and it waits for its key art to decode before it
+         starts counting. Requesting both assets here puts them in flight
+         while the module bundle is still being parsed. The `type` on the
+         image lets browsers without WebP skip it and fall back to the
+         PNG in the <picture> element. -->
+    <link rel="preload" as="image" type="image/webp" href="/hocuspocus/scribe-keyart.webp" fetchpriority="high" />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/cormorant-garamond-600-wordmark.woff2" crossorigin />
     <title>HocusPocus · Creation Lab</title>
   </head>
   <body>

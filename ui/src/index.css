@@ -680,3 +680,294 @@ input[type="range"]::-webkit-slider-thumb {
     height: 20px;
   }
 }
+
+/* ─── Brand wordmark ────────────────────────────────────────────────────
+ * Cormorant Garamond 600, subset by Google Fonts to the six glyphs of
+ * "HocusPocus" (1.5 KB) and vendored, because the app runs offline
+ * inside Pinokio. The unicode-range keeps every other character on the
+ * fallback serif rather than rendering .notdef boxes.
+ *
+ * This is a logo face, not a UI face: use .hp-wordmark only where the
+ * product signs its own name — the boot plate and the sidebar identity.
+ * "HocusPocus" as a *value* (a provider option next to MiniMax, a badge
+ * on a generated asset) is data, not a signature, and stays on the UI
+ * sans.
+ */
+@font-face {
+  font-family: 'HocusPocus Wordmark';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/cormorant-garamond-600-wordmark.woff2') format('woff2');
+  unicode-range: U+48, U+50, U+63, U+6F, U+73, U+75;
+}
+
+.hp-wordmark {
+  font-family: 'HocusPocus Wordmark', ui-serif, Georgia, serif;
+  letter-spacing: 0.005em;
+}
+
+/* ─── Boot intro ────────────────────────────────────────────────────────
+ * Everything below is scoped to .hp-intro* and belongs to exactly one
+ * component: components/HocusPocusIntro.tsx.
+ *
+ * The plate stays dark in every theme on purpose. It is a lit poster,
+ * and the key art — a scribe lit by his own quill — only reads on black.
+ *
+ * Nothing animates until the root carries data-run="true", which the
+ * component sets once the key art has decoded. Otherwise the whole
+ * choreography plays against an empty screen on a cold cache and the
+ * art pops in halfway through its own entrance.
+ */
+
+/* Dissolve forward into the app rather than cutting to black. */
+.hp-intro-root {
+  transition:
+    opacity var(--hp-intro-fade) ease,
+    transform var(--hp-intro-fade) cubic-bezier(0.4, 0, 0.2, 1),
+    filter var(--hp-intro-fade) ease;
+}
+.hp-intro-root[data-leaving='true'] {
+  opacity: 0;
+  transform: scale(1.025);
+  filter: blur(6px);
+}
+
+/* Held back until the art is decoded, so the first frame is the poster
+   and not a black rectangle. */
+.hp-intro-stage {
+  opacity: 0;
+}
+.hp-intro-root[data-run='true'] .hp-intro-stage {
+  opacity: 1;
+}
+
+/* The key art is a 1254×1254 figure on a transparent background, so it
+   is placed like a figure on a poster instead of being cropped to fill:
+   full-height against the left edge on wide windows, standing on the
+   bottom edge when the window is narrow. It is never scaled past the
+   viewport, never blurred, and never dimmed.
+   Left, because the scribe faces his light — which puts both his
+   attention and the warm side of the frame on the copy. */
+.hp-intro-artbox {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: min(100dvh, 66vw);
+  aspect-ratio: 1 / 1;
+}
+.hp-intro-art-frame,
+.hp-intro-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.hp-intro-art {
+  object-fit: contain;
+  object-position: bottom center;
+}
+
+/* The art carries one practical light: the quill on the desk, at about
+   (76%, 40%) of the square. The ambient glow is anchored to that point
+   and lives inside the art box, so it tracks the figure at any window
+   size and the screen reads as lit by the picture — rather than by an
+   unrelated violet dot in the middle of the window. With the figure on
+   the left, that point falls on the inner edge of the art, so the glow
+   spills across the gap and lights the wordmark. */
+.hp-intro-bloom {
+  position: absolute;
+  left: 76%;
+  top: 40%;
+  width: 110%;
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    circle,
+    rgba(255, 186, 92, 0.3) 0%,
+    rgba(226, 132, 46, 0.15) 26%,
+    rgba(92, 58, 138, 0.13) 50%,
+    transparent 72%
+  );
+  filter: blur(12px);
+}
+
+/* Legibility scrim, weighted to the copy side only. The previous plate
+   darkened the entire frame just to make the wordmark readable, which
+   cost the art its contrast. */
+.hp-intro-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      260deg,
+      #07060b 12%,
+      rgba(7, 6, 11, 0.88) 33%,
+      rgba(7, 6, 11, 0.14) 58%,
+      rgba(7, 6, 11, 0) 74%
+    ),
+    radial-gradient(125% 95% at 48% 46%, transparent 52%, rgba(4, 3, 8, 0.74) 100%);
+}
+
+/* Grain. Half a point of texture over the whole composite, which also
+   breaks up the banding those big dark radials would otherwise show on
+   8-bit panels. */
+.hp-intro-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.13;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (max-width: 1023px) {
+  .hp-intro-artbox {
+    left: 50%;
+    bottom: -4%;
+    width: min(112vw, 78dvh);
+    transform: translateX(-50%);
+  }
+  .hp-intro-scrim {
+    background:
+      linear-gradient(
+        to bottom,
+        #07060b 10%,
+        rgba(7, 6, 11, 0.84) 32%,
+        rgba(7, 6, 11, 0.16) 62%,
+        rgba(7, 6, 11, 0) 78%
+      ),
+      radial-gradient(125% 95% at 50% 42%, transparent 52%, rgba(4, 3, 8, 0.74) 100%);
+  }
+}
+
+/* Embers off the quill. The plate holds for four and a half seconds on
+   a still image; a little drift in the warm air above the desk is what
+   keeps it from reading as a screenshot. Nine of them, 3px, slow, and
+   scattered by hand around the light — a regular grid would read as a
+   loading spinner. */
+.hp-intro-mote {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 214, 150, 0.9);
+  box-shadow: 0 0 7px rgba(255, 186, 92, 0.7);
+  opacity: 0;
+}
+
+/* Type. Base rules are the *settled* state — the keyframes below supply
+   the entrance — so switching the animations off under reduced motion
+   leaves a correctly composed still. */
+.hp-intro-rule {
+  transform-origin: center;
+}
+@media (min-width: 1024px) {
+  .hp-intro-rule {
+    transform-origin: left center;
+  }
+}
+.hp-intro-progress {
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+@keyframes hp-intro-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes hp-intro-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+/* Slow continuous push-in for the whole plate — linear, because a drift
+   that decelerates reads as a camera stopping, not as a held shot. */
+@keyframes hp-intro-drift {
+  from { transform: scale(1.06); }
+  to { transform: scale(1); }
+}
+@keyframes hp-intro-bloom-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes hp-intro-breathe {
+  0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.82; transform: translate(-50%, -50%) scale(1.035); }
+}
+/* The wordmark resolves out of the glow: wide, blurred and low, then
+   settling into its final tracking. */
+@keyframes hp-intro-wordmark {
+  from { opacity: 0; letter-spacing: 0.26em; filter: blur(8px); transform: translateY(10px); }
+  to { opacity: 1; letter-spacing: 0.005em; filter: blur(0); transform: none; }
+}
+@keyframes hp-intro-mote {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.55); }
+  16% { opacity: 0.8; }
+  72% { opacity: 0.42; }
+  100% { opacity: 0; transform: translate3d(var(--mote-drift), -190px, 0) scale(1); }
+}
+@keyframes hp-intro-draw {
+  from { opacity: 0; transform: scaleX(0); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+@keyframes hp-intro-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.hp-intro-root[data-run='true'] .hp-intro-art-frame {
+  animation: hp-intro-fade 1100ms ease-out both;
+}
+.hp-intro-root[data-run='true'] .hp-intro-art {
+  animation: hp-intro-drift 7000ms linear both;
+}
+.hp-intro-root[data-run='true'] .hp-intro-bloom {
+  animation:
+    hp-intro-bloom-in 1400ms ease-out both,
+    hp-intro-breathe 4600ms 1400ms ease-in-out infinite;
+}
+.hp-intro-root[data-run='true'] .hp-intro-mote {
+  animation: hp-intro-mote var(--mote-duration) var(--mote-delay) linear infinite;
+}
+.hp-intro-root[data-run='true'] .hp-intro-beat {
+  animation: hp-intro-rise 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.hp-intro-root[data-run='true'] .hp-intro-wordmark {
+  animation: hp-intro-wordmark 1500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.hp-intro-root[data-run='true'] .hp-intro-rule {
+  animation: hp-intro-draw 1200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* Duration is set inline from the same constant that drives the
+   dismiss timer, so the bar cannot drift out of sync with the plate. */
+.hp-intro-root[data-run='true'] .hp-intro-progress {
+  animation: hp-intro-progress linear both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-intro-root[data-run='true'] :is(
+    .hp-intro-art-frame,
+    .hp-intro-art,
+    .hp-intro-bloom,
+    .hp-intro-beat,
+    .hp-intro-wordmark,
+    .hp-intro-rule
+  ) {
+    animation: none;
+  }
+  /* The embers only exist as motion, so they leave rather than freeze
+     mid-air (their base state is opacity: 0). */
+  .hp-intro-root[data-run='true'] .hp-intro-mote {
+    animation: none;
+  }
+  /* No sweep to watch, so the bar states the remaining time instead of
+     performing it. */
+  .hp-intro-root[data-run='true'] .hp-intro-progress {
+    animation: none;
+    opacity: 0.5;
+    transform: scaleX(1);
+  }
+  .hp-intro-root[data-leaving='true'] {
+    transform: none;
+    filter: none;
+  }
+}
