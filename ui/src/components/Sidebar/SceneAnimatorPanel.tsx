@@ -2164,7 +2164,13 @@ export function SceneAnimatorPanel() {
       const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: true, extract_vocals: true, lyrics_hint: track.prompt })
       const segments = (analysis.lyrics ?? []).filter(segment => segment.end > segment.start && segment.start + track.startTime < scene.duration)
       if (!segments.length) throw new Error('No spoken regions were found in this track.')
-      const plans = segments.map(segment => planCutoutDialogue(segment.text, Math.max(0, segment.start + track.startTime), Math.min(scene.duration, segment.end + track.startTime), fps))
+      // Use actual word boundaries whenever Whisper provides them.  Older
+      // analyses remain valid: they fall back to one plan per segment.
+      const units = segments.flatMap(segment => segment.words?.length
+        ? segment.words.map(word => ({ text: word.text, start: word.start, end: word.end }))
+        : [{ text: segment.text, start: segment.start, end: segment.end }])
+        .filter(unit => unit.end > unit.start && unit.start + track.startTime < scene.duration)
+      const plans = units.map(unit => planCutoutDialogue(unit.text, Math.max(0, unit.start + track.startTime), Math.min(scene.duration, unit.end + track.startTime), fps))
       const framesByLayer: Record<string, SceneKeyframe[]> = {}
       for (const plan of plans) {
         const next = applyCutoutDialogue({ open, closed }, plan)
@@ -2174,11 +2180,11 @@ export function SceneAnimatorPanel() {
       updateScene(current => ({
         ...current,
         layers: current.layers.map(layer => framesByLayer[layer.id] ? { ...layer, animation: { ...layer.animation, keyframes: framesByLayer[layer.id], duration: current.duration, curve: 'hold' } } : layer),
-        dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.includes(open.id)), ...plans.map((plan, index) => ({ id: beatIds[index], text: segments[index].text, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(framesByLayer), audioTrackId: track.id, confidence: 'known-text' as const }))],
+        dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.includes(open.id)), ...plans.map((plan, index) => ({ id: beatIds[index], text: units[index].text, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(framesByLayer), audioTrackId: track.id, confidence: 'known-text' as const }))],
       }))
       setCutoutDialogueText(segments.map(segment => segment.text).join(' ')); setCutoutDialogueStart(plans[0].start); setCutoutDialogueEnd(plans.at(-1)!.end)
       setSelectedId(open.id); setProgress(plans[0].start / scene.duration)
-      setMessage(`Detected ${segments.length} spoken region${segments.length === 1 ? '' : 's'} from ${track.name} and animated the mouth.`)
+      setMessage(`Detected ${units.length} spoken ${units.length === 1 ? 'unit' : 'units'} from ${track.name} and animated the mouth.`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not analyze the speech track.')
     } finally {

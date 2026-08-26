@@ -1255,6 +1255,8 @@ export interface LyricSegment {
   end: number
   text: string
   speaker?: string | null
+  /** Word-level alignment when the transcription engine supplies it. */
+  words?: Array<{ start: number; end: number; text: string }> | null
 }
 
 export interface SongStructureEntry {
