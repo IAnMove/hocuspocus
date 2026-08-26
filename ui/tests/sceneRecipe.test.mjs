@@ -259,9 +259,57 @@ test('an unusable grade costs the grade, not the recipe', () => {
 })
 
 test('the grade vocabulary is offered to the model', () => {
-  const prompt = buildRecipeSystemPrompt([], 'auto')
+  const prompt = buildRecipeSystemPrompt({ mode: 'auto', inventory: [] })
   for (const word of ['calm', 'tense', 'dreamy', 'heroic', 'natural', 'cool', 'warm', 'neon']) {
     assert.ok(prompt.includes(word), `prompt offers ${word}`)
   }
   assert.match(prompt, /scene\.mood/)
+})
+
+const withLayers = layers => parseSceneRecipe({
+  ...EXAMPLE_SAUCER_CRUISE_RECIPE,
+  assets: [
+    { id: 'a', kind: 'image', source: 'a.png' },
+    { id: 'b', kind: 'image', source: 'b.png' },
+    { id: 'c', kind: 'image', source: 'c.png' },
+    { id: 'm', kind: 'model3d', source: 'm.glb' },
+  ],
+  shots: undefined,
+  scene: { ...EXAMPLE_SAUCER_CRUISE_RECIPE.scene, layers },
+})
+const parallaxOf = layers => compileSceneRecipe(
+  withLayers(layers),
+  { a: 'a.png', b: 'b.png', c: 'c.png', m: 'm.glb' },
+  filename => filename,
+).layers.filter(layer => layer.type !== 'camera').map(layer => layer.parallax)
+
+test('stacked plates are banded by depth instead of collapsing to one speed', () => {
+  // The old default gave every image 0.2, so three plates moved at an
+  // identical speed and the only depth cue a 2.5D compositor has was lost.
+  const bands = parallaxOf([
+    { id: 'a', type: 'image', asset: 'a', z: 0 },
+    { id: 'b', type: 'image', asset: 'b', z: 10 },
+    { id: 'c', type: 'image', asset: 'c', z: 20 },
+  ])
+  assert.deepEqual(bands, [.3, .7, 1.2])
+  assert.equal(new Set(bands).size, 3, 'each plane moves at its own speed')
+})
+
+test('a lone subject over a plate stays at camera speed', () => {
+  assert.deepEqual(parallaxOf([
+    { id: 'a', type: 'image', asset: 'a', z: 0 },
+    { id: 'm', type: 'model3d', asset: 'm', z: 10 },
+  ]), [.3, 1])
+})
+
+test('an explicit parallax value is never overridden', () => {
+  assert.deepEqual(parallaxOf([
+    { id: 'a', type: 'image', asset: 'a', z: 0, parallax: .05 },
+    { id: 'b', type: 'image', asset: 'b', z: 10 },
+    { id: 'c', type: 'image', asset: 'c', z: 20, parallax: 2 },
+  ]), [.05, .7, 2])
+})
+
+test('the depth vocabulary is offered to the model', () => {
+  assert.match(buildRecipeSystemPrompt({ mode: 'auto', inventory: [] }), /parallax/i)
 })

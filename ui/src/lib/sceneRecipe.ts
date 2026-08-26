@@ -5,6 +5,28 @@ import type { SceneGradeIntensity, SceneGradeMood, SceneGradePalette } from './s
 const GRADE_MOODS: readonly SceneGradeMood[] = ['calm', 'tense', 'dreamy', 'heroic']
 const GRADE_PALETTES: readonly SceneGradePalette[] = ['natural', 'cool', 'warm', 'neon']
 
+/**
+ * Depth bands, matching PARALLAX_PRESETS in the manual scene editor so a
+ * compiled recipe and a hand-built scene read as the same product.
+ *
+ * The previous default gave every image and video 0.2 and everything else 1,
+ * which is two planes no matter how many layers a shot has: three stacked
+ * plates all moved at exactly the same speed and the depth collapsed. Since
+ * relative speed is the only depth cue a 2.5D compositor has, that flattened
+ * every LLM-authored scene that tried for more than a hero and a backdrop.
+ *
+ * A two-layer shot keeps its subject at camera speed rather than pushing it
+ * to 1.2 - a lone hero is not a foreground element, it is the subject.
+ */
+const PARALLAX_BAND = { background: .3, midground: .7, foreground: 1.2, subject: 1 }
+const parallaxForDepth = (rank: number, count: number): number => {
+  if (count <= 1) return PARALLAX_BAND.subject
+  if (count === 2) return rank === 0 ? PARALLAX_BAND.background : PARALLAX_BAND.subject
+  if (rank === 0) return PARALLAX_BAND.background
+  if (rank === count - 1) return PARALLAX_BAND.foreground
+  return PARALLAX_BAND.midground
+}
+
 export type RecipeAssetKind = 'image' | 'video' | 'model3d'
 
 export const RECIPE_RIG_PROFILES = ['prop', 'vehicle', 'humanoid', 'quadruped', 'flying', 'serpentine'] as const
@@ -426,6 +448,7 @@ Scene intensity: 1, 2, 3
 
 Semantic mapping hints:
 - Emotional or atmospheric words in the request set scene.mood and scene.palette. Melancholy/wistful -> mood dreamy with a cool palette; threat/dread -> tense; triumph/resolve -> heroic; warm nostalgia -> warm palette. Leave them unset only when the request is genuinely neutral, because an unset scene renders with flat neutral colour.
+- Depth/parallax requests set layer.parallax: lower is further away. Distant background 0.3, mid-ground 0.7, subject 1, foreground element passing close to the lens 1.2. Relative speed is the only depth cue this compositor has, so give layers distinct values whenever the request implies depth. Left unset, layers are banded automatically by z order.
 - rise/take off -> liftoff or diagonal-rise; descend/land -> landing; cross frame/fly past -> space-cruise, glide or pass-camera.
 - reveal/appear -> fade-reveal, portal-arrival or center-reveal; approach -> cinematic-push or zoom-in; depart -> exit-frame or zoom-out.
 - calm observational shot -> camera-locked or camera-dolly; follow horizontal action -> camera-pan-right/left; urgency -> camera-handheld or camera-whip-pan.
@@ -833,6 +856,13 @@ export function compileSceneRecipe(
   const grade = recipe.scene.mood || recipe.scene.palette
     ? resolveSceneGrade({ mood: recipe.scene.mood, palette: recipe.scene.palette, intensity: recipe.scene.intensity, neutral: 'omit' })
     : null
+  // Depth rank is taken over the visual layers only, in the same z order the
+  // renderer stacks them, so band assignment matches what the viewer sees.
+  const depthOrder = recipe.scene.layers
+    .map((layer, index) => ({ id: layer.id, type: layer.type, z: layer.z ?? index * 10 }))
+    .filter(layer => layer.type !== 'camera')
+    .sort((a, b) => a.z - b.z)
+    .map(layer => layer.id)
   const layers: SceneLayer[] = recipe.scene.layers.map((layer, index) => {
     const motion = layer.motion ? RECIPE_MOTION_PRESETS[layer.motion] : undefined
     const camera = layer.cameraPreset ? RECIPE_CAMERA_PRESETS[layer.cameraPreset] : undefined
@@ -863,7 +893,9 @@ export function compileSceneRecipe(
       visible: true,
       z: layer.z ?? (layer.type === 'camera' ? 1000 : index * 10),
       fill: layer.fill === true || layer.type === 'effect',
-      parallax: layer.type === 'camera' ? undefined : (layer.parallax ?? (layer.type === 'image' || layer.type === 'video' ? 0.2 : 1)),
+      // An explicit value always wins: the model asked for that depth on purpose.
+      parallax: layer.type === 'camera' ? undefined
+        : (layer.parallax ?? parallaxForDepth(depthOrder.indexOf(layer.id), depthOrder.length)),
       atmosphere,
       // Palette is the temperature of the whole frame, so every visual layer
       // carries it. Mood is the subject's emotional register and goes only on
