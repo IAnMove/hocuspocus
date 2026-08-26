@@ -16,6 +16,17 @@ test('narrative library exposes ten standard scenes plus the travel experiment',
   assert.ok(NARRATIVE_SCENE_TEMPLATES.every(template => template.constraints.includes('continuous_motion') && template.previewPrompt && typeof template.createScene === 'function'))
 })
 
+test('narrative gallery entries expose actionable visual evaluation metadata', () => {
+  const categories = new Set(['dialogue', 'character', 'world', 'object', 'transition', 'travel'])
+  for (const template of NARRATIVE_SCENE_TEMPLATES) {
+    assert.ok(categories.has(template.category), `${template.id} has a gallery category`)
+    assert.ok(template.visualIntent.length > 20, `${template.id} has a visual intent`)
+    assert.ok(template.referenceMotion.length > 20, `${template.id} has reference motion`)
+    assert.ok(template.evaluationCues.length >= 3, `${template.id} has evaluation cues`)
+    assert.ok(template.evaluationCues.every(cue => cue.length > 10), `${template.id} cues are reviewable`)
+  }
+})
+
 test('drift keyframes keep long motion alive near the end of a shot', () => {
   const frames = buildDriftKeyframes('hero', 10, { x: 40, y: 50, scale: 1, opacity: 1, rotation: 0 }, { x: 60, y: 50, scale: 1, opacity: 1, rotation: 0 }, { bob: 1, pulse: .02 })
   assert.ok(frames.length >= 5)
@@ -92,4 +103,15 @@ test('narrative provenance records the assigned assets and compiled direction', 
   assert.deepEqual(next.narrative?.assets?.map(asset => asset.slot), ['hero', 'plate'])
   assert.match(next.narrative?.prompt ?? '', /Inner thought/)
   assert.match(next.narrative?.prompt ?? '', /mood: dreamy/)
+})
+
+test('narrative provenance serializes the gallery metadata used for evaluation', () => {
+  const template = NARRATIVE_SCENE_TEMPLATES.find(item => item.id === 'run-travel-parallax')
+  const scene = createNarrativeScene('run-travel-parallax', assets)
+  assert.equal(scene.narrative?.category, template.category)
+  assert.equal(scene.narrative?.visualIntent, template.visualIntent)
+  assert.equal(scene.narrative?.referenceMotion, template.referenceMotion)
+  assert.deepEqual(scene.narrative?.evaluationCues, template.evaluationCues)
+  assert.notEqual(scene.narrative?.evaluationCues, template.evaluationCues)
+  assert.doesNotThrow(() => JSON.stringify(scene))
 })
