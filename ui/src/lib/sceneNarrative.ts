@@ -1,5 +1,6 @@
 import type { Scene, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType } from '../types'
 import { suggestSeamOccluderKind } from './seamOccluder'
+import { resolveSceneGrade } from './sceneGrade'
 
 export type NarrativeSceneId =
   | 'inner-thought'
@@ -280,8 +281,8 @@ export const applyNarrativeSceneControls = (scene: Scene, controls: NarrativeSce
     layers: scene.layers.map(layer => {
       const isHero = layer.id === 'hero' || layer.id === 'prop' || layer.id === 'landmark'
       const isCamera = layer.type === 'camera'
-      const palettePatch = palette === 'cool' ? { hue: 12, saturation: .9 } : palette === 'warm' ? { hue: -10, saturation: 1.08 } : palette === 'neon' ? { hue: 42, saturation: 1.35, contrast: 1.12 } : {}
-      const moodPatch = mood === 'tense' ? { contrast: 1.15, saturation: .82 } : mood === 'dreamy' ? { glow: .65 + intensity * .25, saturation: 1.12 } : mood === 'heroic' ? { glow: .35 + intensity * .18, contrast: 1.13, saturation: 1.12 } : { brightness: .98 + intensity * .02 }
+      // Building a scene, so a neutral palette writes nothing. See sceneGrade.ts.
+      const { palettePatch, moodPatch } = resolveSceneGrade({ mood, palette, intensity, neutral: 'omit' })
       const movement = isHero ? heroShift : 0
       const shift = (frame: SceneKeyframe) => ({ ...frame, x: frame.x + movement, rotation: frame.rotation + (isHero ? direction * (controls.direction ? .6 : 0) : 0) })
       const animation = isCamera && controls.camera === 'restrained'

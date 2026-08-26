@@ -1,5 +1,6 @@
 import type { Scene, SceneKeyframe, SceneLayer } from '../types'
 import { buildDriftKeyframes } from './sceneNarrative'
+import { resolveSceneGrade } from './sceneGrade'
 
 export type SceneCopilotScope = 'layer' | 'scene'
 export type SceneMotionPreset = 'thinking_drift' | 'living_drift' | 'run_bob' | 'float'
@@ -191,9 +192,9 @@ export const applySceneCopilotProposal = (scene: Scene, proposal: SceneCopilotPr
         }) }
       }
       if (operation.op === 'set_scene_grade') {
-        const intensity = operation.intensity ?? 2
-        const palettePatch = operation.palette === 'cool' ? { hue: 12, saturation: .9 } : operation.palette === 'warm' ? { hue: -10, saturation: 1.08 } : operation.palette === 'neon' ? { hue: 42, saturation: 1.35, contrast: 1.12 } : { hue: 0, saturation: 1 }
-        const moodPatch = operation.mood === 'tense' ? { contrast: 1.15, saturation: .82 } : operation.mood === 'dreamy' ? { glow: .65 + intensity * .25, saturation: 1.12 } : operation.mood === 'heroic' ? { glow: .35 + intensity * .18, contrast: 1.13, saturation: 1.12 } : operation.mood === 'calm' ? { brightness: .98 + intensity * .02 } : {}
+        // Editing, so a neutral palette must write explicit neutral values —
+        // otherwise asking for 'natural' could never undo an earlier grade.
+        const { palettePatch, moodPatch } = resolveSceneGrade({ mood: operation.mood, palette: operation.palette, intensity: operation.intensity, neutral: 'reset' })
         return { ...currentScene, layers: currentScene.layers.map(layer => layer.type === 'camera' ? layer : { ...layer, effects: { ...layer.effects, ...palettePatch, ...moodPatch } }) }
       }
       if (operation.op === 'set_relationship') return { ...currentScene, layers: currentScene.layers.map(layer => layer.id !== operation.layerId ? layer : { ...layer, relationship: operation.relationship === 'none' ? undefined : { type: operation.relationship, targetLayerId: operation.targetLayerId!, offsetX: operation.offsetX, offsetY: operation.offsetY, strength: operation.strength, rotationOffset: operation.rotationOffset }, animation: { ...layer.animation, orbit: undefined } }) }

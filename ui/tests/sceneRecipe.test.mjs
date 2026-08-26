@@ -209,3 +209,59 @@ test('H3 plates use supported model canvases and enough temporal-grid frames', (
   })
   assert.equal(recipeAssetDuration(recipe, 'clouds'), 9)
 })
+
+const gradedRecipe = grade => parseSceneRecipe({
+  ...EXAMPLE_SAUCER_CRUISE_RECIPE,
+  scene: { ...EXAMPLE_SAUCER_CRUISE_RECIPE.scene, ...grade },
+})
+const compileGraded = grade => compileSceneRecipe(
+  gradedRecipe(grade),
+  { stars: 'stars.png', saucer: 'saucer.glb' },
+  filename => filename,
+)
+
+test('an ungraded recipe compiles exactly as it did before grading existed', () => {
+  // The regression guard for every recipe already saved to disk.
+  for (const layer of compileGraded({}).layers) {
+    assert.equal(layer.effects, undefined, `${layer.id} stays ungraded`)
+  }
+})
+
+test('scene mood and palette reach the compiled layers', () => {
+  const scene = compileGraded({ mood: 'dreamy', palette: 'cool', intensity: 3 })
+  const model = scene.layers.find(layer => layer.type === 'model3d')
+  const plate = scene.layers.find(layer => layer.type === 'image')
+  // dreamy carries glow; cool carries hue. The subject gets both, the plate
+  // only the palette - grading a background with the hero's mood washes it out.
+  assert.ok(model.effects.glow > 0, 'the subject carries the mood')
+  assert.equal(model.effects.hue, 12)
+  assert.equal(plate.effects.hue, 12)
+  assert.equal(plate.effects.glow, undefined, 'the plate does not carry the mood')
+})
+
+test('intensity scales the mood rather than switching it', () => {
+  const soft = compileGraded({ mood: 'dreamy', intensity: 1 }).layers.find(layer => layer.type === 'model3d')
+  const strong = compileGraded({ mood: 'dreamy', intensity: 3 }).layers.find(layer => layer.type === 'model3d')
+  assert.ok(strong.effects.glow > soft.effects.glow)
+})
+
+test('the camera is never graded', () => {
+  const camera = compileGraded({ mood: 'heroic', palette: 'neon' }).layers.find(layer => layer.type === 'camera')
+  assert.equal(camera.effects, undefined)
+})
+
+test('an unusable grade costs the grade, not the recipe', () => {
+  // Structured output is not enforced by the remote provider (see
+  // docs/eval-selection-baseline.md), so a bad enum value has to degrade.
+  const recipe = gradedRecipe({ mood: 'melancholy', palette: 'sepia' })
+  assert.equal(recipe.scene.mood, undefined)
+  assert.equal(recipe.scene.palette, undefined)
+})
+
+test('the grade vocabulary is offered to the model', () => {
+  const prompt = buildRecipeSystemPrompt([], 'auto')
+  for (const word of ['calm', 'tense', 'dreamy', 'heroic', 'natural', 'cool', 'warm', 'neon']) {
+    assert.ok(prompt.includes(word), `prompt offers ${word}`)
+  }
+  assert.match(prompt, /scene\.mood/)
+})

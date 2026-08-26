@@ -1,4 +1,9 @@
 import type { Scene, SceneAtmosphereKind, SceneCurve, SceneLayer, SceneLayerType } from '../types'
+import { resolveSceneGrade } from './sceneGrade'
+import type { SceneGradeIntensity, SceneGradeMood, SceneGradePalette } from './sceneGrade'
+
+const GRADE_MOODS: readonly SceneGradeMood[] = ['calm', 'tense', 'dreamy', 'heroic']
+const GRADE_PALETTES: readonly SceneGradePalette[] = ['natural', 'cool', 'warm', 'neon']
 
 export type RecipeAssetKind = 'image' | 'video' | 'model3d'
 
@@ -72,6 +77,16 @@ export interface SceneRecipe {
     height?: number
     fps?: 30 | 60
     duration?: number
+    /**
+     * Emotional and colour temperature for the whole scene. Without these the
+     * compiler emits no `effects` at all and every LLM-authored layer renders
+     * through the neutral defaults, however evocative the request was — the
+     * single widest gap between a scene that executes and one that looks
+     * intended. Compiled through the same formula the templates use.
+     */
+    mood?: SceneGradeMood
+    palette?: SceneGradePalette
+    intensity?: SceneGradeIntensity
     layers: SceneRecipeLayer[]
   }
 }
@@ -318,6 +333,9 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         height: { type: 'integer', minimum: 256, maximum: 3840 },
         fps: { enum: [30, 60] },
         duration: { type: 'number', minimum: 0.5, maximum: 30 },
+        mood: { enum: ['calm', 'tense', 'dreamy', 'heroic'] },
+        palette: { enum: ['natural', 'cool', 'warm', 'neon'] },
+        intensity: { enum: [1, 2, 3] },
         layers: { type: 'array', minItems: 1, maxItems: 24, items: recipeLayerSchema },
       },
       required: ['width', 'height', 'fps', 'duration', 'layers'],
@@ -402,8 +420,12 @@ Atmosphere: ${fx}
 Hunyuan presets: eco, balanced, quality, multiview
 Rig profiles: ${RECIPE_RIG_PROFILES.join(', ')}
 Rig clips: ${RECIPE_RIG_ANIMATIONS.join(', ')}
+Scene mood: calm, tense, dreamy, heroic
+Scene palette: natural, cool, warm, neon
+Scene intensity: 1, 2, 3
 
 Semantic mapping hints:
+- Emotional or atmospheric words in the request set scene.mood and scene.palette. Melancholy/wistful -> mood dreamy with a cool palette; threat/dread -> tense; triumph/resolve -> heroic; warm nostalgia -> warm palette. Leave them unset only when the request is genuinely neutral, because an unset scene renders with flat neutral colour.
 - rise/take off -> liftoff or diagonal-rise; descend/land -> landing; cross frame/fly past -> space-cruise, glide or pass-camera.
 - reveal/appear -> fade-reveal, portal-arrival or center-reveal; approach -> cinematic-push or zoom-in; depart -> exit-frame or zoom-out.
 - calm observational shot -> camera-locked or camera-dolly; follow horizontal action -> camera-pan-right/left; urgency -> camera-handheld or camera-whip-pan.
@@ -716,6 +738,11 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
       height: Math.round(boundedNumber(sceneRaw.height, 720, 256, 3840)),
       fps: sceneRaw.fps === 60 ? 60 : 30,
       duration: boundedNumber(sceneRaw.duration, shots?.[0]?.duration || 5, 0.5, 30),
+      // Unknown values fall through as undefined rather than throwing: a
+      // mistyped mood should cost the grade, not the whole recipe.
+      mood: GRADE_MOODS.includes(sceneRaw.mood as SceneGradeMood) ? sceneRaw.mood as SceneGradeMood : undefined,
+      palette: GRADE_PALETTES.includes(sceneRaw.palette as SceneGradePalette) ? sceneRaw.palette as SceneGradePalette : undefined,
+      intensity: ([1, 2, 3] as const).includes(sceneRaw.intensity as SceneGradeIntensity) ? sceneRaw.intensity as SceneGradeIntensity : undefined,
       layers,
     },
   }
@@ -801,6 +828,11 @@ export function compileSceneRecipe(
   fileUrlFor: (filename: string) => string,
 ): Scene {
   const duration = Math.max(0.5, recipe.scene.duration || 5)
+  // Only graded when the recipe asked. An ungraded recipe must compile to
+  // exactly what it compiled to before this existed.
+  const grade = recipe.scene.mood || recipe.scene.palette
+    ? resolveSceneGrade({ mood: recipe.scene.mood, palette: recipe.scene.palette, intensity: recipe.scene.intensity, neutral: 'omit' })
+    : null
   const layers: SceneLayer[] = recipe.scene.layers.map((layer, index) => {
     const motion = layer.motion ? RECIPE_MOTION_PRESETS[layer.motion] : undefined
     const camera = layer.cameraPreset ? RECIPE_CAMERA_PRESETS[layer.cameraPreset] : undefined
@@ -833,6 +865,13 @@ export function compileSceneRecipe(
       fill: layer.fill === true || layer.type === 'effect',
       parallax: layer.type === 'camera' ? undefined : (layer.parallax ?? (layer.type === 'image' || layer.type === 'video' ? 0.2 : 1)),
       atmosphere,
+      // Palette is the temperature of the whole frame, so every visual layer
+      // carries it. Mood is the subject's emotional register and goes only on
+      // model3d, matching how the templates grade a hero against its plate —
+      // pushing glow onto the background instead washes the frame out.
+      ...(grade && layer.type !== 'camera'
+        ? { effects: { ...grade.palettePatch, ...(layer.type === 'model3d' ? grade.moodPatch : {}) } }
+        : {}),
       transform: {
         x: layer.transform?.x ?? start.x,
         y: layer.transform?.y ?? start.y,
