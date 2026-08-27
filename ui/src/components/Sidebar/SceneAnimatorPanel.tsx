@@ -12,7 +12,7 @@ import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
-import { applyCutoutDialogue, planCutoutDialogue } from '../../lib/cutoutDialogue'
+import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, isCutoutFaceLayer, planCutoutDialogue } from '../../lib/cutoutDialogue'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
@@ -2134,31 +2134,31 @@ export function SceneAnimatorPanel() {
   const animateCutoutDialogue = () => {
     const text = cutoutDialogueText.trim()
     if (!text) { setMessage('Write the dialogue line before animating the mouth.'); return }
-    const open = scene.layers.find(layer => /mouth[ -]?open|open[ -]?mouth/i.test(`${layer.id} ${layer.name}`))
-    const closed = scene.layers.find(layer => /mouth[ -]?closed|closed[ -]?mouth/i.test(`${layer.id} ${layer.name}`))
-    if (!open) { setMessage('Add or mount an Open mouth overlay first. The cutout talking-head template includes one.'); return }
-    if (open.locked || closed?.locked) { setMessage('Unlock the mouth layer before animating dialogue.'); return }
+    const mouthLayers = findCutoutMouthLayers(scene.layers)
+    const primary = mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round
+    if (!primary) { setMessage('Add or mount an Open, Small, Wide or Round mouth overlay first. The cutout talking-head template includes one.'); return }
+    if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage('Unlock the mouth layers before animating dialogue.'); return }
     const start = Math.max(0, Math.min(scene.duration, cutoutDialogueStart))
     const end = Math.max(start + 1 / fps, Math.min(scene.duration, cutoutDialogueEnd))
     const plan = planCutoutDialogue(text, start, end, fps)
-    const frames = applyCutoutDialogue({ open, closed }, plan)
+    const frames = applyCutoutDialogue(mouthLayers, plan)
     const beatId = uid()
     const audioTrackId = (scene.audioTracks ?? []).find(track => track.kind === 'speech')?.id
     updateScene(current => ({
       ...current,
       layers: current.layers.map(layer => frames[layer.id] ? { ...layer, animation: { ...layer.animation, keyframes: frames[layer.id], duration: current.duration, curve: 'hold' } } : layer),
-      dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.includes(open.id)), { id: beatId, text, start, end, mouthLayerIds: Object.keys(frames), ...(audioTrackId ? { audioTrackId } : {}), confidence: 'known-text' }],
+      dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.some(id => Object.keys(frames).includes(id))), { id: beatId, text, start, end, mouthLayerIds: Object.keys(frames), ...(audioTrackId ? { audioTrackId } : {}), confidence: 'known-text' }],
     }))
-    setSelectedId(open.id); setSelectedKeyframeId(null); setProgress(start / scene.duration)
-    setMessage(`Animated ${plan.visemes.length} mouth beats from ${start.toFixed(1)}s to ${end.toFixed(1)}s. Edit the keyframes in the timeline if needed.`)
+    setSelectedId(primary.id); setSelectedKeyframeId(null); setProgress(start / scene.duration)
+    setMessage(`Animated ${plan.visemes.length} mouth beats across ${Object.keys(frames).length} available mouth state${Object.keys(frames).length === 1 ? '' : 's'}. Edit the keyframes in the timeline if needed.`)
   }
   const animateCutoutDialogueFromAudio = async () => {
-    const open = scene.layers.find(layer => /mouth[ -]?open|open[ -]?mouth/i.test(`${layer.id} ${layer.name}`))
-    const closed = scene.layers.find(layer => /mouth[ -]?closed|closed[ -]?mouth/i.test(`${layer.id} ${layer.name}`))
+    const mouthLayers = findCutoutMouthLayers(scene.layers)
+    const primary = mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round
     const track = (scene.audioTracks ?? []).find(item => item.kind === 'speech') ?? scene.audioTracks?.[0]
-    if (!open) { setMessage('Add or mount an Open mouth overlay first.'); return }
+    if (!primary) { setMessage('Add or mount an Open, Small, Wide or Round mouth overlay first.'); return }
     if (!track) { setMessage('Attach or generate a speech track first.'); return }
-    if (open.locked || closed?.locked) { setMessage('Unlock the mouth layer before animating dialogue.'); return }
+    if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage('Unlock the mouth layers before animating dialogue.'); return }
     setCutoutDialogueBusy(true)
     try {
       const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: true, extract_vocals: true, lyrics_hint: track.prompt })
@@ -2173,23 +2173,34 @@ export function SceneAnimatorPanel() {
       const plans = units.map(unit => planCutoutDialogue(unit.text, Math.max(0, unit.start + track.startTime), Math.min(scene.duration, unit.end + track.startTime), fps))
       const framesByLayer: Record<string, SceneKeyframe[]> = {}
       for (const plan of plans) {
-        const next = applyCutoutDialogue({ open, closed }, plan)
+        const next = applyCutoutDialogue(mouthLayers, plan)
         for (const [layerId, frames] of Object.entries(next)) framesByLayer[layerId] = [...(framesByLayer[layerId] ?? []), ...frames]
       }
       const beatIds = plans.map(() => uid())
       updateScene(current => ({
         ...current,
         layers: current.layers.map(layer => framesByLayer[layer.id] ? { ...layer, animation: { ...layer.animation, keyframes: framesByLayer[layer.id], duration: current.duration, curve: 'hold' } } : layer),
-        dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.includes(open.id)), ...plans.map((plan, index) => ({ id: beatIds[index], text: units[index].text, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(framesByLayer), audioTrackId: track.id, confidence: 'known-text' as const }))],
+        dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.some(id => Object.keys(framesByLayer).includes(id))), ...plans.map((plan, index) => ({ id: beatIds[index], text: units[index].text, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(framesByLayer), audioTrackId: track.id, confidence: 'known-text' as const }))],
       }))
       setCutoutDialogueText(segments.map(segment => segment.text).join(' ')); setCutoutDialogueStart(plans[0].start); setCutoutDialogueEnd(plans.at(-1)!.end)
-      setSelectedId(open.id); setProgress(plans[0].start / scene.duration)
+      setSelectedId(primary.id); setProgress(plans[0].start / scene.duration)
       setMessage(`Detected ${units.length} spoken ${units.length === 1 ? 'unit' : 'units'} from ${track.name} and animated the mouth.`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not analyze the speech track.')
     } finally {
       setCutoutDialogueBusy(false)
     }
+  }
+  const bindCutoutFace = () => {
+    if (!selected || selected.type === 'camera' || selected.type === 'effect' || isCutoutFaceLayer(selected)) {
+      setMessage('Select the current character pose layer before binding its mouth and blink overlays.')
+      return
+    }
+    const next = bindCutoutFaceToPose(scene.layers, selected.id) as AnimatorLayer[]
+    const bound = next.filter(layer => layer.relationship?.type === 'parent' && layer.relationship.targetLayerId === selected.id && isCutoutFaceLayer(layer)).length
+    if (!bound) { setMessage('Add mouth or blink overlays before binding the face to this pose.'); return }
+    updateScene(current => ({ ...current, layers: bindCutoutFaceToPose(current.layers, selected.id) as AnimatorLayer[] }))
+    setMessage(`Bound ${bound} face overlay${bound === 1 ? '' : 's'} to ${selected.name}. Their current placement is now specific to this pose.`)
   }
   const proposeCopilotEdit = async () => {
     if (!selected || !copilotIntent.trim()) return
@@ -2425,7 +2436,8 @@ export function SceneAnimatorPanel() {
       </div>
       <div className="space-y-1.5 rounded border border-rose-300/30 bg-rose-400/[.04] p-2">
         <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-rose-100">Cutout dialogue</span><span className="text-[8px] text-rose-200/75">Editable mouth keyframes</span></div>
-        <p className="text-[8px] leading-relaxed text-text-muted">With an <em>Open mouth</em> overlay (and optionally <em>Closed mouth</em>), turn a known line into a restrained speaking rhythm. It is deterministic, saved with the scene and never moves during music or silence unless you ask it to.</p>
+        <p className="text-[8px] leading-relaxed text-text-muted">With mouth overlays named <em>Open</em>, <em>Small</em>, <em>Wide</em>, <em>Round</em> and optionally <em>Closed</em>, turn a known line into a restrained speaking rhythm. Missing shapes safely fall back to Open.</p>
+        <button type="button" disabled={!selected || playing || recording || publishing} onClick={bindCutoutFace} className="w-full rounded border border-rose-300/30 bg-black/10 px-2 py-1 text-[9px] text-rose-100 disabled:opacity-40">Bind face overlays to selected pose</button>
         <textarea value={cutoutDialogueText} disabled={playing || recording || publishing} onChange={event => setCutoutDialogueText(event.target.value)} placeholder="Dialogue spoken by this character…" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
         <div className="grid grid-cols-2 gap-1"><label className="text-[8px] text-text-muted">Start<input aria-label="Cutout dialogue start" type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueStart} onChange={event => setCutoutDialogueStart(Number(event.target.value) || 0)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label><label className="text-[8px] text-text-muted">End<input aria-label="Cutout dialogue end" type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueEnd} onChange={event => setCutoutDialogueEnd(Number(event.target.value) || scene.duration)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label></div>
         <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!cutoutDialogueText.trim() || cutoutDialogueBusy || playing || recording || publishing} onClick={animateCutoutDialogue} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">Animate from line</button><button type="button" disabled={cutoutDialogueBusy || !(scene.audioTracks ?? []).length || playing || recording || publishing} onClick={() => void animateCutoutDialogueFromAudio()} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{cutoutDialogueBusy ? 'Analyzing speech…' : 'Detect from audio'}</button></div>

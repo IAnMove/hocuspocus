@@ -8,9 +8,44 @@ export type CutoutDialoguePlan = {
   visemes: Array<{ start: number; end: number; state: CutoutViseme }>
 }
 
-type MouthLayerPair = {
-  open: SceneLayer
+export type CutoutMouthLayers = {
+  open?: SceneLayer
   closed?: SceneLayer
+  small?: SceneLayer
+  wide?: SceneLayer
+  round?: SceneLayer
+}
+
+const layerLabel = (layer: SceneLayer) => `${layer.id} ${layer.name}`.toLocaleLowerCase()
+const isMouthState = (layer: SceneLayer, state: CutoutViseme | 'open') => {
+  const label = layerLabel(layer)
+  return label.includes('mouth') && new RegExp(`(?:mouth[ _-]*${state}|${state}[ _-]*mouth)`, 'i').test(label)
+}
+
+export function findCutoutMouthLayers(layers: SceneLayer[]): CutoutMouthLayers {
+  const visual = layers.filter(layer => layer.type !== 'camera' && layer.type !== 'effect')
+  const find = (state: CutoutViseme | 'open') => visual.find(layer => isMouthState(layer, state))
+  return { open: find('open'), closed: find('closed'), small: find('small'), wide: find('wide'), round: find('round') }
+}
+
+export function isCutoutFaceLayer(layer: SceneLayer): boolean {
+  const label = layerLabel(layer)
+  return label.includes('mouth') || /(?:blink|closed)[ _-]*(?:eye|eyes)|(?:eye|eyes)[ _-]*(?:blink|closed)/i.test(label)
+}
+
+/**
+ * Stores the current, pose-specific face placement by parenting ordinary face
+ * overlays to the selected character layer.  The overlays keep their authored
+ * scene coordinates; parent motion only adds the pose layer's later movement,
+ * scale and rotation.  This deliberately reuses the persisted relationship
+ * contract instead of adding a second rig format.
+ */
+export function bindCutoutFaceToPose(layers: SceneLayer[], poseLayerId: string): SceneLayer[] {
+  const pose = layers.find(layer => layer.id === poseLayerId)
+  if (!pose || pose.type === 'camera' || pose.type === 'effect' || isCutoutFaceLayer(pose)) return layers
+  return layers.map(layer => isCutoutFaceLayer(layer) && layer.id !== pose.id
+    ? { ...layer, relationship: { type: 'parent', targetLayerId: pose.id } }
+    : layer)
 }
 
 const VOWEL = /[aeiouáéíóúäëïöü]/i
@@ -77,23 +112,20 @@ export function planCutoutDialogue(text: string, start: number, end: number, fps
   return { start: safeStart, end: safeEnd, visemes }
 }
 
-export function applyCutoutDialogue(pair: MouthLayerPair, plan: CutoutDialoguePlan): Record<string, SceneKeyframe[]> {
-  const openFrames: SceneKeyframe[] = []
-  const closedFrames: SceneKeyframe[] = []
+export function applyCutoutDialogue(layers: CutoutMouthLayers, plan: CutoutDialoguePlan): Record<string, SceneKeyframe[]> {
+  const speakingFallback = layers.open ?? layers.wide ?? layers.small ?? layers.round
+  if (!speakingFallback) return {}
+  const participants = [...new Set(Object.values(layers).filter((layer): layer is SceneLayer => Boolean(layer)))]
+  const framesByLayer = Object.fromEntries(participants.map(layer => [layer.id, [] as SceneKeyframe[]]))
   for (const beat of plan.visemes) {
-    const isOpen = beat.state !== 'closed'
-    openFrames.push(pointFor(pair.open, beat.start, Number(isOpen)))
-    if (pair.closed) closedFrames.push(pointFor(pair.closed, beat.start, Number(!isOpen)))
+    const active = beat.state === 'closed' ? layers.closed : layers[beat.state] ?? speakingFallback
+    for (const layer of participants) framesByLayer[layer.id].push(pointFor(layer, beat.start, Number(layer === active)))
   }
   // Keyframe arrays need a terminal pose even when the final beat began before
   // the requested end, otherwise an imported scene may normalize it away.
   const last = plan.visemes.at(-1)
   if (!last || last.start < plan.end) {
-    openFrames.push(pointFor(pair.open, plan.end, 0))
-    if (pair.closed) closedFrames.push(pointFor(pair.closed, plan.end, 1))
+    for (const layer of participants) framesByLayer[layer.id].push(pointFor(layer, plan.end, Number(layer === layers.closed)))
   }
-  return {
-    [pair.open.id]: openFrames,
-    ...(pair.closed ? { [pair.closed.id]: closedFrames } : {}),
-  }
+  return framesByLayer
 }
