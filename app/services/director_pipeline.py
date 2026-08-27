@@ -13365,7 +13365,12 @@ def _run_minimax_h3_story_video(
     final_name = f"minimax_h3_{pid}_multiclip.mp4"
     final_path = os.path.join(out_dir, final_name)
     clip_paths = [name if os.path.isabs(name) else os.path.join(out_dir, name) for name in outputs]
-    if not _wgp.concatenate_multi_clip_videos(clip_paths, final_path, assembly_audio):
+    if not _wgp.concatenate_multi_clip_videos(
+        clip_paths,
+        final_path,
+        assembly_audio,
+        audio_start_sec=audio_origin_sec,
+    ):
         raise RuntimeError(
             "MiniMax H3 rendered every segment, but final short-film assembly failed. "
             "The individual clips were preserved."

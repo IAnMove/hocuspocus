@@ -19,9 +19,12 @@ def test_h3_internal_continuations_use_character_refs_and_stable_seeds(tmp_path:
 
     class FakeWgp:
         @staticmethod
-        def concatenate_multi_clip_videos(paths, destination, audio_path):
+        def concatenate_multi_clip_videos(
+            paths, destination, audio_path, audio_start_sec=0.0,
+        ):
             assert len(paths) == 2
             assert audio_path is None
+            assert audio_start_sec == 0.0
             Path(destination).write_bytes(b"joined")
             return True
 
