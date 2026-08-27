@@ -21,6 +21,13 @@ test('a short aligned word still gets one readable open pulse', () => {
   assert.ok(plan.visemes.some(beat => beat.state !== 'closed'))
 })
 
+test('a long mixed-vowel line retains every available mouth family', () => {
+  const plan = planCutoutDialogue('La antena envía una curiosa señal de sopa.', 0, 3.1, 30)
+  assert.ok(plan.visemes.some(beat => beat.state === 'small'))
+  assert.ok(plan.visemes.some(beat => beat.state === 'wide'))
+  assert.ok(plan.visemes.some(beat => beat.state === 'round'))
+})
+
 test('mouth layers receive complementary, editable opacity keyframes', () => {
   const plan = planCutoutDialogue('Una frase corta para hablar.', 0, 3, 30)
   const frames = applyCutoutDialogue({ open: layer('mouth-open'), closed: layer('mouth-closed') }, plan)

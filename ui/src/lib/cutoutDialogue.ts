@@ -50,6 +50,9 @@ export function bindCutoutFaceToPose(layers: SceneLayer[], poseLayerId: string):
 
 const VOWEL = /[aeiouáéíóúäëïöü]/i
 const ROUND_VOWEL = /[ouóúöü]/i
+const visemeForGlyph = (glyph: string): CutoutViseme => /[.,;:!?—-]/.test(glyph) || !VOWEL.test(glyph)
+  ? 'closed'
+  : ROUND_VOWEL.test(glyph) ? 'round' : /[aeáé]/i.test(glyph) ? 'wide' : 'small'
 const pointFor = (layer: SceneLayer, time: number, opacity: number): SceneKeyframe => {
   const reference = layer.animation.keyframes?.[0] ?? layer.animation.start
   return {
@@ -79,14 +82,27 @@ export function planCutoutDialogue(text: string, start: number, end: number, fps
   const available = safeEnd - safeStart
   const maxBeats = Math.max(2, Math.floor(available / minHold))
   const stride = Math.max(1, Math.ceil(glyphs.length / maxBeats))
-  const beats = glyphs.filter((_, index) => index % stride === 0 || index === glyphs.length - 1)
+  const glyphStates = glyphs.map(visemeForGlyph)
+  const selectedIndexes = glyphs.flatMap((_, index) => index % stride === 0 || index === glyphs.length - 1 ? [index] : [])
+  // Even sampling can accidentally skip every O/U or I sound in an otherwise
+  // long line, making installed round/small sprites look broken. Preserve one
+  // interior sample of each viseme that exists in the text when cadence allows
+  // it, preferably replacing an uninformative closed sample.
+  for (const required of ['small', 'wide', 'round'] as const) {
+    if (selectedIndexes.slice(1, -1).some(index => glyphStates[index] === required)) continue
+    const candidate = glyphStates.findIndex((state, index) => state === required && index > 0 && index < glyphs.length - 1)
+    if (candidate < 0) continue
+    const replacement = selectedIndexes.findIndex((index, position) => position > 0 && position < selectedIndexes.length - 1 && glyphStates[index] === 'closed')
+    if (replacement >= 0) selectedIndexes[replacement] = candidate
+    else if (selectedIndexes.length < maxBeats) selectedIndexes.push(candidate)
+  }
+  selectedIndexes.sort((a, b) => a - b)
+  const beats = [...new Set(selectedIndexes)].map(index => glyphs[index])
   const interval = available / Math.max(1, beats.length)
   const visemes = beats.map((glyph, index) => {
     const beatStart = safeStart + interval * index
     const beatEnd = index === beats.length - 1 ? safeEnd : Math.max(beatStart + frame, safeStart + interval * (index + 1))
-    const state: CutoutViseme = /[.,;:!?—-]/.test(glyph) || !VOWEL.test(glyph)
-      ? 'closed'
-      : ROUND_VOWEL.test(glyph) ? 'round' : /[aeáé]/i.test(glyph) ? 'wide' : 'small'
+    const state = visemeForGlyph(glyph)
     return { start: beatStart, end: beatEnd, state }
   })
   // First and last frames should always settle on a closed mouth so a cut into
