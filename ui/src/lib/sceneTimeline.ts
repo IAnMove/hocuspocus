@@ -24,7 +24,11 @@ export const applySceneCurve = (amount: number, curve: SceneCurve) => {
   if (curve === 'ease') return value * value * (3 - 2 * value)
   if (curve === 'dramatic') return value * value
   if (curve === 'bounce') return Math.max(0, Math.min(1, value + Math.sin(value * Math.PI * 3) * (1 - value) * .18))
-  if (curve === 'hold') return value < .12 ? 0 : 1
+  // A hold is a step function: retain the preceding keyframe for its full
+  // interval and switch only on the following keyframe. The former 12%
+  // threshold made every cutout mouth pulse (and any other held pose) jump
+  // almost immediately to the *next* state.
+  if (curve === 'hold') return value < 1 ? 0 : 1
   return value
 }
 
