@@ -21,7 +21,7 @@ const GRADE_PALETTES: readonly SceneGradePalette[] = ['natural', 'cool', 'warm',
  * A two-layer shot keeps its subject at camera speed rather than pushing it
  * to 1.2 - a lone hero is not a foreground element, it is the subject.
  */
-const AUDIO_KINDS: readonly SceneRecipeAudio['kind'][] = ['speech', 'music', 'sfx']
+const AUDIO_KINDS: readonly SceneRecipeAudio['kind'][] = ['speech', 'music', 'sfx', 'audio']
 
 /** Rejects the whole track rather than half of it: a music bed at the wrong
  *  volume is worse than one the user is told is missing. */
@@ -32,7 +32,7 @@ const parseRecipeAudio = (raw: unknown): SceneRecipeAudio[] | undefined => {
     const track = item as Record<string, unknown>
     const id = typeof track.id === 'string' && track.id.trim() ? track.id.trim() : `audio-${index + 1}`
     if (!AUDIO_KINDS.includes(track.kind as SceneRecipeAudio['kind'])) {
-      throw new Error(`Audio track "${id}" must be speech, music or sfx.`)
+      throw new Error(`Audio track "${id}" must be speech, music, sfx or audio.`)
     }
     return [{
       id,
@@ -162,7 +162,7 @@ export interface SceneRecipeShot {
  */
 export interface SceneRecipeAudio {
   id: string
-  kind: 'speech' | 'music' | 'sfx'
+  kind: 'speech' | 'music' | 'sfx' | 'audio'
   /** A resolved filename. Without one the id must resolve through `resolved`. */
   source?: string
   /** What the recipe runner generates through the matching HocusPocus audio engine when source is missing. */
@@ -545,7 +545,7 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         type: 'object',
         properties: {
           id: { type: 'string', minLength: 1, maxLength: 64 },
-          kind: { enum: ['speech', 'music', 'sfx'] },
+          kind: { enum: ['speech', 'music', 'sfx', 'audio'] },
           source: { type: 'string', maxLength: 400 },
           prompt: { type: 'string', maxLength: 600 },
           name: { type: 'string', maxLength: 120 },

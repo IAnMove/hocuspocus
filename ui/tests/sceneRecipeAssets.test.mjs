@@ -25,6 +25,15 @@ test('recipe SFX uses MMAudio with an isolated non-dialogue prompt', () => {
   assert.equal(params.sfx_mode, true)
 })
 
+test('generic generated audio follows the SFX engine while keeping its recipe kind', () => {
+  const params = recipeAudioGenerationParams({
+    id: 'room-tone', kind: 'audio', prompt: 'Soft winter square ambience.',
+  }, 6, 'default')
+  assert.equal(params.model_type, 'mmaudio_v2')
+  assert.equal(params._audio_sub_mode, 'sfx')
+  assert.equal(params.sfx_mode, true)
+})
+
 test('resolved audio filenames become durable recipe sources', () => {
   const recipe = {
     version: 1,

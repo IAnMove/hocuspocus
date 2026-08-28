@@ -164,6 +164,7 @@ const RECIPE_AUDIO_DEFAULT_MODELS: Record<SceneRecipeAudio['kind'], string> = {
   speech: 'qwen3_tts_voicedesign',
   sfx: 'mmaudio_v2',
   music: 'ace_step_v1_5_xl_sft_lm_4b',
+  audio: 'mmaudio_v2',
 }
 
 export function recipeAudioGenerationParams(
@@ -175,18 +176,19 @@ export function recipeAudioGenerationParams(
   if (!prompt) throw new Error(`Audio track “${track.id}” needs a prompt or an existing source.`)
   const seconds = Math.max(1, Math.min(60, duration))
   const model = track.model || RECIPE_AUDIO_DEFAULT_MODELS[track.kind]
+  const subMode = track.kind === 'audio' ? 'sfx' : track.kind
   const common = {
     model_type: model,
     generation_mode: 'audio',
     prompt,
     duration_seconds: seconds,
     workspace,
-    _audio_sub_mode: track.kind,
+    _audio_sub_mode: subMode,
   }
   if (track.kind === 'speech') {
     return { ...common, video_length: 0, image_mode: 0, multi_prompts_gen_type: 2 }
   }
-  if (track.kind === 'sfx') {
+  if (track.kind === 'sfx' || track.kind === 'audio') {
     return {
       ...common,
       MMAudio_prompt: prompt,

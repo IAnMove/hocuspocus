@@ -409,8 +409,8 @@ test('an audio id resolves through the same map as an asset', () => {
 })
 
 test('an unresolved track fails loudly instead of exporting silence', () => {
-  // Nothing generates audio from the recipe path yet, so this must name what
-  // is missing rather than produce a mute MP4 nobody can explain.
+  // Compilation is the final gate after the runner resolves generation. A
+  // remaining unresolved source must still name the missing request.
   assert.throws(
     () => compileWithAudio([{ id: 'bed', kind: 'music', prompt: 'melancholic strings' }]),
     /melancholic strings/,
@@ -418,7 +418,7 @@ test('an unresolved track fails loudly instead of exporting silence', () => {
 })
 
 test('audio is validated before anything is compiled', () => {
-  assert.throws(() => withAudio([{ id: 'a', kind: 'orchestra' }]), /speech, music or sfx/)
+  assert.throws(() => withAudio([{ id: 'a', kind: 'orchestra' }]), /speech, music, sfx or audio/)
   assert.throws(() => withAudio([{ id: 'a', kind: 'music' }, { id: 'a', kind: 'sfx' }]), /own id/)
 })
 

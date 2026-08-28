@@ -91,7 +91,7 @@ export function sceneToRecipe(scene: Scene): SceneRecipe {
     record: false,
     save: false,
     assets,
-    audio: scene.audioTracks?.flatMap(track => track.kind === 'audio' ? [] : [{
+    audio: scene.audioTracks?.map(track => ({
       id: track.id,
       kind: track.kind,
       source: track.filename,
@@ -99,7 +99,8 @@ export function sceneToRecipe(scene: Scene): SceneRecipe {
       startTime: track.startTime,
       volume: track.volume,
       prompt: track.prompt,
-    }]),
+      model: track.model,
+    })),
     dialogueBeats: scene.dialogueBeats?.map(beat => ({ ...beat, mouthLayerIds: [...beat.mouthLayerIds] })),
     scene: {
       width: scene.width,
