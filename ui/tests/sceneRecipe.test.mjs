@@ -102,6 +102,23 @@ test('custom recipe dialogue drives distinct face-bound visemes without crossing
   assert.equal(scene.layers.find(layer => layer.id === 'b-wide').animation.keyframes, undefined)
 })
 
+test('recipe dialogue preserves how its timing was obtained', () => {
+  for (const confidence of ['known-text', 'aligned-audio', 'energy-fallback']) {
+    const recipe = parseSceneRecipe({
+      version: 1,
+      name: `timing-${confidence}`,
+      assets: [{ id: 'mouth-art', kind: 'image', source: 'mouth.png' }],
+      dialogueBeats: [{ id: 'line', text: 'Hola', start: 0, end: 1, mouthLayerIds: ['mouth-open'], confidence }],
+      scene: {
+        width: 1280, height: 720, fps: 30, duration: 2,
+        layers: [{ id: 'mouth-open', name: 'Mouth Open', type: 'overlay', asset: 'mouth-art' }],
+      },
+    })
+    const scene = compileSceneRecipe(recipe, { 'mouth-art': 'mouth.png' }, filename => filename)
+    assert.equal(scene.dialogueBeats[0].confidence, confidence)
+  }
+})
+
 test('recipe version accepts a numeric string from imperfect structured providers', () => {
   const recipe = parseSceneRecipe({ ...EXAMPLE_SAUCER_CRUISE_RECIPE, version: '1' })
   assert.equal(recipe.version, 1)

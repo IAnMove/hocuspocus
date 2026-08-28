@@ -57,7 +57,9 @@ export function findCutoutMouthLayers(layers: SceneLayer[], poseLayerId?: string
     || !layer.faceBinding && layer.relationship?.type === 'parent' && layer.relationship.targetLayerId === poseLayerId && isCutoutFaceLayer(layer)) : []
   // A semantic or legacy-parented kit is authoritative. Old single-character
   // scenes that have never been bound retain their global name-based fallback.
-  const candidates = scoped.length ? scoped : visual
+  const hasAssignedMouthKit = visual.some(layer => layer.faceBinding?.role === 'mouth'
+    || !layer.faceBinding && layer.relationship?.type === 'parent' && isCutoutFaceLayer(layer))
+  const candidates = scoped.length ? scoped : poseLayerId && hasAssignedMouthKit ? [] : visual
   const find = (state: CutoutViseme | 'open') => candidates.find(layer => bindingState(layer, state)) ?? candidates.find(layer => isMouthState(layer, state))
   return { open: find('open'), closed: find('closed'), small: find('small'), wide: find('wide'), round: find('round') }
 }

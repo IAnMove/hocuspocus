@@ -510,6 +510,7 @@ export function SceneAnimatorPanel() {
   const [cutoutDialogueText, setCutoutDialogueText] = useState('')
   const [cutoutDialogueStart, setCutoutDialogueStart] = useState(0)
   const [cutoutDialogueEnd, setCutoutDialogueEnd] = useState(5)
+  const [cutoutDialogueTrackId, setCutoutDialogueTrackId] = useState('')
   const [cutoutDialogueBusy, setCutoutDialogueBusy] = useState(false)
   const [chainFromPlayhead, setChainFromPlayhead] = useState(false)
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null)
@@ -558,6 +559,10 @@ export function SceneAnimatorPanel() {
   const generatedModels = outputs.filter(output => output.type === 'model3d' && /\.glb$/i.test(output.name))
   const generatedMedia = outputs.filter(output => output.type === 'image' || output.type === 'video')
   const generatedAudio = outputs.filter(output => output.type === 'audio')
+  const dialogueAudioTracks = [...(scene.audioTracks ?? [])].sort((a, b) => Number(b.kind === 'speech') - Number(a.kind === 'speech'))
+  const selectedDialogueTrack = dialogueAudioTracks.find(track => track.id === cutoutDialogueTrackId)
+    ?? dialogueAudioTracks.find(track => track.kind === 'speech')
+    ?? dialogueAudioTracks[0]
   const narrativeVisuals = outputs.filter(output => output.type === 'model3d' || output.type === 'image' || output.type === 'video')
   const narrativeTemplate = getNarrativeTemplate(narrativeTemplateId)!
   const narrativeAssetByName = (name: string) => narrativeVisuals.find(asset => asset.name === name)
@@ -2160,7 +2165,7 @@ export function SceneAnimatorPanel() {
     const plan = planCutoutDialogue(text, start, end, fps)
     const frames = applyCutoutDialogue(mouthLayers, plan)
     const beatId = uid()
-    const audioTrackId = (scene.audioTracks ?? []).find(track => track.kind === 'speech')?.id
+    const audioTrackId = selectedDialogueTrack?.id
     updateScene(current => ({
       ...current,
       layers: current.layers.map(layer => frames[layer.id] ? { ...layer, animation: { ...layer.animation, keyframes: frames[layer.id], duration: current.duration, curve: 'hold' } } : layer),
@@ -2175,7 +2180,7 @@ export function SceneAnimatorPanel() {
       ?? (selected && selected.type !== 'camera' && selected.type !== 'effect' && !isCutoutFaceLayer(selected) ? selected.id : undefined)
     const mouthLayers = findCutoutMouthLayers(scene.layers, poseLayerId)
     const primary = mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round
-    const track = (scene.audioTracks ?? []).find(item => item.kind === 'speech') ?? scene.audioTracks?.[0]
+    const track = selectedDialogueTrack
     if (!primary) { setMessage('Add or mount an Open, Small, Wide or Round mouth overlay first.'); return }
     if (!track) { setMessage('Attach or generate a speech track first.'); return }
     if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage('Unlock the mouth layers before animating dialogue.'); return }
@@ -2200,7 +2205,7 @@ export function SceneAnimatorPanel() {
       updateScene(current => ({
         ...current,
         layers: current.layers.map(layer => framesByLayer[layer.id] ? { ...layer, animation: { ...layer.animation, keyframes: framesByLayer[layer.id], duration: current.duration, curve: 'hold' } } : layer),
-        dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.some(id => Object.keys(framesByLayer).includes(id))), ...plans.map((plan, index) => ({ id: beatIds[index], text: units[index].text, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(framesByLayer), audioTrackId: track.id, confidence: 'known-text' as const }))],
+        dialogueBeats: [...(current.dialogueBeats ?? []).filter(beat => !beat.mouthLayerIds.some(id => Object.keys(framesByLayer).includes(id))), ...plans.map((plan, index) => ({ id: beatIds[index], text: units[index].text, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(framesByLayer), audioTrackId: track.id, confidence: 'aligned-audio' as const }))],
       }))
       setCutoutDialogueText(segments.map(segment => segment.text).join(' ')); setCutoutDialogueStart(plans[0].start); setCutoutDialogueEnd(plans.at(-1)!.end)
       setSelectedId(primary.id); setProgress(plans[0].start / scene.duration)
@@ -2458,9 +2463,10 @@ export function SceneAnimatorPanel() {
         <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-rose-100">Cutout dialogue</span><span className="text-[8px] text-rose-200/75">Editable mouth keyframes</span></div>
         <p className="text-[8px] leading-relaxed text-text-muted">With mouth overlays named <em>Open</em>, <em>Small</em>, <em>Wide</em>, <em>Round</em> and optionally <em>Closed</em>, turn a known line into a restrained speaking rhythm. Missing shapes safely fall back to Open.</p>
         <button type="button" disabled={!selected || playing || recording || publishing} onClick={bindCutoutFace} className="w-full rounded border border-rose-300/30 bg-black/10 px-2 py-1 text-[9px] text-rose-100 disabled:opacity-40">Bind face overlays to selected pose</button>
+        {dialogueAudioTracks.length > 0 && <label className="block text-[8px] text-text-muted">Voice track<select aria-label="Cutout dialogue voice track" value={selectedDialogueTrack?.id ?? ''} onChange={event => setCutoutDialogueTrackId(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[9px] text-text-secondary">{dialogueAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind === 'speech' ? 'Voice' : track.kind} · {track.name}</option>)}</select></label>}
         <textarea value={cutoutDialogueText} disabled={playing || recording || publishing} onChange={event => setCutoutDialogueText(event.target.value)} placeholder="Dialogue spoken by this character…" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
         <div className="grid grid-cols-2 gap-1"><label className="text-[8px] text-text-muted">Start<input aria-label="Cutout dialogue start" type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueStart} onChange={event => setCutoutDialogueStart(Number(event.target.value) || 0)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label><label className="text-[8px] text-text-muted">End<input aria-label="Cutout dialogue end" type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueEnd} onChange={event => setCutoutDialogueEnd(Number(event.target.value) || scene.duration)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label></div>
-        <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!cutoutDialogueText.trim() || cutoutDialogueBusy || playing || recording || publishing} onClick={animateCutoutDialogue} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">Animate from line</button><button type="button" disabled={cutoutDialogueBusy || !(scene.audioTracks ?? []).length || playing || recording || publishing} onClick={() => void animateCutoutDialogueFromAudio()} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{cutoutDialogueBusy ? 'Analyzing speech…' : 'Detect from audio'}</button></div>
+        <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!cutoutDialogueText.trim() || cutoutDialogueBusy || playing || recording || publishing} onClick={animateCutoutDialogue} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">Animate from line</button><button type="button" disabled={cutoutDialogueBusy || !selectedDialogueTrack || playing || recording || publishing} onClick={() => void animateCutoutDialogueFromAudio()} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{cutoutDialogueBusy ? 'Analyzing speech…' : 'Detect from audio'}</button></div>
         {(scene.dialogueBeats ?? []).length > 0 && <p className="text-[8px] text-rose-100/80">{scene.dialogueBeats!.length} dialogue beat{scene.dialogueBeats!.length === 1 ? '' : 's'} saved in this scene.</p>}
       </div>
       {selected && <div className="space-y-1 rounded border border-fuchsia-400/20 bg-fuchsia-400/[.025] p-2"><div className="text-[9px] text-fuchsia-100">Suggestions for {selected.name}</div><div className="flex flex-wrap gap-1">{copilotSuggestions.map(suggestion => <button key={suggestion} type="button" disabled={copilotBusy || selected.locked} onClick={() => { setCopilotIntent(suggestion); setCopilotError(null) }} className="rounded border border-fuchsia-300/25 px-1.5 py-0.5 text-left text-[8px] text-fuchsia-100 hover:bg-fuchsia-400/10 disabled:opacity-40">{suggestion}</button>)}</div></div>}

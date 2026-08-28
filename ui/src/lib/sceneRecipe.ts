@@ -64,7 +64,10 @@ const parseDialogueBeats = (raw: unknown): SceneRecipeDialogueBeat[] | undefined
     if (!text || !mouthLayerIds.length || end <= start) throw new Error(`Dialogue beat "${id}" needs text, a positive range and mouth layer ids.`)
     if (ids.has(id)) throw new Error('Each dialogue beat needs its own id.')
     ids.add(id)
-    return { id, text, start, end, mouthLayerIds, audioTrackId: asString(beat.audioTrackId) || undefined, confidence: 'known-text' as const }
+    const confidence: SceneRecipeDialogueBeat['confidence'] = beat.confidence === 'aligned-audio' || beat.confidence === 'energy-fallback'
+      ? beat.confidence
+      : 'known-text'
+    return { id, text, start, end, mouthLayerIds, audioTrackId: asString(beat.audioTrackId) || undefined, confidence }
   })
   return beats.length ? beats : undefined
 }
@@ -184,7 +187,7 @@ export interface SceneRecipeDialogueBeat {
   end: number
   mouthLayerIds: string[]
   audioTrackId?: string
-  confidence: 'known-text'
+  confidence: 'known-text' | 'aligned-audio' | 'energy-fallback'
 }
 
 export interface SceneRecipe {
@@ -565,7 +568,7 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
           id: { type: 'string', minLength: 1, maxLength: 120 }, text: { type: 'string', minLength: 1, maxLength: 2000 },
           start: { type: 'number', minimum: 0, maximum: 60 }, end: { type: 'number', minimum: .01, maximum: 60 },
           mouthLayerIds: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 120 } },
-          audioTrackId: { type: 'string', minLength: 1, maxLength: 120 }, confidence: { const: 'known-text' },
+          audioTrackId: { type: 'string', minLength: 1, maxLength: 120 }, confidence: { enum: ['known-text', 'aligned-audio', 'energy-fallback'] },
         }, required: ['id', 'text', 'start', 'end', 'mouthLayerIds', 'confidence'],
       },
     },

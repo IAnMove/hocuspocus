@@ -575,7 +575,9 @@ export interface Scene {
     end: number
     mouthLayerIds: string[]
     audioTrackId?: string
-    confidence: 'known-text'
+    /** How the timing was obtained: authored bounds, speech alignment, or an
+     * approximate voice-activity envelope when no transcript is available. */
+    confidence: 'known-text' | 'aligned-audio' | 'energy-fallback'
   }>
   composition?: {
     showGrid: boolean

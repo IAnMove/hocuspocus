@@ -96,6 +96,25 @@ test('semantic face binding wins over names and keeps pose assignments isolated'
   assert.deepEqual(boundA.find(item => item.id === blinkB.id).relationship, undefined)
 })
 
+test('a selected character without assigned mouths does not reuse another character mouth kit', () => {
+  const poseA = { ...layer('pose-a'), name: 'Character A pose', type: 'image' }
+  const poseB = { ...layer('pose-b'), name: 'Character B pose', type: 'image' }
+  const mouthA = { ...layer('mouth-a-wide'), name: 'Character A wide mouth', type: 'overlay', faceBinding: { poseLayerId: poseA.id, role: 'mouth', state: 'wide' } }
+
+  const foundForB = findCutoutMouthLayers([poseA, poseB, mouthA], poseB.id)
+
+  assert.ok(Object.values(foundForB).every(value => value === undefined))
+})
+
+test('legacy single-character scenes still discover unbound mouths', () => {
+  const pose = { ...layer('legacy-pose'), name: 'Legacy character pose', type: 'image' }
+  const mouth = { ...layer('legacy-mouth-round'), name: 'Round mouth', type: 'overlay' }
+
+  const found = findCutoutMouthLayers([pose, mouth], pose.id)
+
+  assert.equal(found.round?.id, mouth.id)
+})
+
 test('legacy unparented overlays receive semantic binding while legacy other-pose parents stay untouched', () => {
   const pose = { ...layer('pose'), name: 'Character pose', type: 'image' }
   const legacyMouth = { ...layer('mouth-open'), name: 'Open mouth', type: 'overlay' }
