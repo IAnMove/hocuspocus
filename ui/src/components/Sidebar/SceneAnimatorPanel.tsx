@@ -12,7 +12,7 @@ import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
-import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, isCutoutFaceLayer, planCutoutDialogue } from '../../lib/cutoutDialogue'
+import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue } from '../../lib/cutoutDialogue'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
@@ -1558,6 +1558,7 @@ export function SceneAnimatorPanel() {
           source: isCamera ? '' : String(rawLayer.source ?? ''),
           visible,
           locked: rawLayer.locked === true,
+          faceBinding: normalizeFaceBinding(rawLayer.faceBinding),
           relationship,
           effects: isCamera ? undefined : normalizedEffects(rawLayer.effects),
           strip: isCamera ? undefined : normalizedStrip(rawLayer.strip),
@@ -1826,6 +1827,19 @@ export function SceneAnimatorPanel() {
     const viewers = new Map<string, ModelViewerAnimationElement[]>()
     const canvases = new Map<string, HTMLCanvasElement[]>()
     const models = current.layers.filter((layer): layer is VisualAnimatorLayer => layer.visible && layer.type === 'model3d' && !layer.missingAsset && Boolean(layer.source))
+
+    // Image, video and procedural-effect scenes do not need the hidden WebGL
+    // stage. Waiting for two presentation frames for every encoded frame is
+    // especially expensive in a background tab, where requestAnimationFrame
+    // is throttled, and used to turn an eight-second cutaway into a multi-
+    // minute export even though there was no model-viewer to synchronize.
+    if (models.length === 0) {
+      return {
+        canvases,
+        async renderFrame() {},
+        dispose() { host.remove() },
+      }
+    }
 
     for (const layer of models) {
       const scales = [layer.transform.scale, layer.animation.start.scale, layer.animation.end.scale, ...getSceneKeyframes(layer).map(frame => frame.scale)]
@@ -2134,7 +2148,10 @@ export function SceneAnimatorPanel() {
   const animateCutoutDialogue = () => {
     const text = cutoutDialogueText.trim()
     if (!text) { setMessage('Write the dialogue line before animating the mouth.'); return }
-    const mouthLayers = findCutoutMouthLayers(scene.layers)
+    const poseLayerId = selected?.faceBinding?.poseLayerId
+      ?? (selected?.relationship?.type === 'parent' && isCutoutFaceLayer(selected) ? selected.relationship.targetLayerId : undefined)
+      ?? (selected && selected.type !== 'camera' && selected.type !== 'effect' && !isCutoutFaceLayer(selected) ? selected.id : undefined)
+    const mouthLayers = findCutoutMouthLayers(scene.layers, poseLayerId)
     const primary = mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round
     if (!primary) { setMessage('Add or mount an Open, Small, Wide or Round mouth overlay first. The cutout talking-head template includes one.'); return }
     if (Object.values(mouthLayers).some(layer => layer?.locked)) { setMessage('Unlock the mouth layers before animating dialogue.'); return }
@@ -2153,7 +2170,10 @@ export function SceneAnimatorPanel() {
     setMessage(`Animated ${plan.visemes.length} mouth beats across ${Object.keys(frames).length} available mouth state${Object.keys(frames).length === 1 ? '' : 's'}. Edit the keyframes in the timeline if needed.`)
   }
   const animateCutoutDialogueFromAudio = async () => {
-    const mouthLayers = findCutoutMouthLayers(scene.layers)
+    const poseLayerId = selected?.faceBinding?.poseLayerId
+      ?? (selected?.relationship?.type === 'parent' && isCutoutFaceLayer(selected) ? selected.relationship.targetLayerId : undefined)
+      ?? (selected && selected.type !== 'camera' && selected.type !== 'effect' && !isCutoutFaceLayer(selected) ? selected.id : undefined)
+    const mouthLayers = findCutoutMouthLayers(scene.layers, poseLayerId)
     const primary = mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round
     const track = (scene.audioTracks ?? []).find(item => item.kind === 'speech') ?? scene.audioTracks?.[0]
     if (!primary) { setMessage('Add or mount an Open, Small, Wide or Round mouth overlay first.'); return }

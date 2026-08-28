@@ -76,3 +76,31 @@ test('mouth discovery and pose binding preserve the authored face placement', ()
   assert.equal(bound.find(item => item.id === plate.id).relationship, undefined)
   assert.equal(bound.find(item => item.id === mouth.id).animation.start.x, mouth.animation.start.x)
 })
+
+test('semantic face binding wins over names and keeps pose assignments isolated', () => {
+  const poseA = { ...layer('pose-a'), name: 'Character pose A', type: 'image' }
+  const poseB = { ...layer('pose-b'), name: 'Character pose B', type: 'image' }
+  const mouthA = { ...layer('overlay-a'), name: 'Overlay A', type: 'overlay', faceBinding: { poseLayerId: poseA.id, role: 'mouth', state: 'wide' } }
+  const mouthB = { ...layer('overlay-b'), name: 'Overlay B', type: 'overlay', faceBinding: { poseLayerId: poseB.id, role: 'mouth', state: 'small' } }
+  const blinkB = { ...layer('eyes-b'), name: 'Eyes B', type: 'overlay', faceBinding: { poseLayerId: poseB.id, role: 'blink', state: 'blink' } }
+  const found = findCutoutMouthLayers([poseA, poseB, mouthA, mouthB, blinkB])
+  assert.equal(found.wide?.id, mouthA.id)
+  assert.equal(found.small?.id, mouthB.id)
+  const foundB = findCutoutMouthLayers([poseA, poseB, mouthA, mouthB, blinkB], poseB.id)
+  assert.equal(foundB.open?.id, mouthB.id)
+  assert.equal(foundB.small?.id, mouthB.id)
+  assert.equal(foundB.wide, undefined)
+  const boundA = bindCutoutFaceToPose([poseA, poseB, mouthA, mouthB, blinkB], poseA.id)
+  assert.deepEqual(boundA.find(item => item.id === mouthA.id).relationship, { type: 'parent', targetLayerId: poseA.id })
+  assert.deepEqual(boundA.find(item => item.id === mouthB.id).relationship, undefined)
+  assert.deepEqual(boundA.find(item => item.id === blinkB.id).relationship, undefined)
+})
+
+test('legacy unparented overlays receive semantic binding while legacy other-pose parents stay untouched', () => {
+  const pose = { ...layer('pose'), name: 'Character pose', type: 'image' }
+  const legacyMouth = { ...layer('mouth-open'), name: 'Open mouth', type: 'overlay' }
+  const other = { ...layer('mouth-closed'), name: 'Closed mouth', type: 'overlay', relationship: { type: 'parent', targetLayerId: 'other-pose' } }
+  const bound = bindCutoutFaceToPose([pose, legacyMouth, other], pose.id)
+  assert.deepEqual(bound.find(item => item.id === legacyMouth.id).faceBinding, { poseLayerId: pose.id, role: 'mouth', state: 'wide' })
+  assert.deepEqual(bound.find(item => item.id === other.id).relationship, { type: 'parent', targetLayerId: 'other-pose' })
+})

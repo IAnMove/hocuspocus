@@ -1,4 +1,4 @@
-import type { SceneKeyframe, SceneLayer } from '../types'
+import type { SceneFaceBinding, SceneFaceBindingState, SceneKeyframe, SceneLayer } from '../types'
 
 export type CutoutViseme = 'closed' | 'small' | 'wide' | 'round'
 
@@ -22,13 +22,48 @@ const isMouthState = (layer: SceneLayer, state: CutoutViseme | 'open') => {
   return label.includes('mouth') && new RegExp(`(?:mouth[ _-]*${state}|${state}[ _-]*mouth)`, 'i').test(label)
 }
 
-export function findCutoutMouthLayers(layers: SceneLayer[]): CutoutMouthLayers {
+const FACE_STATES: SceneFaceBindingState[] = ['closed', 'small', 'wide', 'round', 'blink']
+
+/** Parse the additive facial metadata while keeping malformed imported data inert. */
+export function normalizeFaceBinding(value: unknown): SceneFaceBinding | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const poseLayerId = typeof raw.poseLayerId === 'string' ? raw.poseLayerId.trim() : ''
+  const role = raw.role === 'mouth' || raw.role === 'blink' ? raw.role : undefined
+  const state = FACE_STATES.includes(raw.state as SceneFaceBindingState) ? raw.state as SceneFaceBindingState : undefined
+  if (!poseLayerId || !role) return undefined
+  return { poseLayerId, role, ...(state ? { state } : {}) }
+}
+
+const bindingState = (layer: SceneLayer, state: CutoutViseme | 'open') =>
+  layer.faceBinding?.role === 'mouth' && (state === 'open'
+    ? ['small', 'wide', 'round'].includes(layer.faceBinding.state ?? '')
+    : layer.faceBinding.state === state)
+
+const inferredFaceBinding = (layer: SceneLayer, poseLayerId: string): SceneFaceBinding => {
+  const label = layerLabel(layer)
+  if (label.includes('blink') || /(?:closed)[ _-]*(?:eye|eyes)|(?:eye|eyes)[ _-]*(?:closed)/i.test(label)) {
+    return { poseLayerId, role: 'blink', state: 'blink' }
+  }
+  const state = (['closed', 'small', 'wide', 'round'] as const).find(candidate => isMouthState(layer, candidate))
+    ?? (isMouthState(layer, 'open') ? 'wide' : undefined)
+  return { poseLayerId, role: 'mouth', ...(state ? { state } : {}) }
+}
+
+export function findCutoutMouthLayers(layers: SceneLayer[], poseLayerId?: string): CutoutMouthLayers {
   const visual = layers.filter(layer => layer.type !== 'camera' && layer.type !== 'effect')
-  const find = (state: CutoutViseme | 'open') => visual.find(layer => isMouthState(layer, state))
+  const scoped = poseLayerId ? visual.filter(layer =>
+    layer.faceBinding?.role === 'mouth' && layer.faceBinding.poseLayerId === poseLayerId
+    || !layer.faceBinding && layer.relationship?.type === 'parent' && layer.relationship.targetLayerId === poseLayerId && isCutoutFaceLayer(layer)) : []
+  // A semantic or legacy-parented kit is authoritative. Old single-character
+  // scenes that have never been bound retain their global name-based fallback.
+  const candidates = scoped.length ? scoped : visual
+  const find = (state: CutoutViseme | 'open') => candidates.find(layer => bindingState(layer, state)) ?? candidates.find(layer => isMouthState(layer, state))
   return { open: find('open'), closed: find('closed'), small: find('small'), wide: find('wide'), round: find('round') }
 }
 
 export function isCutoutFaceLayer(layer: SceneLayer): boolean {
+  if (layer.faceBinding) return true
   const label = layerLabel(layer)
   return label.includes('mouth') || /(?:blink|closed)[ _-]*(?:eye|eyes)|(?:eye|eyes)[ _-]*(?:blink|closed)/i.test(label)
 }
@@ -43,9 +78,16 @@ export function isCutoutFaceLayer(layer: SceneLayer): boolean {
 export function bindCutoutFaceToPose(layers: SceneLayer[], poseLayerId: string): SceneLayer[] {
   const pose = layers.find(layer => layer.id === poseLayerId)
   if (!pose || pose.type === 'camera' || pose.type === 'effect' || isCutoutFaceLayer(pose)) return layers
-  return layers.map(layer => isCutoutFaceLayer(layer) && layer.id !== pose.id
-    ? { ...layer, relationship: { type: 'parent', targetLayerId: pose.id } }
-    : layer)
+  return layers.map(layer => {
+    if (layer.id === pose.id || !isCutoutFaceLayer(layer)) return layer
+    // A semantic binding to another pose is already assigned; never steal it.
+    if (layer.faceBinding && layer.faceBinding.poseLayerId !== pose.id) return layer
+    // Legacy scenes have no faceBinding. Treat a parent to another pose as
+    // assigned too, while allowing an unparented legacy overlay to migrate.
+    if (!layer.faceBinding && layer.relationship?.type === 'parent' && layer.relationship.targetLayerId !== pose.id) return layer
+    const faceBinding = layer.faceBinding ?? inferredFaceBinding(layer, pose.id)
+    return { ...layer, faceBinding, relationship: { type: 'parent', targetLayerId: pose.id } }
+  })
 }
 
 const VOWEL = /[aeiouáéíóúäëïöü]/i

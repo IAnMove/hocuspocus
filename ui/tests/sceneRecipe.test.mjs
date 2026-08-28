@@ -415,6 +415,20 @@ test('recipe transport preserves authored keyframes, hidden layers, blur and wor
   assert.equal(scene.layers.find(layer => layer.id === 'alternate').visible, false)
 })
 
+test('recipe transport preserves pose-specific face binding metadata', () => {
+  const recipe = parseSceneRecipe({
+    version: 1, name: 'bound-face', record: false, save: false,
+    assets: [{ id: 'pose', kind: 'image', source: 'pose.png' }, { id: 'mouth', kind: 'image', source: 'mouth.png' }],
+    scene: { width: 1280, height: 720, fps: 30, duration: 3, layers: [
+      { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },
+      { id: 'pose-a', type: 'image', asset: 'pose' },
+      { id: 'mouth-wide', type: 'overlay', asset: 'mouth', faceBinding: { poseLayerId: 'pose-a', role: 'mouth', state: 'wide' }, relationship: { type: 'parent', targetLayerId: 'pose-a' } },
+    ] },
+  })
+  const scene = compileSceneRecipe(recipe, { pose: 'pose.png', mouth: 'mouth.png' }, file => file)
+  assert.deepEqual(scene.layers.find(layer => layer.id === 'mouth-wide').faceBinding, { poseLayerId: 'pose-a', role: 'mouth', state: 'wide' })
+})
+
 test('a template recipe compiles a proven narrative composition from declared slots', () => {
   const recipe = parseSceneRecipe({
     version: 1, name: 'thought-beat', record: false, save: false,

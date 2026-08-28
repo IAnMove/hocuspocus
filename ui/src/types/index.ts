@@ -354,6 +354,14 @@ export interface OutputFile {
 }
 
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'
+export type SceneFaceBindingRole = 'mouth' | 'blink'
+export type SceneFaceBindingState = 'closed' | 'small' | 'wide' | 'round' | 'blink'
+/** Optional semantic metadata for a cutout facial overlay. */
+export interface SceneFaceBinding {
+  poseLayerId: string
+  role: SceneFaceBindingRole
+  state?: SceneFaceBindingState
+}
 export type SceneAtmosphereKind =
   | 'rain'
   | 'snow'
@@ -427,6 +435,8 @@ export interface SceneLayer {
   /** Author-confirmed horizontal continuity. Enables safe loop/cylinder tools;
    * this is never inferred from an arbitrary filename at export time. */
   seamlessHorizontal?: boolean
+  /** Optional semantic link for a mouth/blink overlay and its character pose. */
+  faceBinding?: SceneFaceBinding
   relationship?: {
     type: 'parent' | 'follow' | 'lookAt'
     targetLayerId: string

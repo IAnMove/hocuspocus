@@ -1,4 +1,5 @@
 import type { Scene, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../types'
+import { normalizeFaceBinding } from './cutoutDialogue'
 import { resolveSceneGrade } from './sceneGrade'
 import type { SceneGradeIntensity, SceneGradeMood, SceneGradePalette } from './sceneGrade'
 import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES } from './sceneNarrative'
@@ -126,6 +127,7 @@ export interface SceneRecipeLayer {
   parallax?: number
   z?: number
   seamlessHorizontal?: boolean
+  faceBinding?: SceneLayer['faceBinding']
   relationship?: SceneLayer['relationship']
   strip?: SceneLayer['strip']
   effects?: SceneLayer['effects']
@@ -394,6 +396,16 @@ const recipeLayerSchema = {
     parallax: { type: 'number', minimum: 0, maximum: 2 },
     z: { type: 'number', minimum: -10000, maximum: 10000 },
     seamlessHorizontal: { type: 'boolean' },
+    faceBinding: {
+      type: 'object',
+      properties: {
+        poseLayerId: { type: 'string', minLength: 1, maxLength: 80 },
+        role: { enum: ['mouth', 'blink'] },
+        state: { enum: ['closed', 'small', 'wide', 'round', 'blink'] },
+      },
+      required: ['poseLayerId', 'role'],
+      additionalProperties: false,
+    },
     relationship: {
       type: 'object',
       properties: {
@@ -958,6 +970,7 @@ function parseLayers(values: unknown, label: string): SceneRecipeLayer[] {
       parallax: typeof layer.parallax === 'number' ? layer.parallax : undefined,
       z: typeof layer.z === 'number' ? layer.z : undefined,
       seamlessHorizontal: typeof layer.seamlessHorizontal === 'boolean' ? layer.seamlessHorizontal : undefined,
+      faceBinding: normalizeFaceBinding(layer.faceBinding),
       relationship: parseRelationship(layer.relationship),
       strip: parseStrip(layer.strip),
       effects: parseEffects(layer.effects),
@@ -1396,6 +1409,7 @@ export function compileSceneRecipe(
       locked: layer.locked,
       fill: layer.fill === true || layer.type === 'effect',
       seamlessHorizontal: layer.seamlessHorizontal,
+      faceBinding: layer.faceBinding ? { ...layer.faceBinding } : undefined,
       relationship: layer.relationship ? { ...layer.relationship } : undefined,
       strip: layer.strip ? { ...layer.strip, seamOccluder: layer.strip.seamOccluder ? { ...layer.strip.seamOccluder } : undefined } : undefined,
       // An explicit value always wins: the model asked for that depth on purpose.
