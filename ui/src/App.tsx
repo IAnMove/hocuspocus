@@ -47,7 +47,6 @@ function AppContent() {
   const loadProductionProfile = useStore(s => s.loadProductionProfile)
   const loadLlmStatus = useStore(s => s.loadLlmStatus)
   const loadLlmModels = useStore(s => s.loadLlmModels)
-  const loadPipelineList = useStore(s => s.loadPipelineList)
   const servicesConfig = useStore(s => s.servicesConfig)
   const dashboardOpen = useStore(s => s.dashboardOpen)
   const runtimeIdentity = useStore(s => s.systemStats?.runtime)
@@ -66,10 +65,9 @@ function AppContent() {
     loadProductionProfile()
     loadLlmStatus()
     loadLlmModels()
-    loadPipelineList()
     reconnectJobs()
     reconnectDirectorPipelines()
-  }, [loadModels, loadWorkspaces, loadOutputs, loadSystemConfig, loadServicesConfig, loadProductionProfile, loadLlmStatus, loadLlmModels, loadPipelineList, reconnectJobs, reconnectDirectorPipelines])
+  }, [loadModels, loadWorkspaces, loadOutputs, loadSystemConfig, loadServicesConfig, loadProductionProfile, loadLlmStatus, loadLlmModels, reconnectJobs, reconnectDirectorPipelines])
 
   // Keep the output library live even when a job was submitted by another
   // tab, restored after a browser restart, or its terminal poll was missed.
@@ -116,7 +114,17 @@ function AppContent() {
 
   // Poll LLM status to stay in sync with backend auto-load/unload
   useEffect(() => {
-    const interval = setInterval(loadLlmStatus, 15000)
+    let inFlight = false
+    const tick = async () => {
+      if (document.hidden || inFlight) return
+      inFlight = true
+      try {
+        await loadLlmStatus()
+      } finally {
+        inFlight = false
+      }
+    }
+    const interval = setInterval(() => { void tick() }, 15000)
     return () => clearInterval(interval)
   }, [loadLlmStatus])
 

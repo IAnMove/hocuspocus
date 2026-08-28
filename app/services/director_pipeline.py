@@ -1778,88 +1778,138 @@ def _reconcile_pipeline_state_file(filepath: str, data: dict) -> dict:
     return data
 
 
-def list_pipeline_states(out_dir: str, workspace: Optional[str] = None) -> list[dict]:
+def _pipeline_scan_dirs(out_dir: str, workspace: Optional[str]) -> list[tuple[str, str]]:
+    """Return (scan_dir, workspace_name) for one workspace only."""
+    normalized_workspace = workspace or "default"
+    if normalized_workspace == "default":
+        return [(out_dir, "default")]
+    workspace_dir = os.path.join(out_dir, normalized_workspace)
+    return [(workspace_dir, normalized_workspace)] if os.path.isdir(workspace_dir) else []
+
+
+def _iter_pipeline_state_files(
+    out_dir: str, workspace: Optional[str] = None,
+) -> list[tuple[float, str, str]]:
+    """Newest-first pipeline files as (mtime, filepath, workspace_name).
+
+    Listing uses mtime so Workspaces can paginate without json-loading every
+    5–8 MB state file in the folder.
+    """
+    found: list[tuple[float, str, str]] = []
+    if not os.path.isdir(out_dir):
+        return found
+    for scan_dir, workspace_name in _pipeline_scan_dirs(out_dir, workspace):
+        try:
+            names = os.listdir(scan_dir)
+        except OSError:
+            continue
+        for fname in names:
+            if not (fname.startswith(_PIPELINE_FILE_PREFIX) and fname.endswith(".json")):
+                continue
+            filepath = os.path.join(scan_dir, fname)
+            try:
+                mtime = os.path.getmtime(filepath)
+            except OSError:
+                continue
+            found.append((mtime, filepath, workspace_name))
+    found.sort(key=lambda item: item[0], reverse=True)
+    return found
+
+
+def _summarize_pipeline_state_file(filepath: str, workspace_name: str) -> Optional[dict]:
+    """Read one pipeline JSON into a dashboard list row, or None if unreadable."""
+    try:
+        with _pipeline_file_lock:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data = _reconcile_pipeline_state_file(filepath, data)
+            # Normalize and replace the exact snapshot read while
+            # retaining the file lock. Releasing it between read
+            # and write let a repair worker publish newer progress
+            # that this stale list snapshot then overwrote.
+            pid = data.get("pipeline_id", "")
+            changed = _normalize_interrupted_repair(data, pid)
+
+            # Detect stale "running" pipelines while retaining the
+            # same serialization boundary as repair normalization.
+            status = data.get("status", "unknown")
+            with _pipeline_lock:
+                pipeline_present = pid in _pipelines
+            if status == "running" and not pipeline_present:
+                data["status"] = "crashed"
+                status = "crashed"
+                changed = True
+            if changed:
+                _write_pipeline_json_unlocked(filepath, data)
+        clip_count = (
+            len(data.get("clips") or [])
+            or len(data.get("clip_plans") or [])
+            or len(data.get("planned_clips") or [])
+        )
+        return {
+            "id": pid,
+            "status": status,
+            "phase": data.get("phase") or status,
+            "pipeline_type": data.get("pipeline_type", ""),
+            "generation_mode": data.get("generation_mode", "image_guided"),
+            "created_at": data.get("created_at"),
+            "updated_at": data.get("updated_at"),
+            "completed_at": data.get("completed_at"),
+            "progress": copy.deepcopy(data.get("progress") or {}),
+            "error": data.get("error"),
+            "clip_count": clip_count,
+            "output_count": len(data.get("output_files", [])),
+            "output_files": list(data.get("output_files", []) or []),
+            "scene_description": (data.get("scene_description", "") or "")[:100],
+            "comic_id": data.get("comic_id"),
+            "preview_fingerprint": data.get("preview_fingerprint"),
+            "preview_revision": data.get("preview_revision", 1),
+            "workspace": workspace_name,
+            "repair_status": (data.get("repair") or {}).get("status"),
+            "generation_details": _public_pipeline_generation_details(
+                _director_params_from_saved_state(data),
+                len(data.get("clips", [])),
+            ),
+            "resource_schedule": copy.deepcopy(
+                data.get("resource_schedule") or {}
+            ),
+            "_filepath": filepath,
+        }
+    except Exception:
+        return None
+
+
+def list_pipeline_states(
+    out_dir: str,
+    workspace: Optional[str] = None,
+    limit: int = 0,
+    offset: int = 0,
+) -> list[dict]:
     """Scan saved pipeline state files for one workspace.
 
     Older code always descended into every workspace, despite the API claiming
     to return the active workspace. Besides leaking unrelated history into the
     dashboard, that made comic PRE auto-recovery select another project's run.
+
+    Files are newest-first by mtime. ``limit=0`` returns the full list
+    (scripts and comic recovery). The Workspaces UI passes a small page so it
+    does not json-load every pipeline on open.
     """
+    files = _iter_pipeline_state_files(out_dir, workspace)
+    if offset < 0:
+        offset = 0
+    selected = files[offset:offset + limit] if limit and limit > 0 else files[offset:]
     results = []
-    if not os.path.isdir(out_dir):
-        return results
-    normalized_workspace = workspace or "default"
-    if normalized_workspace == "default":
-        dirs_to_scan = [out_dir]
-    else:
-        workspace_dir = os.path.join(out_dir, normalized_workspace)
-        dirs_to_scan = [workspace_dir] if os.path.isdir(workspace_dir) else []
-
-    for scan_dir in dirs_to_scan:
-        for fname in os.listdir(scan_dir):
-            if fname.startswith(_PIPELINE_FILE_PREFIX) and fname.endswith(".json"):
-                try:
-                    filepath = os.path.join(scan_dir, fname)
-                    with _pipeline_file_lock:
-                        with open(filepath, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                        data = _reconcile_pipeline_state_file(filepath, data)
-                        # Normalize and replace the exact snapshot read while
-                        # retaining the file lock. Releasing it between read
-                        # and write let a repair worker publish newer progress
-                        # that this stale list snapshot then overwrote.
-                        pid = data.get("pipeline_id", "")
-                        changed = _normalize_interrupted_repair(data, pid)
-
-                        # Detect stale "running" pipelines while retaining the
-                        # same serialization boundary as repair normalization.
-                        status = data.get("status", "unknown")
-                        with _pipeline_lock:
-                            pipeline_present = pid in _pipelines
-                        if status == "running" and not pipeline_present:
-                            data["status"] = "crashed"
-                            status = "crashed"
-                            changed = True
-                        if changed:
-                            _write_pipeline_json_unlocked(filepath, data)
-                    clip_count = (
-                        len(data.get("clips") or [])
-                        or len(data.get("clip_plans") or [])
-                        or len(data.get("planned_clips") or [])
-                    )
-                    results.append({
-                        "id": pid,
-                        "status": status,
-                        "phase": data.get("phase") or status,
-                        "pipeline_type": data.get("pipeline_type", ""),
-                        "generation_mode": data.get("generation_mode", "image_guided"),
-                        "created_at": data.get("created_at"),
-                        "updated_at": data.get("updated_at"),
-                        "completed_at": data.get("completed_at"),
-                        "progress": copy.deepcopy(data.get("progress") or {}),
-                        "error": data.get("error"),
-                        "clip_count": clip_count,
-                        "output_count": len(data.get("output_files", [])),
-                        "output_files": list(data.get("output_files", []) or []),
-                        "scene_description": (data.get("scene_description", "") or "")[:100],
-                        "comic_id": data.get("comic_id"),
-                        "preview_fingerprint": data.get("preview_fingerprint"),
-                        "preview_revision": data.get("preview_revision", 1),
-                        "workspace": os.path.basename(scan_dir) if scan_dir != out_dir else "default",
-                        "repair_status": (data.get("repair") or {}).get("status"),
-                        "generation_details": _public_pipeline_generation_details(
-                            _director_params_from_saved_state(data),
-                            len(data.get("clips", [])),
-                        ),
-                        "resource_schedule": copy.deepcopy(
-                            data.get("resource_schedule") or {}
-                        ),
-                        "_filepath": filepath,
-                    })
-                except Exception:
-                    pass
-    results.sort(key=lambda x: x.get("created_at") or 0, reverse=True)
+    for _mtime, filepath, workspace_name in selected:
+        item = _summarize_pipeline_state_file(filepath, workspace_name)
+        if item:
+            results.append(item)
     return results
+
+
+def count_pipeline_states(out_dir: str, workspace: Optional[str] = None) -> int:
+    """Count pipeline state files without opening them."""
+    return len(_iter_pipeline_state_files(out_dir, workspace))
 
 
 def _backfill_clip_video_filenames(state: dict, state_dir: str) -> dict:

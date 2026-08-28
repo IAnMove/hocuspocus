@@ -10247,12 +10247,22 @@ def director_pipeline_resume(pid: str):
 # ── Director Pipeline Dashboard ───────────────────────────────────────────
 
 @api.get("/api/v1/director/pipelines")
-def list_saved_pipelines():
-    """List saved pipeline states for the active workspace."""
-    from services.director_pipeline import list_pipeline_states
+def list_saved_pipelines(limit: int = 0, offset: int = 0):
+    """List saved pipeline states for the active workspace.
+
+    Newest first. ``limit=0`` returns the full list. Workspaces passes a
+    small page so opening the tab does not parse every pipeline JSON.
+    """
+    from services.director_pipeline import count_pipeline_states, list_pipeline_states
     base = wgp.server_config.get("save_path", "outputs")
-    pipelines = list_pipeline_states(base, _get_active_workspace())
-    return {"pipelines": pipelines}
+    workspace = _get_active_workspace()
+    pipelines = list_pipeline_states(base, workspace, limit=limit, offset=offset)
+    return {
+        "pipelines": pipelines,
+        "total": count_pipeline_states(base, workspace),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @api.get("/api/v1/director/pipelines/active")

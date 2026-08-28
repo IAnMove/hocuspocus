@@ -1548,8 +1548,8 @@ export async function fetchPipelineStatus(pid: string): Promise<PipelineStatus> 
   return res.json()
 }
 
-export async function fetchActiveDirectorPipelines(): Promise<{ pipelines: ActiveDirectorPipeline[] }> {
-  const res = await fetch(`${BASE}/api/v1/director/pipelines/active`)
+export async function fetchActiveDirectorPipelines(signal?: AbortSignal): Promise<{ pipelines: ActiveDirectorPipeline[] }> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/active`, { signal })
   if (!res.ok) throw new Error('Failed to fetch active Director pipelines')
   return res.json()
 }
@@ -1754,17 +1754,28 @@ export async function fetchPreflight(): Promise<{ ok: boolean; checks: Preflight
 
 // ── Director Pipeline Dashboard ──────────────────────────────────────────
 
-export async function fetchPipelineList(): Promise<{ pipelines: import('../types').PipelineListItem[] }> {
-  const res = await fetch(`${BASE}/api/v1/director/pipelines`)
+export async function fetchPipelineList(opts?: { limit?: number; offset?: number }): Promise<{
+  pipelines: import('../types').PipelineListItem[]
+  total: number
+}> {
+  const params = new URLSearchParams()
+  if (opts?.limit && opts.limit > 0) params.set('limit', String(opts.limit))
+  if (opts?.offset && opts.offset > 0) params.set('offset', String(opts.offset))
+  const qs = params.toString()
+  const res = await fetch(`${BASE}/api/v1/director/pipelines${qs ? `?${qs}` : ''}`)
   if (!res.ok) throw new Error('Failed to fetch pipelines')
-  return res.json()
+  const data = await res.json()
+  const pipelines = data.pipelines || []
+  return { pipelines, total: data.total ?? pipelines.length }
 }
 
 export async function fetchSavedPipeline(pid: string): Promise<import('../types').SavedPipelineState> {
   const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}`, {
     cache: 'no-store',
   })
-  if (!res.ok) throw new Error('Pipeline not found')
+  if (!res.ok) {
+    throw new Error(res.status === 404 ? 'Pipeline not found' : `Failed to load pipeline (${res.status})`)
+  }
   return res.json()
 }
 
@@ -3806,8 +3817,8 @@ export async function fetchSystemDetect(): Promise<import('../types').SystemDete
 
 /** Live CPU / RAM / GPU + loaded-model telemetry for the hardware
  *  status indicators. Cheap enough to poll every ~2s. */
-export async function fetchSystemStats(): Promise<import('../types').SystemStats> {
-  const res = await fetch(`${BASE}/api/v1/system-stats`)
+export async function fetchSystemStats(signal?: AbortSignal): Promise<import('../types').SystemStats> {
+  const res = await fetch(`${BASE}/api/v1/system-stats`, { signal })
   if (!res.ok) throw new Error('Failed to fetch system stats')
   return res.json()
 }
@@ -4980,8 +4991,8 @@ export interface ActiveDownload {
   seconds_since_progress: number
 }
 
-export async function fetchActiveDownloads(): Promise<{ downloads: ActiveDownload[] }> {
-  const res = await fetch(`${BASE}/api/v1/downloads/active`)
+export async function fetchActiveDownloads(signal?: AbortSignal): Promise<{ downloads: ActiveDownload[] }> {
+  const res = await fetch(`${BASE}/api/v1/downloads/active`, { signal })
   if (!res.ok) throw new Error(`Failed to fetch active downloads (${res.status})`)
   return res.json()
 }

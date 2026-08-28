@@ -1,4 +1,5 @@
 import json
+import os
 import time
 
 from app.services import director_pipeline
@@ -178,3 +179,28 @@ def test_pipeline_history_is_scoped_to_selected_workspace(tmp_path):
     other_items = director_pipeline.list_pipeline_states(str(tmp_path), "other")
     assert [item["id"] for item in other_items] == ["other001"]
     assert other_items[0]["comic_id"] == "comic-other"
+
+
+def test_pipeline_list_paginates_newest_first_without_opening_the_rest(tmp_path):
+    older = tmp_path / "_director_pipeline_older.json"
+    newer = tmp_path / "_director_pipeline_newer.json"
+    older.write_text(json.dumps({
+        "pipeline_id": "older",
+        "status": "completed",
+        "pipeline_type": "music_video",
+        "clips": [],
+    }), encoding="utf-8")
+    newer.write_text(json.dumps({
+        "pipeline_id": "newer",
+        "status": "crashed",
+        "pipeline_type": "music_video",
+        "clips": [{"index": 0}],
+    }), encoding="utf-8")
+    os.utime(older, (1_700_000_000, 1_700_000_000))
+    os.utime(newer, (1_700_000_100, 1_700_000_100))
+
+    assert director_pipeline.count_pipeline_states(str(tmp_path), "default") == 2
+    page = director_pipeline.list_pipeline_states(str(tmp_path), "default", limit=1, offset=0)
+    assert [item["id"] for item in page] == ["newer"]
+    rest = director_pipeline.list_pipeline_states(str(tmp_path), "default", limit=1, offset=1)
+    assert [item["id"] for item in rest] == ["older"]
