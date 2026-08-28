@@ -46,6 +46,26 @@ def test_character_kit_normalizes_reusable_assets_and_pose_anchor():
     assert normalized["provenance"][0]["method"] == "hocuspocus-image"
 
 
+def test_character_kit_normalizes_per_state_mouth_anchors_with_legacy_fallback():
+    value = kit()
+    value["anchors"]["base"]["mouthStates"] = {
+        "wide": {"offsetX": 3, "offsetY": -4, "scale": .2, "rotation": 1},
+        "round": {"offsetX": 2, "offsetY": -5, "scale": .18, "rotation": 0},
+    }
+    normalized = normalize_character_kit(value)
+    assert normalized["anchors"]["base"]["mouth"]["offsetX"] == 1.5
+    assert normalized["anchors"]["base"]["mouthStates"]["wide"]["offsetX"] == 3
+
+
+def test_character_kit_rejects_unknown_mouth_state_anchor():
+    value = kit()
+    value["anchors"]["base"]["mouthStates"] = {
+        "smile": {"offsetX": 0, "offsetY": 0, "scale": .2, "rotation": 0},
+    }
+    with pytest.raises(ValueError, match="invalid mouth states"):
+        normalize_character_kit(value)
+
+
 def test_character_kit_rejects_browser_only_sources():
     value = kit()
     value["base"]["source"] = "blob:http://localhost/transient"

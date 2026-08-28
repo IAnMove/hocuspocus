@@ -35,7 +35,13 @@ export interface CharacterKit {
   poses: Record<string, CharacterKitAsset>
   mouth: Partial<Record<CharacterMouthState, CharacterKitAsset>>
   eyes: Partial<Record<'open' | 'blink', CharacterKitAsset>>
-  anchors: Record<string, { mouth: CharacterFaceAnchor; eyes?: CharacterFaceAnchor }>
+  anchors: Record<string, {
+    /** Legacy/default mouth placement used when a state-specific anchor is absent. */
+    mouth: CharacterFaceAnchor
+    /** Optional per-mouth-state placement for generated facial variants. */
+    mouthStates?: Partial<Record<CharacterMouthState, CharacterFaceAnchor>>
+    eyes?: CharacterFaceAnchor
+  }>
   provenance: Array<Record<string, unknown>>
   createdAt?: string
   updatedAt?: string
@@ -119,7 +125,7 @@ export function mountCharacterKitLayers(
   for (const state of ['closed', 'small', 'wide', 'round'] as const) {
     const asset = kit.mouth[state]
     if (!asset || asset.reviewState !== 'approved') continue
-    const mouthTransform = faceTransform(mouthAnchor)
+    const mouthTransform = faceTransform(anchors?.mouthStates?.[state] ?? mouthAnchor)
     layers.push({
       id: `kit-${kit.id}-mouth-${state}`, name: `${kit.name} Mouth ${state}`, type: 'overlay', source: asset.source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: mouthTransform,

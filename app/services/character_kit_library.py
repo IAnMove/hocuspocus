@@ -121,12 +121,20 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
     anchors_raw = value.get("anchors") or {}
     if not isinstance(anchors_raw, dict) or len(anchors_raw) > 32:
         raise ValueError("Character Kit anchors must be an object with at most 32 poses")
-    anchors: dict[str, dict[str, dict[str, float]]] = {}
+    anchors: dict[str, dict[str, Any]] = {}
     for raw_pose_id, raw_group in anchors_raw.items():
         pose_id = _token(raw_pose_id, "Anchor pose")
         if not isinstance(raw_group, dict) or "mouth" not in raw_group:
             raise ValueError(f"Anchors for {pose_id} need a mouth anchor")
         group = {"mouth": _anchor(raw_group["mouth"], f"{pose_id} mouth anchor")}
+        mouth_states_raw = raw_group.get("mouthStates")
+        if mouth_states_raw is not None:
+            if not isinstance(mouth_states_raw, dict) or any(key not in {"closed", "small", "wide", "round"} for key in mouth_states_raw):
+                raise ValueError(f"Anchors for {pose_id} have invalid mouth states")
+            group["mouthStates"] = {
+                key: _anchor(anchor, f"{pose_id} mouth {key} anchor")
+                for key, anchor in mouth_states_raw.items()
+            }
         if raw_group.get("eyes") is not None:
             group["eyes"] = _anchor(raw_group["eyes"], f"{pose_id} eyes anchor")
         anchors[pose_id] = group

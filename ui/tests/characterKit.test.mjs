@@ -27,6 +27,25 @@ test('mounting a reviewed kit creates isolated semantic face layers', () => {
   assert.equal(layers.find(layer => layer.id.endsWith('mouth-closed')).transform.x, 52)
 })
 
+test('mounting uses a per-state mouth anchor and keeps the legacy fallback', () => {
+  const kit = {
+    ...createCharacterKit('Anchored'),
+    base: { ...asset('base'), kind: 'image' },
+    mouth: { closed: asset('closed'), wide: asset('wide'), round: asset('round') },
+    eyes: {},
+    anchors: {
+      base: {
+        mouth: { offsetX: 2, offsetY: -6, scale: .2, rotation: -3 },
+        mouthStates: { wide: { offsetX: 8, offsetY: -4, scale: .25, rotation: 1 } },
+      },
+    },
+  }
+  const layers = mountCharacterKitLayers(kit)
+  assert.deepEqual(layers.find(layer => layer.id.endsWith('mouth-wide')).transform, { x: 58, y: 51, scale: .18, opacity: 1, rotation: 1 })
+  assert.equal(layers.find(layer => layer.id.endsWith('mouth-closed')).transform.x, 52)
+  assert.equal(layers.find(layer => layer.id.endsWith('mouth-round')).transform.x, 52)
+})
+
 test('inventory exposes only reviewed performance pieces to the LLM', () => {
   const kit = { ...createCharacterKit('Brin'), base: { ...asset('base'), kind: 'image' }, poses: { run: asset('run'), sad: asset('sad', 'rejected') }, mouth: { wide: asset('wide'), round: asset('round', 'pending') }, eyes: {} }
   const inventory = characterKitInventory({ version: 1, revision: 1, activeId: kit.id, kits: { [kit.id]: kit } })
