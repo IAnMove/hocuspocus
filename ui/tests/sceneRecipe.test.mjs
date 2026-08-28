@@ -68,6 +68,77 @@ test('compiled dialogue beats replace template mouth loops with text-driven keyf
   assert.equal(scene.audioTracks[0].model, 'qwen3_tts_voicedesign')
 })
 
+test('multi-shot recipes isolate their audio and dialogue, including explicit silence', () => {
+  const layers = [
+    { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },
+    { id: 'hero-a', type: 'image', asset: 'hero-art' },
+    { id: 'mouth-a', name: 'Mouth A', type: 'overlay', asset: 'mouth-a-art', faceBinding: { poseLayerId: 'hero-a', role: 'mouth', state: 'wide' } },
+    { id: 'hero-b', type: 'image', asset: 'hero-art' },
+    { id: 'mouth-b', name: 'Mouth B', type: 'overlay', asset: 'mouth-b-art', faceBinding: { poseLayerId: 'hero-b', role: 'mouth', state: 'round' } },
+  ]
+  const recipe = parseSceneRecipe({
+    version: 1,
+    name: 'scoped-dialogue',
+    record: false,
+    save: false,
+    assets: [
+      { id: 'hero-art', kind: 'image', source: 'hero.png' },
+      { id: 'mouth-a-art', kind: 'image', source: 'mouth-a.png' },
+      { id: 'mouth-b-art', kind: 'image', source: 'mouth-b.png' },
+    ],
+    audio: [
+      { id: 'voice-a', kind: 'speech', source: 'voice-a.wav' },
+      { id: 'voice-b', kind: 'speech', source: 'voice-b.wav' },
+    ],
+    dialogueBeats: [
+      { id: 'beat-a', text: 'Habla A.', start: 0.2, end: 1.8, mouthLayerIds: ['mouth-a'], audioTrackId: 'voice-a', confidence: 'known-text' },
+      { id: 'beat-b', text: 'Habla B.', start: 0.2, end: 1.8, mouthLayerIds: ['mouth-b'], audioTrackId: 'voice-b', confidence: 'known-text' },
+    ],
+    shots: [
+      { name: 'a-speaks', duration: 2, audioTrackIds: ['voice-a'], dialogueBeatIds: ['beat-a'], layers },
+      { name: 'silence', duration: 2, audioTrackIds: [], dialogueBeatIds: [], layers },
+      { name: 'legacy-all', duration: 2, layers },
+    ],
+    scene: { width: 1280, height: 720, fps: 30, duration: 2, layers },
+  })
+  const resolved = { 'hero-art': 'hero.png', 'mouth-a-art': 'mouth-a.png', 'mouth-b-art': 'mouth-b.png' }
+  const spoken = compileRecipeShot(recipe, recipe.shots[0], resolved, filename => filename)
+  assert.deepEqual(spoken.audioTracks.map(track => track.id), ['voice-a'])
+  assert.deepEqual(spoken.dialogueBeats.map(beat => beat.id), ['beat-a'])
+  assert.ok(spoken.layers.find(layer => layer.id === 'mouth-a').animation.keyframes.length > 2)
+  assert.equal(spoken.layers.find(layer => layer.id === 'mouth-b').animation.keyframes, undefined)
+
+  const silent = compileRecipeShot(recipe, recipe.shots[1], resolved, filename => filename)
+  assert.equal(silent.audioTracks, undefined)
+  assert.equal(silent.dialogueBeats, undefined)
+  assert.equal(silent.layers.find(layer => layer.id === 'mouth-a').animation.keyframes, undefined)
+
+  const legacy = compileRecipeShot(recipe, recipe.shots[2], resolved, filename => filename)
+  assert.deepEqual(legacy.audioTracks.map(track => track.id), ['voice-a', 'voice-b'])
+  assert.deepEqual(legacy.dialogueBeats.map(beat => beat.id), ['beat-a', 'beat-b'])
+})
+
+test('shot audio and dialogue scopes reject unknown ids', () => {
+  assert.throws(() => parseSceneRecipe({
+    version: 1,
+    name: 'bad-scope',
+    assets: [{ id: 'plate', kind: 'image', source: 'plate.png' }],
+    audio: [],
+    dialogueBeats: [],
+    shots: [{ name: 'only', duration: 2, audioTrackIds: ['missing-voice'], dialogueBeatIds: ['missing-beat'], layers: [{ id: 'plate', type: 'image', asset: 'plate' }] }],
+    scene: { width: 1280, height: 720, fps: 30, duration: 2, layers: [{ id: 'plate', type: 'image', asset: 'plate' }] },
+  }), /unknown audio track "missing-voice"/)
+
+  assert.throws(() => parseSceneRecipe({
+    version: 1,
+    name: 'orphan-beat-audio',
+    assets: [{ id: 'mouth', kind: 'image', source: 'mouth.png' }],
+    dialogueBeats: [{ id: 'line', text: 'Hola', start: 0, end: 1, mouthLayerIds: ['mouth'], audioTrackId: 'missing-voice', confidence: 'known-text' }],
+    shots: [{ name: 'only', duration: 2, layers: [{ id: 'mouth', type: 'overlay', asset: 'mouth' }] }],
+    scene: { width: 1280, height: 720, fps: 30, duration: 2, layers: [{ id: 'mouth', type: 'overlay', asset: 'mouth' }] },
+  }), /Dialogue beat "line" references unknown audio track "missing-voice"/)
+})
+
 test('custom recipe dialogue drives distinct face-bound visemes without crossing characters', () => {
   const recipe = parseSceneRecipe({
     version: 1,
@@ -188,6 +259,7 @@ test('LLM contract is closed-schema, multilingual and treats inventory as data',
   assert.match(prompt, /animation\.keyframes/)
   assert.match(prompt, /seamOccluder/)
   assert.match(prompt, /NARRATIVE_TEMPLATE_CATALOG/)
+  assert.match(prompt, /audioTrackIds and dialogueBeatIds/)
   assert.match(prompt, /seamlessHorizontal is a verified inventory capability/)
   assert.match(prompt, /Robot de bronce/)
   assert.equal(SCENE_RECIPE_JSON_SCHEMA.additionalProperties, false)

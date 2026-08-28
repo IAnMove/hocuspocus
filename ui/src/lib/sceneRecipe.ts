@@ -148,6 +148,10 @@ export interface SceneRecipeLayer {
 export interface SceneRecipeShot {
   name: string
   duration?: number
+  /** Explicit per-shot mix. Omitted preserves legacy all-track behaviour; an empty array means silence. */
+  audioTrackIds?: string[]
+  /** Explicit per-shot speaking beats. Omitted preserves legacy all-beat behaviour; an empty array means no dialogue. */
+  dialogueBeatIds?: string[]
   /** A stable narrative grammar selected by the LLM. It compiles to ordinary editable layers. */
   template?: NarrativeSceneId
   slots?: Partial<Record<'hero' | 'plate' | 'prop' | 'foreground', string>>
@@ -581,6 +585,8 @@ export const SCENE_RECIPE_JSON_SCHEMA: Record<string, unknown> = {
         properties: {
           name: { type: 'string', minLength: 1, maxLength: 100 },
           duration: { type: 'number', minimum: 0.5, maximum: 60 },
+          audioTrackIds: { type: 'array', maxItems: 6, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 64 } },
+          dialogueBeatIds: { type: 'array', maxItems: 48, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 120 } },
           layers: { type: 'array', minItems: 1, maxItems: 24, items: recipeLayerSchema },
           template: { enum: NARRATIVE_SCENE_TEMPLATES.map(template => template.id) },
           slots: {
@@ -714,6 +720,7 @@ Semantic mapping hints:
 - Where the subject faces is transform.rotationY on its model3d layer, not a camera preset. "Side camera", "from the side", "in profile" -> rotationY 90. "Three-quarter" -> 35. "From behind", "back to us" -> 180. Facing straight at the viewer -> 0. Camera presets move the camera; they never change which side of a subject is visible, so a shot described by viewpoint needs rotationY set explicitly.
 - Requested music, narration or sound effects go in the top-level audio array, never in assets and never as a layer. Give each track an id, a kind, a startTime and a prompt describing the sound. In Auto mode a missing speech, music or SFX source is generated through the corresponding installed HocusPocus audio engine; Manual mode requires an existing source. Audio is requested, not drawn: it adds no layer and does not change the composition.
 - Spoken cutout dialogue uses both a speech audio entry and a top-level dialogueBeats entry. Set its audioTrackId, exact text and time range. mouthLayerIds must name the mouth overlays in that shot; for cutout-talking-head use ["mouth-open", "mouth-closed"]. The compiler converts the text into editable held/snap mouth keyframes automatically. Never target the hero/base plate itself as a mouth layer.
+- Every new multi-shot recipe must set each shot's audioTrackIds and dialogueBeatIds. Include only ids that should play in that shot. Use [] for a silent shot or a shot with no dialogue; never repeat the full episode mix in every shot.
 - Inventory entries marked APPROVED_CHARACTER_KIT are a coherent reviewed character, not unrelated images. Use body/pose and face pieces from the same kit id, copy their exact sources, and never mix one kit's mouth or eyes with another kit's body. If the requested character has no matching approved kit, request new generated assets instead of borrowing another identity.
 - Depth/parallax requests set layer.parallax: lower is further away. Distant background 0.3, mid-ground 0.7, subject 1, foreground element passing close to the lens 1.2. Relative speed is the only depth cue this compositor has, so give layers distinct values whenever the request implies depth. Left unset, layers are banded automatically by z order.
 - For authored timing, animation.keyframes is a time-ordered array of two or more complete poses. Use it for holds, snaps, blinks, beats and motion that must not collapse into one start/end glide. Each keyframe has time, x, y, scale, opacity, rotation and curve. Use animation offset/speed/loop/trimStart/trimEnd only when the layer's local timeline needs it.
@@ -805,6 +812,16 @@ function optionalNumber(value: unknown, minimum: number, maximum: number): numbe
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(minimum, Math.min(maximum, value))
     : undefined
+}
+
+function parseScopedIds(value: unknown, label: string, maximum: number): string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`)
+  if (value.length > maximum) throw new Error(`${label} cannot contain more than ${maximum} ids.`)
+  const ids = value.map(entry => asString(entry))
+  if (ids.some(id => !id)) throw new Error(`${label} must contain non-empty string ids.`)
+  if (new Set(ids).size !== ids.length) throw new Error(`${label} ids must be unique.`)
+  return ids
 }
 
 function parsePoint(value: unknown): NonNullable<SceneLayer['animation']>['start'] | undefined {
@@ -1175,6 +1192,8 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
       return {
         name: asString(shot.name) || `shot-${index + 1}`,
         duration: boundedNumber(shot.duration, 5, 0.5, 60),
+        audioTrackIds: parseScopedIds(shot.audioTrackIds, `Shot ${index + 1} audioTrackIds`, 6),
+        dialogueBeatIds: parseScopedIds(shot.dialogueBeatIds, `Shot ${index + 1} dialogueBeatIds`, 48),
         template,
         slots: parseTemplateSlots(shot.slots),
         controls: parseTemplateControls(shot.controls),
@@ -1194,7 +1213,33 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
   if (!layers?.length) throw new Error('Recipe needs scene.layers or a first shot with layers.')
   const assetsById = new Map(assets.map(asset => [asset.id, asset]))
   const clipsByAsset = new Map<string, Set<RecipeRigAnimation>>()
+  const audio = parseRecipeAudio(raw.audio)
   const dialogueBeats = parseDialogueBeats(raw.dialogueBeats)
+  const audioIds = new Set((audio ?? []).map(track => track.id))
+  const dialogueBeatIds = new Set((dialogueBeats ?? []).map(beat => beat.id))
+  const dialogueBeatById = new Map((dialogueBeats ?? []).map(beat => [beat.id, beat]))
+  dialogueBeats?.forEach(beat => {
+    if (beat.audioTrackId && !audioIds.has(beat.audioTrackId)) {
+      throw new Error(`Dialogue beat "${beat.id}" references unknown audio track "${beat.audioTrackId}".`)
+    }
+  })
+  shots?.forEach((shot, index) => {
+    shot.audioTrackIds?.forEach(id => {
+      if (!audioIds.has(id)) throw new Error(`Shot ${index + 1} references unknown audio track "${id}".`)
+    })
+    shot.dialogueBeatIds?.forEach(id => {
+      if (!dialogueBeatIds.has(id)) throw new Error(`Shot ${index + 1} references unknown dialogue beat "${id}".`)
+    })
+    if (shot.audioTrackIds !== undefined && shot.dialogueBeatIds !== undefined) {
+      const scopedAudioIds = new Set(shot.audioTrackIds)
+      shot.dialogueBeatIds.forEach(id => {
+        const audioTrackId = dialogueBeatById.get(id)?.audioTrackId
+        if (audioTrackId && !scopedAudioIds.has(audioTrackId)) {
+          throw new Error(`Shot ${index + 1} dialogue beat "${id}" needs audio track "${audioTrackId}" in audioTrackIds.`)
+        }
+      })
+    }
+  })
   validateLayerRelationships(layers, 'Scene')
   validateLayerAssets(layers, 'Scene', assetsById, clipsByAsset)
   shots?.forEach((shot, index) => {
@@ -1214,7 +1259,7 @@ export function parseSceneRecipe(value: unknown): SceneRecipe {
     record: raw.record === true,
     save: raw.save === true,
     assets,
-    audio: parseRecipeAudio(raw.audio),
+    audio,
     dialogueBeats,
     shots,
     scene: {
@@ -1245,12 +1290,23 @@ export function recipeAssetDuration(recipe: SceneRecipe, assetId: string): numbe
   return Math.max(0.5, ...(durations.length ? durations : [recipe.scene.duration || 5]))
 }
 
+function scopeRecipeToShot(recipe: SceneRecipe, shot: SceneRecipeShot): SceneRecipe {
+  const audioIds = shot.audioTrackIds === undefined ? undefined : new Set(shot.audioTrackIds)
+  const beatIds = shot.dialogueBeatIds === undefined ? undefined : new Set(shot.dialogueBeatIds)
+  return {
+    ...recipe,
+    audio: audioIds === undefined ? recipe.audio : (recipe.audio ?? []).filter(track => audioIds.has(track.id)),
+    dialogueBeats: beatIds === undefined ? recipe.dialogueBeats : (recipe.dialogueBeats ?? []).filter(beat => beatIds.has(beat.id)),
+  }
+}
+
 export function compileRecipeShot(
   recipe: SceneRecipe,
   shot: SceneRecipeShot,
   resolved: Record<string, string>,
   fileUrlFor: (filename: string) => string,
 ): Scene {
+  const scopedRecipe = scopeRecipeToShot(recipe, shot)
   if (shot.template) {
     const template = getNarrativeTemplate(shot.template)
     if (!template) throw new Error(`Unknown narrative template: ${shot.template}`)
@@ -1279,8 +1335,8 @@ export function compileRecipeShot(
       width: recipe.scene.width, height: recipe.scene.height, fps: recipe.scene.fps, duration: shot.duration || recipe.scene.duration, controls,
     }
     const scene = createNarrativeScene(template.id, input)
-    const audioTracks = compileRecipeAudio(recipe, resolved, scene.duration)
-    const dialogue = compileRecipeDialogue(scene.layers, recipe.dialogueBeats, scene.fps ?? 30, scene.duration)
+    const audioTracks = compileRecipeAudio(scopedRecipe, resolved, scene.duration)
+    const dialogue = compileRecipeDialogue(scene.layers, scopedRecipe.dialogueBeats, scene.fps ?? 30, scene.duration)
     return {
       ...scene,
       layers: dialogue.layers,
@@ -1290,7 +1346,7 @@ export function compileRecipeShot(
   }
   if (!shot.layers?.length) throw new Error(`Shot "${shot.name}" needs a template or layers.`)
   return compileSceneRecipe({
-    ...recipe,
+    ...scopedRecipe,
     name: `${recipe.name}-${shot.name}`,
     scene: {
       ...recipe.scene,
