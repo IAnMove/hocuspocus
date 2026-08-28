@@ -4,6 +4,8 @@ import { generateImageAsset } from '../../lib/imageGeneration'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 import {
   CHARACTER_FACE_RIG_STATES,
+  FACE_RIG_PRESET_ROOT,
+  applyFaceRigMouthPreset,
   assessFaceRigPlacement,
   classifyCharacterKitAlpha,
   faceRigAnchorFor,
@@ -16,6 +18,7 @@ import {
   registerGeneratedFaceRigAsset,
   setFaceRigAnchor,
   setFaceRigReviewState,
+  type FaceRigMouthPresetPack,
   type CharacterKitFaceRigState,
   type FaceRigDialoguePreview,
   type FaceRigDialogueViseme,
@@ -80,6 +83,8 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   const [dialoguePreview, setDialoguePreview] = useState<FaceRigDialoguePreview | null>(null)
   const [liveViseme, setLiveViseme] = useState<FaceRigDialogueViseme | undefined>(undefined)
   const [dialogueAudio, setDialogueAudio] = useState<string | null>(null)
+  const [presetPacks, setPresetPacks] = useState<FaceRigMouthPresetPack[]>([])
+  const [presetId, setPresetId] = useState('')
   const previewRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin: CharacterFaceAnchor } | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -99,6 +104,18 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   useEffect(() => {
     setDraftAnchor(savedAnchor)
   }, [savedAnchor, selectedState, poseId, kit.id])
+  useEffect(() => {
+    let cancelled = false
+    void fetch(`${FACE_RIG_PRESET_ROOT}/manifest.json`).then(async response => {
+      if (!response.ok) throw new Error('Could not load mouth style packs.')
+      const data = await response.json() as { packs?: FaceRigMouthPresetPack[] }
+      if (!cancelled) {
+        setPresetPacks(Array.isArray(data.packs) ? data.packs : [])
+        setPresetId(current => current || data.packs?.[0]?.id || '')
+      }
+    }).catch(() => { if (!cancelled) setPresetPacks([]) })
+    return () => { cancelled = true }
+  }, [])
 
   const requests = useMemo(() => {
     try { return faceRigGenerationRequests(kit, poseId, description) }
@@ -276,6 +293,19 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null
   }
 
+  const applyPreset = () => {
+    const pack = presetPacks.find(item => item.id === presetId)
+    if (!pack) throw new Error('Choose a mouth style pack first.')
+    try {
+      const next = applyFaceRigMouthPreset(kit, pack, workspace)
+      onChange(next)
+      onStatus?.(`Applied ${pack.label} as pending Face Rig mouths. Check placement before approval.`)
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not apply this mouth pack.')
+    }
+  }
+
   const savePlacement = () => {
     try {
       const next = setFaceRigAnchor(kit, poseId, selectedState, draftAnchor)
@@ -303,6 +333,12 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   return <div className="space-y-1.5">
     <p className="text-[8px] leading-relaxed text-text-muted">Generate reusable mouth and blink overlays from the approved pose. Outputs stay pending until you verify transparency and placement; recipes never see pending pieces.</p>
     <label className="block text-[8px] text-text-muted">Identity / art notes (optional)<textarea value={description} disabled={disabled || Boolean(busyState)} onChange={event => setDescription(event.target.value)} rows={2} placeholder="Flat paper-cut texture, thick uneven black outline…" className="mt-0.5 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px]" /></label>
+    {presetPacks.length > 0 && <div className="grid grid-cols-[1fr_auto] gap-1">
+      <select aria-label="Mouth style pack" value={presetId} disabled={disabled || Boolean(busyState)} onChange={event => setPresetId(event.target.value)} className="rounded border border-border bg-bg-primary px-1 py-1 text-[8px]">
+        {presetPacks.map(pack => <option key={pack.id} value={pack.id}>{pack.label}</option>)}
+      </select>
+      <button type="button" disabled={disabled || Boolean(busyState) || !presetId} onClick={applyPreset} className="rounded border border-violet-300/40 bg-violet-400/10 px-1 py-1 text-[8px] text-violet-100 disabled:opacity-40">Apply pack</button>
+    </div>}
     <div className="grid grid-cols-5 gap-1">{CHARACTER_FACE_RIG_STATES.map(state => {
       const asset = assetFor(kit, state)
       return <button key={state} type="button" disabled={disabled || Boolean(busyState)} onClick={() => setSelectedState(state)} className={`rounded border px-1 py-1 text-[7px] ${selectedState === state ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{LABELS[state]}<span className="block text-[6px]">{asset?.reviewState ?? 'missing'}</span></button>

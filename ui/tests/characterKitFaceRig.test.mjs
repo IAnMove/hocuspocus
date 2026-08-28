@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
-import { assessFaceRigPlacement, classifyCharacterKitAlpha, faceRigAnchorFor, faceRigGenerationRequests, faceRigOverlayPreviewStyle, faceRigPrompt, faceRigVisemeAt, previewFaceRigDialogue, previewFaceRigDialogueFromAudio, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigAnchor, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
+import { applyFaceRigMouthPreset, assessFaceRigPlacement, classifyCharacterKitAlpha, faceRigAnchorFor, faceRigGenerationRequests, faceRigOverlayPreviewStyle, faceRigPrompt, faceRigVisemeAt, previewFaceRigDialogue, previewFaceRigDialogueFromAudio, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigAnchor, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
 
 const pose = { id: 'base', name: 'Base', source: 'base.png', kind: 'image', alphaStatus: 'opaque', reviewState: 'approved' }
 const generated = state => ({ id: `generated-${state}`, name: state, source: `${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved' })
@@ -124,6 +124,25 @@ test('dialogue preview marks missing mouths as fallbacks and stays off the kit',
   assert.ok(preview.visemes.filter(beat => beat.fallback).every(beat => beat.sourceState === 'wide' || beat.sourceState === 'closed'))
   assert.equal(kit.mouth.small, undefined)
   assert.equal(faceRigVisemeAt(preview, 0)?.state, preview.visemes[0].state)
+})
+
+test('applying a mouth style pack stays pending and does not invent blink', () => {
+  const kit = { ...createCharacterKit('Luna'), base: pose }
+  const next = applyFaceRigMouthPreset(kit, {
+    id: 'paper-cut',
+    label: 'Paper cut',
+    states: {
+      closed: { file: 'paper-cut/closed.png' },
+      small: { file: 'paper-cut/small.png' },
+      wide: { file: 'paper-cut/wide.png' },
+      round: { file: 'paper-cut/round.png' },
+    },
+  })
+  assert.equal(kit.mouth.wide, undefined)
+  assert.equal(next.mouth.closed.reviewState, 'pending')
+  assert.equal(next.mouth.wide.source, '/character-kit-presets/mouths/paper-cut/wide.png')
+  assert.equal(next.eyes.blink, undefined)
+  assert.equal(next.provenance.at(-1).packId, 'paper-cut')
 })
 
 test('audio-aligned dialogue preview stays within four seconds', () => {

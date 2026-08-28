@@ -246,6 +246,47 @@ export function faceRigOverlayPreviewStyle(anchor: CharacterFaceAnchor): {
 }
 
 export const FACE_RIG_MOUTH_STATES = ['closed', 'small', 'wide', 'round'] as const
+export const FACE_RIG_PRESET_ROOT = '/character-kit-presets/mouths'
+
+export interface FaceRigMouthPresetPack {
+  id: string
+  label: string
+  style?: string
+  notes?: string
+  states: Partial<Record<CharacterMouthState, { file: string }>>
+}
+
+/** Attach a reusable viseme pack as pending overlays. Does not approve placement. */
+export function applyFaceRigMouthPreset(
+  kit: CharacterKit,
+  pack: FaceRigMouthPresetPack,
+  workspace?: string,
+): CharacterKit {
+  if (!pack.id.trim()) throw new Error('Choose a mouth style pack first.')
+  let next = kit
+  for (const state of FACE_RIG_MOUTH_STATES) {
+    const file = pack.states[state]?.file
+    if (!file) continue
+    const source = `${FACE_RIG_PRESET_ROOT}/${file.replace(/^\/+/, '')}`
+    next = registerGeneratedFaceRigAsset(next, state, {
+      id: `${kit.id}-${pack.id}-${state}`,
+      name: `${kit.name} · ${state} · ${pack.label}`,
+      source,
+      kind: 'overlay',
+      alphaStatus: 'transparent',
+      reviewState: 'pending',
+      workspace,
+    }, {
+      poseId: 'preset',
+      reference: source,
+      prompt: pack.notes || pack.label,
+      packId: pack.id,
+      methodHint: 'character-kit-face-rig-preset',
+    })
+  }
+  if (next === kit) throw new Error(`Pack “${pack.label}” has no closed/small/wide/round overlays.`)
+  return next
+}
 export const FACE_RIG_DIALOGUE_MIN_SECONDS = 2
 export const FACE_RIG_DIALOGUE_MAX_SECONDS = 4
 
