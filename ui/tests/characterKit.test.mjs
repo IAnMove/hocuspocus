@@ -66,6 +66,35 @@ test('mounting uses a per-state mouth anchor and keeps the legacy fallback', () 
   assert.equal(layers.find(layer => layer.id.endsWith('mouth-round')).transform.x, 50 + 2 * poseScale)
 })
 
+test('capture then mount keeps pose-local mouth offset at two scene scales', () => {
+  const kit = {
+    ...createCharacterKit('Luma'),
+    base: { ...asset('luma-base'), kind: 'image' },
+    mouth: { closed: asset('closed') },
+    eyes: {},
+    anchors: { base: { mouth: { offsetX: 4, offsetY: -12, scale: .2, rotation: 0 } } },
+  }
+  const smallPose = { x: 40, y: 60, scale: .5, opacity: 1, rotation: 0 }
+  const largePose = { x: 40, y: 60, scale: 1, opacity: 1, rotation: 0 }
+  const small = mountCharacterKitLayers(kit, 'base', smallPose)
+  const large = mountCharacterKitLayers(kit, 'base', largePose)
+  const recapture = layers => captureCharacterFaceAnchor(
+    layers[0],
+    layers.find(layer => layer.id.endsWith('mouth-closed')),
+  )
+  const smallAnchor = recapture(small)
+  const largeAnchor = recapture(large)
+  assert.equal(smallAnchor.offsetX, 4)
+  assert.equal(smallAnchor.offsetY, -12)
+  assert.equal(smallAnchor.scale, .2)
+  assert.deepEqual(smallAnchor, largeAnchor)
+  const smallMouth = small.find(layer => layer.id.endsWith('mouth-closed'))
+  const largeMouth = large.find(layer => layer.id.endsWith('mouth-closed'))
+  assert.equal(smallMouth.transform.y, 60 + (-12) * .5)
+  assert.equal(largeMouth.transform.y, 60 + (-12) * 1)
+  assert.notEqual(smallMouth.transform.y, largeMouth.transform.y)
+})
+
 test('inventory exposes only reviewed performance pieces to the LLM', () => {
   const kit = { ...createCharacterKit('Brin'), base: { ...asset('base'), kind: 'image' }, poses: { run: asset('run'), sad: asset('sad', 'rejected') }, mouth: { wide: asset('wide'), round: asset('round', 'pending') }, eyes: {} }
   const inventory = characterKitInventory({ version: 1, revision: 1, activeId: kit.id, kits: { [kit.id]: kit } })

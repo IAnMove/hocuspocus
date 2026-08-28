@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { characterKitRecipeInventory, createCharacterKit, mountCharacterKitLayers } from '../src/lib/characterKit.ts'
+import { composeCharacterKitLook, lockFaceRigMouthPlacement } from '../src/lib/characterKitFaceRig.ts'
 import { compileRecipeShot, listRecipeShots, parseSceneRecipe } from '../src/lib/sceneRecipe.ts'
 
 const asset = (id, source, reviewState = 'approved', kind = 'overlay') => ({
@@ -126,4 +127,94 @@ test('CharacterKit episode recipe mounts only approved pieces and isolates audio
   const pointing = compileRecipeShot(recipe, shots[3], {}, filename => filename)
   assert.ok(pointing.layers.some(layer => layer.id === 'kit-luma-pose-pointing'))
   assert.deepEqual(pointing.audioTracks.map(track => track.id), ['voice-luma-2'])
+})
+
+test('mini South Park-style cutout dialogue locks mouths and scopes speech per shot', () => {
+  const look = composeCharacterKitLook({
+    name: 'Luma',
+    traits: 'beanie, pigtails',
+    stylePrompt: 'flat paper-cut collage, torn paper edges, thick uneven black outline, layered construction paper',
+  })
+  const lumaKit = lockFaceRigMouthPlacement({
+    ...luma(),
+    lookNotes: look,
+    mouth: {
+      closed: asset('luma-mouth-closed', '/api/v1/file/luma-mouth-closed-v1.png'),
+      small: asset('luma-mouth-small', '/api/v1/file/luma-mouth-open-v2.png'),
+      wide: asset('luma-mouth-wide', '/api/v1/file/luma-mouth-wide-v1.png'),
+      round: asset('luma-mouth-round', '/api/v1/file/luma-mouth-round-v1.png'),
+    },
+  }, 'base', { offsetX: 0, offsetY: -22, scale: .05, rotation: 0 })
+  const brinKit = lockFaceRigMouthPlacement({
+    ...brin(),
+    mouth: {
+      closed: asset('brin-mouth-closed', '/api/v1/file/brin-mouth-closed-v1.cleanup-80de8898.png'),
+      small: asset('brin-mouth-small', '/api/v1/file/brin-mouth-small-gen.cleanup-d94f04ef.png'),
+      wide: asset('brin-mouth-wide', '/api/v1/file/brin-mouth-wide-v1.cleanup-12df84c6.png'),
+      round: asset('brin-mouth-round', '/api/v1/file/brin-mouth-round-v1.cleanup-40f991ad.png'),
+    },
+    eyes: { blink: asset('brin-blink', '/api/v1/file/brin-blink-eyes-v1.cleanup-1ed2cbfe.png') },
+  }, 'reaction', { offsetX: 0, offsetY: -18, scale: .05, rotation: 0 })
+
+  const lumaLayers = recipeLayers(lumaKit, 'base', { x: 32, y: 58, scale: .62, opacity: 1, rotation: 0 })
+  const lumaSmall = recipeLayers(lumaKit, 'base', { x: 32, y: 58, scale: .4, opacity: 1, rotation: 0 })
+  const brinLayers = recipeLayers(brinKit, 'reaction', { x: 68, y: 58, scale: .62, opacity: 1, rotation: 0 })
+  const lumaMouth = lumaLayers.find(layer => layer.id === 'kit-luma-mouth-wide')
+  const lumaMouthSmall = lumaSmall.find(layer => layer.id === 'kit-luma-mouth-wide')
+  assert.equal(lumaMouth.transform.y, 58 + (-22) * .62)
+  assert.equal(lumaMouthSmall.transform.y, 58 + (-22) * .4)
+  assert.notEqual(lumaMouth.transform.y, lumaMouthSmall.transform.y)
+  const mouthStates = ['closed', 'small', 'wide', 'round']
+  for (const state of mouthStates) {
+    const layer = lumaLayers.find(item => item.id === `kit-luma-mouth-${state}`)
+    assert.equal(layer.transform.y, lumaMouth.transform.y)
+    assert.equal(layer.transform.scale, .62 * .05)
+  }
+
+  const lumaMouthIds = lumaLayers.filter(layer => layer.faceBinding?.role === 'mouth').map(layer => layer.id)
+  const brinMouthIds = brinLayers.filter(layer => layer.faceBinding?.role === 'mouth').map(layer => layer.id)
+  const recipe = parseSceneRecipe({
+    version: 1,
+    name: 'cafeteria-snow-menu',
+    record: false,
+    save: false,
+    assets: [
+      { id: 'square', kind: 'image', source: '/api/v1/file/luma-snow-square-plate-v1.png' },
+      { id: 'luma-base', kind: 'image', source: lumaKit.base.source },
+      { id: 'brin-reaction', kind: 'image', source: brinKit.poses.reaction.source },
+    ],
+    audio: [
+      { id: 'voice-luma-menu', kind: 'speech', source: 'luma-menu.wav', prompt: 'Hoy el menú es solo nieve.', model: 'qwen3_tts_voicedesign' },
+      { id: 'voice-brin-tray', kind: 'speech', source: 'brin-tray.wav', prompt: 'Eso es el patio.', model: 'qwen3_tts_voicedesign' },
+      { id: 'voice-luma-done', kind: 'speech', source: 'luma-done.wav', prompt: 'Entonces ya comimos.', model: 'qwen3_tts_voicedesign' },
+    ],
+    dialogueBeats: [
+      { id: 'beat-luma-menu', text: 'Hoy el menú es solo nieve.', start: 0.3, end: 3.6, mouthLayerIds: lumaMouthIds, audioTrackId: 'voice-luma-menu', confidence: 'known-text' },
+      { id: 'beat-brin-tray', text: 'Eso es el patio.', start: 0.3, end: 2.8, mouthLayerIds: brinMouthIds, audioTrackId: 'voice-brin-tray', confidence: 'known-text' },
+      { id: 'beat-luma-done', text: 'Entonces ya comimos.', start: 0.3, end: 3.2, mouthLayerIds: lumaMouthIds, audioTrackId: 'voice-luma-done', confidence: 'known-text' },
+    ],
+    shots: [
+      { name: 'hold', duration: 4, audioTrackIds: [], dialogueBeatIds: [], layers: brinLayers },
+      { name: 'luma-menu', duration: 5, audioTrackIds: ['voice-luma-menu'], dialogueBeatIds: ['beat-luma-menu'], layers: lumaLayers },
+      { name: 'brin-tray', duration: 4, audioTrackIds: ['voice-brin-tray'], dialogueBeatIds: ['beat-brin-tray'], layers: brinLayers },
+      { name: 'luma-done', duration: 5, audioTrackIds: ['voice-luma-done'], dialogueBeatIds: ['beat-luma-done'], layers: lumaLayers },
+    ],
+    scene: { width: 1280, height: 720, fps: 30, duration: 5, mood: 'calm', palette: 'cool', intensity: 2, layers: lumaLayers },
+  })
+
+  const shots = listRecipeShots(recipe)
+  assert.equal(shots.length, 4)
+  assert.equal(shots.reduce((sum, shot) => sum + shot.duration, 0), 18)
+  const silent = compileRecipeShot(recipe, shots[0], {}, filename => filename)
+  assert.equal(silent.audioTracks, undefined)
+  assert.equal(silent.dialogueBeats, undefined)
+  const lumaLine = compileRecipeShot(recipe, shots[1], {}, filename => filename)
+  assert.deepEqual(lumaLine.audioTracks.map(track => track.id), ['voice-luma-menu'])
+  assert.deepEqual(lumaLine.dialogueBeats.map(beat => beat.id), ['beat-luma-menu'])
+  assert.ok(lumaLine.layers.filter(layer => layer.faceBinding?.role === 'mouth').every(layer => layer.id.startsWith('kit-luma-mouth-')))
+  assert.ok(lumaLine.layers.some(layer => layer.animation?.keyframes?.length > 1))
+  const brinLine = compileRecipeShot(recipe, shots[2], {}, filename => filename)
+  assert.deepEqual(brinLine.audioTracks.map(track => track.id), ['voice-brin-tray'])
+  assert.equal(brinLine.layers.some(layer => layer.id.includes('luma')), false)
+  assert.ok(brinLine.layers.filter(layer => layer.faceBinding?.role === 'mouth').every(layer => layer.id.startsWith('kit-brin-mouth-')))
 })
