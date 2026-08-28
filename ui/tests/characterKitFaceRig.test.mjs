@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
-import { classifyCharacterKitAlpha, faceRigGenerationRequests, faceRigPrompt, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
+import { assessFaceRigPlacement, classifyCharacterKitAlpha, faceRigAnchorFor, faceRigGenerationRequests, faceRigOverlayPreviewStyle, faceRigPrompt, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigAnchor, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
 
 const pose = { id: 'base', name: 'Base', source: 'base.png', kind: 'image', alphaStatus: 'opaque', reviewState: 'approved' }
 const generated = state => ({ id: `generated-${state}`, name: state, source: `${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved' })
@@ -84,4 +84,28 @@ test('cleaning a Face Rig overlay keeps it pending and records provenance', () =
     width: 8, height: 8, alpha: { pixelCount: 1, transparentRatio: 1, translucentRatio: 0, opaqueRatio: 0, status: 'transparent' },
     method: 'rembg-u2net', padding: 8,
   }), /no generated closed asset/)
+})
+
+test('Face Rig anchors fall back to the legacy mouth slot and save per-state placement', () => {
+  const kit = { ...createCharacterKit('Luna'), base: pose, anchors: { base: { mouth: { offsetX: 0, offsetY: -19, scale: .041, rotation: 0 } } } }
+  assert.deepEqual(faceRigAnchorFor(kit, 'base', 'wide'), { offsetX: 0, offsetY: -19, scale: .041, rotation: 0 })
+  const next = setFaceRigAnchor(kit, 'base', 'wide', { offsetX: 1, offsetY: -18, scale: .055, rotation: 2 })
+  assert.equal(kit.anchors.base.mouthStates, undefined)
+  assert.deepEqual(next.anchors.base.mouthStates.wide, { offsetX: 1, offsetY: -18, scale: .055, rotation: 2 })
+  assert.deepEqual(next.anchors.base.mouth, { offsetX: 0, offsetY: -19, scale: .041, rotation: 0 })
+  const blinked = setFaceRigAnchor(next, 'base', 'blink', { offsetX: 0, offsetY: -30.5, scale: .149, rotation: 0 })
+  assert.deepEqual(blinked.anchors.base.eyes, { offsetX: 0, offsetY: -30.5, scale: .149, rotation: 0 })
+  assert.equal(blinked.provenance.at(-1).method, 'character-kit-face-rig-anchor')
+})
+
+test('placement preview uses relative CSS and warns when the overlay misses the face', () => {
+  const style = faceRigOverlayPreviewStyle({ offsetX: 0, offsetY: -19, scale: .041, rotation: 0 })
+  assert.equal(style.left, '50%')
+  assert.equal(style.top, '31%')
+  assert.equal(style.width, '4.1%')
+  assert.equal(assessFaceRigPlacement({ offsetX: 0, offsetY: -19, scale: .041, rotation: 0 }, 'wide').ok, true)
+  const huge = assessFaceRigPlacement({ offsetX: 80, offsetY: 8, scale: .9, rotation: 0 }, 'wide')
+  assert.equal(huge.ok, false)
+  assert.ok(huge.warnings.some(warning => /miss the face/.test(warning)))
+  assert.ok(huge.warnings.some(warning => /larger than a typical viseme/.test(warning)))
 })

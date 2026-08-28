@@ -1,4 +1,4 @@
-import type { CharacterKit, CharacterKitAsset, CharacterKitReviewState, CharacterMouthState } from './characterKit'
+import type { CharacterFaceAnchor, CharacterKit, CharacterKitAsset, CharacterKitReviewState, CharacterMouthState } from './characterKit'
 
 export const CHARACTER_FACE_RIG_STATES = ['closed', 'small', 'wide', 'round', 'blink'] as const
 export type CharacterKitFaceRigState = typeof CHARACTER_FACE_RIG_STATES[number]
@@ -34,6 +34,7 @@ export interface FaceRigProvenance {
 
 const MOUTH_STATES = new Set<CharacterMouthState>(['closed', 'small', 'wide', 'round'])
 const MATERIAL_ALPHA_RATIO = .01
+export const DEFAULT_FACE_RIG_ANCHOR: CharacterFaceAnchor = { offsetX: 0, offsetY: 0, scale: .16, rotation: 0 }
 
 /** Classify an RGBA buffer without guessing when its shape/content is invalid. */
 export function classifyCharacterKitAlpha(rgba: Uint8ClampedArray): CharacterKitAlphaMetrics {
@@ -171,6 +172,93 @@ export function registerCleanedFaceRigAsset(
     }],
     updatedAt: new Date().toISOString(),
   }
+}
+
+export function normalizeFaceRigAnchor(value?: Partial<CharacterFaceAnchor> | null): CharacterFaceAnchor {
+  const source = value && typeof value === 'object' ? value : {}
+  const scale = Number(source.scale)
+  return {
+    offsetX: Number.isFinite(Number(source.offsetX)) ? Number(source.offsetX) : 0,
+    offsetY: Number.isFinite(Number(source.offsetY)) ? Number(source.offsetY) : 0,
+    scale: Number.isFinite(scale) && scale > 0 ? scale : DEFAULT_FACE_RIG_ANCHOR.scale,
+    rotation: Number.isFinite(Number(source.rotation)) ? Number(source.rotation) : 0,
+  }
+}
+
+/** Resolve the saved relative anchor for one Face Rig state, falling back to the legacy mouth slot. */
+export function faceRigAnchorFor(kit: CharacterKit, poseId: string, state: CharacterKitFaceRigState): CharacterFaceAnchor {
+  if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
+  const poseAnchors = kit.anchors[poseId.trim() || 'base'] ?? kit.anchors.base
+  if (state === 'blink') return normalizeFaceRigAnchor(poseAnchors?.eyes ?? poseAnchors?.mouth)
+  return normalizeFaceRigAnchor(poseAnchors?.mouthStates?.[state as CharacterMouthState] ?? poseAnchors?.mouth)
+}
+
+/** Persist a calibrated overlay anchor without approving the generated piece. */
+export function setFaceRigAnchor(
+  kit: CharacterKit,
+  poseId: string,
+  state: CharacterKitFaceRigState,
+  anchor: Partial<CharacterFaceAnchor>,
+): CharacterKit {
+  if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
+  const normalizedPoseId = poseId.trim() || 'base'
+  const nextAnchor = normalizeFaceRigAnchor(anchor)
+  const current = kit.anchors[normalizedPoseId] ?? kit.anchors.base ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
+  const nextPoseAnchors = state === 'blink'
+    ? { mouth: normalizeFaceRigAnchor(current.mouth), mouthStates: current.mouthStates, eyes: nextAnchor }
+    : {
+      mouth: normalizeFaceRigAnchor(current.mouth ?? nextAnchor),
+      mouthStates: { ...current.mouthStates, [state]: nextAnchor },
+      eyes: current.eyes,
+    }
+  return {
+    ...kit,
+    anchors: { ...kit.anchors, [normalizedPoseId]: nextPoseAnchors },
+    provenance: [...kit.provenance, {
+      method: 'character-kit-face-rig-anchor',
+      state,
+      poseId: normalizedPoseId,
+      anchor: nextAnchor,
+    }],
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+const cssPercent = (value: number) => `${Number(value.toFixed(4))}%`
+
+export function faceRigOverlayPreviewStyle(anchor: CharacterFaceAnchor): {
+  left: string
+  top: string
+  width: string
+  height: string
+  transform: string
+} {
+  const next = normalizeFaceRigAnchor(anchor)
+  const size = Math.max(.5, next.scale * 100)
+  return {
+    left: cssPercent(50 + next.offsetX),
+    top: cssPercent(50 + next.offsetY),
+    width: cssPercent(size),
+    height: cssPercent(size),
+    transform: `translate(-50%, -50%) rotate(${next.rotation}deg)`,
+  }
+}
+
+/** Warn when an overlay is far from the face or obviously the wrong size. Never auto-approves. */
+export function assessFaceRigPlacement(anchor: CharacterFaceAnchor, state: CharacterKitFaceRigState): { ok: boolean; warnings: string[] } {
+  if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
+  const next = normalizeFaceRigAnchor(anchor)
+  const warnings: string[] = []
+  if (Math.abs(next.offsetX) > 28 || Math.abs(next.offsetY) > 42) {
+    warnings.push('This overlay sits far from the pose center and may miss the face.')
+  }
+  if (next.scale < .012) warnings.push('This overlay is unusually small compared with the pose.')
+  if (state === 'blink' ? next.scale > .45 : next.scale > .22) {
+    warnings.push(state === 'blink'
+      ? 'This blink overlay is larger than a typical eye mask.'
+      : 'This mouth overlay is larger than a typical viseme.')
+  }
+  return { ok: warnings.length === 0, warnings }
 }
 
 /** Change review status without mutating the kit or its nested asset. */
