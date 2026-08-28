@@ -669,7 +669,7 @@ curl -X POST "$MAESTRO_URL/api/v1/video-editor/probe" \
   -d '{"source": "shot_a.mp4", "workspace": "default"}'
 ```
 
-`POST /api/v1/video-editor/export` returns **202** and accepts 1–100 clips. Width/height must be even and in 240–3840. `fps` must be `24`, `25`, `30`, `50`, or `60`. Transition names: `none`, `crossfade`, `fade-black`, `wipe-left`, `slide-left`, `slide-right`, `circle-open`, `dissolve`, `pixelize`, `blur`, `zoom-in`, `later-clock`, `later-tropical`, `later-cinematic`. `transition_duration` is 0.05–5 seconds; `later-*` inserts a time card (duration also clamped to ≥0.5 s at render). Poll `GET /api/v1/video-editor/export/{job_id}`; cancel with `POST /api/v1/video-editor/export/{job_id}/cancel` (deferred to the next FFmpeg boundary).
+`POST /api/v1/video-editor/export` returns **202** and accepts 1–100 clips. Width/height must be even and in 240–3840. `fps` must be `24`, `25`, `30`, `50`, or `60`. Transition names: `none`, `crossfade`, `fade-black`, `wipe-left`, `slide-left`, `slide-right`, `circle-open`, `dissolve`, `pixelize`, `blur`, `zoom-in`, `later-clock`, `later-tropical`, `later-cinematic`. `transition_duration` is 0.05–5 seconds; `later-*` inserts a time card (duration also clamped to ≥0.5 s at render). Poll `GET /api/v1/video-editor/export/{job_id}`; cancel with `POST /api/v1/video-editor/export/{job_id}/cancel` (deferred to the next FFmpeg boundary). The completed MP4 sidecar uses Video Editor metadata contract v2: `params.video_editor.source_manifest` embeds each available source sidecar (including scene recipe, prompts, audio references and model metadata) without absolute paths. Missing or malformed legacy sidecars are recorded per clip and do not fail the export; nested editor manifests are omitted to prevent recursive growth.
 
 ```python
 import requests
@@ -727,4 +727,3 @@ These routes always use the server active workspace. They do not accept `?worksp
 - Batch prompt rewrite is UI-only: loop `POST /api/v1/llm/generate` (local LLM) then PUT the chosen prompts.
 
 Operator notes: `docs/video-editor/HOWUSEIT.md` and `docs/workspaces/HOWUSEIT.md`.
-

@@ -34901,7 +34901,7 @@ def _video_editor_task_identity(body: dict, job_id: str) -> tuple[str, str, str 
 
 
 def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path: str) -> None:
-    from services.video_editor import render_project
+    from services.video_editor import build_source_provenance_manifest, render_project
 
     job = _video_editor_job_snapshot(job_id)
     if job is None or str(job.get("status") or "") in _VIDEO_EDITOR_TERMINAL:
@@ -35055,7 +35055,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
         sidecar = {
             "params": {
                 "video_editor": {
-                    "version": 1,
+                    "version": 2,
                     "width": int(body["width"]),
                     "height": int(body["height"]),
                     "fps": int(body["fps"]),
@@ -35079,6 +35079,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                         }
                         for clip in body["clips"]
                     ],
+                    "source_manifest": build_source_provenance_manifest(resolved_clips),
                 },
                 "source": "video_editor",
             },
