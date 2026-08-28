@@ -4,6 +4,7 @@ import * as api from '../../api/client'
 import { getFileUrl } from '../../api/client'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
+import { queueFaceRigHandoff } from '../../lib/characterKitHandoff'
 import {
   buildCharacterOrbitPrompt,
   CHARACTER_ORBIT_VIEWS,
@@ -64,6 +65,7 @@ export function CharacterCreatorPanel() {
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const outputFiles = useStore(s => s.outputs)
   const loadOutputs = useStore(s => s.loadOutputs)
+  const setMediaFilter = useStore(s => s.setMediaFilter)
   const [kind, setKind] = useState<OrbitSubjectKind>('character')
   const [refs, setRefs] = useState<UploadedRef[]>([])
   const [aPrompt, setAPrompt] = useState('')
@@ -225,6 +227,33 @@ export function CharacterCreatorPanel() {
       setBusy(false)
     }
   }, [activeWorkspace, kind, loadOutputs])
+
+  const openFaceRigFromCreator = async () => {
+    if (kind !== 'character') {
+      setError('Face Rig is for Character Kits. Keep Character Creator for identity and turnaround sheets.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      const captured = views.find(view => view.id === selectedViewId) ?? views.find(view => view.id === 'front') ?? views[0]
+      let source = captured?.url || (captured?.filename ? getFileUrl(captured.filename, activeWorkspace) : '')
+      if (!source || source.startsWith('blob:') || source.startsWith('data:')) {
+        const subject = refs[0]
+        if (!subject?.file) throw new Error('Capture a turnaround view or upload the subject image first.')
+        const uploaded = await uploadRef(subject)
+        setRefs(current => current.map(ref => ref.id === uploaded.id ? uploaded : ref))
+        source = uploaded.url || (uploaded.filename ? getFileUrl(uploaded.filename, activeWorkspace) : '')
+      }
+      const name = aPrompt.trim().split(/[.!\n]/)[0].slice(0, 48) || 'Character from Creator'
+      queueFaceRigHandoff({ name, source, workspace: activeWorkspace })
+      setMediaFilter('scene3d')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const replaceSelectedView = async () => {
     if (!videoName || !selectedViewId) return
@@ -392,6 +421,16 @@ export function CharacterCreatorPanel() {
         <p className="text-[10px] text-text-muted">
           Sube una imagen. MiniMax describe el sujeto y arma el prompt de órbita. No hace falta escribir nada.
         </p>
+        {kind === 'character' && (
+          <button
+            type="button"
+            className={`${button} mt-2`}
+            disabled={busy}
+            onClick={() => void openFaceRigFromCreator()}
+          >
+            Create / open CharacterKit Face Rig
+          </button>
+        )}
       </header>
       <div className="flex-1 overflow-y-auto p-3 md:p-4">
         <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">

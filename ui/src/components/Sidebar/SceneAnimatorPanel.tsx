@@ -15,6 +15,7 @@ import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
 import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
 import { captureCharacterFaceAnchor, characterKitAssetFromLayer, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
+import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } from '../../lib/characterKitHandoff'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
@@ -524,6 +525,8 @@ export function SceneAnimatorPanel() {
   const [characterKitEditorTab, setCharacterKitEditorTab] = useState<'kit' | 'face-rig'>('kit')
   const [characterKitBusy, setCharacterKitBusy] = useState(false)
   const [characterKitError, setCharacterKitError] = useState<string | null>(null)
+  const characterKitLibraryRef = useRef(characterKitLibrary)
+  characterKitLibraryRef.current = characterKitLibrary
   const [chainFromPlayhead, setChainFromPlayhead] = useState(false)
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
@@ -674,12 +677,32 @@ export function SceneAnimatorPanel() {
     void fetchCharacterKitLibrary(workspace).then(library => {
       if (cancelled) return
       setCharacterKitLibrary(library)
+      const handoff = consumeFaceRigHandoff()
+      if (handoff && (handoff.workspace === workspace || workspace === 'default')) {
+        setCharacterKitDraft(kitFromFaceRigHandoff(handoff, library))
+        setCharacterKitPoseId('base')
+        setCharacterKitEditorTab('face-rig')
+        setMessage(`Opened Character Kit Face Rig from Character Creator. Save the kit after reviewing the base pose.`)
+        return
+      }
       setCharacterKitDraft(library.kits[library.activeId] ? structuredClone(library.kits[library.activeId]) : null)
     }).catch(error => {
       if (!cancelled) setCharacterKitError(error instanceof Error ? error.message : 'Could not load Character Kits.')
     }).finally(() => { if (!cancelled) setCharacterKitBusy(false) })
     return () => { cancelled = true }
   }, [workspace])
+  useEffect(() => {
+    const onHandoff = () => {
+      const handoff = consumeFaceRigHandoff()
+      if (!handoff) return
+      setCharacterKitDraft(kitFromFaceRigHandoff(handoff, characterKitLibraryRef.current))
+      setCharacterKitPoseId('base')
+      setCharacterKitEditorTab('face-rig')
+      setMessage('Opened Character Kit Face Rig from Character Creator. This does not replace Character Creator.')
+    }
+    window.addEventListener(FACE_RIG_HANDOFF_EVENT, onHandoff)
+    return () => window.removeEventListener(FACE_RIG_HANDOFF_EVENT, onHandoff)
+  }, [])
   useEffect(() => () => {
     if (animationRef.current) cancelAnimationFrame(animationRef.current)
     if (recordingAnimationRef.current) cancelAnimationFrame(recordingAnimationRef.current)
