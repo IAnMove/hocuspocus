@@ -20,6 +20,7 @@ import {
   type SceneRecipeShot,
 } from '../../lib/sceneRecipe'
 import { resolveRecipeAssets } from '../../lib/sceneRecipeAssets'
+import { characterKitRecipeInventory, type CharacterKitLibrary } from '../../lib/characterKit'
 import type { Scene } from '../../types'
 
 type LoadedAsset = {
@@ -154,10 +155,12 @@ function AssetThumb({
 export function SceneRecipePanel({
   disabled,
   outputs,
+  characterKits,
   onApply,
 }: {
   disabled?: boolean
   outputs: ApiOutput[]
+  characterKits?: CharacterKitLibrary
   onApply: (recipe: SceneRecipe, scene: Scene, status: (message: string) => void, prompt: string) => Promise<void>
 }) {
   const workspace = useStore(s => s.activeWorkspace)
@@ -267,7 +270,9 @@ export function SceneRecipePanel({
         animations: item.animations,
         seamlessHorizontal: item.seamlessHorizontal,
       }))
-      const systemPrompt = buildRecipeSystemPrompt({ mode, inventory: loaded })
+      const kitInventory = characterKits ? characterKitRecipeInventory(characterKits) : []
+      const fullInventory = [...loaded, ...kitInventory.filter(item => !loaded.some(selectedItem => selectedItem.source === item.source))]
+      const systemPrompt = buildRecipeSystemPrompt({ mode, inventory: fullInventory })
       let text = await generateLlmText({
         prompt: intent.trim(),
         system_prompt: systemPrompt,
@@ -297,7 +302,7 @@ export function SceneRecipePanel({
       }
       if (!recipe) throw new Error('The LLM did not produce a valid recipe after two repairs.')
       if (mode === 'manual') {
-        recipe = constrainManualRecipeToInventory(recipe, selected)
+        recipe = constrainManualRecipeToInventory(recipe, fullInventory)
       }
       setRecipeText(JSON.stringify(recipe, null, 2))
       setPlannedRecipe(recipe)

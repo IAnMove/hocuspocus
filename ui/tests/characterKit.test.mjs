@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { captureCharacterFaceAnchor, characterKitInventory, createCharacterKit, mountCharacterKitLayers } from '../src/lib/characterKit.ts'
+import { captureCharacterFaceAnchor, characterKitInventory, characterKitRecipeInventory, createCharacterKit, mountCharacterKitLayers } from '../src/lib/characterKit.ts'
 
 const asset = (id, reviewState = 'approved') => ({ id, name: id, source: `${id}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState })
 
@@ -32,4 +32,7 @@ test('inventory exposes only reviewed performance pieces to the LLM', () => {
   const inventory = characterKitInventory({ version: 1, revision: 1, activeId: kit.id, kits: { [kit.id]: kit } })
   assert.deepEqual(inventory[0].poses, ['base', 'run'])
   assert.deepEqual(inventory[0].mouth, ['wide'])
+  const recipeInventory = characterKitRecipeInventory({ version: 1, revision: 1, activeId: kit.id, kits: { [kit.id]: kit } })
+  assert.deepEqual(recipeInventory.map(item => item.name), ['brin/base', 'brin/pose/run', 'brin/mouth/wide'])
+  assert.ok(recipeInventory.every(item => item.description.includes('APPROVED_CHARACTER_KIT id=brin')))
 })

@@ -1,4 +1,5 @@
 import type { SceneFaceBindingState, SceneLayer } from '../types'
+import type { SceneRecipeInventoryItem } from './sceneRecipe'
 
 export type CharacterKitStyle = 'cutout' | 'children-illustration' | 'anime-2d'
 export type CharacterKitReviewState = 'pending' | 'approved' | 'rejected'
@@ -150,4 +151,28 @@ export function characterKitInventory(library: CharacterKitLibrary): Array<Recor
     mouth: Object.entries(kit.mouth).filter(([, asset]) => asset?.reviewState === 'approved').map(([state]) => state),
     eyes: Object.entries(kit.eyes).filter(([, asset]) => asset?.reviewState === 'approved').map(([state]) => state),
   }))
+}
+
+/** Flatten only reviewed kit pieces into the existing bounded recipe inventory.
+ * The active kit is ordered first so its complete face set survives the global
+ * inventory cap even in a large workspace. */
+export function characterKitRecipeInventory(library: CharacterKitLibrary): SceneRecipeInventoryItem[] {
+  const ordered = Object.values(library.kits).sort((a, b) => Number(b.id === library.activeId) - Number(a.id === library.activeId))
+  return ordered.flatMap(kit => {
+    const items: SceneRecipeInventoryItem[] = []
+    const add = (asset: CharacterKitAsset | undefined, role: string) => {
+      if (!asset || asset.reviewState !== 'approved') return
+      items.push({
+        name: `${kit.id}/${role}`,
+        kind: 'image',
+        source: asset.source,
+        description: `APPROVED_CHARACTER_KIT id=${kit.id}; name=${kit.name}; style=${kit.style}; role=${role}; alpha=${asset.alphaStatus}. Keep body, pose and face pieces from this same kit.`,
+      })
+    }
+    add(kit.base, 'base')
+    for (const [poseId, asset] of Object.entries(kit.poses)) add(asset, `pose/${poseId}`)
+    for (const [state, asset] of Object.entries(kit.mouth)) add(asset, `mouth/${state}`)
+    for (const [state, asset] of Object.entries(kit.eyes)) add(asset, `eyes/${state}`)
+    return items
+  })
 }
