@@ -87,6 +87,15 @@ test('a speaking beat round-trips with its editable mouth provenance', () => {
   assert.deepEqual(recipe.dialogueBeats[0].mouthLayerIds, ['hero'])
 })
 
+test('pose-specific face binding survives scene serialization', () => {
+  const authored = sceneFixture()
+  authored.layers[0].faceBinding = { poseLayerId: 'pose-a', role: 'mouth', state: 'wide' }
+  const recipe = sceneToRecipe(authored)
+  assert.deepEqual(recipe.scene.layers[0].faceBinding, { poseLayerId: 'pose-a', role: 'mouth', state: 'wide' })
+  recipe.scene.layers[0].faceBinding.state = 'round'
+  assert.equal(authored.layers[0].faceBinding.state, 'wide')
+})
+
 test('a real run-travel template remains a faithful recipe after compilation', () => {
   const authored = createNarrativeScene('run-travel-parallax', {
     hero: { name: 'Runner', type: 'image', source: '/assets/runner.png' },

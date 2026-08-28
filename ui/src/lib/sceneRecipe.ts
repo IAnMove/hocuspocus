@@ -1,5 +1,5 @@
 import type { Scene, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../types'
-import { normalizeFaceBinding } from './cutoutDialogue'
+import { applyCutoutDialogue, findCutoutMouthLayers, normalizeFaceBinding, planCutoutDialogue } from './cutoutDialogue'
 import { resolveSceneGrade } from './sceneGrade'
 import type { SceneGradeIntensity, SceneGradeMood, SceneGradePalette } from './sceneGrade'
 import { createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES } from './sceneNarrative'
@@ -710,6 +710,7 @@ Semantic mapping hints:
 - Emotional or atmospheric words in the request set scene.mood and scene.palette. Melancholy/wistful -> mood dreamy with a cool palette; threat/dread -> tense; triumph/resolve -> heroic; warm nostalgia -> warm palette. Leave them unset only when the request is genuinely neutral, because an unset scene renders with flat neutral colour.
 - Where the subject faces is transform.rotationY on its model3d layer, not a camera preset. "Side camera", "from the side", "in profile" -> rotationY 90. "Three-quarter" -> 35. "From behind", "back to us" -> 180. Facing straight at the viewer -> 0. Camera presets move the camera; they never change which side of a subject is visible, so a shot described by viewpoint needs rotationY set explicitly.
 - Requested music, narration or sound effects go in the top-level audio array, never in assets and never as a layer. Give each track an id, a kind, a startTime and a prompt describing the sound. Audio is requested, not drawn: it adds no layer and does not change the composition.
+- Spoken cutout dialogue uses both a speech audio entry and a top-level dialogueBeats entry. Set its audioTrackId, exact text and time range. mouthLayerIds must name the mouth overlays in that shot; for cutout-talking-head use ["mouth-open", "mouth-closed"]. The compiler converts the text into editable held/snap mouth keyframes automatically. Never target the hero/base plate itself as a mouth layer.
 - Depth/parallax requests set layer.parallax: lower is further away. Distant background 0.3, mid-ground 0.7, subject 1, foreground element passing close to the lens 1.2. Relative speed is the only depth cue this compositor has, so give layers distinct values whenever the request implies depth. Left unset, layers are banded automatically by z order.
 - For authored timing, animation.keyframes is a time-ordered array of two or more complete poses. Use it for holds, snaps, blinks, beats and motion that must not collapse into one start/end glide. Each keyframe has time, x, y, scale, opacity, rotation and curve. Use animation offset/speed/loop/trimStart/trimEnd only when the layer's local timeline needs it.
 - A repeatable moving world uses layer.strip with enabled, count, spacing, direction, speed and optional seamOccluder. Use it only when the plate is explicitly seamlessHorizontal: true. A seamOccluder is a pole, lamp, tree or column that masks the tile join; it is not a generated asset.
@@ -1275,10 +1276,12 @@ export function compileRecipeShot(
     }
     const scene = createNarrativeScene(template.id, input)
     const audioTracks = compileRecipeAudio(recipe, resolved, scene.duration)
+    const dialogue = compileRecipeDialogue(scene.layers, recipe.dialogueBeats, scene.fps ?? 30, scene.duration)
     return {
       ...scene,
+      layers: dialogue.layers,
       ...(audioTracks.length ? { audioTracks } : {}),
-      ...(recipe.dialogueBeats?.length ? { dialogueBeats: recipe.dialogueBeats.map(beat => ({ ...beat, mouthLayerIds: [...beat.mouthLayerIds] })) } : {}),
+      ...(dialogue.beats.length ? { dialogueBeats: dialogue.beats } : {}),
     }
   }
   if (!shot.layers?.length) throw new Error(`Shot "${shot.name}" needs a template or layers.`)
@@ -1355,6 +1358,58 @@ function compileRecipeAudio(recipe: SceneRecipe, resolved: Record<string, string
       ...(track.model ? { model: track.model } : {}),
     }
   })
+}
+
+function compileRecipeDialogue(
+  layers: SceneLayer[],
+  beats: SceneRecipeDialogueBeat[] | undefined,
+  fps: number,
+  duration: number,
+): { layers: SceneLayer[]; beats: SceneRecipeDialogueBeat[] } {
+  if (!beats?.length) return { layers, beats: [] }
+  const layerById = new Map(layers.map(layer => [layer.id, layer]))
+  const framesByLayer = new Map<string, SceneKeyframe[]>()
+  const appliedBeats: SceneRecipeDialogueBeat[] = []
+  for (const beat of beats) {
+    const targets = beat.mouthLayerIds.flatMap(id => layerById.get(id) ? [layerById.get(id)!] : [])
+    // Top-level beats can target a different shot in a multi-shot recipe.
+    if (!targets.length) continue
+    if (targets.length !== beat.mouthLayerIds.length) {
+      appliedBeats.push({ ...beat, mouthLayerIds: [...beat.mouthLayerIds] })
+      continue
+    }
+    const mouthLayers = findCutoutMouthLayers(targets)
+    if (!(mouthLayers.open ?? mouthLayers.wide ?? mouthLayers.small ?? mouthLayers.round)) {
+      // Older scenes used dialogueBeats as provenance before semantic mouth
+      // layers existed. Preserve that metadata without rewriting arbitrary
+      // hero animation; new valid recipes animate automatically.
+      appliedBeats.push({ ...beat, mouthLayerIds: [...beat.mouthLayerIds] })
+      continue
+    }
+    const start = Math.max(0, Math.min(duration, beat.start))
+    const end = Math.max(start + 1 / Math.max(1, fps), Math.min(duration, beat.end))
+    if (start >= duration) continue
+    const plan = planCutoutDialogue(beat.text, start, Math.min(duration, end), fps)
+    const generated = applyCutoutDialogue(mouthLayers, plan)
+    for (const [layerId, frames] of Object.entries(generated)) {
+      framesByLayer.set(layerId, [...(framesByLayer.get(layerId) ?? []), ...frames])
+    }
+    appliedBeats.push({ ...beat, start: plan.start, end: plan.end, mouthLayerIds: Object.keys(generated) })
+  }
+  if (!framesByLayer.size) return { layers, beats: appliedBeats }
+  return {
+    layers: layers.map(layer => {
+      const frames = framesByLayer.get(layer.id)
+      if (!frames) return layer
+      // Adjacent words can share a boundary. The later beat owns that exact
+      // instant, which keeps the snap deterministic and IDs unique.
+      const atTime = new Map<number, SceneKeyframe>()
+      for (const frame of frames) atTime.set(frame.time, frame)
+      const keyframes = [...atTime.values()].sort((left, right) => left.time - right.time)
+      return { ...layer, animation: { ...layer.animation, keyframes, duration, curve: 'hold' } }
+    }),
+    beats: appliedBeats,
+  }
 }
 
 export function compileSceneRecipe(
@@ -1452,6 +1507,7 @@ export function compileSceneRecipe(
   // yet, so an unresolved track is a hard failure with a nameable cause rather
   // than a silently mute export.
   const audioTracks = compileRecipeAudio(recipe, resolved, duration)
+  const dialogue = compileRecipeDialogue(layers, recipe.dialogueBeats, recipe.scene.fps === 60 ? 60 : 30, duration)
   return {
     version: 1,
     name: recipe.name,
@@ -1460,9 +1516,9 @@ export function compileSceneRecipe(
     fps: recipe.scene.fps === 60 ? 60 : 30,
     duration,
     composition: { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' },
-    layers,
+    layers: dialogue.layers,
     ...(audioTracks.length ? { audioTracks } : {}),
-    ...(recipe.dialogueBeats?.length ? { dialogueBeats: recipe.dialogueBeats.map(beat => ({ ...beat, mouthLayerIds: [...beat.mouthLayerIds] })) } : {}),
+    ...(dialogue.beats.length ? { dialogueBeats: dialogue.beats } : {}),
   }
 }
 

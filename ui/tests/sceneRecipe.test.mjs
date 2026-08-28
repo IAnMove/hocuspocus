@@ -39,6 +39,69 @@ test('recipe JSON in a markdown fence still parses', () => {
   assert.equal(recipe.assets.length, 2)
 })
 
+test('compiled dialogue beats replace template mouth loops with text-driven keyframes', () => {
+  const recipe = parseSceneRecipe({
+    version: 1,
+    name: 'talking-cutout',
+    record: false,
+    save: false,
+    assets: [
+      { id: 'hero', kind: 'image', source: 'hero.png' },
+      { id: 'plate', kind: 'image', source: 'plate.png' },
+      { id: 'open', kind: 'image', source: 'open.png' },
+      { id: 'closed', kind: 'image', source: 'closed.png' },
+    ],
+    audio: [{ id: 'voice', kind: 'speech', source: 'line.wav', model: 'qwen3_tts_voicedesign' }],
+    dialogueBeats: [{ id: 'line', text: 'Hola, sopa curiosa.', start: .5, end: 3.5, mouthLayerIds: ['mouth-open', 'mouth-closed'], audioTrackId: 'voice', confidence: 'known-text' }],
+    shots: [{ name: 'line', duration: 5, template: 'cutout-talking-head', slots: { hero: 'hero', plate: 'plate', prop: 'open', foreground: 'closed' } }],
+    scene: { width: 1280, height: 720, fps: 30, duration: 5, layers: [{ id: 'camera', type: 'camera', cameraPreset: 'camera-locked' }, { id: 'fallback', type: 'image', asset: 'plate' }] },
+  })
+  const scene = compileRecipeShot(recipe, recipe.shots[0], {
+    hero: 'hero.png', plate: 'plate.png', open: 'open.png', closed: 'closed.png', voice: 'line.wav',
+  }, filename => filename)
+  const open = scene.layers.find(layer => layer.id === 'mouth-open')
+  const closed = scene.layers.find(layer => layer.id === 'mouth-closed')
+  assert.ok(open.animation.keyframes.length > 4)
+  assert.ok(open.animation.keyframes.some(frame => frame.opacity === 1))
+  assert.ok(closed.animation.keyframes.some(frame => frame.opacity === 1))
+  assert.equal(scene.dialogueBeats[0].audioTrackId, 'voice')
+  assert.equal(scene.audioTracks[0].model, 'qwen3_tts_voicedesign')
+})
+
+test('custom recipe dialogue drives distinct face-bound visemes without crossing characters', () => {
+  const recipe = parseSceneRecipe({
+    version: 1,
+    name: 'three-visemes',
+    record: false,
+    save: false,
+    assets: [
+      { id: 'hero-art', kind: 'image', source: 'hero.png' },
+      { id: 'small-art', kind: 'image', source: 'small.png' },
+      { id: 'wide-art', kind: 'image', source: 'wide.png' },
+      { id: 'round-art', kind: 'image', source: 'round.png' },
+    ],
+    dialogueBeats: [{ id: 'line', text: 'La antena envía una curiosa señal de sopa.', start: .25, end: 4.5, mouthLayerIds: ['a-small', 'a-wide', 'a-round'], confidence: 'known-text' }],
+    scene: {
+      width: 1280, height: 720, fps: 30, duration: 5,
+      layers: [
+        { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },
+        { id: 'hero-a', type: 'image', asset: 'hero-art' },
+        { id: 'a-small', name: 'Mouth Small', type: 'overlay', asset: 'small-art', faceBinding: { poseLayerId: 'hero-a', role: 'mouth', state: 'small' } },
+        { id: 'a-wide', name: 'Mouth Wide', type: 'overlay', asset: 'wide-art', faceBinding: { poseLayerId: 'hero-a', role: 'mouth', state: 'wide' } },
+        { id: 'a-round', name: 'Mouth Round', type: 'overlay', asset: 'round-art', faceBinding: { poseLayerId: 'hero-a', role: 'mouth', state: 'round' } },
+        { id: 'b-wide', name: 'Mouth Wide B', type: 'overlay', asset: 'wide-art', faceBinding: { poseLayerId: 'hero-b', role: 'mouth', state: 'wide' } },
+      ],
+    },
+  })
+  const scene = compileSceneRecipe(recipe, {
+    'hero-art': 'hero.png', 'small-art': 'small.png', 'wide-art': 'wide.png', 'round-art': 'round.png',
+  }, filename => filename)
+  assert.ok(scene.layers.find(layer => layer.id === 'a-small').animation.keyframes.some(frame => frame.opacity === 1))
+  assert.ok(scene.layers.find(layer => layer.id === 'a-wide').animation.keyframes.some(frame => frame.opacity === 1))
+  assert.ok(scene.layers.find(layer => layer.id === 'a-round').animation.keyframes.some(frame => frame.opacity === 1))
+  assert.equal(scene.layers.find(layer => layer.id === 'b-wide').animation.keyframes, undefined)
+})
+
 test('recipe version accepts a numeric string from imperfect structured providers', () => {
   const recipe = parseSceneRecipe({ ...EXAMPLE_SAUCER_CRUISE_RECIPE, version: '1' })
   assert.equal(recipe.version, 1)

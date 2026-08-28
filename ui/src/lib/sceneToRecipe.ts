@@ -45,6 +45,7 @@ const cloneLayer = (layer: SceneLayer, asset?: string): SerializedSceneRecipeLay
   seamlessHorizontal: layer.seamlessHorizontal,
   locked: layer.locked,
   visible: layer.visible,
+  faceBinding: layer.faceBinding ? { ...layer.faceBinding } : undefined,
   relationship: layer.relationship ? { ...layer.relationship } : undefined,
   strip: layer.strip
     ? {
