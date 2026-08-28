@@ -43,9 +43,16 @@ export interface CharacterKit {
     eyes?: CharacterFaceAnchor
   }>
   provenance: Array<Record<string, unknown>>
+  /** Style + traits the user picked; Face Rig fills overlay prompts from this. */
+  lookNotes?: string
   createdAt?: string
   updatedAt?: string
 }
+
+/** Pose-local mouth placement: percent of the character, not of the 16:9 frame. */
+export const DEFAULT_CHARACTER_MOUTH_ANCHOR: CharacterFaceAnchor = { offsetX: 0, offsetY: -18, scale: .05, rotation: 0 }
+/** Pose-local blink placement. Smaller than a mouth pack that covers the whole head. */
+export const DEFAULT_CHARACTER_BLINK_ANCHOR: CharacterFaceAnchor = { offsetX: 0, offsetY: -28, scale: .12, rotation: 0 }
 
 export interface CharacterKitLibrary {
   version: 1
@@ -62,6 +69,24 @@ export function createCharacterKit(name: string, style: CharacterKitStyle = 'cut
   const now = new Date().toISOString()
   const id = cleanId(name) || `character-${Date.now().toString(36)}`
   return { version: 1, id, name: name.trim() || 'Untitled character', style, poses: {}, mouth: {}, eyes: {}, anchors: {}, provenance: [], createdAt: now, updatedAt: now }
+}
+
+/** Attach a generated full-body pose as pending review. Does not approve it. */
+export function registerGeneratedKitPose(
+  kit: CharacterKit,
+  poseId: string,
+  asset: CharacterKitAsset,
+): CharacterKit {
+  const normalizedPoseId = poseId.trim() || 'base'
+  if (!asset.source || asset.source.startsWith('blob:')) throw new Error('Generated poses need a persistent source.')
+  const nextAsset: CharacterKitAsset = { ...asset, kind: 'image', reviewState: 'pending' }
+  return {
+    ...kit,
+    base: normalizedPoseId === 'base' ? nextAsset : kit.base,
+    poses: normalizedPoseId === 'base' ? kit.poses : { ...kit.poses, [normalizedPoseId]: nextAsset },
+    provenance: [...kit.provenance, { method: 'character-kit-pose-generate', poseId: normalizedPoseId, source: nextAsset.source }],
+    updatedAt: new Date().toISOString(),
+  }
 }
 
 export function characterKitAssetFromLayer(
@@ -87,10 +112,25 @@ export function characterKitAssetFromLayer(
 export function captureCharacterFaceAnchor(pose: SceneLayer, face: SceneLayer): CharacterFaceAnchor {
   const poseScale = Math.max(.001, pose.transform.scale)
   return {
-    offsetX: face.transform.x - pose.transform.x,
-    offsetY: face.transform.y - pose.transform.y,
+    offsetX: (face.transform.x - pose.transform.x) / poseScale,
+    offsetY: (face.transform.y - pose.transform.y) / poseScale,
     scale: face.transform.scale / poseScale,
     rotation: (face.transform.rotation ?? 0) - (pose.transform.rotation ?? 0),
+  }
+}
+
+/** Map a pose-local Face Rig anchor onto a character at any scene scale. */
+export function appliedCharacterFaceTransform(
+  pose: SceneLayer['transform'],
+  anchor: CharacterFaceAnchor,
+): SceneLayer['transform'] {
+  const poseScale = Math.max(.001, pose.scale)
+  return {
+    x: pose.x + anchor.offsetX * poseScale,
+    y: pose.y + anchor.offsetY * poseScale,
+    scale: poseScale * Math.max(.001, anchor.scale),
+    opacity: 1,
+    rotation: (pose.rotation ?? 0) + (anchor.rotation ?? 0),
   }
 }
 
@@ -112,14 +152,8 @@ export function mountCharacterKitLayers(
     visible: true, locked: false, z: 20, fill: false, parallax: 1, transform: { ...transform }, animation,
   }
   const anchors = kit.anchors[poseId] ?? kit.anchors.base
-  const mouthAnchor = anchors?.mouth ?? { offsetX: 0, offsetY: 0, scale: .16, rotation: 0 }
-  const faceTransform = (anchor: CharacterFaceAnchor) => ({
-    x: transform.x + anchor.offsetX,
-    y: transform.y + anchor.offsetY,
-    scale: transform.scale * anchor.scale,
-    opacity: 1,
-    rotation: (transform.rotation ?? 0) + anchor.rotation,
-  })
+  const mouthAnchor = anchors?.mouth ?? DEFAULT_CHARACTER_MOUTH_ANCHOR
+  const faceTransform = (anchor: CharacterFaceAnchor) => appliedCharacterFaceTransform(transform, anchor)
   const layers: SceneLayer[] = [pose]
   let z = 21
   for (const state of ['closed', 'small', 'wide', 'round'] as const) {
@@ -136,7 +170,7 @@ export function mountCharacterKitLayers(
   }
   const blink = kit.eyes.blink
   if (blink?.reviewState === 'approved') {
-    const eyeTransform = faceTransform(anchors?.eyes ?? mouthAnchor)
+    const eyeTransform = faceTransform(anchors?.eyes ?? DEFAULT_CHARACTER_BLINK_ANCHOR)
     layers.push({
       id: `kit-${kit.id}-eyes-blink`, name: `${kit.name} Eyes blink`, type: 'overlay', source: blink.source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: eyeTransform,

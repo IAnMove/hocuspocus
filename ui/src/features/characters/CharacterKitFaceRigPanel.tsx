@@ -5,13 +5,18 @@ import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 import {
   CHARACTER_FACE_RIG_STATES,
   FACE_RIG_PRESET_ROOT,
+  FACE_RIG_STYLE_PRESETS,
+  FACE_RIG_TRAIT_CHIPS,
   applyFaceRigMouthPreset,
   assessFaceRigPlacement,
+  characterKitPosePrompt,
   classifyCharacterKitAlpha,
+  composeCharacterKitLook,
   faceRigAnchorFor,
   faceRigGenerationRequests,
   faceRigOverlayPreviewStyle,
   faceRigVisemeAt,
+  lockFaceRigMouthPlacement,
   previewFaceRigDialogue,
   previewFaceRigDialogueFromAudio,
   registerCleanedFaceRigAsset,
@@ -23,7 +28,7 @@ import {
   type FaceRigDialoguePreview,
   type FaceRigDialogueViseme,
 } from '../../lib/characterKitFaceRig'
-import type { CharacterFaceAnchor, CharacterKit, CharacterKitAsset, CharacterMouthState } from '../../lib/characterKit'
+import { registerGeneratedKitPose, type CharacterFaceAnchor, type CharacterKit, type CharacterKitAsset, type CharacterMouthState } from '../../lib/characterKit'
 import { useStore } from '../../stores/useStore'
 
 type Props = {
@@ -73,8 +78,11 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   const speechModel = useStore(state => state.selectedModelPerAudioSubMode.speech ?? 'kugelaudio_0_open')
   const workspace = useStore(state => state.activeWorkspace)
   const [selectedState, setSelectedState] = useState<CharacterKitFaceRigState>('wide')
-  const [description, setDescription] = useState('')
-  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | null>(null)
+  const [styleId, setStyleId] = useState<typeof FACE_RIG_STYLE_PRESETS[number]['id']>(FACE_RIG_STYLE_PRESETS[0].id)
+  const [traits, setTraits] = useState<string[]>([])
+  const [extraNotes, setExtraNotes] = useState(kit.lookNotes ?? '')
+  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | 'pose' | null>(null)
+  const [holdBlink, setHoldBlink] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showOverlay, setShowOverlay] = useState(true)
   const [checkerboard, setCheckerboard] = useState(true)
@@ -93,9 +101,17 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   const savedAnchor = useMemo(() => faceRigAnchorFor(kit, poseId, selectedState), [kit, poseId, selectedState])
   const poseSource = poseId === 'base' ? kit.base?.source : kit.poses[poseId]?.source
   const selectedAsset = assetFor(kit, selectedState)
-  const playbackState = liveViseme?.sourceState ?? selectedState
-  const playbackAsset = playbackState === 'blink' ? selectedAsset : kit.mouth[playbackState] ?? selectedAsset
-  const playbackAnchor = liveViseme ? faceRigAnchorFor(kit, poseId, playbackState) : draftAnchor
+  const stylePrompt = FACE_RIG_STYLE_PRESETS.find(item => item.id === styleId)?.prompt ?? ''
+  const description = composeCharacterKitLook({
+    name: kit.name,
+    traits: traits.join(', '),
+    stylePrompt,
+    extra: extraNotes,
+  })
+  const playbackState: CharacterKitFaceRigState = holdBlink ? 'blink' : (liveViseme?.sourceState ?? selectedState)
+  const playbackAsset = playbackState === 'blink' ? kit.eyes.blink ?? selectedAsset : kit.mouth[playbackState] ?? selectedAsset
+  const playbackAnchor = holdBlink || liveViseme ? faceRigAnchorFor(kit, poseId, playbackState) : draftAnchor
+  const poseApproved = Boolean((poseId === 'base' ? kit.base : kit.poses[poseId])?.reviewState === 'approved')
   const placement = useMemo(() => assessFaceRigPlacement(draftAnchor, selectedState), [draftAnchor, selectedState])
   const overlayStyle = useMemo(() => faceRigOverlayPreviewStyle(playbackAnchor), [playbackAnchor])
   const dirtyAnchor = JSON.stringify(draftAnchor) !== JSON.stringify(savedAnchor)
@@ -159,11 +175,46 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     })
   }
 
+  const persistLook = (next: CharacterKit): CharacterKit => ({ ...next, lookNotes: description })
+
+  const toggleTrait = (trait: string) => {
+    setTraits(current => current.includes(trait) ? current.filter(item => item !== trait) : [...current, trait])
+  }
+
+  const generatePose = async () => {
+    setBusyState('pose'); setError(null)
+    try {
+      const generated = await generateImageAsset(
+        'maestro',
+        characterKitPosePrompt(kit, description),
+        imageModel || undefined,
+        poseSource,
+        'background, ground shadow, extra characters, collage, turnaround sheet, text, watermark, frame, border',
+        { strictReference: Boolean(poseSource), referenceMode: 'identity', aspectRatio: '2:3' },
+      )
+      const next = registerGeneratedKitPose(persistLook(kit), poseId || 'base', {
+        id: generated.id,
+        name: `${kit.name} · pose`,
+        source: generated.source,
+        kind: 'image',
+        alphaStatus: 'unknown',
+        reviewState: 'pending',
+        prompt: characterKitPosePrompt(kit, description),
+        model: generated.model || imageModel || undefined,
+        workspace,
+      })
+      onChange(next)
+      onStatus?.('Paso 1: pose generated as pending. Approve it in Kit & poses, then generate mouths.')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Character pose generation failed.')
+    } finally { setBusyState(null) }
+  }
+
   const generateSelected = async () => {
     setBusyState(selectedState); setError(null)
     try {
-      const next = await generateState(kit, selectedState)
-      onChange(next); onStatus?.(`${LABELS[selectedState]} generated as pending review.`)
+      const next = await generateState(persistLook(kit), selectedState)
+      onChange(next); onStatus?.(`${LABELS[selectedState]} generated as pending review. Drag it onto the lips, then lock all mouths.`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Face Rig generation failed.')
     } finally { setBusyState(null) }
@@ -172,7 +223,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   const generateMissingPack = async () => {
     setBusyState('pack'); setError(null)
     try {
-      let next = kit
+      let next = persistLook(kit)
       const missing = CHARACTER_FACE_RIG_STATES.filter(state => !assetFor(next, state) || assetFor(next, state)?.reviewState === 'rejected')
       if (!missing.length) throw new Error('The five Face Rig states already exist. Generate one selected state to replace it.')
       for (const state of missing) {
@@ -308,13 +359,38 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
 
   const savePlacement = () => {
     try {
-      const next = setFaceRigAnchor(kit, poseId, selectedState, draftAnchor)
+      const next = setFaceRigAnchor(persistLook(kit), poseId, selectedState, draftAnchor)
       onChange(next)
       onStatus?.(`${LABELS[selectedState]} placement saved for ${poseId || 'base'}. It stays pending until you approve.`)
       setError(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save this Face Rig placement.')
     }
+  }
+
+  const lockMouths = () => {
+    try {
+      const next = lockFaceRigMouthPlacement(persistLook(kit), poseId, draftAnchor)
+      onChange(next)
+      onStatus?.(`Locked this height and size on closed, small, wide and round for ${poseId || 'base'}.`)
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not lock this mouth placement.')
+    }
+  }
+
+  const nudge = (field: keyof CharacterFaceAnchor, delta: number) => {
+    if (disabled || Boolean(busyState)) return
+    setDraftAnchor(current => ({ ...current, [field]: current[field] + delta }))
+  }
+
+  const flashBlink = () => {
+    if (!kit.eyes.blink?.source) {
+      setError('Generate a blink overlay first, then flash it to check the eyes.')
+      return
+    }
+    setHoldBlink(true)
+    window.setTimeout(() => setHoldBlink(false), 450)
   }
 
   const review = (state: CharacterKitFaceRigState, approved: boolean) => {
@@ -331,14 +407,27 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   }
 
   return <div className="space-y-1.5">
-    <p className="text-[8px] leading-relaxed text-text-muted">Generate reusable mouth and blink overlays from the approved pose. Outputs stay pending until you verify transparency and placement; recipes never see pending pieces.</p>
-    <label className="block text-[8px] text-text-muted">Identity / art notes (optional)<textarea value={description} disabled={disabled || Boolean(busyState)} onChange={event => setDescription(event.target.value)} rows={2} placeholder="Flat paper-cut texture, thick uneven black outline…" className="mt-0.5 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px]" /></label>
+    <p className="text-[8px] leading-relaxed text-text-muted">Two steps: first the puppet body, then lips and blinks you drag onto the face. Pick a style and a couple of traits; the prompts are already written. Recipes never see pending pieces.</p>
+    <div className="space-y-1 rounded border border-emerald-300/20 bg-black/15 p-1.5">
+      <p className="text-[8px] font-medium text-emerald-100">Paso 1 · Personaje</p>
+      <p className="text-[7px] text-text-muted">Style + traits only. Generate a full-body cutout, then approve it in Kit & poses.</p>
+      <div className="flex flex-wrap gap-1">{FACE_RIG_STYLE_PRESETS.map(preset => (
+        <button key={preset.id} type="button" disabled={disabled || Boolean(busyState)} onClick={() => setStyleId(preset.id)} className={`rounded border px-1 py-0.5 text-[7px] ${styleId === preset.id ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{preset.label}</button>
+      ))}</div>
+      <div className="flex flex-wrap gap-1">{FACE_RIG_TRAIT_CHIPS.map(trait => (
+        <button key={trait} type="button" disabled={disabled || Boolean(busyState)} onClick={() => toggleTrait(trait)} className={`rounded border px-1 py-0.5 text-[7px] ${traits.includes(trait) ? 'border-amber-300 bg-amber-400/15 text-amber-100' : 'border-border text-text-muted'}`}>{trait}</button>
+      ))}</div>
+      <label className="block text-[8px] text-text-muted">Extra notes (optional)<textarea value={extraNotes} disabled={disabled || Boolean(busyState)} onChange={event => setExtraNotes(event.target.value)} rows={2} placeholder="Only what the chips do not cover…" className="mt-0.5 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px]" /></label>
+      <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void generatePose()} className="w-full rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === 'pose' ? 'Generating character…' : poseApproved ? 'Regenerate pose (stays pending)' : 'Generate full-body cutout'}</button>
+      <p className="text-[7px] text-text-secondary">{poseApproved ? `Approved pose: ${poseId || 'base'}. Continue with mouths.` : 'Approve the pose in Kit & poses before generating Face Rig overlays.'}</p>
+    </div>
     {presetPacks.length > 0 && <div className="grid grid-cols-[1fr_auto] gap-1">
       <select aria-label="Mouth style pack" value={presetId} disabled={disabled || Boolean(busyState)} onChange={event => setPresetId(event.target.value)} className="rounded border border-border bg-bg-primary px-1 py-1 text-[8px]">
         {presetPacks.map(pack => <option key={pack.id} value={pack.id}>{pack.label}</option>)}
       </select>
       <button type="button" disabled={disabled || Boolean(busyState) || !presetId} onClick={applyPreset} className="rounded border border-violet-300/40 bg-violet-400/10 px-1 py-1 text-[8px] text-violet-100 disabled:opacity-40">Apply pack</button>
     </div>}
+    <p className="text-[8px] font-medium text-emerald-100">Paso 2 · Labios y parpadeo</p>
     <div className="grid grid-cols-5 gap-1">{CHARACTER_FACE_RIG_STATES.map(state => {
       const asset = assetFor(kit, state)
       return <button key={state} type="button" disabled={disabled || Boolean(busyState)} onClick={() => setSelectedState(state)} className={`rounded border px-1 py-1 text-[7px] ${selectedState === state ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{LABELS[state]}<span className="block text-[6px]">{asset?.reviewState ?? 'missing'}</span></button>
@@ -364,7 +453,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
           {showOverlay && playbackAsset && <img
             src={playbackAsset.source}
             alt={`${kit.name} ${LABELS[playbackState]} overlay`}
-            className={`absolute object-contain ${liveViseme ? '' : 'cursor-grab active:cursor-grabbing'}`}
+            className={`absolute object-contain ${liveViseme || holdBlink ? '' : 'cursor-grab active:cursor-grabbing'}`}
             style={overlayStyle}
             draggable={false}
             onPointerDown={onOverlayPointerDown}
@@ -372,18 +461,34 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
             onPointerUp={onOverlayPointerUp}
             onPointerCancel={onOverlayPointerUp}
           />}
+          <div className="pointer-events-none absolute inset-x-0 top-[32%] border-t border-dashed border-amber-200/40" title="Typical mouth line" />
+        </div>
+        <p className="text-[7px] text-text-muted">Paso 2 · Arrastra la boca hasta los labios. Abajo = Down. Luego lock all mouths.</p>
+        <div className="grid grid-cols-4 gap-1">
+          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetY', -1)} className="rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Up</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetY', 1)} className="rounded border border-amber-300/40 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100">Down</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetX', -1)} className="rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Left</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetX', 1)} className="rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Right</button>
+        </div>
+        <div className="grid grid-cols-2 gap-1">
+          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('scale', -0.005)} className="rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Smaller</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('scale', 0.005)} className="rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Bigger</button>
         </div>
         <div className="grid grid-cols-2 gap-1 text-[7px] text-text-muted">
           <label>X<input type="range" min={-40} max={40} step={0.5} value={draftAnchor.offsetX} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('offsetX', Number(event.target.value))} className="w-full" /></label>
-          <label>Y<input type="range" min={-50} max={20} step={0.5} value={draftAnchor.offsetY} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('offsetY', Number(event.target.value))} className="w-full" /></label>
+          <label>Y (down →)<input type="range" min={-50} max={20} step={0.5} value={draftAnchor.offsetY} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('offsetY', Number(event.target.value))} className="w-full" /></label>
           <label>Scale<input type="range" min={0.01} max={0.45} step={0.001} value={draftAnchor.scale} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('scale', Number(event.target.value))} className="w-full" /></label>
           <label>Rotate<input type="range" min={-45} max={45} step={0.5} value={draftAnchor.rotation} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('rotation', Number(event.target.value))} className="w-full" /></label>
         </div>
         <p className="text-[7px] text-text-secondary">x {draftAnchor.offsetX.toFixed(2)} · y {draftAnchor.offsetY.toFixed(2)} · scale {draftAnchor.scale.toFixed(4)} · rot {draftAnchor.rotation.toFixed(1)}°</p>
         {placement.warnings.map(warning => <p key={warning} className="text-[7px] text-amber-200">{warning}</p>)}
         <div className="grid grid-cols-2 gap-1">
-          <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} onClick={savePlacement} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Save placement</button>
+          <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} onClick={savePlacement} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Save this state</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} onClick={lockMouths} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">Lock all mouths</button>
+        </div>
+        <div className="grid grid-cols-2 gap-1">
           <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} onClick={() => setDraftAnchor(savedAnchor)} className="rounded border border-border px-1 py-1 text-[8px] text-text-muted disabled:opacity-40">Reset</button>
+          <button type="button" disabled={disabled || Boolean(busyState) || !kit.eyes.blink?.source} onClick={flashBlink} className="rounded border border-cyan-300/40 px-1 py-1 text-[8px] text-cyan-100 disabled:opacity-40">{holdBlink ? 'Blinking…' : 'Flash blink 0.4s'}</button>
         </div>
       </div>}
       <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || assetFor(kit, selectedState)!.alphaStatus !== 'transparent'} onClick={() => review(selectedState, true)} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Approve transparent</button><button type="button" disabled={disabled || Boolean(busyState)} onClick={() => review(selectedState, false)} className="rounded border border-red-300/30 px-1 py-1 text-[8px] text-red-200">Reject</button></div>

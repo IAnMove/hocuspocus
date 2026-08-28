@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
-import { applyFaceRigMouthPreset, assessFaceRigPlacement, classifyCharacterKitAlpha, faceRigAnchorFor, faceRigGenerationRequests, faceRigOverlayPreviewStyle, faceRigPrompt, faceRigVisemeAt, previewFaceRigDialogue, previewFaceRigDialogueFromAudio, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigAnchor, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
+import { applyFaceRigMouthPreset, assessFaceRigPlacement, characterKitPosePrompt, classifyCharacterKitAlpha, composeCharacterKitLook, faceRigAnchorFor, faceRigGenerationRequests, faceRigOverlayPreviewStyle, faceRigPrompt, faceRigVisemeAt, lockFaceRigMouthPlacement, previewFaceRigDialogue, previewFaceRigDialogueFromAudio, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigAnchor, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
 
 const pose = { id: 'base', name: 'Base', source: 'base.png', kind: 'image', alphaStatus: 'opaque', reviewState: 'approved' }
 const generated = state => ({ id: `generated-${state}`, name: state, source: `${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved' })
@@ -143,6 +143,33 @@ test('applying a mouth style pack stays pending and does not invent blink', () =
   assert.equal(next.mouth.wide.source, '/character-kit-presets/mouths/paper-cut/wide.png')
   assert.equal(next.eyes.blink, undefined)
   assert.equal(next.provenance.at(-1).packId, 'paper-cut')
+})
+
+test('look chips compose a style-only prompt and fill overlay + body requests', () => {
+  const look = composeCharacterKitLook({
+    name: 'Luma',
+    traits: 'afro hair, beanie',
+    stylePrompt: 'hand-sculpted plasticine clay, visible fingerprints, matte clay material, stop-motion puppet',
+  })
+  const kit = { ...createCharacterKit('Luma'), base: pose, lookNotes: look }
+  assert.match(look, /afro hair/)
+  assert.match(characterKitPosePrompt(kit), /plasticine/)
+  assert.match(characterKitPosePrompt(kit), /full-body standing character cutout/)
+  assert.match(faceRigPrompt(kit, 'wide'), /mouth overlay sprite only/)
+  assert.match(faceRigPrompt(kit, 'blink'), /closed eyelids only/)
+  const requests = faceRigGenerationRequests(kit)
+  assert.ok(requests.every(request => request.prompt.includes('afro hair') && request.prompt.includes('plasticine')))
+})
+
+test('locking mouth placement copies one calibration onto every viseme', () => {
+  const kit = { ...createCharacterKit('Luna'), base: pose }
+  const locked = lockFaceRigMouthPlacement(kit, 'base', { offsetX: 1, offsetY: -14, scale: .05, rotation: 0 })
+  assert.equal(kit.anchors.base, undefined)
+  assert.deepEqual(locked.anchors.base.mouth, { offsetX: 1, offsetY: -14, scale: .05, rotation: 0 })
+  assert.deepEqual(locked.anchors.base.mouthStates.closed, locked.anchors.base.mouth)
+  assert.deepEqual(locked.anchors.base.mouthStates.wide, locked.anchors.base.mouth)
+  assert.equal(faceRigAnchorFor(locked, 'base', 'blink').scale, .12)
+  assert.equal(locked.provenance.at(-1).method, 'character-kit-face-rig-lock-mouths')
 })
 
 test('audio-aligned dialogue preview stays within four seconds', () => {

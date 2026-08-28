@@ -1,5 +1,13 @@
 import { planCutoutDialogue } from './cutoutDialogue'
-import type { CharacterFaceAnchor, CharacterKit, CharacterKitAsset, CharacterKitReviewState, CharacterMouthState } from './characterKit'
+import {
+  DEFAULT_CHARACTER_BLINK_ANCHOR,
+  DEFAULT_CHARACTER_MOUTH_ANCHOR,
+  type CharacterFaceAnchor,
+  type CharacterKit,
+  type CharacterKitAsset,
+  type CharacterKitReviewState,
+  type CharacterMouthState,
+} from './characterKit'
 
 export const CHARACTER_FACE_RIG_STATES = ['closed', 'small', 'wide', 'round', 'blink'] as const
 export type CharacterKitFaceRigState = typeof CHARACTER_FACE_RIG_STATES[number]
@@ -35,7 +43,40 @@ export interface FaceRigProvenance {
 
 const MOUTH_STATES = new Set<CharacterMouthState>(['closed', 'small', 'wide', 'round'])
 const MATERIAL_ALPHA_RATIO = .01
-export const DEFAULT_FACE_RIG_ANCHOR: CharacterFaceAnchor = { offsetX: 0, offsetY: 0, scale: .16, rotation: 0 }
+export const DEFAULT_FACE_RIG_ANCHOR: CharacterFaceAnchor = DEFAULT_CHARACTER_MOUTH_ANCHOR
+export const DEFAULT_FACE_RIG_BLINK_ANCHOR: CharacterFaceAnchor = DEFAULT_CHARACTER_BLINK_ANCHOR
+
+export const FACE_RIG_STYLE_PRESETS = [
+  { id: 'paper-cut', label: 'Recorte de papel', prompt: 'flat paper-cut collage, torn paper edges, thick uneven black outline, layered construction paper' },
+  { id: 'plasticine', label: 'Plastilina', prompt: 'hand-sculpted plasticine clay, visible fingerprints, matte clay material, stop-motion puppet' },
+  { id: 'cartoon', label: 'Cartoon', prompt: 'bold cartoon, clean cel shading, thick ink outline, simple graphic shapes' },
+  { id: 'watercolor', label: 'Acuarela', prompt: 'soft watercolor illustration, paper grain, gentle pigment bleeds, children\'s book' },
+  { id: 'comic-ink', label: 'Tinta cómic', prompt: 'high-contrast comic-book ink, halftone dots, graphic novel linework' },
+  { id: 'felt-puppet', label: 'Títere de fieltro', prompt: 'felt puppet, stitched edges, wool texture, handmade craft' },
+  { id: 'limited-anime', label: 'Anime limitado', prompt: 'limited-animation anime, flat color fills, simple shapes, 2D TV cutout' },
+  { id: 'children-illustration', label: 'Ilustración infantil', prompt: 'children\'s picture-book illustration, friendly proportions, soft lighting' },
+] as const
+
+export const FACE_RIG_TRAIT_CHIPS = [
+  'afro hair',
+  'braids',
+  'pigtails',
+  'beanie',
+  'round glasses',
+  'goggles',
+  'freckles',
+  'dark skin',
+  'pale skin',
+  'winter coat',
+  'school uniform',
+] as const
+
+export function composeCharacterKitLook(parts: { name?: string; stylePrompt?: string; traits?: string; extra?: string }): string {
+  return [parts.name, parts.traits, parts.stylePrompt, parts.extra]
+    .map(part => String(part || '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(', ')
+}
 
 /** Classify an RGBA buffer without guessing when its shape/content is invalid. */
 export function classifyCharacterKitAlpha(rgba: Uint8ClampedArray): CharacterKitAlphaMetrics {
@@ -79,13 +120,19 @@ export function validateFaceRigPose(kit: CharacterKit, poseId = 'base'): FaceRig
   return { poseId: normalizedPoseId, pose }
 }
 
-/** Keep prompts neutral and identity-focused; visual direction belongs to the generator. */
+/** Full-body puppet prompt. The user only supplies style and traits. */
+export function characterKitPosePrompt(kit: CharacterKit, description = ''): string {
+  const identity = description.trim() || kit.lookNotes?.trim() || `${kit.name} character`
+  return `Generate a full-body standing character cutout of ${identity}; one reusable puppet, feet planted, facing camera; transparent PNG/WebP, tightly cropped to the character, no background, no ground shadow, no text, no extra characters, no turnaround sheet, no collage of views.`
+}
+
+/** Keep prompts identity-focused; the user only fills style and traits. */
 export function faceRigPrompt(kit: CharacterKit, state: CharacterKitFaceRigState, description = ''): string {
   if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
-  const identity = description.trim() || `${kit.name} character`
+  const identity = description.trim() || kit.lookNotes?.trim() || `${kit.name} character`
   const expression = state === 'blink'
-    ? 'an eyes overlay sprite with closed eyelids'
-    : `a ${state} mouth overlay sprite`
+    ? 'an eyes overlay sprite with closed eyelids only'
+    : `a ${state} mouth overlay sprite only`
   return `Generate ONLY ${expression} for ${identity}; use the pose as identity and art-style reference; preserve the facial proportions and colors; isolated transparent PNG/WebP overlay, tightly cropped to the facial piece, aligned to the reference; no full character, no head, no body, no skin rectangle, no background, no text, no glow, no shadow, no extra objects.`
 }
 
@@ -190,8 +237,38 @@ export function normalizeFaceRigAnchor(value?: Partial<CharacterFaceAnchor> | nu
 export function faceRigAnchorFor(kit: CharacterKit, poseId: string, state: CharacterKitFaceRigState): CharacterFaceAnchor {
   if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
   const poseAnchors = kit.anchors[poseId.trim() || 'base'] ?? kit.anchors.base
-  if (state === 'blink') return normalizeFaceRigAnchor(poseAnchors?.eyes ?? poseAnchors?.mouth)
-  return normalizeFaceRigAnchor(poseAnchors?.mouthStates?.[state as CharacterMouthState] ?? poseAnchors?.mouth)
+  if (state === 'blink') return normalizeFaceRigAnchor(poseAnchors?.eyes ?? DEFAULT_FACE_RIG_BLINK_ANCHOR)
+  return normalizeFaceRigAnchor(poseAnchors?.mouthStates?.[state as CharacterMouthState] ?? poseAnchors?.mouth ?? DEFAULT_FACE_RIG_ANCHOR)
+}
+
+/** Copy one calibrated mouth placement onto closed/small/wide/round for this pose. */
+export function lockFaceRigMouthPlacement(
+  kit: CharacterKit,
+  poseId: string,
+  anchor: Partial<CharacterFaceAnchor>,
+): CharacterKit {
+  const normalizedPoseId = poseId.trim() || 'base'
+  const nextAnchor = normalizeFaceRigAnchor(anchor)
+  const current = kit.anchors[normalizedPoseId] ?? kit.anchors.base ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
+  const mouthStates = {
+    closed: nextAnchor,
+    small: nextAnchor,
+    wide: nextAnchor,
+    round: nextAnchor,
+  }
+  return {
+    ...kit,
+    anchors: {
+      ...kit.anchors,
+      [normalizedPoseId]: { mouth: nextAnchor, mouthStates, eyes: current.eyes },
+    },
+    provenance: [...kit.provenance, {
+      method: 'character-kit-face-rig-lock-mouths',
+      poseId: normalizedPoseId,
+      anchor: nextAnchor,
+    }],
+    updatedAt: new Date().toISOString(),
+  }
 }
 
 /** Persist a calibrated overlay anchor without approving the generated piece. */
@@ -380,10 +457,13 @@ export function assessFaceRigPlacement(anchor: CharacterFaceAnchor, state: Chara
     warnings.push('This overlay sits far from the pose center and may miss the face.')
   }
   if (next.scale < .012) warnings.push('This overlay is unusually small compared with the pose.')
-  if (state === 'blink' ? next.scale > .45 : next.scale > .22) {
+  if (state === 'blink' ? next.scale > .2 : next.scale > .12) {
     warnings.push(state === 'blink'
-      ? 'This blink overlay is larger than a typical eye mask.'
-      : 'This mouth overlay is larger than a typical viseme.')
+      ? 'This blink overlay is larger than a typical eye mask. Scale it down until it only covers the eyes.'
+      : 'This mouth overlay is larger than a typical viseme. Scale it down until it sits on the lips.')
+  }
+  if (state !== 'blink' && next.offsetY > -8) {
+    warnings.push('Mouths on a full-body cutout usually sit above the chest. Nudge Down/Up until the overlay covers the lips, then lock all mouths.')
   }
   return { ok: warnings.length === 0, warnings }
 }
