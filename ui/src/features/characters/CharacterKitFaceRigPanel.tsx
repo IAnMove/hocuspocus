@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
+import { cleanCharacterKitFaceOverlay } from '../../api/client'
 import { generateImageAsset } from '../../lib/imageGeneration'
 import {
   CHARACTER_FACE_RIG_STATES,
   classifyCharacterKitAlpha,
   faceRigGenerationRequests,
+  registerCleanedFaceRigAsset,
   registerGeneratedFaceRigAsset,
   setFaceRigReviewState,
   type CharacterKitFaceRigState,
@@ -58,7 +60,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   const workspace = useStore(state => state.activeWorkspace)
   const [selectedState, setSelectedState] = useState<CharacterKitFaceRigState>('wide')
   const [description, setDescription] = useState('')
-  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | null>(null)
+  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const requests = useMemo(() => {
@@ -130,6 +132,21 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     } finally { setBusyState(null) }
   }
 
+  const cleanSelected = async () => {
+    const asset = assetFor(kit, selectedState)
+    if (!asset) throw new Error(`Generate ${LABELS[selectedState]} before cleaning it.`)
+    setBusyState('cleanup'); setError(null)
+    try {
+      const cleaned = await cleanCharacterKitFaceOverlay({ workspace, source: asset.source })
+      const alpha = await inspectSourceAlpha(cleaned.source).catch(() => cleaned.alpha)
+      const next = registerCleanedFaceRigAsset(kit, selectedState, { ...cleaned, alpha })
+      onChange(next)
+      onStatus?.(`${LABELS[selectedState]} cleaned as ${alpha.status}. It stays pending until you approve the placement.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Face Rig cleanup failed.')
+    } finally { setBusyState(null) }
+  }
+
   const review = (state: CharacterKitFaceRigState, approved: boolean) => {
     try {
       if (approved && assetFor(kit, state)?.alphaStatus !== 'transparent') {
@@ -154,6 +171,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     {assetFor(kit, selectedState) && <div className="space-y-1 rounded border border-emerald-300/20 bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px] p-1.5">
       <img src={assetFor(kit, selectedState)!.source} alt={`${kit.name} ${LABELS[selectedState]}`} className="mx-auto h-28 w-full object-contain" />
       <div className="flex items-center justify-between text-[7px]"><span className="truncate text-text-secondary">{assetFor(kit, selectedState)!.name}</span><span className="text-emerald-100">{assetFor(kit, selectedState)!.alphaStatus} · {assetFor(kit, selectedState)!.reviewState}</span></div>
+      <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void cleanSelected()} className="w-full rounded border border-cyan-300/40 bg-cyan-400/10 px-1 py-1 text-[8px] text-cyan-100 disabled:opacity-40">{busyState === 'cleanup' ? 'Cleaning overlay…' : 'Clean background / halo'}</button>
       <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || assetFor(kit, selectedState)!.alphaStatus !== 'transparent'} onClick={() => review(selectedState, true)} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Approve transparent</button><button type="button" disabled={disabled || Boolean(busyState)} onClick={() => review(selectedState, false)} className="rounded border border-red-300/30 px-1 py-1 text-[8px] text-red-200">Reject</button></div>
     </div>}
     <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || !selectedRequest} onClick={() => void generateSelected()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === selectedState ? `Generating ${LABELS[selectedState]}…` : `Generate / replace ${LABELS[selectedState]}`}</button><button type="button" disabled={disabled || Boolean(busyState) || !requests.length} onClick={() => void generateMissingPack()} className="rounded border border-emerald-300/30 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === 'pack' ? 'Generating pack…' : 'Generate missing pack'}</button></div>

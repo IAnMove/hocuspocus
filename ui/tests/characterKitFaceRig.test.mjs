@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
-import { classifyCharacterKitAlpha, faceRigGenerationRequests, faceRigPrompt, registerGeneratedFaceRigAsset, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
+import { classifyCharacterKitAlpha, faceRigGenerationRequests, faceRigPrompt, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
 
 const pose = { id: 'base', name: 'Base', source: 'base.png', kind: 'image', alphaStatus: 'opaque', reviewState: 'approved' }
 const generated = state => ({ id: `generated-${state}`, name: state, source: `${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved' })
@@ -59,4 +59,29 @@ test('blink is registered in eyes and rejects transient generated sources', () =
   const next = registerGeneratedFaceRigAsset(kit, 'blink', generated('blink'), { poseId: 'base', reference: 'base.png', prompt: 'blink prompt' })
   assert.equal(next.eyes.blink.reviewState, 'pending')
   assert.throws(() => registerGeneratedFaceRigAsset(kit, 'round', { ...generated('round'), source: 'blob:temp' }, { poseId: 'base', reference: 'base.png', prompt: 'round' }), /persistent source/)
+})
+
+test('cleaning a Face Rig overlay keeps it pending and records provenance', () => {
+  const kit = registerGeneratedFaceRigAsset({ ...createCharacterKit('Luna'), base: pose }, 'wide', generated('wide'), { poseId: 'base', reference: 'base.png', prompt: 'wide prompt' })
+  const cleaned = registerCleanedFaceRigAsset(kit, 'wide', {
+    source: '/api/v1/file/wide.cleanup-abcd.png',
+    filename: 'wide.cleanup-abcd.png',
+    original: 'wide.png',
+    width: 48,
+    height: 24,
+    alpha: { pixelCount: 4, transparentRatio: .5, translucentRatio: .25, opaqueRatio: .5, status: 'transparent' },
+    method: 'rembg-u2net',
+    padding: 8,
+    model: 'u2net',
+  })
+  assert.equal(kit.mouth.wide.source, 'wide.png')
+  assert.equal(cleaned.mouth.wide.source, '/api/v1/file/wide.cleanup-abcd.png')
+  assert.equal(cleaned.mouth.wide.reviewState, 'pending')
+  assert.equal(cleaned.mouth.wide.alphaStatus, 'transparent')
+  assert.equal(cleaned.provenance.at(-1).method, 'character-kit-face-rig-cleanup')
+  assert.throws(() => registerCleanedFaceRigAsset(kit, 'closed', {
+    source: '/api/v1/file/closed.cleanup.png', filename: 'closed.cleanup.png', original: 'closed.png',
+    width: 8, height: 8, alpha: { pixelCount: 1, transparentRatio: 1, translucentRatio: 0, opaqueRatio: 0, status: 'transparent' },
+    method: 'rembg-u2net', padding: 8,
+  }), /no generated closed asset/)
 })

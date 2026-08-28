@@ -123,6 +123,56 @@ export function registerGeneratedFaceRigAsset(
   }
 }
 
+export interface FaceRigCleanupResult {
+  source: string
+  filename: string
+  original: string
+  width: number
+  height: number
+  alpha: CharacterKitAlphaMetrics
+  method: string
+  padding: number
+  model?: string
+}
+
+/** Replace one overlay with a cleaned PNG while keeping it pending for review. */
+export function registerCleanedFaceRigAsset(
+  kit: CharacterKit,
+  state: CharacterKitFaceRigState,
+  cleaned: FaceRigCleanupResult,
+): CharacterKit {
+  if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
+  const current = assetForState(kit, state)
+  if (!current) throw new Error(`Character Kit “${kit.name}” has no generated ${state} asset to clean.`)
+  if (!cleaned.source || cleaned.source.startsWith('blob:')) throw new Error('Cleaned Face Rig assets need a persistent source.')
+  const nextAsset: CharacterKitAsset = {
+    ...current,
+    source: cleaned.source,
+    kind: 'overlay',
+    alphaStatus: cleaned.alpha?.status ?? 'unknown',
+    reviewState: 'pending',
+  }
+  return {
+    ...kit,
+    mouth: MOUTH_STATES.has(state as CharacterMouthState) ? { ...kit.mouth, [state]: nextAsset } : kit.mouth,
+    eyes: state === 'blink' ? { ...kit.eyes, blink: nextAsset } : kit.eyes,
+    provenance: [...kit.provenance, {
+      method: 'character-kit-face-rig-cleanup',
+      state,
+      original: cleaned.original,
+      source: cleaned.source,
+      filename: cleaned.filename,
+      cleanupMethod: cleaned.method,
+      model: cleaned.model,
+      padding: cleaned.padding,
+      alphaMetrics: cleaned.alpha,
+      width: cleaned.width,
+      height: cleaned.height,
+    }],
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 /** Change review status without mutating the kit or its nested asset. */
 export function setFaceRigReviewState(kit: CharacterKit, state: CharacterKitFaceRigState, reviewState: CharacterKitReviewState): CharacterKit {
   const current = assetForState(kit, state)

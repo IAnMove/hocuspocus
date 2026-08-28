@@ -26488,6 +26488,14 @@ def delete_character_kit_library_item(kit_id: str, body: dict):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+from routers.character_kit_face import create_character_kit_face_router
+
+api.include_router(create_character_kit_face_router(
+    workspace_dir=lambda workspace: _workspace_dir(_character_kit_workspace(workspace)),
+    uploads_root=lambda: os.path.join(os.getcwd(), "uploads"),
+))
+
+
 @api.post("/api/v1/scenes/recordings")
 async def save_scene_recording(
     file: UploadFile = File(...),

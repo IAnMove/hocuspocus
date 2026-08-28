@@ -858,6 +858,28 @@ export async function deleteCharacterKit(
   return response.json()
 }
 
+export async function cleanCharacterKitFaceOverlay(details: {
+  workspace: string
+  source: string
+  padding?: number
+}): Promise<import('../lib/characterKitFaceRig').FaceRigCleanupResult> {
+  const response = await fetch(`${BASE}/api/v1/character-kits/face-rig/cleanup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspace: details.workspace,
+      source: details.source,
+      padding: details.padding ?? 8,
+    }),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not clean Face Rig overlay' }))
+    const detail = error.detail
+    throw new Error(typeof detail === 'string' ? detail : 'Could not clean Face Rig overlay')
+  }
+  return response.json()
+}
+
 export async function saveSceneRecording(
   recording: Blob,
   details: {
