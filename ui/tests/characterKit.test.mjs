@@ -35,9 +35,14 @@ test('mounting a reviewed kit creates isolated semantic face layers', () => {
   assert.deepEqual(layers.find(layer => layer.id.endsWith('mouth-wide')).faceBinding, { poseLayerId: pose.id, role: 'mouth', state: 'wide' })
   assert.equal(layers.some(layer => layer.id.endsWith('mouth-round')), false)
   const closed = layers.find(layer => layer.id.endsWith('mouth-closed'))
+  const wide = layers.find(layer => layer.id.endsWith('mouth-wide'))
   assert.equal(closed.transform.x, 50 + 2 * .72)
   assert.equal(closed.transform.y, 55 + (-6) * .72)
   assert.equal(closed.transform.scale, .72 * .2)
+  assert.equal(closed.transform.opacity, 1)
+  assert.equal(closed.animation.start.opacity, 1)
+  assert.equal(wide.transform.opacity, 0)
+  assert.equal(wide.animation.start.opacity, 0)
 })
 
 test('mounting uses a per-state mouth anchor and keeps the legacy fallback', () => {
@@ -59,7 +64,7 @@ test('mounting uses a per-state mouth anchor and keeps the legacy fallback', () 
     x: 50 + 8 * poseScale,
     y: 55 + (-4) * poseScale,
     scale: poseScale * .25,
-    opacity: 1,
+    opacity: 0,
     rotation: 1,
   })
   assert.equal(layers.find(layer => layer.id.endsWith('mouth-closed')).transform.x, 50 + 2 * poseScale)

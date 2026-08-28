@@ -100,15 +100,16 @@ const visemeForGlyph = (glyph: string): CutoutViseme => /[.,;:!?—-]/.test(glyp
   ? 'closed'
   : ROUND_VOWEL.test(glyph) ? 'round' : /[aeáé]/i.test(glyph) ? 'wide' : 'small'
 const pointFor = (layer: SceneLayer, time: number, opacity: number): SceneKeyframe => {
-  const reference = layer.animation.keyframes?.[0] ?? layer.animation.start
+  const authored = layer.animation?.start
+  const transform = layer.transform
   return {
     id: `${layer.id}-dialogue-${Math.round(time * 1000)}`,
     time,
-    x: reference.x,
-    y: reference.y,
-    scale: reference.scale,
+    x: Number.isFinite(transform?.x) ? transform.x : authored?.x ?? 50,
+    y: Number.isFinite(transform?.y) ? transform.y : authored?.y ?? 50,
+    scale: Number.isFinite(transform?.scale) ? transform.scale : authored?.scale ?? 1,
     opacity,
-    rotation: reference.rotation ?? 0,
+    rotation: Number.isFinite(transform?.rotation) ? transform.rotation ?? 0 : authored?.rotation ?? 0,
     curve: 'hold',
   }
 }

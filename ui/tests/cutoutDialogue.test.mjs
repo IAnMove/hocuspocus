@@ -28,6 +28,29 @@ test('a long mixed-vowel line retains every available mouth family', () => {
   assert.ok(plan.visemes.some(beat => beat.state === 'round'))
 })
 
+test('dialogue keyframes copy the mounted mouth transform instead of a 50/50 rest pose', () => {
+  const mounted = {
+    id: 'kit-luma-mouth-wide',
+    name: 'Luma Mouth wide',
+    type: 'overlay',
+    transform: { x: 32, y: 48.08, scale: .0434, opacity: 0, rotation: 0 },
+    animation: { start: { x: 50, y: 50, scale: 1, opacity: 0 }, end: { x: 50, y: 50, scale: 1, opacity: 0 }, duration: 5, curve: 'hold' },
+    faceBinding: { poseLayerId: 'kit-luma-pose-base', role: 'mouth', state: 'wide' },
+  }
+  const closed = {
+    ...mounted,
+    id: 'kit-luma-mouth-closed',
+    name: 'Luma Mouth closed',
+    transform: { ...mounted.transform, opacity: 1 },
+    faceBinding: { poseLayerId: 'kit-luma-pose-base', role: 'mouth', state: 'closed' },
+  }
+  const plan = { start: 0, end: 1, visemes: [{ start: 0, end: .4, state: 'closed' }, { start: .4, end: 1, state: 'wide' }] }
+  const frames = applyCutoutDialogue({ closed, wide: mounted }, plan)
+  assert.ok(frames['kit-luma-mouth-wide'].every(frame => frame.x === 32 && frame.y === 48.08 && frame.scale === .0434))
+  assert.ok(frames['kit-luma-mouth-closed'].every(frame => frame.x === 32 && frame.y === 48.08 && frame.scale === .0434))
+  assert.deepEqual(frames['kit-luma-mouth-wide'].map(frame => frame.opacity), [0, 1, 0])
+})
+
 test('mouth layers receive complementary, editable opacity keyframes', () => {
   const plan = planCutoutDialogue('Una frase corta para hablar.', 0, 3, 30)
   const frames = applyCutoutDialogue({ open: layer('mouth-open'), closed: layer('mouth-closed') }, plan)

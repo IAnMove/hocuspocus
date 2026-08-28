@@ -1506,7 +1506,16 @@ export function compileSceneRecipe(
     }
     const authored = layer.animation ?? {}
     const frames = authored.keyframes?.length && authored.keyframes.length >= 2 ? authored.keyframes : undefined
-    const start = authored.start || frames?.[0] || preset?.start || { x: 50, y: 50, scale: layer.type === 'model3d' ? 0.7 : 1, opacity: 1, rotation: 0 }
+    const fromTransform = layer.transform && (layer.transform.x !== undefined || layer.transform.y !== undefined || layer.transform.scale !== undefined)
+      ? {
+        x: layer.transform.x ?? 50,
+        y: layer.transform.y ?? 50,
+        scale: layer.transform.scale ?? (layer.type === 'model3d' ? 0.7 : 1),
+        opacity: layer.transform.opacity ?? 1,
+        rotation: layer.transform.rotation ?? 0,
+      }
+      : undefined
+    const start = authored.start || frames?.[0] || preset?.start || fromTransform || { x: 50, y: 50, scale: layer.type === 'model3d' ? 0.7 : 1, opacity: 1, rotation: 0 }
     const end = authored.end || frames?.[frames.length - 1] || preset?.end || start
     // A recipe shot owns its timeline. Camera presets commonly last five
     // seconds, but must not silently extend an explicit shorter shot.

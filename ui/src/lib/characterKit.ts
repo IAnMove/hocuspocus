@@ -159,7 +159,7 @@ export function mountCharacterKitLayers(
   for (const state of ['closed', 'small', 'wide', 'round'] as const) {
     const asset = kit.mouth[state]
     if (!asset || asset.reviewState !== 'approved') continue
-    const mouthTransform = faceTransform(anchors?.mouthStates?.[state] ?? mouthAnchor)
+    const mouthTransform = { ...faceTransform(anchors?.mouthStates?.[state] ?? mouthAnchor), opacity: state === 'closed' ? 1 : 0 }
     layers.push({
       id: `kit-${kit.id}-mouth-${state}`, name: `${kit.name} Mouth ${state}`, type: 'overlay', source: asset.source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: mouthTransform,
@@ -170,7 +170,7 @@ export function mountCharacterKitLayers(
   }
   const blink = kit.eyes.blink
   if (blink?.reviewState === 'approved') {
-    const eyeTransform = faceTransform(anchors?.eyes ?? DEFAULT_CHARACTER_BLINK_ANCHOR)
+    const eyeTransform = { ...faceTransform(anchors?.eyes ?? DEFAULT_CHARACTER_BLINK_ANCHOR), opacity: 0 }
     layers.push({
       id: `kit-${kit.id}-eyes-blink`, name: `${kit.name} Eyes blink`, type: 'overlay', source: blink.source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: eyeTransform,

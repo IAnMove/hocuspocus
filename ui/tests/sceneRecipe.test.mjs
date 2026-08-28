@@ -68,6 +68,35 @@ test('compiled dialogue beats replace template mouth loops with text-driven keyf
   assert.equal(scene.audioTracks[0].model, 'qwen3_tts_voicedesign')
 })
 
+test('compile uses the mounted layer transform as the rest pose instead of 50/50/1', () => {
+  const recipe = parseSceneRecipe({
+    version: 1,
+    name: 'mouth-rest',
+    record: false,
+    save: false,
+    assets: [{ id: 'mouth', kind: 'image', source: 'mouth.png' }],
+    shots: [{
+      name: 'hold',
+      duration: 2,
+      audioTrackIds: [],
+      dialogueBeatIds: [],
+      layers: [{ id: 'mouth', type: 'overlay', source: 'mouth.png', transform: { x: 32, y: 48, scale: .04, opacity: 0, rotation: 0 } }],
+    }],
+    scene: { width: 1280, height: 720, fps: 30, duration: 2, layers: [{ id: 'mouth', type: 'overlay', source: 'mouth.png', transform: { x: 32, y: 48, scale: .04, opacity: 0, rotation: 0 } }] },
+  })
+  const scene = compileRecipeShot(recipe, recipe.shots[0], {}, filename => filename)
+  const mouth = scene.layers.find(layer => layer.id === 'mouth')
+  assert.equal(mouth.transform.x, 32)
+  assert.equal(mouth.transform.y, 48)
+  assert.equal(mouth.transform.scale, .04)
+  assert.equal(mouth.transform.opacity, 0)
+  assert.equal(mouth.animation.start.x, 32)
+  assert.equal(mouth.animation.start.y, 48)
+  assert.equal(mouth.animation.start.scale, .04)
+  assert.equal(mouth.animation.start.opacity, 0)
+  assert.equal(mouth.animation.keyframes, undefined)
+})
+
 test('multi-shot recipes isolate their audio and dialogue, including explicit silence', () => {
   const layers = [
     { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },

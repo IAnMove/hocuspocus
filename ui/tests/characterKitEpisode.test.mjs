@@ -3,6 +3,7 @@ import test from 'node:test'
 import { characterKitRecipeInventory, createCharacterKit, mountCharacterKitLayers } from '../src/lib/characterKit.ts'
 import { composeCharacterKitLook, lockFaceRigMouthPlacement } from '../src/lib/characterKitFaceRig.ts'
 import { compileRecipeShot, listRecipeShots, parseSceneRecipe } from '../src/lib/sceneRecipe.ts'
+import { evaluateSceneLayer } from '../src/lib/sceneTimeline.ts'
 
 const asset = (id, source, reviewState = 'approved', kind = 'overlay') => ({
   id, name: id, source, kind, alphaStatus: 'transparent', reviewState,
@@ -49,6 +50,7 @@ const recipeLayers = (kit, poseId, transform) => {
       source: layer.source,
       z: layer.z,
       transform: layer.transform,
+      animation: layer.animation,
       faceBinding: layer.faceBinding,
       relationship: layer.relationship,
     })),
@@ -208,11 +210,30 @@ test('mini South Park-style cutout dialogue locks mouths and scopes speech per s
   const silent = compileRecipeShot(recipe, shots[0], {}, filename => filename)
   assert.equal(silent.audioTracks, undefined)
   assert.equal(silent.dialogueBeats, undefined)
+  const silentMouths = silent.layers.filter(layer => layer.faceBinding?.role === 'mouth')
+  assert.ok(silentMouths.length >= 4)
+  for (const layer of silentMouths) {
+    const rest = evaluateSceneLayer(layer, 0)
+    assert.equal(rest.x, layer.transform.x)
+    assert.equal(rest.y, layer.transform.y)
+    assert.equal(rest.scale, layer.transform.scale)
+    assert.equal(rest.opacity, layer.faceBinding.state === 'closed' ? 1 : 0)
+  }
   const lumaLine = compileRecipeShot(recipe, shots[1], {}, filename => filename)
   assert.deepEqual(lumaLine.audioTracks.map(track => track.id), ['voice-luma-menu'])
   assert.deepEqual(lumaLine.dialogueBeats.map(beat => beat.id), ['beat-luma-menu'])
   assert.ok(lumaLine.layers.filter(layer => layer.faceBinding?.role === 'mouth').every(layer => layer.id.startsWith('kit-luma-mouth-')))
   assert.ok(lumaLine.layers.some(layer => layer.animation?.keyframes?.length > 1))
+  const mountedWide = lumaLayers.find(layer => layer.id === 'kit-luma-mouth-wide')
+  const spokenWide = lumaLine.layers.find(layer => layer.id === 'kit-luma-mouth-wide')
+  assert.ok(spokenWide.animation.keyframes.length > 1)
+  assert.ok(spokenWide.animation.keyframes.every(frame => (
+    frame.x === mountedWide.transform.x
+    && frame.y === mountedWide.transform.y
+    && frame.scale === mountedWide.transform.scale
+  )))
+  assert.notEqual(spokenWide.animation.keyframes[0].x, 50)
+  assert.notEqual(spokenWide.animation.keyframes[0].scale, 1)
   const brinLine = compileRecipeShot(recipe, shots[2], {}, filename => filename)
   assert.deepEqual(brinLine.audioTracks.map(track => track.id), ['voice-brin-tray'])
   assert.equal(brinLine.layers.some(layer => layer.id.includes('luma')), false)
