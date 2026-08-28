@@ -118,6 +118,62 @@
           "height": 826
         }
       }
+    },
+    {
+      "id": "comic-ink",
+      "label": "Comic ink",
+      "style": "cutout",
+      "notes": "Bold India-ink outline with Ben-Day dots.",
+      "states": {
+        "closed": {
+          "file": "comic-ink/closed.png",
+          "width": 1024,
+          "height": 1024
+        },
+        "small": {
+          "file": "comic-ink/small.png",
+          "width": 998,
+          "height": 1016
+        },
+        "wide": {
+          "file": "comic-ink/wide.png",
+          "width": 1024,
+          "height": 1016
+        },
+        "round": {
+          "file": "comic-ink/round.png",
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "watercolor",
+      "label": "Watercolor",
+      "style": "children-illustration",
+      "notes": "Soft rose/peach washes. Closed includes surrounding skin wash.",
+      "states": {
+        "closed": {
+          "file": "watercolor/closed.png",
+          "width": 955,
+          "height": 718
+        },
+        "small": {
+          "file": "watercolor/small.png",
+          "width": 822,
+          "height": 767
+        },
+        "wide": {
+          "file": "watercolor/wide.png",
+          "width": 923,
+          "height": 1014
+        },
+        "round": {
+          "file": "watercolor/round.png",
+          "width": 828,
+          "height": 855
+        }
+      }
     }
   ]
 }
