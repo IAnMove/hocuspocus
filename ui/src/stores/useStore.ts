@@ -2362,10 +2362,15 @@ export const useStore = create<AppState>((set, get) => ({
   editRepaintFrameUrl: '',
   editRepaintMappings: [],
   editRepaintResolutionProfile: '480p',
-  setEditRepaintFrame: (file, path, url) => set({
-    editRepaintFrameFile: file,
-    editRepaintFramePath: path,
-    editRepaintFrameUrl: url,
+  setEditRepaintFrame: (file, path, url) => set(state => {
+    if (state.editRepaintFrameUrl && state.editRepaintFrameUrl !== url && state.editRepaintFrameUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(state.editRepaintFrameUrl)
+    }
+    return {
+      editRepaintFrameFile: file,
+      editRepaintFramePath: path,
+      editRepaintFrameUrl: url,
+    }
   }),
   setEditRepaintMappings: mappings => set({
     editRepaintMappings: mappings.slice(0, 5),
@@ -2679,15 +2684,25 @@ export const useStore = create<AppState>((set, get) => ({
   outpaintWindowOverlap: 9,  // LTX-2 default
   setOutpaintWindowOverlap: (v) => set({ outpaintWindowOverlap: v }),
   setEditVideoPath: (path) => set({ editVideoPath: path }),
-  setEditVideo: (file, path, url, duration, resolution) => set({
-    editVideoFile: file, editVideoPath: path, editVideoUrl: url,
-    editVideoDuration: duration, editVideoResolution: resolution,
-    editEndTime: duration,
+  setEditVideo: (file, path, url, duration, resolution) => set(state => {
+    if (state.editVideoUrl && state.editVideoUrl !== url && state.editVideoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(state.editVideoUrl)
+    }
+    return {
+      editVideoFile: file, editVideoPath: path, editVideoUrl: url,
+      editVideoDuration: duration, editVideoResolution: resolution,
+      editEndTime: duration,
+    }
   }),
-  clearEditVideo: () => set({
-    editVideoFile: null, editVideoPath: '', editVideoUrl: '',
-    editVideoDuration: 0, editVideoResolution: '', editStartTime: 0, editEndTime: 5,
-    editMasksPath: null, editMaskPreview: null, editDetectedTarget: '',
+  clearEditVideo: () => set(state => {
+    if (state.editVideoUrl.startsWith('blob:')) URL.revokeObjectURL(state.editVideoUrl)
+    if (state.editRepaintFrameUrl.startsWith('blob:')) URL.revokeObjectURL(state.editRepaintFrameUrl)
+    return {
+      editVideoFile: null, editVideoPath: '', editVideoUrl: '',
+      editVideoDuration: 0, editVideoResolution: '', editStartTime: 0, editEndTime: 5,
+      editMasksPath: null, editMaskPreview: null, editDetectedTarget: '',
+      editRepaintFrameFile: null, editRepaintFramePath: '', editRepaintFrameUrl: '',
+    }
   }),
   musicDescription: '',
   setMusicDescription: (s) => set({ musicDescription: s }),
@@ -9377,9 +9392,10 @@ export const useStore = create<AppState>((set, get) => ({
     set({ outputsLoading: true, galleryRefreshPending: false })
     try {
       const { outputs: apiOutputs, total } = query.useServerList
-        ? await api.fetchOutputs(query.resultKind || query.favoritesOnly || query.multiclipOnly || query.search ? 0 : PAGE_SIZE, 0, {
+        ? await api.fetchOutputs(query.resultKind || query.favoritesOnly || query.multiclipOnly || query.editsOnly || query.search ? 0 : PAGE_SIZE, 0, {
             favoritesOnly: query.favoritesOnly,
             multiclipOnly: query.multiclipOnly,
+            editsOnly: query.editsOnly,
             resultKind: query.resultKind,
             mediaType: query.mediaType,
             search: query.search,
@@ -9434,6 +9450,7 @@ export const useStore = create<AppState>((set, get) => ({
         resultKind: query.resultKind,
         favoritesOnly: query.favoritesOnly,
         multiclipOnly: query.multiclipOnly,
+        editsOnly: query.editsOnly,
         search: query.search,
         signal: request.controller.signal,
       })
@@ -9478,11 +9495,12 @@ export const useStore = create<AppState>((set, get) => ({
         resultKind: query.resultKind,
         favoritesOnly: query.favoritesOnly,
         multiclipOnly: query.multiclipOnly,
+        editsOnly: query.editsOnly,
         search: query.search,
         signal: request.controller.signal,
       })
       if (!_isCurrentOutputRequest(get, request)) return
-      const fresh: OutputFile[] = apiOutputs.map(o => ({
+      const fresh: OutputFile[] = apiOutputs.map(o => ({}
         name: o.name,
         url: o.url,
         type: o.type,

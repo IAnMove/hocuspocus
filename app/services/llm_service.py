@@ -2021,6 +2021,7 @@ def generate(
     presence_penalty: float = 0.0,
     stop: Optional[list[str]] = None,
     json_schema: Optional[dict] = None,
+    cancellation_token=None,
 ) -> str:
     """Generate text via llama-server's OpenAI-compatible chat endpoint.
 
@@ -2204,9 +2205,16 @@ def generate(
         else:
             print(f"[LLM] json_schema requested but provider={_provider} — sending unconstrained (grammar is local llama-server only)")
 
-    if _provider == "anthropic":
-        return _generate_anthropic(messages, total_tokens, max(temperature, 0.01), top_p)
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, _provider)
 
+    if _provider == "anthropic":
+        return _generate_anthropic(
+            messages, total_tokens, max(temperature, 0.01), top_p,
+            cancellation_token=cancellation_token,
+        )
+
+    response_watcher = None
     try:
         resp = requests.post(
             f"{_server_url()}/v1/chat/completions",
@@ -2215,13 +2223,32 @@ def generate(
             # (connect, read): fail fast if the server socket is gone;
             # allow a long read for actual generation.
             timeout=(10, 600),
+            stream=bool(cancellation_token),
         )
         resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, _provider,
+        )
+        _raise_if_token_cancelled(
+            cancellation_token, _provider,
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
+        data = resp.json()
+        _raise_if_token_cancelled(
+            cancellation_token, _provider,
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
     except requests.exceptions.RequestException as e:
+        if _token_cancelled(cancellation_token):
+            _raise_if_token_cancelled(
+                cancellation_token, _provider,
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
         # A dead subprocess surfaces here as a ConnectionError; translate it
         # into an actionable error naming the real cause (see the helper).
         raise _diagnose_llm_request_failure(e) from e
-    data = resp.json()
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     raw_content = data["choices"][0]["message"]["content"] or ""
     finish_reason = data["choices"][0].get("finish_reason", "unknown")
@@ -2949,7 +2976,14 @@ def generate_streaming(
     return content.strip()
 
 
-def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top_p: float) -> str:
+def _generate_anthropic(
+    messages: list,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    *,
+    cancellation_token=None,
+) -> str:
     """Non-streaming generation via Anthropic Messages API."""
     import re as _re
     # Anthropic uses system as a top-level param, not in messages
@@ -2971,14 +3005,39 @@ def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top
     if system_text:
         payload["system"] = system_text
 
-    resp = requests.post(
-        "https://api.anthropic.com/v1/messages",
-        json=payload,
-        headers=_api_headers(),
-        timeout=600,
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, "Anthropic")
+    response_watcher = None
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            json=payload,
+            headers=_api_headers(),
+            timeout=600,
+            stream=bool(cancellation_token),
+        )
+        resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, "Anthropic",
+        )
+        _raise_if_token_cancelled(
+            cancellation_token, "Anthropic",
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
+        data = resp.json()
+        _raise_if_token_cancelled(
+            cancellation_token, "Anthropic",
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
+    except requests.exceptions.RequestException:
+        if _token_cancelled(cancellation_token):
+            _raise_if_token_cancelled(
+                cancellation_token, "Anthropic",
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
+        raise
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     # Anthropic response: {"content": [{"type": "text", "text": "..."}], ...}
     raw_content = ""

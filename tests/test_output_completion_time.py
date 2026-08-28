@@ -25,7 +25,7 @@ def load_list_outputs(namespace: dict):
     exec(compile(module, str(LAUNCH), "exec"), namespace)
 
 
-def list_test_outputs(tmp_path):
+def list_test_outputs(tmp_path, **kwargs):
     namespace = {
         "os": os,
         "json": json,
@@ -45,7 +45,7 @@ def list_test_outputs(tmp_path):
     class Response:
         headers = {}
 
-    return namespace["list_outputs"](Response())["outputs"]
+    return namespace["list_outputs"](Response(), **kwargs)["outputs"]
 
 
 def test_output_list_exposes_exact_sidecar_completion_time(tmp_path):
@@ -73,3 +73,24 @@ def test_output_list_marks_file_timestamp_as_approximate_fallback(tmp_path):
 
     assert output["completed_at"] == 345.0
     assert output["completion_time_source"] == "file"
+
+
+def test_output_list_edits_only_keeps_tagged_and_legacy_avatar_files(tmp_path):
+    recent = tmp_path / "studio.mp4"
+    recent.write_bytes(b"video")
+    (tmp_path / "studio.meta.json").write_text(json.dumps({"params": {}}), encoding="utf-8")
+    retake = tmp_path / "retake.mp4"
+    retake.write_bytes(b"edit")
+    (tmp_path / "retake.meta.json").write_text(
+        json.dumps({"generation_mode": "video", "params": {"edit_sub_mode": "retake"}}),
+        encoding="utf-8",
+    )
+    legacy = tmp_path / "legacy-edit.mp4"
+    legacy.write_bytes(b"avatar")
+    (tmp_path / "legacy-edit.meta.json").write_text(
+        json.dumps({"generation_mode": "avatar", "params": {}}),
+        encoding="utf-8",
+    )
+
+    names = {item["name"] for item in list_test_outputs(tmp_path, edits_only=True)}
+    assert names == {"retake.mp4", "legacy-edit.mp4"}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Bone, Box, Download, Loader2, PersonStanding, Play, RefreshCw, Square } from 'lucide-react'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
 import {
   cancelRigJob,
@@ -148,34 +149,31 @@ export function RigAnimatePanel() {
   const isRunning = job?.status === 'queued' || job?.status === 'running'
   const activeJobId = isRunning ? job?.job_id ?? null : null
   const canRun = !!selectedEngine?.installed && !!source && selectedClips.size > 0 && !isRunning
+  const pollFailuresRef = useRef(0)
 
   useEffect(() => {
-    if (!activeJobId) return
-    let disposed = false
-    let failures = 0
-    const poll = async () => {
-      try {
-        const next = await fetchRigJob(activeJobId)
-        failures = 0
-        if (!disposed) setJob(next)
-      } catch (err) {
-        if (disposed) return
-        failures += 1
-        const message = err instanceof Error ? err.message : 'Could not read rig job status'
-        setError(message)
-        const lost = (err as Error & { status?: number }).status === 404
-        if (lost || failures >= 4) {
-          setJob(current => current && { ...current, status: 'failed', error: lost ? 'The rig job was lost — the backend probably restarted.' : message })
-        }
-      }
-    }
-    const timer = window.setInterval(poll, 1500)
-    void poll()
-    return () => {
-      disposed = true
-      window.clearInterval(timer)
-    }
+    pollFailuresRef.current = 0
   }, [activeJobId])
+
+  useSerializedPoll({
+    enabled: Boolean(activeJobId),
+    intervalMs: 1500,
+    ownerKey: activeJobId,
+    poll: () => fetchRigJob(activeJobId!),
+    onValue: next => {
+      pollFailuresRef.current = 0
+      setJob(next)
+    },
+    onError: err => {
+      pollFailuresRef.current += 1
+      const message = err instanceof Error ? err.message : 'Could not read rig job status'
+      setError(message)
+      const lost = (err as Error & { status?: number }).status === 404
+      if (lost || pollFailuresRef.current >= 4) {
+        setJob(current => current && { ...current, status: 'failed', error: lost ? 'The rig job was lost — the backend probably restarted.' : message })
+      }
+    },
+  })
 
   useEffect(() => {
     if (job?.status === 'completed') {

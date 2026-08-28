@@ -24,6 +24,18 @@ from services.series_jobs import SeriesJobStore
 from services.task_manager import get_cancellation_token, get_task_registry
 
 
+def _remove_assembly_artifacts(output_path: str | None) -> None:
+    if not output_path:
+        return
+    sidecar = os.path.splitext(output_path)[0] + ".meta.json"
+    for path in (output_path, sidecar):
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except OSError:
+            pass
+
+
 PUBLIC_JOB_KEYS = (
     "jobId",
     "workspace",
@@ -292,6 +304,9 @@ def create_series_assembly_router(
         task_id = str(job.get("taskId") or canonical_task_id(job_id))
         token = get_cancellation_token(workspace_dir(str(job["workspace"])), task_id)
         output_path = ""
+        published = False
+        asset_id = ""
+        clip_paths: list[str] = []
         try:
             if token.is_cancelled():
                 update(
@@ -326,11 +341,7 @@ def create_series_assembly_router(
                 if supports_abort else concatenate_clips(clip_paths, output_path)
             )
             if token.is_cancelled():
-                if output_path and os.path.isfile(output_path):
-                    try:
-                        os.remove(output_path)
-                    except OSError:
-                        pass
+                _remove_assembly_artifacts(output_path)
                 update(
                     job_id, status="cancelled", stage="cancelled",
                     error=None, finishedAt=time.time(),
@@ -356,10 +367,7 @@ def create_series_assembly_router(
                     },
                 }, handle, indent=2)
             if token.is_cancelled():
-                try:
-                    os.remove(output_path)
-                except OSError:
-                    pass
+                _remove_assembly_artifacts(output_path)
                 update(
                     job_id, status="cancelled", stage="cancelled",
                     error=None, finishedAt=time.time(),
@@ -369,6 +377,7 @@ def create_series_assembly_router(
 
             asset_id = f"asset_assembly_{uuid.uuid4().hex}"
             completed_at = iso_now()
+            published = False
             with library_lock:
                 library = read_library(str(job["workspace"]))
                 series = copy.deepcopy(find_series(library, str(job["seriesId"])))
@@ -410,6 +419,7 @@ def create_series_assembly_router(
                 if token.is_cancelled():
                     raise RuntimeError("Series assembly cancelled before library commit")
                 write_library(str(job["workspace"]), library)
+                published = True
             update(
                 job_id,
                 status="completed",
@@ -421,23 +431,30 @@ def create_series_assembly_router(
                 message=f"Joined {len(clip_paths)} approved clips in episode order.",
             )
         except Exception as exc:
+            if published:
+                try:
+                    update(
+                        job_id,
+                        status="completed",
+                        stage="completed",
+                        current=len(clip_paths),
+                        assetId=asset_id,
+                        filename=os.path.basename(output_path),
+                        finishedAt=time.time(),
+                        message=f"Joined {len(clip_paths)} approved clips in episode order.",
+                    )
+                except Exception:
+                    pass
+                return
             if token.is_cancelled():
-                if output_path and os.path.isfile(output_path):
-                    try:
-                        os.remove(output_path)
-                    except OSError:
-                        pass
+                _remove_assembly_artifacts(output_path)
                 update(
                     job_id, status="cancelled", stage="cancelled",
                     error=None, finishedAt=time.time(),
                     message="Series episode assembly cancelled; approved clips were not changed.",
                 )
                 return
-            if output_path and os.path.isfile(output_path):
-                try:
-                    os.remove(output_path)
-                except OSError:
-                    pass
+            _remove_assembly_artifacts(output_path)
             update(
                 job_id,
                 status="failed",

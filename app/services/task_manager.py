@@ -127,20 +127,21 @@ def _update_cancellation_token(workspace_dir: str, task_id: str, **changes: Any)
     status = str(changes.get("status") or "").lower()
     phase = str(changes.get("phase") or "").lower()
     should_cancel = status in {"cancelled", "interrupted"} or phase == "cancelling"
+    terminal = status in {"completed", "failed", "cancelled", "interrupted", "deleted"}
     with _cancellation_tokens_lock:
         token = _cancellation_tokens.get(key)
         if should_cancel and token is None:
             token = _cancellation_tokens.setdefault(key, CancellationToken())
-        elif status in {"completed", "failed"}:
-            # Successful/failed workers no longer need an in-memory signal.
-            # The durable task snapshot remains the source of history.
-            _cancellation_tokens.pop(key, None)
+        elif status == "queued" and phase != "cancelling" and token is not None:
+            # Resume explicitly reopens the canonical task and gets a fresh signal.
+            token.reset()
             return
+        if terminal:
+            # Drop the map entry. Workers that already hold the object still
+            # see a cancelled Event; a later resume creates a fresh token.
+            _cancellation_tokens.pop(key, None)
     if should_cancel and token is not None:
         token.cancel(f"Task {task_id} cancellation requested")
-    elif status == "queued" and phase != "cancelling" and token is not None:
-        # Resume explicitly reopens the canonical task and gets a fresh signal.
-        token.reset()
 
 
 class TokenUsage(TypedDict):
@@ -916,6 +917,7 @@ class TaskRegistry:
             )
             connection.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
             connection.commit()
+        _update_cancellation_token(self.workspace_dir, task_id, status="deleted")
         self._notify()
         return True
 

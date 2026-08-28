@@ -186,6 +186,8 @@ function generationRecipe(task: CanonicalTask): string {
 
 export function ActivityFooter() {
   const activeWorkspace = useStore(state => state.activeWorkspace)
+  const workspaceRef = useRef(activeWorkspace)
+  workspaceRef.current = activeWorkspace
   const setVideoWorkflowsOpen = useStore(state => state.setDashboardOpen)
   const [tasks, setTasks] = useState<CanonicalTask[]>([])
   const tasksRef = useRef<CanonicalTask[]>([])
@@ -341,29 +343,33 @@ export function ActivityFooter() {
 
   const runControl = (task: CanonicalTask, action: TaskControlAction) => {
     if (busyIds.has(task.id)) return
-    setBusyIds(current => new Set(current).add(task.id))
+    const workspace = activeWorkspace
+    const taskId = task.id
+    setBusyIds(current => new Set(current).add(taskId))
     const operation = action === 'cancel'
-      ? api.cancelCanonicalTask(task.id, activeWorkspace)
+      ? api.cancelCanonicalTask(taskId, workspace)
       : action === 'resume'
-        ? api.resumeCanonicalTask(task.id, activeWorkspace)
-        : api.dismissCanonicalTask(task.id, activeWorkspace)
+        ? api.resumeCanonicalTask(taskId, workspace)
+        : api.dismissCanonicalTask(taskId, workspace)
     void operation.then(result => {
+      if (workspaceRef.current !== workspace) return
       const next = action === 'dismiss'
-        ? tasksRef.current.filter(item => item.id !== task.id)
-        : tasksRef.current.map(item => item.id === task.id ? result as CanonicalTask : item)
+        ? tasksRef.current.filter(item => item.id !== taskId)
+        : tasksRef.current.map(item => item.id === taskId ? result as CanonicalTask : item)
       tasksRef.current = next
       setTasks(next)
       setControlFailures(current => {
-        if (!current[task.id]) return current
+        if (!current[taskId]) return current
         const nextFailures = { ...current }
-        delete nextFailures[task.id]
+        delete nextFailures[taskId]
         return nextFailures
       })
     }).catch(reason => {
+      if (workspaceRef.current !== workspace) return
       const message = reason instanceof Error ? reason.message : String(reason)
       setControlFailures(current => ({
         ...current,
-        [task.id]: { action, message },
+        [taskId]: { action, message },
       }))
       // A footer-level Cancel can fail while the task list is collapsed. Open
       // it so the actionable error and Retry control are immediately visible.
@@ -371,7 +377,7 @@ export function ActivityFooter() {
     }).finally(() => {
       setBusyIds(current => {
         const next = new Set(current)
-        next.delete(task.id)
+        next.delete(taskId)
         return next
       })
     })

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, ChevronDown, Cpu, Images, Layers3, Loader2, Palette, Play, RefreshCw, Square, Upload, X } from 'lucide-react'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
 import { ModelSelector } from './ModelSelector'
 import {
@@ -267,37 +268,31 @@ export function Hunyuan3DPanel() {
 
   const activeJobId = job?.job_id
   const activeJobStatus = job?.status
+  const pollFailuresRef = useRef(0)
 
   useEffect(() => {
-    if (!activeJobId || !ACTIVE_3D_JOB_STATUSES.has(activeJobStatus ?? '')) return
-    let disposed = false
-    let failures = 0
-    const poll = async () => {
-      try {
-        const next = await fetchHunyuan3DJob(activeJobId)
-        failures = 0
-        if (!disposed) setJob(next)
-      } catch (err) {
-        if (disposed) return
-        failures += 1
-        const message = err instanceof Error ? err.message : 'Could not read 3D job status'
-        setError(message)
-        // A 404 (job registry lost — backend restart) or repeated failures
-        // will never recover; mark the job failed locally so the interval
-        // stops and the Generate button becomes usable again.
-        const lost = (err as Error & { status?: number }).status === 404
-        if (lost || failures >= 4) {
-          setJob(current => current && { ...current, status: 'failed', error: lost ? 'The 3D job was lost — the backend probably restarted.' : message })
-        }
+    pollFailuresRef.current = 0
+  }, [activeJobId])
+
+  useSerializedPoll({
+    enabled: Boolean(activeJobId && ACTIVE_3D_JOB_STATUSES.has(activeJobStatus ?? '')),
+    intervalMs: 1500,
+    ownerKey: activeJobId,
+    poll: () => fetchHunyuan3DJob(activeJobId!),
+    onValue: next => {
+      pollFailuresRef.current = 0
+      setJob(next)
+    },
+    onError: err => {
+      pollFailuresRef.current += 1
+      const message = err instanceof Error ? err.message : 'Could not read 3D job status'
+      setError(message)
+      const lost = (err as Error & { status?: number }).status === 404
+      if (lost || pollFailuresRef.current >= 4) {
+        setJob(current => current && { ...current, status: 'failed', error: lost ? 'The 3D job was lost — the backend probably restarted.' : message })
       }
-    }
-    const timer = window.setInterval(poll, 1500)
-    void poll()
-    return () => {
-      disposed = true
-      window.clearInterval(timer)
-    }
-  }, [activeJobId, activeJobStatus])
+    },
+  })
 
   useEffect(() => {
     if (job?.status === 'completed' && completedJobRef.current !== job.job_id) {

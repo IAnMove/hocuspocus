@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Camera, Loader2, PersonStanding, Plus, Upload, X } from 'lucide-react'
 import * as api from '../../api/client'
 import { getFileUrl } from '../../api/client'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
 import {
   buildCharacterOrbitPrompt,
@@ -203,13 +204,14 @@ export function CharacterCreatorPanel() {
           source: sourceName,
           time,
           name: `${kind}_${view.id}`,
+          workspace: activeWorkspace,
         })
         captured.push({
           id: view.id,
           hunyuan: view.hunyuan,
           label: kind === 'object' ? view.objectLabel : view.label,
           filename: shot.filename,
-          url: shot.url || getFileUrl(shot.filename),
+          url: shot.url || getFileUrl(shot.filename, activeWorkspace),
           time,
         })
       }
@@ -236,9 +238,10 @@ export function CharacterCreatorPanel() {
         source: videoName,
         time,
         name: `${kind}_${selected.id}_manual`,
+        workspace: activeWorkspace,
       })
       setViews(current => current.map(view => view.id === selected.id
-        ? { ...view, filename: shot.filename, url: shot.url || getFileUrl(shot.filename), time }
+        ? { ...view, filename: shot.filename, url: shot.url || getFileUrl(shot.filename, activeWorkspace), time }
         : view,
       ))
       void loadOutputs()
@@ -250,9 +253,19 @@ export function CharacterCreatorPanel() {
   }
 
   const restoredWorkspaceRef = useRef<string | null>(null)
+  const busyRef = useRef(busy)
+  const jobIdRef = useRef(jobId)
+  const hunyuanJobIdRef = useRef(hunyuanJobId)
+  busyRef.current = busy
+  jobIdRef.current = jobId
+  hunyuanJobIdRef.current = hunyuanJobId
   useEffect(() => {
     if (!outputFiles.length) return
     if (restoredWorkspaceRef.current === activeWorkspace) return
+    if (busy || jobId || hunyuanJobId || readyRefs.length) {
+      restoredWorkspaceRef.current = activeWorkspace
+      return
+    }
     restoredWorkspaceRef.current = activeWorkspace
     let cancelled = false
     const restoreLatestCharacterSheet = async () => {
@@ -260,7 +273,7 @@ export function CharacterCreatorPanel() {
         for (const output of outputFiles.filter(item => item.type === 'video').slice(0, 50)) {
           const metadata = await api.fetchOutputMetadata(output.name, activeWorkspace).catch(() => null)
           if (metadata?.params?.character_sheet_engine !== 'poopman333_6_panel') continue
-          if (cancelled) return
+          if (cancelled || busyRef.current || jobIdRef.current || hunyuanJobIdRef.current) return
           setVideoName(output.name)
           await takePhotos(output.name)
           return
@@ -271,43 +284,42 @@ export function CharacterCreatorPanel() {
     }
     void restoreLatestCharacterSheet()
     return () => { cancelled = true }
-  }, [activeWorkspace, outputFiles, takePhotos])
+  }, [activeWorkspace, busy, hunyuanJobId, jobId, outputFiles, readyRefs.length, takePhotos])
 
-  useEffect(() => {
-    if (!jobId) return
-    let cancelled = false
-    const tick = async () => {
-      try {
-        const status = await api.fetchJobStatus(jobId)
-        if (cancelled) return
-        setJobMessage(status.message || status.status)
-        if (status.status === 'completed') {
-          const name = status.output_files.find(file => /\.(mp4|webm|mov)$/i.test(file)) || status.output_files[0] || null
-          setVideoName(name)
-          setJobId(null)
-          void loadOutputs()
-          if (name) void takePhotos(name)
-          else setBusy(false)
-          return
-        }
-        if (status.status === 'failed' || status.status === 'cancelled') {
-          setError(status.error || `Orbit ${status.status}`)
-          setBusy(false)
-          setJobId(null)
-          return
-        }
-        window.setTimeout(() => { void tick() }, 2000)
-      } catch (reason) {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : String(reason))
-          setBusy(false)
-          setJobId(null)
-        }
+  const orbitFailuresRef = useRef(0)
+  useEffect(() => { orbitFailuresRef.current = 0 }, [jobId])
+  useSerializedPoll({
+    enabled: Boolean(jobId),
+    intervalMs: 2000,
+    ownerKey: jobId,
+    poll: () => api.fetchJobStatus(jobId!),
+    onValue: status => {
+      orbitFailuresRef.current = 0
+      setJobMessage(status.message || status.status)
+      if (status.status === 'completed') {
+        const name = status.output_files.find(file => /\.(mp4|webm|mov)$/i.test(file)) || status.output_files[0] || null
+        setVideoName(name)
+        setJobId(null)
+        void loadOutputs()
+        if (name) void takePhotos(name)
+        else setBusy(false)
+        return
       }
-    }
-    void tick()
-    return () => { cancelled = true }
-  }, [jobId, loadOutputs])
+      if (status.status === 'failed' || status.status === 'cancelled') {
+        setError(status.error || `Orbit ${status.status}`)
+        setBusy(false)
+        setJobId(null)
+      }
+    },
+    onError: reason => {
+      orbitFailuresRef.current += 1
+      const lost = (reason as Error & { status?: number }).status === 404
+      if (!lost && orbitFailuresRef.current < 4) return
+      setError(reason instanceof Error ? reason.message : String(reason))
+      setBusy(false)
+      setJobId(null)
+    },
+  })
 
   const generateHunyuan = async () => {
     const front = views.find(view => view.hunyuan === 'front')
@@ -339,40 +351,39 @@ export function CharacterCreatorPanel() {
     }
   }
 
-  useEffect(() => {
-    if (!hunyuanJobId) return
-    let cancelled = false
-    const tick = async () => {
-      try {
-        const status = await api.fetchHunyuan3DJob(hunyuanJobId)
-        if (cancelled) return
-        setHunyuanMessage(status.message || status.status)
-        if (status.status === 'completed') {
-          setHunyuanGlb(status.filename)
-          setHunyuanJobId(null)
-          setBusy(false)
-          void loadOutputs()
-          if (status.filename) void import('@google/model-viewer')
-          return
-        }
-        if (status.status === 'failed' || status.status === 'cancelled') {
-          setError(status.error || `Hunyuan3D ${status.status}`)
-          setHunyuanJobId(null)
-          setBusy(false)
-          return
-        }
-        window.setTimeout(() => { void tick() }, 1500)
-      } catch (reason) {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : String(reason))
-          setHunyuanJobId(null)
-          setBusy(false)
-        }
+  const hunyuanFailuresRef = useRef(0)
+  useEffect(() => { hunyuanFailuresRef.current = 0 }, [hunyuanJobId])
+  useSerializedPoll({
+    enabled: Boolean(hunyuanJobId),
+    intervalMs: 1500,
+    ownerKey: hunyuanJobId,
+    poll: () => api.fetchHunyuan3DJob(hunyuanJobId!),
+    onValue: status => {
+      hunyuanFailuresRef.current = 0
+      setHunyuanMessage(status.message || status.status)
+      if (status.status === 'completed') {
+        setHunyuanGlb(status.filename)
+        setHunyuanJobId(null)
+        setBusy(false)
+        void loadOutputs()
+        if (status.filename) void import('@google/model-viewer')
+        return
       }
-    }
-    void tick()
-    return () => { cancelled = true }
-  }, [hunyuanJobId, loadOutputs])
+      if (status.status === 'failed' || status.status === 'cancelled') {
+        setError(status.error || `Hunyuan3D ${status.status}`)
+        setHunyuanJobId(null)
+        setBusy(false)
+      }
+    },
+    onError: reason => {
+      hunyuanFailuresRef.current += 1
+      const lost = (reason as Error & { status?: number }).status === 404
+      if (!lost && hunyuanFailuresRef.current < 4) return
+      setError(reason instanceof Error ? reason.message : String(reason))
+      setHunyuanJobId(null)
+      setBusy(false)
+    },
+  })
 
   return (
     <section aria-label="Character Creator" className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary">
@@ -475,7 +486,7 @@ export function CharacterCreatorPanel() {
           <div className="space-y-3">
             <div className="overflow-hidden rounded-xl border border-border bg-black">
               {videoName ? (
-                <video ref={videoPreviewRef} src={getFileUrl(videoName)} controls className="mx-auto aspect-[9/16] max-h-[420px] w-full object-contain" />
+                <video ref={videoPreviewRef} src={getFileUrl(videoName, activeWorkspace)} controls className="mx-auto aspect-[9/16] max-h-[420px] w-full object-contain" />
               ) : (
                 <div className="flex aspect-[9/16] max-h-[420px] flex-col items-center justify-center gap-2 text-text-muted">
                   <PersonStanding size={22} />
@@ -540,7 +551,7 @@ export function CharacterCreatorPanel() {
             {hunyuanGlb && (
               <div className="overflow-hidden rounded-xl border border-border bg-bg-secondary">
                 <model-viewer
-                  src={getFileUrl(hunyuanGlb)}
+                  src={getFileUrl(hunyuanGlb, activeWorkspace)}
                   alt="Hunyuan3D"
                   camera-controls
                   auto-rotate
