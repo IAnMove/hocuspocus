@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { cleanCharacterKitFaceOverlay } from '../../api/client'
+import { analyzeAudio, cleanCharacterKitFaceOverlay, getFileUrl } from '../../api/client'
 import { generateImageAsset } from '../../lib/imageGeneration'
+import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 import {
   CHARACTER_FACE_RIG_STATES,
   assessFaceRigPlacement,
@@ -8,11 +9,16 @@ import {
   faceRigAnchorFor,
   faceRigGenerationRequests,
   faceRigOverlayPreviewStyle,
+  faceRigVisemeAt,
+  previewFaceRigDialogue,
+  previewFaceRigDialogueFromAudio,
   registerCleanedFaceRigAsset,
   registerGeneratedFaceRigAsset,
   setFaceRigAnchor,
   setFaceRigReviewState,
   type CharacterKitFaceRigState,
+  type FaceRigDialoguePreview,
+  type FaceRigDialogueViseme,
 } from '../../lib/characterKitFaceRig'
 import type { CharacterFaceAnchor, CharacterKit, CharacterKitAsset, CharacterMouthState } from '../../lib/characterKit'
 import { useStore } from '../../stores/useStore'
@@ -61,22 +67,34 @@ async function inspectSourceAlpha(source: string) {
 
 export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChange, onStatus }: Props) {
   const imageModel = useStore(state => state.selectedModelPerMode.image || '')
+  const speechModel = useStore(state => state.selectedModelPerAudioSubMode.speech ?? 'kugelaudio_0_open')
   const workspace = useStore(state => state.activeWorkspace)
   const [selectedState, setSelectedState] = useState<CharacterKitFaceRigState>('wide')
   const [description, setDescription] = useState('')
-  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | null>(null)
+  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showOverlay, setShowOverlay] = useState(true)
   const [checkerboard, setCheckerboard] = useState(true)
   const [draftAnchor, setDraftAnchor] = useState<CharacterFaceAnchor>(() => faceRigAnchorFor(kit, poseId, selectedState))
+  const [dialogueText, setDialogueText] = useState('The square is frozen and the bell is too loud.')
+  const [dialoguePreview, setDialoguePreview] = useState<FaceRigDialoguePreview | null>(null)
+  const [liveViseme, setLiveViseme] = useState<FaceRigDialogueViseme | undefined>(undefined)
+  const [dialogueAudio, setDialogueAudio] = useState<string | null>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin: CharacterFaceAnchor } | null>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const playTokenRef = useRef(0)
+  const dialoguePreviewRef = useRef<FaceRigDialoguePreview | null>(null)
   const savedAnchor = useMemo(() => faceRigAnchorFor(kit, poseId, selectedState), [kit, poseId, selectedState])
   const poseSource = poseId === 'base' ? kit.base?.source : kit.poses[poseId]?.source
   const selectedAsset = assetFor(kit, selectedState)
+  const playbackState = liveViseme?.sourceState ?? selectedState
+  const playbackAsset = playbackState === 'blink' ? selectedAsset : kit.mouth[playbackState] ?? selectedAsset
+  const playbackAnchor = liveViseme ? faceRigAnchorFor(kit, poseId, playbackState) : draftAnchor
   const placement = useMemo(() => assessFaceRigPlacement(draftAnchor, selectedState), [draftAnchor, selectedState])
-  const overlayStyle = useMemo(() => faceRigOverlayPreviewStyle(draftAnchor), [draftAnchor])
+  const overlayStyle = useMemo(() => faceRigOverlayPreviewStyle(playbackAnchor), [playbackAnchor])
   const dirtyAnchor = JSON.stringify(draftAnchor) !== JSON.stringify(savedAnchor)
+  dialoguePreviewRef.current = dialoguePreview
 
   useEffect(() => {
     setDraftAnchor(savedAnchor)
@@ -171,8 +189,70 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     setDraftAnchor(current => ({ ...current, [field]: value }))
   }
 
+  const planDialogue = () => {
+    try {
+      const preview = previewFaceRigDialogue(kit, dialogueText)
+      setDialoguePreview(preview)
+      setLiveViseme(undefined)
+      setError(null)
+      onStatus?.(`Planned ${preview.visemes.length} visemes over ${preview.end.toFixed(1)}s. Missing mouths stay as fallbacks and are not saved.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not plan this Face Rig line.')
+    }
+  }
+
+  const playDialogue = () => {
+    const preview = dialoguePreviewRef.current
+    if (!preview) { planDialogue(); return }
+    const token = ++playTokenRef.current
+    const started = performance.now()
+    const audio = audioRef.current
+    if (audio && dialogueAudio) {
+      audio.currentTime = 0
+      void audio.play().catch(() => undefined)
+    }
+    const tick = () => {
+      if (playTokenRef.current !== token) return
+      const current = dialoguePreviewRef.current
+      if (!current) return
+      const elapsed = audio && dialogueAudio && !audio.paused ? audio.currentTime : (performance.now() - started) / 1000
+      setLiveViseme(faceRigVisemeAt(current, elapsed))
+      if (elapsed >= current.end) {
+        setLiveViseme(undefined)
+        return
+      }
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }
+
+  const speakDialogue = async () => {
+    const line = dialogueText.trim()
+    if (!line) throw new Error('Write a short test line first.')
+    setBusyState('dialogue'); setError(null)
+    try {
+      const clip = await generateSceneSpeechClip({ prompt: line, model: speechModel, durationSeconds: 3 })
+      setDialogueAudio(clip.filename)
+      let preview = previewFaceRigDialogue(kit, line, 3)
+      try {
+        const analysis = await analyzeAudio({ audio_path: clip.filename, transcribe: true, extract_vocals: true, lyrics_hint: line })
+        const units = (analysis.lyrics ?? []).flatMap(segment => segment.words?.length
+          ? segment.words.map(word => ({ text: word.text, start: word.start, end: word.end }))
+          : [{ text: segment.text, start: segment.start, end: segment.end }])
+        preview = previewFaceRigDialogueFromAudio(kit, line, units)
+      } catch {
+        preview = previewFaceRigDialogue(kit, line, 3)
+      }
+      setDialoguePreview(preview)
+      onStatus?.(`Preview speech ready with ${preview.visemes.length} visemes. Nothing was saved to the kit.`)
+      requestAnimationFrame(() => playDialogue())
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Face Rig speech preview failed.')
+    } finally { setBusyState(null) }
+  }
+
   const onOverlayPointerDown = (event: ReactPointerEvent<HTMLImageElement>) => {
-    if (disabled || Boolean(busyState) || !showOverlay) return
+    if (disabled || Boolean(busyState) || !showOverlay || liveViseme) return
     const box = previewRef.current
     if (!box) return
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -245,10 +325,10 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
           className={`relative aspect-square overflow-hidden rounded border border-border ${checkerboard ? 'bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px]' : 'bg-bg-primary'}`}
         >
           <img src={poseSource} alt={`${kit.name} pose`} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
-          {showOverlay && <img
-            src={selectedAsset.source}
-            alt={`${kit.name} ${LABELS[selectedState]} overlay`}
-            className="absolute cursor-grab object-contain active:cursor-grabbing"
+          {showOverlay && playbackAsset && <img
+            src={playbackAsset.source}
+            alt={`${kit.name} ${LABELS[playbackState]} overlay`}
+            className={`absolute object-contain ${liveViseme ? '' : 'cursor-grab active:cursor-grabbing'}`}
             style={overlayStyle}
             draggable={false}
             onPointerDown={onOverlayPointerDown}
@@ -273,6 +353,21 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
       <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || assetFor(kit, selectedState)!.alphaStatus !== 'transparent'} onClick={() => review(selectedState, true)} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Approve transparent</button><button type="button" disabled={disabled || Boolean(busyState)} onClick={() => review(selectedState, false)} className="rounded border border-red-300/30 px-1 py-1 text-[8px] text-red-200">Reject</button></div>
     </div>}
     <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || !selectedRequest} onClick={() => void generateSelected()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === selectedState ? `Generating ${LABELS[selectedState]}…` : `Generate / replace ${LABELS[selectedState]}`}</button><button type="button" disabled={disabled || Boolean(busyState) || !requests.length} onClick={() => void generateMissingPack()} className="rounded border border-emerald-300/30 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === 'pack' ? 'Generating pack…' : 'Generate missing pack'}</button></div>
+    <div className="space-y-1 rounded border border-amber-300/20 bg-black/15 p-1.5">
+      <p className="text-[8px] text-text-muted">Short dialogue preview. This does not save visemes or audio into the kit.</p>
+      <textarea value={dialogueText} disabled={disabled || Boolean(busyState)} onChange={event => setDialogueText(event.target.value)} rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px]" />
+      <div className="grid grid-cols-2 gap-1">
+        <button type="button" disabled={disabled || Boolean(busyState) || !dialogueText.trim()} onClick={planDialogue} className="rounded border border-amber-300/40 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">Plan visemes</button>
+        <button type="button" disabled={disabled || Boolean(busyState) || !dialogueText.trim()} onClick={() => void speakDialogue()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">{busyState === 'dialogue' ? 'Generating speech…' : `Speak 3s · ${speechModel}`}</button>
+      </div>
+      {dialoguePreview && <div className="space-y-1">
+        <p className="text-[7px] text-text-secondary">{dialoguePreview.visemes.length} beats · {dialoguePreview.end.toFixed(1)}s · available {dialoguePreview.available.join(', ') || 'none'}</p>
+        {dialoguePreview.missing.length > 0 && <p className="text-[7px] text-amber-200">Missing {dialoguePreview.missing.join(', ')}; those beats use {dialoguePreview.visemes.find(beat => beat.fallback)?.sourceState ?? 'the remaining mouth'} as fallback.</p>}
+        <div className="flex flex-wrap gap-1">{dialoguePreview.visemes.map((beat, index) => <span key={`${beat.start}-${index}`} className={`rounded border px-1 py-0.5 text-[6px] ${liveViseme && liveViseme.start === beat.start && liveViseme.state === beat.state ? 'border-amber-300 text-amber-100' : 'border-border text-text-muted'}`}>{beat.state}{beat.fallback ? `→${beat.sourceState}` : ''}</span>)}</div>
+        <button type="button" disabled={disabled || Boolean(busyState)} onClick={playDialogue} className="w-full rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Play visemes</button>
+      </div>}
+      {dialogueAudio && <audio ref={audioRef} src={getFileUrl(dialogueAudio, workspace)} preload="auto" className="hidden" />}
+    </div>
     <p className="text-[7px] text-text-muted">Model: {imageModel || 'current HocusPocus image model'} · reference: {poseId || 'base'}. Drag the overlay or use the sliders, save placement, then approve. Recipes never see pending pieces.</p>
     {error && <p className="text-[8px] text-red-300">{error}</p>}
   </div>

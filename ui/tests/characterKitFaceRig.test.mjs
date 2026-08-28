@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
-import { assessFaceRigPlacement, classifyCharacterKitAlpha, faceRigAnchorFor, faceRigGenerationRequests, faceRigOverlayPreviewStyle, faceRigPrompt, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigAnchor, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
+import { assessFaceRigPlacement, classifyCharacterKitAlpha, faceRigAnchorFor, faceRigGenerationRequests, faceRigOverlayPreviewStyle, faceRigPrompt, faceRigVisemeAt, previewFaceRigDialogue, previewFaceRigDialogueFromAudio, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigAnchor, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
 
 const pose = { id: 'base', name: 'Base', source: 'base.png', kind: 'image', alphaStatus: 'opaque', reviewState: 'approved' }
 const generated = state => ({ id: `generated-${state}`, name: state, source: `${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved' })
@@ -108,4 +108,30 @@ test('placement preview uses relative CSS and warns when the overlay misses the 
   assert.equal(huge.ok, false)
   assert.ok(huge.warnings.some(warning => /miss the face/.test(warning)))
   assert.ok(huge.warnings.some(warning => /larger than a typical viseme/.test(warning)))
+})
+
+test('dialogue preview marks missing mouths as fallbacks and stays off the kit', () => {
+  const kit = {
+    ...createCharacterKit('Luna'),
+    base: pose,
+    mouth: { closed: generated('closed'), wide: generated('wide') },
+  }
+  const preview = previewFaceRigDialogue(kit, 'The square is frozen and the bell is too loud.', 3)
+  assert.equal(preview.end, 3)
+  assert.deepEqual(preview.available, ['closed', 'wide'])
+  assert.deepEqual(preview.missing, ['small', 'round'])
+  assert.ok(preview.visemes.some(beat => beat.state === 'closed'))
+  assert.ok(preview.visemes.filter(beat => beat.fallback).every(beat => beat.sourceState === 'wide' || beat.sourceState === 'closed'))
+  assert.equal(kit.mouth.small, undefined)
+  assert.equal(faceRigVisemeAt(preview, 0)?.state, preview.visemes[0].state)
+})
+
+test('audio-aligned dialogue preview stays within four seconds', () => {
+  const kit = { ...createCharacterKit('Luna'), base: pose, mouth: { closed: generated('closed'), wide: generated('wide'), round: generated('round') } }
+  const preview = previewFaceRigDialogueFromAudio(kit, 'Hello there', [
+    { text: 'Hello', start: 0.1, end: 0.8 },
+    { text: 'there', start: 0.9, end: 5.2 },
+  ])
+  assert.ok(preview.end <= 4)
+  assert.ok(preview.visemes.length > 1)
 })

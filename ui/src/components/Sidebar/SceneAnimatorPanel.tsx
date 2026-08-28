@@ -2,7 +2,8 @@ import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, typ
 import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, ChevronDown, ChevronDown as Down, ChevronUp, CloudRain, Copy, CopyPlus, Download, Eye, EyeOff, FileJson, Film, FolderOpen, Grid3X3, Image as ImageIcon, Loader2, Lock, Magnet, Mic, Play, Plus, Redo2, Save, Trash2, Undo2, Unlock, Video } from 'lucide-react'
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { useStore } from '../../stores/useStore'
-import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, fetchJobStatus, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, submitGeneration, uploadImage } from '../../api/client'
+import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
+import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 import { SceneRecipePanel } from './SceneRecipePanel'
 import type { SceneRecipe } from '../../lib/sceneRecipe'
 import { sceneToRecipe } from '../../lib/sceneToRecipe'
@@ -2241,17 +2242,12 @@ export function SceneAnimatorPanel() {
     if (!prompt) return
     setSceneAudioBusy(true); setSceneAudioError(null)
     try {
-      const submitted = await submitGeneration({ model_type: selectedSpeechModel, generation_mode: 'audio', prompt, video_length: 0, image_mode: 0, multi_prompts_gen_type: 2, duration_seconds: sceneRef.current.duration, _audio_sub_mode: 'speech' })
-      const deadline = Date.now() + 15 * 60_000
-      let status = await fetchJobStatus(submitted.job_id)
-      while (!['completed', 'failed', 'cancelled'].includes(status.status) && Date.now() < deadline) {
-        await new Promise(resolve => window.setTimeout(resolve, 1000))
-        status = await fetchJobStatus(submitted.job_id)
-      }
-      if (status.status !== 'completed') throw new Error(status.error || (Date.now() >= deadline ? 'Audio generation timed out.' : 'Audio generation did not complete.'))
-      const filename = status.output_files.find(file => /\.(wav|mp3|m4a|aac|flac|ogg)$/i.test(file)) ?? status.output_files[0]
-      if (!filename) throw new Error('The audio model completed without an output file.')
-      attachSceneAudio(filename, filename.replace(/\.[^.]+$/, ''), 'speech', prompt, selectedSpeechModel)
+      const clip = await generateSceneSpeechClip({
+        prompt,
+        model: selectedSpeechModel,
+        durationSeconds: sceneRef.current.duration,
+      })
+      attachSceneAudio(clip.filename, clip.filename.replace(/\.[^.]+$/, ''), 'speech', prompt, selectedSpeechModel)
       setSceneAudioPrompt(''); await loadOutputs(); setMessage('Generated speech attached to this scene.')
     } catch (error) {
       setSceneAudioError(error instanceof Error ? error.message : 'Could not generate scene speech.')

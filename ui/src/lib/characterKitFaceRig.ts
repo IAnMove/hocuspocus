@@ -1,3 +1,4 @@
+import { planCutoutDialogue } from './cutoutDialogue'
 import type { CharacterFaceAnchor, CharacterKit, CharacterKitAsset, CharacterKitReviewState, CharacterMouthState } from './characterKit'
 
 export const CHARACTER_FACE_RIG_STATES = ['closed', 'small', 'wide', 'round', 'blink'] as const
@@ -242,6 +243,91 @@ export function faceRigOverlayPreviewStyle(anchor: CharacterFaceAnchor): {
     height: cssPercent(size),
     transform: `translate(-50%, -50%) rotate(${next.rotation}deg)`,
   }
+}
+
+export const FACE_RIG_MOUTH_STATES = ['closed', 'small', 'wide', 'round'] as const
+export const FACE_RIG_DIALOGUE_MIN_SECONDS = 2
+export const FACE_RIG_DIALOGUE_MAX_SECONDS = 4
+
+export type FaceRigDialogueViseme = {
+  start: number
+  end: number
+  state: CharacterMouthState
+  sourceState: CharacterMouthState
+  fallback: boolean
+}
+
+export type FaceRigDialoguePreview = {
+  text: string
+  start: number
+  end: number
+  visemes: FaceRigDialogueViseme[]
+  available: CharacterMouthState[]
+  missing: CharacterMouthState[]
+}
+
+export function clampFaceRigDialogueDuration(value: number): number {
+  if (!Number.isFinite(value)) return 3
+  return Math.min(FACE_RIG_DIALOGUE_MAX_SECONDS, Math.max(FACE_RIG_DIALOGUE_MIN_SECONDS, value))
+}
+
+function mouthAvailability(kit: CharacterKit): { available: CharacterMouthState[]; missing: CharacterMouthState[]; fallback?: CharacterMouthState } {
+  const available = FACE_RIG_MOUTH_STATES.filter(state => Boolean(kit.mouth[state]?.source))
+  const missing = FACE_RIG_MOUTH_STATES.filter(state => !kit.mouth[state]?.source)
+  const fallback = (['wide', 'small', 'round', 'closed'] as const).find(state => available.includes(state))
+  return { available, missing, fallback }
+}
+
+function withMouthFallback(
+  kit: CharacterKit,
+  text: string,
+  visemes: Array<{ start: number; end: number; state: CharacterMouthState }>,
+  start: number,
+  end: number,
+): FaceRigDialoguePreview {
+  const { available, missing, fallback } = mouthAvailability(kit)
+  return {
+    text,
+    start,
+    end,
+    available,
+    missing,
+    visemes: visemes.map(beat => {
+      const has = available.includes(beat.state)
+      const sourceState = has ? beat.state : fallback ?? beat.state
+      return { ...beat, sourceState, fallback: !has && sourceState !== beat.state }
+    }),
+  }
+}
+
+/** Plan a 2–4s viseme preview from text using the existing cutout cadence. */
+export function previewFaceRigDialogue(kit: CharacterKit, text: string, durationSeconds = 3, fps = 30): FaceRigDialoguePreview {
+  const duration = clampFaceRigDialogueDuration(durationSeconds)
+  const plan = planCutoutDialogue(text.trim(), 0, duration, fps)
+  return withMouthFallback(kit, text.trim(), plan.visemes, plan.start, plan.end)
+}
+
+/** Rebuild the same preview from analyzed speech units without writing the kit. */
+export function previewFaceRigDialogueFromAudio(
+  kit: CharacterKit,
+  text: string,
+  units: Array<{ text: string; start: number; end: number }>,
+  fps = 30,
+): FaceRigDialoguePreview {
+  const usable = units.filter(unit => unit.text.trim() && Number.isFinite(unit.start) && Number.isFinite(unit.end) && unit.end > unit.start)
+  if (!usable.length) return previewFaceRigDialogue(kit, text, 3, fps)
+  const end = clampFaceRigDialogueDuration(usable[usable.length - 1].end)
+  const visemes = usable.flatMap(unit => {
+    const start = Math.max(0, unit.start)
+    if (start >= end) return []
+    return planCutoutDialogue(unit.text, start, Math.min(end, unit.end), fps).visemes
+  })
+  return withMouthFallback(kit, text.trim() || usable.map(unit => unit.text).join(' '), visemes, 0, end)
+}
+
+export function faceRigVisemeAt(preview: FaceRigDialoguePreview, time: number): FaceRigDialogueViseme | undefined {
+  if (!preview.visemes.length) return undefined
+  return preview.visemes.find(beat => time >= beat.start && time < beat.end) ?? preview.visemes[preview.visemes.length - 1]
 }
 
 /** Warn when an overlay is far from the face or obviously the wrong size. Never auto-approves. */
