@@ -26420,6 +26420,74 @@ def save_scene_output(body: dict):
     }
 
 
+def _character_kit_workspace(value) -> str:
+    workspace = str(value or _get_active_workspace()).strip()
+    if workspace != "default" and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", workspace):
+        raise HTTPException(status_code=400, detail="Invalid Character Kit workspace")
+    return workspace
+
+
+def _character_kit_conflict(exc) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={
+            "code": "character_kit_revision_conflict",
+            "message": str(exc),
+            "expectedRevision": exc.expected,
+            "currentRevision": exc.current,
+        },
+    )
+
+
+@api.get("/api/v1/character-kits/library")
+def get_character_kit_library(workspace: str | None = None):
+    """Load reusable cutout characters from one workspace."""
+    from services.character_kit_library import read_character_kit_library
+
+    try:
+        return read_character_kit_library(_workspace_dir(_character_kit_workspace(workspace)))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read Character Kits: {exc}") from exc
+
+
+@api.patch("/api/v1/character-kits/library/kits/{kit_id}")
+def patch_character_kit_library_item(kit_id: str, body: dict):
+    """Atomically create or update one kit without replacing its neighbours."""
+    from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit
+
+    try:
+        return patch_character_kit(
+            _workspace_dir(_character_kit_workspace(body.get("workspace"))),
+            kit_id,
+            body.get("kit"),
+            base_revision=body.get("baseRevision"),
+            make_active=body.get("makeActive") is not False,
+        )
+    except CharacterKitRevisionConflict as exc:
+        raise _character_kit_conflict(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.delete("/api/v1/character-kits/library/kits/{kit_id}")
+def delete_character_kit_library_item(kit_id: str, body: dict):
+    """Delete one kit under the same compare-and-swap contract."""
+    from services.character_kit_library import CharacterKitRevisionConflict, delete_character_kit
+
+    try:
+        return delete_character_kit(
+            _workspace_dir(_character_kit_workspace(body.get("workspace"))),
+            kit_id,
+            base_revision=body.get("baseRevision"),
+        )
+    except CharacterKitRevisionConflict as exc:
+        raise _character_kit_conflict(exc) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Character Kit not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @api.post("/api/v1/scenes/recordings")
 async def save_scene_recording(
     file: UploadFile = File(...),
