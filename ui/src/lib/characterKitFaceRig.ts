@@ -15,6 +15,14 @@ export interface FaceRigValidation {
   pose: CharacterKitAsset
 }
 
+export interface CharacterKitAlphaMetrics {
+  pixelCount: number
+  transparentRatio: number
+  translucentRatio: number
+  opaqueRatio: number
+  status: 'transparent' | 'opaque' | 'unknown'
+}
+
 export interface FaceRigProvenance {
   method: 'character-kit-face-rig'
   state: CharacterKitFaceRigState
@@ -25,6 +33,35 @@ export interface FaceRigProvenance {
 }
 
 const MOUTH_STATES = new Set<CharacterMouthState>(['closed', 'small', 'wide', 'round'])
+const MATERIAL_ALPHA_RATIO = .01
+
+/** Classify an RGBA buffer without guessing when its shape/content is invalid. */
+export function classifyCharacterKitAlpha(rgba: Uint8ClampedArray): CharacterKitAlphaMetrics {
+  const invalid = { pixelCount: 0, transparentRatio: 0, translucentRatio: 0, opaqueRatio: 0, status: 'unknown' as const }
+  if (!(rgba instanceof Uint8ClampedArray) || rgba.length === 0 || rgba.length % 4 !== 0) return invalid
+  let transparent = 0
+  let translucent = 0
+  let opaque = 0
+  for (let index = 3; index < rgba.length; index += 4) {
+    const alpha = rgba[index]
+    if (alpha < 250) {
+      transparent++
+      if (alpha > 0) translucent++
+    }
+    if (alpha === 255) opaque++
+  }
+  const pixelCount = rgba.length / 4
+  const transparentRatio = transparent / pixelCount
+  const translucentRatio = translucent / pixelCount
+  const opaqueRatio = opaque / pixelCount
+  return {
+    pixelCount,
+    transparentRatio,
+    translucentRatio,
+    opaqueRatio,
+    status: transparentRatio >= MATERIAL_ALPHA_RATIO ? 'transparent' : opaqueRatio >= 0.99 ? 'opaque' : 'unknown',
+  }
+}
 
 function poseFor(kit: CharacterKit, poseId: string): CharacterKitAsset | undefined {
   return poseId === 'base' ? kit.base : kit.poses[poseId]

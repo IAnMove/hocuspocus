@@ -1,10 +1,30 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
-import { faceRigGenerationRequests, faceRigPrompt, registerGeneratedFaceRigAsset, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
+import { classifyCharacterKitAlpha, faceRigGenerationRequests, faceRigPrompt, registerGeneratedFaceRigAsset, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
 
 const pose = { id: 'base', name: 'Base', source: 'base.png', kind: 'image', alphaStatus: 'opaque', reviewState: 'approved' }
 const generated = state => ({ id: `generated-${state}`, name: state, source: `${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved' })
+
+test('alpha classification detects a materially transparent RGBA image', () => {
+  const rgba = new Uint8ClampedArray([255, 255, 255, 0, 255, 255, 255, 255, 255, 255, 255, 128, 255, 255, 255, 255])
+  assert.deepEqual(classifyCharacterKitAlpha(rgba), { pixelCount: 4, transparentRatio: .5, translucentRatio: .25, opaqueRatio: .5, status: 'transparent' })
+})
+
+test('alpha classification accepts an effectively opaque image', () => {
+  const rgba = new Uint8ClampedArray([0, 0, 0, 255, 1, 1, 1, 255, 2, 2, 2, 254, 3, 3, 3, 255])
+  const metrics = classifyCharacterKitAlpha(rgba)
+  assert.equal(metrics.pixelCount, 4)
+  assert.equal(metrics.opaqueRatio, .75)
+  assert.equal(metrics.status, 'unknown')
+  assert.equal(classifyCharacterKitAlpha(new Uint8ClampedArray([0, 0, 0, 255, 1, 1, 1, 255, 2, 2, 2, 255, 3, 3, 3, 255])).status, 'opaque')
+})
+
+test('alpha classification returns unknown for invalid pixel data', () => {
+  assert.equal(classifyCharacterKitAlpha(new Uint8ClampedArray()).status, 'unknown')
+  assert.equal(classifyCharacterKitAlpha(new Uint8ClampedArray([0, 0, 0])).status, 'unknown')
+  assert.equal(classifyCharacterKitAlpha(/** @type {any} */ (new Uint8Array([0, 0, 0, 255]))).status, 'unknown')
+})
 
 test('Face Rig validates a persistent approved base or pose', () => {
   const kit = { ...createCharacterKit('Luna'), base: pose }
