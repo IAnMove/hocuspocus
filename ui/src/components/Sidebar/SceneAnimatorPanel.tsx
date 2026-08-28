@@ -12,7 +12,7 @@ import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
-import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue } from '../../lib/cutoutDialogue'
+import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
 import { captureCharacterFaceAnchor, characterKitAssetFromLayer, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
@@ -2330,6 +2330,29 @@ export function SceneAnimatorPanel() {
     updateScene(current => ({ ...current, layers: bindCutoutFaceToPose(current.layers, selected.id) as AnimatorLayer[] }))
     setMessage(`Bound ${bound} face overlay${bound === 1 ? '' : 's'} to ${selected.name}. Their current placement is now specific to this pose.`)
   }
+  const updateDialogueBeat = (beatId: string, patch: Partial<SceneDialogueBeat>) => {
+    updateScene(current => {
+      const previous = current.dialogueBeats ?? []
+      const beats = previous.map(beat => beat.id === beatId ? { ...beat, ...patch } : beat)
+      const clearLayerIds = previous.flatMap(beat => beat.mouthLayerIds)
+      return { ...current, dialogueBeats: beats, layers: rebuildCutoutDialogueLayers(current.layers, beats, current.fps ?? 30, current.duration, clearLayerIds) as AnimatorLayer[] }
+    })
+  }
+  const assignDialogueBeatSpeaker = (beatId: string, poseLayerId: string) => {
+    const mouths = findCutoutMouthLayers(scene.layers, poseLayerId)
+    const mouthLayerIds = Object.values(mouths).flatMap(layer => layer ? [layer.id] : []).filter((id, index, ids) => ids.indexOf(id) === index)
+    if (!mouthLayerIds.length) { setMessage('This pose has no assigned mouth kit. Bind or mount its face first.'); return }
+    updateDialogueBeat(beatId, { mouthLayerIds })
+    setMessage(`Dialogue assigned to ${scene.layers.find(layer => layer.id === poseLayerId)?.name ?? poseLayerId}.`)
+  }
+  const removeDialogueBeat = (beatId: string) => {
+    updateScene(current => {
+      const previous = current.dialogueBeats ?? []
+      const beats = previous.filter(beat => beat.id !== beatId)
+      const clearLayerIds = previous.flatMap(beat => beat.mouthLayerIds)
+      return { ...current, dialogueBeats: beats, layers: rebuildCutoutDialogueLayers(current.layers, beats, current.fps ?? 30, current.duration, clearLayerIds) as AnimatorLayer[] }
+    })
+  }
   const proposeCopilotEdit = async () => {
     if (!selected || !copilotIntent.trim()) return
     if (selected.locked) { setCopilotError('Unlock this layer before asking the copilot to change it.'); return }
@@ -2588,7 +2611,12 @@ export function SceneAnimatorPanel() {
         <textarea value={cutoutDialogueText} disabled={playing || recording || publishing} onChange={event => setCutoutDialogueText(event.target.value)} placeholder="Dialogue spoken by this character…" rows={2} className="w-full resize-y rounded border border-border bg-bg-primary px-2 py-1 text-[10px] disabled:opacity-50" />
         <div className="grid grid-cols-2 gap-1"><label className="text-[8px] text-text-muted">Start<input aria-label="Cutout dialogue start" type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueStart} onChange={event => setCutoutDialogueStart(Number(event.target.value) || 0)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label><label className="text-[8px] text-text-muted">End<input aria-label="Cutout dialogue end" type="number" min="0" max={scene.duration} step="0.1" value={cutoutDialogueEnd} onChange={event => setCutoutDialogueEnd(Number(event.target.value) || scene.duration)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[9px]" /></label></div>
         <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!cutoutDialogueText.trim() || cutoutDialogueBusy || playing || recording || publishing} onClick={animateCutoutDialogue} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">Animate from line</button><button type="button" disabled={cutoutDialogueBusy || !selectedDialogueTrack || playing || recording || publishing} onClick={() => void animateCutoutDialogueFromAudio()} className="rounded border border-rose-300/50 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-100 disabled:opacity-40">{cutoutDialogueBusy ? 'Analyzing speech…' : 'Detect from audio'}</button></div>
-        {(scene.dialogueBeats ?? []).length > 0 && <p className="text-[8px] text-rose-100/80">{scene.dialogueBeats!.length} dialogue beat{scene.dialogueBeats!.length === 1 ? '' : 's'} saved in this scene.</p>}
+        {(scene.dialogueBeats ?? []).length > 0 && <div className="space-y-1 rounded border border-rose-300/15 bg-black/10 p-1.5"><div className="text-[8px] text-rose-100/80">{scene.dialogueBeats!.length} editable dialogue beat{scene.dialogueBeats!.length === 1 ? '' : 's'}</div>{scene.dialogueBeats!.map(beat => {
+          const mouth = scene.layers.find(layer => beat.mouthLayerIds.includes(layer.id))
+          const poseLayerId = mouth?.faceBinding?.poseLayerId ?? (mouth?.relationship?.type === 'parent' ? mouth.relationship.targetLayerId : '')
+          const speakerPoses = scene.layers.filter(layer => !isCutoutFaceLayer(layer) && scene.layers.some(face => face.faceBinding?.poseLayerId === layer.id && face.faceBinding.role === 'mouth' || !face.faceBinding && face.relationship?.type === 'parent' && face.relationship.targetLayerId === layer.id && isCutoutFaceLayer(face)))
+          return <div key={beat.id} className="space-y-1 rounded border border-rose-300/15 p-1"><div className="grid grid-cols-[1fr_20px] gap-1"><input aria-label={`Dialogue text ${beat.id}`} value={beat.text} onChange={event => updateDialogueBeat(beat.id, { text: event.target.value })} className="rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /><button type="button" title="Delete dialogue beat" onClick={() => removeDialogueBeat(beat.id)} className="text-red-300"><Trash2 size={10} /></button></div><div className="grid grid-cols-2 gap-1"><label className="text-[7px] text-text-muted">Speaker<select aria-label={`Dialogue speaker ${beat.id}`} value={poseLayerId} onChange={event => assignDialogueBeatSpeaker(beat.id, event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="">Unassigned</option>{speakerPoses.map(layer => <option key={layer.id} value={layer.id}>{layer.name}</option>)}</select></label><label className="text-[7px] text-text-muted">Voice<select aria-label={`Dialogue audio ${beat.id}`} value={beat.audioTrackId ?? ''} onChange={event => updateDialogueBeat(beat.id, { audioTrackId: event.target.value || undefined })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="">No track</option>{dialogueAudioTracks.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}</select></label></div><div className="grid grid-cols-3 gap-1"><label className="text-[7px] text-text-muted">Start<input type="number" min="0" max={scene.duration} step="0.05" value={beat.start} onChange={event => updateDialogueBeat(beat.id, { start: Math.max(0, Math.min(beat.end - 1 / fps, Number(event.target.value) || 0)) })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]" /></label><label className="text-[7px] text-text-muted">End<input type="number" min="0" max={scene.duration} step="0.05" value={beat.end} onChange={event => updateDialogueBeat(beat.id, { end: Math.max(beat.start + 1 / fps, Math.min(scene.duration, Number(event.target.value) || scene.duration)) })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]" /></label><label className="text-[7px] text-text-muted">Timing<select value={beat.confidence} onChange={event => updateDialogueBeat(beat.id, { confidence: event.target.value as SceneDialogueBeat['confidence'] })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[7px]"><option value="known-text">Known</option><option value="aligned-audio">Aligned</option><option value="energy-fallback">Energy</option></select></label></div><button type="button" onClick={() => { setSelectedId(mouth?.id ?? null); setProgress(beat.start / scene.duration) }} className="w-full text-[7px] text-rose-200/80">Jump to beat · {beat.mouthLayerIds.length} mouth states</button></div>
+        })}</div>}
       </div>
       {selected && <div className="space-y-1 rounded border border-fuchsia-400/20 bg-fuchsia-400/[.025] p-2"><div className="text-[9px] text-fuchsia-100">Suggestions for {selected.name}</div><div className="flex flex-wrap gap-1">{copilotSuggestions.map(suggestion => <button key={suggestion} type="button" disabled={copilotBusy || selected.locked} onClick={() => { setCopilotIntent(suggestion); setCopilotError(null) }} className="rounded border border-fuchsia-300/25 px-1.5 py-0.5 text-left text-[8px] text-fuchsia-100 hover:bg-fuchsia-400/10 disabled:opacity-40">{suggestion}</button>)}</div></div>}
       <SceneRecipePanel disabled={playing || recording || publishing || saving} outputs={outputs} characterKits={characterKitLibrary} onApply={applyRecipeScene} />

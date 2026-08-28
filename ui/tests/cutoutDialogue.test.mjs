@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, planCutoutDialogue } from '../src/lib/cutoutDialogue.ts'
+import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, planCutoutDialogue, rebuildCutoutDialogueLayers } from '../src/lib/cutoutDialogue.ts'
 
 const layer = id => ({ id, animation: { start: { x: 50, y: 48, scale: .12, opacity: 1 }, end: { x: 50, y: 48, scale: .12, opacity: 1 }, duration: 5, curve: 'hold' } })
 
@@ -122,4 +122,15 @@ test('legacy unparented overlays receive semantic binding while legacy other-pos
   const bound = bindCutoutFaceToPose([pose, legacyMouth, other], pose.id)
   assert.deepEqual(bound.find(item => item.id === legacyMouth.id).faceBinding, { poseLayerId: pose.id, role: 'mouth', state: 'wide' })
   assert.deepEqual(bound.find(item => item.id === other.id).relationship, { type: 'parent', targetLayerId: 'other-pose' })
+})
+
+test('editing dialogue speaker clears stale frames and rebuilds only the assigned mouth kit', () => {
+  const poseA = { ...layer('pose-a'), name: 'A', type: 'image' }
+  const poseB = { ...layer('pose-b'), name: 'B', type: 'image' }
+  const mouthA = { ...layer('mouth-a-wide'), name: 'A wide', type: 'overlay', faceBinding: { poseLayerId: poseA.id, role: 'mouth', state: 'wide' }, animation: { ...layer('mouth-a-wide').animation, keyframes: [{ id: 'old', time: 0, x: 50, y: 48, scale: .12, opacity: 1 }] } }
+  const mouthB = { ...layer('mouth-b-wide'), name: 'B wide', type: 'overlay', faceBinding: { poseLayerId: poseB.id, role: 'mouth', state: 'wide' } }
+  const beats = [{ id: 'line', text: 'Ahora habla B', start: 1, end: 3, mouthLayerIds: [mouthB.id], confidence: 'known-text' }]
+  const rebuilt = rebuildCutoutDialogueLayers([poseA, poseB, mouthA, mouthB], beats, 30, 5, [mouthA.id])
+  assert.equal(rebuilt.find(item => item.id === mouthA.id).animation.keyframes, undefined)
+  assert.ok(rebuilt.find(item => item.id === mouthB.id).animation.keyframes.some(frame => frame.opacity === 1))
 })

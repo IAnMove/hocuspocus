@@ -1,4 +1,4 @@
-import type { SceneFaceBinding, SceneFaceBindingState, SceneKeyframe, SceneLayer } from '../types'
+import type { Scene, SceneFaceBinding, SceneFaceBindingState, SceneKeyframe, SceneLayer } from '../types'
 
 export type CutoutViseme = 'closed' | 'small' | 'wide' | 'round'
 
@@ -15,6 +15,8 @@ export type CutoutMouthLayers = {
   wide?: SceneLayer
   round?: SceneLayer
 }
+
+export type SceneDialogueBeat = NonNullable<Scene['dialogueBeats']>[number]
 
 const layerLabel = (layer: SceneLayer) => `${layer.id} ${layer.name}`.toLocaleLowerCase()
 const isMouthState = (layer: SceneLayer, state: CutoutViseme | 'open') => {
@@ -170,6 +172,43 @@ export function planCutoutDialogue(text: string, start: number, end: number, fps
     }
   }
   return { start: safeStart, end: safeEnd, visemes }
+}
+
+/** Recompile edited beat records into ordinary mouth opacity keyframes.
+ * `clearLayerIds` removes stale frames from a previous speaker/beat assignment
+ * while leaving unrelated animation tracks untouched. */
+export function rebuildCutoutDialogueLayers(
+  layers: SceneLayer[],
+  beats: SceneDialogueBeat[],
+  fps: number,
+  duration: number,
+  clearLayerIds: string[] = [],
+): SceneLayer[] {
+  const layerById = new Map(layers.map(layer => [layer.id, layer]))
+  const framesByLayer = new Map<string, SceneKeyframe[]>()
+  const affected = new Set(clearLayerIds)
+  for (const beat of beats) {
+    const targets = beat.mouthLayerIds.flatMap(id => layerById.get(id) ? [layerById.get(id)!] : [])
+    if (!targets.length) continue
+    const mouthLayers = findCutoutMouthLayers(targets)
+    if (!(mouthLayers.open ?? mouthLayers.small ?? mouthLayers.wide ?? mouthLayers.round)) continue
+    const start = Math.max(0, Math.min(duration, beat.start))
+    if (start >= duration) continue
+    const end = Math.max(start + 1 / Math.max(1, fps), Math.min(duration, beat.end))
+    const generated = applyCutoutDialogue(mouthLayers, planCutoutDialogue(beat.text, start, end, fps))
+    for (const [layerId, frames] of Object.entries(generated)) {
+      affected.add(layerId)
+      framesByLayer.set(layerId, [...(framesByLayer.get(layerId) ?? []), ...frames])
+    }
+  }
+  return layers.map(layer => {
+    if (!affected.has(layer.id)) return layer
+    const frames = framesByLayer.get(layer.id) ?? []
+    const byTime = new Map<number, SceneKeyframe>()
+    for (const frame of frames) byTime.set(Math.round(frame.time * 1_000_000), frame)
+    const keyframes = [...byTime.values()].sort((a, b) => a.time - b.time)
+    return { ...layer, animation: { ...layer.animation, keyframes: keyframes.length ? keyframes : undefined, duration, curve: 'hold' } }
+  })
 }
 
 export function applyCutoutDialogue(layers: CutoutMouthLayers, plan: CutoutDialoguePlan): Record<string, SceneKeyframe[]> {
