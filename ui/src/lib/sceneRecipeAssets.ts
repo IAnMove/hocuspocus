@@ -1,6 +1,6 @@
 import * as api from '../api/client'
 import { generateImageAsset } from './imageGeneration'
-import type { SceneRecipe, SceneRecipeAsset } from './sceneRecipe'
+import type { SceneRecipe, SceneRecipeAsset, SceneRecipeAudio } from './sceneRecipe'
 import { aspectRatioForScene, h3FramesForDuration, h3ResolutionForScene, recipeAssetDuration } from './sceneRecipe'
 
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
@@ -160,6 +160,68 @@ async function resolveModel(asset: SceneRecipeAsset, workspace: string, onStatus
   return glb
 }
 
+const RECIPE_AUDIO_DEFAULT_MODELS: Record<SceneRecipeAudio['kind'], string> = {
+  speech: 'qwen3_tts_voicedesign',
+  sfx: 'mmaudio_v2',
+  music: 'ace_step_v1_5_xl_sft_lm_4b',
+}
+
+export function recipeAudioGenerationParams(
+  track: SceneRecipeAudio,
+  duration: number,
+  workspace: string,
+): Record<string, unknown> {
+  const prompt = track.prompt?.trim()
+  if (!prompt) throw new Error(`Audio track “${track.id}” needs a prompt or an existing source.`)
+  const seconds = Math.max(1, Math.min(60, duration))
+  const model = track.model || RECIPE_AUDIO_DEFAULT_MODELS[track.kind]
+  const common = {
+    model_type: model,
+    generation_mode: 'audio',
+    prompt,
+    duration_seconds: seconds,
+    workspace,
+    _audio_sub_mode: track.kind,
+  }
+  if (track.kind === 'speech') {
+    return { ...common, video_length: 0, image_mode: 0, multi_prompts_gen_type: 2 }
+  }
+  if (track.kind === 'sfx') {
+    return {
+      ...common,
+      MMAudio_prompt: prompt,
+      MMAudio_neg_prompt: 'speech, dialogue, singing, music, distortion',
+      sfx_mode: true,
+      seed: -1,
+    }
+  }
+  return { ...common, _music_description: prompt }
+}
+
+async function resolveAudio(
+  track: SceneRecipeAudio,
+  recipe: SceneRecipe,
+  workspace: string,
+  onStatus?: (message: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (track.source) return track.source
+  await waitForGpuIdle(onStatus, signal)
+  onStatus?.(`Generating ${track.kind} “${track.id}”…`)
+  const started = await api.submitGeneration(recipeAudioGenerationParams(track, recipe.scene.duration || 5, workspace))
+  const status = await pollUntil(
+    `${track.kind === 'speech' ? 'Voice' : track.kind === 'sfx' ? 'SFX' : 'Music'} “${track.id}”`,
+    () => api.fetchJobStatus(started.job_id),
+    job => job.status === 'completed' ? (job.output_files?.find(file => /\.(wav|mp3|m4a|aac|flac|ogg)$/i.test(file)) || job.output_files?.[0] || 'missing') : null,
+    onStatus,
+    signal,
+    20 * 60 * 1000,
+  )
+  const file = status.output_files?.find(item => /\.(wav|mp3|m4a|aac|flac|ogg)$/i.test(item)) ?? status.output_files?.[0]
+  if (!file) throw new Error(`${track.kind} “${track.id}” completed without an audio file.`)
+  return file
+}
+
 export async function resolveRecipeAssets(
   recipe: SceneRecipe,
   options: {
@@ -189,6 +251,13 @@ export async function resolveRecipeAssets(
         : await resolveModel(asset, options.workspace, options.onStatus, options.signal)
     resolved[asset.id] = value
     if (asset.identity) byIdentity.set(asset.identity, value)
+  }
+  for (const track of recipe.audio ?? []) {
+    throwIfAborted(options.signal)
+    if (!track.source && !generateMissing) {
+      throw new Error(`Audio track “${track.id}” has no source. Attach it in Manual mode or generate it in Auto.`)
+    }
+    resolved[track.id] = await resolveAudio(track, recipe, options.workspace, options.onStatus, options.signal)
   }
   return resolved
 }

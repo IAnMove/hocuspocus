@@ -319,7 +319,7 @@ export function SceneRecipePanel({
     setError(null)
     try {
       const recipe = parseSceneRecipeText(recipeText)
-      setStatus(mode === 'manual' ? 'Using loaded assets…' : 'Resolving assets (generate only what is missing)…')
+      setStatus(mode === 'manual' ? 'Using loaded assets and audio…' : 'Resolving assets and audio (generate only what is missing)…')
       const resolved = await resolveRecipeAssets(recipe, {
         workspace,
         onStatus: setStatus,
