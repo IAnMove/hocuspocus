@@ -10,7 +10,9 @@ MiniMax H3 FastH3 Preview: experimental 4-step T2VA recipe from FastVideo
 (`FastVideo-FastH3-4-step-Preview-v1-VSA-DataFree`). Studio can download the
 matching LoRA and lock four steps. FastVideo trained this student for VSA-H3
 sparse attention; Maestro still uses dense attention, so this is a trial. It
-does not support first/last frame or Omni Ref.
+does not support first/last frame or Omni Ref. On load, Studio rewrites the
+FastVideo Diffusers adapter onto native H3 modules (fused QKV, swapped SwiGLU
+halves) and drops VSA compression gates that this runtime does not have.
 
 ## [0.9.0] - 2026-08-24
 

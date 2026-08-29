@@ -827,9 +827,18 @@ class MiniMaxH3Transformer(nn.Module):
         that projection with WanGP's revision-pinned affine fit.
         """
 
+        from .fasth3 import (
+            convert_fastvideo_h3_lora_to_native,
+            is_fastvideo_h3_lora_state_dict,
+        )
         from .lora_affine import convert_adaln_loras
 
         converted = dict(state_dict)
+        if is_fastvideo_h3_lora_state_dict(converted):
+            converted = convert_fastvideo_h3_lora_to_native(
+                converted,
+                drop_time_embedder=self.use_adaln_curves,
+            )
         started = time.perf_counter()
         count, architecture, source_width, target_width = convert_adaln_loras(
             model_type,

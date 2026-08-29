@@ -192,10 +192,20 @@ def convert_adaln_loras(
                 (module_name, down_key, up_key, int(down.shape[1]))
             )
 
-    if not candidates:
+    diff_keys = [
+        key
+        for key in state_dict
+        if key.endswith(".adaln_proj.linear.diff")
+    ]
+    if not candidates and not diff_keys:
         return 0, architecture, target_width, target_width
 
     source_widths = {candidate[3] for candidate in candidates}
+    for diff_key in diff_keys:
+        diff = state_dict[diff_key]
+        if getattr(diff, "ndim", 0) != 2:
+            continue
+        source_widths.add(int(diff.shape[1]))
     if len(source_widths) != 1:
         raise ValueError(
             f"MiniMax H3 LoRA mixes AdaLN input widths: {sorted(source_widths)}"
@@ -250,7 +260,37 @@ def convert_adaln_loras(
             up.float() @ inner_bias,
         )
 
-    return len(candidates), architecture, source_width, target_width
+    converted_diffs = 0
+    for diff_key in diff_keys:
+        diff = state_dict[diff_key]
+        if getattr(diff, "ndim", 0) != 2 or int(diff.shape[1]) != source_width:
+            raise ValueError(
+                "MiniMax H3 LoRA AdaLN weight delta is incompatible for "
+                f"{diff_key}: {tuple(diff.shape)}"
+            )
+        mapped = (
+            diff.float()
+            if source_encoder is None
+            else diff.float() @ source_encoder
+        )
+        inner_bias = (
+            mapped.new_zeros(mapped.shape[0])
+            if source_affine is None
+            else -(mapped @ source_affine[-1])
+        )
+        if target_affine is not None:
+            mapped = mapped @ target_affine.T
+            inner_bias.add_(mapped[:, target_width])
+            mapped = mapped[:, :target_width]
+        state_dict[diff_key] = mapped
+        _add_bias_delta(
+            state_dict,
+            diff_key[: -len(".diff")] + ".diff_b",
+            inner_bias,
+        )
+        converted_diffs += 1
+
+    return len(candidates) + converted_diffs, architecture, source_width, target_width
 
 
 __all__ = ["FULL_TIME_DIM", "convert_adaln_loras"]

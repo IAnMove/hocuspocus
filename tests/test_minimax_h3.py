@@ -2400,6 +2400,41 @@ class TestMiniMaxH3RuntimeMath(unittest.TestCase):
         )
         self.assertEqual(state_dict[f"{prefix}.diff_b"].shape, (4,))
 
+    def test_full_h3_adaln_weight_delta_is_converted_for_pruned_checkpoint(self):
+        from models.minimax_h3 import lora_affine
+
+        canonical_table = self.torch.randn(32, 8)
+        canonical_affine = self.torch.zeros(9, 2688)
+        canonical_affine[:8, :8] = self.torch.eye(8)
+        prefix = "final_layer.adaln_proj.linear"
+        state_dict = {
+            f"{prefix}.diff": self.torch.randn(4, 2688),
+            f"{prefix}.diff_b": self.torch.zeros(4),
+        }
+
+        with mock.patch.object(
+            lora_affine,
+            "_load_affine_package",
+            return_value=(canonical_table, canonical_affine),
+        ):
+            count, architecture, source_width, target_width = (
+                lora_affine.convert_adaln_loras(
+                    "minimax_h3",
+                    state_dict,
+                    canonical_table.clone(),
+                )
+            )
+
+        self.assertEqual((count, architecture), (1, "fl2va"))
+        self.assertEqual((source_width, target_width), (2688, 8))
+        self.assertEqual(state_dict[f"{prefix}.diff"].shape, (4, 8))
+        self.assertEqual(state_dict[f"{prefix}.diff_b"].shape, (4,))
+
+    def test_h3_preprocess_loras_rewrites_fastvideo_adapters(self):
+        transformer = _TRANSFORMER_PATH.read_text(encoding="utf-8")
+        self.assertIn("convert_fastvideo_h3_lora_to_native", transformer)
+        self.assertIn("drop_time_embedder=self.use_adaln_curves", transformer)
+
     def test_turbo_lora_is_validated_for_full_and_pruned_before_load(self):
         from models.minimax_h3.minimax_h3_main import MiniMaxH3Model
 

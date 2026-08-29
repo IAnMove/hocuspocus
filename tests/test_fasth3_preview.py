@@ -81,6 +81,95 @@ class FastH3PreviewTests(unittest.TestCase):
         self.assertFalse(fasth3.fasth3_preview_supported("minimax_h3_ref2va"))
         self.assertFalse(fasth3.fasth3_preview_supported("minimax_h3_legacy"))
 
+    def test_fastvideo_adapter_is_rewritten_onto_native_h3_modules(self):
+        import torch
+
+        fasth3 = _load_fasth3()
+        rank = 2
+        hidden = 4
+        head = fasth3._FASTVIDEO_HEAD_DIM_TOTAL
+        half = fasth3._FASTVIDEO_FFN_HALF
+        a_q = torch.arange(rank * hidden, dtype=torch.float32).reshape(rank, hidden)
+        a_k = a_q + 10
+        a_v = a_q + 20
+        b_q = torch.arange(head * rank, dtype=torch.float32).reshape(head, rank)
+        b_k = b_q + 1
+        b_v = b_q + 2
+        a_ff = torch.ones(rank, hidden)
+        b_ff = torch.cat(
+            [
+                torch.full((half, rank), 3.0),
+                torch.full((half, rank), 7.0),
+            ],
+            dim=0,
+        )
+        source = {
+            "transformer_blocks.0.attn.to_q.lora_A.weight": a_q,
+            "transformer_blocks.0.attn.to_q.lora_B.weight": b_q,
+            "transformer_blocks.0.attn.to_k.lora_A.weight": a_k,
+            "transformer_blocks.0.attn.to_k.lora_B.weight": b_k,
+            "transformer_blocks.0.attn.to_v.lora_A.weight": a_v,
+            "transformer_blocks.0.attn.to_v.lora_B.weight": b_v,
+            "transformer_blocks.0.attn.to_out.0.lora_A.weight": a_q.clone(),
+            "transformer_blocks.0.attn.to_out.0.lora_B.weight": torch.ones(hidden, rank),
+            "transformer_blocks.0.ff.net.0.proj.lora_A.weight": a_ff,
+            "transformer_blocks.0.ff.net.0.proj.lora_B.weight": b_ff,
+            "transformer_blocks.0.ff.net.2.lora_A.weight": a_ff.clone(),
+            "transformer_blocks.0.ff.net.2.lora_B.weight": torch.ones(hidden, rank),
+            "transformer_blocks.0.attn.to_gate_compress.set_weight": torch.ones(8),
+            "token_refiner.refiner_blocks.0.attn.to_q.lora_A.weight": a_q.clone(),
+            "token_refiner.refiner_blocks.0.attn.to_q.lora_B.weight": b_q.clone(),
+            "token_refiner.refiner_blocks.0.attn.to_k.lora_A.weight": a_k.clone(),
+            "token_refiner.refiner_blocks.0.attn.to_k.lora_B.weight": b_k.clone(),
+            "token_refiner.refiner_blocks.0.attn.to_v.lora_A.weight": a_v.clone(),
+            "token_refiner.refiner_blocks.0.attn.to_v.lora_B.weight": b_v.clone(),
+            "audio_proj_in.diff": torch.ones(hidden, 2),
+            "time_embedder.linear_1.diff": torch.ones(hidden, hidden),
+            "norm_out.linear.diff": torch.ones(6, 2688),
+        }
+
+        converted = fasth3.convert_fastvideo_h3_lora_to_native(
+            source,
+            drop_time_embedder=True,
+        )
+
+        self.assertNotIn("transformer_blocks.0.attn.to_q.lora_A.weight", converted)
+        self.assertNotIn(
+            "transformer_blocks.0.attn.to_gate_compress.set_weight",
+            converted,
+        )
+        self.assertNotIn("time_embedder.proj_in.diff", converted)
+        self.assertNotIn("time_embedder.linear_1.diff", converted)
+        self.assertIn("blocks.0.attn.qkv_proj.lora_A.weight", converted)
+        self.assertIn("blocks.0.attn.out_proj.lora_A.weight", converted)
+        self.assertIn("blocks.0.mlp.fc1.lora_B.weight", converted)
+        self.assertIn("blocks.0.mlp.fc2.lora_A.weight", converted)
+        self.assertIn("token_refiner.blocks.0.attn.qkv_proj.lora_B.weight", converted)
+        self.assertIn("audio_patch_proj.diff", converted)
+        self.assertIn("final_layer.adaln_proj.linear.diff", converted)
+
+        a_fused = converted["blocks.0.attn.qkv_proj.lora_A.weight"]
+        b_fused = converted["blocks.0.attn.qkv_proj.lora_B.weight"]
+        delta = b_fused @ a_fused
+        expected = torch.cat((b_q @ a_q, b_k @ a_k, b_v @ a_v), dim=0)
+        self.assertEqual(tuple(a_fused.shape), (6, hidden))
+        self.assertEqual(tuple(b_fused.shape), (3 * head, 6))
+        self.assertTrue(torch.allclose(delta, expected))
+
+        swapped = converted["blocks.0.mlp.fc1.lora_B.weight"]
+        self.assertTrue(torch.equal(swapped[:half], b_ff[half:]))
+        self.assertTrue(torch.equal(swapped[half:], b_ff[:half]))
+
+        native = {
+            "blocks.0.attn.qkv_proj.lora_A.weight": a_q.clone(),
+            "blocks.0.attn.qkv_proj.lora_B.weight": torch.ones(12, rank),
+        }
+        self.assertFalse(fasth3.is_fastvideo_h3_lora_state_dict(native))
+        self.assertEqual(
+            fasth3.convert_fastvideo_h3_lora_to_native(native).keys(),
+            native.keys(),
+        )
+
     def test_runtime_and_ui_advertise_the_managed_choice(self):
         launch = _LAUNCH.read_text(encoding="utf-8")
         toggle = _TOGGLE.read_text(encoding="utf-8")
