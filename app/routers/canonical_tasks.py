@@ -116,7 +116,7 @@ def create_canonical_tasks_router(
             event_exclude_fields={"detail"} if volatile_detail else None,
             kind=str(raw.get("kind") or "foreground"),
             workflow="frontend",
-            title=str(raw.get("title") or "Maestro activity"),
+            title=str(raw.get("title") or "HocusPocus activity"),
             status=status,
             phase=str(raw.get("phase") or status),
             message=str(raw.get("error") or raw.get("message") or "Working…"),

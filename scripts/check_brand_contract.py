@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard visible Loreframe Lab branding without renaming legacy contracts."""
+"""Guard visible HocusPocus branding without renaming legacy contracts."""
 
 from __future__ import annotations
 
@@ -28,20 +28,20 @@ def main() -> int:
 
     required = {
         ROOT / "pinokio.js": (
-            'title: "Loreframe Lab · Experimental"',
-            "non-commercial fork of Maestro",
+            'title: "HocusPocus · Creation Lab"',
+            "forked from Maestro",
         ),
         ROOT / "ui" / "index.html": (
-            "<title>Loreframe Lab · Experimental</title>",
-            "Loreframe Lab UI failed to load",
+            "<title>HocusPocus · Creation Lab</title>",
+            "HocusPocus UI failed to load",
         ),
         ROOT / "app" / "_launch_runtime.py": (
-            'FastAPI(title="Loreframe Lab API"',
-            "Loreframe Lab UI:",
-            "[Loreframe Lab] React UI serving",
+            'FastAPI(title="HocusPocus Lab API"',
+            "HocusPocus Lab UI:",
+            "[HocusPocus Lab] React UI serving",
         ),
         ROOT / "README.md": (
-            "# Loreframe Lab",
+            "# HocusPocus · Creation Lab",
             "Blizaine/Maestro",
         ),
     }
@@ -55,6 +55,8 @@ def main() -> int:
         ROOT / "update.js": (
             "Maestro has uncommitted changes",
             "Already up to date. Maestro",
+            "Loreframe Lab has uncommitted changes",
+            "Already up to date. Loreframe Lab",
         ),
         ROOT / "app" / "_launch_runtime.py": (
             'FastAPI(title="Maestro API"',

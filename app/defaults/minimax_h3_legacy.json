@@ -2,7 +2,7 @@
     "model": {
         "name": "H3 Legacy Quality — ConvRot",
         "architecture": "minimax_h3_legacy",
-        "description": "Exact high-quality route recovered from the previous Maestro: isolated ComfyUI runtime, pruned INT8 ConvRot FL2VA transformer and matching Qwen3-VL 32B INT8 ConvRot encoder. Fixed at 20 steps with Turbo, cache and LoRAs disabled. Creates text or first/last-frame video with synchronized stereo audio.",
+        "description": "Exact high-quality legacy route preserved in HocusPocus: isolated ComfyUI runtime, pruned INT8 ConvRot FL2VA transformer and matching Qwen3-VL 32B INT8 ConvRot encoder. Fixed at 20 steps with Turbo, cache and LoRAs disabled. Creates text or first/last-frame video with synchronized stereo audio.",
         "minimax_h3_legacy_sidecar": true,
         "URLs": [
             "https://huggingface.co/Abiray/Minimax-H3-nvfp4-INT4-INT8-Convrot/resolve/37da7100b8074d621cd46a8d9c5af704b8651e11/MiniMax_H3_FL2VA_pruned_int8_convrot.safetensors"

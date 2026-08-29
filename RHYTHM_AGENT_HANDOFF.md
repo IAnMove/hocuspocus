@@ -19,7 +19,7 @@ El usuario pidió dos líneas de trabajo relacionadas:
    - pedir que lance trabajos reales en la cola;
    - cancelar o gestionar trabajos con las confirmaciones adecuadas.
 
-El usuario también preguntó si esto necesita un agente CLI. La recomendación acordada es que **el operador cotidiano de Maestro no necesita un CLI**. Debe ser un agente embebido que use el LLM configurado en la aplicación y un catálogo cerrado de herramientas. Un CLI se reservaría para un futuro **Developer Agent** capaz de editar código, con sandbox, permisos y revisión de diffs.
+El usuario también preguntó si esto necesita un agente CLI. La recomendación acordada es que **el operador cotidiano de HocusPocus no necesita un CLI**. Debe ser un agente embebido que use el LLM configurado en la aplicación y un catálogo cerrado de herramientas. Un CLI se reservaría para un futuro **Developer Agent** capaz de editar código, con sandbox, permisos y revisión de diffs.
 
 En el último mensaje, el usuario pidió documentarlo todo porque el contexto se acabará y continuará Grok. También pidió expresamente **no perder tiempo esperando a que terminen tests ahora**. Por tanto, este documento se crea sin volver a ejecutar pruebas.
 
@@ -45,7 +45,7 @@ En esta sesión se resolvió:
   url: "{{input.event[1]}}"
   ```
 
-La tarea actual es código de la aplicación, no trabajo de launcher. No tocar `start.js`, `pinokio.js`, `install.js`, `reset.js` ni `update.js` salvo petición expresa y nueva ejecución completa del procedimiento obligatorio.
+La tarea principal es código de la aplicación. `update.js` sí recibió después dos cambios de texto visibles, expresamente dentro del rebrand; se resolvió de nuevo el destino y se contrastó la estructura con `/home/ina/pinokio/prototype/system/examples/comfy/update.js`. No se cambió ninguna API ni paso del launcher. No tocar `start.js`, `pinokio.js`, `install.js` o `reset.js` sin repetir el procedimiento obligatorio.
 
 Antes de diagnosticar cualquier fallo nuevo, mirar primero `logs/`, especialmente los archivos `latest`, como exige `AGENTS.md`.
 
@@ -247,7 +247,7 @@ Estado de Git observado antes de crear este handoff:
 ?? ui/tests/sceneRhythm.test.mjs
 ```
 
-Este archivo aparecerá además como untracked hasta que el usuario o el siguiente agente decida incluirlo en un commit. No hacer commit ni push salvo petición explícita.
+Este handoff quedó incluido en el commit de ritmo. El usuario pidió después crear commits de las mejoras del mago; no incluir en ellos los tres documentos locales sin seguimiento que se enumeran arriba.
 
 ## 7. Cómo probar manualmente la función de ritmo
 
@@ -439,7 +439,7 @@ respuesta + acciones tipadas
   ↓
 Action bus del cliente
   ├─ navegación y prefill → Zustand/useStore
-  ├─ consultas → APIs de Maestro
+  ├─ consultas → APIs de HocusPocus
   ├─ trabajos → workflows reales existentes
   └─ seguimiento → cola canónica/SSE
   ↓
@@ -499,7 +499,7 @@ No usarlo para el operador cotidiano porque:
 
 - da permisos innecesarios;
 - complica instalación, autenticación y soporte cross-platform;
-- mezcla operar Maestro con modificar Maestro;
+- mezcla operar HocusPocus con modificar HocusPocus;
 - aumenta el riesgo de prompt injection y cambios de código accidentales.
 
 Sí puede existir más adelante como **Developer Agent**, claramente separado, con:
@@ -513,7 +513,7 @@ Sí puede existir más adelante como **Developer Agent**, claramente separado, c
 
 ### Opción 4 — Servidor MCP de Maestro
 
-Exponer las mismas herramientas como MCP permitiría que agentes externos consulten y operen Maestro. Es una ampliación valiosa, pero no hace falta para el asistente embebido y no sustituye el action bus del cliente.
+Exponer las mismas herramientas como MCP permitiría que agentes externos consulten y operen HocusPocus. Es una ampliación valiosa, pero no hace falta para el asistente embebido y no sustituye el action bus del cliente.
 
 ## 13. Catálogo inicial de herramientas
 
@@ -565,9 +565,9 @@ Automático:
 - proponer un plan;
 - analizar información local no sensible.
 
-Requiere confirmación visible:
+Requiere confirmación visible o una orden inequívoca del usuario:
 
-- iniciar una generación con coste o mucho tiempo;
+- iniciar una generación normal se puede ejecutar directamente cuando la frase es imperativa y explícita; si es ambigua o supera umbrales de coste/tiempo, se confirma;
 - lanzar Director/Series completos;
 - resolución/duración por encima de umbrales configurables;
 - cancelar una tarea;
@@ -588,7 +588,7 @@ Reglas:
 
 ## 15. Conocimiento de la aplicación
 
-Para explicar cómo funciona Maestro no conviene enviar todo el repositorio al LLM en cada turno.
+Para explicar cómo funciona HocusPocus no conviene enviar todo el repositorio al LLM en cada turno.
 
 Crear un `FeatureRegistry` estructurado con:
 
@@ -605,7 +605,7 @@ Después añadir recuperación de fragmentos de `docs/` si hace falta. Empezar c
 
 ## 16. Orden recomendado de implementación del mago
 
-### Corte 1 — Cascarón visual y lectura
+### Corte 1 — Cascarón visual y lectura — completado
 
 - `ui/src/features/agent/AgentAssistantPanel.tsx`
 - `ui/src/features/agent/agentSession.ts`
@@ -614,7 +614,7 @@ Después añadir recuperación de fragmentos de `docs/` si hace falta. Empezar c
 - historial ligero por workspace;
 - preguntas generales mediante `generateLlmText`;
 - contexto real de `fetchCanonicalTasks`;
-- todavía sin mutaciones.
+- inicialmente sin mutaciones; esta limitación ya fue sustituida por el Corte 2/3 mínimo descrito abajo.
 
 Aceptación:
 
@@ -622,13 +622,13 @@ Aceptación:
 - “¿Qué está haciendo ahora?” incluye fase, progreso y subtarea.
 - “¿Cómo creo un vídeo 3D?” explica el flujo correcto.
 
-### Corte 2 — Action bus de navegación/prefill
+### Corte 2 — Action bus de navegación/prefill — primer alcance completado
 
-Crear:
+Implementado en:
 
-- `ui/src/features/agent/actions.ts`
-- `ui/src/features/agent/dispatch.ts`
-- `ui/src/features/agent/systemPrompt.ts`
+- `ui/src/features/agent/agentActions.ts` (tipos, esquema, parser, snapshot y dispatch);
+- `ui/src/features/agent/agentKnowledge.ts` (system prompt, mapa y contexto);
+- `ui/src/features/agent/AgentAssistantPanel.tsx` (turno, ejecución y resultados visibles).
 
 Las acciones llaman al store existente. No usar `document.querySelector` ni eventos de clic artificiales.
 
@@ -638,12 +638,12 @@ Aceptación:
 - “Ponme un ejemplo de vídeo H3 rápido” abre Studio/Video, selecciona modelo compatible y rellena los campos sin generar.
 - Cada acción aparece como un paso visible en el chat.
 
-### Corte 3 — Mutaciones con confirmación
+### Corte 3 — Mutaciones — generación de vídeo mínima completada
 
-- `start_generation` pasa por `useStore.startGeneration()` o el workflow real equivalente;
+- `start_generation` pasa por `useStore.startGeneration()`;
 - el trabajo aparece en el footer porque el backend crea la tarea canónica;
 - el agente espera por el stream existente;
-- confirmación previa y botón Stop.
+- una orden explícita de generar funciona como autorización para el trabajo normal; siguen pendientes confirmación reforzada, idempotencia y botón Stop para acciones caras/destructivas.
 
 Aceptación:
 
@@ -702,13 +702,13 @@ El mago debe:
 1. Leer `AGENTS.md` completo y rehacer el checklist obligatorio.
 2. Revisar `logs/*/latest` antes de diagnosticar.
 3. Revisar el diff actual y no tocar los tres documentos locales del usuario.
-4. Abrir manualmente 3D Video y validar el flujo de ritmo si el usuario autoriza pruebas; ahora pidió no esperar con tests.
+4. Abrir manualmente 3D Video y validar el flujo de ritmo si el usuario autoriza pruebas; no repetir suites largas.
 5. No rehacer `sceneRhythm.ts`: la base ya existe y tiene pruebas.
 6. Si se continúa con ritmo, empezar por persistencia del `RhythmMap` y marcadores de timeline.
-7. Si se continúa con el mago, empezar por el **Corte 1** del apartado 16.
+7. Si se continúa con el mago, ampliar el bus actual: imágenes/audio/3D, cancelación confirmada, seguimiento del job y acciones de ritmo/Director.
 8. Reutilizar `ActivityFooter`, `generateLlmText`, `fetchCanonicalTasks` y el store existente.
 9. No introducir un agente CLI en el flujo cotidiano.
-10. Mantener mutaciones desactivadas hasta tener action schemas, confirmaciones e idempotencia.
+10. Mantener las mutaciones fuera de la allowlist desactivadas. La generación de vídeo ya usa schema cerrado y sólo arranca tras `prepare_video` en el mismo turno; añadir idempotencia antes de ampliar operaciones.
 11. Antes de finalizar, ejecutar el checklist de salida de `AGENTS.md` y documentar cualquier prueba que sí se haya ejecutado.
 
 ## 19. Decisiones que no deben perderse
@@ -740,7 +740,7 @@ añaden, o deben conservar si todavía no se han confirmado:
 - `ui/src/features/agent/agentKnowledge.ts`
   - mapa resumido de la aplicación;
   - saneado de la cola canónica;
-  - system prompt honesto de modo solo lectura;
+  - system prompt inicial de modo solo lectura, sustituido después por el contrato operativo del apartado 21;
   - constructor del contexto conversacional.
 - `ui/src/features/agent/AgentAssistantPanel.tsx`
   - panel anclado sobre el footer;
@@ -756,7 +756,61 @@ añaden, o deben conservar si todavía no se han confirmado:
   - halo, motas, respiración, estado de pensamiento y entrada del panel;
   - fallback completo para `prefers-reduced-motion`.
 
-Este primer corte es deliberadamente de consulta. No debe afirmar que navega o
-ejecuta acciones. El siguiente corte es `actions.ts` + `dispatch.ts` para
-navegación y prefill visibles; después vendrán trabajos mutantes con
-confirmación.
+Ese primer corte dejó de ser sólo consulta. La continuación actual añade
+acciones tipadas, navegación, prefill completo de vídeo y envío explícito a la
+cola real. La app añade el resultado verdadero de cada acción al mensaje; el
+LLM no puede afirmar por sí solo que algo terminó bien.
+
+## 21. Estado actual del mago operativo (2026-08-29)
+
+Implementación añadida después de los commits `79f567b` y `c7343c0`:
+
+- `ui/src/features/agent/agentActions.ts`
+  - allowlist de 17 destinos de navegación;
+  - esquema JSON estricto para `open_tab`, `prepare_video` y `start_generation`;
+  - parser que trata la salida del LLM como no confiable, limita campos y un máximo de seis acciones;
+  - impide `start_generation` si no hubo `prepare_video` antes en el mismo turno;
+  - snapshot acotado del formulario actual y modelos T2V disponibles;
+  - selección de un modelo T2V instalado/habilitado;
+  - preparación visible de Studio → Video;
+  - propiedades soportadas: prompt, modelo, duración, preset/resolución, aspect ratio, negative prompt, seed, inference steps, guidance, output count, dirección de audio H3 y Turbo;
+  - envío por `useStore.startGeneration()`, por lo que utiliza la cola y el ciclo de descarga/VRAM existentes;
+  - comprobación de que apareció un job nuevo y propagación del error real si el submit falla.
+- `ui/src/features/agent/agentKnowledge.ts`
+  - eliminadas las instrucciones de sólo lectura;
+  - el mago habla con una personalidad mágica breve pero mantiene exactitud técnica;
+  - sólo genera ante verbos de acción explícitos;
+  - devuelve JSON estructurado y no declara éxito antes de que el cliente ejecute.
+- `ui/src/features/agent/AgentAssistantPanel.tsx`
+  - historial actualizado a `hocuspocus-agent-chat-v2` para no rehidratar el saludo antiguo de sólo lectura;
+  - mensajes de trabajo HocusPocus, sin el texto visible “Maestro”;
+  - estado visual `acting`, pasos y resultados reales `✦/⚠`;
+  - sugerencias rápidas de navegación y preparación.
+- `ui/src/index.css`
+  - animación breve de conjuro para el estado `acting`, incluida en el fallback existente de reduced motion.
+
+Branding visible corregido además en el fallback de tareas, la descripción de H3
+Legacy y los mensajes de Update. `scripts/check_brand_contract.py` vuelve a
+validar HocusPocus y conserva deliberadamente contratos internos como
+`maestro-video-editor-draft-v1`, `.maestro-tasks-v1.sqlite3` y `MAESTRO_EVENT`.
+Las referencias a Maestro como proyecto upstream/crédito también se conservan.
+
+`README.md` raíz se dejó expresamente **intacto** por la última indicación del
+usuario.
+
+Verificación corta realizada, sin lanzar ninguna generación ni suite larga:
+
+- `python scripts/check_brand_contract.py`: PASS;
+- `npm run build` dentro de `ui/`: TypeScript + Vite PASS;
+- bundle servido por el runtime: `index-BABGOZiQ.js` y `index-DKdWp3hG.css`;
+- `git diff --check`: limpio.
+
+Siguientes ampliaciones recomendadas, en orden:
+
+1. Añadir tests puros del parser/dispatch e idempotency keys.
+2. Generalizar `prepare_video` a recetas tipadas de imagen, audio y 3D.
+3. Añadir `cancel_task`/`resume_task` con confirmación visible y selección inequívoca.
+4. Mostrar el job canónico creado y permitir que el mago siga su progreso.
+5. Conectar `analyze_audio` + `apply_beat_motion` para operar el flujo de ritmo ya implementado en 3D Video.
+6. Llevar el bucle al backend si se necesita persistencia cuando el panel/pestaña se cierra.
+7. Mantener un futuro CLI como **Developer Agent** separado, con sandbox, permisos, aprobación y diff; no usarlo para navegación/formularios/cola normal.
