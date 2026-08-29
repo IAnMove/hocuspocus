@@ -549,16 +549,18 @@ export function ActivityFooter() {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => { setAgentOpen(open => !open); setDetailsOpen(false) }}
-        className={`hp-agent-trigger flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 transition ${agentOpen ? 'border-amber-200/45 bg-amber-200/10 text-amber-50' : 'border-amber-200/15 text-amber-100/75 hover:border-amber-200/35 hover:text-amber-50'}`}
-        aria-expanded={agentOpen}
-        title="Ask HocusPocus about the app or current task queue"
-      >
-        <AgentAvatar state={agentOpen ? 'listening' : 'idle'} size={24} />
-        <span className="hidden font-medium sm:inline">Ask HocusPocus</span>
-      </button>
+      <div className="flex h-full w-44 shrink-0 items-center border-r border-amber-200/15 pr-3">
+        <button
+          type="button"
+          onClick={() => { setAgentOpen(open => !open); setDetailsOpen(false) }}
+          className={`hp-agent-trigger flex w-full items-center gap-2 rounded-lg border px-2 py-0.5 text-left transition ${agentOpen ? 'border-amber-200/45 bg-amber-200/10 text-amber-50' : 'border-amber-200/15 bg-amber-100/[.025] text-amber-100/75 hover:border-amber-200/35 hover:bg-amber-100/[.055] hover:text-amber-50'}`}
+          aria-expanded={agentOpen}
+          title="Ask to the Wizard about the app or current task queue"
+        >
+          <AgentAvatar state={agentOpen ? 'listening' : 'idle'} size={24} />
+          <span className="font-medium whitespace-nowrap">Ask to the Wizard</span>
+        </button>
+      </div>
 
       <button type="button" onClick={() => { setDetailsOpen(open => !open); setAgentOpen(false) }} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title="Show canonical task history">
         {isActive

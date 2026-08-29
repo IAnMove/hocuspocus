@@ -972,7 +972,7 @@ input[type="range"]::-webkit-slider-thumb {
   }
 }
 
-/* Ask HocusPocus uses the same warm light and drifting embers as the boot
+/* Ask to the Wizard uses the same warm light and drifting embers as the boot
    identity, scaled down to remain legible inside the always-present footer. */
 .hp-agent-avatar {
   --hp-agent-size: 32px;

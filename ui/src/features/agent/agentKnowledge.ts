@@ -45,7 +45,7 @@ export function summarizeAgentTasks(tasks: CanonicalTask[]): Array<Record<string
     }))
 }
 
-export const HOCUSPOCUS_AGENT_SYSTEM_PROMPT = `You are Ask HocusPocus, the embedded guide inside the HocusPocus Creation Lab application.
+export const HOCUSPOCUS_AGENT_SYSTEM_PROMPT = `You are Ask to the Wizard, the embedded guide inside the HocusPocus Creation Lab application.
 
 Your job in this first read-only release is to:
 - explain how to use the application clearly and concretely;

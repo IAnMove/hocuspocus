@@ -11,7 +11,7 @@ Destinatario principal de este handoff: Grok o el siguiente agente que continúe
 El usuario pidió dos líneas de trabajo relacionadas:
 
 1. Mejorar la generación de animaciones y comenzar a conectar el ritmo de una canción MP3 con las animaciones de **3D Video**. El ejemplo explícito fue que un objeto o personaje “se asome” cada vez que hay un beat.
-2. Añadir en la esquina izquierda del footer, junto al histórico/visor de actividad, un acceso con el logo de HocusPocus y un texto como **Ask HocusPocus**. Este acceso debe abrir una ventana con un mago animado al que se pueda:
+2. Añadir en la esquina izquierda del footer, junto al histórico/visor de actividad, un acceso con el logo de HocusPocus y el texto **Ask to the Wizard**. Este acceso debe abrir una ventana con un mago animado al que se pueda:
    - preguntar cómo funciona cualquier parte de la aplicación;
    - consultar qué hay en cola y qué se está haciendo;
    - pedir que abra la pestaña apropiada;
@@ -384,12 +384,12 @@ Por tanto, el mago debe reutilizar esa fuente. No crear una segunda cola, no int
 Colocación propuesta:
 
 ```text
-[ icono animado · Ask HocusPocus ] [ Activity · N ] [ estado actual ] [ controles ]
+[ icono animado · Ask to the Wizard ] [ Activity · N ] [ estado actual ] [ controles ]
 ```
 
 Al pulsar se abre un popover/drawer anclado sobre el footer, por ejemplo 360–420 px de ancho y 480–560 px de alto, con botón para expandir a un panel mayor.
 
-Nombre recomendado: **Ask HocusPocus**. Alternativas: **Ask the Wizard**, **Mago**, **HocusPocus Agent**. Mantener el nombre en una constante para poder cambiarlo sin buscar strings por toda la app.
+Nombre elegido por el usuario: **Ask to the Wizard**. Mantener el nombre en una constante para poder cambiarlo sin buscar strings por toda la app.
 
 ## 10. Estética y animación del mago
 
@@ -750,7 +750,7 @@ añaden, o deben conservar si todavía no se han confirmado:
   - snapshot real de las tareas que ya mantiene `ActivityFooter`;
   - sugerencias rápidas y mensajes de error de configuración.
 - `ui/src/components/ActivityFooter.tsx`
-  - botón **Ask HocusPocus** antes de Activity;
+- franja reservada **Ask to the Wizard** antes de Activity, dentro del flujo flex normal para desplazar el contenido existente hacia la derecha;
   - exclusión mutua entre el panel del agente y el histórico de Activity.
 - `ui/src/index.css`
   - halo, motas, respiración, estado de pensamiento y entrada del panel;
