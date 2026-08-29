@@ -971,3 +971,94 @@ input[type="range"]::-webkit-slider-thumb {
     filter: none;
   }
 }
+
+/* Ask HocusPocus uses the same warm light and drifting embers as the boot
+   identity, scaled down to remain legible inside the always-present footer. */
+.hp-agent-avatar {
+  --hp-agent-size: 32px;
+  position: relative;
+  display: inline-grid;
+  width: var(--hp-agent-size);
+  height: var(--hp-agent-size);
+  flex: 0 0 var(--hp-agent-size);
+  place-items: center;
+  isolation: isolate;
+}
+.hp-agent-avatar img {
+  position: relative;
+  z-index: 2;
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.32));
+  animation: hp-agent-float 4.8s ease-in-out infinite;
+}
+.hp-agent-halo {
+  position: absolute;
+  inset: 7%;
+  z-index: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.24), rgba(124, 58, 237, 0.08) 52%, transparent 72%);
+  animation: hp-agent-halo 3.8s ease-in-out infinite;
+}
+.hp-agent-mote {
+  position: absolute;
+  z-index: 3;
+  width: 2px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(254, 215, 170, 0.95);
+  box-shadow: 0 0 5px rgba(251, 191, 36, 0.8);
+  opacity: 0;
+}
+.hp-agent-mote-a { left: 9%; top: 58%; animation: hp-agent-spark 3.4s 0s ease-out infinite; }
+.hp-agent-mote-b { right: 5%; top: 45%; animation: hp-agent-spark 4.1s 1.2s ease-out infinite; }
+.hp-agent-mote-c { left: 55%; top: 5%; animation: hp-agent-spark 3.7s 2.1s ease-out infinite; }
+.hp-agent-avatar[data-state='thinking'] img { animation: hp-agent-think 1.15s ease-in-out infinite; }
+.hp-agent-avatar[data-state='thinking'] .hp-agent-halo { animation: hp-agent-halo-thinking 1.15s ease-in-out infinite; }
+.hp-agent-avatar[data-state='listening'] img { transform: rotate(-4deg) translateY(-1px); }
+.hp-agent-avatar[data-state='success'] .hp-agent-halo { background: radial-gradient(circle, rgba(110, 231, 183, 0.38), rgba(251, 191, 36, 0.12) 55%, transparent 74%); }
+.hp-agent-avatar[data-state='error'] .hp-agent-halo { background: radial-gradient(circle, rgba(248, 113, 113, 0.34), rgba(124, 58, 237, 0.08) 55%, transparent 74%); }
+.hp-agent-trigger:hover .hp-agent-avatar img { filter: drop-shadow(0 0 10px rgba(253, 230, 138, 0.55)); }
+.hp-agent-panel { transform-origin: bottom left; animation: hp-agent-panel-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.hp-agent-panel-glow {
+  position: absolute;
+  inset: -80% -20% auto -25%;
+  height: 180px;
+  background: radial-gradient(ellipse, rgba(245, 158, 11, 0.18), rgba(124, 58, 237, 0.08) 45%, transparent 70%);
+  pointer-events: none;
+}
+@keyframes hp-agent-float {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-2px) rotate(1deg); }
+}
+@keyframes hp-agent-halo {
+  0%, 100% { opacity: 0.68; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+@keyframes hp-agent-halo-thinking {
+  0%, 100% { opacity: 0.7; transform: scale(0.9) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.14) rotate(10deg); }
+}
+@keyframes hp-agent-think {
+  0%, 100% { transform: translateY(1px) rotate(-3deg); }
+  50% { transform: translateY(-3px) rotate(3deg); }
+}
+@keyframes hp-agent-spark {
+  0%, 55% { opacity: 0; transform: translate3d(0, 2px, 0) scale(0.5); }
+  68% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate3d(4px, -10px, 0) scale(1); }
+}
+@keyframes hp-agent-panel-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hp-agent-avatar img,
+  .hp-agent-halo,
+  .hp-agent-mote,
+  .hp-agent-panel {
+    animation: none !important;
+  }
+  .hp-agent-avatar[data-state='listening'] img { transform: none; }
+}

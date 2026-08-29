@@ -725,3 +725,38 @@ El mago debe:
 - No usar CLI para el asistente de usuario.
 - Un futuro Developer Agent debe estar separado y tener permisos explícitos.
 - La estética importa: mago con personalidad y estados, pero sin sacrificar accesibilidad ni claridad.
+
+## 20. Continuación iniciada después del handoff
+
+El bloque de ritmo y este handoff se guardaron en el commit:
+
+```text
+3ac6f5d feat: sync 3d scene animation to music beats
+```
+
+Después comenzó el **Corte 1** del mago. Los cambios posteriores a ese commit
+añaden, o deben conservar si todavía no se han confirmado:
+
+- `ui/src/features/agent/agentKnowledge.ts`
+  - mapa resumido de la aplicación;
+  - saneado de la cola canónica;
+  - system prompt honesto de modo solo lectura;
+  - constructor del contexto conversacional.
+- `ui/src/features/agent/AgentAssistantPanel.tsx`
+  - panel anclado sobre el footer;
+  - avatar con estados `idle`, `listening`, `thinking`, `success` y `error`;
+  - historial por workspace en `localStorage`;
+  - preguntas al LLM configurado mediante `generateLlmText`;
+  - snapshot real de las tareas que ya mantiene `ActivityFooter`;
+  - sugerencias rápidas y mensajes de error de configuración.
+- `ui/src/components/ActivityFooter.tsx`
+  - botón **Ask HocusPocus** antes de Activity;
+  - exclusión mutua entre el panel del agente y el histórico de Activity.
+- `ui/src/index.css`
+  - halo, motas, respiración, estado de pensamiento y entrada del panel;
+  - fallback completo para `prefers-reduced-motion`.
+
+Este primer corte es deliberadamente de consulta. No debe afirmar que navega o
+ejecuta acciones. El siguiente corte es `actions.ts` + `dispatch.ts` para
+navegación y prefill visibles; después vendrán trabajos mutantes con
+confirmación.

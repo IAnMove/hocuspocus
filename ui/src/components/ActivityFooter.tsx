@@ -5,6 +5,7 @@ import type { CanonicalTask } from '../api/client'
 import { applyCanonicalTaskEvent, canResumeCanonicalTask, canonicalTaskVisualState, reconcileCanonicalTaskSnapshot } from '../lib/canonicalTaskEvents'
 import { formatAppAction, formatAppTimestamp } from '../lib/locale'
 import { useStore } from '../stores/useStore'
+import { AgentAssistantPanel, AgentAvatar } from '../features/agent/AgentAssistantPanel'
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const CONNECTED_RECONCILE_MS = 60_000
@@ -192,6 +193,7 @@ export function ActivityFooter() {
   const [tasks, setTasks] = useState<CanonicalTask[]>([])
   const tasksRef = useRef<CanonicalTask[]>([])
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [agentOpen, setAgentOpen] = useState(false)
   const [clock, setClock] = useState(Date.now())
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
   const [controlFailures, setControlFailures] = useState<Record<string, TaskControlFailure>>({})
@@ -401,6 +403,14 @@ export function ActivityFooter() {
 
   return (
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
+      {agentOpen && (
+        <AgentAssistantPanel
+          key={activeWorkspace}
+          workspace={activeWorkspace}
+          tasks={tasks}
+          onClose={() => setAgentOpen(false)}
+        />
+      )}
       {detailsOpen && roots.length > 0 && (
         <div className="absolute bottom-full left-3 mb-2 w-[min(48rem,calc(100vw-1.5rem))] max-h-80 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
           <div className="mb-1.5 flex items-center justify-between px-1">
@@ -539,7 +549,18 @@ export function ActivityFooter() {
         </div>
       )}
 
-      <button type="button" onClick={() => setDetailsOpen(open => !open)} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title="Show canonical task history">
+      <button
+        type="button"
+        onClick={() => { setAgentOpen(open => !open); setDetailsOpen(false) }}
+        className={`hp-agent-trigger flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 transition ${agentOpen ? 'border-amber-200/45 bg-amber-200/10 text-amber-50' : 'border-amber-200/15 text-amber-100/75 hover:border-amber-200/35 hover:text-amber-50'}`}
+        aria-expanded={agentOpen}
+        title="Ask HocusPocus about the app or current task queue"
+      >
+        <AgentAvatar state={agentOpen ? 'listening' : 'idle'} size={24} />
+        <span className="hidden font-medium sm:inline">Ask HocusPocus</span>
+      </button>
+
+      <button type="button" onClick={() => { setDetailsOpen(open => !open); setAgentOpen(false) }} className="flex items-center gap-1.5 shrink-0" aria-expanded={detailsOpen} title="Show canonical task history">
         {isActive
           ? <Loader2 size={13} className="animate-spin text-accent-blue" />
           : hasError
