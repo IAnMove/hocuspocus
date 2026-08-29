@@ -48,6 +48,7 @@ import type {
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
 import { ACE_STEP_MUSIC_MODEL, isAceStepMusicModel, normalizeStoryMusicModel, songWriteTarget } from './musicModel'
+import { listenForAgentStorySection } from '../agent/agentUiBus'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
@@ -942,6 +943,7 @@ export function StoryLabPanel() {
   const [tab, setTab] = useState<StoryTab>(() => (
     readDirectorClipReplacementResult() ? 'assembly' : 'overview'
   ))
+  useEffect(() => listenForAgentStorySection(setTab), [])
   const [busy, setBusy] = useState<StoryGenerationScope | null>(null)
   const [imageBusy, setImageBusy] = useState('')
   const [referenceBatchBusy, setReferenceBatchBusy] = useState(false)

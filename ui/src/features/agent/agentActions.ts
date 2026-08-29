@@ -1,5 +1,6 @@
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
 import type { AspectRatio, MediaFilter, ModelDef, ResolutionPreset } from '../../types'
+import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
 
 export const AGENT_TABS = [
   'studio',
@@ -49,7 +50,83 @@ export interface AgentStartGenerationAction {
   type: 'start_generation'
 }
 
-export type AgentAction = AgentOpenTabAction | AgentPrepareVideoAction | AgentStartGenerationAction
+export interface AgentOpenStorySectionAction {
+  type: 'open_story_section'
+  section: AgentStorySection
+}
+
+export interface AgentOpenSeriesSectionAction {
+  type: 'open_series_section'
+  section: AgentSeriesSection
+}
+
+export interface AgentCreativeCharacter {
+  name: string
+  role: string
+  personality: string
+  desire: string
+  flaw: string
+  appearance: string
+  voice: string
+}
+
+export interface AgentCreativeLocation {
+  name: string
+  purpose: string
+  description: string
+}
+
+export interface AgentCreateStoryAction {
+  type: 'create_story'
+  title: string
+  projectType: 'full_story' | 'music_video' | 'trailer' | 'quick_video'
+  creativeBrief: string
+  premise: string
+  logline: string
+  synopsis: string
+  theme: string
+  ending: string
+  genre: string
+  tone: string
+  visualStyle: string
+  worldSummary: string
+  language: string
+  characters: AgentCreativeCharacter[]
+  locations: AgentCreativeLocation[]
+  outlineBeats: string[]
+  durationSeconds?: number
+}
+
+export interface AgentCreateSeriesEpisodeAction {
+  type: 'create_series_episode'
+  seriesTitle: string
+  seriesPremise: string
+  seriesLogline: string
+  episodeTitle: string
+  episodePremise: string
+  episodeLogline: string
+  genre: string
+  tone: string
+  visualStyle: string
+  worldSummary: string
+  theme: string
+  ending: string
+  language: string
+  characters: AgentCreativeCharacter[]
+  locations: AgentCreativeLocation[]
+  outlineBeats: string[]
+  targetDurationSeconds?: number
+  createIfMissing: boolean
+  knownUniverse: boolean
+}
+
+export type AgentAction = AgentOpenTabAction
+  | AgentOpenStorySectionAction
+  | AgentOpenSeriesSectionAction
+  | AgentPrepareVideoAction
+  | AgentStartGenerationAction
+  | AgentCreateStoryAction
+  | AgentCreateSeriesEpisodeAction
 
 export interface AgentTurn {
   reply: string
@@ -87,6 +164,15 @@ export interface AgentAppSnapshot {
 const TAB_SET = new Set<string>(AGENT_TABS)
 const RESOLUTION_PRESETS = new Set<ResolutionPreset>(['auto', '480p', '540p', '720p', '768p', '1080p'])
 const ASPECT_RATIOS = new Set<AspectRatio>(['auto', '21:9', '16:9', '9:16', '1:1', '4:3', '3:4'])
+const STORY_PROJECT_TYPES = new Set<AgentCreateStoryAction['projectType']>([
+  'full_story', 'music_video', 'trailer', 'quick_video',
+])
+const STORY_SECTIONS = new Set<AgentStorySection>([
+  'overview', 'world', 'characters', 'relationships', 'structure', 'productions',
+])
+const SERIES_SECTIONS = new Set<AgentSeriesSection>([
+  'setup', 'canon', 'episode', 'shots', 'review',
+])
 const MAX_ACTIONS = 6
 
 const cleanString = (value: unknown, maxLength: number): string => (
@@ -115,6 +201,47 @@ const optionalPositiveNumber = (
     : undefined
 )
 
+const stringArray = (value: unknown, maxItems: number, maxLength: number): string[] => (
+  Array.isArray(value)
+    ? value.slice(0, maxItems).flatMap(item => {
+      const text = cleanString(item, maxLength)
+      return text ? [text] : []
+    })
+    : []
+)
+
+const creativeCharacters = (value: unknown): AgentCreativeCharacter[] => (
+  Array.isArray(value) ? value.slice(0, 16).flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = item as Record<string, unknown>
+    const name = cleanString(raw.name, 160)
+    if (!name) return []
+    return [{
+      name,
+      role: cleanString(raw.role, 300),
+      personality: cleanString(raw.personality, 1_000),
+      desire: cleanString(raw.desire, 1_000),
+      flaw: cleanString(raw.flaw, 1_000),
+      appearance: cleanString(raw.appearance, 1_000),
+      voice: cleanString(raw.voice, 1_000),
+    }]
+  }) : []
+)
+
+const creativeLocations = (value: unknown): AgentCreativeLocation[] => (
+  Array.isArray(value) ? value.slice(0, 16).flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = item as Record<string, unknown>
+    const name = cleanString(raw.name, 160)
+    if (!name) return []
+    return [{
+      name,
+      purpose: cleanString(raw.purpose, 1_000),
+      description: cleanString(raw.description, 1_500),
+    }]
+  }) : []
+)
+
 const extractJsonObject = (raw: string): Record<string, unknown> | null => {
   const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   const start = trimmed.indexOf('{')
@@ -136,6 +263,14 @@ function parseAction(value: unknown): AgentAction | null {
   if (raw.type === 'open_tab') {
     const tab = cleanString(raw.tab, 40)
     return TAB_SET.has(tab) ? { type: 'open_tab', tab: tab as AgentTab } : null
+  }
+  if (raw.type === 'open_story_section') {
+    const section = cleanString(raw.story_section, 40) as AgentStorySection
+    return STORY_SECTIONS.has(section) ? { type: 'open_story_section', section } : null
+  }
+  if (raw.type === 'open_series_section') {
+    const section = cleanString(raw.series_section, 40) as AgentSeriesSection
+    return SERIES_SECTIONS.has(section) ? { type: 'open_series_section', section } : null
   }
   if (raw.type === 'prepare_video') {
     const prompt = cleanString(raw.prompt, 8_000)
@@ -164,6 +299,59 @@ function parseAction(value: unknown): AgentAction | null {
     }
   }
   if (raw.type === 'start_generation') return { type: 'start_generation' }
+  if (raw.type === 'create_story') {
+    const title = cleanString(raw.title, 300)
+    const premise = cleanString(raw.premise, 2_000)
+    if (!title || !premise) return null
+    const projectType = cleanString(raw.project_type, 30) as AgentCreateStoryAction['projectType']
+    return {
+      type: 'create_story',
+      title,
+      projectType: STORY_PROJECT_TYPES.has(projectType) ? projectType : 'full_story',
+      creativeBrief: cleanString(raw.creative_brief, 4_000),
+      premise,
+      logline: cleanString(raw.logline, 2_000),
+      synopsis: cleanString(raw.synopsis, 6_000),
+      theme: cleanString(raw.theme, 1_000),
+      ending: cleanString(raw.ending, 2_000),
+      genre: cleanString(raw.genre, 300),
+      tone: cleanString(raw.tone, 500),
+      visualStyle: cleanString(raw.visual_style, 2_000),
+      worldSummary: cleanString(raw.world_summary, 3_000),
+      language: cleanString(raw.language, 120),
+      characters: creativeCharacters(raw.characters),
+      locations: creativeLocations(raw.locations),
+      outlineBeats: stringArray(raw.outline_beats, 24, 1_500),
+      durationSeconds: optionalPositiveNumber(raw.target_duration_seconds, 15, 3_600, true),
+    }
+  }
+  if (raw.type === 'create_series_episode') {
+    const seriesTitle = cleanString(raw.series_title, 300)
+    const episodePremise = cleanString(raw.episode_premise, 3_000)
+    if (!seriesTitle || !episodePremise) return null
+    return {
+      type: 'create_series_episode',
+      seriesTitle,
+      seriesPremise: cleanString(raw.series_premise, 3_000),
+      seriesLogline: cleanString(raw.series_logline, 2_000),
+      episodeTitle: cleanString(raw.episode_title, 300),
+      episodePremise,
+      episodeLogline: cleanString(raw.episode_logline, 2_000),
+      genre: cleanString(raw.genre, 300),
+      tone: cleanString(raw.tone, 500),
+      visualStyle: cleanString(raw.visual_style, 2_000),
+      worldSummary: cleanString(raw.world_summary, 3_000),
+      theme: cleanString(raw.theme, 1_000),
+      ending: cleanString(raw.ending, 2_000),
+      language: cleanString(raw.language, 120),
+      characters: creativeCharacters(raw.characters),
+      locations: creativeLocations(raw.locations),
+      outlineBeats: stringArray(raw.outline_beats, 24, 1_500),
+      targetDurationSeconds: optionalPositiveNumber(raw.target_duration_seconds, 15, 3_600, true),
+      createIfMissing: raw.create_if_missing === true,
+      knownUniverse: raw.known_universe === true,
+    }
+  }
   return null
 }
 
@@ -257,8 +445,10 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'prepare_video', 'start_generation'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'start_generation', 'create_story', 'create_series_episode'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
+          story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
+          series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
           prompt: { type: 'string', maxLength: 8_000 },
           model_type: { type: 'string', maxLength: 160 },
           duration_seconds: { type: 'number', minimum: 0, maximum: 300 },
@@ -272,12 +462,69 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           output_count: { type: 'integer', minimum: 0, maximum: 8 },
           audio_direction: { type: 'string', maxLength: 1_000 },
           turbo: { type: 'string', enum: ['keep', 'on', 'off'] },
+          title: { type: 'string', maxLength: 300 },
+          project_type: { type: 'string', enum: ['', 'full_story', 'music_video', 'trailer', 'quick_video'] },
+          creative_brief: { type: 'string', maxLength: 4_000 },
+          premise: { type: 'string', maxLength: 2_000 },
+          logline: { type: 'string', maxLength: 2_000 },
+          synopsis: { type: 'string', maxLength: 6_000 },
+          theme: { type: 'string', maxLength: 1_000 },
+          ending: { type: 'string', maxLength: 2_000 },
+          genre: { type: 'string', maxLength: 300 },
+          tone: { type: 'string', maxLength: 500 },
+          visual_style: { type: 'string', maxLength: 2_000 },
+          world_summary: { type: 'string', maxLength: 3_000 },
+          language: { type: 'string', maxLength: 120 },
+          series_title: { type: 'string', maxLength: 300 },
+          series_premise: { type: 'string', maxLength: 3_000 },
+          series_logline: { type: 'string', maxLength: 2_000 },
+          episode_title: { type: 'string', maxLength: 300 },
+          episode_premise: { type: 'string', maxLength: 3_000 },
+          episode_logline: { type: 'string', maxLength: 2_000 },
+          target_duration_seconds: { type: 'number', minimum: 0, maximum: 3_600 },
+          create_if_missing: { type: 'boolean' },
+          known_universe: { type: 'boolean' },
+          characters: {
+            type: 'array', maxItems: 16,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                name: { type: 'string', maxLength: 160 },
+                role: { type: 'string', maxLength: 300 },
+                personality: { type: 'string', maxLength: 1_000 },
+                desire: { type: 'string', maxLength: 1_000 },
+                flaw: { type: 'string', maxLength: 1_000 },
+                appearance: { type: 'string', maxLength: 1_000 },
+                voice: { type: 'string', maxLength: 1_000 },
+              },
+              required: ['name', 'role', 'personality', 'desire', 'flaw', 'appearance', 'voice'],
+            },
+          },
+          locations: {
+            type: 'array', maxItems: 16,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                name: { type: 'string', maxLength: 160 },
+                purpose: { type: 'string', maxLength: 1_000 },
+                description: { type: 'string', maxLength: 1_500 },
+              },
+              required: ['name', 'purpose', 'description'],
+            },
+          },
+          outline_beats: { type: 'array', maxItems: 24, items: { type: 'string', maxLength: 1_500 } },
         },
         required: [
-          'type', 'tab', 'prompt', 'model_type', 'duration_seconds',
+          'type', 'tab', 'story_section', 'series_section', 'prompt', 'model_type', 'duration_seconds',
           'resolution_preset', 'resolution', 'aspect_ratio', 'negative_prompt',
           'seed', 'inference_steps', 'guidance_scale', 'output_count',
           'audio_direction', 'turbo',
+          'title', 'project_type', 'creative_brief', 'premise', 'logline',
+          'synopsis', 'theme', 'ending', 'genre', 'tone', 'visual_style',
+          'world_summary', 'language', 'series_title', 'series_premise',
+          'series_logline', 'episode_title', 'episode_premise',
+          'episode_logline', 'target_duration_seconds', 'create_if_missing',
+          'known_universe', 'characters', 'locations', 'outline_beats',
         ],
       },
     },
@@ -491,20 +738,44 @@ export async function executeAgentActions(
   for (const action of actions) {
     const working = action.type === 'open_tab'
       ? `Abriendo ${TAB_LABELS[action.tab]}…`
+      : action.type === 'open_story_section'
+        ? `Abriendo Story Lab → ${action.section}…`
+        : action.type === 'open_series_section'
+          ? `Abriendo Series Lab → ${action.section}…`
       : action.type === 'prepare_video'
         ? 'Trazando el hechizo de vídeo en Studio…'
-        : 'Enviando el vídeo a la cola…'
+        : action.type === 'start_generation'
+          ? 'Enviando el vídeo a la cola…'
+          : action.type === 'create_story'
+            ? 'Escribiendo y guardando la nueva historia…'
+            : 'Preparando la serie y el nuevo episodio…'
     onStep?.(working)
     try {
       if (action.type === 'open_tab') {
         results.push({ action, ok: true, message: openTab(action.tab) })
+      } else if (action.type === 'open_story_section') {
+        openTab('story_lab')
+        const { openAgentStorySection } = await import('./agentUiBus')
+        openAgentStorySection(action.section)
+        results.push({ action, ok: true, message: `He abierto Story Lab → ${action.section}.` })
+      } else if (action.type === 'open_series_section') {
+        openTab('series_lab')
+        const { openAgentSeriesSection } = await import('./agentUiBus')
+        openAgentSeriesSection(action.section)
+        results.push({ action, ok: true, message: `He abierto Series Lab → ${action.section}.` })
       } else if (action.type === 'prepare_video') {
         const message = await prepareVideo(action)
         preparedVideo = true
         results.push({ action, ok: true, message })
-      } else {
+      } else if (action.type === 'start_generation') {
         if (!preparedVideo) throw new Error('El vídeo no se preparó en este turno; no lo he lanzado.')
         results.push({ action, ok: true, message: await startPreparedGeneration() })
+      } else if (action.type === 'create_story') {
+        const { createFilledStory } = await import('./labActions')
+        results.push({ action, ok: true, message: await createFilledStory(action) })
+      } else {
+        const { createFilledSeriesEpisode } = await import('./labActions')
+        results.push({ action, ok: true, message: await createFilledSeriesEpisode(action) })
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

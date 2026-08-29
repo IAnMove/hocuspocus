@@ -2954,10 +2954,12 @@ export async function createSeriesEpisode(
   workspace: string,
   seriesId: string,
   seasonId?: string,
+  episode?: Partial<Pick<import('../features/series/types').SeriesEpisode,
+    'title' | 'premise' | 'logline' | 'targetDurationSeconds' | 'status' | 'outline'>>,
 ): Promise<import('../features/series/types').SeriesEpisode> {
   return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace, seasonId }),
+    body: JSON.stringify({ workspace, seasonId, episode }),
   }), 'Could not create Series episode')
 }
 

@@ -846,3 +846,119 @@ La verificación de este arreglo no debe lanzar una generación real: basta con
 lint, build y el contrato de marca. La prueba manual posterior debe usar una
 petición explícita y comprobar que el resultado del chat incluye tanto la
 preparación como el identificador real de la tarea creada en la cola.
+
+El arreglo anterior quedó guardado en:
+
+```text
+776130f fix: make wizard navigation and commands visible
+```
+
+## 23. Catálogo de capacidades y Story/Series operables (2026-08-30)
+
+El siguiente fallo observado fue una petición explícita de crear un capítulo de
+una serie conocida. El LLM inventó un argumento útil en el chat y abrió Story
+Lab, pero no rellenó nada. Los logs confirmaron dos llamadas LLM correctas y
+ninguna mutación de Series Lab después de ellas. La causa no era el modelo: el
+Wizard sólo disponía de `open_tab`, `prepare_video` y `start_generation`.
+
+### Fuente de conocimiento única
+
+Se añade `ui/src/features/agent/agentCapabilities.ts` como catálogo canónico de
+funciones ya implementadas. Cada descriptor contiene:
+
+- identificador estable;
+- propósito;
+- cuándo debe utilizarse;
+- riesgo (`read`, `edit` o `compute`);
+- parámetros principales.
+
+`agentKnowledge.ts` genera desde ese catálogo el bloque de capacidades que
+recibe el LLM. Al implementar otra herramienta hay que registrarla allí; no se
+debe enseñar sólo mediante prosa aislada en el prompt. El catálogo contiene por
+ahora:
+
+1. `open_tab`
+2. `prepare_video`
+3. `open_story_section`
+4. `open_series_section`
+5. `start_generation`
+6. `create_story`
+7. `create_series_episode`
+
+### Proceso común de cualquier acción
+
+```text
+petición → intención estructurada → parser/validación → resolución de IDs reales
+→ preflight/permisos → executor API/store → verificación → resultado y navegación
+```
+
+El LLM nunca recibe permiso para escribir directamente en Zustand, manipular el
+DOM o inventar IDs/revisiones. Las acciones compuestas resuelven esos detalles
+con APIs reales.
+
+### Navegación interna
+
+`ui/src/features/agent/agentUiBus.ts` permite abrir subpestañas que antes eran
+estado local privado de React:
+
+- Story Lab: Overview, World, Characters, Relationships, Structure y
+  Productions.
+- Series Lab: Setup, Canon, Episode room, Shots y Review.
+
+El bus conserva el último destino solicitado en memoria, por lo que también
+funciona si el panel lazy todavía no se había montado cuando terminó la acción.
+
+### `create_story`
+
+La acción crea y guarda un proyecto Story Lab completo y editable con:
+
+- título, tipo, brief, premisa, logline, sinopsis, tema y final;
+- género, tono, idioma y estilo visual;
+- mundo y localizaciones;
+- personajes y una relación inicial cuando hay más de uno;
+- al menos tres beats causales;
+- selección visible de Story Lab → Overview.
+
+El guardado usa la revisión CAS de la biblioteca. Una repetición exacta abre la
+historia existente en vez de duplicarla.
+
+### `create_series_episode`
+
+La acción compuesta:
+
+1. busca una serie por título normalizado;
+2. reutiliza la existente o crea una nueva cuando `create_if_missing=true`;
+3. rellena sólo el setup/canon que falte;
+4. para una orden explícita de crear el capítulo, aprueba el canon mínimo que
+   Series Lab exige (el resultado lo comunica de forma visible);
+5. crea el episodio mediante el endpoint real, con título, premisa, logline,
+   duración y outline;
+6. recarga el store, selecciona los IDs devueltos por backend y abre Series Lab
+   → Episode room;
+7. evita duplicar un episodio con el mismo título y premisa.
+
+Un universo conocido se marca `known_universe_experimental` y guarda una nota
+de derechos; el Wizard nunca afirma que el usuario tenga derecho de publicación
+o monetización. Crear el borrador no renderiza tomas ni consume generación de
+vídeo.
+
+### Inventario pendiente para “controlar toda la app”
+
+El mismo catálogo debe crecer por familias, no mediante un CLI con shell libre:
+
+- navegación: selección interna de Director, Settings, outputs, workspaces,
+  stories, series, episodios, escenas y capas;
+- Studio: `prepare_generation` común para imagen/vídeo/audio/3D, modelos,
+  presets, LoRAs y referencias;
+- Story: patch, generación de secciones, aplicación de propuestas, aprobación,
+  imágenes y staging de producciones;
+- Series: bootstrap conocido, plan completo, aplicación, shots, render,
+  revisión y assembly;
+- 3D/rhythm: cargar escena, seleccionar capa, adjuntar audio, analizar beat map,
+  aplicar perfil y guardar/capturar;
+- cola: inspeccionar, cancelar, reanudar y reintentar con confirmación adecuada;
+- workspace: seleccionar y crear; borrado siempre con confirmación reforzada.
+
+Un CLI sólo queda recomendado para un **Developer Agent** separado que edite
+código o ejecute tareas de sistema. La operación cotidiana de HocusPocus debe
+seguir usando este registro cerrado de herramientas y las APIs/stores reales.

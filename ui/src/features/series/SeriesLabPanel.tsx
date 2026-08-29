@@ -11,6 +11,7 @@ import { SeriesReviewPanel } from './SeriesReviewPanel'
 import { Pill } from './components'
 import { primaryButton, secondaryButton } from './styles'
 import type { SeriesJobStatus } from './types'
+import { listenForAgentSeriesSection } from '../agent/agentUiBus'
 
 type LabTab = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
 const tabs: Array<{ id: LabTab; label: string }> = [
@@ -29,6 +30,7 @@ export function SeriesLabPanel() {
     deleteSeries, importStory, createEpisode, deleteEpisode, refreshRecovery,
   } = useSeriesStore()
   const [tab, setTab] = useState<LabTab>('setup')
+  useEffect(() => listenForAgentSeriesSection(setTab), [])
   const [storyOptions, setStoryOptions] = useState<Array<{ id: string; title: string }>>([])
   const [storyId, setStoryId] = useState('')
   const [importOpen, setImportOpen] = useState(false)
