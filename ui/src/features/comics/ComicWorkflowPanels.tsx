@@ -221,7 +221,7 @@ export function ComicWritingProviderFields({
           value={value.writingProvider || 'maestro'}
           onChange={event => selectProvider(event.target.value as ComicDirectorRequest['writingProvider'])}
         >
-          <option value="maestro">Loreframe Lab internal · default</option>
+          <option value="maestro">HocusPocus internal · default</option>
           <option value="deepseek">DeepSeek · only this comic</option>
           <option value="minimax">MiniMax · only this comic</option>
           <option value="openai">OpenAI · only this comic</option>
@@ -263,7 +263,7 @@ export function ComicWritingProviderFields({
         </p>
       </>}
       </fieldset>
-      {!external && <p className="text-[9px] text-text-muted">Uses Loreframe Lab&apos;s configured internal LLM. External selection never changes the global provider.</p>}
+      {!external && <p className="text-[9px] text-text-muted">Uses HocusPocus&apos;s configured internal LLM. External selection never changes the global provider.</p>}
     </div>
   )
 }
@@ -658,6 +658,8 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
   const [videoTab, setVideoTab] = useState<'settings' | 'shots'>('settings')
   const [busy, setBusy] = useState<'animatic' | 'movie' | 'preflight' | null>(null)
   const [progress, setProgress] = useState('')
+  const pipelinePollRef = useRef(0)
+  useEffect(() => () => { pipelinePollRef.current += 1 }, [])
   const [result, setResult] = useState<{ name: string; url: string } | null>(null)
   const [preflightPipelineId, setPreflightPipelineId] = useState<string | null>(null)
   const [preflightStatus, setPreflightStatus] = useState<api.PipelineStatus | null>(null)
@@ -1014,6 +1016,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
     }
     let activityFailed = false
     let activityCancelled = false
+    const pollGeneration = ++pipelinePollRef.current
     setBusy('animatic')
     setResult(null)
     reportAnimaticActivity('Preparing comic animatic…')
@@ -1065,20 +1068,23 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         panels,
       })
       for (;;) {
+        if (pollGeneration !== pipelinePollRef.current) return
         await new Promise(resolve => window.setTimeout(resolve, 1000))
+        if (pollGeneration !== pipelinePollRef.current) return
         const job = await api.fetchVideoEditorExport(started.job_id)
+        if (pollGeneration !== pipelinePollRef.current) return
         reportAnimaticActivity(
           `${job.message} · ${job.progress}%`,
           'rendering_animatic',
           job.progress,
           100,
         )
-        if (job.status === 'cancelled') {
+        if (job.status === 'cancelled' || String(job.status) === 'interrupted') {
           activityCancelled = true
           notify('ok', 'Animatic rendering cancelled.')
           break
         }
-        if (job.status === 'failed') throw new Error(job.error || job.message)
+        if (job.status === 'failed' || String(job.status) === 'crashed') throw new Error(job.error || job.message)
         if (job.status === 'completed' && job.url && job.filename) {
           const completed = { name: job.filename, url: job.url }
           setResult(completed)
@@ -1169,6 +1175,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       })
     }
     let activityFailed = false
+    const pollGeneration = ++pipelinePollRef.current
     setBusy(preflightOnly ? 'preflight' : 'movie')
     setResult(null)
     reportActivity('Preparing comic video…')
@@ -1447,8 +1454,11 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       if (preflightOnly) {
         setPreflightPipelineId(pipeline_id)
         for (;;) {
+          if (pollGeneration !== pipelinePollRef.current) return
           await new Promise(resolve => window.setTimeout(resolve, 900))
+          if (pollGeneration !== pipelinePollRef.current) return
           const status = await api.fetchPipelineStatus(pipeline_id)
+          if (pollGeneration !== pipelinePollRef.current) return
           setPreflightStatus(status)
           reportActivity(
             status.progress?.message || 'Preparing comic video PRE…',
@@ -1472,7 +1482,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             }))
             break
           }
-          if (status.status === 'failed' || status.status === 'cancelled') {
+          if (['failed', 'cancelled', 'interrupted', 'crashed'].includes(String(status.status))) {
             throw new Error(status.error || 'Comic video PRE stopped.')
           }
         }
@@ -1573,7 +1583,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         </span>
         <span className="mt-1 block text-[9px] text-text-muted">
           {effectiveVideoModel.includes('ltx2')
-            ? 'LTX Distilled uses Loreframe Lab’s validated two-stage 8+3 recipe.'
+            ? 'LTX Distilled uses HocusPocus’s validated two-stage 8+3 recipe.'
             : effectiveVideoModel.includes('minimax')
               ? 'MiniMax is the actual generative engine; “model-driven I2V” below describes a shot method, not a different model.'
               : 'The selected engine is frozen into PRE and shown again before generation.'}
@@ -2581,7 +2591,7 @@ export function ComicVideoPreflightPanel({
       <div className="mx-auto max-w-2xl rounded-xl border border-dashed border-border bg-bg-secondary/60 p-8 text-center">
         <Eye size={28} className="mx-auto text-text-muted" />
         <h2 className="mt-3 text-base font-semibold text-text-primary">No prepared film PRE</h2>
-        <p className="mt-1 text-xs text-text-muted">Open Video → Configuration/Adaptation, prepare a PRE, and Loreframe Lab will open it here without covering the comic canvas.</p>
+        <p className="mt-1 text-xs text-text-muted">Open Video → Configuration/Adaptation, prepare a PRE, and HocusPocus will open it here without covering the comic canvas.</p>
       </div>
     )
   }

@@ -1,0 +1,17 @@
+[
+  {"series": "The Office", "who": "Michael Scott, traje barato, oficina beige, encuadre vertical a cámara", "joke": "Un jefe no cuenta chistes. Un jefe cuenta evaluaciones."},
+  {"series": "Friends", "who": "Joey Tribbiani, cuero, Central Perk, encuadre vertical", "joke": "¿Cómo se llama un sándwich triste? Joey sin pavo."},
+  {"series": "Breaking Bad", "who": "Walter White, calvo, gafas, desierto, plano vertical", "joke": "La química es fácil. Lo difícil es no reírse del propio plan."},
+  {"series": "Stranger Things", "who": "Dustin, gorra, luces de navidad, plano vertical de noche", "joke": "Si parpadean las luces, o es el Demogorgon o se ha ido la luz."},
+  {"series": "Juego de Tronos", "who": "Tyrion Lannister, copa de vino, antorchas, plano vertical", "joke": "Un Lannister siempre paga sus deudas. Los chistes, a plazos."},
+  {"series": "Los Simpson", "who": "Homer Simpson, dibujo 2D amarillo, sofá, plano vertical", "joke": "Tengo una dieta. Se llama desconocer la nevera."},
+  {"series": "Seinfeld", "who": "Jerry Seinfeld, chaqueta, micro, escenario, plano vertical", "joke": "Los vecinos no hacen ruido. El ruido es el hobby del edificio."},
+  {"series": "Sherlock", "who": "Sherlock Holmes, abrigo, niebla, Baker Street, plano vertical", "joke": "He deducido el punchline. No merece un segundo plano."},
+  {"series": "The Mandalorian", "who": "Mandaloriano con casco, desierto, capa, plano vertical", "joke": "No me quito el casco. El chiste tampoco se destapa."},
+  {"series": "Dark", "who": "Jonas Kahnwald, anorak amarillo, bosque lluvioso, plano vertical", "joke": "Si no te ha gustado, ya te gustó en 1986."},
+  {"series": "The Big Bang Theory", "who": "Sheldon Cooper, camiseta a rayas, sofá, plano vertical", "joke": "El knock-knock es ineficiente. Tres golpes bastan. Bazinga."},
+  {"series": "Better Call Saul", "who": "Saul Goodman, traje a rayas, oficina, plano vertical", "joke": "Objetamos el silencio. Mi cliente quiere reír, no pensar."},
+  {"series": "House", "who": "Gregory House, bastón, bata, pasillo de hospital, plano vertical", "joke": "No es lupus. Es el chiste. Casi peor."},
+  {"series": "The Witcher", "who": "Geralt de Rivia, pelo blanco, posada medieval, plano vertical", "joke": "Un monstruo, dos caminos. El chiste era el peaje."},
+  {"series": "Black Mirror", "who": "Presentador de telediario distópico, pantallas, plano vertical", "joke": "Has visto el chiste. El chiste también te ha visto a ti."}
+]

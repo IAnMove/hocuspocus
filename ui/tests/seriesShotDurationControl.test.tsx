@@ -87,3 +87,72 @@ test('editing dialogue recalculates and displays the authoritative requested cli
     globalThis.fetch = originalFetch
   }
 })
+
+test('a failed duration preview does not freeze the signature', async () => {
+  const { render, screen, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
+  const { SeriesShotDurationControl } = await import('../src/features/series/SeriesShotDurationControl.tsx')
+  const originalFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    calls += 1
+    const body = JSON.parse(String(init?.body || '{}'))
+    if (calls === 1) {
+      return new Response(JSON.stringify({ detail: 'preview failed' }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    return new Response(JSON.stringify({
+      ...body.shot,
+      durationSeconds: 8,
+      dialogueDuration: {
+        model: 'minimax_h3', durationMode: 'frame_lattice', wordCount: 3,
+        syllableCount: 3, secondsPerSyllable: 0.22, segmentCount: 1,
+        spokenSeconds: 0.66, estimatedVoiceSeconds: 1,
+        requestedClipSeconds: 8, minimumLimited: false, requiresSplit: false,
+        modelMinimumSeconds: 5.167, modelMaximumSeconds: 14.375,
+        fps: 24, calculatedFrames: 192, effectiveFrames: 192, frameLattice: '17n+5',
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }) as typeof fetch
+
+  const initial = {
+    id: 'shot-1', sceneId: 'scene-1', order: 1, durationSeconds: 5.167,
+    framing: 'medium', camera: 'locked', action: 'Talks', prompt: 'Talks', negativePrompt: '',
+    dialogueBeats: [{ id: 'line-1', characterId: 'char-1', text: 'Hola', emotion: '', delivery: '' }],
+    visibleCharacterIds: ['char-1'], speakingCharacterIds: ['char-1'],
+    wardrobeByCharacterId: {}, propIds: [], emotionalStateByCharacterId: {},
+    renderStrategy: 'direct' as const,
+    referencePolicy: { mode: 'automatic' as const, manualIncludeAssetIds: [], manualExcludeAssetIds: [] },
+    attempts: [],
+  }
+  const series = {
+    id: 'series-1', spokenLanguage: 'Español de España', language: 'Español',
+    provider: { videoModel: 'minimax_h3' },
+  }
+
+  function Harness() {
+    const [shot, setShot] = useState(initial)
+    return <>
+      <textarea aria-label="Dialogue" value={shot.dialogueBeats[0].text} onChange={event => setShot(current => ({
+        ...current,
+        dialogueBeats: [{ ...current.dialogueBeats[0], text: event.target.value }],
+      }))} />
+      <SeriesShotDurationControl workspace="default" series={series} shot={shot} onChange={setShot} />
+    </>
+  }
+
+  try {
+    render(<Harness />)
+    await waitFor(() => assert.match(screen.getByText(/Could not calculate|preview failed|failed/i).textContent || '', /./), { timeout: 2000 }).catch(() => undefined)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Dialogue' }), {
+      target: { value: 'Hola otra vez' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Dialogue' }), {
+      target: { value: 'Hola' },
+    })
+    await waitFor(() => assert.ok(calls >= 2), { timeout: 2000 })
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+  }
+})

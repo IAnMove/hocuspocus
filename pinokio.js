@@ -1,9 +1,9 @@
 const path = require('path')
 module.exports = {
   version: "8.0",
-  title: "Loreframe Lab · Experimental",
-  description: "Experimental, non-commercial fork of Maestro for local story-world production, comic-to-video workflows, recoverable Director pipelines and optimized MiniMax H3 generation. Also includes image, music and 3D tools. Requires an NVIDIA GPU (6GB+ VRAM).",
-  icon: "loreframe-logo.png",
+  title: "HocusPocus · Creation Lab",
+  description: "A local creation studio, forked from Maestro, for directing persistent worlds across video, images, sound, comics and 3D. Includes recoverable Director pipelines and optimized MiniMax H3 generation. Requires an NVIDIA GPU (6GB+ VRAM).",
+  icon: "hocuspocus-icon.png",
   menu: async (kernel, info) => {
     // Do not gate this menu on kernel.gpu. Pinokio can render an app menu
     // before its hardware inventory has populated that property, which would

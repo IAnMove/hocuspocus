@@ -123,3 +123,47 @@ test('failed Activity action keeps its task, exposes Retry, and clears after suc
     })
   }
 })
+
+test('clearing Activity history only hides terminal rows locally', { concurrency: false }, async () => {
+  const { render, screen, waitFor, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ActivityFooter } = await import('../src/components/ActivityFooter.tsx')
+  const originalFetch = globalThis.fetch
+  const originalEventSource = globalThis.EventSource
+  window.localStorage.clear()
+  let taskFetches = 0
+
+  Object.defineProperty(globalThis, 'EventSource', {
+    configurable: true,
+    value: QuietEventSource,
+  })
+  globalThis.fetch = async input => {
+    const url = String(input)
+    if (url.includes('/api/v1/tasks?')) {
+      taskFetches += 1
+      return new Response(JSON.stringify({
+        workspace: 'default',
+        tasks: [task('failed')],
+        latest_event_id: 10,
+      }), { headers: { 'content-type': 'application/json' } })
+    }
+    throw new Error(`Unexpected request: ${url}`)
+  }
+
+  try {
+    render(<ActivityFooter />)
+    await waitFor(() => assert.equal(screen.getByText('Provider stopped').textContent, 'Provider stopped'))
+    fireEvent.click(screen.getByRole('button', { name: /Activity/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear activity history' }))
+    await waitFor(() => assert.equal(screen.queryByText('Retryable render'), null))
+    assert.equal(taskFetches, 1)
+    assert.deepEqual(JSON.parse(window.localStorage.getItem('maestro-activity-hidden-v1:default') || '[]'), [task('failed').id])
+  } finally {
+    cleanup()
+    window.localStorage.clear()
+    globalThis.fetch = originalFetch
+    Object.defineProperty(globalThis, 'EventSource', {
+      configurable: true,
+      value: originalEventSource,
+    })
+  }
+})

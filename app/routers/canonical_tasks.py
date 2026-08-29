@@ -20,6 +20,24 @@ from services.task_identity import canonical_client_task_identity
 from services.task_manager import ACTIVE_STATUSES, ALL_STATUSES, bounded_task_preview
 
 
+def _client_task_number(value: object, default: int = 0) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _client_task_timestamp(value: object, default: float | None = None) -> float:
+    fallback = time.time() if default is None else default
+    try:
+        raw = float(value or 0)
+    except (TypeError, ValueError, OverflowError):
+        return fallback
+    if raw > 1e12:
+        return raw / 1000
+    return raw or fallback
+
+
 TaskRegistryResolver = Callable[[str], Any]
 
 
@@ -103,15 +121,11 @@ def create_canonical_tasks_router(
             phase=str(raw.get("phase") or status),
             message=str(raw.get("error") or raw.get("message") or "Working…"),
             detail=detail,
-            current=int(raw.get("current") or 0),
-            total=int(raw.get("total") or 0),
-            detail_current=int(raw.get("detailCurrent") or 0),
-            detail_total=int(raw.get("detailTotal") or 0),
-            created_at=(
-                float(raw.get("startedAt")) / 1000
-                if float(raw.get("startedAt") or 0) > 1e12
-                else float(raw.get("startedAt") or time.time())
-            ),
+            current=_client_task_number(raw.get("current")),
+            total=_client_task_number(raw.get("total")),
+            detail_current=_client_task_number(raw.get("detailCurrent")),
+            detail_total=_client_task_number(raw.get("detailTotal")),
+            created_at=_client_task_timestamp(raw.get("startedAt")),
             cancelable=False,
             error=(
                 {"message": str(raw.get("error")), "retryable": False}

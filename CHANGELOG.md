@@ -1,9 +1,15 @@
-# Maestro Changelog
+# HocusPocus Changelog
 
-All notable changes to Maestro are documented here. The upstream WanGP
-pipeline's own history lives in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
+Product version comes from the repo-root `VERSION` file. Historical Maestro
+releases below 0.9.0 are the upstream lineage. WanGP pipeline history lives
+in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
+
+## [0.9.0] - 2026-08-24
+
+First HocusPocus preview. Product versioning is independent of the Maestro
+lineage. The UI reads this number from `VERSION` via `/api/v1/system-config`.
 
 ## [1.6.5] - 2026-08-08
 

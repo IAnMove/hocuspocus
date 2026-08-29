@@ -48,7 +48,7 @@ export function SeriesShotDurationControl({
       return
     }
     if (lastCalculatedSignature.current === signature) return
-    lastCalculatedSignature.current = signature
+    const previousSignature = lastCalculatedSignature.current
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
       setCalculating(true)
@@ -56,15 +56,20 @@ export function SeriesShotDurationControl({
       void api.previewSeriesShotDuration(
         workspace, series.id, shotRef.current, controller.signal,
       ).then(planned => {
-        if (!controller.signal.aborted) onChangeRef.current(planned)
+        if (controller.signal.aborted) return
+        lastCalculatedSignature.current = signature
+        onChangeRef.current(planned)
       }).catch(reason => {
-        if (!controller.signal.aborted) setError((reason as Error).message)
+        if (controller.signal.aborted) return
+        lastCalculatedSignature.current = previousSignature
+        setError((reason as Error).message)
       }).finally(() => {
         if (!controller.signal.aborted) setCalculating(false)
       })
     }, 250)
     return () => {
       window.clearTimeout(timer)
+      lastCalculatedSignature.current = previousSignature
       controller.abort()
     }
   }, [hasDialogue, series.id, signature, workspace])

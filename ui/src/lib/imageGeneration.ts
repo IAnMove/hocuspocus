@@ -132,10 +132,10 @@ async function runLocalImage(
 ): Promise<ComicAsset> {
   const maestro = useStore.getState()
   const selected = modelType || maestro.selectedModelPerMode.image || maestro.params.model_type
-  if (!selected) throw new Error('Select an image model in Loreframe Lab first')
+  if (!selected) throw new Error('Select an image model in HocusPocus first')
   const model = maestro.models.find(item => item.model_type === selected)
   if (model && getModelMode(model.model_type, model.family) !== 'image') {
-    throw new Error(`"${selected}" is a video model. Select a Loreframe Lab image model or MiniMax`)
+    throw new Error(`"${selected}" is a video model. Select a HocusPocus image model or MiniMax`)
   }
   const imageParams = maestro.savedParamsPerMode.image || {}
   const referenceParams: Record<string, unknown> = {}
@@ -148,8 +148,8 @@ async function runLocalImage(
       if (options.strictReference) {
         throw new Error(
           options.referenceMode === 'edit'
-            ? 'This Loreframe Lab model cannot edit a source image. Choose Qwen Image Edit or another reference-capable image editor.'
-            : 'This Loreframe Lab model does not support identity references. Choose a reference-capable local model or MiniMax Image.',
+            ? 'This HocusPocus model cannot edit a source image. Choose Qwen Image Edit or another reference-capable image editor.'
+            : 'This HocusPocus model does not support identity references. Choose a reference-capable local model or MiniMax Image.',
         )
       }
     } else {
@@ -218,7 +218,7 @@ async function runLocalImage(
     }
   }
   const jobId = validIdentityValue(identity.jobId)
-  if (!jobId) throw new Error('Loreframe Lab did not return an image job ID')
+  if (!jobId) throw new Error('HocusPocus did not return an image job ID')
   if (!options.existingJobId) options.onJobSubmitted?.(jobId)
   let consecutivePollFailures = 0
   for (;;) {
@@ -236,7 +236,7 @@ async function runLocalImage(
       consecutivePollFailures += 1
       options.onPollRetry?.(consecutivePollFailures, (error as Error).message)
       if (consecutivePollFailures >= 20) {
-        throw new Error(`Could not reconnect to Loreframe Lab job ${jobId}; the job ID was preserved`)
+        throw new Error(`Could not reconnect to HocusPocus job ${jobId}; the job ID was preserved`)
       }
       continue
     }

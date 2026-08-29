@@ -1,10 +1,10 @@
-# Loreframe Lab UI
+# HocusPocus UI
 
 This directory contains the React 19, TypeScript, Tailwind CSS and Zustand
-frontend for Loreframe Lab. It is built into `ui/dist` and served by the
+frontend for HocusPocus. It is built into `ui/dist` and served by the
 FastAPI application; it is not a separate production service.
 
-Loreframe Lab is an experimental, non-commercial fork of
+HocusPocus is an experimental, non-commercial fork of
 [Blizaine/Maestro](https://github.com/Blizaine/Maestro), which in turn builds
 on [Wan2GP](https://github.com/deepbeepmeep/Wan2GP). See the
 [project README](../README.md) and [license summary](../LICENSE) before using
@@ -14,7 +14,7 @@ or redistributing it.
 
 - Node.js 20, matching CI.
 - npm and the committed `package-lock.json`.
-- For live API calls, a Loreframe Lab backend running at
+- For live API calls, a HocusPocus backend running at
   `http://127.0.0.1:7860` (the Vite development proxy target).
 
 The normal Pinokio **Install**, **Start** and **Update** actions manage these

@@ -1,0 +1,17 @@
+[
+  {"series": "Futurama", "who": "Fry, chaqueta roja, Planet Express, encuadre vertical a cámara", "joke": "En el año 3000 el chiste sigue igual. Yo también."},
+  {"series": "Gremlins", "who": "Gizmo, peluche, cocina de noche, plano vertical, no le mojen", "joke": "Tres reglas. El chiste rompe las tres."},
+  {"series": "Alien", "who": "Ellen Ripley, traje de la Nostromo, pasillo oscuro, plano vertical", "joke": "En el espacio nadie oye tu chiste. Menos mal."},
+  {"series": "The X-Files", "who": "Mulder, gabardina, sótano del FBI, plano vertical", "joke": "La verdad está ahí fuera. El punchline, no."},
+  {"series": "Brooklyn Nine-Nine", "who": "Jake Peralta, placa, comisaría, plano vertical", "joke": "Cool cool cool. El chiste no lo es."},
+  {"series": "Rick and Morty", "who": "Rick Sanchez, bata de laboratorio, garaje, plano vertical", "joke": "Wubba lubba. Traducción: este chiste es basura, Morty."},
+  {"series": "The Boys", "who": "Homelander, capa, sonrisa falsa, plano vertical", "joke": "Soy el héroe. El chiste sois vosotros por aplaudir."},
+  {"series": "Succession", "who": "Logan Roy, traje, sala de juntas, plano vertical", "joke": "Tú no eres serio. Esto tampoco."},
+  {"series": "Ted Lasso", "who": "Ted Lasso, bigote, vestuario, plano vertical", "joke": "Sé curioso. Empieza preguntándote por qué reíste."},
+  {"series": "Wednesday", "who": "Wednesday Addams, trenzas, Nevermore, plano vertical", "joke": "Sonreí por dentro. Murió."},
+  {"series": "Cobra Kai", "who": "Johnny Lawrence, chaqueta Cobra Kai, dojo, plano vertical", "joke": "Sweep the leg. El chiste ya estaba en el suelo."},
+  {"series": "The Last of Us", "who": "Joel, barba, ciudad en ruinas, plano vertical", "joke": "Sigue. El punchline no sobrevive el invierno."},
+  {"series": "Arcane", "who": "Jinx, trenzas azules, Zaun, plano vertical", "joke": "¿Un chiste? Boom. Ya está."},
+  {"series": "Peaky Blinders", "who": "Tommy Shelby, gorra, fábrica de Birmingham, plano vertical", "joke": "Por la familia. El chiste paga intereses."},
+  {"series": "True Detective", "who": "Rust Cohle, cerveza, interrogatorio, plano vertical", "joke": "El tiempo es un círculo. Este chiste también."}
+]

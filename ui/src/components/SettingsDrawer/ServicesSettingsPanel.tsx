@@ -123,7 +123,7 @@ function NsfwDisclaimerModal({
           <div className="space-y-2">
             <p><span className="font-medium text-text-primary">1. Age Requirement.</span> You confirm that you are at least 18 years of age (or the age of majority in your jurisdiction, whichever is higher).</p>
 
-            <p><span className="font-medium text-text-primary">2. Legal Responsibility.</span> You are solely responsible for ensuring that all content you generate complies with the laws of your jurisdiction. This includes but is not limited to laws governing obscenity, pornography, intellectual property, privacy, consent, and the depiction of real persons. Loreframe Lab and its developers do not monitor, review, or approve generated content.</p>
+            <p><span className="font-medium text-text-primary">2. Legal Responsibility.</span> You are solely responsible for ensuring that all content you generate complies with the laws of your jurisdiction. This includes but is not limited to laws governing obscenity, pornography, intellectual property, privacy, consent, and the depiction of real persons. HocusPocus and its developers do not monitor, review, or approve generated content.</p>
 
             <p><span className="font-medium text-text-primary">3. Prohibited Content.</span> You agree to NEVER use this software to generate child sexual abuse material (CSAM) or any content depicting minors in sexual or exploitative contexts. This is strictly prohibited regardless of jurisdiction and may constitute a criminal offense.</p>
 
@@ -396,7 +396,7 @@ export function ServicesSettingsPanel() {
                 >
                   <option value="minimax">MiniMax</option>
                   <option value="local">Local</option>
-                  <option value="maestro">Loreframe Lab</option>
+                  <option value="maestro">HocusPocus</option>
                 </select>
                 <input
                   value={productionProfile.image.model}
@@ -423,7 +423,7 @@ export function ServicesSettingsPanel() {
                 >
                   <option value="minimax">MiniMax</option>
                   <option value="local">Local</option>
-                  <option value="maestro">Loreframe Lab</option>
+                  <option value="maestro">HocusPocus</option>
                 </select>
                 <input
                   value={productionProfile.music.model}
@@ -946,7 +946,7 @@ export function ServicesSettingsPanel() {
             </div>
             <div className="text-[10px] text-text-muted mt-0.5">
               Adds a voice-sample dropzone to Studio Video and Director for speaker identity preservation across clips.
-              Loreframe Lab loads the matching ID-LoRA when a reference is supplied. Enabled by default.
+              HocusPocus loads the matching ID-LoRA when a reference is supplied. Enabled by default.
             </div>
           </div>
           <div
@@ -1036,7 +1036,7 @@ export function ServicesSettingsPanel() {
       <div className="space-y-4">
         <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Comic writing providers</h3>
         <p className="text-[10px] text-text-muted">
-          Credentials remain in Loreframe Lab settings and are never embedded in an exported comic.
+          Credentials remain in HocusPocus settings and are never embedded in an exported comic.
         </p>
 
         <ApiKeyField
