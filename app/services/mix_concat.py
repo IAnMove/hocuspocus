@@ -154,7 +154,9 @@ def probe_has_audio(path: str, ffmpeg_bin: str = "ffmpeg") -> bool:
     """True when *path* has at least one audio stream.
 
     Fail open on a flaky probe so a later dialogue clip is not dropped
-    just because ffprobe could not inspect this file.
+    just because ffprobe could not inspect this file. If ffprobe itself
+    is missing, fall back to ffmpeg stderr (``Audio:``) before assuming
+    a stream is present.
     """
     ffprobe_bin = ffmpeg_bin.replace("ffmpeg", "ffprobe")
     try:
