@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Menu, Settings } from 'lucide-react'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { MainContent } from './components/MainContent/MainContent'
@@ -15,6 +15,7 @@ import { WelcomeModal } from './components/WelcomeModal'
 import { QueueRecoveryDialog } from './components/QueueRecoveryDialog'
 import { RecipesOverlay } from './components/Recipes/RecipesOverlay'
 import { BrandIdentity } from './components/BrandIdentity'
+import { HocusPocusIntro } from './components/HocusPocusIntro'
 import { LanAuthGate } from './components/LanAuthGate'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
@@ -33,6 +34,8 @@ export function LazyDirectorOverlay({ open }: { open: boolean }) {
 }
 
 function AppContent() {
+  const [introComplete, setIntroComplete] = useState(false)
+  const completeIntro = useCallback(() => setIntroComplete(true), [])
   const loadModels = useStore(s => s.loadModels)
   const loadOutputs = useStore(s => s.loadOutputs)
   const maybeRefreshGallery = useStore(s => s.maybeRefreshGallery)
@@ -44,7 +47,6 @@ function AppContent() {
   const loadProductionProfile = useStore(s => s.loadProductionProfile)
   const loadLlmStatus = useStore(s => s.loadLlmStatus)
   const loadLlmModels = useStore(s => s.loadLlmModels)
-  const loadPipelineList = useStore(s => s.loadPipelineList)
   const servicesConfig = useStore(s => s.servicesConfig)
   const dashboardOpen = useStore(s => s.dashboardOpen)
   const runtimeIdentity = useStore(s => s.systemStats?.runtime)
@@ -63,10 +65,9 @@ function AppContent() {
     loadProductionProfile()
     loadLlmStatus()
     loadLlmModels()
-    loadPipelineList()
     reconnectJobs()
     reconnectDirectorPipelines()
-  }, [loadModels, loadWorkspaces, loadOutputs, loadSystemConfig, loadServicesConfig, loadProductionProfile, loadLlmStatus, loadLlmModels, loadPipelineList, reconnectJobs, reconnectDirectorPipelines])
+  }, [loadModels, loadWorkspaces, loadOutputs, loadSystemConfig, loadServicesConfig, loadProductionProfile, loadLlmStatus, loadLlmModels, reconnectJobs, reconnectDirectorPipelines])
 
   // Keep the output library live even when a job was submitted by another
   // tab, restored after a browser restart, or its terminal poll was missed.
@@ -113,7 +114,17 @@ function AppContent() {
 
   // Poll LLM status to stay in sync with backend auto-load/unload
   useEffect(() => {
-    const interval = setInterval(loadLlmStatus, 15000)
+    let inFlight = false
+    const tick = async () => {
+      if (document.hidden || inFlight) return
+      inFlight = true
+      try {
+        await loadLlmStatus()
+      } finally {
+        inFlight = false
+      }
+    }
+    const interval = setInterval(() => { void tick() }, 15000)
     return () => clearInterval(interval)
   }, [loadLlmStatus])
 
@@ -194,10 +205,11 @@ function AppContent() {
           downloads in amber so users know the system is recovering
           rather than frozen. */}
       <DownloadStatusBanner />
-      {/* WelcomeModal — one-time first-run orientation (localStorage-gated). */}
-      <WelcomeModal />
+      {/* The startup mark hands over to the existing first-run / updates dialog. */}
+      {introComplete && <WelcomeModal />}
       {/* Explicit choice after an interrupted Pinokio/server session. */}
       <QueueRecoveryDialog />
+      {!introComplete && <HocusPocusIntro onComplete={completeIntro} version={appVersion} />}
     </div>
   )
 }

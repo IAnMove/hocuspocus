@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import {
   AlertTriangle,
   Check,
@@ -277,18 +278,21 @@ export function StyleSheetPanel() {
       .finally(() => setLoading(false))
   }, [loadSources, loadStyles])
 
-  useEffect(() => {
-    if (!importJob || !['queued', 'running', 'cancelling'].includes(importJob.status)) return
-    const timer = window.setInterval(() => {
-      void fetchStyleImport(importJob.jobId).then(async next => {
-        setImportJob(next)
-        if (next.stage === 'previews' || ['completed', 'failed', 'interrupted', 'cancelled'].includes(next.status)) {
-          await Promise.all([loadSources(), loadStyles()])
-        }
-      }).catch(err => setError(err instanceof Error ? err.message : String(err)))
-    }, 1500)
-    return () => window.clearInterval(timer)
-  }, [importJob, loadSources, loadStyles])
+  const importJobId = importJob?.jobId
+  const importJobStatus = importJob?.status
+  useSerializedPoll({
+    enabled: Boolean(importJobId && importJobStatus && ['queued', 'running', 'cancelling'].includes(importJobStatus)),
+    intervalMs: 1500,
+    ownerKey: importJobId,
+    poll: () => fetchStyleImport(importJobId!),
+    onValue: next => {
+      setImportJob(next)
+      if (next.stage === 'previews' || ['completed', 'failed', 'interrupted', 'cancelled'].includes(next.status)) {
+        void Promise.all([loadSources(), loadStyles()])
+      }
+    },
+    onError: err => setError(err instanceof Error ? err.message : String(err)),
+  })
 
   const startImport = async () => {
     setStartingImport(true)

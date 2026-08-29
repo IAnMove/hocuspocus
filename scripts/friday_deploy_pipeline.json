@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-20-22h49m45s_seed879588768_[Estrofa]En el pantano el maestro cierra los ojosel pager parpadea, el cluster ya toseviernes de.wav",
+  "pipeline": {
+    "pipeline_id": "138828b9",
+    "task_id": "task-director-138828b9",
+    "root_task_id": "task-director-138828b9"
+  },
+  "clip_count": 4
+}

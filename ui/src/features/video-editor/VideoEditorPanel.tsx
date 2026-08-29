@@ -131,6 +131,10 @@ function videoEditorExportStorageKey(workspace: string | null | undefined): stri
   return `${VIDEO_EDITOR_EXPORT_KEY}:${encodeURIComponent(workspace || 'default')}`
 }
 
+export function videoEditorDraftStorageKey(workspace: string | null | undefined): string {
+  return `${VIDEO_EDITOR_DRAFT_KEY}:${encodeURIComponent(workspace || 'default')}`
+}
+
 function readVideoEditorExportId(workspace: string | null | undefined): string | null {
   try {
     const value = window.localStorage.getItem(videoEditorExportStorageKey(workspace))
@@ -677,17 +681,17 @@ function wait(ms: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
-function loadEditorDraft(): {
+function parseEditorDraft(raw: string | null): {
   clips: EditorClip[]
   projectName: string
   resolution: ResolutionOption
   fps: number
   warning: string | null
-} {
-  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30, warning: null }
+} | null {
+  if (!raw) return null
   try {
-    const saved = JSON.parse(window.localStorage.getItem(VIDEO_EDITOR_DRAFT_KEY) || 'null')
-    if (!saved || !Array.isArray(saved.clips)) return fallback
+    const saved = JSON.parse(raw)
+    if (!saved || !Array.isArray(saved.clips)) return null
     const resolution = RESOLUTIONS.find(option =>
       option.width === saved.resolution?.width && option.height === saved.resolution?.height,
     ) || RESOLUTIONS[0]
@@ -697,24 +701,52 @@ function loadEditorDraft(): {
     })
     return {
       clips: normalized.clips,
-      projectName: typeof saved.projectName === 'string' ? saved.projectName : fallback.projectName,
+      projectName: typeof saved.projectName === 'string' ? saved.projectName : 'my_video',
       resolution,
       fps: [24, 25, 30, 50, 60].includes(saved.fps) ? saved.fps : 30,
       warning: editorClipRecoveryMessage(normalized),
     }
   } catch {
+    return null
+  }
+}
+
+export function loadEditorDraft(workspace?: string | null): {
+  clips: EditorClip[]
+  projectName: string
+  resolution: ResolutionOption
+  fps: number
+  warning: string | null
+} {
+  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30, warning: null }
+  const namespacedKey = videoEditorDraftStorageKey(workspace)
+  try {
+    const namespaced = parseEditorDraft(window.localStorage.getItem(namespacedKey))
+    if (namespaced) return namespaced
+    const legacyRaw = window.localStorage.getItem(VIDEO_EDITOR_DRAFT_KEY)
+    const legacy = parseEditorDraft(legacyRaw)
+    if (!legacy) return fallback
+    // One-shot migration: the unscoped draft belongs to the workspace that
+    // first opens the editor after this change, not to every workspace.
+    if (legacyRaw) {
+      window.localStorage.setItem(namespacedKey, legacyRaw)
+      window.localStorage.removeItem(VIDEO_EDITOR_DRAFT_KEY)
+    }
+    return legacy
+  } catch {
     return fallback
   }
 }
 
-function persistEditorDraft(
+export function persistEditorDraft(
   clips: EditorClip[],
   projectName: string,
   resolution: ResolutionOption,
   fps: number,
+  workspace?: string | null,
 ): boolean {
   try {
-    window.localStorage.setItem(VIDEO_EDITOR_DRAFT_KEY, JSON.stringify({
+    window.localStorage.setItem(videoEditorDraftStorageKey(workspace), JSON.stringify({
       clips, projectName, resolution, fps, savedAt: new Date().toISOString(),
     }))
     return true
@@ -725,9 +757,10 @@ function persistEditorDraft(
 }
 
 export function VideoEditorPanel() {
-  const [draft] = useState(loadEditorDraft)
   const refreshOutputs = useStore(s => s.refreshOutputs)
   const activeWorkspace = useStore(s => s.activeWorkspace)
+  const [draft] = useState(() => loadEditorDraft(activeWorkspace))
+  const draftWorkspaceRef = useRef(activeWorkspace)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const sequenceRefs = useRef<Array<HTMLVideoElement | null>>([null, null])
@@ -813,8 +846,28 @@ export function VideoEditorPanel() {
   }, [])
 
   useEffect(() => {
+    if (draftWorkspaceRef.current === activeWorkspace) return
+    persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
+    const next = loadEditorDraft(activeWorkspace)
+    draftWorkspaceRef.current = activeWorkspace
+    setClips(next.clips)
+    setProjectName(next.projectName)
+    setResolution(next.resolution)
+    setFps(next.fps)
+    setSelectedId(next.clips[0]?.id || null)
+    setError(next.warning)
+    setPreviewTime(0)
+    setPlaying(false)
+    setSequenceMode(false)
+    // Persist the leaving workspace from the latest in-memory timeline,
+    // then replace state. Clips/name/fps are intentionally read from this
+    // render rather than listed as deps so a local edit cannot retrigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace])
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
-      persistEditorDraft(clips, projectName, resolution, fps)
+      persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
     }, 600)
     return () => window.clearTimeout(timer)
   }, [clips, projectName, resolution, fps])
@@ -928,7 +981,7 @@ export function VideoEditorPanel() {
       )) return
 
       const committedClips = kind === 'sequence' ? nextClips : [...clips, ...nextClips]
-      if (!persistEditorDraft(committedClips, nextProjectName, nextResolution, fps)) {
+      if (!persistEditorDraft(committedClips, nextProjectName, nextResolution, fps, draftWorkspaceRef.current)) {
         throw new Error('The editor draft could not be saved. The hand-off was kept for Retry.')
       }
       setClips(committedClips)
@@ -998,7 +1051,7 @@ export function VideoEditorPanel() {
                 trimEnd: media.duration,
               }
             : clip)
-          persistEditorDraft(next, projectName, resolution, fps)
+          persistEditorDraft(next, projectName, resolution, fps, draftWorkspaceRef.current)
           return next
         })
         clearVideoEditorReplacementResult()
@@ -1036,7 +1089,7 @@ export function VideoEditorPanel() {
       useStore.getState().setGenerationMode('video')
       useStore.getState().setSidebarMode('studio')
 
-      persistEditorDraft(clips, projectName, resolution, fps)
+      persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
       writeVideoEditorReplacementTarget({
         clipId: selected.id,
         clipIndex: selectedIndex,
@@ -1919,7 +1972,7 @@ export function VideoEditorPanel() {
     const recoveryMessage = editorClipRecoveryMessage(normalized)
     if (recoveryMessage) {
       setClips(normalized.clips)
-      persistEditorDraft(normalized.clips, projectName, resolution, fps)
+      persistEditorDraft(normalized.clips, projectName, resolution, fps, draftWorkspaceRef.current)
     }
     setError(recoveryMessage)
     exportSubmittingRef.current = true
@@ -2062,7 +2115,7 @@ export function VideoEditorPanel() {
           disabled={adding}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border bg-bg-secondary hover:bg-bg-hover disabled:opacity-50"
         >
-          <FolderOpen size={13} /> From Loreframe Lab
+          <FolderOpen size={13} /> From HocusPocus
         </button>
         <button
           onClick={startExport}
@@ -2251,7 +2304,7 @@ export function VideoEditorPanel() {
                 onClick={takeScreenshot}
                 disabled={!selected || capturingFrame}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-hover disabled:opacity-40"
-                title="Save the exact current source frame as a reusable PNG in Loreframe Lab Outputs"
+                title="Save the exact current source frame as a reusable PNG in HocusPocus Outputs"
               >
                 {capturingFrame
                   ? <Loader2 size={11} className="animate-spin" />
@@ -2911,7 +2964,7 @@ export function VideoEditorPanel() {
       {pickerOpen && (
         <ModalShell
           open
-          title="Add Loreframe Lab videos"
+          title="Add HocusPocus videos"
           onClose={closeMaestroPicker}
           className="fixed inset-0 z-[80] bg-black/65 flex items-center justify-center p-4"
           onMouseDown={event => {
@@ -2921,11 +2974,11 @@ export function VideoEditorPanel() {
           <div className="w-full max-w-4xl max-h-[78vh] bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
               <FolderOpen size={15} className="text-accent-blue" />
-              <span className="text-sm font-medium">Add Loreframe Lab videos</span>
+              <span className="text-sm font-medium">Add HocusPocus videos</span>
               {maestroVideoTotal > 0 && (
                 <span className="text-[10px] text-text-muted">{maestroVideos.length} / {maestroVideoTotal}</span>
               )}
-              <button type="button" onClick={closeMaestroPicker} aria-label="Close Loreframe Lab video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
+              <button type="button" onClick={closeMaestroPicker} aria-label="Close HocusPocus video picker" className="ml-auto p-1 rounded hover:bg-bg-hover">
                 <X size={15} />
               </button>
             </div>
@@ -2935,7 +2988,7 @@ export function VideoEditorPanel() {
                   <Loader2 size={22} className="animate-spin" />
                 </div>
               ) : maestroVideos.length ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" role="listbox" aria-multiselectable="true" aria-label="Loreframe Lab videos">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" role="listbox" aria-multiselectable="true" aria-label="HocusPocus videos">
                   {maestroVideos.map(output => {
                     const selected = pickerSelectedSet.has(output.name)
                     return (

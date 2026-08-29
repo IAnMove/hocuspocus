@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "job": {
+    "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-21-18h38m12s_seed590064009_[Estrofa]Obi-Wan desplegó un viernes, un kernel lleno de oopspanic, stack trace, dmesg en rojo, A.wav",
+    "filename": "2026-08-21-18h38m12s_seed590064009_[Estrofa]Obi-Wan desplegó un viernes, un kernel lleno de oopspanic, stack trace, dmesg en rojo, A.wav",
+    "style": "dark comic industrial rock, Mustafar fire, sysadmin panic, Spanish lyrics, no rap, no trap, no pop, no concert stage",
+    "lyrics": "[Estrofa]\nObi-Wan desplegó un viernes, un kernel lleno de oops\npanic, stack trace, dmesg en rojo, Anakin solo en el bridge\nel maestro se fue a descansar, el aprendiz con el pager\nla galaxia en un oops, y el ticket abierto hasta el lunes\n\n[Estribillo]\nSe pasó al lado oscuro por un deploy del viernes\nun kernel lleno de errores, y Obi-Wan ya no vuelve\nsi cae producción, el finde te come\nAnakin se quedó on-call, y nació Vader\n\n[Estrofa]\nNo hay rollback, no hay parche, solo lava y logs\nel Consejo no responde, Palpatine sí\nroot en el hypervisor, capa negra, reboot forzado\nla lección del kernel: nunca dejes a tu junior solo\n\n[Estribillo]\nSe pasó al lado oscuro por un deploy del viernes\nun kernel lleno de errores, y Obi-Wan ya no vuelve\nsi cae producción, el finde te come\nAnakin se quedó on-call, y nació Vader"
+  },
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-21-18h38m12s_seed590064009_[Estrofa]Obi-Wan desplegó un viernes, un kernel lleno de oopspanic, stack trace, dmesg en rojo, A.wav"
+}

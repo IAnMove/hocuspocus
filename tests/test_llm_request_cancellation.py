@@ -26,6 +26,27 @@ from services.task_manager import (  # noqa: E402
 )
 
 
+class _BlockingJsonResponse:
+    status_code = 200
+    text = ""
+    encoding = "utf-8"
+
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.closed = threading.Event()
+
+    def raise_for_status(self):
+        return None
+
+    def close(self):
+        self.closed.set()
+
+    def json(self):
+        self.started.set()
+        self.closed.wait(2)
+        raise llm_service.requests.exceptions.ConnectionError("response closed")
+
+
 class _BlockingResponse:
     status_code = 200
     text = ""
@@ -198,6 +219,52 @@ class TestLlmRequestCancellation(unittest.TestCase):
             ))
         except BaseException as exc:
             errors.append(exc)
+
+    def test_public_generate_client_propagates_token_to_http_response(self):
+        response = _BlockingJsonResponse()
+        token = CancellationToken()
+        errors = []
+        results = []
+
+        with patch.object(llm_service, "is_loaded", return_value=True), patch.object(
+            llm_service.requests, "post", return_value=response,
+        ):
+            worker = threading.Thread(
+                target=self._run_generate,
+                args=(token, errors, results),
+                daemon=True,
+            )
+            worker.start()
+            self.assertTrue(response.started.wait(1))
+            token.cancel("user requested cancellation")
+            worker.join(1)
+
+        self.assertFalse(worker.is_alive())
+        self.assertTrue(response.closed.is_set())
+        self.assertEqual(results, [])
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], llm_service.LLMRequestCancelled)
+
+    def _run_generate(self, token, errors, results):
+        try:
+            results.append(llm_service.generate(
+                prompt="cancel public completion",
+                max_new_tokens=8,
+                cancellation_token=token,
+            ))
+        except BaseException as exc:
+            errors.append(exc)
+
+    def test_cancelled_task_drops_the_in_memory_token(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            registry = TaskRegistry(workspace, interrupt_stale=False)
+            registry.create(id="job-drop", status="running", phase="running")
+            token = get_cancellation_token(workspace, "job-drop")
+            registry.update("job-drop", status="cancelled", phase="cancelled", force=True)
+            self.assertTrue(token.is_cancelled())
+            replacement = get_cancellation_token(workspace, "job-drop")
+            self.assertIsNot(replacement, token)
+            self.assertFalse(replacement.is_cancelled())
 
     def test_registry_cancellation_is_scoped_to_one_job(self):
         with tempfile.TemporaryDirectory() as workspace:

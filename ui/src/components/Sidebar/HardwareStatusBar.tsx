@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronUp, ChevronDown, Cpu, MemoryStick, Power, Zap } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
-import { releaseModels } from '../../api/client'
+import { fetchSystemStats, releaseModels } from '../../api/client'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 
 // Color a "fullness" bar (VRAM / RAM) by how close to full it is —
 // green well below, amber as it tightens, red near the ceiling. This is
@@ -58,12 +59,16 @@ const COLLAPSE_KEY = 'hwbar_collapsed'
  *   - Collapsed: a single one-line row of tiny status chips (~the height
  *     of the model line), for users who want the readout but not the bulk.
  * Polls GET /api/v1/system-stats every ~2s while mounted (both views);
- * pauses when the tab is hidden.
+ * one request at a time, next tick only after the previous settles.
+ * Pauses when the tab is hidden.
  */
 export function HardwareStatusBar() {
   const stats = useStore(s => s.systemStats)
   const loadSystemStats = useStore(s => s.loadSystemStats)
   const llmStatus = useStore(s => s.llmStatus)
+  const [tabVisible, setTabVisible] = useState(
+    () => typeof document === 'undefined' || !document.hidden,
+  )
 
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem(COLLAPSE_KEY) === '1' } catch { return false }
@@ -101,19 +106,17 @@ export function HardwareStatusBar() {
   }
 
   useEffect(() => {
-    const tick = () => {
-      if (typeof document !== 'undefined' && document.hidden) return
-      loadSystemStats()
-    }
-    tick() // populate immediately, don't wait for the first interval
-    const id = setInterval(tick, 2000)
-    const onVis = () => { if (!document.hidden) loadSystemStats() }
+    const onVis = () => setTabVisible(!document.hidden)
     document.addEventListener('visibilitychange', onVis)
-    return () => {
-      clearInterval(id)
-      document.removeEventListener('visibilitychange', onVis)
-    }
-  }, [loadSystemStats])
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+
+  useSerializedPoll({
+    enabled: tabVisible,
+    intervalMs: 2000,
+    poll: async (signal) => fetchSystemStats(signal),
+    onValue: (next) => { useStore.setState({ systemStats: next }) },
+  })
 
   const gpu = stats?.gpu
   const ram = stats?.ram

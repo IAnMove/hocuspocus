@@ -24,6 +24,78 @@ INTERSTITIAL_TRANSITIONS = frozenset(
     {"later-clock", "later-tropical", "later-cinematic"}
 )
 
+SOURCE_SIDECAR_LIMIT_BYTES = 4 * 1024 * 1024
+
+
+def _source_sidecar_path(source: str) -> str:
+    return os.path.splitext(source)[0] + ".meta.json"
+
+
+def _without_nested_source_manifest(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Keep source metadata reproducible without recursively nesting masters."""
+    cleaned = dict(metadata)
+    params = cleaned.get("params")
+    if not isinstance(params, dict):
+        return cleaned
+    clean_params = dict(params)
+    editor = clean_params.get("video_editor")
+    if isinstance(editor, dict) and "source_manifest" in editor:
+        clean_editor = dict(editor)
+        clean_editor.pop("source_manifest", None)
+        clean_params["video_editor"] = clean_editor
+    cleaned["params"] = clean_params
+    return cleaned
+
+
+def build_source_provenance_manifest(
+    clips: list[dict[str, Any]],
+    *,
+    max_sidecar_bytes: int = SOURCE_SIDECAR_LIMIT_BYTES,
+) -> dict[str, Any]:
+    """Collect portable source metadata for one assembled editor timeline.
+
+    ``resolved_path`` is accepted only as an already validated API-layer input
+    and is never serialized. A missing or malformed sidecar is recorded per
+    clip so one legacy source cannot prevent the final video from exporting.
+    """
+    entries: list[dict[str, Any]] = []
+    for index, clip in enumerate(clips):
+        resolved = str(clip.get("resolved_path") or "")
+        source = str(clip.get("source") or "")
+        entry: dict[str, Any] = {
+            "index": index,
+            "name": str(clip.get("name") or os.path.basename(source) or f"Clip {index + 1}"),
+            "source": source,
+            "resolved_filename": os.path.basename(resolved) if resolved else None,
+        }
+        if not resolved:
+            entry.update({"sidecar_status": "unavailable", "sidecar_filename": None})
+            entries.append(entry)
+            continue
+
+        sidecar_path = _source_sidecar_path(resolved)
+        entry["sidecar_filename"] = os.path.basename(sidecar_path)
+        try:
+            size = os.path.getsize(sidecar_path)
+            if size > max(1, int(max_sidecar_bytes)):
+                entry.update({"sidecar_status": "too_large", "sidecar_bytes": size})
+            else:
+                with open(sidecar_path, encoding="utf-8") as handle:
+                    metadata = json.load(handle)
+                if not isinstance(metadata, dict):
+                    raise ValueError("source sidecar root is not an object")
+                entry.update({
+                    "sidecar_status": "embedded",
+                    "sidecar_bytes": size,
+                    "metadata": _without_nested_source_manifest(metadata),
+                })
+        except FileNotFoundError:
+            entry["sidecar_status"] = "missing"
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            entry.update({"sidecar_status": "unreadable", "sidecar_error": str(exc)[:300]})
+        entries.append(entry)
+    return {"version": 1, "clips": entries}
+
 
 def is_interstitial_transition(transition: str) -> bool:
     """Return whether a transition inserts a full time-card between clips."""

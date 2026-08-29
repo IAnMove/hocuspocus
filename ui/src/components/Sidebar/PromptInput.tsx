@@ -457,7 +457,7 @@ export function PromptInput() {
         placeholder={schedulerApplies
           ? 'Un prompt por línea; cada línea se añadirá como un vídeo independiente...'
           : usesH3WindowPlanner
-          ? `Describe the complete video idea—Loreframe Lab will plan ${windowCount} H3 windows.`
+          ? `Describe the complete video idea—HocusPocus will plan ${windowCount} H3 windows.`
           : usesWindows
             ? `Line 1 = window 1, line 2 = window 2... (${windowCount} windows)`
           : modePlaceholder}

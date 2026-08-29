@@ -47,7 +47,8 @@ test('Director keeps the previous pipeline visible and retries a failed selectio
   console.error = () => undefined
   globalThis.fetch = async (input: string | URL | Request) => {
     const url = String(input)
-    if (url.endsWith('/api/v1/director/pipelines')) {
+    const path = url.split('?')[0]
+    if (path.endsWith('/api/v1/director/pipelines')) {
       return new Response(JSON.stringify({ pipelines: [{
         id: 'next', status: next.status, pipeline_type: next.pipeline_type,
         created_at: next.created_at, clip_count: 0, output_count: 0,

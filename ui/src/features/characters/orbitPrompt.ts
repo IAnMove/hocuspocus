@@ -15,6 +15,8 @@ export const CHARACTER_ORBIT_VIEWS = [
 ] as const
 
 export const CHARACTER_SHEET_RESOLUTION = '768x1344'
+// PoopMan333's 6-panel workflow uses H3's native five-second pass. The four
+// geometry views are sampled from its first 3-second orbit beat.
 export const CHARACTER_SHEET_FRAMES = 124
 export const CHARACTER_SHEET_STEPS = 25
 export const CHARACTER_SHEET_FPS = 24
@@ -48,11 +50,13 @@ const SHARED_STAGING = [
 ].join(' ')
 
 const STATUE_LOCK = [
-  'The subject is completely frozen, as rigid and motionless as a statue. Only the camera moves. Hair, fabric, cloaks, skirts, sleeves, straps, ribbons, chains, tassels, fur and feathers are all locked solid: every strand and every fold sits in exactly the same position in every frame. There is no wind, no breeze, no air movement, no breathing, no settling, no sway, no secondary motion of any kind. Orientation, surfaces and lighting are identical in every shot, and the subject stays the same size in frame.',
+  'The subject is a rigid physical statue or mannequin on a turntable. Every body part, hand, face, hair strand, garment, fold and attached prop is locked together as one solid object. The only allowed motion is the entire subject rotating rigidly around its vertical center axis; the subject rotates as one rigid object. There is no walking, acting, talking, breathing, blinking, gesturing, looking around, cloth motion, hair motion or independent body movement. The subject remains centered and the same size in every frame.',
 ].join(' ')
 
-const ORBIT_360 = [
+const TURN_TABLE_360 = [
   '[0-3 seconds] tight full shot of the subject. The camera makes one smooth fixed-speed orbit right around it, a full 360 degrees: starting square on the front, passing the left side a quarter of the way round, directly behind at halfway, the right side three quarters of the way round, and returning to the front. The subject does not move at all. Ends back on the front view at 3 seconds.',
+  '[3-4 seconds] Camera snaps into a fast push-in on the character\'s face. Locked-off head and shoulders close-up, face square to camera, eyes into the lens. Ends on a sharp front-on face at 4 seconds.',
+  '[4-5 seconds] Camera whip-pans and rotates to an orthogonal angle. Locked-off head and shoulders close-up, head turned to a three-quarter angle, eyes still forward. Ends on a clean three-quarter face.',
 ].join(' ')
 
 /** Official B prompt from PoopMan333 6-panel workflow (Keep Picture 1's Style). */
@@ -62,17 +66,14 @@ The output is matches the style of <Picture 1>. Sharp detail on eyes and face. T
 [STAGING]
 ${SHARED_STAGING}
 
-The character holds one relaxed A-pose throughout: arms hanging slightly away from the body, palms toward the thighs, feet shoulder-width apart, head level, calm neutral expression, eyes open and looking forward.
+The character holds one relaxed A-pose throughout: arms hanging slightly away from the body, palms toward the thighs, feet shoulder-width apart, head level, calm neutral expression, eyes open and looking forward. The character keeps the exact same pose, expression, clothing, hair and attached props from the reference throughout the rotation. Do not reposition the hands, limbs or props.
 ${STATUE_LOCK}
 
-${ORBIT_360}
+${TURN_TABLE_360}
 
-[3-4 seconds] Camera snaps into a fast push-in on the character's face. Locked-off head and shoulders close-up, face square to camera, eyes into the lens. Ends on a sharp front-on face.
-
-[4-5 seconds] camera whip-pans and rotates to a orthogonal angle. Locked-off head and shoulders close-up, head turned to a three-quarter angle, eyes still forward. Ends on a clean three-quarter face.
-
-[CAMERA] One constant-speed orbit in beat 1, then locked off and static. The camera is the only thing in the scene that moves at any point. No zoom, no push in, no dolly, no tilt, no roll, no handheld shake, no motion blur, no dissolves.
-[AUDIO] Silence. No music, no room tone, no voices.`
+[CAMERA] One constant-speed orbit in beat 1, then locked off and static. The camera is the only thing in the scene that moves at any point. No zoom, no dolly, no tilt, no roll, no handheld shake, no motion blur, no dissolves beyond the intended beat changes.
+[AUDIO] Silence. No music, no room tone, no voices.
+`
 
 export const OBJECT_ORBIT_B_PROMPT = `[STYLE]
 The output is matches the style of <Picture 1>. Sharp detail on silhouette and materials. The style never changes and never drifts between shots. No shadows.
@@ -83,10 +84,11 @@ ${SHARED_STAGING}
 The object is completely frozen, as rigid as a studio product turntable. Only the camera moves. No secondary motion of any kind.
 ${STATUE_LOCK}
 
-${ORBIT_360}
+${TURN_TABLE_360}
 
-[CAMERA] One constant-speed 360-degree orbit. The camera is the only thing in the scene that moves at any point. No zoom, no push in, no dolly, no tilt, no roll, no handheld shake, no motion blur, no dissolves.
-[AUDIO] Silence. No music, no room tone, no voices.`
+[CAMERA] One constant-speed orbit in beat 1, then locked off and static. The camera is the only thing in the scene that moves at any point. No zoom, no dolly, no tilt, no roll, no handheld shake, no motion blur, no dissolves beyond the intended beat changes.
+[AUDIO] Silence. No music, no room tone, no voices.
+`
 
 export function buildOrbitBPrompt(kind: OrbitSubjectKind = 'character'): string {
   return kind === 'object' ? OBJECT_ORBIT_B_PROMPT : CHARACTER_ORBIT_B_PROMPT

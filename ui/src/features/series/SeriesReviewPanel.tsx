@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Download, Edit3, ExternalLink, Film, Loader2, Play, RotateCcw, Save, Square, X } from 'lucide-react'
 import * as api from '../../api/client'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
 import { orderedTimelineShots, reconcilePlaybackCursor, safeTimelineAttempt, seriesEditorCanvas } from '../../lib/orderedClipTimeline'
 import { Pill, SectionCard } from './components'
@@ -57,9 +58,11 @@ export function SeriesReviewPanel({
   const lastPlayerRef = useRef<HTMLVideoElement>(null)
   const activeJobId = job?.jobId
   const activeJobStatus = job?.status
-  const activeJobCurrent = job?.current
   const assemblyJobId = assemblyJob?.jobId
   const assemblyJobStatus = assemblyJob?.status
+  const episodeIdRef = useRef(episode.id)
+  episodeIdRef.current = episode.id
+  const lastRenderCurrentRef = useRef<number | null>(null)
   const previousEpisodeId = useRef(episode.id)
   const episodeChanged = previousEpisodeId.current !== episode.id
   useEffect(() => {
@@ -81,32 +84,39 @@ export function SeriesReviewPanel({
     setEditBusy(false)
     setAssemblyJob(null)
     setReviewView('assembly')
+    lastRenderCurrentRef.current = null
   }, [episode.id, episode.shots, episodeChanged])
-  useEffect(() => {
-    if (!activeJobId || !activeJobStatus || !['queued', 'running', 'cancelling'].includes(activeJobStatus)) return
-    let active = true
-    const timer = window.setInterval(() => {
-      void api.fetchSeriesRenderJob(activeJobId).then(async value => {
-        if (!active) return
-        const progressAdvanced = value.current !== activeJobCurrent
-        setJob(value)
-        if (progressAdvanced || ['completed', 'failed', 'cancelled'].includes(value.status)) await reload()
-      }).catch(reason => { if (active) setError((reason as Error).message) })
-    }, 1000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [activeJobCurrent, activeJobId, activeJobStatus, reload, setJob])
-  useEffect(() => {
-    if (!assemblyJobId || !assemblyJobStatus || !['queued', 'running', 'cancelling'].includes(assemblyJobStatus)) return
-    let active = true
-    const timer = window.setInterval(() => {
-      void api.fetchSeriesEpisodeAssembly(assemblyJobId, workspace).then(async value => {
-        if (!active) return
-        setAssemblyJob(value)
-        if (value.status === 'completed') await reload()
-      }).catch(reason => { if (active) setError((reason as Error).message) })
-    }, 1000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [assemblyJobId, assemblyJobStatus, reload, workspace])
+  useSerializedPoll({
+    enabled: Boolean(activeJobId && activeJobStatus && ['queued', 'running', 'cancelling'].includes(activeJobStatus)),
+    intervalMs: 1000,
+    ownerKey: `${episode.id}:${activeJobId || ''}`,
+    poll: () => api.fetchSeriesRenderJob(activeJobId!),
+    onValue: value => {
+      if (episodeIdRef.current !== episode.id) return
+      const previous = lastRenderCurrentRef.current
+      lastRenderCurrentRef.current = value.current
+      setJob(value)
+      const terminal = ['completed', 'failed', 'cancelled'].includes(value.status)
+      if (terminal || (previous !== null && value.current !== previous)) void reload()
+    },
+    onError: reason => {
+      if (episodeIdRef.current === episode.id) setError((reason as Error).message)
+    },
+  })
+  useSerializedPoll({
+    enabled: Boolean(assemblyJobId && assemblyJobStatus && ['queued', 'running', 'cancelling'].includes(assemblyJobStatus)),
+    intervalMs: 1000,
+    ownerKey: `${episode.id}:${assemblyJobId || ''}`,
+    poll: () => api.fetchSeriesEpisodeAssembly(assemblyJobId!, workspace),
+    onValue: value => {
+      if (episodeIdRef.current !== episode.id) return
+      setAssemblyJob(value)
+      if (value.status === 'completed') void reload()
+    },
+    onError: reason => {
+      if (episodeIdRef.current === episode.id) setError((reason as Error).message)
+    },
+  })
   const approved = useMemo(() => episode.shots.flatMap(shot => {
     const attempt = shot.attempts.find(item => item.id === shot.approvedAttemptId)
     const asset = attempt?.outputAssetIds.map(id => series.assets[id]).find(Boolean)
@@ -301,8 +311,20 @@ export function SeriesReviewPanel({
       ] as const).map(([id, label, count]) => <button key={id} className={`rounded-lg border px-3 py-2 text-xs ${reviewView === id ? 'border-violet-400 bg-violet-500/20 text-violet-100' : 'border-border bg-bg-primary text-text-muted hover:bg-bg-hover'}`} onClick={() => setReviewView(id)}>{label}<span className="ml-2 rounded bg-black/20 px-1.5 py-0.5 text-[9px]">{count}</span></button>)}
     </div>
     <SectionCard title="Durable render queue" description="Completed shots survive cancellation and restart. Approved shots are never included in bulk missing/failed runs.">
-      <div className="flex flex-wrap gap-2"><button className={primaryButton} disabled={Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))} onClick={() => void startRender('missing')}><Film size={13} />Generate missing</button><button className={secondaryButton} disabled={Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))} onClick={() => void startRender('failed')}><RotateCcw size={13} />Retry failed</button>{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesRenderJob(job.jobId).then(setJob)}><Square size={13} />Cancel generation</button>}</div>
-      {job && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<Pill tone={job.status === 'completed' ? 'green' : job.status === 'failed' ? 'red' : 'violet'}>{job.status}</Pill><span>{job.message}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.items && <div className="mt-2 flex flex-wrap gap-1">{job.items.map(item => <Pill key={item.attemptId} tone={item.status === 'completed' ? 'green' : item.status === 'failed' ? 'red' : item.status === 'running' || item.status === 'cancelling' ? 'violet' : 'neutral'}>{item.shotId} · {item.status}</Pill>)}</div>}{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-2 ${secondaryButton}`} onClick={() => void api.resumeSeriesRenderJob(job.jobId).then(setJob)}>Resume incomplete queue</button>}</div>}
+      <div className="flex flex-wrap gap-2"><button className={primaryButton} disabled={Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))} onClick={() => void startRender('missing')}><Film size={13} />Generate missing</button><button className={secondaryButton} disabled={Boolean(job && ['queued', 'running', 'cancelling'].includes(job.status))} onClick={() => void startRender('failed')}><RotateCcw size={13} />Retry failed</button>{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => {
+        const episodeId = episode.id
+        const jobId = job.jobId
+        void api.cancelSeriesRenderJob(jobId).then(value => {
+          if (episodeIdRef.current === episodeId && value.jobId === jobId) setJob(value)
+        })
+      }}><Square size={13} />Cancel generation</button>}</div>
+      {job && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<Pill tone={job.status === 'completed' ? 'green' : job.status === 'failed' ? 'red' : 'violet'}>{job.status}</Pill><span>{job.message}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.items && <div className="mt-2 flex flex-wrap gap-1">{job.items.map(item => <Pill key={item.attemptId} tone={item.status === 'completed' ? 'green' : item.status === 'failed' ? 'red' : item.status === 'running' || item.status === 'cancelling' ? 'violet' : 'neutral'}>{item.shotId} · {item.status}</Pill>)}</div>}{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-2 ${secondaryButton}`} onClick={() => {
+        const episodeId = episode.id
+        const jobId = job.jobId
+        void api.resumeSeriesRenderJob(jobId).then(value => {
+          if (episodeIdRef.current === episodeId && value.jobId === jobId) setJob(value)
+        })
+      }}>Resume incomplete queue</button>}</div>}
     </SectionCard>
 
     {reviewView === 'history' && <SectionCard title="Shot attempt history" description="Each shot keeps its immutable generation history. The latest completed alternative occupies the same ordered slot; approving it changes the final export.">
@@ -380,7 +402,24 @@ export function SeriesReviewPanel({
           <button className={`mt-3 ${greenButton}`} disabled={editBusy} onClick={() => void regenerateEdited()}>{editBusy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}Save and regenerate in this slot</button>
         </div>
       })()}
-      {assemblyJob && <div className={`mt-3 rounded-lg border p-3 text-xs ${['failed', 'interrupted'].includes(assemblyJob.status) ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-green-500/30 bg-green-500/10 text-green-200'}`}><div className="flex flex-wrap items-center gap-2">{['queued', 'running', 'cancelling'].includes(assemblyJob.status) && <Loader2 size={13} className="animate-spin" />}<span>{assemblyJob.message}</span>{assemblyJob.filename && <a className={`ml-auto ${greenButton}`} href={api.getFileUrl(assemblyJob.filename, workspace)} download><Download size={13} />Download joined episode</a>}{['queued', 'running'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesEpisodeAssembly(assemblyJob.jobId, workspace).then(setAssemblyJob)}><Square size={13} />Cancel join</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => void api.resumeSeriesEpisodeAssembly(assemblyJob.jobId, workspace).then(setAssemblyJob)}><RotateCcw size={13} />Resume join</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => void api.discardSeriesEpisodeAssembly(assemblyJob.jobId, workspace).then(() => setAssemblyJob(null))}><X size={12} />Discard checkpoint</button>}</div>{assemblyJob.error && <p className="mt-1 text-[10px]">{assemblyJob.error}</p>}</div>}
+      {assemblyJob && <div className={`mt-3 rounded-lg border p-3 text-xs ${['failed', 'interrupted'].includes(assemblyJob.status) ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-green-500/30 bg-green-500/10 text-green-200'}`}><div className="flex flex-wrap items-center gap-2">{['queued', 'running', 'cancelling'].includes(assemblyJob.status) && <Loader2 size={13} className="animate-spin" />}<span>{assemblyJob.message}</span>{assemblyJob.filename && <a className={`ml-auto ${greenButton}`} href={api.getFileUrl(assemblyJob.filename, workspace)} download><Download size={13} />Download joined episode</a>}{['queued', 'running'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => {
+              const episodeId = episode.id
+              const jobId = assemblyJob.jobId
+              void api.cancelSeriesEpisodeAssembly(jobId, workspace).then(value => {
+                if (episodeIdRef.current === episodeId && value.jobId === jobId) setAssemblyJob(value)
+              })
+            }}><Square size={13} />Cancel join</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => {
+              const episodeId = episode.id
+              const jobId = assemblyJob.jobId
+              void api.resumeSeriesEpisodeAssembly(jobId, workspace).then(value => {
+                if (episodeIdRef.current === episodeId && value.jobId === jobId) setAssemblyJob(value)
+              })
+            }}><RotateCcw size={13} />Resume join</button>}{['failed', 'cancelled', 'interrupted'].includes(assemblyJob.status) && <button className={secondaryButton} onClick={() => {
+              const episodeId = episode.id
+              void api.discardSeriesEpisodeAssembly(assemblyJob.jobId, workspace).then(() => {
+                if (episodeIdRef.current === episodeId) setAssemblyJob(null)
+              })
+            }}><X size={12} />Discard checkpoint</button>}</div>{assemblyJob.error && <p className="mt-1 text-[10px]">{assemblyJob.error}</p>}</div>}
     </SectionCard>}
 
     {reviewView === 'finish' && <><SectionCard title="Video Editor hand-off" description={`${approved.length}/${episode.shots.length} shots have an approved output. The editor opens with the saved Series resolution and orientation.`}>

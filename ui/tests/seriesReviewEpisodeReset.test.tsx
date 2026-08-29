@@ -121,3 +121,68 @@ test('Series Review pauses and clears episode-owned state when the episode chang
   assert.doesNotMatch(screen.getByRole('button', { name: 'accepted' }).className, /bg-violet/)
   assert.match(screen.getByRole('button', { name: 'pending' }).className, /bg-violet/)
 })
+
+test('a late Review cancel does not attach episode 1 job onto episode 2', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
+  const { useState } = await import('react')
+  const { SeriesReviewPanel } = await import('../src/features/series/SeriesReviewPanel.tsx')
+  const first = episode('episode-1', 1)
+  const second = episode('episode-2', 2)
+  const series = {
+    id: 'series-1', title: 'Series',
+    assets: {
+      'asset-1': { id: 'asset-1', workspaceId: 'default', kind: 'video', uri: 'outputs/clip-1.mp4', ownerType: 'attempt', ownerId: 'attempt-1', isDerivedThumbnail: false, metadata: {} },
+      'asset-2': { id: 'asset-2', workspaceId: 'default', kind: 'video', uri: 'outputs/clip-2.mp4', ownerType: 'attempt', ownerId: 'attempt-2', isDerivedThumbnail: false, metadata: {} },
+    },
+    provider: { videoSettings: { resolution: '540p', orientation: 'landscape' } },
+  }
+  const runningJob = {
+    jobId: 'render-episode-1', workspace: 'default', seriesId: 'series-1', episodeId: 'episode-1',
+    status: 'running', stage: 'rendering', current: 0, total: 1, message: 'Rendering episode 1',
+  }
+  const originalFetch = globalThis.fetch
+  let resolveCancel!: (response: Response) => void
+  const cancelResponse = new Promise<Response>(resolve => { resolveCancel = resolve })
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (url.includes('/cancel') && init?.method === 'POST') {
+      return cancelResponse
+    }
+    if (url.includes('/api/v1/series/render/jobs/')) {
+      return new Response(JSON.stringify(runningJob), { headers: { 'content-type': 'application/json' } })
+    }
+    throw new Error(`Unexpected request: ${url}`)
+  }
+
+  function Harness({ current }: { current: typeof first }) {
+    const [job, setJob] = useState<typeof runningJob | null>(runningJob)
+    React.useEffect(() => {
+      setJob(current.id === first.id ? runningJob : null)
+    }, [current.id])
+    return <SeriesReviewPanel
+      workspace="default"
+      series={series as never}
+      episode={current as never}
+      job={job as never}
+      setJob={setJob as never}
+      reload={async () => undefined}
+      startRender={async () => undefined}
+      updateEpisode={() => undefined}
+      saveNow={async () => null}
+    />
+  }
+
+  try {
+    const view = render(<Harness current={first} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel generation' }))
+    view.rerender(<Harness current={second} />)
+    resolveCancel(new Response(JSON.stringify({
+      ...runningJob, status: 'cancelling', message: 'Cancelling episode 1',
+    }), { headers: { 'content-type': 'application/json' } }))
+    await waitFor(() => assert.equal(screen.queryByText('Cancelling episode 1'), null))
+    assert.equal(screen.queryByText('Rendering episode 1'), null)
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+  }
+})

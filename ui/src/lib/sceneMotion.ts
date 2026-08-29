@@ -47,8 +47,8 @@ export const sanitizeSceneMotion = (raw: unknown, layer: SceneLayer, options: Mo
   if (!isRecord(item)) throw new Error('JSON must contain a motion object.')
 
   const duration = finiteField(item.duration, 'motion.duration', .1, 3600)
-  const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce']
-  if (item.curve !== undefined && !curves.includes(item.curve as SceneCurve)) throw new Error('motion.curve must be linear, ease, dramatic or bounce.')
+  const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce', 'hold']
+  if (item.curve !== undefined && !curves.includes(item.curve as SceneCurve)) throw new Error('motion.curve must be linear, ease, dramatic, bounce or hold.')
   const curve = item.curve as SceneCurve | undefined ?? layer.animation.curve
   const start = motionPoint(item.start, layer.animation.start, 'motion.start')
   const end = motionPoint(item.end, layer.animation.end, 'motion.end')
