@@ -126,6 +126,7 @@ function useAdvancedActiveItems(): string[] {
   const items: string[] = []
   if (params.seed !== -1) items.push(`Seed ${params.seed}`)
   if (params.minimax_h3_turbo_mode) items.push('H3 Turbo')
+  if (params.minimax_h3_fasth3_mode) items.push('FastH3 Preview')
   if (params.skip_steps_cache_type === 'first_block') {
     items.push(`H3 cache ${params.skip_steps_multiplier ?? 0.08}`)
   }
@@ -209,6 +210,11 @@ export function AdvancedSettings() {
     params.minimax_h3_turbo_mode === true
     && modelOptions?.minimax_h3_turbo != null
   )
+  const h3FastH3Mode = (
+    params.minimax_h3_fasth3_mode === true
+    && modelOptions?.minimax_h3_fasth3 != null
+  )
+  const h3SpeedPreset = h3TurboMode || h3FastH3Mode
   const showInferenceSteps = (
     !isAudioOnly
     && (isScailEdit || !modelOptions?.lock_inference_steps)
@@ -815,7 +821,7 @@ export function AdvancedSettings() {
                     <input
                       type="number"
                       value={params.num_inference_steps}
-                      disabled={h3TurboMode}
+                      disabled={h3SpeedPreset}
                       onChange={e => setParam('num_inference_steps', Number(e.target.value))}
                       className="w-16 bg-bg-tertiary border border-border rounded px-2 py-0.5 text-xs text-text-primary text-center focus:outline-none focus:border-accent-blue disabled:cursor-not-allowed disabled:opacity-50"
                     />
@@ -823,13 +829,18 @@ export function AdvancedSettings() {
                   <input
                     type="range" min={1} max={50} step={1}
                     value={params.num_inference_steps}
-                    disabled={h3TurboMode}
+                    disabled={h3SpeedPreset}
                     onChange={e => setParam('num_inference_steps', Number(e.target.value))}
                     className="w-full disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   {h3TurboMode && (
                     <p className="text-[9px] text-text-muted mt-0.5">
                       Turbo mode locks this preset to {modelOptions?.minimax_h3_turbo?.steps} steps.
+                    </p>
+                  )}
+                  {h3FastH3Mode && (
+                    <p className="text-[9px] text-text-muted mt-0.5">
+                      FastH3 Preview locks this preset to {modelOptions?.minimax_h3_fasth3?.steps} steps.
                     </p>
                   )}
                   {isScailFast && (

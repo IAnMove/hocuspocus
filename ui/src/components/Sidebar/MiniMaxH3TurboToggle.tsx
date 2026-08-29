@@ -14,6 +14,8 @@ export function MiniMaxH3TurboToggle() {
   const toggleLora = useStore(s => s.toggleLora)
   const setLoraWeight = useStore(s => s.setLoraWeight)
   const selectModel = useStore(s => s.selectModel)
+  const fasth3Option = useStore(s => s.modelOptions?.minimax_h3_fasth3)
+  const fasth3Enabled = useStore(s => s.params.minimax_h3_fasth3_mode === true)
 
   // The backend advertises the same managed adapter for Full and Pruned H3;
   // its loader converts the small AdaLN projection for the selected base.
@@ -23,7 +25,11 @@ export function MiniMaxH3TurboToggle() {
     if (!option) return
     setParam('minimax_h3_turbo_mode', checked)
     if (checked) {
-      if (!activatedLoras.includes(option.filename)) {
+      if (fasth3Enabled && fasth3Option) {
+        setParam('minimax_h3_fasth3_mode', false)
+        if (activatedLoras.includes(fasth3Option.filename)) toggleLora(fasth3Option.filename)
+      }
+      if (!useStore.getState().params.activated_loras.includes(option.filename)) {
         toggleLora(option.filename)
       }
       // toggleLora updates the Zustand store synchronously, so the managed

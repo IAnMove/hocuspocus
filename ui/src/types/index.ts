@@ -186,6 +186,8 @@ export interface GenerateParams {
   minimax_h3_text_encoder?: 'nvfp4_awq' | 'gguf_q2_k' | 'gguf_q4_k_m' | 'int8' | 'bf16'
   /** One-click managed H3 Turbo recipe for Full or Pruned H3. */
   minimax_h3_turbo_mode?: boolean
+  /** Experimental FastVideo FastH3 Preview v1 (4-step T2VA). */
+  minimax_h3_fasth3_mode?: boolean
   /** Automatically expand one long H3 concept into window-local prompts. */
   minimax_h3_window_storyboard?: boolean
   /** Compiled Context-IR prompts, one per continuation pass. */
@@ -280,6 +282,7 @@ export interface GenerationDetails {
   flow_shift?: number
   audio_shift?: number
   turbo?: boolean
+  fasth3?: boolean
   cache?: boolean
   cache_type?: string
   lora_count?: number
@@ -719,6 +722,14 @@ export interface ModelOptions {
   }[] | null
   minimax_h3_text_encoder_default?: string
   minimax_h3_turbo?: {
+    filename: string
+    label: string
+    experimental: boolean
+    steps: number
+    weight: number
+    guide: string
+  } | null
+  minimax_h3_fasth3?: {
     filename: string
     label: string
     experimental: boolean

@@ -1327,7 +1327,7 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         self.assertIn("setLoraWeight(option.filename, 0, option.weight)", toggle)
         self.assertIn("Use Pruned Turbo", toggle)
         self.assertIn("recommended_model_type", toggle)
-        self.assertIn("disabled={h3TurboMode}", advanced)
+        self.assertIn("disabled={h3SpeedPreset}", advanced)
         self.assertIn("minimax_h3_turbo_mode?: boolean", types_source)
         self.assertIn("minimax_h3_runtime_advisory?:", types_source)
 

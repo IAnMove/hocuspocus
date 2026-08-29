@@ -192,6 +192,7 @@ function _generationDetailsFromParams(
   copy('flow_shift', 'flow_shift')
   copy('h3_audio_shift', 'audio_shift')
   copy('minimax_h3_turbo_mode', 'turbo')
+  copy('minimax_h3_fasth3_mode', 'fasth3')
   return details
 }
 
@@ -6730,6 +6731,7 @@ export const useStore = create<AppState>((set, get) => ({
           paramUpdates.flow_shift = 12
           paramUpdates.h3_audio_shift = 3
           paramUpdates.minimax_h3_turbo_mode = false
+          paramUpdates.minimax_h3_fasth3_mode = false
           paramUpdates.activated_loras = []
           paramUpdates.loras_multipliers = ''
           paramUpdates.h3_model_profile = 'quality'
@@ -6770,6 +6772,14 @@ export const useStore = create<AppState>((set, get) => ({
         // Model switches preserve most Studio params. Never carry the Full-H3
         // Turbo flag invisibly into a Pruned H3 or unrelated model.
         paramUpdates.minimax_h3_turbo_mode = false
+      }
+      if (options.minimax_h3_fasth3) {
+        if (get().params.minimax_h3_fasth3_mode === true) {
+          paramUpdates.num_inference_steps = options.minimax_h3_fasth3.steps
+          paramUpdates.minimax_h3_turbo_mode = false
+        }
+      } else {
+        paramUpdates.minimax_h3_fasth3_mode = false
       }
       // TTS default duration. Prefer the model's declared `default` (DramaBox
       // uses 0 = auto-derive from prompt); fall back to `max` (legacy behavior
@@ -9240,6 +9250,7 @@ export const useStore = create<AppState>((set, get) => ({
         activated_loras: [],
         loras_multipliers: '',
         minimax_h3_turbo_mode: false,
+        minimax_h3_fasth3_mode: false,
       },
       selectedModelPerMode: { ...s.selectedModelPerMode, [currentMode]: modelType },
       h3WindowPlan: null,
@@ -9840,6 +9851,7 @@ export const useStore = create<AppState>((set, get) => ({
       p.minimax_h3_text_encoder as GenerateParams['minimax_h3_text_encoder']
     ) ?? undefined
     newParams.minimax_h3_turbo_mode = Boolean(p.minimax_h3_turbo_mode)
+    newParams.minimax_h3_fasth3_mode = Boolean(p.minimax_h3_fasth3_mode)
     newParams.self_refiner_setting = (p.self_refiner_setting as number) ?? undefined
     newParams.audio_guide = (p.audio_guide as string) || ''
     newParams.audio_guide2 = (p.audio_guide2 as string) || ''

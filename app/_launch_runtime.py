@@ -135,6 +135,18 @@ from models.minimax_h3.turbo import (
     MINIMAX_H3_TURBO_LORA_SHA256,
     MINIMAX_H3_TURBO_LORA_SIZE,
 )
+from models.minimax_h3.fasth3 import (
+    FASTH3_PREVIEW_GUIDE_URL,
+    FASTH3_PREVIEW_LORA_FILENAME,
+    FASTH3_PREVIEW_LORA_REMOTE_PATH,
+    FASTH3_PREVIEW_LORA_REPO_ID,
+    FASTH3_PREVIEW_LORA_REVISION,
+    FASTH3_PREVIEW_LORA_SHA256,
+    FASTH3_PREVIEW_LORA_SIZE,
+    FASTH3_PREVIEW_STEPS,
+    FASTH3_PREVIEW_WEIGHT,
+    fasth3_preview_supported,
+)
 print(f"[HocusPocus Lab] WanGP loaded: {len(wgp.displayed_model_types)} models available")
 # Base save path always comes from server_config["save_path"] (never from wgp.save_path which gets workspace-modified)
 
@@ -738,6 +750,7 @@ def _public_generation_details(params: dict | None) -> dict:
         "flow_shift": params.get("flow_shift"),
         "audio_shift": params.get("h3_audio_shift"),
         "turbo": params.get("minimax_h3_turbo_mode"),
+        "fasth3": params.get("minimax_h3_fasth3_mode"),
     }
     for key, value in public_values.items():
         if value is not None and value != "":
@@ -2679,6 +2692,29 @@ def _minimax_h3_turbo_option(model_def: dict) -> dict | None:
     }
 
 
+def _minimax_h3_fasth3_option(model_def: dict) -> dict | None:
+    """Return FastH3 Preview v1 when the selected H3 model can do T2VA."""
+
+    architecture = str((model_def or {}).get("architecture") or "")
+    if not fasth3_preview_supported(architecture):
+        return None
+    return {
+        "filename": FASTH3_PREVIEW_LORA_FILENAME,
+        "label": "FastH3 Preview",
+        "experimental": True,
+        "steps": FASTH3_PREVIEW_STEPS,
+        "weight": FASTH3_PREVIEW_WEIGHT,
+        "guide": (
+            "Experimental FastVideo FastH3 Preview v1 (VSA / Data-Free). "
+            "Four transformer forwards, text-to-audio-video only — no first/"
+            "last frame and no Omni Ref. FastVideo trained this student for "
+            "VSA-H3 sparse attention; Maestro still runs dense attention, so "
+            "this is a trial. The ~5 GB adapter downloads on first use. "
+            f"Source: {FASTH3_PREVIEW_GUIDE_URL}"
+        ),
+    }
+
+
 @api.get("/api/v1/loras/{model_type}")
 def list_loras(model_type: str):
     """List available LoRA files for a model type."""
@@ -2696,6 +2732,7 @@ def list_loras(model_type: str):
         return {"loras": [], "guidance_max_phases": md.get("guidance_max_phases", 1)}
 
     turbo_option = _minimax_h3_turbo_option(md)
+    fasth3_option = _minimax_h3_fasth3_option(md)
     if lora_dir is None:
         return {"loras": [], "guidance_max_phases": md.get("guidance_max_phases", 1)}
 
@@ -2715,6 +2752,8 @@ def list_loras(model_type: str):
     # generation preflight below performs the verified one-time download.
     if turbo_option:
         names.add(turbo_option["filename"])
+    if fasth3_option:
+        names.add(fasth3_option["filename"])
     loras = sorted(names)
 
     return {
@@ -2738,6 +2777,7 @@ def list_loras_details(model_type: str):
     except Exception:
         return {"loras": [], "guidance_max_phases": md.get("guidance_max_phases", 1)}
     turbo_option = _minimax_h3_turbo_option(md)
+    fasth3_option = _minimax_h3_fasth3_option(md)
     if lora_dir is None:
         return {"loras": [], "guidance_max_phases": md.get("guidance_max_phases", 1)}
 
@@ -2904,6 +2944,36 @@ def list_loras_details(model_type: str):
             },
             "has_guide": True,
             "guide": turbo_option["guide"],
+            "update_status": "current",
+        })
+        loras.sort(key=lambda item: item["filename"])
+    if fasth3_option:
+        filename = fasth3_option["filename"]
+        info = next((item for item in loras if item["filename"] == filename), None)
+        if info is None:
+            info = {
+                "filename": filename,
+                "trained_words": [],
+                "preview_url": None,
+                "civitai_model_id": None,
+                "recommended_weights": None,
+                "has_guide": False,
+                "nsfw": False,
+                "downloaded_at": None,
+                "released_at": None,
+                "lora_id": f"managed:{filename}",
+            }
+            loras.append(info)
+        info.update({
+            "managed": True,
+            "recommended_weights": {
+                "source": "default",
+                "default": fasth3_option["weight"],
+                "min": 0.50,
+                "max": 1.00,
+            },
+            "has_guide": True,
+            "guide": fasth3_option["guide"],
             "update_status": "current",
         })
         loras.sort(key=lambda item: item["filename"])
@@ -6425,6 +6495,7 @@ def get_model_options(model_type: str):
         ] or None,
         "minimax_h3_text_encoder_default": _h3_encoder_default,
         "minimax_h3_turbo": _minimax_h3_turbo_option(md),
+        "minimax_h3_fasth3": _minimax_h3_fasth3_option(md),
         "minimax_h3_runtime_advisory": _minimax_h3_runtime_advisory(md),
         "resolution_presets": md.get("resolution_presets"),
         "resolution_preset_order": md.get("resolution_preset_order"),
@@ -11287,6 +11358,19 @@ async def generate(request: Request):
                     f"{body['num_inference_steps']} steps, "
                     f"LoRA strength {body['loras_multipliers'].split()[-1]}."
                 )
+            from models.minimax_h3.fasth3 import (
+                normalize_fasth3_preview_request,
+            )
+            try:
+                body["_architecture"] = _generation_model_def.get("architecture")
+                if normalize_fasth3_preview_request(body):
+                    print(
+                        "[FastH3 Preview] Experimental 4-step T2VA preset: "
+                        f"{body['num_inference_steps']} steps, "
+                        f"LoRA strength {body['loras_multipliers'].split()[-1]}."
+                    )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         from models.minimax_h3.minimax_h3_handler import (
@@ -11935,6 +12019,15 @@ _MANAGED_LORAS = {
             "https://huggingface.co/"
             f"{MINIMAX_H3_TURBO_LORA_REPO_ID}"
         ),
+    },
+    FASTH3_PREVIEW_LORA_FILENAME: {
+        "repo_id": FASTH3_PREVIEW_LORA_REPO_ID,
+        "revision": FASTH3_PREVIEW_LORA_REVISION,
+        "remote_path": FASTH3_PREVIEW_LORA_REMOTE_PATH,
+        "sha256": FASTH3_PREVIEW_LORA_SHA256,
+        "size": FASTH3_PREVIEW_LORA_SIZE,
+        "label": "FastH3 Preview v1 VSA Data-Free",
+        "support_url": FASTH3_PREVIEW_GUIDE_URL,
     },
 }
 

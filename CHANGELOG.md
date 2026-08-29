@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+MiniMax H3 FastH3 Preview: experimental 4-step T2VA recipe from FastVideo
+(`FastVideo-FastH3-4-step-Preview-v1-VSA-DataFree`). Studio can download the
+matching LoRA and lock four steps. FastVideo trained this student for VSA-H3
+sparse attention; Maestro still uses dense attention, so this is a trial. It
+does not support first/last frame or Omni Ref.
+
 ## [0.9.0] - 2026-08-24
 
 First HocusPocus preview. Product versioning is independent of the Maestro
