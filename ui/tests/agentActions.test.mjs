@@ -60,7 +60,25 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode'],
+    ['open_tab', 'prepare_video', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
+})
+
+test('drops cancel_task unless confirm is true and repairs an explicit cancel request', async () => {
+  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const unsigned = parseAgentTurn(JSON.stringify({
+    reply: 'Cancelo.',
+    actions: [{ type: 'cancel_task', task_id: 'task-1', confirm: false }],
+  }))
+  assert.equal(unsigned.actions.length, 0)
+  const signed = parseAgentTurn(JSON.stringify({
+    reply: 'Cancelo.',
+    actions: [{ type: 'cancel_task', task_id: 'task-1', confirm: true }],
+  }))
+  assert.equal(signed.actions[0].type, 'cancel_task')
+  assert.equal(signed.actions[0].taskId, 'task-1')
+  const repaired = reconcileAgentTurnWithRequest('cancela el trabajo activo', { reply: 'Vale.', actions: [] })
+  assert.equal(repaired.actions[0].type, 'cancel_task')
+  assert.equal(repaired.actions[0].confirm, true)
 })

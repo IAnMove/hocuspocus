@@ -884,6 +884,9 @@ ahora:
 5. `start_generation`
 6. `create_story`
 7. `create_series_episode`
+8. `inspect_queue`
+9. `cancel_task`
+10. `resume_task`
 
 ### Proceso común de cualquier acción
 
@@ -956,9 +959,24 @@ El mismo catálogo debe crecer por familias, no mediante un CLI con shell libre:
   revisión y assembly;
 - 3D/rhythm: cargar escena, seleccionar capa, adjuntar audio, analizar beat map,
   aplicar perfil y guardar/capturar;
-- cola: inspeccionar, cancelar, reanudar y reintentar con confirmación adecuada;
+- cola: inspeccionar, cancelar y reanudar ya están conectados; falta reintentar con confirmación y seguimiento continuo del job;
 - workspace: seleccionar y crear; borrado siempre con confirmación reforzada.
 
 Un CLI sólo queda recomendado para un **Developer Agent** separado que edite
 código o ejecute tareas de sistema. La operación cotidiana de HocusPocus debe
 seguir usando este registro cerrado de herramientas y las APIs/stores reales.
+
+## 24. Cola canónica operable (2026-08-30)
+
+Tras el commit de Story/Series Lab, el mago todavía no podía responder de
+forma actuada a “¿qué hay en cola?”, “¿por qué espera la GPU?” o “cancela el
+trabajo activo”: tenía el snapshot en el prompt, pero ninguna herramienta de
+cola. Se añaden tres acciones sobre las APIs canónicas existentes:
+
+- `inspect_queue` refresca `/api/v1/tasks` y abre el historial de Activity.
+- `cancel_task` exige `confirm=true` y un id, o la única raíz activa.
+- `resume_task` usa el mismo contrato de confirmación y `canResumeCanonicalTask`.
+
+Una orden explícita de cancelar se repara en cliente si el LLM omite la
+acción, igual que las órdenes de vídeo. No se lanza ninguna generación en esta
+ampliación.

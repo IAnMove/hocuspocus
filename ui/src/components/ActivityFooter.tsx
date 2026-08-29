@@ -6,6 +6,7 @@ import { applyCanonicalTaskEvent, canResumeCanonicalTask, canonicalTaskVisualSta
 import { formatAppAction, formatAppTimestamp } from '../lib/locale'
 import { useStore } from '../stores/useStore'
 import { AgentAssistantPanel, AgentAvatar } from '../features/agent/AgentAssistantPanel'
+import { listenForAgentActivityDetails } from '../features/agent/agentUiBus'
 
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const CONNECTED_RECONCILE_MS = 60_000
@@ -205,6 +206,8 @@ export function ActivityFooter() {
     hiddenHistoryIdsRef.current = loaded
     setHiddenHistoryIds(loaded)
   }, [activeWorkspace])
+
+  useEffect(() => listenForAgentActivityDetails(() => setDetailsOpen(true)), [])
 
   useEffect(() => {
     let mounted = true

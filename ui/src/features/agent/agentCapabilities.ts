@@ -74,6 +74,30 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     risk: 'edit',
     parameters: ['series_title', 'series_premise', 'episode_title', 'episode_premise', 'episode_logline', 'characters', 'locations', 'outline_beats'],
   },
+  {
+    type: 'inspect_queue',
+    title: 'Inspect the canonical queue',
+    purpose: 'Refresh the real task list and open Activity so the user sees current jobs.',
+    useWhen: 'The user asks what is in the queue, why the GPU is waiting, or the status of a job.',
+    risk: 'read',
+    parameters: ['queue_scope'],
+  },
+  {
+    type: 'cancel_task',
+    title: 'Cancel a canonical task',
+    purpose: 'Cancel one identified active task through the canonical API after an explicit user request.',
+    useWhen: 'The user clearly asks to cancel the active job or a specific task id.',
+    risk: 'edit',
+    parameters: ['task_id', 'confirm'],
+  },
+  {
+    type: 'resume_task',
+    title: 'Resume a canonical task',
+    purpose: 'Resume one identified resumable task through the canonical API after an explicit user request.',
+    useWhen: 'The user clearly asks to resume a specific interrupted or failed resumable task.',
+    risk: 'edit',
+    parameters: ['task_id', 'confirm'],
+  },
 ]
 
 export function buildAgentCapabilityGuide(): string {

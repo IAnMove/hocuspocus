@@ -120,6 +120,23 @@ export interface AgentCreateSeriesEpisodeAction {
   knownUniverse: boolean
 }
 
+export interface AgentInspectQueueAction {
+  type: 'inspect_queue'
+  scope: 'active' | 'all'
+}
+
+export interface AgentCancelTaskAction {
+  type: 'cancel_task'
+  taskId: string
+  confirm: true
+}
+
+export interface AgentResumeTaskAction {
+  type: 'resume_task'
+  taskId: string
+  confirm: true
+}
+
 export type AgentAction = AgentOpenTabAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
@@ -127,6 +144,9 @@ export type AgentAction = AgentOpenTabAction
   | AgentStartGenerationAction
   | AgentCreateStoryAction
   | AgentCreateSeriesEpisodeAction
+  | AgentInspectQueueAction
+  | AgentCancelTaskAction
+  | AgentResumeTaskAction
 
 export interface AgentTurn {
   reply: string
@@ -352,6 +372,18 @@ function parseAction(value: unknown): AgentAction | null {
       knownUniverse: raw.known_universe === true,
     }
   }
+  if (raw.type === 'inspect_queue') {
+    const scope = cleanString(raw.queue_scope, 12)
+    return { type: 'inspect_queue', scope: scope === 'all' ? 'all' : 'active' }
+  }
+  if (raw.type === 'cancel_task') {
+    if (raw.confirm !== true) return null
+    return { type: 'cancel_task', taskId: cleanString(raw.task_id, 160), confirm: true }
+  }
+  if (raw.type === 'resume_task') {
+    if (raw.confirm !== true) return null
+    return { type: 'resume_task', taskId: cleanString(raw.task_id, 160), confirm: true }
+  }
   return null
 }
 
@@ -397,6 +429,19 @@ const EXPLICIT_VIDEO_REQUESTS = [
 
 const NEGATED_VIDEO_REQUEST = /\b(?:no|sin|don['’]?t|do\s+not)\b[^.!?\n]{0,32}\b(?:hagas|generes|crees|lances|encoles|hacer|generar|crear|lanzar|encolar|make|create|generate|render|launch|start|queue)\b/i
 
+const EXPLICIT_CANCEL_REQUESTS = [
+  /\b(?:cancela|cancelad|cancelar|para|parad|det[eé]n|detened)\b[^.!?\n]*\b(?:tarea|trabajo|job|cola|generaci[oó]n|v[ií]deo|video|clip)\b/i,
+  /\b(?:para|parad|det[eé]n)\b[^.!?\n]*\b(?:lo que est[aá] (?:generando|renderizando|en cola|corriendo))\b/i,
+  /\b(?:cancel|stop|abort)\b[^.!?\n]*\b(?:task|job|queue|generation|video|clip|active)\b/i,
+]
+const NEGATED_CANCEL_REQUEST = /\b(?:no|sin|don['’]?t|do\s+not)\b[^.!?\n]{0,24}\b(?:cancel|cancela|canceles|pares|detengas|stop|abort)\b/i
+
+export function isExplicitCancelRequest(request: string): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_CANCEL_REQUEST.test(text)) return false
+  return EXPLICIT_CANCEL_REQUESTS.some(pattern => pattern.test(text))
+}
+
 export function isExplicitVideoGenerationRequest(request: string): boolean {
   const text = request.trim()
   if (!text || NEGATED_VIDEO_REQUEST.test(text)) return false
@@ -410,6 +455,15 @@ export function isExplicitVideoGenerationRequest(request: string): boolean {
  * “how do I generate a video?” and negated requests remain read-only.
  */
 export function reconcileAgentTurnWithRequest(request: string, turn: AgentTurn): AgentTurn {
+  if (isExplicitCancelRequest(request)) {
+    const existing = turn.actions.find(
+      (action): action is AgentCancelTaskAction => action.type === 'cancel_task',
+    )
+    return {
+      reply: 'Cancelaré la tarea activa en la cola canónica y dejaré Activity a la vista. 🪄',
+      actions: [{ type: 'cancel_task', taskId: existing?.taskId || '', confirm: true }],
+    }
+  }
   if (!isExplicitVideoGenerationRequest(request)) return turn
 
   const navigation = turn.actions
@@ -445,7 +499,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'start_generation', 'create_story', 'create_series_episode'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -484,6 +538,9 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           target_duration_seconds: { type: 'number', minimum: 0, maximum: 3_600 },
           create_if_missing: { type: 'boolean' },
           known_universe: { type: 'boolean' },
+          queue_scope: { type: 'string', enum: ['', 'active', 'all'] },
+          task_id: { type: 'string', maxLength: 160 },
+          confirm: { type: 'boolean' },
           characters: {
             type: 'array', maxItems: 16,
             items: {
@@ -524,7 +581,8 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           'world_summary', 'language', 'series_title', 'series_premise',
           'series_logline', 'episode_title', 'episode_premise',
           'episode_logline', 'target_duration_seconds', 'create_if_missing',
-          'known_universe', 'characters', 'locations', 'outline_beats',
+          'known_universe', 'queue_scope', 'task_id', 'confirm',
+          'characters', 'locations', 'outline_beats',
         ],
       },
     },
@@ -748,7 +806,13 @@ export async function executeAgentActions(
           ? 'Enviando el vídeo a la cola…'
           : action.type === 'create_story'
             ? 'Escribiendo y guardando la nueva historia…'
-            : 'Preparando la serie y el nuevo episodio…'
+            : action.type === 'create_series_episode'
+              ? 'Preparando la serie y el nuevo episodio…'
+              : action.type === 'inspect_queue'
+                ? 'Consultando la cola canónica…'
+                : action.type === 'cancel_task'
+                  ? 'Cancelando la tarea en la cola…'
+                  : 'Reanudando la tarea en la cola…'
     onStep?.(working)
     try {
       if (action.type === 'open_tab') {
@@ -773,9 +837,18 @@ export async function executeAgentActions(
       } else if (action.type === 'create_story') {
         const { createFilledStory } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledStory(action) })
-      } else {
+      } else if (action.type === 'create_series_episode') {
         const { createFilledSeriesEpisode } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledSeriesEpisode(action) })
+      } else if (action.type === 'inspect_queue') {
+        const { inspectCanonicalQueue } = await import('./queueActions')
+        results.push({ action, ok: true, message: await inspectCanonicalQueue(action.scope) })
+      } else if (action.type === 'cancel_task') {
+        const { cancelCanonicalQueueTask } = await import('./queueActions')
+        results.push({ action, ok: true, message: await cancelCanonicalQueueTask(action.taskId, action.confirm) })
+      } else {
+        const { resumeCanonicalQueueTask } = await import('./queueActions')
+        results.push({ action, ok: true, message: await resumeCanonicalQueueTask(action.taskId, action.confirm) })
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

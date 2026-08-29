@@ -39,3 +39,18 @@ export function listenForAgentSeriesSection(
   if (requestedSeriesSection) listener(requestedSeriesSection)
   return () => window.removeEventListener(SERIES_SECTION_EVENT, handler)
 }
+
+const ACTIVITY_DETAILS_EVENT = 'hocuspocus:activity-details'
+let requestedActivityDetails = false
+
+export function openAgentActivityDetails(): void {
+  requestedActivityDetails = true
+  window.dispatchEvent(new CustomEvent(ACTIVITY_DETAILS_EVENT))
+}
+
+export function listenForAgentActivityDetails(listener: () => void): () => void {
+  const handler = () => listener()
+  window.addEventListener(ACTIVITY_DETAILS_EVENT, handler)
+  if (requestedActivityDetails) listener()
+  return () => window.removeEventListener(ACTIVITY_DETAILS_EVENT, handler)
+}
