@@ -610,6 +610,138 @@ def test_h3_legacy_assembly_offsets_source_audio_to_plan_start(tmp_path: Path):
     assert outputs[-1] == "minimax_h3_h3offset_multiclip.mp4"
 
 
+def test_h3_legacy_music_video_slices_each_shot_from_its_timeline_offset(tmp_path: Path):
+    """Shot 2+ must be conditioned on the song after prior segments, not clip 0."""
+    song = tmp_path / "song.wav"
+    song.write_bytes(b"RIFF")
+    start_images = []
+    for index in range(2):
+        path = tmp_path / f"shot_{index}.png"
+        path.write_bytes(b"frame")
+        start_images.append(path.name)
+
+    submitted = []
+    slices = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        name = f"clip_{len(submitted)}.mp4"
+        (tmp_path / name).write_bytes(b"video")
+        return [name]
+
+    def slice_audio(src, start_sec, duration_sec, dst):
+        slices.append((src, float(start_sec), float(duration_sec), dst))
+        Path(dst).write_bytes(b"slice")
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(paths, destination, audio_path, **_kwargs):
+            Path(destination).write_bytes(b"assembled")
+            return True
+
+    fps = 24
+    first_frames = director_pipeline._minimax_h3_frame_segments(5.0, fps)[0]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch.object(director_pipeline, "_slice_audio_segment", side_effect=slice_audio), \
+            patch.object(director_pipeline, "_save_pipeline_state"), \
+            patch.object(director_pipeline, "_wgp", FakeWgp()):
+        director_pipeline._run_minimax_h3_story_video(
+            "h3offset",
+            {
+                "video_model": "minimax_h3_legacy",
+                "pipeline_type": "music_video",
+                "audio_path": str(song),
+            },
+            [{"video_prompt": "first verse"}, {"video_prompt": "second verse"}],
+            [{"start": 2, "end": 7}, {"start": 7, "end": 12}],
+            start_images,
+            {"num_inference_steps": 20, "h3_reference_mode": "first_frame"},
+            "960x544",
+            str(tmp_path),
+        )
+
+    assert len(slices) == 2
+    assert slices[0][0] == str(song)
+    assert slices[0][1] == 2.0
+    assert slices[1][1] == 2.0 + first_frames / fps
+    assert submitted[0]["audio_guide"] == slices[0][3]
+    assert submitted[1]["audio_guide"] == slices[1][3]
+    assert submitted[0]["audio_prompt_type"] == "A"
+    assert submitted[1]["audio_prompt_type"] == "A"
+
+
+def test_h3_legacy_resume_advances_audio_offset_past_reused_segments(tmp_path: Path):
+    """Reused shot 1 must still move the song cursor before rendering shot 2."""
+    song = tmp_path / "song.wav"
+    song.write_bytes(b"RIFF")
+    first_frame = tmp_path / "shot_0.png"
+    second_frame = tmp_path / "shot_1.png"
+    first_frame.write_bytes(b"frame")
+    second_frame.write_bytes(b"frame")
+    existing = tmp_path / "existing.mp4"
+    existing.write_bytes(b"video")
+
+    submitted = []
+    slices = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        name = f"new_{len(submitted)}.mp4"
+        (tmp_path / name).write_bytes(b"video")
+        return [name]
+
+    def slice_audio(src, start_sec, duration_sec, dst):
+        slices.append(float(start_sec))
+        Path(dst).write_bytes(b"slice")
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(paths, destination, audio_path, **_kwargs):
+            Path(destination).write_bytes(b"assembled")
+            return True
+
+    fps = 24
+    reused_frames = 124
+    previous_pipelines = director_pipeline._pipelines
+    director_pipeline._pipelines = {
+        "h3resumeaudio": {
+            "_h3_segments": [[{
+                "index": 0,
+                "filename": existing.name,
+                "frames": reused_frames,
+                "stale": False,
+            }], []],
+        },
+    }
+    try:
+        with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+                patch.object(director_pipeline, "_slice_audio_segment", side_effect=slice_audio), \
+                patch.object(director_pipeline, "_save_pipeline_state"), \
+                patch.object(director_pipeline, "_wgp", FakeWgp()):
+            director_pipeline._run_minimax_h3_story_video(
+                "h3resumeaudio",
+                {
+                    "video_model": "minimax_h3_legacy",
+                    "pipeline_type": "music_video",
+                    "audio_path": str(song),
+                },
+                [{"video_prompt": "first"}, {"video_prompt": "second"}],
+                [{"start": 2, "end": 7}, {"start": 7, "end": 12}],
+                [first_frame.name, second_frame.name],
+                {"num_inference_steps": 20},
+                "960x544",
+                str(tmp_path),
+            )
+    finally:
+        director_pipeline._pipelines = previous_pipelines
+
+    assert len(submitted) == 1
+    assert "second" in submitted[0]["prompt"]
+    assert slices == [2.0 + reused_frames / fps]
+    assert submitted[0]["audio_guide"]
+
+
 def test_h3_story_routes_only_the_location_selected_for_the_shot(tmp_path: Path):
     shot = tmp_path / "shot.png"
     character = tmp_path / "character.png"
