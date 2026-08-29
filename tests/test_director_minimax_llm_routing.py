@@ -68,6 +68,42 @@ class TestMiniMaxChatRouting(unittest.TestCase):
         self.assertEqual(captured.get("api_key"), "server-secret")
         self.assertEqual(captured.get("remote_url"), "https://api.minimax.io")
 
+    def test_generic_generate_uses_hardened_minimax_completion_path(self):
+        previous = {
+            "provider": llm_service._provider,
+            "model_id": llm_service._model_id,
+            "remote_url": llm_service._remote_url,
+            "api_key": llm_service._api_key,
+        }
+        llm_service._provider = "minimax"
+        llm_service._model_id = "MiniMax-M3"
+        llm_service._remote_url = "https://api.minimax.io"
+        llm_service._api_key = "server-secret"
+        schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+        try:
+            with patch.object(llm_service, "is_loaded", return_value=True), patch.object(
+                llm_service, "generate_openai_compatible", return_value='{"ok":true}',
+            ) as compatible:
+                result = llm_service.generate(
+                    prompt="return JSON",
+                    system_prompt="planner",
+                    max_new_tokens=4000,
+                    temperature=0.15,
+                    json_schema=schema,
+                )
+        finally:
+            llm_service._provider = previous["provider"]
+            llm_service._model_id = previous["model_id"]
+            llm_service._remote_url = previous["remote_url"]
+            llm_service._api_key = previous["api_key"]
+
+        self.assertEqual(result, '{"ok":true}')
+        compatible.assert_called_once()
+        kwargs = compatible.call_args.kwargs
+        self.assertEqual(kwargs["model_id"], "MiniMax-M3")
+        self.assertEqual(kwargs["json_schema"], schema)
+        self.assertEqual(kwargs["max_new_tokens"], 4000)
+
 
 if __name__ == "__main__":
     unittest.main()

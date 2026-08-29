@@ -183,6 +183,33 @@ def test_cancelled_assembly_removes_output_created_during_cancellation(tmp_path)
 
     assert _wait_for_terminal(status, response["jobId"])["status"] == "cancelled"
     assert not list(tmp_path.glob("*_series_assembly.mp4"))
+    assert not list(tmp_path.glob("*_series_assembly.meta.json"))
+    episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
+    assert not episode.get("assemblyAssetIds")
+
+
+def test_cancelled_assembly_after_meta_removes_sidecar(tmp_path):
+    output_created = threading.Event()
+    release = threading.Event()
+
+    def concatenate(paths, output_path, *, abort_callback):
+        shutil.copyfile(paths[0], output_path)
+        output_created.set()
+        assert release.wait(timeout=2)
+        return True
+
+    endpoints, library = _client(tmp_path, concatenate)
+    start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
+    status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
+    cancel = endpoints["/api/v1/series/assembly/jobs/{job_id}/cancel"]
+    response = start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))
+
+    assert output_created.wait(timeout=1)
+    cancel(response["jobId"], type("Payload", (), {"workspace": "default"})())
+    release.set()
+
+    assert _wait_for_terminal(status, response["jobId"])["status"] == "cancelled"
+    assert not list(tmp_path.glob("*.meta.json"))
     episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
     assert not episode.get("assemblyAssetIds")
 

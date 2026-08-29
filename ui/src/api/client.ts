@@ -157,7 +157,7 @@ export async function fetchCanonicalTasks(
 ): Promise<{ workspace: string; tasks: CanonicalTask[]; latest_event_id: number }> {
   const query = new URLSearchParams({ workspace, status, limit: '300' })
   const res = await fetch(`${BASE}/api/v1/tasks?${query}`)
-  if (!res.ok) throw new Error('Failed to fetch Loreframe Lab tasks')
+  if (!res.ok) throw new Error('Failed to fetch HocusPocus tasks')
   return res.json()
 }
 
@@ -181,7 +181,7 @@ export async function upsertCanonicalClientTask(task: Record<string, unknown>): 
   const res = await fetch(`${BASE}/api/v1/tasks/upsert`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: canonicalTask }),
   })
-  if (!res.ok) throw new Error('Failed to publish Loreframe Lab activity')
+  if (!res.ok) throw new Error('Failed to publish HocusPocus activity')
   return res.json()
 }
 
@@ -221,7 +221,7 @@ export async function resumeCanonicalTask(taskId: string, workspace: string): Pr
 
 export async function dismissCanonicalTask(taskId: string, workspace: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}?workspace=${encodeURIComponent(workspace)}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('Failed to dismiss Loreframe Lab task')
+  if (!res.ok) throw new Error('Failed to dismiss HocusPocus task')
 }
 
 // --- Models & Families ---
@@ -781,12 +781,13 @@ export async function toggleFavorite(name: string): Promise<{ name: string; favo
 
 // --- Outputs ---
 
-export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; resultKind?: ApiOutput['result_kind']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
+export async function fetchOutputs(limit = 0, offset = 0, opts?: { favoritesOnly?: boolean; multiclipOnly?: boolean; editsOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; resultKind?: ApiOutput['result_kind']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
   const params = new URLSearchParams()
   if (limit > 0) params.set('limit', String(limit))
   if (offset > 0) params.set('offset', String(offset))
   if (opts?.favoritesOnly) params.set('favorites_only', 'true')
   if (opts?.multiclipOnly) params.set('multiclip_only', 'true')
+  if (opts?.editsOnly) params.set('edits_only', 'true')
   if (opts?.resultKind) params.set('result_kind', opts.resultKind)
   if (opts?.search) params.set('search', opts.search)
   // "__uploads__" browses the uploads folder (virtual Uploads view)
@@ -808,6 +809,97 @@ export async function saveScene(scene: import('../types').Scene, preview: string
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to save scene' }))
     throw new Error(error.detail || 'Failed to save scene')
+  }
+  return res.json()
+}
+
+export async function fetchCharacterKitLibrary(workspace: string): Promise<import('../lib/characterKit').CharacterKitLibrary> {
+  const response = await fetch(`${BASE}/api/v1/character-kits/library?workspace=${encodeURIComponent(workspace)}`)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not load Character Kits' }))
+    throw new Error(typeof error.detail === 'string' ? error.detail : 'Could not load Character Kits')
+  }
+  return response.json()
+}
+
+export async function saveCharacterKit(
+  workspace: string,
+  library: import('../lib/characterKit').CharacterKitLibrary,
+  kit: import('../lib/characterKit').CharacterKit,
+): Promise<import('../lib/characterKit').CharacterKitLibrary> {
+  const response = await fetch(`${BASE}/api/v1/character-kits/library/kits/${encodeURIComponent(kit.id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, baseRevision: library.revision, kit, makeActive: true }),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not save Character Kit' }))
+    const detail = error.detail
+    throw new Error(typeof detail === 'string' ? detail : typeof detail?.message === 'string' ? detail.message : 'Could not save Character Kit')
+  }
+  return response.json()
+}
+
+export async function deleteCharacterKit(
+  workspace: string,
+  library: import('../lib/characterKit').CharacterKitLibrary,
+  kitId: string,
+): Promise<import('../lib/characterKit').CharacterKitLibrary> {
+  const response = await fetch(`${BASE}/api/v1/character-kits/library/kits/${encodeURIComponent(kitId)}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, baseRevision: library.revision }),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not delete Character Kit' }))
+    const detail = error.detail
+    throw new Error(typeof detail === 'string' ? detail : typeof detail?.message === 'string' ? detail.message : 'Could not delete Character Kit')
+  }
+  return response.json()
+}
+
+export async function cleanCharacterKitFaceOverlay(details: {
+  workspace: string
+  source: string
+  padding?: number
+}): Promise<import('../lib/characterKitFaceRig').FaceRigCleanupResult> {
+  const response = await fetch(`${BASE}/api/v1/character-kits/face-rig/cleanup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspace: details.workspace,
+      source: details.source,
+      padding: details.padding ?? 8,
+    }),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not clean Face Rig overlay' }))
+    const detail = error.detail
+    throw new Error(typeof detail === 'string' ? detail : 'Could not clean Face Rig overlay')
+  }
+  return response.json()
+}
+
+export async function saveSceneRecording(
+  recording: Blob,
+  details: {
+    scene: import('../types').Scene
+    prompt: string
+    recipe: Record<string, unknown> | null
+  workspace?: string
+  },
+): Promise<ApiOutput> {
+  const form = new FormData()
+  const extension = recording.type.includes('mp4') ? 'mp4' : 'webm'
+  form.append('file', recording, `${details.scene.name || '3d-scene'}.${extension}`)
+  form.append('metadata', JSON.stringify(details))
+  const res = await fetch(`${BASE}/api/v1/scenes/recordings`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to save MP4 recording' }))
+    throw new Error(error.detail || 'Failed to save MP4 recording')
   }
   return res.json()
 }
@@ -1456,8 +1548,8 @@ export async function fetchPipelineStatus(pid: string): Promise<PipelineStatus> 
   return res.json()
 }
 
-export async function fetchActiveDirectorPipelines(): Promise<{ pipelines: ActiveDirectorPipeline[] }> {
-  const res = await fetch(`${BASE}/api/v1/director/pipelines/active`)
+export async function fetchActiveDirectorPipelines(signal?: AbortSignal): Promise<{ pipelines: ActiveDirectorPipeline[] }> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/active`, { signal })
   if (!res.ok) throw new Error('Failed to fetch active Director pipelines')
   return res.json()
 }
@@ -1662,17 +1754,28 @@ export async function fetchPreflight(): Promise<{ ok: boolean; checks: Preflight
 
 // ── Director Pipeline Dashboard ──────────────────────────────────────────
 
-export async function fetchPipelineList(): Promise<{ pipelines: import('../types').PipelineListItem[] }> {
-  const res = await fetch(`${BASE}/api/v1/director/pipelines`)
+export async function fetchPipelineList(opts?: { limit?: number; offset?: number }): Promise<{
+  pipelines: import('../types').PipelineListItem[]
+  total: number
+}> {
+  const params = new URLSearchParams()
+  if (opts?.limit && opts.limit > 0) params.set('limit', String(opts.limit))
+  if (opts?.offset && opts.offset > 0) params.set('offset', String(opts.offset))
+  const qs = params.toString()
+  const res = await fetch(`${BASE}/api/v1/director/pipelines${qs ? `?${qs}` : ''}`)
   if (!res.ok) throw new Error('Failed to fetch pipelines')
-  return res.json()
+  const data = await res.json()
+  const pipelines = data.pipelines || []
+  return { pipelines, total: data.total ?? pipelines.length }
 }
 
 export async function fetchSavedPipeline(pid: string): Promise<import('../types').SavedPipelineState> {
   const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}`, {
     cache: 'no-store',
   })
-  if (!res.ok) throw new Error('Pipeline not found')
+  if (!res.ok) {
+    throw new Error(res.status === 404 ? 'Pipeline not found' : `Failed to load pipeline (${res.status})`)
+  }
   return res.json()
 }
 
@@ -3410,7 +3513,7 @@ async function getStoryGenerationStatusResilient(
       if (signal?.aborted) throw new DOMException('Story generation cancelled', 'AbortError')
       if (!isStoryStatusNetworkError(error)) throw error
       if (attempt >= STORY_STATUS_RETRY_DELAYS_MS.length) {
-        throw new Error(`Connection to Loreframe Lab is still unavailable. The job remains saved. Resume job: ${jobId}`)
+        throw new Error(`Connection to HocusPocus is still unavailable. The job remains saved. Resume job: ${jobId}`)
       }
       const delayMs = STORY_STATUS_RETRY_DELAYS_MS[attempt]
       onRetry?.(attempt + 1, delayMs)
@@ -3714,8 +3817,8 @@ export async function fetchSystemDetect(): Promise<import('../types').SystemDete
 
 /** Live CPU / RAM / GPU + loaded-model telemetry for the hardware
  *  status indicators. Cheap enough to poll every ~2s. */
-export async function fetchSystemStats(): Promise<import('../types').SystemStats> {
-  const res = await fetch(`${BASE}/api/v1/system-stats`)
+export async function fetchSystemStats(signal?: AbortSignal): Promise<import('../types').SystemStats> {
+  const res = await fetch(`${BASE}/api/v1/system-stats`, { signal })
   if (!res.ok) throw new Error('Failed to fetch system stats')
   return res.json()
 }
@@ -4012,6 +4115,10 @@ export async function generateLlmText(params: {
   system_prompt?: string
   max_new_tokens?: number
   temperature?: number
+  top_p?: number
+  frequency_penalty?: number
+  presence_penalty?: number
+  json_schema?: Record<string, unknown>
 }): Promise<string> {
   const res = await fetch(`${BASE}/api/v1/llm/generate`, {
     method: 'POST',
@@ -4021,6 +4128,10 @@ export async function generateLlmText(params: {
       system_prompt: params.system_prompt || '',
       max_new_tokens: params.max_new_tokens ?? 1536,
       temperature: params.temperature ?? 0.3,
+      top_p: params.top_p ?? 0.9,
+      frequency_penalty: params.frequency_penalty ?? 0,
+      presence_penalty: params.presence_penalty ?? 0,
+      json_schema: params.json_schema,
     }),
   })
   if (!res.ok) {
@@ -4068,7 +4179,7 @@ export async function testLlmConnection(): Promise<{ ok: boolean; response: stri
   try {
     res = await fetch(`${BASE}/api/v1/llm/test`, { method: 'POST' })
   } catch {
-    throw new Error('Loreframe Lab backend is unreachable. Reopen the current WebUI from Pinokio and try again')
+    throw new Error('HocusPocus backend is unreachable. Reopen the current WebUI from Pinokio and try again')
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'LLM test failed' }))
@@ -4880,8 +4991,8 @@ export interface ActiveDownload {
   seconds_since_progress: number
 }
 
-export async function fetchActiveDownloads(): Promise<{ downloads: ActiveDownload[] }> {
-  const res = await fetch(`${BASE}/api/v1/downloads/active`)
+export async function fetchActiveDownloads(signal?: AbortSignal): Promise<{ downloads: ActiveDownload[] }> {
+  const res = await fetch(`${BASE}/api/v1/downloads/active`, { signal })
   if (!res.ok) throw new Error(`Failed to fetch active downloads (${res.status})`)
   return res.json()
 }

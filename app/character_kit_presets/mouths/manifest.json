@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "states": [
+    "closed",
+    "small",
+    "wide",
+    "round"
+  ],
+  "packs": [
+    {
+      "id": "paper-cut",
+      "label": "Paper cut",
+      "style": "cutout",
+      "notes": "Construction-paper collage with thick uneven outline. Round viseme has a true hole.",
+      "states": {
+        "closed": {
+          "file": "paper-cut/closed.png",
+          "width": 940,
+          "height": 1006
+        },
+        "small": {
+          "file": "paper-cut/small.png",
+          "width": 970,
+          "height": 902
+        },
+        "wide": {
+          "file": "paper-cut/wide.png",
+          "width": 953,
+          "height": 902
+        },
+        "round": {
+          "file": "paper-cut/round.png",
+          "width": 908,
+          "height": 851
+        }
+      }
+    },
+    {
+      "id": "children-illustration",
+      "label": "Children illustration",
+      "style": "children-illustration",
+      "notes": "Gouache picture-book mouth. Closed is a rounded smile blob rather than anatomical lips.",
+      "states": {
+        "closed": {
+          "file": "children-illustration/closed.png",
+          "width": 857,
+          "height": 926
+        },
+        "small": {
+          "file": "children-illustration/small.png",
+          "width": 852,
+          "height": 532
+        },
+        "wide": {
+          "file": "children-illustration/wide.png",
+          "width": 817,
+          "height": 748
+        },
+        "round": {
+          "file": "children-illustration/round.png",
+          "width": 630,
+          "height": 624
+        }
+      }
+    },
+    {
+      "id": "limited-anime",
+      "label": "Limited anime",
+      "style": "anime-2d",
+      "notes": "Cel-shaded peach lips, two tones, crisp outline.",
+      "states": {
+        "closed": {
+          "file": "limited-anime/closed.png",
+          "width": 804,
+          "height": 337
+        },
+        "small": {
+          "file": "limited-anime/small.png",
+          "width": 607,
+          "height": 407
+        },
+        "wide": {
+          "file": "limited-anime/wide.png",
+          "width": 715,
+          "height": 653
+        },
+        "round": {
+          "file": "limited-anime/round.png",
+          "width": 574,
+          "height": 570
+        }
+      }
+    },
+    {
+      "id": "felt-puppet",
+      "label": "Felt puppet",
+      "style": "cutout",
+      "notes": "Wool felt with cream blanket stitch. Closed still has a slight seam opening.",
+      "states": {
+        "closed": {
+          "file": "felt-puppet/closed.png",
+          "width": 989,
+          "height": 582
+        },
+        "small": {
+          "file": "felt-puppet/small.png",
+          "width": 879,
+          "height": 619
+        },
+        "wide": {
+          "file": "felt-puppet/wide.png",
+          "width": 975,
+          "height": 805
+        },
+        "round": {
+          "file": "felt-puppet/round.png",
+          "width": 825,
+          "height": 826
+        }
+      }
+    },
+    {
+      "id": "comic-ink",
+      "label": "Comic ink",
+      "style": "cutout",
+      "notes": "Bold India-ink outline with Ben-Day dots.",
+      "states": {
+        "closed": {
+          "file": "comic-ink/closed.png",
+          "width": 1024,
+          "height": 1024
+        },
+        "small": {
+          "file": "comic-ink/small.png",
+          "width": 998,
+          "height": 1016
+        },
+        "wide": {
+          "file": "comic-ink/wide.png",
+          "width": 1024,
+          "height": 1016
+        },
+        "round": {
+          "file": "comic-ink/round.png",
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "id": "watercolor",
+      "label": "Watercolor",
+      "style": "children-illustration",
+      "notes": "Soft rose/peach washes. Closed includes surrounding skin wash.",
+      "states": {
+        "closed": {
+          "file": "watercolor/closed.png",
+          "width": 955,
+          "height": 718
+        },
+        "small": {
+          "file": "watercolor/small.png",
+          "width": 822,
+          "height": 767
+        },
+        "wide": {
+          "file": "watercolor/wide.png",
+          "width": 923,
+          "height": 1014
+        },
+        "round": {
+          "file": "watercolor/round.png",
+          "width": 828,
+          "height": 855
+        }
+      }
+    }
+  ]
+}

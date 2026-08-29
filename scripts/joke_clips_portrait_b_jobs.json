@@ -1,0 +1,137 @@
+[
+  {
+    "index": 1,
+    "series": "Futurama",
+    "joke": "En el año 3000 el chiste sigue igual. Yo también.",
+    "job_id": "d0697eae",
+    "task_id": "task-generation-d0697eae",
+    "root_task_id": "task-generation-d0697eae",
+    "status": "queued"
+  },
+  {
+    "index": 2,
+    "series": "Gremlins",
+    "joke": "Tres reglas. El chiste rompe las tres.",
+    "job_id": "50d85ea2",
+    "task_id": "task-generation-50d85ea2",
+    "root_task_id": "task-generation-50d85ea2",
+    "status": "queued"
+  },
+  {
+    "index": 3,
+    "series": "Alien",
+    "joke": "En el espacio nadie oye tu chiste. Menos mal.",
+    "job_id": "a653f323",
+    "task_id": "task-generation-a653f323",
+    "root_task_id": "task-generation-a653f323",
+    "status": "queued"
+  },
+  {
+    "index": 4,
+    "series": "The X-Files",
+    "joke": "La verdad está ahí fuera. El punchline, no.",
+    "job_id": "3260d1c4",
+    "task_id": "task-generation-3260d1c4",
+    "root_task_id": "task-generation-3260d1c4",
+    "status": "queued"
+  },
+  {
+    "index": 5,
+    "series": "Brooklyn Nine-Nine",
+    "joke": "Cool cool cool. El chiste no lo es.",
+    "job_id": "eb2101dc",
+    "task_id": "task-generation-eb2101dc",
+    "root_task_id": "task-generation-eb2101dc",
+    "status": "queued"
+  },
+  {
+    "index": 6,
+    "series": "Rick and Morty",
+    "joke": "Wubba lubba. Traducción: este chiste es basura, Morty.",
+    "job_id": "0781d432",
+    "task_id": "task-generation-0781d432",
+    "root_task_id": "task-generation-0781d432",
+    "status": "queued"
+  },
+  {
+    "index": 7,
+    "series": "The Boys",
+    "joke": "Soy el héroe. El chiste sois vosotros por aplaudir.",
+    "job_id": "aefb18b6",
+    "task_id": "task-generation-aefb18b6",
+    "root_task_id": "task-generation-aefb18b6",
+    "status": "queued"
+  },
+  {
+    "index": 8,
+    "series": "Succession",
+    "joke": "Tú no eres serio. Esto tampoco.",
+    "job_id": "4ca7d8c6",
+    "task_id": "task-generation-4ca7d8c6",
+    "root_task_id": "task-generation-4ca7d8c6",
+    "status": "queued"
+  },
+  {
+    "index": 9,
+    "series": "Ted Lasso",
+    "joke": "Sé curioso. Empieza preguntándote por qué reíste.",
+    "job_id": "def66e83",
+    "task_id": "task-generation-def66e83",
+    "root_task_id": "task-generation-def66e83",
+    "status": "queued"
+  },
+  {
+    "index": 10,
+    "series": "Wednesday",
+    "joke": "Sonreí por dentro. Murió.",
+    "job_id": "4bb714f0",
+    "task_id": "task-generation-4bb714f0",
+    "root_task_id": "task-generation-4bb714f0",
+    "status": "queued"
+  },
+  {
+    "index": 11,
+    "series": "Cobra Kai",
+    "joke": "Sweep the leg. El chiste ya estaba en el suelo.",
+    "job_id": "f952be65",
+    "task_id": "task-generation-f952be65",
+    "root_task_id": "task-generation-f952be65",
+    "status": "queued"
+  },
+  {
+    "index": 12,
+    "series": "The Last of Us",
+    "joke": "Sigue. El punchline no sobrevive el invierno.",
+    "job_id": "d94e54b2",
+    "task_id": "task-generation-d94e54b2",
+    "root_task_id": "task-generation-d94e54b2",
+    "status": "queued"
+  },
+  {
+    "index": 13,
+    "series": "Arcane",
+    "joke": "¿Un chiste? Boom. Ya está.",
+    "job_id": "5a0048b4",
+    "task_id": "task-generation-5a0048b4",
+    "root_task_id": "task-generation-5a0048b4",
+    "status": "queued"
+  },
+  {
+    "index": 14,
+    "series": "Peaky Blinders",
+    "joke": "Por la familia. El chiste paga intereses.",
+    "job_id": "887187aa",
+    "task_id": "task-generation-887187aa",
+    "root_task_id": "task-generation-887187aa",
+    "status": "queued"
+  },
+  {
+    "index": 15,
+    "series": "True Detective",
+    "joke": "El tiempo es un círculo. Este chiste también.",
+    "job_id": "07674dd6",
+    "task_id": "task-generation-07674dd6",
+    "root_task_id": "task-generation-07674dd6",
+    "status": "queued"
+  }
+]

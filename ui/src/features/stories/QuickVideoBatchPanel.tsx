@@ -1,5 +1,6 @@
 import { ExternalLink, Loader2, Play, RefreshCcw, Square, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import * as api from '../../api/client'
 import type { StoryMusicVideoGenerationMode, StoryProject } from './types'
 
@@ -81,7 +82,16 @@ export function QuickVideoBatchPanel({
   const refresh = useCallback(async () => {
     try {
       const response = await api.listQuickVideoBatches(workspace)
-      setJobs(response.jobs)
+      setJobs(current => {
+        const localById = new Map(current.map(job => [job.jobId, job]))
+        return response.jobs.map(server => {
+          const local = localById.get(server.jobId)
+          if (local?.status === 'cancelling' && (server.status === 'queued' || server.status === 'running')) {
+            return { ...server, status: 'cancelling' as const }
+          }
+          return server
+        })
+      })
       setError('')
     } catch (reason) {
       setError((reason as Error).message)
@@ -89,11 +99,30 @@ export function QuickVideoBatchPanel({
   }, [workspace])
 
   useEffect(() => { void refresh() }, [refresh])
-  useEffect(() => {
-    if (!jobs.some(job => activeStatuses.has(job.status))) return
-    const timer = window.setInterval(() => void refresh(), 2500)
-    return () => window.clearInterval(timer)
-  }, [jobs, refresh])
+  const hasActiveJobs = jobs.some(job => activeStatuses.has(job.status))
+  useSerializedPoll({
+    enabled: hasActiveJobs,
+    intervalMs: 2500,
+    ownerKey: workspace,
+    poll: async () => {
+      const response = await api.listQuickVideoBatches(workspace)
+      return response.jobs
+    },
+    onValue: serverJobs => {
+      setJobs(current => {
+        const localById = new Map(current.map(job => [job.jobId, job]))
+        return serverJobs.map(server => {
+          const local = localById.get(server.jobId)
+          if (local?.status === 'cancelling' && (server.status === 'queued' || server.status === 'running')) {
+            return { ...server, status: 'cancelling' as const }
+          }
+          return server
+        })
+      })
+      setError('')
+    },
+    onError: reason => setError((reason as Error).message),
+  })
 
   const start = async () => {
     if (!parsedIdeas.length || busy) return
@@ -146,6 +175,9 @@ export function QuickVideoBatchPanel({
   ) => {
     if (command === 'discard' && !window.confirm('¿Descartar el historial de este lote? Los vídeos generados se conservarán.')) return
     setError('')
+    if (command === 'cancel') {
+      setJobs(current => current.map(value => value.jobId === job.jobId ? { ...value, status: 'cancelling' } : value))
+    }
     try {
       const result = await api.controlQuickVideoBatch(job.jobId, command, workspace, itemIndex)
       if ('discarded' in result) {

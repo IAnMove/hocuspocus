@@ -10,6 +10,9 @@ ui/node_modules/
 # React build output
 ui/dist/
 
+# Private planning notes and local-only development artefacts.
+/internal/
+
 # Pinokio runtime
 logs/
 cache/

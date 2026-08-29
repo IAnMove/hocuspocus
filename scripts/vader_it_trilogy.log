@@ -1,0 +1,604 @@
+18:35:11 ==== vader_friday_kernel ====
+18:35:11 starting MiniMax Music song
+18:35:11 MiniMax Music job minimax-music-b7f0e236dca3
+18:35:11 MiniMax Music queued: 1 MiniMax Music candidate(s) queued
+18:35:19 MiniMax Music failed: MiniMax Music rejected the request: This Music API is no longer available to new users. Existing paying customers can continue to use the service. For new access, please try MiniMax Audio (https://www.minimax.io/audio) or the open-source model at https://huggingface.co/MiniMaxAI/MiniMax-Music3
+18:35:19 MiniMax Music unavailable (MiniMax Music failed: MiniMax Music rejected the request: This Music API is no longer available to new users. Existing paying customers can continue to use the service. For new access, please try MiniMax Audio (https://www.minimax.io/audio) or the open-source model at https://huggingface.co/MiniMaxAI/MiniMax-Music3)
+18:35:19 generating local ACE-Step song
+18:38:13 song source=ace_step file=2026-08-21-18h38m12s_seed590064009_[Estrofa]Obi-Wan desplegó un viernes, un kernel lleno de oopspanic, stack trace, dmesg en rojo, A.wav
+18:38:56 planned 4 clips; MiniMax M3 will write prompts
+18:38:56 pipeline 96a07fba
+18:38:56 pipeline 96a07fba running/planning: Starting...
+18:39:16 pipeline 96a07fba running/planning: minimax / MiniMax-M3 is writing 8 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+18:39:36 pipeline 96a07fba running/planning: minimax / MiniMax-M3 is writing 8 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+18:39:56 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:40:16 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:40:36 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:40:56 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:41:16 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:41:36 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:41:56 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:42:16 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:42:36 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:42:56 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:43:17 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · starting model pass
+18:43:37 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · MiniMax H3 sampling — step 4/20
+18:43:57 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · MiniMax H3 sampling — step 7/20
+18:44:17 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · MiniMax H3 sampling — step 11/20
+18:44:37 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · MiniMax H3 sampling — step 14/20
+18:44:57 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · MiniMax H3 sampling — step 18/20
+18:45:17 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+18:45:37 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+18:45:57 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+18:46:17 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · starting model pass
+18:46:41 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · starting model pass
+18:47:01 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · starting model pass
+18:47:21 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · starting model pass
+18:47:41 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · starting model pass
+18:48:01 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · starting model pass
+18:48:21 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · starting model pass
+18:48:41 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · starting model pass
+18:49:01 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · MiniMax H3 sampling — step 3/20
+18:49:21 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · MiniMax H3 sampling — step 7/20
+18:49:41 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · MiniMax H3 sampling — step 11/20
+18:50:01 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · MiniMax H3 sampling — step 14/20
+18:50:21 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · MiniMax H3 sampling — step 18/20
+18:50:41 pipeline 96a07fba running/generating_video: H3 Legacy · clip 1/8 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+18:51:01 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · starting model pass
+18:51:21 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · starting model pass
+18:51:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · starting model pass
+18:52:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · starting model pass
+18:52:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · starting model pass
+18:52:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · starting model pass
+18:53:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · MiniMax H3 sampling — step 2/20
+18:53:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · MiniMax H3 sampling — step 5/20
+18:53:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · MiniMax H3 sampling — step 9/20
+18:54:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · MiniMax H3 sampling — step 12/20
+18:54:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · MiniMax H3 sampling — step 16/20
+18:54:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+18:55:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+18:55:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · starting model pass
+18:55:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · starting model pass
+18:56:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · starting model pass
+18:56:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · starting model pass
+18:56:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · starting model pass
+18:57:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · starting model pass
+18:57:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · MiniMax H3 sampling — step 4/20
+18:57:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · MiniMax H3 sampling — step 7/20
+18:58:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · MiniMax H3 sampling — step 11/20
+18:58:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · MiniMax H3 sampling — step 14/20
+18:58:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · MiniMax H3 sampling — step 18/20
+18:59:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 2/8 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+18:59:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · starting model pass
+18:59:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · starting model pass
+19:00:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · starting model pass
+19:00:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · starting model pass
+19:00:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · starting model pass
+19:01:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · starting model pass
+19:01:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · MiniMax H3 sampling — step 1/20
+19:01:42 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · MiniMax H3 sampling — step 5/20
+19:02:02 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · MiniMax H3 sampling — step 9/20
+19:02:22 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · MiniMax H3 sampling — step 12/20
+19:02:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · MiniMax H3 sampling — step 16/20
+19:03:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:03:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:03:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · starting model pass
+19:04:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · starting model pass
+19:04:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · starting model pass
+19:04:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · starting model pass
+19:05:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · starting model pass
+19:05:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · starting model pass
+19:05:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · MiniMax H3 sampling — step 3/20
+19:06:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · MiniMax H3 sampling — step 7/20
+19:06:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · MiniMax H3 sampling — step 10/20
+19:06:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · MiniMax H3 sampling — step 14/20
+19:07:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · MiniMax H3 sampling — step 17/20
+19:07:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 3/8 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:07:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · starting model pass
+19:08:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · starting model pass
+19:08:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · starting model pass
+19:08:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · starting model pass
+19:09:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · starting model pass
+19:09:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · starting model pass
+19:09:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · starting model pass
+19:10:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 2/20
+19:10:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 4/20
+19:10:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 5/20
+19:11:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 7/20
+19:11:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 8/20
+19:11:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 10/20
+19:12:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 11/20
+19:12:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 13/20
+19:12:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 14/20
+19:13:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 16/20
+19:13:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 17/20
+19:13:43 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling — step 19/20
+19:14:03 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:14:23 pipeline 96a07fba running/generating_video: H3 Legacy · clip 4/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:14:44 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · starting model pass
+19:15:04 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · starting model pass
+19:15:24 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · starting model pass
+19:15:44 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · starting model pass
+19:16:04 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · starting model pass
+19:16:24 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · starting model pass
+19:16:44 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 1/20
+19:17:04 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 3/20
+19:17:24 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 5/20
+19:17:44 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 6/20
+19:18:04 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 8/20
+19:18:24 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 9/20
+19:18:44 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 11/20
+19:19:04 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 12/20
+19:19:24 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 14/20
+19:19:44 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 15/20
+19:20:04 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 17/20
+19:20:24 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling — step 18/20
+19:20:44 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:21:04 pipeline 96a07fba running/generating_video: H3 Legacy · clip 5/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:21:24 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · starting model pass
+19:21:44 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · starting model pass
+19:22:04 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · starting model pass
+19:22:24 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · starting model pass
+19:22:44 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · starting model pass
+19:23:04 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · starting model pass
+19:23:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 1/20
+19:23:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 3/20
+19:24:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 5/20
+19:24:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 6/20
+19:24:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 8/20
+19:25:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 10/20
+19:25:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 12/20
+19:25:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 13/20
+19:26:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 15/20
+19:26:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 17/20
+19:26:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling — step 19/20
+19:27:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:27:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 6/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:27:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · starting model pass
+19:28:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · starting model pass
+19:28:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · starting model pass
+19:28:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · starting model pass
+19:29:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · starting model pass
+19:29:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · starting model pass
+19:29:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 1/20
+19:30:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 3/20
+19:30:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 4/20
+19:30:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 6/20
+19:31:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 7/20
+19:31:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 9/20
+19:31:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 10/20
+19:32:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 12/20
+19:32:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 13/20
+19:32:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 15/20
+19:33:05 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 16/20
+19:33:25 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 18/20
+19:33:45 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling — step 19/20
+19:34:06 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:34:26 pipeline 96a07fba running/generating_video: H3 Legacy · clip 7/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:34:46 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · starting model pass
+19:35:06 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · starting model pass
+19:35:26 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · starting model pass
+19:35:46 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · starting model pass
+19:36:06 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · starting model pass
+19:36:26 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · starting model pass
+19:36:46 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 2/20
+19:37:06 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 4/20
+19:37:26 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 6/20
+19:37:46 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 7/20
+19:38:06 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 9/20
+19:38:26 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 11/20
+19:38:46 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 13/20
+19:39:06 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 14/20
+19:39:26 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 16/20
+19:39:46 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling — step 18/20
+19:40:06 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:40:26 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:40:46 pipeline 96a07fba running/generating_video: H3 Legacy · clip 8/8 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:41:06 pipeline 96a07fba completed/completed: Done!
+19:41:06 vader_friday_kernel done
+19:41:06 ==== vader_denied_merge ====
+19:41:06 starting MiniMax Music song
+19:41:10 MiniMax Music job minimax-music-484d878d8062
+19:41:10 MiniMax Music queued: 1 MiniMax Music candidate(s) queued
+19:41:18 MiniMax Music failed: MiniMax Music rejected the request: This Music API is no longer available to new users. Existing paying customers can continue to use the service. For new access, please try MiniMax Audio (https://www.minimax.io/audio) or the open-source model at https://huggingface.co/MiniMaxAI/MiniMax-Music3
+19:41:19 MiniMax Music unavailable (MiniMax Music failed: MiniMax Music rejected the request: This Music API is no longer available to new users. Existing paying customers can continue to use the service. For new access, please try MiniMax Audio (https://www.minimax.io/audio) or the open-source model at https://huggingface.co/MiniMaxAI/MiniMax-Music3)
+19:41:19 generating local ACE-Step song
+19:43:42 song source=ace_step file=2026-08-21-19h43m32s_seed875519062_[Estrofa]El Consejo lee el pull request, mil comentarios, cero mergeAnakin pide write access, le n.wav
+19:44:09 planned 5 clips; MiniMax M3 will write prompts
+19:44:11 pipeline deb88c89
+19:44:11 pipeline deb88c89 running/planning: Starting...
+19:44:31 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:44:51 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:45:11 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:45:31 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:45:51 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:46:11 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:46:31 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:46:51 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:47:11 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:47:31 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:47:51 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:48:11 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:48:31 pipeline deb88c89 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+19:48:51 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+19:49:11 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+19:49:31 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+19:49:51 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+19:50:11 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+19:50:31 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+19:50:51 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 2/20
+19:51:11 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 5/20
+19:51:31 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 7/20
+19:51:51 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 9/20
+19:52:11 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 12/20
+19:52:31 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 14/20
+19:52:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 17/20
+19:53:12 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 19/20
+19:53:32 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:53:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+19:54:12 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+19:54:32 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+19:54:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+19:55:12 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+19:55:32 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+19:55:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+19:56:12 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 4/20
+19:56:32 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 7/20
+19:56:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 9/20
+19:57:12 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 12/20
+19:57:32 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 15/20
+19:57:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 18/20
+19:58:12 pipeline deb88c89 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+19:58:32 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · starting model pass
+19:58:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · starting model pass
+19:59:12 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · starting model pass
+19:59:32 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · starting model pass
+19:59:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · starting model pass
+20:00:12 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · starting model pass
+20:00:32 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · starting model pass
+20:00:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 2/20
+20:01:12 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 4/20
+20:01:32 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 5/20
+20:01:52 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 7/20
+20:02:13 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 8/20
+20:02:33 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 10/20
+20:02:53 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 11/20
+20:03:13 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 13/20
+20:03:33 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 14/20
+20:03:53 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 16/20
+20:04:13 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 17/20
+20:04:33 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling — step 19/20
+20:04:53 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:05:15 pipeline deb88c89 running/generating_video: H3 Legacy · clip 2/6 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:05:35 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+20:05:55 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+20:06:15 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+20:06:35 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+20:06:55 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+20:07:15 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+20:07:35 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 3/20
+20:07:55 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 7/20
+20:08:15 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 11/20
+20:08:35 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 14/20
+20:08:55 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 18/20
+20:09:15 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:09:36 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+20:09:56 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+20:10:16 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+20:10:36 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+20:10:56 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+20:11:16 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+20:11:36 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 2/20
+20:11:56 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 6/20
+20:12:16 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 9/20
+20:12:36 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 13/20
+20:12:56 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 16/20
+20:13:16 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:13:36 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:13:56 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+20:14:16 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+20:14:36 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+20:14:56 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+20:15:16 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+20:15:36 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+20:15:56 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+20:16:17 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 2/20
+20:16:37 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 5/20
+20:16:57 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 9/20
+20:17:17 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 12/20
+20:17:37 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 16/20
+20:17:57 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:18:17 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:19:17 pipeline deb88c89 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:19:37 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · starting model pass
+20:19:57 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · starting model pass
+20:20:17 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · starting model pass
+20:20:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · starting model pass
+20:20:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · starting model pass
+20:21:18 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · starting model pass
+20:21:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · MiniMax H3 sampling — step 4/20
+20:21:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · MiniMax H3 sampling — step 8/20
+20:22:18 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · MiniMax H3 sampling — step 11/20
+20:22:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · MiniMax H3 sampling — step 15/20
+20:22:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · MiniMax H3 sampling — step 19/20
+20:23:18 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 1/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:23:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · starting model pass
+20:23:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · starting model pass
+20:24:18 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · starting model pass
+20:24:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · starting model pass
+20:24:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · starting model pass
+20:25:18 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · starting model pass
+20:25:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · MiniMax H3 sampling — step 2/20
+20:25:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · MiniMax H3 sampling — step 6/20
+20:26:18 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · MiniMax H3 sampling — step 10/20
+20:26:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · MiniMax H3 sampling — step 13/20
+20:26:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · MiniMax H3 sampling — step 17/20
+20:27:18 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:27:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 2/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:27:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · starting model pass
+20:28:18 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · starting model pass
+20:28:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · starting model pass
+20:28:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · starting model pass
+20:29:18 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · starting model pass
+20:29:38 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · starting model pass
+20:29:58 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · MiniMax H3 sampling — step 4/20
+20:30:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · MiniMax H3 sampling — step 8/20
+20:30:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · MiniMax H3 sampling — step 12/20
+20:30:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · MiniMax H3 sampling — step 15/20
+20:31:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · MiniMax H3 sampling — step 19/20
+20:31:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 4/6 · segment 3/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:31:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+20:32:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+20:32:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+20:32:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+20:33:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+20:33:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+20:33:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 2/20
+20:34:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 5/20
+20:34:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 8/20
+20:34:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 11/20
+20:35:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 14/20
+20:35:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 17/20
+20:35:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:36:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:36:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+20:36:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+20:37:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+20:37:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+20:37:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+20:38:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+20:38:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 3/20
+20:38:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 6/20
+20:39:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 9/20
+20:39:39 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 12/20
+20:39:59 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 15/20
+20:40:19 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 18/20
+20:40:40 pipeline deb88c89 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:41:00 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+20:41:20 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+20:41:40 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+20:42:00 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+20:42:20 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+20:42:40 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+20:43:00 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 1/20
+20:43:20 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 4/20
+20:43:40 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 6/20
+20:44:00 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 9/20
+20:44:20 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 11/20
+20:44:40 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 13/20
+20:45:00 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 16/20
+20:45:20 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 18/20
+20:45:40 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:46:00 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:46:20 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+20:46:40 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+20:47:00 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+20:47:20 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+20:47:40 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+20:48:00 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+20:48:21 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+20:48:41 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+20:49:01 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 2/20
+20:49:21 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 5/20
+20:49:41 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 8/20
+20:50:01 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 11/20
+20:50:21 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 14/20
+20:50:41 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 17/20
+20:51:01 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:51:21 pipeline deb88c89 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:51:41 pipeline deb88c89 completed/completed: Done!
+20:51:41 vader_denied_merge done
+20:51:41 ==== vader_works_on_my_machine ====
+20:51:41 starting MiniMax Music song
+20:51:41 MiniMax Music job minimax-music-1c5fb9edfb7c
+20:51:41 MiniMax Music queued: 1 MiniMax Music candidate(s) queued
+20:51:49 MiniMax Music failed: MiniMax Music rejected the request: This Music API is no longer available to new users. Existing paying customers can continue to use the service. For new access, please try MiniMax Audio (https://www.minimax.io/audio) or the open-source model at https://huggingface.co/MiniMaxAI/MiniMax-Music3
+20:51:49 MiniMax Music unavailable (MiniMax Music failed: MiniMax Music rejected the request: This Music API is no longer available to new users. Existing paying customers can continue to use the service. For new access, please try MiniMax Audio (https://www.minimax.io/audio) or the open-source model at https://huggingface.co/MiniMaxAI/MiniMax-Music3)
+20:51:49 generating local ACE-Step song
+20:53:27 song source=ace_step file=2026-08-21-20h53m26s_seed279525435_[Estrofa]En el Templo el test está verde, en Coruscant todo pasaen Mustafar peta a la primera, An.wav
+20:53:52 planned 3 clips; MiniMax M3 will write prompts
+20:53:52 pipeline ec5fc482
+20:53:52 pipeline ec5fc482 running/planning: Starting...
+20:54:12 pipeline ec5fc482 running/planning: minimax / MiniMax-M3 is writing 6 timed song segments: scene, action, camera, and final generation prompt. Waiting for the remote response; image and video generation have not started.
+20:54:32 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+20:54:52 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+20:55:12 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+20:55:32 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+20:55:52 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+20:56:12 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · starting model pass
+20:56:32 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 2/20
+20:56:52 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 5/20
+20:57:12 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 7/20
+20:57:32 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 10/20
+20:57:52 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 12/20
+20:58:12 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 15/20
+20:58:32 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 17/20
+20:58:52 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling — step 19/20
+20:59:12 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+20:59:33 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+20:59:53 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+21:00:13 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+21:00:33 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+21:00:53 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+21:01:13 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · starting model pass
+21:01:33 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 1/20
+21:01:53 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 4/20
+21:02:13 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 7/20
+21:02:33 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 10/20
+21:02:53 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 13/20
+21:03:13 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 16/20
+21:03:33 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling — step 19/20
+21:03:53 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 1/6 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:04:13 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · starting model pass
+21:04:33 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · starting model pass
+21:04:53 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · starting model pass
+21:05:13 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · starting model pass
+21:05:34 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · starting model pass
+21:05:54 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · starting model pass
+21:06:14 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · MiniMax H3 sampling — step 2/20
+21:06:34 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · MiniMax H3 sampling — step 6/20
+21:06:54 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · MiniMax H3 sampling — step 10/20
+21:07:14 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · MiniMax H3 sampling — step 13/20
+21:07:34 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · MiniMax H3 sampling — step 17/20
+21:07:54 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:08:14 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 1/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:08:34 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · starting model pass
+21:08:54 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · starting model pass
+21:09:14 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · starting model pass
+21:09:34 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · starting model pass
+21:09:54 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · starting model pass
+21:10:14 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · MiniMax H3 sampling — step 1/20
+21:10:34 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · MiniMax H3 sampling — step 5/20
+21:10:54 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · MiniMax H3 sampling — step 8/20
+21:11:14 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · MiniMax H3 sampling — step 12/20
+21:11:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · MiniMax H3 sampling — step 15/20
+21:11:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · MiniMax H3 sampling — step 19/20
+21:12:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 2/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:12:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · starting model pass
+21:12:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · starting model pass
+21:13:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · starting model pass
+21:13:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · starting model pass
+21:13:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · starting model pass
+21:14:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · starting model pass
+21:14:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · MiniMax H3 sampling — step 3/20
+21:14:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · MiniMax H3 sampling — step 7/20
+21:15:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · MiniMax H3 sampling — step 11/20
+21:15:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · MiniMax H3 sampling — step 14/20
+21:15:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · MiniMax H3 sampling — step 18/20
+21:16:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 2/6 · segment 3/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:16:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+21:16:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+21:17:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+21:17:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+21:17:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+21:18:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · starting model pass
+21:18:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 1/20
+21:18:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 5/20
+21:19:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 9/20
+21:19:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 12/20
+21:19:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling — step 16/20
+21:20:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:20:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 1/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:20:55 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+21:21:15 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+21:21:35 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+21:21:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+21:22:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+21:22:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · starting model pass
+21:22:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 2/20
+21:23:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 6/20
+21:23:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 10/20
+21:23:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 13/20
+21:24:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling — step 17/20
+21:24:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 2/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:24:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+21:25:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+21:25:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+21:25:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+21:26:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+21:26:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · starting model pass
+21:26:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 1/20
+21:27:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 5/20
+21:27:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 8/20
+21:27:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 12/20
+21:28:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 16/20
+21:28:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling — step 19/20
+21:28:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 3/6 · segment 3/3 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:29:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · starting model pass
+21:29:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · starting model pass
+21:29:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · starting model pass
+21:30:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · starting model pass
+21:30:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · starting model pass
+21:30:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · starting model pass
+21:31:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · MiniMax H3 sampling — step 4/20
+21:31:36 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · MiniMax H3 sampling — step 7/20
+21:31:56 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · MiniMax H3 sampling — step 11/20
+21:32:16 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · MiniMax H3 sampling — step 15/20
+21:32:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · MiniMax H3 sampling — step 18/20
+21:32:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:33:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · starting model pass
+21:33:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · starting model pass
+21:33:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · starting model pass
+21:34:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · starting model pass
+21:34:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · starting model pass
+21:34:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · starting model pass
+21:35:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · MiniMax H3 sampling — step 2/20
+21:35:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · MiniMax H3 sampling — step 6/20
+21:35:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · MiniMax H3 sampling — step 9/20
+21:36:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · MiniMax H3 sampling — step 13/20
+21:36:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · MiniMax H3 sampling — step 17/20
+21:36:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:37:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 4/6 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:37:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+21:37:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+21:38:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+21:38:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+21:38:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · starting model pass
+21:39:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 1/20
+21:39:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 4/20
+21:39:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 7/20
+21:40:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 10/20
+21:40:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 13/20
+21:40:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 16/20
+21:41:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling — step 19/20
+21:41:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:41:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+21:42:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+21:42:37 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+21:42:57 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+21:43:17 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+21:43:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · starting model pass
+21:43:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 3/20
+21:44:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 7/20
+21:44:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 10/20
+21:44:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 14/20
+21:45:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling — step 18/20
+21:45:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 5/6 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:45:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+21:46:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+21:46:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+21:46:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+21:47:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+21:47:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · starting model pass
+21:47:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 2/20
+21:48:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 6/20
+21:48:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 9/20
+21:48:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 13/20
+21:49:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling — step 16/20
+21:49:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:49:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 1/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:50:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+21:50:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+21:50:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+21:51:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+21:51:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+21:51:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · starting model pass
+21:52:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 4/20
+21:52:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 8/20
+21:52:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 12/20
+21:53:18 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 15/20
+21:53:38 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling — step 19/20
+21:53:58 pipeline ec5fc482 running/generating_video: H3 Legacy · clip 6/6 · segment 2/2 · MiniMax H3 sampling complete (20/20); decoding video and audio…
+21:54:19 pipeline ec5fc482 completed/completed: Done!
+21:54:19 vader_works_on_my_machine done
+21:54:19 vader IT trilogy done

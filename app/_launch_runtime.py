@@ -30,6 +30,13 @@ import os
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
+_app_dir_for_identity = os.path.dirname(os.path.abspath(__file__))
+if _app_dir_for_identity not in sys.path:
+    sys.path.insert(0, _app_dir_for_identity)
+from app_identity import read_app_version
+
+APP_VERSION = read_app_version()
+
 import torch
 import glob
 import hashlib
@@ -67,7 +74,7 @@ sys.argv = _wgp_argv
 # instead of hanging indefinitely; HF's resumable-download retry
 # layer picks up from the partial file. Also hooks tqdm to track
 # download progress for the UI's downloads-in-progress banner.
-print("[Loreframe Lab] Installing download stall protection...")
+print("[HocusPocus Lab] Installing download stall protection...")
 from services import safe_download  # noqa: F401 (side-effect import)
 
 # HuggingFace token-path robustness (fixes the "Permission denied:
@@ -89,7 +96,7 @@ if _hf_token_path:
     except FileNotFoundError:
         pass  # absent → huggingface_hub handles this gracefully (anonymous)
     except OSError as _hf_err:
-        print(f"[Loreframe Lab] HF_TOKEN_PATH is set but unreadable "
+        print(f"[HocusPocus Lab] HF_TOKEN_PATH is set but unreadable "
               f"({type(_hf_err).__name__}) — using anonymous HuggingFace "
               "access for public models.")
         os.environ.pop("HF_TOKEN_PATH", None)
@@ -105,7 +112,7 @@ if _hf_token_path:
             _hf_const.HF_TOKEN_PATH = os.path.join(tempfile.gettempdir(), "maestro_no_hf_token")
 
 # Now safe to import wgp - all module-level code will run with patched argv
-print("[Loreframe Lab] Importing WanGP engine...")
+print("[HocusPocus Lab] Importing WanGP engine...")
 import wgp
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import debug_trace
@@ -128,7 +135,7 @@ from models.minimax_h3.turbo import (
     MINIMAX_H3_TURBO_LORA_SHA256,
     MINIMAX_H3_TURBO_LORA_SIZE,
 )
-print(f"[Loreframe Lab] WanGP loaded: {len(wgp.displayed_model_types)} models available")
+print(f"[HocusPocus Lab] WanGP loaded: {len(wgp.displayed_model_types)} models available")
 # Base save path always comes from server_config["save_path"] (never from wgp.save_path which gets workspace-modified)
 
 # Apply active workspace on startup
@@ -168,9 +175,9 @@ if "auto_performance" not in _services:
     try:
         with open(wgp.server_config_filename, "w", encoding="utf-8") as _f:
             _f.write(json.dumps(wgp.server_config, indent=4))
-        print("[Loreframe Lab] Migration: existing config detected, auto_performance set to False (manual mode preserved)")
+        print("[HocusPocus Lab] Migration: existing config detected, auto_performance set to False (manual mode preserved)")
     except Exception as _e:
-        print(f"[Loreframe Lab] Migration: failed to persist auto_performance default: {_e}")
+        print(f"[HocusPocus Lab] Migration: failed to persist auto_performance default: {_e}")
 
 # First-boot auto-tune: a fresh install has auto_performance=True but the
 # recommended profile was only ever WRITTEN when the user opened Settings and
@@ -193,18 +200,18 @@ if _services.get("auto_performance") and not _services.get("auto_performance_app
             _services["auto_performance_applied"] = True
             with open(wgp.server_config_filename, "w", encoding="utf-8") as _f:
                 _f.write(json.dumps(wgp.server_config, indent=4))
-            print(f"[Loreframe Lab] First-boot auto-tune applied: {_rec.get('_recommendation_label', 'recommended profile')} "
+            print(f"[HocusPocus Lab] First-boot auto-tune applied: {_rec.get('_recommendation_label', 'recommended profile')} "
                   f"(video_profile={_rec.get('video_profile')}, vram_safety_coefficient={_rec.get('vram_safety_coefficient')})")
         else:
-            print("[Loreframe Lab] First-boot auto-tune skipped: no CUDA GPU detected.")
+            print("[HocusPocus Lab] First-boot auto-tune skipped: no CUDA GPU detected.")
     except Exception as _e:
-        print(f"[Loreframe Lab] First-boot auto-tune skipped ({_e}); using defaults until Settings → Performance is applied.")
+        print(f"[HocusPocus Lab] First-boot auto-tune skipped ({_e}); using defaults until Settings → Performance is applied.")
 
 # Restore argv
 sys.argv = _original_argv
 
 # --- FastAPI setup ---
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -215,7 +222,7 @@ from services.access_log_filter import install_quiet_access_filter
 # filters. Install early, then idempotently confirm it again before startup.
 install_quiet_access_filter()
 
-api = FastAPI(title="Loreframe Lab API", version="1.0.0")
+api = FastAPI(title="HocusPocus Lab API", version=APP_VERSION or "0.0.0")
 
 debug_trace.configure(
     enabled=lambda: bool(
@@ -496,11 +503,11 @@ def _coordinated_generation_slot(
     model_type = str(params.get("model_type") or "").strip()
     if not description:
         if _is_legacy_h3_model(model_type):
-            description = "Loreframe Lab H3 Legacy generation"
+            description = "HocusPocus Lab H3 Legacy generation"
         elif model_type:
-            description = f"Loreframe Lab WGP generation · {model_type}"
+            description = f"HocusPocus Lab WGP generation · {model_type}"
         else:
-            description = "Loreframe Lab GPU generation"
+            description = "HocusPocus Lab GPU generation"
     with generation_slot(_gen_lock, job) as acquired:
         if not acquired:
             yield False
@@ -775,8 +782,16 @@ def _is_legacy_h3_model(model_type: str | None) -> bool:
     return str(model_type or "").strip() == minimax_h3_service.MODEL_ID
 
 
+def _is_character_sheet_engine(body: dict | None) -> bool:
+    return (
+        isinstance(body, dict)
+        and str(body.get("character_sheet_engine") or "").strip()
+        == minimax_h3_service.CHARACTER_SHEET_ENGINE
+    )
+
+
 def _is_minimax_h3_model(model_type: str | None) -> bool:
-    """Recognize every native H3 variant from the v1.6.5 model registry."""
+    """Recognize every native H3 variant from the current model registry."""
     candidate = str(model_type or "").strip()
     if not candidate:
         return False
@@ -6558,25 +6573,12 @@ def delete_preset(preset_id: str):
     return {"deleted": preset_id}
 
 
-def _read_app_version() -> str:
-    """Maestro release version from the repo-root VERSION file."""
-    try:
-        vpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "VERSION")
-        with open(vpath, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    except OSError:
-        return ""
-
-
-_APP_VERSION = _read_app_version()
-
-
 @api.get("/api/v1/system-config")
 def get_system_config():
     """Return system-level settings for the UI System tab."""
     cfg = wgp.server_config
     return {
-        "app_version": _APP_VERSION,
+        "app_version": APP_VERSION,
         "attention_mode": cfg.get("attention_mode", "auto"),
         "transformer_quantization": cfg.get("transformer_quantization", "int8"),
         "vae_config": cfg.get("vae_config", 0),
@@ -6637,7 +6639,7 @@ def _apply_linked_model_folders(folders):
         if not os.path.isdir(ap):
             raise HTTPException(status_code=400, detail=f"Folder does not exist: {ap}")
         if not is_external_root(ap):
-            raise HTTPException(status_code=400, detail=f"Folder is inside the Loreframe Lab install (already searched): {ap}")
+            raise HTTPException(status_code=400, detail=f"Folder is inside the HocusPocus Lab install (already searched): {ap}")
         ap_n = os.path.normcase(ap)
         if ap_n == primary_n:
             raise HTTPException(status_code=400, detail=f"Folder is the primary download root: {ap}")
@@ -7135,7 +7137,7 @@ def system_preflight():
             "id": "ffmpeg",
             "level": "error",
             "message": "ffmpeg was not found on PATH. Video and audio "
-                       "export will fail. Install ffmpeg and restart Loreframe Lab.",
+                       "export will fail. Install ffmpeg and restart HocusPocus Lab.",
         })
 
     # CUDA — the generation pipeline is NVIDIA-only.
@@ -7145,7 +7147,7 @@ def system_preflight():
             checks.append({
                 "id": "cuda",
                 "level": "error",
-                "message": "No CUDA GPU detected. Loreframe Lab's generation "
+                "message": "No CUDA GPU detected. HocusPocus Lab's generation "
                            "pipeline requires an NVIDIA GPU; generation will "
                            "not work on this machine.",
             })
@@ -7930,7 +7932,7 @@ async def storage_remove_linked(request: Request):
         raise HTTPException(status_code=404, detail="File not found.")
     target = os.path.abspath(path)
     if not wgp.fl.is_protected_path(target):
-        raise HTTPException(status_code=400, detail="That file is not in a linked install — use Reclaim for Loreframe Lab's own copies.")
+        raise HTTPException(status_code=400, detail="That file is not in a linked install — use Reclaim for HocusPocus Lab's own copies.")
     target_real = os.path.realpath(target)
     try:
         psize = os.path.getsize(target_real)
@@ -7960,11 +7962,11 @@ async def storage_remove_linked(request: Request):
         if surviving:
             break
     if not surviving:
-        raise HTTPException(status_code=409, detail="Loreframe Lab does not hold an identical copy of that file — refusing to remove the linked install's only version.")
+        raise HTTPException(status_code=409, detail="HocusPocus Lab does not hold an identical copy of that file — refusing to remove the linked install's only version.")
     from services.win_safe_files import recycle_file
     if not recycle_file(target):
         raise HTTPException(status_code=423, detail="Could not move the file to the Recycle Bin (it may be locked, or too large for the Bin). Nothing was deleted.")
-    print(f"[Storage] Removed linked duplicate to Recycle Bin: {target} ({psize} bytes; Loreframe Lab's copy: {surviving})")
+    print(f"[Storage] Removed linked duplicate to Recycle Bin: {target} ({psize} bytes; HocusPocus Lab's copy: {surviving})")
     return {"status": "ok", "freed_bytes": psize, "recycled": True, "surviving_copy": surviving}
 
 
@@ -8237,6 +8239,13 @@ async def llm_generate(request: Request):
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
 
+    json_schema = body.get("json_schema")
+    if json_schema is not None:
+        if not isinstance(json_schema, dict):
+            raise HTTPException(status_code=400, detail="json_schema must be an object")
+        if len(json.dumps(json_schema, ensure_ascii=False)) > 100_000:
+            raise HTTPException(status_code=400, detail="json_schema is too large")
+
     _ensure_llm_loaded()
 
     try:
@@ -8246,7 +8255,10 @@ async def llm_generate(request: Request):
             max_new_tokens=body.get("max_new_tokens", 256),
             temperature=body.get("temperature", 0.7),
             top_p=body.get("top_p", 0.9),
+            frequency_penalty=body.get("frequency_penalty", 0.0),
+            presence_penalty=body.get("presence_penalty", 0.0),
             seed=body.get("seed"),
+            json_schema=json_schema,
         )
         return {"text": result}
     except Exception as e:
@@ -8714,7 +8726,7 @@ async def llm_enhance_prompt(request: Request):
             print(f"[Enhance] Wan2GP enhancer failed, falling back to LLM: {e}")
             # Fall through to LLM
     elif enhancer_enabled > 0 and needs_h3_context_ir:
-        print("[Enhance] MiniMax H3 requires structured Context-IR; using Loreframe Lab's model-specific LLM guide")
+        print("[Enhance] MiniMax H3 requires structured Context-IR; using HocusPocus Lab's model-specific LLM guide")
 
     # Use our local LLM service
     from services import llm_service
@@ -10235,12 +10247,22 @@ def director_pipeline_resume(pid: str):
 # ── Director Pipeline Dashboard ───────────────────────────────────────────
 
 @api.get("/api/v1/director/pipelines")
-def list_saved_pipelines():
-    """List saved pipeline states for the active workspace."""
-    from services.director_pipeline import list_pipeline_states
+def list_saved_pipelines(limit: int = 0, offset: int = 0):
+    """List saved pipeline states for the active workspace.
+
+    Newest first. ``limit=0`` returns the full list. Workspaces passes a
+    small page so opening the tab does not parse every pipeline JSON.
+    """
+    from services.director_pipeline import count_pipeline_states, list_pipeline_states
     base = wgp.server_config.get("save_path", "outputs")
-    pipelines = list_pipeline_states(base, _get_active_workspace())
-    return {"pipelines": pipelines}
+    workspace = _get_active_workspace()
+    pipelines = list_pipeline_states(base, workspace, limit=limit, offset=offset)
+    return {
+        "pipelines": pipelines,
+        "total": count_pipeline_states(base, workspace),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @api.get("/api/v1/director/pipelines/active")
@@ -11137,6 +11159,7 @@ async def generate(request: Request):
         _base_model_type = body.get("model_type")
     _generation_model_def = wgp.get_model_def(body["model_type"]) or {}
     if legacy_h3:
+        character_sheet = _is_character_sheet_engine(body)
         body.setdefault("resolution", minimax_h3_service.DEFAULTS["resolution"])
         body.setdefault("video_length", minimax_h3_service.DEFAULTS["video_length"])
         body.setdefault(
@@ -11146,28 +11169,44 @@ async def generate(request: Request):
         body.update({
             "h3_model_profile": "quality",
             "h3_allow_low_memory_fallback": False,
-            "num_inference_steps": 20,
+            "num_inference_steps": 25 if character_sheet else 20,
             "flow_shift": 12.0,
             "h3_audio_shift": 3.0,
             "guidance_scale": 1.0,
+            # The original Character Sheet workflow has a separate Turbo
+            # LoRA. Maestro's native Turbo adapter is not interchangeable, so
+            # never let that global checkbox leak into this isolated route.
             "minimax_h3_turbo_mode": False,
             "activated_loras": [],
             "loras_multipliers": "",
             "skip_steps_cache_type": "",
         })
-        for key in (
-            "minimax_h3_text_encoder",
-            "skip_steps_multiplier",
-            "skip_steps_start_step_perc",
-            "minimax_h3_window_storyboard",
-            "h3_window_prompts",
-            "h3_window_plan_signature",
-            "h3_window_plan",
-            "minimax_h3_references",
-            "per_clip_minimax_h3_references",
-            "minimax_h3_reference_detail",
-        ):
-            body.pop(key, None)
+        if character_sheet:
+            if not isinstance(body.get("image_refs"), list) or not any(body["image_refs"]):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Character Sheet engine requires at least one image reference.",
+                )
+            body.update({
+                "resolution": "768x1344",
+                "video_length": 124,
+                "h3_reference_mode": "references",
+                "h3_ref_image_size": "max",
+            })
+        else:
+            for key in (
+                "minimax_h3_text_encoder",
+                "skip_steps_multiplier",
+                "skip_steps_start_step_perc",
+                "minimax_h3_window_storyboard",
+                "h3_window_prompts",
+                "h3_window_plan_signature",
+                "h3_window_plan",
+                "minimax_h3_references",
+                "per_clip_minimax_h3_references",
+                "minimax_h3_reference_detail",
+            ):
+                body.pop(key, None)
 
     if _is_minimax_h3_model(body.get("model_type")):
         from services.minimax_h3_duration import (
@@ -17976,7 +18015,7 @@ async def repaint_endpoint(request: Request):
         shot_final_out_dir = None
         try:
             with _coordinated_generation_slot(
-                job, description="Loreframe Lab GPU preparation · repaint",
+                job, description="HocusPocus Lab GPU preparation · repaint",
             ) as acquired:
                 if not acquired:
                     return
@@ -18932,7 +18971,7 @@ async def recast_endpoint(request: Request):
             # the generation phase; a waiting job may slip its detection in
             # between, but everything stays strictly one-GPU-task-at-a-time.
             with _coordinated_generation_slot(
-                job, description="Loreframe Lab GPU preparation · recast",
+                job, description="HocusPocus Lab GPU preparation · recast",
             ) as acquired:
                 if not acquired:
                     return
@@ -20299,7 +20338,7 @@ def _prepare_and_run_outpaint(job_id):
         # CPU-bound, but taking the slot preserves submission order and avoids
         # stacking ffmpeg decoding on top of another active generation.
         with _coordinated_generation_slot(
-            job, description="Loreframe Lab GPU preparation · outpaint",
+            job, description="HocusPocus Lab GPU preparation · outpaint",
         ) as acquired:
             if not acquired:
                 return
@@ -23130,7 +23169,7 @@ def _run_tool_upscale(job_id: str):
     abort_state = {"abort": False}
     audio_tracks = []
     with _coordinated_generation_slot(
-        job, description="Loreframe Lab GPU tool · upscale",
+        job, description="HocusPocus Lab GPU tool · upscale",
     ) as acquired:
         if not acquired:
             return False
@@ -23306,7 +23345,7 @@ def _run_tool_revoice(job_id: str):
     abort_state = {"abort": False}
     final_path = None
     with _coordinated_generation_slot(
-        job, description="Loreframe Lab GPU tool · revoice",
+        job, description="HocusPocus Lab GPU tool · revoice",
     ) as acquired:
         if not acquired:
             return False
@@ -26391,6 +26430,257 @@ def save_scene_output(body: dict):
     }
 
 
+def _character_kit_workspace(value) -> str:
+    workspace = str(value or _get_active_workspace()).strip()
+    if workspace != "default" and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", workspace):
+        raise HTTPException(status_code=400, detail="Invalid Character Kit workspace")
+    return workspace
+
+
+def _character_kit_conflict(exc) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={
+            "code": "character_kit_revision_conflict",
+            "message": str(exc),
+            "expectedRevision": exc.expected,
+            "currentRevision": exc.current,
+        },
+    )
+
+
+@api.get("/api/v1/character-kits/library")
+def get_character_kit_library(workspace: str | None = None):
+    """Load reusable cutout characters from one workspace."""
+    from services.character_kit_library import read_character_kit_library
+
+    try:
+        return read_character_kit_library(_workspace_dir(_character_kit_workspace(workspace)))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read Character Kits: {exc}") from exc
+
+
+@api.patch("/api/v1/character-kits/library/kits/{kit_id}")
+def patch_character_kit_library_item(kit_id: str, body: dict):
+    """Atomically create or update one kit without replacing its neighbours."""
+    from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit
+
+    try:
+        return patch_character_kit(
+            _workspace_dir(_character_kit_workspace(body.get("workspace"))),
+            kit_id,
+            body.get("kit"),
+            base_revision=body.get("baseRevision"),
+            make_active=body.get("makeActive") is not False,
+        )
+    except CharacterKitRevisionConflict as exc:
+        raise _character_kit_conflict(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.delete("/api/v1/character-kits/library/kits/{kit_id}")
+def delete_character_kit_library_item(kit_id: str, body: dict):
+    """Delete one kit under the same compare-and-swap contract."""
+    from services.character_kit_library import CharacterKitRevisionConflict, delete_character_kit
+
+    try:
+        return delete_character_kit(
+            _workspace_dir(_character_kit_workspace(body.get("workspace"))),
+            kit_id,
+            base_revision=body.get("baseRevision"),
+        )
+    except CharacterKitRevisionConflict as exc:
+        raise _character_kit_conflict(exc) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Character Kit not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+from routers.character_kit_face import create_character_kit_face_router
+
+api.include_router(create_character_kit_face_router(
+    workspace_dir=lambda workspace: _workspace_dir(_character_kit_workspace(workspace)),
+    uploads_root=lambda: os.path.join(os.getcwd(), "uploads"),
+))
+
+
+@api.post("/api/v1/scenes/recordings")
+async def save_scene_recording(
+    file: UploadFile = File(...),
+    metadata: str = Form("{}"),
+):
+    """Convert a browser WebM capture to MP4 and publish it in Videos.
+
+    The sidecar deliberately keeps the exact user prompt, full LLM recipe,
+    compiled scene, and source assets so a rendered 3D clip remains fully
+    explainable and reproducible from the gallery.
+    """
+    from services.scene_recording import (
+        SceneRecordingTranscodeError,
+        transcode_scene_recording,
+    )
+
+    if file.size is not None and file.size > MAX_IMAGE_UPLOAD_BYTES:
+        await file.close()
+        raise HTTPException(status_code=413, detail="Recording is too large (max 500 MB)")
+    if len(metadata.encode("utf-8")) > 8 * 1024 * 1024:
+        await file.close()
+        raise HTTPException(status_code=413, detail="Scene recording metadata is too large")
+    try:
+        details = json.loads(metadata)
+    except json.JSONDecodeError as error:
+        await file.close()
+        raise HTTPException(status_code=400, detail="Invalid scene recording metadata") from error
+    if not isinstance(details, dict):
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene recording metadata must be an object")
+
+    scene = details.get("scene")
+    recipe = details.get("recipe")
+    prompt = details.get("prompt", "")
+    if not isinstance(scene, dict) or scene.get("version") != 1:
+        await file.close()
+        raise HTTPException(status_code=400, detail="A version 1 scene is required")
+    if recipe is not None and not isinstance(recipe, dict):
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene recipe must be an object")
+    if not isinstance(prompt, str) or len(prompt) > 200_000:
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene prompt must be text under 200,000 characters")
+    layers = scene.get("layers")
+    if not isinstance(layers, list) or len(layers) > 500:
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene layers must be a list of at most 500 items")
+
+    workspace = details.get("workspace") or None
+    out_dir = _workspace_dir(workspace)
+    os.makedirs(out_dir, exist_ok=True)
+    raw_audio_tracks = scene.get("audioTracks") or []
+    if not isinstance(raw_audio_tracks, list) or len(raw_audio_tracks) > 8:
+        await file.close()
+        raise HTTPException(status_code=400, detail="Scene audio tracks must be a list of at most 8 items")
+    audio_tracks = []
+    for index, raw_track in enumerate(raw_audio_tracks):
+        if not isinstance(raw_track, dict):
+            await file.close()
+            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} is invalid")
+        filename = str(raw_track.get("filename") or "").strip()
+        # A filename, rather than a host path, keeps the browser metadata safe.
+        if not filename or os.path.basename(filename) != filename:
+            await file.close()
+            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} has an invalid filename")
+        audio_path = _safe_join(out_dir, filename)
+        if not audio_path or not os.path.isfile(audio_path):
+            await file.close()
+            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} was not found in this workspace")
+        try:
+            start_time = max(0.0, min(3600.0, float(raw_track.get("startTime", 0))))
+            volume = max(0.0, min(2.0, float(raw_track.get("volume", 1))))
+        except (TypeError, ValueError):
+            await file.close()
+            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} has invalid timing")
+        audio_tracks.append({"path": audio_path, "start_time": start_time, "volume": volume})
+    raw_name = str(scene.get("name") or "3D scene").strip()
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "3d-scene"
+    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
+    output_name = f"{stamp}_{safe_name}_3d_{uuid.uuid4().hex[:6]}.mp4"
+    output_path = os.path.join(out_dir, output_name)
+    upload_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-recording.webm")
+    fps = 60 if scene.get("fps") == 60 else 30
+    started_at = time.time()
+
+    try:
+        await _stream_upload(file, upload_path, max_bytes=MAX_IMAGE_UPLOAD_BYTES)
+        async with _UPLOAD_TRANSCODE_SLOTS:
+            await asyncio.to_thread(
+                transcode_scene_recording,
+                upload_path,
+                output_path,
+                fps=fps,
+                audio_tracks=audio_tracks,
+                duration=float(scene.get("duration") or 0),
+            )
+    except UploadTooLargeError as error:
+        raise HTTPException(status_code=413, detail="Recording is too large (max 500 MB)") from error
+    except SceneRecordingTranscodeError as error:
+        raise HTTPException(status_code=400, detail=f"Could not convert recording to MP4: {error}") from error
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Could not save MP4 recording: {error}") from error
+    finally:
+        try:
+            if os.path.isfile(upload_path):
+                os.remove(upload_path)
+        except OSError:
+            pass
+
+    completed_at = time.time()
+    width = int(scene.get("width") or 0)
+    height = int(scene.get("height") or 0)
+    duration = float(scene.get("duration") or 0)
+    source_assets = []
+    if isinstance(recipe, dict):
+        source_assets = recipe.get("assets") if isinstance(recipe.get("assets"), list) else []
+    if not source_assets:
+        source_assets = [
+            {
+                "id": layer.get("id"),
+                "name": layer.get("name"),
+                "kind": layer.get("type"),
+                "source": layer.get("source"),
+            }
+            for layer in layers
+            if isinstance(layer, dict) and layer.get("source")
+        ]
+    sidecar = {
+        "params": {
+            "model_type": "scene-animator-3d",
+            "generation_mode": "3d-scene-compositor",
+            "prompt": prompt,
+            "original_prompt": prompt,
+            "scene_recipe": recipe,
+            "scene": scene,
+            "source_assets": source_assets,
+            "audio_tracks": scene.get("audioTracks") or [],
+            "resolution": f"{width}x{height}" if width and height else None,
+            "width": width,
+            "height": height,
+            "fps": fps,
+            "duration_seconds": duration,
+            "video_length": round(duration * fps) if duration > 0 else None,
+        },
+        "generation_mode": "video",
+        "tool": "scene-animator-3d",
+        "generation_time": round(completed_at - started_at, 3),
+        "created_at": completed_at,
+        "completed_at": completed_at,
+        "output_filename": output_name,
+    }
+    try:
+        with open(os.path.splitext(output_path)[0] + ".meta.json", "w", encoding="utf-8") as handle:
+            json.dump(sidecar, handle, ensure_ascii=False, indent=2)
+    except Exception as error:
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail=f"Could not save recording metadata: {error}") from error
+
+    with _output_scan_cache_lock:
+        _output_scan_cache.pop(out_dir, None)
+    return {
+        "name": output_name,
+        "type": "video",
+        "mode": "video",
+        "size": os.path.getsize(output_path),
+        "created_at": completed_at,
+        "completed_at": completed_at,
+        "url": f"/api/v1/file/{output_name}",
+        "thumbnail_url": f"/api/v1/outputs/thumbnail/{quote(output_name, safe='')}",
+    }
+
+
 # ============================================================================
 # Comics — native projects, MiniMax images, and Director planning
 # ============================================================================
@@ -26696,7 +26986,7 @@ def _comic_reference_image_file(source: str, workspace: str | None = None) -> st
         from urllib.parse import unquote
         path = _safe_join(os.path.join(os.getcwd(), "uploads"), unquote(filename))
     if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=400, detail="Character reference must be a Loreframe Lab output or upload")
+        raise HTTPException(status_code=400, detail="Character reference must be a HocusPocus Lab output or upload")
     if os.path.getsize(path) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Character reference is too large")
     import mimetypes
@@ -30858,7 +31148,7 @@ api.include_router(create_series_assembly_router(
 
 
 def _quick_video_batch_reference_path(source: str, workspace: str) -> str | None:
-    """Resolve only Loreframe-owned image URLs used by a Quick Video batch."""
+    """Resolve only HocusPocus-owned image URLs used by a Quick Video batch."""
     from urllib.parse import unquote, urlparse
 
     parsed_path = urlparse(str(source or "")).path
@@ -31070,7 +31360,7 @@ def _story_import_upload_path(value: str) -> str:
     upload_dir = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
     candidate = os.path.realpath(str(value or ""))
     if candidate != upload_dir and not candidate.startswith(upload_dir + os.sep):
-        raise HTTPException(status_code=400, detail="Smart asset analysis only accepts Loreframe Lab uploads")
+        raise HTTPException(status_code=400, detail="Smart asset analysis only accepts HocusPocus Lab uploads")
     if not os.path.isfile(candidate):
         raise HTTPException(status_code=400, detail="One imported asset is no longer available")
     return candidate
@@ -31331,7 +31621,7 @@ lighting and story-specific color cues, but do not paste the global visual style
 field. Maestro applies that independent style at image render time when its lock is enabled.
 Keep IDs short, ASCII and stable. Do not overwrite manual facts unless the instruction asks."""
     system_prompt = (
-        "You are Loreframe Lab Story Architect: a professional story editor, character "
+        "You are HocusPocus Lab Story Architect: a professional story editor, character "
         "designer and production bible author. Return strict JSON only."
     )
     schema = _story_lab_schema(schema_scope, project_type)
@@ -31863,7 +32153,7 @@ def _load_minimax_music_job(job_id: str) -> dict | None:
                     status="interrupted",
                     phase="interrupted",
                     message=(
-                        "Loreframe Lab restarted while MiniMax Music was active. "
+                        "HocusPocus Lab restarted while MiniMax Music was active. "
                         "Existing outputs were preserved; start a new request only after checking them."
                     ),
                     error="Provider completion is unknown after restart",
@@ -32514,7 +32804,7 @@ continuity exclusions that do not conflict.
 Dialogue density: {body.get('dialogueDensity', 'medium')}
 Ending requirement: {body.get('ending') or 'a satisfying ending'}
 Locked character bible: {json.dumps(characters, ensure_ascii=False)}"""
-    system_prompt = """You are Loreframe Lab Comic Director, a professional comics writer, visual
+    system_prompt = """You are HocusPocus Lab Comic Director, a professional comics writer, visual
 storyteller and continuity editor. Return only the JSON object required by the supplied schema.
 Keep every field concise and use stable character IDs."""
     try:
@@ -33026,7 +33316,7 @@ Never add or remove a line.
 
 Source page text: {json.dumps({"panels": source_panels}, ensure_ascii=False)}""",
         system_prompt=(
-            "You are Loreframe Lab's meticulous comic letterer and translator. "
+            "You are HocusPocus Lab's meticulous comic letterer and translator. "
             "Return only the strict JSON requested by the schema."
         ),
         schema=schema,
@@ -33150,7 +33440,7 @@ At most {max_elements} text block{"s" if max_elements != 1 else ""} may appear i
 Never duplicate or paraphrase the same message across caption, dialogue and sound effect.
 Source page: {json.dumps(source, ensure_ascii=False)}""",
             system_prompt=(
-                "You are Loreframe Lab's comic lettering editor and literary translator. "
+                "You are HocusPocus Lab's comic lettering editor and literary translator. "
                 "Return only the strict JSON requested by the schema."
             ),
             schema=schema,
@@ -33263,7 +33553,7 @@ visual storytelling; never use dialogue to repeat what the image already shows.
 
 Existing plan: {json.dumps(plan, ensure_ascii=False)}""",
             system_prompt=(
-                "You are Loreframe Lab's senior comics editor. Build clear setup, inciting incident, "
+                "You are HocusPocus Lab's senior comics editor. Build clear setup, inciting incident, "
                 "progressive complications, reversal, crisis, climax and resolution. Return only strict JSON."
             ),
             schema=schema,
@@ -33642,7 +33932,7 @@ def _resolve_output_file(filename: str, workspace: str | None = None) -> str | N
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = ""):
+def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = ""):
     """List generated output files (newest first) from the active workspace.
 
     Supports pagination via limit/offset query params.
@@ -33890,6 +34180,12 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         return {"outputs": files, "total": len(files)}
 
     # Special filters: return ALL matches, bypass pagination
+    if edits_only:
+        files = [
+            item for item in files
+            if item.get("edit_sub_mode") or item.get("mode") == "avatar"
+        ]
+        return {"outputs": files, "total": len(files)}
     if favorites_only:
         files = [f for f in files if f["favorite"]]
         return {"outputs": files, "total": len(files)}
@@ -34697,7 +34993,7 @@ def _video_editor_task_identity(body: dict, job_id: str) -> tuple[str, str, str 
 
 
 def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path: str) -> None:
-    from services.video_editor import render_project
+    from services.video_editor import build_source_provenance_manifest, render_project
 
     job = _video_editor_job_snapshot(job_id)
     if job is None or str(job.get("status") or "") in _VIDEO_EDITOR_TERMINAL:
@@ -34851,7 +35147,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
         sidecar = {
             "params": {
                 "video_editor": {
-                    "version": 1,
+                    "version": 2,
                     "width": int(body["width"]),
                     "height": int(body["height"]),
                     "fps": int(body["fps"]),
@@ -34875,6 +35171,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                         }
                         for clip in body["clips"]
                     ],
+                    "source_manifest": build_source_provenance_manifest(resolved_clips),
                 },
                 "source": "video_editor",
             },
@@ -35684,12 +35981,20 @@ async def upload_image(file: UploadFile = File(...)):
     # 6.4s of the performance.
     if ext in (".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"):
         try:
-            from shared.utils.utils import get_video_info
-            _fps, _w, _h, _frame_count = get_video_info(filepath)
+            from shared.utils.video_decode import probe_video_stream_metadata
+            _metadata = probe_video_stream_metadata(filepath)
+            if _metadata is not None:
+                _fps = float(_metadata.get("fps_float") or _metadata.get("fps") or 0)
+                _frame_count = int(_metadata.get("frame_count") or 0)
+                _duration = float(_metadata.get("duration") or 0)
+            else:
+                from shared.utils.utils import get_video_info
+                _fps, _w, _h, _frame_count = get_video_info(filepath)
+                _duration = float(_frame_count or 0) / float(_fps) if _fps else 0
             if _fps:
                 result["fps"] = float(_fps)
                 result["frame_count"] = int(_frame_count or 0)
-                result["duration_seconds"] = round(float(_frame_count or 0) / float(_fps), 3)
+                result["duration_seconds"] = round(_duration or (float(_frame_count or 0) / float(_fps)), 3)
             try:
                 import av as _av
 
@@ -36369,9 +36674,9 @@ try:
         api, _demo, path="/classic",
         allowed_paths=[wgp.save_path, wgp.image_save_path, "icons"],
     )
-    print("[Loreframe Lab] Gradio classic UI mounted at /classic")
+    print("[HocusPocus Lab] Gradio classic UI mounted at /classic")
 except Exception as e:
-    print(f"[Loreframe Lab] WARNING: Could not mount Gradio UI at /classic: {e}")
+    print(f"[HocusPocus Lab] WARNING: Could not mount Gradio UI at /classic: {e}")
     traceback.print_exc()
 
 
@@ -36396,12 +36701,12 @@ _mimetypes.add_type("image/svg+xml", ".svg")
 _ui_dist = os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))
 if os.path.isdir(_ui_dist):
     api.mount("/", StaticFiles(directory=_ui_dist, html=True))
-    print(f"[Loreframe Lab] React UI serving from {_ui_dist}")
+    print(f"[HocusPocus Lab] React UI serving from {_ui_dist}")
 else:
     @api.get("/")
     def index():
         return {"message": "React UI not built. Run: cd ui && npm install && npm run build"}
-    print(f"[Loreframe Lab] React UI not found at {_ui_dist} - serving API only")
+    print(f"[HocusPocus Lab] React UI not found at {_ui_dist} - serving API only")
 
 
 # ============================================================================
@@ -36461,10 +36766,10 @@ def run_server():
     resolved_port = _first_bindable_port(host, port)
     if resolved_port is None:
         print(
-            f"\n[Loreframe Lab] ERROR: could not find a free port in "
-            f"{port}-{port + 20}. Another app (or a stale Loreframe Lab instance) "
+            f"\n[HocusPocus Lab] ERROR: could not find a free port in "
+            f"{port}-{port + 20}. Another app (or a stale HocusPocus Lab instance) "
             f"is holding them.\n"
-            f"  • Close the other program, or stop the existing Loreframe Lab from "
+            f"  • Close the other program, or stop the existing HocusPocus Lab from "
             f"the Pinokio menu, then Start again.\n"
             f"  • On Windows you can see what holds a port with: "
             f"netstat -ano | findstr :{port}\n",
@@ -36473,7 +36778,7 @@ def run_server():
         sys.exit(1)
     if resolved_port != port:
         print(
-            f"[Loreframe Lab] Port {port} was busy — using {resolved_port} instead.",
+            f"[HocusPocus Lab] Port {port} was busy — using {resolved_port} instead.",
             flush=True,
         )
         port = resolved_port
@@ -36486,7 +36791,7 @@ def run_server():
     display_host = "127.0.0.1" if host == "0.0.0.0" else host
 
     print(f"\n{'='*50}")
-    print(f"  Loreframe Lab UI: http://{display_host}:{port}/")
+    print(f"  HocusPocus Lab UI: http://{display_host}:{port}/")
     # Trailing slash required: the Gradio submount 404s the bare path.
     print(f"  Classic UI:    http://{display_host}:{port}/classic/")
     print(f"  API docs:      http://{display_host}:{port}/docs")
@@ -36504,7 +36809,7 @@ def run_server():
         # window between probe and uvicorn's own bind). Still fail loudly and
         # actionably rather than dumping a bare traceback into the launcher.
         print(
-            f"\n[Loreframe Lab] ERROR: failed to bind {host}:{port} ({e}). "
+            f"\n[HocusPocus Lab] ERROR: failed to bind {host}:{port} ({e}). "
             f"The port was taken just after we checked it — Start again to "
             f"pick a fresh port.\n",
             flush=True,

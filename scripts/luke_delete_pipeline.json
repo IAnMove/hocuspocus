@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-21-09h52m01s_seed769466180_[Estrofa]En la granja de humedad el joven mira la pantallauna tabla llena de filas, el destino en.wav",
+  "pipeline": {
+    "pipeline_id": "85e4e916",
+    "task_id": "task-director-85e4e916",
+    "root_task_id": "task-director-85e4e916"
+  },
+  "clip_count": 4
+}

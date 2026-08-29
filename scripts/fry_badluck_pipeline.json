@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-20-18h28m35s_seed46558511_[Estrofa]Pidi\u00f3 una pizza y se durmi\u00f3 mil a\u00f1osel trabajo le espera, el trabajo ya es otrose tro.wav",
+  "pipeline": {
+    "pipeline_id": "7d5b4dba",
+    "task_id": "task-director-7d5b4dba",
+    "root_task_id": "task-director-7d5b4dba"
+  },
+  "clip_count": 4
+}

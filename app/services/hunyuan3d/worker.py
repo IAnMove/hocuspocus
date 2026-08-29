@@ -24,6 +24,7 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 V2_ROOT = HERE / "vendor" / "Hunyuan3D-2"
 V21_ROOT = HERE / "vendor" / "Hunyuan3D-2.1"
+sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(V2_ROOT))
 sys.path.insert(0, str(V21_ROOT))
 sys.path.insert(0, str(V21_ROOT / "hy3dshape"))
@@ -136,38 +137,67 @@ def load_pil(path: str):
     return Image.open(path).convert("RGBA")
 
 
-def make_text_image(prompt: str, output_dir: Path, device: str) -> tuple[Any, str]:
-    event("text_to_image", 0.08, "Loading HunyuanDiT text-to-image conditioner")
-    from huggingface_hub import hf_hub_download
-    from hy3dgen.text2image import HunyuanDiTPipeline
+def _minimax_api_key() -> str:
+    env_key = str(os.environ.get("MINIMAX_API_KEY") or "").strip()
+    if env_key:
+        return env_key
+    config_path = HERE.parents[1] / "wgp_config.json"
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        return str((data.get("services") or {}).get("minimax_api_key") or "").strip()
+    except (OSError, ValueError, TypeError):
+        return ""
 
-    repo_id = "Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled"
-    pipeline = None
-    for attempt in range(1, 4):
-        try:
-            # Resolve the public manifest before Diffusers loads the snapshot.
-            # This seeds the revision cache and avoids the misleading generic
-            # "model_index.json is missing" wrapper on metadata failures.
-            hf_hub_download(repo_id, "model_index.json", token=False)
-            pipeline = HunyuanDiTPipeline(
-                repo_id,
-                device=device,
-            )
-            break
-        except OSError:
-            if attempt == 3:
-                raise
-            delay = attempt * 5
-            event("text_to_image", 0.08, f"Hugging Face metadata unavailable; retrying in {delay}s ({attempt}/3)")
-            time.sleep(delay)
-    assert pipeline is not None
-    with Heartbeat("text_to_image", 0.1, "Generating the text-to-image condition"):
-        image = pipeline(prompt)
+
+def make_text_image(prompt: str, output_dir: Path, device: str) -> tuple[Any, str]:
+    """Create the Hunyuan conditioner still without loading HunyuanDiT.
+
+    HunyuanDiT is a second multi-GB GPU model. The local snapshot was truncated
+    (MetadataIncompleteBuffer) and loading it froze the machine for minutes.
+    MiniMax Image-01 produces the white-background still instead.
+    """
+    del device
+    event("text_to_image", 0.08, "Generating a MiniMax reference still (HunyuanDiT is disabled)")
+    api_key = _minimax_api_key()
+    if not api_key:
+        raise RuntimeError(
+            "HunyuanDiT is disabled because it hangs the GPU and its weights were truncated. "
+            "Set the MiniMax API key in Settings → Services, or pass a reference image."
+        )
+    import base64
+    import requests
+
+    suffix = ", white background, centered 3D object, studio product shot, no people, no text"
+    full_prompt = prompt if "white background" in prompt.lower() else f"{prompt}{suffix}"
+    full_prompt = " ".join(full_prompt.split())[:1400]
+    response = requests.post(
+        "https://api.minimax.io/v1/image_generation",
+        json={
+            "model": "image-01",
+            "prompt": full_prompt,
+            "aspect_ratio": "1:1",
+            "response_format": "base64",
+            "n": 1,
+            "prompt_optimizer": False,
+        },
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        timeout=(15, 300),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    status = (payload.get("base_resp") or {}).get("status_code", 0)
+    if status not in (0, None):
+        raise RuntimeError((payload.get("base_resp") or {}).get("status_msg") or "MiniMax image failed")
+    encoded = (payload.get("data") or {}).get("image_base64") or []
+    if not encoded:
+        raise RuntimeError("MiniMax returned no reference image")
+    image_bytes = base64.b64decode(encoded[0])
     path = output_dir / "text_condition.png"
+    path.write_bytes(image_bytes)
+    from PIL import Image
+    image = Image.open(path).convert("RGBA")
     image.save(path)
-    del pipeline
-    release_cuda()
-    return image.convert("RGBA"), str(path)
+    return image, str(path)
 
 
 def prepare_images(request: dict[str, Any], engine: str, temp_dir: Path):
@@ -206,18 +236,36 @@ def load_v2_pipeline(model: dict[str, Any], settings: dict[str, Any]):
     from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
 
     event("loading_model", 0.24, f"Loading {model['label']}")
-    with Heartbeat("loading_model", 0.24, f"Loading {model['label']}"):
+    last_error: Exception | None = None
+    for attempt in range(1, 6):
         try:
-            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-                model["repo"],
-                subfolder=model["subfolder"],
-                use_safetensors=True,
-                device="cuda",
-            )
-        except TypeError:
-            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model["repo"], subfolder=model["subfolder"])
-    configure_pipeline(pipeline, settings)
-    return pipeline
+            with Heartbeat("loading_model", 0.24, f"Loading {model['label']}"):
+                try:
+                    pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+                        model["repo"],
+                        subfolder=model["subfolder"],
+                        use_safetensors=True,
+                        device="cuda",
+                    )
+                except TypeError:
+                    pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+                        model["repo"], subfolder=model["subfolder"]
+                    )
+            configure_pipeline(pipeline, settings)
+            return pipeline
+        except Exception as exc:
+            last_error = exc
+            text = str(exc)
+            retryable = any(token in text for token in (
+                "IncompleteRead", "ChunkedEncodingError", "MetadataIncompleteBuffer",
+                "Connection broken", "Connection reset",
+            ))
+            if not retryable or attempt == 5:
+                raise
+            delay = attempt * 8
+            event("loading_model", 0.24, f"Hugging Face download dropped; retrying in {delay}s ({attempt}/5)")
+            time.sleep(delay)
+    raise last_error or RuntimeError("Failed to load Hunyuan3D")
 
 
 def load_v21_pipeline(model: dict[str, Any], settings: dict[str, Any]):

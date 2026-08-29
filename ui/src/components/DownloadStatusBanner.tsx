@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Download, AlertTriangle } from 'lucide-react'
 import { fetchActiveDownloads, type ActiveDownload } from '../api/client'
+import { useSerializedPoll } from '../hooks/useSerializedPoll'
 
 /**
  * DownloadStatusBanner — fixed-position overlay shown while
@@ -13,9 +14,9 @@ import { fetchActiveDownloads, type ActiveDownload } from '../api/client'
  *
  * Polling is unconditional (vs gated on "is a job running") because
  * model downloads can fire from several paths in Maestro: job
- * submission, model selection, etc. Polling
- * is cheap (a 2s GET every 2s) and only ever returns data when the
- * banner needs to be visible.
+ * submission, model selection, etc. One GET at a time; the next tick
+ * waits for the previous response so a slow Lab cannot stack pending
+ * /downloads/active calls.
  *
  * Pairs with services/safe_download.py — that module patches HF
  * downloads to detect mid-stream stalls and recover automatically.
@@ -25,26 +26,18 @@ import { fetchActiveDownloads, type ActiveDownload } from '../api/client'
 export function DownloadStatusBanner() {
   const [downloads, setDownloads] = useState<ActiveDownload[]>([])
 
-  useEffect(() => {
-    let cancelled = false
-
-    const tick = async () => {
+  useSerializedPoll({
+    intervalMs: 2000,
+    poll: async (signal) => {
       try {
-        const result = await fetchActiveDownloads()
-        if (!cancelled) setDownloads(result.downloads)
-      } catch {
-        // Endpoint not available (older backend) or transient — ignore
-        if (!cancelled) setDownloads([])
+        return (await fetchActiveDownloads(signal)).downloads
+      } catch (reason) {
+        if (reason instanceof DOMException && reason.name === 'AbortError') throw reason
+        return [] as ActiveDownload[]
       }
-    }
-
-    tick()
-    const interval = setInterval(tick, 2000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [])
+    },
+    onValue: setDownloads,
+  })
 
   if (downloads.length === 0) return null
 

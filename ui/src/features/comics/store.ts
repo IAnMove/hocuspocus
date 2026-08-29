@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
 import { comicId, createComicPage, createComicProject, normalizeComicProject } from './model'
 import type { ComicAsset, ComicElement, ComicPage, ComicProject } from './types'
 
@@ -50,7 +51,7 @@ function restoreAutosave(): {
     return { project: fallback, persistedName: null, currentPageId: fallback.pages[0].id }
   }
   try {
-    const saved = JSON.parse(window.localStorage.getItem(COMIC_AUTOSAVE_KEY) || 'null')
+    const saved = JSON.parse(safeStorageGet('local', COMIC_AUTOSAVE_KEY) || 'null')
     const project = normalizeComicProject(saved?.project)
     const currentPageId = project.pages.some(page => page.id === saved?.currentPageId)
       ? saved.currentPageId
@@ -305,7 +306,7 @@ if (typeof window !== 'undefined') {
     window.clearTimeout(autosaveTimer)
     autosaveTimer = window.setTimeout(() => {
       try {
-        window.localStorage.setItem(COMIC_AUTOSAVE_KEY, JSON.stringify({
+        safeStorageSet('local', COMIC_AUTOSAVE_KEY, JSON.stringify({
           project: state.project,
           persistedName: state.persistedName,
           currentPageId: state.currentPageId,

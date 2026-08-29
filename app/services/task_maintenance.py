@@ -211,7 +211,7 @@ def apply_task_maintenance(
     """Back up, apply retention, checkpoint and optionally compact a registry."""
     if compact and not backend_stopped:
         raise TaskMaintenanceSafetyError(
-            "Compaction requires backend_stopped=True after stopping Loreframe Lab"
+            "Compaction requires backend_stopped=True after stopping HocusPocus Lab"
         )
     workspace = Path(workspace_dir).expanduser().resolve()
     before = inspect_task_database(workspace)
@@ -255,7 +255,7 @@ def restore_task_database_backup(
     """Atomically restore a validated backup while the backend is stopped."""
     if not backend_stopped:
         raise TaskMaintenanceSafetyError(
-            "Restore requires backend_stopped=True after stopping Loreframe Lab"
+            "Restore requires backend_stopped=True after stopping HocusPocus Lab"
         )
     source = Path(backup_path).expanduser().resolve()
     _validate_database(source)
@@ -307,7 +307,7 @@ def restore_task_database_backup(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Safely inspect or maintain Loreframe Lab's canonical task database."
+        description="Safely inspect or maintain HocusPocus Lab's canonical task database."
     )
     parser.add_argument("--workspace-dir", required=True, help="Directory containing the task DB")
     mode = parser.add_mutually_exclusive_group(required=True)

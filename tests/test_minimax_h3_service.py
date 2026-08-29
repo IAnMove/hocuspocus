@@ -196,6 +196,29 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         self.assertEqual(workflow["27"]["inputs"]["audio"], ["26", 0])
         self.assertEqual(workflow["28"]["inputs"]["codec"], "auto")
 
+    def test_character_sheet_profile_uses_isolated_ref2va_recipe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "character.png"
+            Image.new("RGB", (96, 96), (80, 120, 160)).save(source)
+            with patch.object(h3, "INPUT_DIR", Path(tmp) / "input"):
+                workflow, pipeline = h3.build_workflow({
+                    **h3.DEFAULTS,
+                    "prompt": "[0-3 seconds] one smooth 360 orbit",
+                    "character_sheet_engine": h3.CHARACTER_SHEET_ENGINE,
+                    "h3_reference_mode": "references",
+                    "image_refs": [str(source)],
+                    "resolution": "768x1344",
+                    "video_length": 124,
+                }, "character-sheet")
+
+            self.assertEqual(pipeline, "ref2va")
+            self.assertEqual(
+                workflow["1"]["inputs"]["unet_name"],
+                h3.MODEL_PROFILES["quality"]["ref2va"],
+            )
+            self.assertEqual(workflow["23"]["inputs"]["steps"], 25)
+            self.assertEqual(workflow["10"]["class_type"], "MiniMaxH3ReferenceToVideo")
+
     def test_stale_ref2va_mode_without_media_recovers_to_text_to_video(self):
         params = {
             **h3.DEFAULTS,

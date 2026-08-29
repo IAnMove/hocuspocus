@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import {
   Check, Combine, History, ImageIcon, Layers, Loader2,
   Pencil, Play, RefreshCw, Save,
@@ -44,10 +45,12 @@ function audioPlanLabel(clip: PipelineClipState): string {
 
 export function WorkspacesPanel() {
   const pipelineList = useStore(s => s.dashboardPipelineList)
+  const pipelineTotal = useStore(s => s.dashboardPipelineTotal)
   const selectedPipeline = useStore(s => s.dashboardSelectedPipeline)
   const loading = useStore(s => s.dashboardLoading)
   const loadError = useStore(s => s.dashboardLoadError)
   const loadPipelineList = useStore(s => s.loadPipelineList)
+  const loadMorePipelineList = useStore(s => s.loadMorePipelineList)
   const loadPipeline = useStore(s => s.loadSavedPipeline)
   const retryLoad = useStore(s => s.retryDashboardLoad)
   const resumePipeline = useStore(s => s.resumePipeline)
@@ -70,17 +73,19 @@ export function WorkspacesPanel() {
     void loadPipelineList()
   }, [loadPipelineList])
 
-  useEffect(() => {
-    if (!selectedPipeline && !livePipelineId) return
-    const live = selectedPipeline ? pipelineBusy(selectedPipeline) : Boolean(livePipelineId)
-    if (!live && !pendingLive) return
-    const timer = window.setInterval(() => {
-      if (selectedPipeline) void loadPipeline(selectedPipeline.pipeline_id)
-      else if (livePipelineId) void loadPipeline(livePipelineId)
-      void loadPipelineList()
-    }, 3000)
-    return () => window.clearInterval(timer)
-  }, [livePipelineId, loadPipeline, loadPipelineList, pendingLive, selectedPipeline])
+  const liveSelected = selectedPipeline ? pipelineBusy(selectedPipeline) : Boolean(livePipelineId)
+  useSerializedPoll({
+    enabled: Boolean((liveSelected || pendingLive) && (selectedPipeline || livePipelineId)),
+    intervalMs: 3000,
+    ownerKey: selectedPipeline?.pipeline_id || livePipelineId || '',
+    poll: async () => {
+      const id = selectedPipeline?.pipeline_id || livePipelineId
+      if (id) await loadPipeline(id)
+      await loadPipelineList()
+      return true
+    },
+    onValue: () => {},
+  })
 
   const queue = selectedPipeline ? hydratePipelineQueue(selectedPipeline) : null
   const selectedId = queue?.pipeline_id || ''
@@ -145,7 +150,9 @@ export function WorkspacesPanel() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-text-primary">Workspaces</h2>
-              <p className="text-[10px] text-text-muted">Elige un hilo. Los más nuevos van arriba.</p>
+              <p className="text-[10px] text-text-muted">
+                El último hilo se abre solo. El resto se carga al pulsar, o con “más hilos”.
+              </p>
             </div>
             <button type="button" className={button} onClick={() => void loadPipelineList()} title="Reload threads">
               <RefreshCw size={13} />
@@ -201,6 +208,15 @@ export function WorkspacesPanel() {
           )}
           {pipelineList.length > 0 && !sortedThreads.length && (
             <p className="min-w-64 p-3 text-[11px] text-text-muted">Ningún hilo coincide con “{query}”.</p>
+          )}
+          {pipelineList.length < pipelineTotal && (
+            <button
+              type="button"
+              className={`${button} mt-1 w-full md:w-full`}
+              onClick={() => void loadMorePipelineList()}
+            >
+              Más hilos ({pipelineList.length}/{pipelineTotal})
+            </button>
           )}
         </nav>
       </aside>
