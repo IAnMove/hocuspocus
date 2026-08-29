@@ -89,6 +89,36 @@ export function registerGeneratedKitPose(
   }
 }
 
+/** Replace a pose with a mouth-wiped copy. Keeps review state; does not delete the original file. */
+export function registerWipedKitPose(
+  kit: CharacterKit,
+  poseId: string,
+  asset: CharacterKitAsset,
+): CharacterKit {
+  const normalizedPoseId = poseId.trim() || 'base'
+  if (!asset.source || asset.source.startsWith('blob:')) throw new Error('Wiped poses need a persistent source.')
+  const current = normalizedPoseId === 'base' ? kit.base : kit.poses[normalizedPoseId]
+  if (!current) throw new Error(`Character Kit “${kit.name}” has no ${normalizedPoseId} pose to wipe.`)
+  const nextAsset: CharacterKitAsset = {
+    ...current,
+    ...asset,
+    kind: 'image',
+    reviewState: current.reviewState === 'approved' ? 'approved' : 'pending',
+  }
+  return {
+    ...kit,
+    base: normalizedPoseId === 'base' ? nextAsset : kit.base,
+    poses: normalizedPoseId === 'base' ? kit.poses : { ...kit.poses, [normalizedPoseId]: nextAsset },
+    provenance: [...kit.provenance, {
+      method: 'character-kit-mouth-wipe',
+      poseId: normalizedPoseId,
+      original: current.source,
+      source: nextAsset.source,
+    }],
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 export function characterKitAssetFromLayer(
   layer: SceneLayer,
   workspace: string,

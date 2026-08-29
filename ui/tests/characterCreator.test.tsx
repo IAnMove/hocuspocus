@@ -10,6 +10,11 @@ import {
   needsVisionDescribe,
   viewCaptureTime,
 } from '../src/features/characters/orbitPrompt.ts'
+import {
+  attachCharacterCreatorMesh,
+  parseCharacterCreatorHistory,
+  rememberCharacterCreatorSheet,
+} from '../src/features/characters/characterCreatorHistory.ts'
 
 function installDom() {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
@@ -68,6 +73,34 @@ test('a single object image is enough to build an orbit prompt', () => {
   assert.match(prompt, /turntable/)
 })
 
+test('Character Creator history remembers sheets and can attach a later mesh', () => {
+  const first = rememberCharacterCreatorSheet([], {
+    id: 'one',
+    name: 'Luma',
+    kind: 'character',
+    videoName: 'luma-orbit.mp4',
+    views: [{ id: 'front', hunyuan: 'front', label: 'Front', filename: 'front.png', url: '/api/v1/file/front.png', time: 0.1 }],
+    workspace: 'default',
+    createdAt: '2026-08-29T00:00:00Z',
+  })
+  const second = rememberCharacterCreatorSheet(first, {
+    id: 'two',
+    name: 'Brin',
+    kind: 'character',
+    videoName: 'brin-orbit.mp4',
+    views: [],
+    workspace: 'default',
+    createdAt: '2026-08-29T01:00:00Z',
+  })
+  assert.equal(second[0].name, 'Brin')
+  assert.equal(second[1].name, 'Luma')
+  const updated = attachCharacterCreatorMesh(second, 'luma-orbit.mp4', 'luma.glb')
+  assert.equal(updated.find(item => item.videoName === 'luma-orbit.mp4')?.hunyuanGlb, 'luma.glb')
+  const parsed = parseCharacterCreatorHistory(JSON.stringify(updated))
+  assert.equal(parsed.length, 2)
+  assert.equal(parseCharacterCreatorHistory('not-json').length, 0)
+})
+
 test('A prompt can be overridden before concatenating B', () => {
   const prompt = buildCharacterOrbitPrompt(
     'character',
@@ -121,7 +154,9 @@ test('Character Creator captures 4 stills before Hunyuan, from one image', async
     const hunyuan = screen.getByRole('button', { name: /Generar Hunyuan3D/ }) as HTMLButtonElement
     assert.equal(hunyuan.disabled, true)
     assert.ok(screen.getByText(/MiniMax describe/i))
-    assert.ok(screen.getByText(/No hace falta escribir nada/i))
+    assert.ok(screen.getByText(/Turnaround 3D/i))
+    assert.ok(screen.getByText(/No es el puppet 2D de Face Rig/i))
+    assert.ok(screen.getByRole('button', { name: /Create \/ open CharacterKit Face Rig/ }))
     assert.ok(screen.getByRole('button', { name: /A Prompt opcional/ }))
     assert.ok(screen.getByText(/Turbo nativo desactivado/i))
   assert.ok(screen.getByText(/grabs 2 \/ 21 \/ 42 \/ 63/))

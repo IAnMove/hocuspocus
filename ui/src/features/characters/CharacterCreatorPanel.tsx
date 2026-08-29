@@ -5,6 +5,14 @@ import { getFileUrl } from '../../api/client'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
 import { queueFaceRigHandoff } from '../../lib/characterKitHandoff'
+import { safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
+import {
+  attachCharacterCreatorMesh,
+  characterCreatorHistoryKey,
+  parseCharacterCreatorHistory,
+  rememberCharacterCreatorSheet,
+  type CharacterCreatorHistoryEntry,
+} from './characterCreatorHistory'
 import {
   buildCharacterOrbitPrompt,
   CHARACTER_ORBIT_VIEWS,
@@ -83,10 +91,15 @@ export function CharacterCreatorPanel() {
   const [hunyuanMessage, setHunyuanMessage] = useState('')
   const [hunyuanGlb, setHunyuanGlb] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [history, setHistory] = useState<CharacterCreatorHistoryEntry[]>([])
   const modelType = useMemo(() => resolveOrbitModel(models), [models])
   const readyRefs = refs.filter(ref => Boolean(ref.file))
   const refsRef = useRef(refs)
+  const aPromptRef = useRef(aPrompt)
+  const hunyuanGlbRef = useRef(hunyuanGlb)
   refsRef.current = refs
+  aPromptRef.current = aPrompt
+  hunyuanGlbRef.current = hunyuanGlb
 
   useEffect(() => () => {
     refsRef.current.forEach(ref => { if (ref.preview) URL.revokeObjectURL(ref.preview) })
@@ -220,6 +233,21 @@ export function CharacterCreatorPanel() {
       setViews(captured)
       setSelectedViewId(captured[0]?.id || null)
       setSelectedTime(captured[0]?.time || 0)
+      const entry: CharacterCreatorHistoryEntry = {
+        id: `sheet-${sourceName}`,
+        name: aPromptRef.current.trim().split(/[.!\n]/)[0].slice(0, 48) || sourceName.replace(/\.[^.]+$/, ''),
+        kind,
+        videoName: sourceName,
+        views: captured,
+        hunyuanGlb: hunyuanGlbRef.current,
+        workspace: activeWorkspace,
+        createdAt: new Date().toISOString(),
+      }
+      setHistory(current => {
+        const next = rememberCharacterCreatorSheet(current, entry)
+        safeStorageSet('local', characterCreatorHistoryKey(activeWorkspace), JSON.stringify(next))
+        return next
+      })
       void loadOutputs()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -280,6 +308,10 @@ export function CharacterCreatorPanel() {
       setBusy(false)
     }
   }
+
+  useEffect(() => {
+    setHistory(parseCharacterCreatorHistory(safeStorageGet('local', characterCreatorHistoryKey(activeWorkspace))))
+  }, [activeWorkspace])
 
   const restoredWorkspaceRef = useRef<string | null>(null)
   const busyRef = useRef(busy)
@@ -394,6 +426,15 @@ export function CharacterCreatorPanel() {
         setHunyuanGlb(status.filename)
         setHunyuanJobId(null)
         setBusy(false)
+        const sheetName = videoName
+        const meshName = status.filename
+        if (meshName && sheetName) {
+          setHistory(current => {
+            const next = attachCharacterCreatorMesh(current, sheetName, meshName)
+            safeStorageSet('local', characterCreatorHistoryKey(activeWorkspace), JSON.stringify(next))
+            return next
+          })
+        }
         void loadOutputs()
         if (status.filename) void import('@google/model-viewer')
         return
@@ -419,7 +460,7 @@ export function CharacterCreatorPanel() {
       <header className="border-b border-border bg-bg-secondary px-3 py-2">
         <h2 className="text-sm font-semibold text-text-primary">Character Creator</h2>
         <p className="text-[10px] text-text-muted">
-          Sube una imagen. MiniMax describe el sujeto y arma el prompt de órbita. No hace falta escribir nada.
+          Turnaround 3D: sube una foto, MiniMax describe el sujeto y arma el prompt de órbita. Sale un vídeo 360 y, si quieres, un mesh Hunyuan. No es el puppet 2D de Face Rig.
         </p>
         {kind === 'character' && (
           <button
@@ -430,6 +471,35 @@ export function CharacterCreatorPanel() {
           >
             Create / open CharacterKit Face Rig
           </button>
+        )}
+        {history.length > 0 && (
+          <div className="mt-2 space-y-1">
+            <p className="text-[10px] text-text-muted">Historial de este workspace</p>
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {history.map(entry => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setKind(entry.kind)
+                    setVideoName(entry.videoName)
+                    setViews(entry.views)
+                    setSelectedViewId(entry.views[0]?.id || 'front')
+                    setSelectedTime(entry.views[0]?.time || 0)
+                    setHunyuanGlb(entry.hunyuanGlb || null)
+                    setError(null)
+                  }}
+                  className={`min-w-[4.5rem] max-w-[5.5rem] shrink-0 overflow-hidden rounded border p-1 text-left ${videoName === entry.videoName ? 'border-violet-400/50 bg-violet-500/15' : 'border-border bg-bg-tertiary'}`}
+                >
+                  {entry.views[0]?.url
+                    ? <img src={entry.views[0].url} alt="" className="mb-1 aspect-square w-full rounded object-cover" />
+                    : <div className="mb-1 aspect-square w-full rounded bg-bg-active" />}
+                  <span className="block truncate text-[9px] text-text-primary">{entry.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </header>
       <div className="flex-1 overflow-y-auto p-3 md:p-4">

@@ -304,6 +304,123 @@ export function setFaceRigAnchor(
 
 const cssPercent = (value: number) => `${Number(value.toFixed(4))}%`
 
+export type FaceRigMouthRegion = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export function containedImageRect(
+  imageWidth: number,
+  imageHeight: number,
+  boxWidth: number,
+  boxHeight: number,
+): { x: number; y: number; width: number; height: number } {
+  const src = imageWidth / Math.max(1, imageHeight)
+  const box = boxWidth / Math.max(1, boxHeight)
+  if (src > box) {
+    const height = boxWidth / Math.max(.0001, src)
+    return { x: 0, y: (boxHeight - height) / 2, width: boxWidth, height }
+  }
+  const width = boxHeight * src
+  return { x: (boxWidth - width) / 2, y: 0, width, height: boxHeight }
+}
+
+/** Mouth box in preview-square percents (top-left + size). */
+export function faceRigRegionFromAnchor(anchor: Partial<CharacterFaceAnchor>): FaceRigMouthRegion {
+  const next = normalizeFaceRigAnchor(anchor)
+  const size = Math.max(.5, next.scale * 100)
+  return {
+    x: 50 + next.offsetX - size / 2,
+    y: 50 + next.offsetY - size / 2,
+    width: size,
+    height: size,
+  }
+}
+
+export function faceRigAnchorFromRegion(region: FaceRigMouthRegion): CharacterFaceAnchor {
+  const width = Math.max(.5, Number(region.width) || 0)
+  const height = Math.max(.5, Number(region.height) || 0)
+  return normalizeFaceRigAnchor({
+    offsetX: Number(region.x) + width / 2 - 50,
+    offsetY: Number(region.y) + height / 2 - 50,
+    scale: Math.max(width, height) / 100,
+    rotation: 0,
+  })
+}
+
+export function previewPercentToImagePixel(
+  percentX: number,
+  percentY: number,
+  imageWidth: number,
+  imageHeight: number,
+): { x: number; y: number } {
+  const content = containedImageRect(imageWidth, imageHeight, 100, 100)
+  const u = (percentX - content.x) / Math.max(.0001, content.width)
+  const v = (percentY - content.y) / Math.max(.0001, content.height)
+  return {
+    x: Math.max(0, Math.min(imageWidth - 1, u * imageWidth)),
+    y: Math.max(0, Math.min(imageHeight - 1, v * imageHeight)),
+  }
+}
+
+/** Fill an elliptical mouth box with sampled nearby skin. Leaves the rest of the pose intact. */
+export function wipeMouthRegion(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  region: { cx: number; cy: number; rx: number; ry: number },
+): Uint8ClampedArray {
+  if (!(rgba instanceof Uint8ClampedArray) || rgba.length !== width * height * 4) {
+    return new Uint8ClampedArray(rgba)
+  }
+  const next = new Uint8ClampedArray(rgba)
+  const rx = Math.max(1, region.rx)
+  const ry = Math.max(1, region.ry)
+  const samples: number[] = []
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const nx = (x - region.cx) / rx
+      const ny = (y - region.cy) / ry
+      const d = nx * nx + ny * ny
+      if (d < 1.05 || d > 1.45) continue
+      const i = (y * width + x) * 4
+      if (next[i + 3] < 16) continue
+      samples.push(next[i], next[i + 1], next[i + 2])
+    }
+  }
+  let fillR = 210
+  let fillG = 170
+  let fillB = 140
+  if (samples.length >= 12) {
+    const channel = (offset: number) => {
+      const values = []
+      for (let index = offset; index < samples.length; index += 3) values.push(samples[index])
+      values.sort((a, b) => a - b)
+      return values[Math.floor(values.length / 2)]
+    }
+    fillR = channel(0)
+    fillG = channel(1)
+    fillB = channel(2)
+  }
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const nx = (x - region.cx) / rx
+      const ny = (y - region.cy) / ry
+      const d = nx * nx + ny * ny
+      if (d > 1) continue
+      const i = (y * width + x) * 4
+      const mix = d > .72 ? (1 - d) / .28 : 1
+      next[i] = Math.round(next[i] * (1 - mix) + fillR * mix)
+      next[i + 1] = Math.round(next[i + 1] * (1 - mix) + fillG * mix)
+      next[i + 2] = Math.round(next[i + 2] * (1 - mix) + fillB * mix)
+      if (next[i + 3] > 0) next[i + 3] = 255
+    }
+  }
+  return next
+}
+
 export function faceRigOverlayPreviewStyle(anchor: CharacterFaceAnchor): {
   left: string
   top: string

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { analyzeAudio, cleanCharacterKitFaceOverlay, getFileUrl } from '../../api/client'
+import { analyzeAudio, cleanCharacterKitFaceOverlay, getFileUrl, uploadImage } from '../../api/client'
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 import {
@@ -13,6 +13,10 @@ import {
   classifyCharacterKitAlpha,
   composeCharacterKitLook,
   faceRigAnchorFor,
+  faceRigAnchorFromRegion,
+  faceRigRegionFromAnchor,
+  previewPercentToImagePixel,
+  wipeMouthRegion,
   faceRigGenerationRequests,
   faceRigOverlayPreviewStyle,
   faceRigVisemeAt,
@@ -28,7 +32,7 @@ import {
   type FaceRigDialoguePreview,
   type FaceRigDialogueViseme,
 } from '../../lib/characterKitFaceRig'
-import { registerGeneratedKitPose, type CharacterFaceAnchor, type CharacterKit, type CharacterKitAsset, type CharacterMouthState } from '../../lib/characterKit'
+import { registerGeneratedKitPose, registerWipedKitPose, type CharacterFaceAnchor, type CharacterKit, type CharacterKitAsset, type CharacterMouthState } from '../../lib/characterKit'
 import { useStore } from '../../stores/useStore'
 
 type Props = {
@@ -81,7 +85,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   const [styleId, setStyleId] = useState<typeof FACE_RIG_STYLE_PRESETS[number]['id']>(FACE_RIG_STYLE_PRESETS[0].id)
   const [traits, setTraits] = useState<string[]>([])
   const [extraNotes, setExtraNotes] = useState(kit.lookNotes ?? '')
-  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | 'pose' | null>(null)
+  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | 'pose' | 'wipe' | null>(null)
   const [holdBlink, setHoldBlink] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showOverlay, setShowOverlay] = useState(true)
@@ -94,7 +98,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   const [presetPacks, setPresetPacks] = useState<FaceRigMouthPresetPack[]>([])
   const [presetId, setPresetId] = useState('')
   const previewRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin: CharacterFaceAnchor } | null>(null)
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin: CharacterFaceAnchor; mode: 'move' | 'resize' } | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const playTokenRef = useRef(0)
   const dialoguePreviewRef = useRef<FaceRigDialoguePreview | null>(null)
@@ -114,6 +118,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
   const poseApproved = Boolean((poseId === 'base' ? kit.base : kit.poses[poseId])?.reviewState === 'approved')
   const placement = useMemo(() => assessFaceRigPlacement(draftAnchor, selectedState), [draftAnchor, selectedState])
   const overlayStyle = useMemo(() => faceRigOverlayPreviewStyle(playbackAnchor), [playbackAnchor])
+  const mouthRegion = useMemo(() => faceRigRegionFromAnchor(draftAnchor), [draftAnchor])
   const dirtyAnchor = JSON.stringify(draftAnchor) !== JSON.stringify(savedAnchor)
   dialoguePreviewRef.current = dialoguePreview
 
@@ -324,15 +329,32 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     const box = previewRef.current
     if (!box) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin: draftAnchor }
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin: draftAnchor, mode: 'move' }
   }
 
-  const onOverlayPointerMove = (event: ReactPointerEvent<HTMLImageElement>) => {
+  const onRegionPointerDown = (event: ReactPointerEvent<HTMLElement>, mode: 'move' | 'resize') => {
+    if (disabled || Boolean(busyState) || liveViseme) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin: draftAnchor, mode }
+  }
+
+  const onOverlayPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const drag = dragRef.current
     const box = previewRef.current
     if (!drag || drag.pointerId !== event.pointerId || !box) return
     const dx = ((event.clientX - drag.startX) / Math.max(1, box.clientWidth)) * 100
     const dy = ((event.clientY - drag.startY) / Math.max(1, box.clientHeight)) * 100
+    if (drag.mode === 'resize') {
+      const region = faceRigRegionFromAnchor(drag.origin)
+      setDraftAnchor(faceRigAnchorFromRegion({
+        ...region,
+        width: Math.max(1, region.width + dx),
+        height: Math.max(1, region.height + dy),
+      }))
+      return
+    }
     setDraftAnchor({
       ...drag.origin,
       offsetX: drag.origin.offsetX + dx,
@@ -384,6 +406,59 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
     setDraftAnchor(current => ({ ...current, [field]: current[field] + delta }))
   }
 
+  const wipeMouthZone = async () => {
+    if (!poseSource) throw new Error('Approve a pose before cleaning its mouth zone.')
+    setBusyState('wipe'); setError(null)
+    try {
+      const response = await fetch(poseSource)
+      if (!response.ok) throw new Error('Could not load the pose image.')
+      const bitmap = await createImageBitmap(await response.blob())
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = bitmap.width
+        canvas.height = bitmap.height
+        const context = canvas.getContext('2d', { willReadFrequently: true })
+        if (!context) throw new Error('This browser cannot edit the pose image.')
+        context.drawImage(bitmap, 0, 0)
+        const region = faceRigRegionFromAnchor(draftAnchor)
+        const topLeft = previewPercentToImagePixel(region.x, region.y, bitmap.width, bitmap.height)
+        const bottomRight = previewPercentToImagePixel(region.x + region.width, region.y + region.height, bitmap.width, bitmap.height)
+        const pixels = wipeMouthRegion(
+          context.getImageData(0, 0, bitmap.width, bitmap.height).data,
+          bitmap.width,
+          bitmap.height,
+          {
+            cx: (topLeft.x + bottomRight.x) / 2,
+            cy: (topLeft.y + bottomRight.y) / 2,
+            rx: Math.max(2, Math.abs(bottomRight.x - topLeft.x) / 2),
+            ry: Math.max(2, Math.abs(bottomRight.y - topLeft.y) / 2),
+          },
+        )
+        const painted = new ImageData(bitmap.width, bitmap.height)
+        painted.data.set(pixels)
+        context.putImageData(painted, 0, 0)
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob(value => value ? resolve(value) : reject(new Error('Could not encode the wiped pose.')), 'image/png')
+        })
+        const uploaded = await uploadImage(new File([blob], `${kit.id}-${poseId || 'base'}-mouthless.png`, { type: 'image/png' }))
+        const current = poseId === 'base' ? kit.base : kit.poses[poseId]
+        const next = registerWipedKitPose(persistLook(kit), poseId || 'base', {
+          id: current?.id || `${kit.id}-${poseId || 'base'}`,
+          name: `${kit.name} · ${poseId || 'base'} mouthless`,
+          source: uploaded.url || `/api/v1/file/${uploaded.filename}`,
+          kind: 'image',
+          alphaStatus: current?.alphaStatus ?? 'unknown',
+          reviewState: current?.reviewState ?? 'pending',
+          workspace,
+        })
+        onChange(lockFaceRigMouthPlacement(next, poseId || 'base', draftAnchor))
+        onStatus?.('Wiped the marked mouth zone on this pose. Lock is saved. Original pose stays in provenance.')
+      } finally { bitmap.close() }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not wipe the mouth zone.')
+    } finally { setBusyState(null) }
+  }
+
   const flashBlink = () => {
     if (!kit.eyes.blink?.source) {
       setError('Generate a blink overlay first, then flash it to check the eyes.')
@@ -428,6 +503,44 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
       <button type="button" disabled={disabled || Boolean(busyState) || !presetId} onClick={applyPreset} className="rounded border border-violet-300/40 bg-violet-400/10 px-1 py-1 text-[8px] text-violet-100 disabled:opacity-40">Apply pack</button>
     </div>}
     <p className="text-[8px] font-medium text-emerald-100">Paso 2 · Labios y parpadeo</p>
+    <p className="text-[7px] text-text-muted">Mark the mouth box on the pose first. If the puppet still has a painted mouth, wipe that zone so overlays sit on skin.</p>
+    {poseSource && <div className="space-y-1 rounded border border-amber-300/25 bg-black/20 p-1">
+      <div
+        ref={previewRef}
+        className={`relative aspect-square overflow-hidden rounded border border-border ${checkerboard ? 'bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px]' : 'bg-bg-primary'}`}
+      >
+        <img src={poseSource} alt={`${kit.name} pose`} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
+        {showOverlay && playbackAsset && <img
+          src={playbackAsset.source}
+          alt={`${kit.name} ${LABELS[playbackState]} overlay`}
+          className={`absolute object-contain ${liveViseme || holdBlink ? '' : 'cursor-grab active:cursor-grabbing'}`}
+          style={overlayStyle}
+          draggable={false}
+          onPointerDown={onOverlayPointerDown}
+          onPointerMove={onOverlayPointerMove}
+          onPointerUp={onOverlayPointerUp}
+          onPointerCancel={onOverlayPointerUp}
+        />}
+        <div
+          className="absolute cursor-move rounded border-2 border-amber-300/80 bg-amber-400/10"
+          style={{ left: `${mouthRegion.x}%`, top: `${mouthRegion.y}%`, width: `${mouthRegion.width}%`, height: `${mouthRegion.height}%` }}
+          onPointerDown={event => onRegionPointerDown(event, 'move')}
+          onPointerMove={onOverlayPointerMove}
+          onPointerUp={onOverlayPointerUp}
+          onPointerCancel={onOverlayPointerUp}
+        >
+          <span
+            className="absolute right-0 bottom-0 h-2.5 w-2.5 translate-x-1/2 translate-y-1/2 cursor-nwse-resize rounded-sm border border-amber-100 bg-amber-300"
+            onPointerDown={event => onRegionPointerDown(event, 'resize')}
+          />
+        </div>
+      </div>
+      <p className="text-[7px] text-text-secondary">Box {mouthRegion.width.toFixed(1)}×{mouthRegion.height.toFixed(1)}% · drag to move · corner to resize</p>
+      <div className="grid grid-cols-2 gap-1">
+        <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void wipeMouthZone()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100 disabled:opacity-40">{busyState === 'wipe' ? 'Wiping mouth…' : 'Clean mouth zone'}</button>
+        <button type="button" disabled={disabled || Boolean(busyState)} onClick={lockMouths} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Lock all mouths</button>
+      </div>
+    </div>}
     <div className="grid grid-cols-5 gap-1">{CHARACTER_FACE_RIG_STATES.map(state => {
       const asset = assetFor(kit, state)
       return <button key={state} type="button" disabled={disabled || Boolean(busyState)} onClick={() => setSelectedState(state)} className={`rounded border px-1 py-1 text-[7px] ${selectedState === state ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{LABELS[state]}<span className="block text-[6px]">{asset?.reviewState ?? 'missing'}</span></button>
@@ -437,33 +550,11 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
       <img src={assetFor(kit, selectedState)!.source} alt={`${kit.name} ${LABELS[selectedState]}`} className="mx-auto h-28 w-full object-contain" />
       <div className="flex items-center justify-between text-[7px]"><span className="truncate text-text-secondary">{assetFor(kit, selectedState)!.name}</span><span className="text-emerald-100">{assetFor(kit, selectedState)!.alphaStatus} · {assetFor(kit, selectedState)!.reviewState}</span></div>
       <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void cleanSelected()} className="w-full rounded border border-cyan-300/40 bg-cyan-400/10 px-1 py-1 text-[8px] text-cyan-100 disabled:opacity-40">{busyState === 'cleanup' ? 'Cleaning overlay…' : 'Clean background / halo'}</button>
-      {poseSource && selectedAsset && <div className="space-y-1 rounded border border-border/70 bg-black/20 p-1">
-        <div className="flex items-center justify-between gap-1 text-[7px] text-text-muted">
-          <span>Placement on {poseId || 'base'}</span>
-          <span className="flex gap-1">
-            <button type="button" onClick={() => setShowOverlay(value => !value)} className="rounded border border-border px-1 py-0.5">{showOverlay ? 'Hide overlay' : 'Show overlay'}</button>
-            <button type="button" onClick={() => setCheckerboard(value => !value)} className="rounded border border-border px-1 py-0.5">{checkerboard ? 'Solid' : 'Checker'}</button>
-          </span>
-        </div>
-        <div
-          ref={previewRef}
-          className={`relative aspect-square overflow-hidden rounded border border-border ${checkerboard ? 'bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px]' : 'bg-bg-primary'}`}
-        >
-          <img src={poseSource} alt={`${kit.name} pose`} className="absolute inset-0 h-full w-full object-contain" draggable={false} />
-          {showOverlay && playbackAsset && <img
-            src={playbackAsset.source}
-            alt={`${kit.name} ${LABELS[playbackState]} overlay`}
-            className={`absolute object-contain ${liveViseme || holdBlink ? '' : 'cursor-grab active:cursor-grabbing'}`}
-            style={overlayStyle}
-            draggable={false}
-            onPointerDown={onOverlayPointerDown}
-            onPointerMove={onOverlayPointerMove}
-            onPointerUp={onOverlayPointerUp}
-            onPointerCancel={onOverlayPointerUp}
-          />}
-          <div className="pointer-events-none absolute inset-x-0 top-[32%] border-t border-dashed border-amber-200/40" title="Typical mouth line" />
-        </div>
-        <p className="text-[7px] text-text-muted">Paso 2 · Arrastra la boca hasta los labios. Abajo = Down. Luego lock all mouths.</p>
+      <div className="flex gap-1 text-[7px] text-text-muted">
+        <button type="button" onClick={() => setShowOverlay(value => !value)} className="rounded border border-border px-1 py-0.5">{showOverlay ? 'Hide overlay' : 'Show overlay'}</button>
+        <button type="button" onClick={() => setCheckerboard(value => !value)} className="rounded border border-border px-1 py-0.5">{checkerboard ? 'Solid' : 'Checker'}</button>
+      </div>
+      <div className="space-y-1 rounded border border-border/70 bg-black/20 p-1">
         <div className="grid grid-cols-4 gap-1">
           <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetY', -1)} className="rounded border border-border px-1 py-1 text-[8px] text-text-secondary">Up</button>
           <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetY', 1)} className="rounded border border-amber-300/40 bg-amber-400/10 px-1 py-1 text-[8px] text-amber-100">Down</button>
@@ -490,7 +581,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, onChan
           <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} onClick={() => setDraftAnchor(savedAnchor)} className="rounded border border-border px-1 py-1 text-[8px] text-text-muted disabled:opacity-40">Reset</button>
           <button type="button" disabled={disabled || Boolean(busyState) || !kit.eyes.blink?.source} onClick={flashBlink} className="rounded border border-cyan-300/40 px-1 py-1 text-[8px] text-cyan-100 disabled:opacity-40">{holdBlink ? 'Blinking…' : 'Flash blink 0.4s'}</button>
         </div>
-      </div>}
+      </div>
       <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || assetFor(kit, selectedState)!.alphaStatus !== 'transparent'} onClick={() => review(selectedState, true)} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Approve transparent</button><button type="button" disabled={disabled || Boolean(busyState)} onClick={() => review(selectedState, false)} className="rounded border border-red-300/30 px-1 py-1 text-[8px] text-red-200">Reject</button></div>
     </div>}
     <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || !selectedRequest} onClick={() => void generateSelected()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === selectedState ? `Generating ${LABELS[selectedState]}…` : `Generate / replace ${LABELS[selectedState]}`}</button><button type="button" disabled={disabled || Boolean(busyState) || !requests.length} onClick={() => void generateMissingPack()} className="rounded border border-emerald-300/30 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{busyState === 'pack' ? 'Generating pack…' : 'Generate missing pack'}</button></div>

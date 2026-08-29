@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
-import { applyFaceRigMouthPreset, assessFaceRigPlacement, characterKitPosePrompt, classifyCharacterKitAlpha, composeCharacterKitLook, faceRigAnchorFor, faceRigGenerationRequests, faceRigOverlayPreviewStyle, faceRigPrompt, faceRigVisemeAt, lockFaceRigMouthPlacement, previewFaceRigDialogue, previewFaceRigDialogueFromAudio, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigAnchor, setFaceRigReviewState, validateFaceRigPose } from '../src/lib/characterKitFaceRig.ts'
+import { applyFaceRigMouthPreset, assessFaceRigPlacement, characterKitPosePrompt, classifyCharacterKitAlpha, composeCharacterKitLook, containedImageRect, faceRigAnchorFor, faceRigAnchorFromRegion, faceRigGenerationRequests, faceRigOverlayPreviewStyle, faceRigPrompt, faceRigRegionFromAnchor, faceRigVisemeAt, lockFaceRigMouthPlacement, previewFaceRigDialogue, previewFaceRigDialogueFromAudio, previewPercentToImagePixel, registerCleanedFaceRigAsset, registerGeneratedFaceRigAsset, setFaceRigAnchor, setFaceRigReviewState, validateFaceRigPose, wipeMouthRegion } from '../src/lib/characterKitFaceRig.ts'
+import { registerWipedKitPose } from '../src/lib/characterKit.ts'
 
 const pose = { id: 'base', name: 'Base', source: 'base.png', kind: 'image', alphaStatus: 'opaque', reviewState: 'approved' }
 const generated = state => ({ id: `generated-${state}`, name: state, source: `${state}.png`, kind: 'overlay', alphaStatus: 'transparent', reviewState: 'approved' })
@@ -159,6 +160,48 @@ test('look chips compose a style-only prompt and fill overlay + body requests', 
   assert.match(faceRigPrompt(kit, 'blink'), /closed eyelids only/)
   const requests = faceRigGenerationRequests(kit)
   assert.ok(requests.every(request => request.prompt.includes('afro hair') && request.prompt.includes('plasticine')))
+})
+
+test('mouth region round-trips through the Face Rig anchor and maps onto the pose pixels', () => {
+  const anchor = { offsetX: 2, offsetY: -16, scale: .07, rotation: 0 }
+  const region = faceRigRegionFromAnchor(anchor)
+  const back = faceRigAnchorFromRegion(region)
+  assert.equal(Number(back.offsetX.toFixed(4)), 2)
+  assert.equal(Number(back.offsetY.toFixed(4)), -16)
+  assert.equal(Number(back.scale.toFixed(4)), .07)
+  assert.deepEqual(containedImageRect(100, 100, 100, 100), { x: 0, y: 0, width: 100, height: 100 })
+  const pixel = previewPercentToImagePixel(50, 32, 200, 300)
+  assert.ok(pixel.x > 90 && pixel.x < 110)
+  assert.ok(pixel.y > 80 && pixel.y < 120)
+})
+
+test('wiping a mouth region fills the ellipse without touching distant pixels', () => {
+  const width = 8
+  const height = 8
+  const rgba = new Uint8ClampedArray(width * height * 4)
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = (y * width + x) * 4
+      const mouth = x >= 3 && x <= 4 && y >= 3 && y <= 4
+      rgba[i] = mouth ? 40 : 200
+      rgba[i + 1] = mouth ? 10 : 160
+      rgba[i + 2] = mouth ? 10 : 130
+      rgba[i + 3] = 255
+    }
+  }
+  const wiped = wipeMouthRegion(rgba, width, height, { cx: 3.5, cy: 3.5, rx: 1.6, ry: 1.6 })
+  const center = (3 * width + 3) * 4
+  assert.ok(wiped[center] > 120)
+  assert.equal(wiped[0], 200)
+  assert.equal(rgba[center], 40)
+  const kit = registerWipedKitPose(
+    { ...createCharacterKit('Luna'), base: pose },
+    'base',
+    { ...pose, source: '/api/v1/file/luna-wiped.png', name: 'Wiped' },
+  )
+  assert.equal(kit.base.source, '/api/v1/file/luna-wiped.png')
+  assert.equal(kit.base.reviewState, 'approved')
+  assert.equal(kit.provenance.at(-1).method, 'character-kit-mouth-wipe')
 })
 
 test('locking mouth placement copies one calibration onto every viseme', () => {
