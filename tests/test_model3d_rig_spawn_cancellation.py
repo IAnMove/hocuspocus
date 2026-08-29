@@ -120,6 +120,14 @@ def _seed_case(kind: str, tmp_path: Path, monkeypatch):
             "request": request,
         }
         monkeypatch.setattr(service, "HF_CACHE_DIR", tmp_path / kind / "cache")
+        dummy_ref = tmp_path / kind / "minimax-ref.png"
+        dummy_ref.parent.mkdir(parents=True, exist_ok=True)
+        dummy_ref.write_bytes(b"png")
+        monkeypatch.setattr(
+            service,
+            "_condition_text_job_with_minimax",
+            lambda *_args, **_kwargs: str(dummy_ref),
+        )
     else:
         service = rig_service
         source = tmp_path / kind / "source.glb"

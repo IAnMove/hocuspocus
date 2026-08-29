@@ -37,7 +37,7 @@ def test_activity_footer_places_exact_model_and_recipe_next_to_cancel():
     assert "LoRAs off" in source
     assert "primary?.model" in source
     assert "title={generationRecipe(primary)}" in source
-    assert "api.cancelCanonicalTask(task.id, activeWorkspace)" in source
+    assert "api.cancelCanonicalTask(taskId, workspace)" in source
     assert "primary.cancelable" in source
 
 
@@ -56,6 +56,6 @@ def test_activity_footer_recovers_and_cancels_series_lab_jobs():
 
     assert "api.fetchCanonicalTasks(activeWorkspace, 'all')" in source
     assert "api.subscribeCanonicalTaskEvents" in source
-    assert "api.cancelCanonicalTask(task.id, activeWorkspace)" in source
-    assert "api.dismissCanonicalTask(task.id, activeWorkspace)" in source
+    assert "api.cancelCanonicalTask(taskId, workspace)" in source
+    assert "api.dismissCanonicalTask(taskId, workspace)" in source
     assert "known_series_research: 'Building series bible'" in source

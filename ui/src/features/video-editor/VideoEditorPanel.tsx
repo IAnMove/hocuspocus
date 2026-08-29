@@ -35,6 +35,12 @@ import {
 } from './replacementHandoff'
 import { VIDEO_EDITOR_PENDING_SOURCE_KEY, editorSourcePath } from './editorHandoff'
 import {
+  loadEditorDraft,
+  persistEditorDraft,
+  RESOLUTIONS,
+  type ResolutionOption,
+} from './editorDraft'
+import {
   applyTransitionToGaps,
   editorClipRecoveryMessage,
   normalizeEditorClips,
@@ -66,12 +72,6 @@ interface SequenceStyle {
   filter: string
 }
 
-interface ResolutionOption {
-  label: string
-  width: number
-  height: number
-}
-
 interface SequenceRuntime {
   activeSlot: 0 | 1
   clipIndex: number
@@ -100,19 +100,7 @@ interface PendingEditorSequence {
   clips?: Array<{ name?: string; url?: string }>
 }
 
-const RESOLUTIONS: ResolutionOption[] = [
-  { label: 'Landscape 480p', width: 864, height: 480 },
-  { label: 'Landscape 720p', width: 1280, height: 720 },
-  { label: 'Landscape 1080p', width: 1920, height: 1080 },
-  { label: 'Portrait 480p', width: 480, height: 864 },
-  { label: 'Portrait 720p', width: 720, height: 1280 },
-  { label: 'Portrait 1080p', width: 1080, height: 1920 },
-  { label: 'Square 1080p', width: 1080, height: 1080 },
-  { label: 'Classic 4:3', width: 1440, height: 1080 },
-]
-
 const VIDEO_ACCEPT = '.mp4,.webm,.mov,.mkv,.avi,.m4v'
-const VIDEO_EDITOR_DRAFT_KEY = 'maestro-video-editor-draft-v1'
 const VIDEO_EDITOR_PENDING_SEQUENCE_KEY = 'maestro-video-editor-pending-sequence'
 const VIDEO_EDITOR_EXPORT_KEY = 'maestro-video-editor-export-v1'
 const MAESTRO_PICKER_PAGE_SIZE = 24
@@ -129,10 +117,6 @@ const isVideoEditorJobActive = (job: api.VideoEditorExportJob | null): boolean =
 
 function videoEditorExportStorageKey(workspace: string | null | undefined): string {
   return `${VIDEO_EDITOR_EXPORT_KEY}:${encodeURIComponent(workspace || 'default')}`
-}
-
-export function videoEditorDraftStorageKey(workspace: string | null | undefined): string {
-  return `${VIDEO_EDITOR_DRAFT_KEY}:${encodeURIComponent(workspace || 'default')}`
 }
 
 function readVideoEditorExportId(workspace: string | null | undefined): string | null {
@@ -679,81 +663,6 @@ function ExportPreviewCanvas({
 
 function wait(ms: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, ms))
-}
-
-function parseEditorDraft(raw: string | null): {
-  clips: EditorClip[]
-  projectName: string
-  resolution: ResolutionOption
-  fps: number
-  warning: string | null
-} | null {
-  if (!raw) return null
-  try {
-    const saved = JSON.parse(raw)
-    if (!saved || !Array.isArray(saved.clips)) return null
-    const resolution = RESOLUTIONS.find(option =>
-      option.width === saved.resolution?.width && option.height === saved.resolution?.height,
-    ) || RESOLUTIONS[0]
-    const normalized = normalizeEditorClips(saved.clips, {
-      idFactory: clipId,
-      thumbnailUrl: api.getVideoEditorThumbnailUrl,
-    })
-    return {
-      clips: normalized.clips,
-      projectName: typeof saved.projectName === 'string' ? saved.projectName : 'my_video',
-      resolution,
-      fps: [24, 25, 30, 50, 60].includes(saved.fps) ? saved.fps : 30,
-      warning: editorClipRecoveryMessage(normalized),
-    }
-  } catch {
-    return null
-  }
-}
-
-export function loadEditorDraft(workspace?: string | null): {
-  clips: EditorClip[]
-  projectName: string
-  resolution: ResolutionOption
-  fps: number
-  warning: string | null
-} {
-  const fallback = { clips: [], projectName: 'my_video', resolution: RESOLUTIONS[0], fps: 30, warning: null }
-  const namespacedKey = videoEditorDraftStorageKey(workspace)
-  try {
-    const namespaced = parseEditorDraft(window.localStorage.getItem(namespacedKey))
-    if (namespaced) return namespaced
-    const legacyRaw = window.localStorage.getItem(VIDEO_EDITOR_DRAFT_KEY)
-    const legacy = parseEditorDraft(legacyRaw)
-    if (!legacy) return fallback
-    // One-shot migration: the unscoped draft belongs to the workspace that
-    // first opens the editor after this change, not to every workspace.
-    if (legacyRaw) {
-      window.localStorage.setItem(namespacedKey, legacyRaw)
-      window.localStorage.removeItem(VIDEO_EDITOR_DRAFT_KEY)
-    }
-    return legacy
-  } catch {
-    return fallback
-  }
-}
-
-export function persistEditorDraft(
-  clips: EditorClip[],
-  projectName: string,
-  resolution: ResolutionOption,
-  fps: number,
-  workspace?: string | null,
-): boolean {
-  try {
-    window.localStorage.setItem(videoEditorDraftStorageKey(workspace), JSON.stringify({
-      clips, projectName, resolution, fps, savedAt: new Date().toISOString(),
-    }))
-    return true
-  } catch {
-    // A full browser quota must not interrupt editing.
-    return false
-  }
 }
 
 export function VideoEditorPanel() {

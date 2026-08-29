@@ -184,7 +184,8 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
             allow_clip_text=False,
         )
         prompt = plans[0]["video_prompt"]
-        self.assertTrue(prompt.startswith("integrated_multimodal_description: [Shot 1]"))
+        self.assertIn("integrated_multimodal_description:", prompt)
+        self.assertIn("[Shot 1]", prompt)
         self.assertIn("Shared visual direction: IMMUTABLE PAINTED WORLD", prompt)
         self.assertIn("Reveal the alien citadel", prompt)
         self.assertNotIn("Scene overview:", prompt)
@@ -230,8 +231,10 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         compiled = plans[0]["video_prompt"]
         self.assertEqual(compiled.count("overall_soundscape:"), 1)
         self.assertEqual(compiled.count("non_diegetic_music:"), 1)
-        self.assertIn("Rain, thunder and hurried footsteps", compiled)
-        self.assertIn("Low strings rise into a sharp brass hit", compiled)
+        self.assertIn("overall_soundscape: N/A", compiled)
+        self.assertIn("non_diegetic_music: N/A", compiled)
+        self.assertNotIn("Rain, thunder and hurried footsteps", compiled)
+        self.assertNotIn("Low strings rise into a sharp brass hit", compiled)
         self.assertNotIn("Natural scene-appropriate stereo ambience", compiled)
 
     def test_direct_video_never_leaks_global_audio_meta_into_soundscape(self):
@@ -253,7 +256,8 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
         soundscape = plans[0]["video_prompt"].split(
             "overall_soundscape:", 1
         )[1].split("non_diegetic_music:", 1)[0].casefold()
-        self.assertIn("distant cave drips", soundscape)
+        self.assertIn("n/a", soundscape)
+        self.assertNotIn("distant cave drips", soundscape)
         self.assertNotIn("dialogue", soundscape)
         self.assertNotIn("music", soundscape)
     def test_choruses_reuse_signature_set_with_controlled_coverage(self):

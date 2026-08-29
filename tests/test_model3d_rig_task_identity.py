@@ -81,6 +81,13 @@ def test_model3d_job_and_sidecar_share_the_canonical_task_identity(tmp_path, mon
     monkeypatch.setattr(model3d_service, "HF_CACHE_DIR", tmp_path / "model3d-cache")
     monkeypatch.setattr(model3d_service, "_python_path", lambda: Path("/fake/python"))
     monkeypatch.setattr(model3d_service.subprocess, "Popen", _successful_popen)
+    dummy_ref = tmp_path / "minimax-ref.png"
+    dummy_ref.write_bytes(b"png")
+    monkeypatch.setattr(
+        model3d_service,
+        "_condition_text_job_with_minimax",
+        lambda *_args, **_kwargs: str(dummy_ref),
+    )
 
     created = model3d_service.start_job(
         body={"prompt": "A small arcade cabinet"},

@@ -1682,7 +1682,7 @@ class TestDirectorCancellation(unittest.TestCase):
         self.assertEqual(repair["status"], "interrupted")
         self.assertEqual(repair["phase"], "interrupted")
         self.assertIsNone(repair["clip_index"])
-        self.assertIn("Loreframe Lab stopped", repair["error"])
+        self.assertIn("HocusPocus Lab stopped", repair["error"])
         self.assertIsNotNone(repair["completed_at"])
 
         summaries = pipeline.list_pipeline_states(self.temp_dir.name)

@@ -39,6 +39,8 @@ function clip(name: string) {
 test('Series handoff validates all sources before replacing the draft and can retry', { concurrency: false }, async () => {
   const { render, screen, waitFor, cleanup, fireEvent } = await import('@testing-library/react')
   const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
+  const { videoEditorDraftStorageKey } = await import('../src/features/video-editor/editorDraft.ts')
+  const draftKey = videoEditorDraftStorageKey('default')
   let failSecond = true
   const probed: string[] = []
   globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
@@ -72,7 +74,7 @@ test('Series handoff validates all sources before replacing the draft and can re
   await screen.findByRole('button', { name: 'Retry hand-off' })
   assert.deepEqual(probed, ['first.mp4', 'second.mp4'])
   assert.deepEqual(
-    JSON.parse(dom.window.localStorage.getItem('maestro-video-editor-draft-v1') || '{}').clips.map((item: { name: string }) => item.name),
+    JSON.parse(dom.window.localStorage.getItem(draftKey) || '{}').clips.map((item: { name: string }) => item.name),
     ['old'],
   )
   assert.deepEqual(JSON.parse(dom.window.localStorage.getItem('maestro-video-editor-pending-sequence') || '{}'), handoff)
@@ -82,7 +84,7 @@ test('Series handoff validates all sources before replacing the draft and can re
   fireEvent.click(screen.getByRole('button', { name: 'Retry hand-off' }))
   await waitFor(() => assert.match(screen.getByText(/Timeline · 3 clips/).textContent || '', /Timeline · 3 clips/))
   assert.deepEqual(
-    JSON.parse(dom.window.localStorage.getItem('maestro-video-editor-draft-v1') || '{}').clips.map((item: { name: string }) => item.name),
+    JSON.parse(dom.window.localStorage.getItem(draftKey) || '{}').clips.map((item: { name: string }) => item.name),
     ['First', 'Second', 'Third'],
   )
   assert.equal(dom.window.localStorage.getItem('maestro-video-editor-pending-sequence'), null)

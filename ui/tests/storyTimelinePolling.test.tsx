@@ -121,13 +121,13 @@ test('successful manual timeline refresh clears an error and cancels retry polli
 
   try {
     render(<StoryProductionTimeline production={production} initiallyOpen />)
-    await screen.findByText('Pipeline not found')
+    await screen.findByText('Failed to load pipeline (503)')
     assert.equal(scheduled.size, 1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh timeline' }))
     await waitFor(() => assert.equal(fetches, 2))
     await screen.findByText(/Pipeline pipeline-terminal-1/)
-    assert.equal(screen.queryByText('Pipeline not found'), null)
+    assert.equal(screen.queryByText('Failed to load pipeline (503)'), null)
     assert.deepEqual(cleared, [1])
     assert.equal(scheduled.size, 0)
   } finally {
