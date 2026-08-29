@@ -13,6 +13,7 @@ import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
+import { applySceneRhythmToLayer, buildSceneRhythmMap, type SceneRhythmCueSource, type SceneRhythmProfile } from '../../lib/sceneRhythm'
 import { applyCutoutDialogue, bindCutoutFaceToPose, ensureCutoutFacePlayback, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
 import { captureCharacterFaceAnchor, characterKitAssetFromLayer, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, syncMountedCharacterKitLayers, syncSceneCharacterKits, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
 import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } from '../../lib/characterKitHandoff'
@@ -20,7 +21,7 @@ import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, NARRATI
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
 import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneLayerMotionProgress, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
 import { normalizeSeamOccluder, paintSeamOccluder, seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
-import type { Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
+import type { AudioAnalysisResult, Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
 import { CharacterKitLibraryPanel } from '../../features/characters/CharacterKitLibraryPanel'
@@ -512,6 +513,14 @@ export function SceneAnimatorPanel() {
   const [sceneAudioPrompt, setSceneAudioPrompt] = useState('')
   const [sceneAudioBusy, setSceneAudioBusy] = useState(false)
   const [sceneAudioError, setSceneAudioError] = useState<string | null>(null)
+  const [rhythmTrackId, setRhythmTrackId] = useState('')
+  const [rhythmAnalysis, setRhythmAnalysis] = useState<AudioAnalysisResult | null>(null)
+  const [rhythmAnalysisTrackId, setRhythmAnalysisTrackId] = useState('')
+  const [rhythmBusy, setRhythmBusy] = useState(false)
+  const [rhythmError, setRhythmError] = useState<string | null>(null)
+  const [rhythmCueSource, setRhythmCueSource] = useState<SceneRhythmCueSource>('beats')
+  const [rhythmProfile, setRhythmProfile] = useState<SceneRhythmProfile>('pulse')
+  const [rhythmIntensity, setRhythmIntensity] = useState(.65)
   const [cutoutDialogueText, setCutoutDialogueText] = useState('')
   const [cutoutDialogueStart, setCutoutDialogueStart] = useState(0)
   const [cutoutDialogueEnd, setCutoutDialogueEnd] = useState(5)
@@ -579,6 +588,11 @@ export function SceneAnimatorPanel() {
   const selectedDialogueTrack = dialogueAudioTracks.find(track => track.id === cutoutDialogueTrackId)
     ?? dialogueAudioTracks.find(track => track.kind === 'speech')
     ?? dialogueAudioTracks[0]
+  const rhythmAudioTracks = [...(scene.audioTracks ?? [])].sort((a, b) => Number(b.kind === 'music') - Number(a.kind === 'music'))
+  const selectedRhythmTrack = rhythmAudioTracks.find(track => track.id === rhythmTrackId)
+    ?? rhythmAudioTracks.find(track => track.kind === 'music')
+    ?? rhythmAudioTracks[0]
+  const activeRhythmAnalysis = selectedRhythmTrack?.id === rhythmAnalysisTrackId ? rhythmAnalysis : null
   const narrativeVisuals = outputs.filter(output => output.type === 'model3d' || output.type === 'image' || output.type === 'video')
   const narrativeTemplate = getNarrativeTemplate(narrativeTemplateId)!
   const narrativeAssetByName = (name: string) => narrativeVisuals.find(asset => asset.name === name)
@@ -2346,6 +2360,43 @@ export function SceneAnimatorPanel() {
       setSceneAudioBusy(false)
     }
   }
+  const analyzeSceneRhythm = async () => {
+    const track = selectedRhythmTrack
+    if (!track) { setRhythmError('Attach an MP3, WAV or generated music track first.'); return }
+    setRhythmBusy(true); setRhythmError(null)
+    try {
+      const analysis = await analyzeAudio({ audio_path: track.filename, transcribe: false, extract_vocals: false })
+      if (!analysis.beats.length) throw new Error('No stable beat grid was detected in this track.')
+      setRhythmAnalysis(analysis); setRhythmAnalysisTrackId(track.id)
+      setMessage(`Rhythm ready: ${analysis.bpm.toFixed(1)} BPM · ${analysis.beats.length} beats · ${analysis.downbeats.length} downbeats.`)
+    } catch (error) {
+      setRhythmAnalysis(null); setRhythmAnalysisTrackId('')
+      setRhythmError(error instanceof Error ? error.message : 'Could not identify the rhythm of this track.')
+    } finally {
+      setRhythmBusy(false)
+    }
+  }
+  const applySceneRhythm = () => {
+    const track = selectedRhythmTrack
+    const analysis = activeRhythmAnalysis
+    if (!track || !analysis) { setRhythmError('Analyze the selected audio track before applying rhythm.'); return }
+    if (!selected) { setRhythmError('Select the 3D object, visual layer or camera that should react to the music.'); return }
+    if (selected.locked) { setRhythmError(`Unlock ${selected.name} before generating beat keyframes.`); return }
+    try {
+      const map = buildSceneRhythmMap(analysis, track.startTime, scene.duration, rhythmCueSource)
+      if (!map.cues.length) throw new Error('The detected beats do not overlap the current scene duration and audio start time.')
+      const profile = selected.type === 'camera' && rhythmProfile === 'peek' ? 'camera-punch' : rhythmProfile
+      updateLayer(selected.id, layer => applySceneRhythmToLayer(layer, map, {
+        profile,
+        sceneDuration: scene.duration,
+        intensity: rhythmIntensity,
+      }) as AnimatorLayer)
+      setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(map.cues[0].time / scene.duration); setRhythmError(null)
+      setMessage(`Applied ${map.cues.length} ${rhythmCueSource} from ${track.name} to ${selected.name}. The result is ordinary editable keyframes.`)
+    } catch (error) {
+      setRhythmError(error instanceof Error ? error.message : 'Could not turn this rhythm into scene keyframes.')
+    }
+  }
   const animateCutoutDialogue = () => {
     const text = cutoutDialogueText.trim()
     if (!text) { setMessage('Write the dialogue line before animating the mouth.'); return }
@@ -2676,6 +2727,20 @@ export function SceneAnimatorPanel() {
         <button type="button" disabled={!sceneAudioPrompt.trim() || sceneAudioBusy || playing || recording || publishing} onClick={() => void generateSceneSpeech()} className="w-full rounded border border-amber-300/50 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100 disabled:opacity-40">{sceneAudioBusy ? 'Generating narration…' : `Generate speech · ${selectedSpeechModel}`}</button>
         {generatedAudio.length > 0 && <label className="block text-[9px] text-text-muted">Attach existing output<select defaultValue="" onChange={event => { const output = generatedAudio.find(item => item.name === event.target.value); if (output) attachSceneAudio(output.name, output.name.replace(/\.[^.]+$/, ''), 'audio'); event.currentTarget.value = '' }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]"><option value="">Choose audio…</option>{generatedAudio.map(output => <option key={output.name} value={output.name}>{output.name}</option>)}</select></label>}
         {(scene.audioTracks ?? []).length > 0 && <div className="space-y-1 rounded border border-amber-300/15 bg-black/15 p-1.5">{scene.audioTracks!.map(track => <div key={track.id} className="grid grid-cols-[1fr_44px_44px_18px] items-center gap-1 text-[8px]"><span title={track.prompt ?? track.name} className="truncate text-amber-100">{track.kind} · {track.name}</span><label className="text-text-muted">at<input aria-label={`Start ${track.name}`} type="number" min="0" max={scene.duration} step="0.1" value={track.startTime} onChange={event => { const startTime = Number(event.target.value); if (Number.isFinite(startTime)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, startTime: Math.max(0, Math.min(current.duration, startTime)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><label className="text-text-muted">vol<input aria-label={`Volume ${track.name}`} type="number" min="0" max="2" step="0.1" value={track.volume} onChange={event => { const volume = Number(event.target.value); if (Number.isFinite(volume)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, volume: Math.max(0, Math.min(2, volume)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><button type="button" title={`Remove ${track.name}`} onClick={() => updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).filter(item => item.id !== track.id) }))} className="mt-3 text-red-300"><Trash2 size={12} /></button></div>)}</div>}
+        {rhythmAudioTracks.length > 0 && <div className="space-y-1.5 rounded border border-violet-300/25 bg-violet-400/[.045] p-1.5">
+          <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-medium text-violet-100">Music rhythm → animation</span><span className="text-[7px] text-violet-200/70">BPM + beat grid</span></div>
+          <label className="block text-[8px] text-text-muted">Rhythm track<select value={selectedRhythmTrack?.id ?? ''} disabled={rhythmBusy || playing || recording || publishing} onChange={event => { setRhythmTrackId(event.target.value); setRhythmError(null) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[9px] disabled:opacity-40">{rhythmAudioTracks.map(track => <option key={track.id} value={track.id}>{track.kind} · {track.name}</option>)}</select></label>
+          <button type="button" disabled={!selectedRhythmTrack || rhythmBusy || playing || recording || publishing} onClick={() => void analyzeSceneRhythm()} className="w-full rounded border border-violet-300/45 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">{rhythmBusy ? 'Detecting beats…' : activeRhythmAnalysis ? 'Analyze again' : 'Analyze BPM and beats'}</button>
+          {activeRhythmAnalysis && <div className="rounded border border-violet-300/15 bg-black/15 px-1.5 py-1 text-[8px] text-violet-100"><strong>{activeRhythmAnalysis.bpm.toFixed(1)} BPM</strong> · {activeRhythmAnalysis.beats.length} beats · {activeRhythmAnalysis.downbeats.length} downbeats · {activeRhythmAnalysis.sections.length} sections</div>}
+          <div className="grid grid-cols-2 gap-1">
+            <label className="text-[8px] text-text-muted">Trigger<select value={rhythmCueSource} onChange={event => setRhythmCueSource(event.target.value as SceneRhythmCueSource)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="beats">Every beat</option><option value="downbeats">Downbeats only</option></select></label>
+            <label className="text-[8px] text-text-muted">Reaction<select value={rhythmProfile} onChange={event => setRhythmProfile(event.target.value as SceneRhythmProfile)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="pulse">Scale pulse</option><option value="bounce">Bounce</option><option value="peek" disabled={selected?.type === 'camera'}>Peek on beat</option><option value="camera-punch">Camera punch</option></select></label>
+          </div>
+          <label className="block text-[8px] text-text-muted">Intensity · {Math.round(rhythmIntensity * 100)}%<input type="range" min="0" max="1" step="0.05" value={rhythmIntensity} onChange={event => setRhythmIntensity(Number(event.target.value))} className="mt-0.5 w-full accent-violet-400" /></label>
+          <button type="button" disabled={!activeRhythmAnalysis || !selected || selected.locked || rhythmBusy || playing || recording || publishing} onClick={applySceneRhythm} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-2 py-1 text-[9px] text-violet-100 disabled:opacity-40">Apply to {selected?.name ?? 'selected layer'}</button>
+          <p className="text-[7px] leading-relaxed text-text-muted">The detected grid is offset with the track, then baked into normal keyframes shared by preview and MP4 export. “Peek” hides the selected object between beats and reveals it on each hit.</p>
+        </div>}
+        {rhythmError && <p className="text-[8px] text-red-300">{rhythmError}</p>}
         {sceneAudioError && <p className="text-[8px] text-red-300">{sceneAudioError}</p>}
       </div>
       <CharacterKitLibraryPanel
