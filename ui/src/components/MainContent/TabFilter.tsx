@@ -32,8 +32,10 @@ const tabs: { value: MediaFilter; label: string; shortLabel: string; icon?: stri
 export function TabFilter() {
   const mediaFilter = useStore(s => s.mediaFilter)
   const setMediaFilter = useStore(s => s.setMediaFilter)
+  const developerMode = useStore(s => s.developerMode)
   const searchQuery = useStore(s => s.outputSearchQuery)
   const setSearchQuery = useStore(s => s.setOutputSearchQuery)
+  const visibleTabs = tabs.filter(tab => tab.value !== 'auditdev' || developerMode)
   const [searchOpen, setSearchOpen] = useState(false)
   const [draftQuery, setDraftQuery] = useState(searchQuery)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -82,7 +84,7 @@ export function TabFilter() {
         className="flex-1"
         viewportClassName="flex gap-0.5 bg-bg-tertiary rounded-lg p-0.5 border border-border"
       >
-        {tabs.map(tab => (
+        {visibleTabs.map(tab => (
           <button
             key={tab.value}
             type="button"

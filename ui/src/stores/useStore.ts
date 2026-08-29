@@ -3,6 +3,7 @@ import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPr
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import { applyThemePrefs, getStoredPrefs, type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
+import { loadDeveloperMode, saveDeveloperMode } from '../lib/developerMode'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
@@ -1374,6 +1375,9 @@ interface AppState {
   themePrefs: ThemePrefs
   setThemeMode: (mode: ThemeMode) => void
   setThemeFamily: (family: FamilyId) => void
+  /** Internal tools (Auditoría interna). Off by default; persisted locally. */
+  developerMode: boolean
+  setDeveloperMode: (enabled: boolean) => void
 
   // Retake Dialog
   retakeDialogOpen: boolean
@@ -3039,6 +3043,14 @@ export const useStore = create<AppState>((set, get) => ({
     const prefs = { ...get().themePrefs, family }
     applyThemePrefs(prefs)
     set({ themePrefs: prefs })
+  },
+  developerMode: loadDeveloperMode(),
+  setDeveloperMode: (enabled) => {
+    saveDeveloperMode(enabled)
+    set(s => ({
+      developerMode: enabled,
+      mediaFilter: !enabled && s.mediaFilter === 'auditdev' ? 'all' : s.mediaFilter,
+    }))
   },
 
   // CivitAI LoRA Browser

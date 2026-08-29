@@ -40,13 +40,29 @@ installDom()
 test('video result filters are listed beside Videos', { concurrency: false }, async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.setState({ developerMode: false, mediaFilter: 'all' })
   try {
     render(<TabFilter />)
     assert.ok(screen.getByRole('tab', { name: /Videoclips/i }))
     assert.ok(screen.getByRole('tab', { name: /Tráilers/i }))
     assert.ok(screen.getByRole('tab', { name: /Capítulos/i }))
-    assert.ok(screen.getByRole('tab', { name: /Auditoría interna dev/i }))
+    assert.equal(screen.queryByRole('tab', { name: /Auditoría interna/i }), null)
   } finally {
+    cleanup()
+  }
+})
+
+test('Auditoría interna is only listed in developer mode', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.setState({ developerMode: true, mediaFilter: 'all' })
+  try {
+    render(<TabFilter />)
+    assert.ok(screen.getByRole('tab', { name: /Auditoría interna/i }))
+  } finally {
+    useStore.setState({ developerMode: false })
     cleanup()
   }
 })
