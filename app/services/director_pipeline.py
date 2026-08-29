@@ -13128,7 +13128,11 @@ def _run_minimax_h3_story_video(
 
     outputs: list[str] = []
     temporary_h3_audio: list[str] = []
-    shot_elapsed_frames = [0] * len(clip_plans)
+    # Soundtrack slices must walk the assembled timeline the same way Omni
+    # and clip-rerun do: origin of planned clip 0 plus every prior segment,
+    # including reused ones. A per-shot counter never added earlier shots,
+    # so shot 2+ were conditioned on the first window of the song.
+    elapsed_frames = 0
     saved_segment_states = (_pipelines.get(pid) or {}).get("_h3_segments") or []
     segment_states: list[list[dict]] = [
         copy.deepcopy(saved_segment_states[index])
@@ -13220,6 +13224,7 @@ def _run_minimax_h3_story_video(
                         "total_steps": 0,
                     },
                 )
+                elapsed_frames += frames
                 _save_pipeline_state(pid)
                 continue
             reuse_prefix = False
@@ -13290,7 +13295,7 @@ def _run_minimax_h3_story_video(
                     f"{uuid.uuid4().hex[:8]}.wav",
                 )
                 clip_start = (
-                    audio_origin_sec + shot_elapsed_frames[shot_index] / fps
+                    audio_origin_sec + elapsed_frames / fps
                 )
                 try:
                     _slice_audio_segment(
@@ -13384,7 +13389,7 @@ def _run_minimax_h3_story_video(
                     "total_steps": 0,
                 },
             )
-            shot_elapsed_frames[shot_index] += frames
+            elapsed_frames += frames
             _save_pipeline_state(pid)
     finally:
         for path in continuation_frames:
@@ -13415,7 +13420,12 @@ def _run_minimax_h3_story_video(
     final_name = f"minimax_h3_{pid}_multiclip.mp4"
     final_path = os.path.join(out_dir, final_name)
     clip_paths = [name if os.path.isabs(name) else os.path.join(out_dir, name) for name in outputs]
-    if not _wgp.concatenate_multi_clip_videos(clip_paths, final_path, assembly_audio):
+    if not _wgp.concatenate_multi_clip_videos(
+        clip_paths,
+        final_path,
+        assembly_audio,
+        audio_start_sec=audio_origin_sec,
+    ):
         raise RuntimeError(
             "MiniMax H3 rendered every segment, but final short-film assembly failed. "
             "The individual clips were preserved."

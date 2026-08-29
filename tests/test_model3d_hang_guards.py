@@ -2,6 +2,8 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.services import model3d_service
 
 
@@ -75,6 +77,20 @@ def test_guard_mesh_complexity_reduces_only_when_over_the_hang_limit():
     worker.reduce_faces = fake_reduce
     assert worker.guard_mesh_complexity(small, {}, for_texture=True) is small
     assert worker.guard_mesh_complexity(huge, {}, for_texture=True) is reduced
+
+
+def test_guard_mesh_complexity_fails_closed_when_simplify_cannot_meet_hang_limit():
+    worker = _load_worker()
+    huge = SimpleNamespace(faces=list(range(worker._MAX_TEXTURE_FACES + 50)))
+
+    def fake_reduce(mesh, max_faces):
+        assert mesh is huge
+        assert max_faces == worker._MAX_TEXTURE_FACES
+        return mesh
+
+    worker.reduce_faces = fake_reduce
+    with pytest.raises(RuntimeError, match="after simplification"):
+        worker.guard_mesh_complexity(huge, {}, for_texture=True)
 
 
 def test_guard_mesh_complexity_honors_user_face_target():

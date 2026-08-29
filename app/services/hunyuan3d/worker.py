@@ -112,13 +112,24 @@ def reduce_faces(mesh: Any, max_faces: int) -> Any:
 
 
 def guard_mesh_complexity(mesh: Any, settings: dict[str, Any], *, for_texture: bool) -> Any:
-    hard_limit = _MAX_TEXTURE_FACES if for_texture else _MAX_EXPORT_FACES
+    hang_limit = _MAX_TEXTURE_FACES if for_texture else _MAX_EXPORT_FACES
+    target = hang_limit
     if settings.get("reduce_face"):
-        hard_limit = min(hard_limit, int(settings.get("target_face_num") or hard_limit))
+        target = min(hang_limit, int(settings.get("target_face_num") or hang_limit))
     count = mesh_face_count(mesh)
-    if count > hard_limit:
-        return reduce_faces(mesh, hard_limit)
-    return mesh
+    if count <= target:
+        return mesh
+    reduced = reduce_faces(mesh, target)
+    remaining = mesh_face_count(reduced)
+    # reduce_faces is best-effort and returns the original mesh on error.
+    # Texturing/exporting a mesh still over the hang cap is how the host
+    # freezes; fail the job instead of proceeding with the dense mesh.
+    if remaining > hang_limit:
+        raise RuntimeError(
+            f"Mesh has {remaining} faces after simplification (limit {hang_limit}). "
+            "Lower octree resolution and retry to avoid freezing the host."
+        )
+    return reduced
 
 
 def supported_call(callable_obj, **kwargs):
