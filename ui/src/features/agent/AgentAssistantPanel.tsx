@@ -138,7 +138,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       const answer = await generateLlmText({
         system_prompt: HOCUSPOCUS_AGENT_SYSTEM_PROMPT,
         prompt: buildAgentTurnPrompt(workspace, nextMessages, tasks, buildAgentAppSnapshot()),
-        max_new_tokens: 2_400,
+        max_new_tokens: 3_200,
         temperature: .1,
         json_schema: HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
       })

@@ -43,6 +43,22 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['prompt', 'model_type', 'resolution', 'aspect_ratio', 'seed', 'output_count'],
   },
   {
+    type: 'prepare_audio',
+    title: 'Prepare Studio audio',
+    purpose: 'Open Studio → Audio and fill Speech, Music or SFX. The Audios gallery only displays finished files.',
+    useWhen: 'The user asks to prepare or generate speech, music or a sound effect.',
+    risk: 'edit',
+    parameters: ['audio_sub_mode', 'prompt', 'duration_seconds', 'model_type', 'negative_prompt'],
+  },
+  {
+    type: 'queue_sfx_pack',
+    title: 'Queue a Studio SFX pack',
+    purpose: 'Open Studio → Audio → SFX and submit several MMAudio one-shots to the canonical queue.',
+    useWhen: 'The user explicitly asks to create or generate a pack of game sound effects.',
+    risk: 'compute',
+    parameters: ['sfx_clips', 'confirm', 'model_type', 'negative_prompt'],
+  },
+  {
     type: 'open_story_section',
     title: 'Open a Story Lab section',
     purpose: 'Open Story Lab and select Overview, World, Characters, Relationships, Structure or Productions.',

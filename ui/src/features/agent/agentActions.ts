@@ -1,6 +1,7 @@
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
 import type { AspectRatio, MediaFilter, ModelDef, ResolutionPreset } from '../../types'
 import type { AgentSeriesSection, AgentStorySection } from './agentUiBus'
+import { ARCADE_HORDE_SFX_PACK, type AgentSfxClip } from './sfxPack'
 
 export const AGENT_TABS = [
   'studio',
@@ -58,6 +59,24 @@ export interface AgentPrepareImageAction {
   inferenceSteps?: number
   guidanceScale?: number
   outputCount?: number
+}
+
+export interface AgentPrepareAudioAction {
+  type: 'prepare_audio'
+  subMode: 'speech' | 'music' | 'sfx'
+  prompt: string
+  modelType?: string
+  durationSeconds?: number
+  negativePrompt?: string
+}
+
+export interface AgentQueueSfxPackAction {
+  type: 'queue_sfx_pack'
+  style: string
+  clips: AgentSfxClip[]
+  modelType?: string
+  negativePrompt?: string
+  confirm: true
 }
 
 export interface AgentStartGenerationAction {
@@ -156,6 +175,8 @@ export type AgentAction = AgentOpenTabAction
   | AgentOpenSeriesSectionAction
   | AgentPrepareVideoAction
   | AgentPrepareImageAction
+  | AgentPrepareAudioAction
+  | AgentQueueSfxPackAction
   | AgentStartGenerationAction
   | AgentCreateStoryAction
   | AgentCreateSeriesEpisodeAction
@@ -216,10 +237,32 @@ const SERIES_SECTIONS = new Set<AgentSeriesSection>([
   'setup', 'canon', 'episode', 'shots', 'review',
 ])
 const MAX_ACTIONS = 6
+const AUDIO_SUB_MODES = new Set<AgentPrepareAudioAction['subMode']>(['speech', 'music', 'sfx'])
+const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
+  opentab: 'open_tab',
+  openstorysection: 'open_story_section',
+  openseriessection: 'open_series_section',
+  preparevideo: 'prepare_video',
+  prepareimage: 'prepare_image',
+  prepareaudio: 'prepare_audio',
+  queuesfxpack: 'queue_sfx_pack',
+  startgeneration: 'start_generation',
+  createstory: 'create_story',
+  createseriesepisode: 'create_series_episode',
+  inspectqueue: 'inspect_queue',
+  canceltask: 'cancel_task',
+  resumetask: 'resume_task',
+}
 
 const cleanString = (value: unknown, maxLength: number): string => (
   typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
 )
+
+function canonicalActionType(value: unknown): string {
+  const raw = cleanString(value, 40)
+  const collapsed = raw.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return ACTION_TYPE_ALIASES[collapsed] || raw
+}
 
 const optionalNumber = (
   value: unknown,
@@ -299,22 +342,38 @@ const extractJsonObject = (raw: string): Record<string, unknown> | null => {
   }
 }
 
+function parseSfxClips(value: unknown): AgentSfxClip[] {
+  return Array.isArray(value) ? value.slice(0, 12).flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = item as Record<string, unknown>
+    const name = cleanString(raw.name, 80)
+    const prompt = cleanString(raw.prompt, 1_500)
+    if (!name || !prompt) return []
+    return [{
+      name,
+      prompt,
+      durationSeconds: optionalPositiveNumber(raw.duration_seconds, 1, 20) ?? 1,
+    }]
+  }) : []
+}
+
 function parseAction(value: unknown): AgentAction | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const raw = value as Record<string, unknown>
-  if (raw.type === 'open_tab') {
+  const type = canonicalActionType(raw.type)
+  if (type === 'open_tab') {
     const tab = cleanString(raw.tab, 40)
     return TAB_SET.has(tab) ? { type: 'open_tab', tab: tab as AgentTab } : null
   }
-  if (raw.type === 'open_story_section') {
+  if (type === 'open_story_section') {
     const section = cleanString(raw.story_section, 40) as AgentStorySection
     return STORY_SECTIONS.has(section) ? { type: 'open_story_section', section } : null
   }
-  if (raw.type === 'open_series_section') {
+  if (type === 'open_series_section') {
     const section = cleanString(raw.series_section, 40) as AgentSeriesSection
     return SERIES_SECTIONS.has(section) ? { type: 'open_series_section', section } : null
   }
-  if (raw.type === 'prepare_video') {
+  if (type === 'prepare_video') {
     const prompt = cleanString(raw.prompt, 8_000)
     if (!prompt) return null
     const resolutionPreset = cleanString(raw.resolution_preset, 12) as ResolutionPreset
@@ -340,7 +399,7 @@ function parseAction(value: unknown): AgentAction | null {
       turbo,
     }
   }
-  if (raw.type === 'prepare_image') {
+  if (type === 'prepare_image') {
     const prompt = cleanString(raw.prompt, 8_000)
     if (!prompt) return null
     const resolutionPreset = cleanString(raw.resolution_preset, 12) as ResolutionPreset
@@ -362,8 +421,34 @@ function parseAction(value: unknown): AgentAction | null {
       outputCount: optionalPositiveNumber(raw.output_count, 1, 8, true),
     }
   }
-  if (raw.type === 'start_generation') return { type: 'start_generation' }
-  if (raw.type === 'create_story') {
+  if (type === 'prepare_audio') {
+    const prompt = cleanString(raw.prompt, 8_000)
+    if (!prompt) return null
+    const subMode = cleanString(raw.audio_sub_mode, 12) as AgentPrepareAudioAction['subMode']
+    return {
+      type: 'prepare_audio',
+      subMode: AUDIO_SUB_MODES.has(subMode) ? subMode : 'sfx',
+      prompt,
+      modelType: cleanString(raw.model_type, 160) || undefined,
+      durationSeconds: optionalPositiveNumber(raw.duration_seconds, 1, 20),
+      negativePrompt: cleanString(raw.negative_prompt, 2_000) || undefined,
+    }
+  }
+  if (type === 'queue_sfx_pack') {
+    if (raw.confirm !== true) return null
+    const clips = parseSfxClips(raw.sfx_clips)
+    if (!clips.length) return null
+    return {
+      type: 'queue_sfx_pack',
+      style: cleanString(raw.visual_style, 2_000) || cleanString(raw.theme, 1_000),
+      clips,
+      modelType: cleanString(raw.model_type, 160) || undefined,
+      negativePrompt: cleanString(raw.negative_prompt, 2_000) || undefined,
+      confirm: true,
+    }
+  }
+  if (type === 'start_generation') return { type: 'start_generation' }
+  if (type === 'create_story') {
     const title = cleanString(raw.title, 300)
     const premise = cleanString(raw.premise, 2_000)
     if (!title || !premise) return null
@@ -389,7 +474,7 @@ function parseAction(value: unknown): AgentAction | null {
       durationSeconds: optionalPositiveNumber(raw.target_duration_seconds, 15, 3_600, true),
     }
   }
-  if (raw.type === 'create_series_episode') {
+  if (type === 'create_series_episode') {
     const seriesTitle = cleanString(raw.series_title, 300)
     const episodePremise = cleanString(raw.episode_premise, 3_000)
     if (!seriesTitle || !episodePremise) return null
@@ -416,15 +501,15 @@ function parseAction(value: unknown): AgentAction | null {
       knownUniverse: raw.known_universe === true,
     }
   }
-  if (raw.type === 'inspect_queue') {
+  if (type === 'inspect_queue') {
     const scope = cleanString(raw.queue_scope, 12)
     return { type: 'inspect_queue', scope: scope === 'all' ? 'all' : 'active' }
   }
-  if (raw.type === 'cancel_task') {
+  if (type === 'cancel_task') {
     if (raw.confirm !== true) return null
     return { type: 'cancel_task', taskId: cleanString(raw.task_id, 160), confirm: true }
   }
-  if (raw.type === 'resume_task') {
+  if (type === 'resume_task') {
     if (raw.confirm !== true) return null
     return { type: 'resume_task', taskId: cleanString(raw.task_id, 160), confirm: true }
   }
@@ -447,7 +532,7 @@ export function parseAgentTurn(raw: string): AgentTurn {
   for (const value of proposed) {
     const action = parseAction(value)
     if (!action) continue
-    if (action.type === 'prepare_video' || action.type === 'prepare_image') preparedStudio = true
+    if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio') preparedStudio = true
     if (action.type === 'start_generation') {
       if (!preparedStudio || startedGeneration) continue
       startedGeneration = true
@@ -506,6 +591,21 @@ export function isExplicitImageGenerationRequest(request: string): boolean {
   return EXPLICIT_IMAGE_REQUESTS.some(pattern => pattern.test(text))
 }
 
+const EXPLICIT_SFX_REQUESTS = [
+  /\b(?:efectos?(?:\s+de\s+sonido)?|sfx|sound effects?|sonidos?)\b/i,
+]
+const EXPLICIT_SFX_GENERATE = [
+  /\b(?:genera(?:r|d|me)?|crea(?:r|d|me|ndo)?|hazme|hacedme|lanza(?:r|d)?|encola(?:r|d)?|make|creat(?:e|ing)|generat(?:e|ing)|queue)\b/i,
+]
+const GAME_SFX_HINT = /\b(?:vampire\s*survivors|oleadas?|horde|twin[\s-]?stick|arcade|juego|game)\b/i
+
+export function isExplicitSfxGenerationRequest(request: string): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_VIDEO_REQUEST.test(text)) return false
+  return EXPLICIT_SFX_REQUESTS.some(pattern => pattern.test(text))
+    && EXPLICIT_SFX_GENERATE.some(pattern => pattern.test(text))
+}
+
 /**
  * The LLM remains the planner, but an unmistakable user command must not turn
  * into a clarification loop. Repair that one high-value intent locally with
@@ -513,6 +613,25 @@ export function isExplicitImageGenerationRequest(request: string): boolean {
  * “how do I generate a video?” and negated requests remain read-only.
  */
 export function reconcileAgentTurnWithRequest(request: string, turn: AgentTurn): AgentTurn {
+  if (isExplicitSfxGenerationRequest(request)) {
+    const existing = turn.actions.find(
+      (action): action is AgentQueueSfxPackAction => action.type === 'queue_sfx_pack',
+    )
+    const clips = existing?.clips.length
+      ? existing.clips
+      : GAME_SFX_HINT.test(request) ? ARCADE_HORDE_SFX_PACK : []
+    if (clips.length) {
+      return {
+        reply: 'Prepararé Studio → Audio → SFX y encolaré el pack de efectos. Irán detrás de lo que ya use la GPU. La galería Audios solo muestra resultados cuando terminen. 🪄',
+        actions: [{
+          type: 'queue_sfx_pack',
+          style: existing?.style || 'retro fantasy arcade',
+          clips,
+          confirm: true,
+        }],
+      }
+    }
+  }
   if (isExplicitCancelRequest(request)) {
     const existing = turn.actions.find(
       (action): action is AgentCancelTaskAction => action.type === 'cancel_task',
@@ -577,7 +696,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -619,6 +738,19 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           queue_scope: { type: 'string', enum: ['', 'active', 'all'] },
           task_id: { type: 'string', maxLength: 160 },
           confirm: { type: 'boolean' },
+          audio_sub_mode: { type: 'string', enum: ['', 'speech', 'music', 'sfx'] },
+          sfx_clips: {
+            type: 'array', maxItems: 12,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                name: { type: 'string', maxLength: 80 },
+                prompt: { type: 'string', maxLength: 1_500 },
+                duration_seconds: { type: 'number', minimum: 0, maximum: 20 },
+              },
+              required: ['name', 'prompt', 'duration_seconds'],
+            },
+          },
           characters: {
             type: 'array', maxItems: 16,
             items: {
@@ -649,19 +781,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           },
           outline_beats: { type: 'array', maxItems: 24, items: { type: 'string', maxLength: 1_500 } },
         },
-        required: [
-          'type', 'tab', 'story_section', 'series_section', 'prompt', 'model_type', 'duration_seconds',
-          'resolution_preset', 'resolution', 'aspect_ratio', 'negative_prompt',
-          'seed', 'inference_steps', 'guidance_scale', 'output_count',
-          'audio_direction', 'turbo',
-          'title', 'project_type', 'creative_brief', 'premise', 'logline',
-          'synopsis', 'theme', 'ending', 'genre', 'tone', 'visual_style',
-          'world_summary', 'language', 'series_title', 'series_premise',
-          'series_logline', 'episode_title', 'episode_premise',
-          'episode_logline', 'target_duration_seconds', 'create_if_missing',
-          'known_universe', 'queue_scope', 'task_id', 'confirm',
-          'characters', 'locations', 'outline_beats',
-        ],
+        required: ['type'],
       },
     },
   },
@@ -940,7 +1060,8 @@ async function startPreparedGeneration(): Promise<string> {
   const created = useStore.getState().jobs.find(job => !knownJobs.has(job))
   if (!created) throw new Error('HocusPocus no creó una tarea; revisa los requisitos del modelo y los campos visibles.')
   if (created.status === 'failed') throw new Error(created.error || created.message || 'La generación no pudo entrar en cola.')
-  const kind = useStore.getState().generationMode === 'image' ? 'imagen' : 'vídeo'
+  const mode = useStore.getState().generationMode
+  const kind = mode === 'image' ? 'imagen' : mode === 'audio' ? 'pista de audio' : 'vídeo'
   return created.id
     ? `He enviado la ${kind} a la cola (${created.id}).`
     : `He enviado la ${kind} a la cola; HocusPocus está asignando su identificador.`
@@ -963,6 +1084,10 @@ export async function executeAgentActions(
         ? 'Trazando el hechizo de vídeo en Studio…'
         : action.type === 'prepare_image'
           ? 'Trazando el hechizo de imagen en Studio…'
+        : action.type === 'prepare_audio'
+          ? 'Trazando el hechizo de audio en Studio…'
+        : action.type === 'queue_sfx_pack'
+          ? 'Encolando el pack de efectos SFX…'
         : action.type === 'start_generation'
           ? 'Enviando a la cola…'
           : action.type === 'create_story'
@@ -996,6 +1121,14 @@ export async function executeAgentActions(
         const message = await prepareImage(action)
         preparedStudio = true
         results.push({ action, ok: true, message })
+      } else if (action.type === 'prepare_audio') {
+        const { prepareAudio } = await import('./audioActions')
+        const message = await prepareAudio(action)
+        preparedStudio = true
+        results.push({ action, ok: true, message })
+      } else if (action.type === 'queue_sfx_pack') {
+        const { queueSfxPack } = await import('./audioActions')
+        results.push({ action, ok: true, message: await queueSfxPack(action) })
       } else if (action.type === 'start_generation') {
         if (!preparedStudio) throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
         results.push({ action, ok: true, message: await startPreparedGeneration() })
@@ -1018,7 +1151,7 @@ export async function executeAgentActions(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       results.push({ action, ok: false, message })
-      if (action.type === 'prepare_video' || action.type === 'prepare_image') preparedStudio = false
+      if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio') preparedStudio = false
     }
   }
   return results

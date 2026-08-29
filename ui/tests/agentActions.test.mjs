@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -93,4 +93,26 @@ test('repairs an explicit image request into prepare_image plus start_generation
   const repaired = reconcileAgentTurnWithRequest('hazme una imagen de un gato naranja', { reply: '¿Qué estilo?', actions: [] })
   assert.deepEqual(repaired.actions.map(action => action.type), ['prepare_image', 'start_generation'])
   assert.equal(repaired.actions[0].prompt.includes('gato'), true)
+})
+
+test('accepts compact open_tab aliases and queues an explicit game SFX pack', async () => {
+  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const compact = parseAgentTurn(JSON.stringify({
+    reply: 'Voy a Studio.',
+    actions: [{ type: 'opentab', tab: 'studio' }],
+  }))
+  assert.equal(compact.actions[0].type, 'open_tab')
+  assert.equal(compact.actions[0].tab, 'studio')
+  const unsigned = parseAgentTurn(JSON.stringify({
+    reply: 'Pack.',
+    actions: [{ type: 'queue_sfx_pack', confirm: false, sfx_clips: [{ name: 'coin', prompt: 'coin', duration_seconds: 1 }] }],
+  }))
+  assert.equal(unsigned.actions.length, 0)
+  const repaired = reconcileAgentTurnWithRequest(
+    'necesito efectos para un juego tipo vampire survivors, puedes ir creando',
+    { reply: 'Vale.', actions: [] },
+  )
+  assert.equal(repaired.actions[0].type, 'queue_sfx_pack')
+  assert.equal(repaired.actions[0].confirm, true)
+  assert.ok(repaired.actions[0].clips.length >= 10)
 })
