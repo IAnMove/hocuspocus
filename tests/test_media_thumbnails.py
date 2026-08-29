@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from app.services.media_thumbnails import ensure_media_thumbnail, thumbnail_cache_key
+
+_FFMPEG_AVAILABLE = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+
+pytestmark = pytest.mark.skipif(
+    not _FFMPEG_AVAILABLE,
+    reason="ffmpeg and ffprobe are required for thumbnail tests",
+)
 
 
 def _make_test_image(path: Path) -> None:
