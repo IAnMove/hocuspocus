@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -81,4 +81,16 @@ test('drops cancel_task unless confirm is true and repairs an explicit cancel re
   const repaired = reconcileAgentTurnWithRequest('cancela el trabajo activo', { reply: 'Vale.', actions: [] })
   assert.equal(repaired.actions[0].type, 'cancel_task')
   assert.equal(repaired.actions[0].confirm, true)
+})
+
+test('repairs an explicit image request into prepare_image plus start_generation', async () => {
+  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const parsed = parseAgentTurn(JSON.stringify({
+    reply: 'Voy a pintar.',
+    actions: [{ type: 'prepare_image', prompt: 'un gato naranja', resolution_preset: 'auto', aspect_ratio: '1:1' }],
+  }))
+  assert.equal(parsed.actions[0].type, 'prepare_image')
+  const repaired = reconcileAgentTurnWithRequest('hazme una imagen de un gato naranja', { reply: '¿Qué estilo?', actions: [] })
+  assert.deepEqual(repaired.actions.map(action => action.type), ['prepare_image', 'start_generation'])
+  assert.equal(repaired.actions[0].prompt.includes('gato'), true)
 })

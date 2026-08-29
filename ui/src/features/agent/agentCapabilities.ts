@@ -35,6 +35,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['prompt', 'model_type', 'duration_seconds', 'resolution', 'aspect_ratio', 'seed', 'output_count'],
   },
   {
+    type: 'prepare_image',
+    title: 'Prepare Studio image',
+    purpose: 'Open Studio → Image and fill a validated text-to-image form.',
+    useWhen: 'The user asks to prepare, configure, show or generate an image, photo or portrait.',
+    risk: 'edit',
+    parameters: ['prompt', 'model_type', 'resolution', 'aspect_ratio', 'seed', 'output_count'],
+  },
+  {
     type: 'open_story_section',
     title: 'Open a Story Lab section',
     purpose: 'Open Story Lab and select Overview, World, Characters, Relationships, Structure or Productions.',
@@ -53,8 +61,8 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
   {
     type: 'start_generation',
     title: 'Queue the prepared video',
-    purpose: 'Submit the video prepared in the same turn to the canonical task queue.',
-    useWhen: 'The final user message explicitly asks to generate, launch, start or queue the video.',
+    purpose: 'Submit the Studio video or image prepared in the same turn to the canonical task queue.',
+    useWhen: 'The final user message explicitly asks to generate, launch, start or queue that prepared media.',
     risk: 'compute',
     parameters: [],
   },

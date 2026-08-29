@@ -46,6 +46,20 @@ export interface AgentPrepareVideoAction {
   turbo?: boolean
 }
 
+export interface AgentPrepareImageAction {
+  type: 'prepare_image'
+  prompt: string
+  modelType?: string
+  resolutionPreset?: ResolutionPreset
+  resolution?: string
+  aspectRatio?: AspectRatio
+  negativePrompt?: string
+  seed?: number
+  inferenceSteps?: number
+  guidanceScale?: number
+  outputCount?: number
+}
+
 export interface AgentStartGenerationAction {
   type: 'start_generation'
 }
@@ -141,6 +155,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
   | AgentPrepareVideoAction
+  | AgentPrepareImageAction
   | AgentStartGenerationAction
   | AgentCreateStoryAction
   | AgentCreateSeriesEpisodeAction
@@ -178,6 +193,13 @@ export interface AgentAppSnapshot {
     installed: boolean
     enabled: boolean
     text_to_video: boolean
+  }>
+  available_image_models: Array<{
+    model_type: string
+    name: string
+    family: string
+    installed: boolean
+    enabled: boolean
   }>
 }
 
@@ -318,6 +340,28 @@ function parseAction(value: unknown): AgentAction | null {
       turbo,
     }
   }
+  if (raw.type === 'prepare_image') {
+    const prompt = cleanString(raw.prompt, 8_000)
+    if (!prompt) return null
+    const resolutionPreset = cleanString(raw.resolution_preset, 12) as ResolutionPreset
+    const aspectRatio = cleanString(raw.aspect_ratio, 12) as AspectRatio
+    const resolution = cleanString(raw.resolution, 20)
+    return {
+      type: 'prepare_image',
+      prompt,
+      modelType: cleanString(raw.model_type, 160) || undefined,
+      resolutionPreset: RESOLUTION_PRESETS.has(resolutionPreset) ? resolutionPreset : undefined,
+      resolution: /^\d{2,4}x\d{2,4}$/.test(resolution) ? resolution : undefined,
+      aspectRatio: ASPECT_RATIOS.has(aspectRatio) ? aspectRatio : undefined,
+      negativePrompt: cleanString(raw.negative_prompt, 2_000) || undefined,
+      seed: optionalNumber(raw.seed, -1, 2_147_483_647, true),
+      inferenceSteps: optionalPositiveNumber(raw.inference_steps, 1, 100, true),
+      guidanceScale: typeof raw.guidance_scale === 'number' && raw.guidance_scale >= 0
+        ? optionalNumber(raw.guidance_scale, 0, 30)
+        : undefined,
+      outputCount: optionalPositiveNumber(raw.output_count, 1, 8, true),
+    }
+  }
   if (raw.type === 'start_generation') return { type: 'start_generation' }
   if (raw.type === 'create_story') {
     const title = cleanString(raw.title, 300)
@@ -390,7 +434,7 @@ function parseAction(value: unknown): AgentAction | null {
 /**
  * Treat model output as an untrusted proposal. Only known actions and bounded
  * fields survive, and generation can start only after this same turn prepared
- * a video. That prevents stale chat context from firing the current form.
+ * a Studio form. That prevents stale chat context from firing the current form.
  */
 export function parseAgentTurn(raw: string): AgentTurn {
   const object = extractJsonObject(raw)
@@ -398,14 +442,14 @@ export function parseAgentTurn(raw: string): AgentTurn {
   const reply = cleanString(object.reply, 8_000)
   const proposed = Array.isArray(object.actions) ? object.actions.slice(0, MAX_ACTIONS) : []
   const actions: AgentAction[] = []
-  let preparedVideo = false
+  let preparedStudio = false
   let startedGeneration = false
   for (const value of proposed) {
     const action = parseAction(value)
     if (!action) continue
-    if (action.type === 'prepare_video') preparedVideo = true
+    if (action.type === 'prepare_video' || action.type === 'prepare_image') preparedStudio = true
     if (action.type === 'start_generation') {
-      if (!preparedVideo || startedGeneration) continue
+      if (!preparedStudio || startedGeneration) continue
       startedGeneration = true
     }
     actions.push(action)
@@ -448,6 +492,20 @@ export function isExplicitVideoGenerationRequest(request: string): boolean {
   return EXPLICIT_VIDEO_REQUESTS.some(pattern => pattern.test(text))
 }
 
+const EXPLICIT_IMAGE_REQUESTS = [
+  /\b(?:hazme|hacedme|generame|genérame|creame|créame)\b[^.!?\n]*\b(?:imagen|im[aá]genes|foto|fotos|retrato|ilustraci[oó]n)\b/i,
+  /\b(?:haz|haced|genera|generad|crea|cread|lanza|lanzad|encola|encolad)\b[^.!?\n]*\b(?:imagen|im[aá]genes|foto|fotos|retrato|ilustraci[oó]n)\b/i,
+  /\b(?:quiero|quisiera)\s+que\s+(?:me\s+)?(?:hagas|generes|crees|lances)\b[^.!?\n]*\b(?:imagen|foto|retrato)\b/i,
+  /\b(?:make|create|generate|render|queue)\b[^.!?\n]*\b(?:image|picture|photo|portrait|illustration)\b/i,
+]
+
+export function isExplicitImageGenerationRequest(request: string): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_VIDEO_REQUEST.test(text)) return false
+  if (isExplicitVideoGenerationRequest(text)) return false
+  return EXPLICIT_IMAGE_REQUESTS.some(pattern => pattern.test(text))
+}
+
 /**
  * The LLM remains the planner, but an unmistakable user command must not turn
  * into a clarification loop. Repair that one high-value intent locally with
@@ -464,25 +522,45 @@ export function reconcileAgentTurnWithRequest(request: string, turn: AgentTurn):
       actions: [{ type: 'cancel_task', taskId: existing?.taskId || '', confirm: true }],
     }
   }
-  if (!isExplicitVideoGenerationRequest(request)) return turn
+  if (isExplicitVideoGenerationRequest(request)) {
+    const navigation = turn.actions
+      .filter((action): action is AgentOpenTabAction => action.type === 'open_tab')
+      .slice(0, MAX_ACTIONS - 2)
+    const prepare = turn.actions.find(
+      (action): action is AgentPrepareVideoAction => action.type === 'prepare_video',
+    ) || {
+        type: 'prepare_video',
+        prompt: request.trim().slice(0, 8_000),
+        durationSeconds: 5,
+        resolutionPreset: '720p',
+        aspectRatio: '16:9',
+        seed: -1,
+        outputCount: 1,
+      } satisfies AgentPrepareVideoAction
+
+    return {
+      reply: '¡La petición está clara! Usaré un conjuro de vídeo estándar con los ajustes disponibles, prepararé Studio → Video y lo enviaré a la cola. 🪄',
+      actions: [...navigation, prepare, { type: 'start_generation' }],
+    }
+  }
+  if (!isExplicitImageGenerationRequest(request)) return turn
 
   const navigation = turn.actions
     .filter((action): action is AgentOpenTabAction => action.type === 'open_tab')
     .slice(0, MAX_ACTIONS - 2)
   const prepare = turn.actions.find(
-    (action): action is AgentPrepareVideoAction => action.type === 'prepare_video',
+    (action): action is AgentPrepareImageAction => action.type === 'prepare_image',
   ) || {
-      type: 'prepare_video',
+      type: 'prepare_image',
       prompt: request.trim().slice(0, 8_000),
-      durationSeconds: 5,
-      resolutionPreset: '720p',
-      aspectRatio: '16:9',
+      resolutionPreset: 'auto',
+      aspectRatio: 'auto',
       seed: -1,
       outputCount: 1,
-    } satisfies AgentPrepareVideoAction
+    } satisfies AgentPrepareImageAction
 
   return {
-    reply: '¡La petición está clara! Usaré un conjuro de vídeo estándar con los ajustes disponibles, prepararé Studio → Video y lo enviaré a la cola. 🪄',
+    reply: '¡La petición está clara! Prepararé Studio → Image con un modelo compatible y lo enviaré a la cola. 🪄',
     actions: [...navigation, prepare, { type: 'start_generation' }],
   }
 }
@@ -499,7 +577,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -614,6 +692,17 @@ export function buildAgentAppSnapshot(): AgentAppSnapshot {
         installed: model.is_downloaded === true,
         enabled: state.enabledModels.has(model.model_type),
         text_to_video: model.is_t2v,
+      })),
+    available_image_models: getFamiliesForMode('image', state.families)
+      .flatMap(family => getModelsForFamily(family.id, state.models, 'image'))
+      .filter(model => !model.tool_only)
+      .slice(0, 80)
+      .map(model => ({
+        model_type: model.model_type,
+        name: model.name,
+        family: model.family,
+        installed: model.is_downloaded === true,
+        enabled: state.enabledModels.has(model.model_type),
       })),
   }
 }
@@ -775,6 +864,75 @@ async function prepareVideo(action: AgentPrepareVideoAction): Promise<string> {
   return `He preparado Studio → Video con ${selected.name}, ${useStore.getState().durationSeconds.toFixed(1)} s y el prompt indicado.`
 }
 
+function visibleImageModels(models: ModelDef[]): ModelDef[] {
+  const enabledModels = useStore.getState().enabledModels
+  const families = getFamiliesForMode('image', useStore.getState().families)
+  const familyIds = new Set(families.map(family => family.id))
+  const ordered = families.flatMap(family => getModelsForFamily(family.id, models, 'image'))
+  const orderedIds = new Set(ordered.map(model => model.model_type))
+  const extras = models.filter(model => familyIds.has(model.family) && !orderedIds.has(model.model_type))
+  return [...ordered, ...extras].filter(model => (
+    !model.tool_only
+    && enabledModels.has(model.model_type)
+    && model.is_downloaded !== false
+  ))
+}
+
+async function prepareImage(action: AgentPrepareImageAction): Promise<string> {
+  let state = useStore.getState()
+  if (!state.modelsLoaded) await state.loadModels()
+
+  state = useStore.getState()
+  state.setSettingsOpen(false)
+  state.setDashboardOpen(false)
+  state.setSidebarMode('studio')
+  state.setSidebarOpen(true)
+  state.setGenerationMode('image')
+  state.setMediaFilter('images')
+
+  state = useStore.getState()
+  const candidates = visibleImageModels(state.models)
+  const requested = action.modelType
+    ? candidates.find(model => model.model_type === action.modelType)
+    : undefined
+  if (action.modelType && !requested) {
+    throw new Error(`El modelo ${action.modelType} no está instalado, habilitado o no admite texto a imagen.`)
+  }
+  const current = candidates.find(model => model.model_type === state.params.model_type)
+  const selected = requested || current || candidates.find(model => model.is_downloaded) || candidates[0]
+  if (!selected) {
+    throw new Error('No hay ningún modelo de imagen instalado y habilitado.')
+  }
+
+  if (state.params.model_type !== selected.model_type) state.selectModel(selected.model_type)
+  await useStore.getState().loadModelOptions(selected.model_type)
+
+  state = useStore.getState()
+  state.setStartImage(null)
+  state.setEndImage(null)
+  state.setOutputCount(action.outputCount ?? 1)
+  if (action.aspectRatio) state.setAspectRatio(action.aspectRatio)
+  if (action.resolutionPreset) state.setResolutionPreset(action.resolutionPreset)
+
+  const params: Record<string, unknown> = {
+    prompt: action.prompt,
+    image_mode: 1,
+    video_length: 1,
+    image_start: undefined,
+    image_end: undefined,
+    image_prompt_type: '',
+  }
+  if (action.resolution) params.resolution = action.resolution
+  if (action.negativePrompt !== undefined) params.negative_prompt = action.negativePrompt
+  if (action.seed !== undefined) params.seed = action.seed
+  if (action.inferenceSteps !== undefined) params.num_inference_steps = action.inferenceSteps
+  if (action.guidanceScale !== undefined) params.guidance_scale = action.guidanceScale
+  state.setParams(params)
+
+  const resolution = useStore.getState().params.resolution || useStore.getState().resolutionPreset
+  return `He preparado Studio → Image con ${selected.name}, ${resolution} y el prompt indicado.`
+}
+
 async function startPreparedGeneration(): Promise<string> {
   const before = useStore.getState().jobs
   const knownJobs = new Set(before)
@@ -782,9 +940,10 @@ async function startPreparedGeneration(): Promise<string> {
   const created = useStore.getState().jobs.find(job => !knownJobs.has(job))
   if (!created) throw new Error('HocusPocus no creó una tarea; revisa los requisitos del modelo y los campos visibles.')
   if (created.status === 'failed') throw new Error(created.error || created.message || 'La generación no pudo entrar en cola.')
+  const kind = useStore.getState().generationMode === 'image' ? 'imagen' : 'vídeo'
   return created.id
-    ? `He enviado el vídeo a la cola (${created.id}).`
-    : 'He enviado el vídeo a la cola; HocusPocus está asignando su identificador.'
+    ? `He enviado la ${kind} a la cola (${created.id}).`
+    : `He enviado la ${kind} a la cola; HocusPocus está asignando su identificador.`
 }
 
 export async function executeAgentActions(
@@ -792,7 +951,7 @@ export async function executeAgentActions(
   onStep?: (message: string) => void,
 ): Promise<AgentActionResult[]> {
   const results: AgentActionResult[] = []
-  let preparedVideo = false
+  let preparedStudio = false
   for (const action of actions) {
     const working = action.type === 'open_tab'
       ? `Abriendo ${TAB_LABELS[action.tab]}…`
@@ -802,8 +961,10 @@ export async function executeAgentActions(
           ? `Abriendo Series Lab → ${action.section}…`
       : action.type === 'prepare_video'
         ? 'Trazando el hechizo de vídeo en Studio…'
+        : action.type === 'prepare_image'
+          ? 'Trazando el hechizo de imagen en Studio…'
         : action.type === 'start_generation'
-          ? 'Enviando el vídeo a la cola…'
+          ? 'Enviando a la cola…'
           : action.type === 'create_story'
             ? 'Escribiendo y guardando la nueva historia…'
             : action.type === 'create_series_episode'
@@ -829,10 +990,14 @@ export async function executeAgentActions(
         results.push({ action, ok: true, message: `He abierto Series Lab → ${action.section}.` })
       } else if (action.type === 'prepare_video') {
         const message = await prepareVideo(action)
-        preparedVideo = true
+        preparedStudio = true
+        results.push({ action, ok: true, message })
+      } else if (action.type === 'prepare_image') {
+        const message = await prepareImage(action)
+        preparedStudio = true
         results.push({ action, ok: true, message })
       } else if (action.type === 'start_generation') {
-        if (!preparedVideo) throw new Error('El vídeo no se preparó en este turno; no lo he lanzado.')
+        if (!preparedStudio) throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
         results.push({ action, ok: true, message: await startPreparedGeneration() })
       } else if (action.type === 'create_story') {
         const { createFilledStory } = await import('./labActions')
@@ -853,7 +1018,7 @@ export async function executeAgentActions(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       results.push({ action, ok: false, message })
-      if (action.type === 'prepare_video') preparedVideo = false
+      if (action.type === 'prepare_video' || action.type === 'prepare_image') preparedStudio = false
     }
   }
   return results

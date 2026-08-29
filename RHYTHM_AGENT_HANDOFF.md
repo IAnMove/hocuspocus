@@ -879,14 +879,15 @@ ahora:
 
 1. `open_tab`
 2. `prepare_video`
-3. `open_story_section`
-4. `open_series_section`
-5. `start_generation`
-6. `create_story`
-7. `create_series_episode`
-8. `inspect_queue`
-9. `cancel_task`
-10. `resume_task`
+3. `prepare_image`
+4. `open_story_section`
+5. `open_series_section`
+6. `start_generation`
+7. `create_story`
+8. `create_series_episode`
+9. `inspect_queue`
+10. `cancel_task`
+11. `resume_task`
 
 ### Proceso común de cualquier acción
 
@@ -951,8 +952,7 @@ El mismo catálogo debe crecer por familias, no mediante un CLI con shell libre:
 
 - navegación: selección interna de Director, Settings, outputs, workspaces,
   stories, series, episodios, escenas y capas;
-- Studio: `prepare_generation` común para imagen/vídeo/audio/3D, modelos,
-  presets, LoRAs y referencias;
+- Studio: vídeo e imagen ya se preparan; faltan audio/3D, LoRAs y referencias;
 - Story: patch, generación de secciones, aplicación de propuestas, aprobación,
   imágenes y staging de producciones;
 - Series: bootstrap conocido, plan completo, aplicación, shots, render,
@@ -980,3 +980,10 @@ cola. Se añaden tres acciones sobre las APIs canónicas existentes:
 Una orden explícita de cancelar se repara en cliente si el LLM omite la
 acción, igual que las órdenes de vídeo. No se lanza ninguna generación en esta
 ampliación.
+
+## 25. Studio imagen operable (2026-08-30)
+
+`prepare_image` abre Studio → Image, elige un modelo de familia imagen
+instalado/habilitado y rellena prompt, resolución y recuento. `start_generation`
+acepta esa preparación en el mismo turno. Una orden inequívoca (“hazme una
+imagen de X”) se repara en cliente como el vídeo. Audio y 3D siguen pendientes.
