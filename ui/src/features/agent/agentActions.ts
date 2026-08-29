@@ -330,16 +330,69 @@ const creativeLocations = (value: unknown): AgentCreativeLocation[] => (
 const extractJsonObject = (raw: string): Record<string, unknown> | null => {
   const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   const start = trimmed.indexOf('{')
-  const end = trimmed.lastIndexOf('}')
-  if (start < 0 || end <= start) return null
-  try {
-    const parsed = JSON.parse(trimmed.slice(start, end + 1))
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : null
-  } catch {
-    return null
+  if (start < 0) return null
+  for (let end = trimmed.lastIndexOf('}'); end > start; end = trimmed.lastIndexOf('}', end - 1)) {
+    try {
+      const parsed = JSON.parse(trimmed.slice(start, end + 1))
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      continue
+    }
   }
+  return null
+}
+
+const CANONICAL_FIELD_NAMES = [
+  'type', 'tab', 'story_section', 'series_section', 'prompt', 'model_type',
+  'duration_seconds', 'resolution_preset', 'resolution', 'aspect_ratio',
+  'negative_prompt', 'seed', 'inference_steps', 'guidance_scale', 'output_count',
+  'audio_direction', 'turbo', 'title', 'project_type', 'creative_brief',
+  'premise', 'logline', 'synopsis', 'theme', 'ending', 'genre', 'tone',
+  'visual_style', 'world_summary', 'language', 'series_title', 'series_premise',
+  'series_logline', 'episode_title', 'episode_premise', 'episode_logline',
+  'target_duration_seconds', 'create_if_missing', 'known_universe',
+  'queue_scope', 'task_id', 'confirm', 'characters', 'locations', 'outline_beats',
+  'audio_sub_mode', 'sfx_clips', 'name', 'actions', 'reply',
+] as const
+
+function collapsedKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+export function humanReply(raw: string): string {
+  const object = extractJsonObject(raw)
+  if (typeof object?.reply === 'string' && object.reply.trim()) return object.reply.trim()
+  const quoted = raw.match(/"reply"\s*:\s*"((?:\\.|[^"\\])*)"/)
+  if (quoted) {
+    try {
+      return JSON.parse(`"${quoted[1]}"`)
+    } catch {
+      return quoted[1].replace(/\\n/g, '\n')
+    }
+  }
+  return raw.trim()
+}
+
+function canonicalRecord(raw: Record<string, unknown>): Record<string, unknown> {
+  const collapsed = new Map<string, unknown>()
+  for (const [key, value] of Object.entries(raw)) collapsed.set(collapsedKey(key), value)
+  const next: Record<string, unknown> = { ...raw }
+  for (const name of CANONICAL_FIELD_NAMES) {
+    if (next[name] === undefined) {
+      const hit = collapsed.get(collapsedKey(name))
+      if (hit !== undefined) next[name] = hit
+    }
+  }
+  if (Array.isArray(next.sfx_clips)) {
+    next.sfx_clips = next.sfx_clips.map(item => (
+      item && typeof item === 'object' && !Array.isArray(item)
+        ? canonicalRecord(item as Record<string, unknown>)
+        : item
+    ))
+  }
+  return next
 }
 
 function parseSfxClips(value: unknown): AgentSfxClip[] {
@@ -359,7 +412,7 @@ function parseSfxClips(value: unknown): AgentSfxClip[] {
 
 function parseAction(value: unknown): AgentAction | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const raw = value as Record<string, unknown>
+  const raw = canonicalRecord(value as Record<string, unknown>)
   const type = canonicalActionType(raw.type)
   if (type === 'open_tab') {
     const tab = cleanString(raw.tab, 40)
@@ -523,8 +576,12 @@ function parseAction(value: unknown): AgentAction | null {
  */
 export function parseAgentTurn(raw: string): AgentTurn {
   const object = extractJsonObject(raw)
-  if (!object) return { reply: raw.trim(), actions: [] }
-  const reply = cleanString(object.reply, 8_000)
+  if (!object) return { reply: humanReply(raw.trim()), actions: [] }
+  let reply = cleanString(object.reply, 8_000)
+  if (reply.startsWith('{')) {
+    const nested = extractJsonObject(reply)
+    if (typeof nested?.reply === 'string') reply = cleanString(nested.reply, 8_000)
+  }
   const proposed = Array.isArray(object.actions) ? object.actions.slice(0, MAX_ACTIONS) : []
   const actions: AgentAction[] = []
   let preparedStudio = false
@@ -540,7 +597,7 @@ export function parseAgentTurn(raw: string): AgentTurn {
     actions.push(action)
   }
   return {
-    reply: reply || (actions.length ? 'El hechizo está trazado; voy a mover HocusPocus.' : raw.trim()),
+    reply: reply || (actions.length ? 'El hechizo está trazado; voy a mover HocusPocus.' : humanReply(raw.trim())),
     actions,
   }
 }

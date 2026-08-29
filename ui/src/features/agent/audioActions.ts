@@ -85,5 +85,10 @@ export async function queueSfxPack(action: AgentQueueSfxPackAction): Promise<str
     if (created.status === 'failed') throw new Error(created.error || created.message || `Falló ${clip.name}.`)
     ids.push(`${clip.name}${created.id ? ` (${created.id})` : ''}`)
   }
-  return `He encolado ${ids.length} efectos SFX en Studio → Audio → SFX. Irán detrás de lo que ya use la GPU. Aparecerán en la galería Audios al terminar: ${ids.join(', ')}.`
+  return [
+    `He encolado **${ids.length} efectos SFX** en Studio → Audio → SFX.`,
+    'Irán detrás de lo que ya use la GPU y aparecerán en la galería Audios al terminar.',
+    '',
+    ...ids.map(id => `- ${id}`),
+  ].join('\n')
 }

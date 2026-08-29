@@ -6,6 +6,7 @@ import {
   buildAgentAppSnapshot,
   executeAgentActions,
   HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
+  humanReply,
   parseAgentTurn,
   reconcileAgentTurnWithRequest,
   type AgentActionResult,
@@ -44,7 +45,8 @@ const welcomeMessage = (): AgentMessage => ({
 
 function formatActionResults(results: AgentActionResult[]): string {
   if (!results.length) return ''
-  return results.map(result => `${result.ok ? '✦' : '⚠'} ${result.message}`).join('\n')
+  const lines = results.map(result => `- **${result.ok ? 'Hecho' : 'No se pudo'}.** ${result.message}`)
+  return `### Qué he hecho\n${lines.join('\n')}`
 }
 
 function readMessages(workspace: string): AgentMessage[] {
@@ -156,7 +158,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
       const assistantMessage: AgentMessage = {
         id: newId(),
         role: 'assistant',
-        text: [turn.reply || 'Mi bola de cristal no ha devuelto una respuesta utilizable.', actionReport]
+        text: [humanReply(turn.reply || '') || 'Mi bola de cristal no ha devuelto una respuesta utilizable.', actionReport]
           .filter(Boolean)
           .join('\n\n'),
         createdAt: Date.now(),

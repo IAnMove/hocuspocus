@@ -116,3 +116,14 @@ test('accepts compact open_tab aliases and queues an explicit game SFX pack', as
   assert.equal(repaired.actions[0].confirm, true)
   assert.ok(repaired.actions[0].clips.length >= 10)
 })
+
+test('parses collapsed SFX pack keys and ignores trailing JSON junk', async () => {
+  const { parseAgentTurn, humanReply } = await import('../src/features/agent/agentActions.ts')
+  const messy = '{"reply":"Encolo el pack.\\n\\n1. coin_pickup — brillo corto.\\n2. level_up — fanfarria.","actions":[{"type":"queuesfxpack","sfxclips":[{"name":"coin_pickup","prompt":"coin sparkle","durationseconds":0.5},{"name":"level_up","prompt":"fanfare","durationseconds":1.2}],"confirm":true,"modeltype":"","negativeprompt":"music"}]}"}'
+  const turn = parseAgentTurn(messy)
+  assert.equal(turn.actions[0].type, 'queue_sfx_pack')
+  assert.equal(turn.actions[0].clips.length, 2)
+  assert.equal(turn.actions[0].clips[0].name, 'coin_pickup')
+  assert.match(humanReply(messy), /Encolo el pack/)
+  assert.doesNotMatch(humanReply(messy), /queuesfxpack/)
+})
