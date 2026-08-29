@@ -127,9 +127,12 @@ def test_h3_story_renders_each_shot_and_assembles_native_audio(tmp_path: Path):
 
     class FakeWgp:
         @staticmethod
-        def concatenate_multi_clip_videos(paths, destination, audio_path):
+        def concatenate_multi_clip_videos(
+            paths, destination, audio_path, audio_start_sec=0.0,
+        ):
             assert len(paths) == 2
             assert audio_path is None
+            assert audio_start_sec == 0.0
             Path(destination).write_bytes(b"assembled")
             return True
 
@@ -170,9 +173,12 @@ def test_h3_direct_video_repeats_master_and_never_sends_images(tmp_path: Path):
 
     class FakeWgp:
         @staticmethod
-        def concatenate_multi_clip_videos(paths, destination, audio_path):
+        def concatenate_multi_clip_videos(
+            paths, destination, audio_path, audio_start_sec=0.0,
+        ):
             assert len(paths) == 2
             assert audio_path == "/music/song.wav"
+            assert audio_start_sec == 0.0
             Path(destination).write_bytes(b"assembled")
             return True
 
@@ -360,9 +366,12 @@ def test_h3_resume_reuses_completed_segments_before_rendering_the_rest(tmp_path:
 
     class FakeWgp:
         @staticmethod
-        def concatenate_multi_clip_videos(paths, destination, audio_path):
+        def concatenate_multi_clip_videos(
+            paths, destination, audio_path, audio_start_sec=0.0,
+        ):
             assert [Path(path).name for path in paths] == ["existing.mp4", "new.mp4"]
             assert audio_path is None
+            assert audio_start_sec == 0.0
             Path(destination).write_bytes(b"assembled")
             return True
 
@@ -492,9 +501,12 @@ def test_h3_single_shot_music_video_restores_uploaded_soundtrack(tmp_path: Path)
 
     class FakeWgp:
         @staticmethod
-        def concatenate_multi_clip_videos(paths, destination, audio_path):
+        def concatenate_multi_clip_videos(
+            paths, destination, audio_path, audio_start_sec=0.0,
+        ):
             assert [Path(path).name for path in paths] == ["clip.mp4"]
             assert audio_path == "/music/song.mp3"
+            assert audio_start_sec == 0.0
             Path(destination).write_bytes(b"assembled")
             return True
 
@@ -526,6 +538,76 @@ def test_h3_single_shot_music_video_restores_uploaded_soundtrack(tmp_path: Path)
         .read_text(encoding="utf-8")
     )
     assert sidecar["params"]["model_type"] == "minimax_h3_legacy"
+
+
+def test_h3_legacy_assembly_offsets_source_audio_to_plan_start(tmp_path: Path):
+    """Music-video plans that skip an intro must mux from that source time.
+
+    Per-clip H3 drive already slices from audio_origin_sec. The finished
+    multiclip used to remux the song from 0:00, so verse lips landed on the
+    instrumental intro.
+    """
+    start_images = []
+    for index in range(2):
+        path = tmp_path / f"shot_{index}.png"
+        path.write_bytes(b"frame")
+        start_images.append(path.name)
+    song = tmp_path / "song.mp3"
+    song.write_bytes(b"audio")
+    slice_starts = []
+    captured = {}
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        name = f"clip_{len(submitted)}.mp4"
+        (tmp_path / name).write_bytes(b"video")
+        return [name]
+
+    def slice_audio(_src, start_sec, _duration, dst):
+        slice_starts.append(start_sec)
+        Path(dst).write_bytes(b"wav")
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(
+            paths, destination, audio_path, audio_start_sec=0.0,
+        ):
+            captured["paths"] = [Path(path).name for path in paths]
+            captured["audio_path"] = audio_path
+            captured["audio_start_sec"] = audio_start_sec
+            Path(destination).write_bytes(b"assembled")
+            return True
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch.object(director_pipeline, "_slice_audio_segment", side_effect=slice_audio), \
+            patch.object(director_pipeline, "_save_pipeline_state"), \
+            patch.object(director_pipeline, "_wgp", FakeWgp()):
+        outputs = director_pipeline._run_minimax_h3_story_video(
+            "h3offset",
+            {
+                "video_model": "minimax_h3_legacy",
+                "pipeline_type": "music_video",
+                "audio_path": str(song),
+            },
+            [
+                {"video_prompt": "The singer hits the first verse."},
+                {"video_prompt": "The chorus lands on the hook."},
+            ],
+            [
+                {"start": 12.5, "end": 17.5, "duration_sec": 5},
+                {"start": 17.5, "end": 22.5, "duration_sec": 5},
+            ],
+            start_images,
+            {"num_inference_steps": 20, "h3_reference_mode": "first_frame"},
+            "960x544",
+            str(tmp_path),
+        )
+
+    assert slice_starts[0] == 12.5
+    assert captured["audio_path"] == str(song)
+    assert captured["audio_start_sec"] == 12.5
+    assert outputs[-1] == "minimax_h3_h3offset_multiclip.mp4"
 
 
 def test_h3_legacy_music_video_slices_each_shot_from_its_timeline_offset(tmp_path: Path):
