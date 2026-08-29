@@ -148,6 +148,22 @@ def test_list_and_upsert_keep_snapshot_and_client_namespace_contracts():
     assert len(created["detail"]) <= 400
 
 
+def test_upsert_coerces_non_numeric_progress_instead_of_500():
+    app, _registry, _synced, _controls, upserts = _app()
+    created = _endpoint(app, "/api/v1/tasks/upsert", "POST")({
+        "id": "task-progress-junk",
+        "status": "running",
+        "current": "x",
+        "total": None,
+        "startedAt": "later",
+    })
+
+    assert created["id"] == "task-client-task-progress-junk"
+    assert upserts[0][2]["current"] == 0
+    assert upserts[0][2]["total"] == 0
+    assert isinstance(upserts[0][2]["created_at"], float)
+
+
 def test_task_controls_preserve_404_409_resume_and_delete_behavior():
     app, registry, synced, controls, _upserts = _app()
     registry.tasks.update({

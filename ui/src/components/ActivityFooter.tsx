@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, ListVideo, Loader2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, Eraser, ListVideo, Loader2 } from 'lucide-react'
 import * as api from '../api/client'
 import type { CanonicalTask } from '../api/client'
 import { applyCanonicalTaskEvent, canResumeCanonicalTask, canonicalTaskVisualState, reconcileCanonicalTaskSnapshot } from '../lib/canonicalTaskEvents'
@@ -9,6 +9,7 @@ import { useStore } from '../stores/useStore'
 const ACTIVE = new Set(['created', 'queued', 'waiting_resource', 'running'])
 const CONNECTED_RECONCILE_MS = 60_000
 const DISCONNECTED_POLL_MS = 5_000
+const HIDDEN_HISTORY_STORAGE_PREFIX = 'maestro-activity-hidden-v1:'
 type TaskControlAction = 'cancel' | 'resume' | 'dismiss'
 interface TaskControlFailure {
   action: TaskControlAction
@@ -55,9 +56,37 @@ function elapsed(task: CanonicalTask, now: number): string {
     : `${minutes}:${remainder.toString().padStart(2, '0')}`
 }
 
+function elapsedSeconds(task: CanonicalTask, now: number): number | undefined {
+  const start = epochMs(task.started_at || task.queued_at || task.created_at)
+  if (!start) return undefined
+  const end = ACTIVE.has(task.status)
+    ? now
+    : epochMs(task.completed_at || task.updated_at) || now
+  return Math.max(0, (end - start) / 1000)
+}
+
 function percent(task: CanonicalTask): number {
   if (task.total > 0) return Math.max(0, Math.min(100, (task.current / task.total) * 100))
   return Math.max(0, Math.min(100, Number(task.progress || 0) * 100))
+}
+
+function estimatedRemainingSeconds(task: CanonicalTask, now: number): number | undefined {
+  if (!ACTIVE.has(task.status)) return undefined
+  const elapsed = elapsedSeconds(task, now)
+  const fraction = percent(task) / 100
+  if (!elapsed || elapsed < 3 || fraction < 0.01 || fraction >= 1) return undefined
+  return Math.max(1, Math.round(elapsed * ((1 - fraction) / fraction)))
+}
+
+function formatEta(seconds: number | undefined): string {
+  if (seconds === undefined) return ''
+  const rounded = Math.max(1, Math.round(seconds))
+  const hours = Math.floor(rounded / 3600)
+  const minutes = Math.floor((rounded % 3600) / 60)
+  const remainder = rounded % 60
+  if (hours) return `~${hours}h ${minutes.toString().padStart(2, '0')}m`
+  if (minutes) return `~${minutes}m ${remainder.toString().padStart(2, '0')}s`
+  return `~${remainder}s`
 }
 
 function phaseLabel(task: CanonicalTask): string {
@@ -70,6 +99,31 @@ function resources(task: CanonicalTask): string {
   if (acquired.length) return `Using ${acquired.join(' · ')}`
   if (task.status === 'waiting_resource' && required.length) return `Waiting for ${required.join(' · ')}`
   return required.length ? `Resources ${required.join(' · ')}` : ''
+}
+
+function hiddenHistoryStorageKey(workspace: string): string {
+  return `${HIDDEN_HISTORY_STORAGE_PREFIX}${workspace}`
+}
+
+function readHiddenHistory(workspace: string): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(hiddenHistoryStorageKey(workspace))
+    const parsed = raw ? JSON.parse(raw) : []
+    return new Set(Array.isArray(parsed) ? parsed.filter(value => typeof value === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function writeHiddenHistory(workspace: string, ids: Set<string>): void {
+  try {
+    const key = hiddenHistoryStorageKey(workspace)
+    if (ids.size) window.localStorage.setItem(key, JSON.stringify([...ids]))
+    else window.localStorage.removeItem(key)
+  } catch {
+    // Hiding history is still useful for the current session if storage is
+    // blocked (private browsing, disabled cookies, or a quota error).
+  }
 }
 
 function generationRecipe(task: CanonicalTask): string {
@@ -132,6 +186,8 @@ function generationRecipe(task: CanonicalTask): string {
 
 export function ActivityFooter() {
   const activeWorkspace = useStore(state => state.activeWorkspace)
+  const workspaceRef = useRef(activeWorkspace)
+  workspaceRef.current = activeWorkspace
   const setVideoWorkflowsOpen = useStore(state => state.setDashboardOpen)
   const [tasks, setTasks] = useState<CanonicalTask[]>([])
   const tasksRef = useRef<CanonicalTask[]>([])
@@ -139,6 +195,14 @@ export function ActivityFooter() {
   const [clock, setClock] = useState(Date.now())
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
   const [controlFailures, setControlFailures] = useState<Record<string, TaskControlFailure>>({})
+  const [hiddenHistoryIds, setHiddenHistoryIds] = useState<Set<string>>(() => new Set())
+  const hiddenHistoryIdsRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const loaded = readHiddenHistory(activeWorkspace)
+    hiddenHistoryIdsRef.current = loaded
+    setHiddenHistoryIds(loaded)
+  }, [activeWorkspace])
 
   useEffect(() => {
     let mounted = true
@@ -230,17 +294,21 @@ export function ActivityFooter() {
   }, [activeWorkspace])
 
   const roots = useMemo(() => {
-    const rootTasks = tasks.filter(task => !task.parent_id)
+    // Clear history is a UI-only filter. Active tasks always remain visible,
+    // even if their id was previously hidden after an earlier completion.
+    const visibleTasks = tasks.filter(task => !hiddenHistoryIds.has(task.id) || ACTIVE.has(task.status))
+    const rootTasks = visibleTasks.filter(task => !task.parent_id)
     const active = rootTasks.filter(task => ACTIVE.has(task.status))
       .sort((left, right) => right.updated_at - left.updated_at)
     const recent = rootTasks.filter(task => !ACTIVE.has(task.status))
       .sort((left, right) => right.updated_at - left.updated_at)
       .slice(0, 12)
     return [...active, ...recent]
-  }, [tasks])
+  }, [hiddenHistoryIds, tasks])
   const childrenByRoot = useMemo(() => {
     const result = new Map<string, CanonicalTask[]>()
-    for (const task of tasks) {
+    const visibleTasks = tasks.filter(task => !hiddenHistoryIds.has(task.id) || ACTIVE.has(task.status))
+    for (const task of visibleTasks) {
       if (!task.parent_id) continue
       const children = result.get(task.root_id) || []
       children.push(task)
@@ -248,10 +316,24 @@ export function ActivityFooter() {
     }
     for (const children of result.values()) children.sort((a, b) => a.created_at - b.created_at)
     return result
-  }, [tasks])
+  }, [hiddenHistoryIds, tasks])
   const activeTasks = roots.filter(task => ACTIVE.has(task.status))
   const failedTasks = roots.filter(task => task.status === 'failed' || task.status === 'interrupted')
+  const historicalTasks = roots.filter(task => !ACTIVE.has(task.status))
   const primary = activeTasks[0] || failedTasks[0] || roots[0] || null
+
+  const clearHistory = () => {
+    const next = new Set(hiddenHistoryIdsRef.current)
+    // Only terminal entries are hidden. No API call is made and generated
+    // videos, metadata, and resumable server tasks remain untouched.
+    for (const task of tasksRef.current) {
+      if (!ACTIVE.has(task.status)) next.add(task.id)
+    }
+    hiddenHistoryIdsRef.current = next
+    setHiddenHistoryIds(next)
+    writeHiddenHistory(activeWorkspace, next)
+    if (!activeTasks.length) setDetailsOpen(false)
+  }
 
   useEffect(() => {
     if (!activeTasks.length) return
@@ -261,29 +343,33 @@ export function ActivityFooter() {
 
   const runControl = (task: CanonicalTask, action: TaskControlAction) => {
     if (busyIds.has(task.id)) return
-    setBusyIds(current => new Set(current).add(task.id))
+    const workspace = activeWorkspace
+    const taskId = task.id
+    setBusyIds(current => new Set(current).add(taskId))
     const operation = action === 'cancel'
-      ? api.cancelCanonicalTask(task.id, activeWorkspace)
+      ? api.cancelCanonicalTask(taskId, workspace)
       : action === 'resume'
-        ? api.resumeCanonicalTask(task.id, activeWorkspace)
-        : api.dismissCanonicalTask(task.id, activeWorkspace)
+        ? api.resumeCanonicalTask(taskId, workspace)
+        : api.dismissCanonicalTask(taskId, workspace)
     void operation.then(result => {
+      if (workspaceRef.current !== workspace) return
       const next = action === 'dismiss'
-        ? tasksRef.current.filter(item => item.id !== task.id)
-        : tasksRef.current.map(item => item.id === task.id ? result as CanonicalTask : item)
+        ? tasksRef.current.filter(item => item.id !== taskId)
+        : tasksRef.current.map(item => item.id === taskId ? result as CanonicalTask : item)
       tasksRef.current = next
       setTasks(next)
       setControlFailures(current => {
-        if (!current[task.id]) return current
+        if (!current[taskId]) return current
         const nextFailures = { ...current }
-        delete nextFailures[task.id]
+        delete nextFailures[taskId]
         return nextFailures
       })
     }).catch(reason => {
+      if (workspaceRef.current !== workspace) return
       const message = reason instanceof Error ? reason.message : String(reason)
       setControlFailures(current => ({
         ...current,
-        [task.id]: { action, message },
+        [taskId]: { action, message },
       }))
       // A footer-level Cancel can fail while the task list is collapsed. Open
       // it so the actionable error and Retry control are immediately visible.
@@ -291,7 +377,7 @@ export function ActivityFooter() {
     }).finally(() => {
       setBusyIds(current => {
         const next = new Set(current)
-        next.delete(task.id)
+        next.delete(taskId)
         return next
       })
     })
@@ -305,23 +391,45 @@ export function ActivityFooter() {
   const hasError = !isActive && failedTasks.length > 0
   const primaryVisualState = primary ? canonicalTaskVisualState(primary.status) : 'neutral'
   const primaryMessage = primary?.error?.message || primary?.detail || primary?.message || 'Ready — no active jobs'
+  const primaryEta = primary ? formatEta(estimatedRemainingSeconds(primary, clock)) : ''
+  const primaryActiveChild = primary
+    ? (childrenByRoot.get(primary.root_id) || []).find(child => ACTIVE.has(child.status))
+    : undefined
+  const primaryChildEta = primaryActiveChild
+    ? formatEta(estimatedRemainingSeconds(primaryActiveChild, clock))
+    : ''
 
   return (
     <footer className="relative h-10 shrink-0 border-t border-border bg-bg-secondary px-3 sm:px-4 flex items-center gap-3 text-[10px] z-40">
       {detailsOpen && roots.length > 0 && (
         <div className="absolute bottom-full left-3 mb-2 w-[min(48rem,calc(100vw-1.5rem))] max-h-80 overflow-y-auto rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl">
           <div className="mb-1.5 flex items-center justify-between px-1">
-            <span className="font-semibold text-text-primary">Loreframe Lab tasks</span>
-            <span className="text-text-muted">{activeTasks.length} active · durable per workspace</span>
+            <span className="font-semibold text-text-primary">HocusPocus tasks</span>
+            <div className="flex items-center gap-2">
+              {historicalTasks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearHistory}
+                  className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-muted hover:text-text-primary"
+                  title="Hide completed task history from this UI. Videos and task data are kept."
+                  aria-label="Clear activity history"
+                >
+                  <Eraser size={10} /> Clear history
+                </button>
+              )}
+              <span className="text-text-muted">{activeTasks.length} active · durable per workspace</span>
+            </div>
           </div>
           <div className="space-y-1.5">
             {roots.map(task => {
               const taskChildren = childrenByRoot.get(task.root_id) || []
+              const activeChild = taskChildren.find(child => ACTIVE.has(child.status))
               const active = ACTIVE.has(task.status)
               const recipe = generationRecipe(task)
               const visualState = canonicalTaskVisualState(task.status)
               const controlFailure = controlFailures[task.id]
               const updatedAt = formatAppTimestamp(task.updated_at)
+              const taskEta = formatEta(estimatedRemainingSeconds(task, clock))
               return (
                 <div key={task.id} className="rounded-md border border-border bg-bg-primary p-2">
                   <div className="flex items-start gap-2">
@@ -337,6 +445,7 @@ export function ActivityFooter() {
                         <span className="font-medium text-text-primary">{task.title}</span>
                         <div className="flex items-center gap-2">
                           <span className="tabular-nums text-text-muted" title={updatedAt ? `${formatAppAction('updated')}: ${updatedAt}` : undefined}>{elapsed(task, clock)}</span>
+                          {active && taskEta && <span className="tabular-nums text-accent-blue" title="Estimated remaining time for the complete task">ETA {taskEta}</span>}
                           {updatedAt && <span className="hidden md:inline text-text-muted">{updatedAt}</span>}
                           <span className="capitalize text-text-muted">{phaseLabel(task)}</span>
                           {active && task.cancelable && (
@@ -357,6 +466,12 @@ export function ActivityFooter() {
                       </p>
                       {recipe && <p className="mt-0.5 break-words text-[9px] text-amber-300">{recipe}</p>}
                       {resources(task) && <p className="text-[9px] text-accent-blue">{resources(task)}</p>}
+                      {active && activeChild && (
+                        <p className="text-[9px] text-violet-300">
+                          Active subtask: {phaseLabel(activeChild)}
+                          {formatEta(estimatedRemainingSeconds(activeChild, clock)) && ` · ETA ${formatEta(estimatedRemainingSeconds(activeChild, clock))}`}
+                        </p>
+                      )}
                       {controlFailure && (
                         <div aria-live="polite" className="mt-1.5 flex items-center justify-between gap-2 rounded border border-red-400/40 bg-red-500/10 px-2 py-1 text-[9px] text-red-300">
                           <span>{controlFailure.action[0].toUpperCase() + controlFailure.action.slice(1)} failed: {controlFailure.message}</span>
@@ -386,6 +501,7 @@ export function ActivityFooter() {
                               <div key={child.id} className="mb-1 last:mb-0" title={child.detail || child.message}>
                                 <p>
                                   {phaseLabel(child)} · {elapsed(child, clock)} · {child.message}
+                                  {ACTIVE.has(child.status) && formatEta(estimatedRemainingSeconds(child, clock)) && ` · ETA ${formatEta(estimatedRemainingSeconds(child, clock))}`}
                                 </p>
                                 <p className="flex flex-wrap gap-x-2 text-[8px] text-text-muted">
                                   {childRecipe && <span className="text-amber-300">{childRecipe}</span>}
@@ -439,6 +555,8 @@ export function ActivityFooter() {
       <div className="min-w-0 flex-1 flex items-center gap-2">
         {primary && <span className="hidden sm:inline shrink-0 capitalize text-text-muted">{phaseLabel(primary)}</span>}
         {primary && <span className="shrink-0 tabular-nums text-text-muted">{elapsed(primary, clock)}</span>}
+        {primaryEta && <span className="hidden sm:inline shrink-0 tabular-nums text-accent-blue" title="Estimated remaining time for the complete task">ETA {primaryEta}</span>}
+        {primaryActiveChild && <span className="hidden lg:inline shrink-0 max-w-56 truncate text-violet-300" title={`Active subtask: ${primaryActiveChild.message}`}>Subtask {phaseLabel(primaryActiveChild)}{primaryChildEta ? ` · ETA ${primaryChildEta}` : ''}</span>}
         {primary?.model && <span className="hidden md:inline max-w-64 shrink-0 truncate rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-amber-300" title={generationRecipe(primary)}>{primary.model}</span>}
         <span className={`truncate ${hasError ? 'text-red-400' : isActive ? 'text-text-secondary' : 'text-text-muted'}`} title={primaryMessage}>{primaryMessage}</span>
       </div>

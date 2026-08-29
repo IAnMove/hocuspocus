@@ -13,11 +13,22 @@ export type SceneLayerTiming = {
 
 const lerp = (a: number, b: number, amount: number) => a + (b - a) * amount
 
+/** Converts real media seconds into the normalized scene coordinate used by preview layers. */
+export const sceneProgressFromSeconds = (seconds: number, duration: number) => {
+  const safeDuration = Math.max(.001, Number.isFinite(duration) ? duration : .001)
+  return Math.max(0, Math.min(1, (Number.isFinite(seconds) ? seconds : 0) / safeDuration))
+}
+
 export const applySceneCurve = (amount: number, curve: SceneCurve) => {
   const value = Math.max(0, Math.min(1, amount))
   if (curve === 'ease') return value * value * (3 - 2 * value)
   if (curve === 'dramatic') return value * value
   if (curve === 'bounce') return Math.max(0, Math.min(1, value + Math.sin(value * Math.PI * 3) * (1 - value) * .18))
+  // A hold is a step function: retain the preceding keyframe for its full
+  // interval and switch only on the following keyframe. The former 12%
+  // threshold made every cutout mouth pulse (and any other held pose) jump
+  // almost immediately to the *next* state.
+  if (curve === 'hold') return value < 1 ? 0 : 1
   return value
 }
 
@@ -64,7 +75,7 @@ export const getSceneKeyframes = (layer: SceneLayer): SceneKeyframe[] => {
 
 export const normalizeSceneKeyframes = (value: unknown, layer: SceneLayer): SceneKeyframe[] | undefined => {
   if (!Array.isArray(value)) return undefined
-  const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce']
+  const curves: SceneCurve[] = ['linear', 'ease', 'dramatic', 'bounce', 'hold']
   const usedIds = new Set<string>()
   const frames = value.flatMap((raw, index) => {
     if (!raw || typeof raw !== 'object') return []

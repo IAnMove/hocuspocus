@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from . import resource_scheduler
+from .hunyuan3d.weight_integrity import dit_cache_root, purge_truncated_safetensors, truncated_safetensors
+from .minimax_image_service import MiniMaxImageError, generate_image as generate_minimax_image
 
 
 SERVICE_DIR = Path(__file__).resolve().parent / "hunyuan3d"
@@ -32,6 +34,9 @@ WORKER_PATH = SERVICE_DIR / "worker.py"
 VENDOR_DIR = SERVICE_DIR / "vendor"
 JOBS_DIR = Path(__file__).resolve().parents[1] / "ckpts" / "model3d" / "jobs"
 HF_CACHE_DIR = Path(__file__).resolve().parents[1] / "ckpts" / "model3d" / "huggingface"
+DIT_CONDITION_SUFFIX = (
+    ", white background, centered 3D object, studio product shot, no people, no text, no extra objects"
+)
 
 MODEL3D_EXTENSIONS = {"glb", "obj", "ply", "stl"}
 
@@ -48,7 +53,7 @@ MODELS: list[dict[str, Any]] = [
         "turbo": True,
         "supports_text": True,
         "recommended_vram_gb": 6,
-        "description": "Fastest geometry model; best when sharing the GPU with other Loreframe Lab workloads.",
+        "description": "Fastest geometry model; best when sharing the GPU with other HocusPocus Lab workloads.",
     },
     {
         "id": "hunyuan3d-2mini-fast",
@@ -278,7 +283,7 @@ def installation_status() -> dict[str, Any]:
         "v21_source": v21_source.is_dir(),
         "isolated_runtime": True,
         "releases_vram_after_job": True,
-        "install_hint": None if installed else "Run Loreframe Lab's standard Install or Update action.",
+        "install_hint": None if installed else "Run HocusPocus Lab's standard Install or Update action.",
     }
 
 
@@ -515,6 +520,43 @@ def _prune_finished_jobs_locked() -> None:
             _jobs.pop(job_id, None)
 
 
+def _minimax_api_key() -> str:
+    try:
+        import wgp
+        return str((wgp.server_config.get("services") or {}).get("minimax_api_key") or "").strip()
+    except Exception:
+        return ""
+
+
+def _condition_text_job_with_minimax(request_data: dict[str, Any], output_dir: str, job_id: str) -> str | None:
+    if request_data.get("images"):
+        return None
+    prompt = str((request_data.get("settings") or {}).get("prompt") or "").strip()
+    if not prompt:
+        return None
+    api_key = _minimax_api_key()
+    if not api_key:
+        return None
+    condition_prompt = prompt if "white background" in prompt.lower() else f"{prompt}{DIT_CONDITION_SUFFIX}"
+    result = generate_minimax_image(
+        api_key=api_key,
+        prompt=condition_prompt,
+        aspect_ratio="1:1",
+        output_dir=output_dir,
+        filename_prefix="hy3d-ref",
+        task_id=job_id,
+        root_task_id=job_id,
+    )
+    return str(result["path"])
+
+
+def _purge_truncated_dit_cache() -> list[Path]:
+    truncated = truncated_safetensors(dit_cache_root(HF_CACHE_DIR))
+    if truncated:
+        purge_truncated_safetensors(dit_cache_root(HF_CACHE_DIR))
+    return truncated
+
+
 def start_job(
     *,
     body: dict[str, Any],
@@ -728,6 +770,35 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
     HF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    if not request_data.get("images") and str((request_data.get("settings") or {}).get("prompt") or "").strip():
+        _update_job(
+            job_id,
+            phase="text_to_image",
+            progress=0.06,
+            message="Generating a MiniMax reference still so HunyuanDiT is not loaded on the GPU",
+        )
+        minimax_error = None
+        reference_path = None
+        try:
+            reference_path = _condition_text_job_with_minimax(request_data, output_dir, job_id)
+        except MiniMaxImageError as exc:
+            minimax_error = str(exc)
+        except Exception as exc:
+            minimax_error = str(exc)
+        _purge_truncated_dit_cache()
+        if reference_path:
+            request_data.setdefault("images", {})["front"] = reference_path
+            with _lock:
+                job = _jobs.get(job_id)
+                if job and isinstance(job.get("request"), dict):
+                    job["request"] = request_data
+            _update_job(job_id, message="Reference still ready; starting Hunyuan3D mesh")
+        else:
+            extra = f" MiniMax image failed ({minimax_error})." if minimax_error else " Set the MiniMax API key in Settings → Services."
+            raise RuntimeError(
+                "HunyuanDiT is disabled: it froze the GPU and the local weights were truncated."
+                f"{extra} Provide a reference image and retry."
+            )
     request_path = JOBS_DIR / f"{job_id}.json"
     request_path.write_text(json.dumps(request_data, indent=2), encoding="utf-8")
     pid_path = JOBS_DIR / f"{job_id}.pid"
@@ -747,6 +818,9 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     )
     for env_var in isolated_network_vars:
         env.pop(env_var, None)
+    minimax_key = _minimax_api_key()
+    if minimax_key:
+        env["MINIMAX_API_KEY"] = minimax_key
     env.update({
         "PYTHONUNBUFFERED": "1",
         "HF_HOME": str(HF_CACHE_DIR),

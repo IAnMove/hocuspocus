@@ -10,6 +10,9 @@ test('gallery list query asks the server for 3D and scene files by type', () => 
   assert.equal(galleryListQuery('videos').mediaType, 'video')
   assert.equal(galleryListQuery('trailers').resultKind, 'trailer')
   assert.equal(galleryListQuery('all').mediaType, undefined)
+  assert.equal(galleryListQuery('avatars').editsOnly, true)
+  assert.equal(galleryListQuery('avatars').useServerList, true)
+  assert.equal(galleryListQuery('images').editsOnly, false)
 })
 
 test('video queue tiles stay off Images, 3D and Scenes', () => {
@@ -20,4 +23,9 @@ test('video queue tiles stay off Images, 3D and Scenes', () => {
   assert.equal(jobFitsGalleryFilter(videoJob, 'model3d'), false)
   assert.equal(jobFitsGalleryFilter(videoJob, 'scenes'), false)
   assert.equal(jobFitsGalleryFilter(videoJob, 'trailers'), true)
+  assert.equal(jobFitsGalleryFilter(videoJob, 'avatars'), false)
+  const editJob = { generationDetails: { generation_mode: 'video', edit_sub_mode: 'retake' } } as GenerationJob
+  assert.equal(jobFitsGalleryFilter(editJob, 'avatars'), true)
+  const avatarJob = { generationDetails: { generation_mode: 'avatar' } } as GenerationJob
+  assert.equal(jobFitsGalleryFilter(avatarJob, 'avatars'), true)
 })

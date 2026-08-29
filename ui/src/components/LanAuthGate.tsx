@@ -27,7 +27,7 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
       const status = await response.json() as LanAuthStatus
       setState(!status.required || status.authenticated ? 'ready' : 'locked')
     } catch {
-      setError('Loreframe Lab could not reach its local server.')
+      setError('HocusPocus could not reach its local server.')
       setState('unreachable')
     }
   }, [])
@@ -57,7 +57,7 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
       setToken('')
       setState('ready')
     } catch {
-      setError('Loreframe Lab could not reach its local server.')
+      setError('HocusPocus could not reach its local server.')
     } finally {
       setSubmitting(false)
     }
@@ -76,7 +76,7 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
             ? <LoaderCircle size={24} className="animate-spin" aria-hidden="true" />
             : <ShieldCheck size={24} aria-hidden="true" />}
         </div>
-        <h1 id="lan-auth-title" className="text-xl font-semibold">Loreframe Lab LAN access</h1>
+        <h1 id="lan-auth-title" className="text-xl font-semibold">HocusPocus LAN access</h1>
 
         {state === 'checking' ? (
           <p className="mt-2 text-sm text-text-secondary">Checking this device…</p>

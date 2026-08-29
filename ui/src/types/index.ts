@@ -354,6 +354,14 @@ export interface OutputFile {
 }
 
 export type SceneLayerType = 'model3d' | 'image' | 'video' | 'overlay' | 'effect' | 'camera'
+export type SceneFaceBindingRole = 'mouth' | 'blink'
+export type SceneFaceBindingState = 'closed' | 'small' | 'wide' | 'round' | 'blink'
+/** Optional semantic metadata for a cutout facial overlay. */
+export interface SceneFaceBinding {
+  poseLayerId: string
+  role: SceneFaceBindingRole
+  state?: SceneFaceBindingState
+}
 export type SceneAtmosphereKind =
   | 'rain'
   | 'snow'
@@ -369,7 +377,7 @@ export type SceneAtmosphereKind =
   | 'bubbles'
   | 'speedlines'
   | 'leaves'
-export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce'
+export type SceneCurve = 'linear' | 'ease' | 'dramatic' | 'bounce' | 'hold'
 export type SceneFrameRate = 30 | 60
 export type SceneBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken'
 export type SceneMask = 'none' | 'rounded' | 'ellipse'
@@ -424,6 +432,11 @@ export interface SceneLayer {
    *  and values above 1 create foreground parallax. Camera zoom/roll still
    *  affect every visual layer. Ignored by camera layers. */
   parallax?: number
+  /** Author-confirmed horizontal continuity. Enables safe loop/cylinder tools;
+   * this is never inferred from an arbitrary filename at export time. */
+  seamlessHorizontal?: boolean
+  /** Optional semantic link for a mouth/blink overlay and its character pose. */
+  faceBinding?: SceneFaceBinding
   relationship?: {
     type: 'parent' | 'follow' | 'lookAt'
     targetLayerId: string
@@ -456,6 +469,15 @@ export interface SceneLayer {
     speed: number
     /** Initial offset along the selected axis, in scene percent. */
     phase?: number
+    /** Foreground silhouette locked to each tile join so a looping plate never shows its seam. */
+    seamOccluder?: {
+      enabled: boolean
+      kind: 'pole' | 'lamp' | 'tree' | 'column'
+      /** Relative size of the foreground cover. Defaults to 1. */
+      scale?: number
+      /** Allows a cover to blend with a photographed plate instead of reading as a black card. */
+      opacity?: number
+    }
   }
   transform: {
     x: number
@@ -533,11 +555,62 @@ export interface Scene {
   fps?: SceneFrameRate
   duration: number
   layers: SceneLayer[]
+  /** Real generated/imported audio assets mixed into the exported scene MP4. */
+  audioTracks?: Array<{
+    id: string
+    filename: string
+    name: string
+    kind: 'speech' | 'music' | 'sfx' | 'audio'
+    startTime: number
+    volume: number
+    prompt?: string
+    model?: string
+  }>
+  /** Authored limited-animation dialogue. Mouth layers remain ordinary layers
+   * whose opacity keyframes are generated from these editable beat records. */
+  dialogueBeats?: Array<{
+    id: string
+    text: string
+    start: number
+    end: number
+    mouthLayerIds: string[]
+    audioTrackId?: string
+    /** How the timing was obtained: authored bounds, speech alignment, or an
+     * approximate voice-activity envelope when no transcript is available. */
+    confidence: 'known-text' | 'aligned-audio' | 'energy-fallback'
+  }>
   composition?: {
     showGrid: boolean
     gridSize: number
     snap: boolean
     safeArea: 'none' | 'action' | 'title' | 'vertical' | 'all'
+  }
+  /** Durable, serializable record of copilot edits. Kept with the scene so
+   * save/export can retain the exact human intent and applied operations. */
+  copilotAudit?: Array<{
+    id: string
+    createdAt: string
+    scope: 'layer' | 'scene'
+    selectedLayerId?: string
+    intent: string
+    summary: string
+    operations: Array<Record<string, unknown>>
+    validation: 'applied'
+    model?: string
+  }>
+  /** Template provenance remains with an editable scene and its exported MP4 metadata. */
+  narrative?: {
+    templateId: string
+    controls: Record<string, string | number | boolean | undefined>
+    /** Gallery metadata copied from the selected template at mount time. */
+    category?: string
+    visualIntent?: string
+    referenceMotion?: string
+    evaluationCues?: string[]
+    /** The exact existing assets assigned when the template was mounted. */
+    assets?: Array<{ slot: string; source: string; name?: string; type?: SceneLayerType }>
+    /** Deterministic human-readable direction used to compile this template. */
+    prompt?: string
   }
 }
 
@@ -726,7 +799,7 @@ export interface ModelOptions {
 }
 
 export interface SystemConfig {
-  // Maestro release version (repo-root VERSION file), shown next to the
+  // HocusPocus release version (repo-root VERSION file), shown next to the
   // app title. Optional: older backends don't send it.
   app_version?: string
   attention_mode: string
@@ -1194,6 +1267,8 @@ export interface LyricSegment {
   end: number
   text: string
   speaker?: string | null
+  /** Word-level alignment when the transcription engine supplies it. */
+  words?: Array<{ start: number; end: number; text: string }> | null
 }
 
 export interface SongStructureEntry {

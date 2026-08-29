@@ -505,7 +505,7 @@ function LinkedModelFoldersSection() {
           <p className="text-[10px] text-text-muted leading-relaxed">
             Search other apps&apos; model folders for checkpoints you already have — e.g. an existing
             Wan2GP install — instead of re-downloading them. Linked folders are read-only:
-            new downloads always go to Loreframe Lab&apos;s own ckpts folder.
+            new downloads always go to HocusPocus&apos;s own ckpts folder.
           </p>
 
           {folders.length > 0 && (

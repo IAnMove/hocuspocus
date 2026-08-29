@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "job": {
+    "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-20-17h17m34s_seed671395397_[Estrofa]Tres reglas en el rack, tres reglas en la pielno mojes el mogwai, no riegues el paneldes.wav",
+    "filename": "2026-08-20-17h17m34s_seed671395397_[Estrofa]Tres reglas en el rack, tres reglas en la pielno mojes el mogwai, no riegues el paneldes.wav",
+    "style": "80s Joe Dante Gremlins mischief score meets datacenter industrial, playful chaotic choir of small creatures, synth and tape hiss, server-room percussion of fans and keyboards, Spanish lyrics, no rap, no pop, no trap, no modern concert",
+    "lyrics": "[Estrofa]\nTres reglas en el rack, tres reglas en la piel\nno mojes el mogwai, no riegues el panel\ndespués de medianoche no hay deploy ni miel\nla luz del CPD nos vuelve otra piel\n\n[Estribillo]\nSomos sysadmins, somos gremlins\nel pager nos llama, el cluster se ríe\nsi cae producción, multiplicamos\ncafé en el suelo, alarmas, y dientes\n\n[Estrofa]\nGizmo en la guardia, Stripe en root\ncables como nidos, el sudo no perdona\nun ticket a las tres, otro en la consola\nparpadean los leds, la cinta no perdona\n\n[Estribillo]\nSomos sysadmins, somos gremlins\nel pager nos llama, el cluster se ríe\nsi cae producción, multiplicamos\ncafé en el suelo, alarmas, y dientes"
+  },
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-20-17h17m34s_seed671395397_[Estrofa]Tres reglas en el rack, tres reglas en la pielno mojes el mogwai, no riegues el paneldes.wav"
+}

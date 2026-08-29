@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Bone, Box, Download, Loader2, PersonStanding, Play, RefreshCw, Square } from 'lucide-react'
+import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
 import {
   cancelRigJob,
@@ -148,34 +149,31 @@ export function RigAnimatePanel() {
   const isRunning = job?.status === 'queued' || job?.status === 'running'
   const activeJobId = isRunning ? job?.job_id ?? null : null
   const canRun = !!selectedEngine?.installed && !!source && selectedClips.size > 0 && !isRunning
+  const pollFailuresRef = useRef(0)
 
   useEffect(() => {
-    if (!activeJobId) return
-    let disposed = false
-    let failures = 0
-    const poll = async () => {
-      try {
-        const next = await fetchRigJob(activeJobId)
-        failures = 0
-        if (!disposed) setJob(next)
-      } catch (err) {
-        if (disposed) return
-        failures += 1
-        const message = err instanceof Error ? err.message : 'Could not read rig job status'
-        setError(message)
-        const lost = (err as Error & { status?: number }).status === 404
-        if (lost || failures >= 4) {
-          setJob(current => current && { ...current, status: 'failed', error: lost ? 'The rig job was lost — the backend probably restarted.' : message })
-        }
-      }
-    }
-    const timer = window.setInterval(poll, 1500)
-    void poll()
-    return () => {
-      disposed = true
-      window.clearInterval(timer)
-    }
+    pollFailuresRef.current = 0
   }, [activeJobId])
+
+  useSerializedPoll({
+    enabled: Boolean(activeJobId),
+    intervalMs: 1500,
+    ownerKey: activeJobId,
+    poll: () => fetchRigJob(activeJobId!),
+    onValue: next => {
+      pollFailuresRef.current = 0
+      setJob(next)
+    },
+    onError: err => {
+      pollFailuresRef.current += 1
+      const message = err instanceof Error ? err.message : 'Could not read rig job status'
+      setError(message)
+      const lost = (err as Error & { status?: number }).status === 404
+      if (lost || pollFailuresRef.current >= 4) {
+        setJob(current => current && { ...current, status: 'failed', error: lost ? 'The rig job was lost — the backend probably restarted.' : message })
+      }
+    },
+  })
 
   useEffect(() => {
     if (job?.status === 'completed') {
@@ -280,7 +278,7 @@ export function RigAnimatePanel() {
   if (capabilityError) return (
     <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 space-y-2">
       <p className="text-xs text-red-300">{capabilityError}</p>
-      <p className="text-[10px] text-text-muted">Loreframe Lab&apos;s backend did not answer — it may be stopped or restarting. The procedural engine needs no extra install; this is a connection issue, not a missing installation.</p>
+      <p className="text-[10px] text-text-muted">HocusPocus&apos;s backend did not answer — it may be stopped or restarting. The procedural engine needs no extra install; this is a connection issue, not a missing installation.</p>
       <button onClick={loadCapabilities} className="rounded border border-border bg-bg-tertiary px-2.5 py-1.5 text-[10px] text-text-secondary hover:text-text-primary flex items-center gap-1"><RefreshCw size={11} /> Retry</button>
     </div>
   )
@@ -369,7 +367,7 @@ export function RigAnimatePanel() {
               </div>
             </div>
             <div className="grid max-h-[620px] grid-cols-2 gap-1.5 overflow-y-auto pr-0.5">{profileAnimations.map(animation => <RigAnimationPreview key={animation.id} animation={animation} selected={selectedClips.has(animation.id)} recommended={Boolean(selectedProfile?.recommended_animations.includes(animation.id))} onSelect={() => toggleClip(animation.id)} />)}</div>
-            <p className="mt-1.5 text-[8px] leading-relaxed text-text-muted">These previews visualize Loreframe Lab&apos;s generic procedural chain and its intended root motion, squash, turn and sway. They do not claim semantic limb animation.</p>
+            <p className="mt-1.5 text-[8px] leading-relaxed text-text-muted">These previews visualize HocusPocus&apos;s generic procedural chain and its intended root motion, squash, turn and sway. They do not claim semantic limb animation.</p>
           </div>
 
           {engineId === 'procedural' && (
@@ -413,7 +411,7 @@ export function RigAnimatePanel() {
                     {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                     {exporting ? 'Preparing GLB...' : 'Export animated GLB'}
                   </button>
-                  <p className="text-[9px] text-text-muted text-center">Downloads the rigged model with its baked clips. It also remains available in Loreframe Lab&apos;s 3D gallery.</p>
+                  <p className="text-[9px] text-text-muted text-center">Downloads the rigged model with its baked clips. It also remains available in HocusPocus&apos;s 3D gallery.</p>
                   {exportStatus && <p className="text-[9px] text-accent-green text-center break-all">{exportStatus}</p>}
                   {exportError && <p className="text-[9px] text-red-300 text-center whitespace-pre-wrap">{exportError}</p>}
                 </div>

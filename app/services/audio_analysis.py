@@ -92,11 +92,20 @@ class Section:
     energy: float
 
 @dataclass
+class LyricWord:
+    """A word aligned to the source audio, independent of Whisper's API."""
+    start: float
+    end: float
+    text: str
+
+
+@dataclass
 class LyricSegment:
     start: float
     end: float
     text: str
     speaker: Optional[str] = None
+    words: Optional[List[LyricWord]] = None
 
 @dataclass
 class AudioAnalysis:
@@ -310,7 +319,9 @@ def _transcribe(audio_path: str, lyrics_hint: Optional[str] = None) -> List[Lyri
     segments, info = model.transcribe(
         audio_path,
         beam_size=5,
-        word_timestamps=False,
+        # Segment timing can span a whole sentence.  The cutout animator uses
+        # these word boundaries to make mouth beats at real speech points.
+        word_timestamps=True,
         language=None,
         vad_filter=True,
         initial_prompt=initial_prompt,
@@ -320,10 +331,16 @@ def _transcribe(audio_path: str, lyrics_hint: Optional[str] = None) -> List[Lyri
     for seg in segments:
         text = seg.text.strip()
         if text:
+            words = [
+                LyricWord(start=round(word.start, 3), end=round(word.end, 3), text=word.word.strip())
+                for word in (seg.words or [])
+                if word.start is not None and word.end is not None and word.end > word.start and word.word.strip()
+            ]
             lyrics.append(LyricSegment(
                 start=round(seg.start, 3),
                 end=round(seg.end, 3),
                 text=text,
+                words=words or None,
             ))
     return lyrics
 

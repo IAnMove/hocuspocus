@@ -148,6 +148,14 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
         normalise_time_card_text=lambda value: str(value or "").strip(),
         render_project=default_render_project,
         render_comic_animatic=default_render_animatic,
+        build_source_provenance_manifest=lambda clips: {
+            "version": 1,
+            "clips": [{
+                "index": index,
+                "source": clip.get("source"),
+                "sidecar_status": "missing",
+            } for index, clip in enumerate(clips)],
+        },
     )
     services_module = _module("services", video_editor=video_editor_module)
     services_module.__path__ = []
@@ -396,6 +404,10 @@ def test_progress_and_terminal_publish_without_get_and_sidecar_keeps_task_hierar
     assert sidecar["job_id"] == response["job_id"]
     assert sidecar["task_id"] == response["task_id"]
     assert sidecar["root_task_id"] == response["root_task_id"]
+    if render_kind == "export":
+        editor = sidecar["params"]["video_editor"]
+        assert editor["version"] == 2
+        assert editor["source_manifest"]["clips"][0]["source"] == "clip.mp4"
 
 
 def test_canonical_adapter_exposes_real_lane_cancel_contract_and_control_route():

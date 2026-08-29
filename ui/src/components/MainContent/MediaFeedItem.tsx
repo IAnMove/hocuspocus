@@ -551,7 +551,7 @@ export function MediaFeedItem({ file, index, isActive, onVisible, onMeasured, st
         // accent-blue → reads as a flat 2px blue ring (preserves
         // prior visual exactly).
         //
-        // Loreframe Blue: a conic-gradient override (see index.css)
+        // HocusPocus Blue: a conic-gradient override (see index.css)
         // sweeps spotlight stops around the perimeter — electric blue
         // and cyan at three asymmetric angles, with deep blue in between
         // so those sections of the border

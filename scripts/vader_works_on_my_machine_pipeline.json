@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-21-20h53m26s_seed279525435_[Estrofa]En el Templo el test est\u00e1 verde, en Coruscant todo pasaen Mustafar peta a la primera, An.wav",
+  "pipeline": {
+    "pipeline_id": "ec5fc482",
+    "task_id": "task-director-ec5fc482",
+    "root_task_id": "task-director-ec5fc482"
+  },
+  "clip_count": 3
+}

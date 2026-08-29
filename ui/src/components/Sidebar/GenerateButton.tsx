@@ -95,7 +95,7 @@ export function GenerateButton() {
         cooldown || needsScheduledPrompts
           ? 'bg-bg-active text-text-muted cursor-not-allowed'
           // Classic theme: bg-cta resolves to a flat accent-green.
-          // Loreframe Blue resolves to the branded blue gradient, while
+          // HocusPocus Blue resolves to the branded blue gradient, while
           // shadow-accent-glow adds the restrained cool bloom.
           : 'bg-cta hover:brightness-110 shadow-accent-glow text-white'
       }`}

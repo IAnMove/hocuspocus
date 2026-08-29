@@ -41,12 +41,14 @@ export function galleryListQuery(mediaFilter: MediaFilter, searchQuery = '') {
     mediaType,
     favoritesOnly: mediaFilter === 'favorites',
     multiclipOnly: mediaFilter === 'multiclip',
+    editsOnly: mediaFilter === 'avatars',
     useServerList: Boolean(
       search
       || resultKind
       || mediaType
       || mediaFilter === 'favorites'
-      || mediaFilter === 'multiclip',
+      || mediaFilter === 'multiclip'
+      || mediaFilter === 'avatars',
     ),
   }
 }
@@ -57,6 +59,10 @@ export function jobFitsGalleryFilter(job: GenerationJob, filter: MediaFilter): b
   if (filter === 'images') return mode === 'image'
   if (filter === 'audio') return mode === 'audio'
   if (filter === 'model3d') return mode === 'model3d'
+  if (filter === 'avatars') {
+    const details = job.generationDetails as { edit_sub_mode?: string } | undefined
+    return mode === 'avatar' || Boolean(details?.edit_sub_mode)
+  }
   if (
     filter === 'videos'
     || filter === 'videoclips'

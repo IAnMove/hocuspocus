@@ -19,6 +19,7 @@ import {
 } from '../features/studio/studioRestore'
 import { GALLERY_LIST_FILTERS, galleryListQuery } from '../lib/galleryListQuery'
 
+const DASHBOARD_PIPELINE_PAGE_SIZE = 8
 const CIVIT_DOWNLOAD_POLL_MS = 2000
 const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
 let _civitDownloadPollTask: Promise<void> | null = null
@@ -35,6 +36,7 @@ const _directorRepairPolls = new Map<string, DirectorRepairPoll>()
 const _directorRepairDiscoveries = new Map<string, object>()
 let _dashboardPipelineLoadToken = 0
 let _dashboardPipelineListLoadToken = 0
+let _systemStatsInFlight = false
 let _workspaceRequestEpoch = 0
 let _workspaceListRequestEpoch = 0
 let _pendingWorkspaceTransitionEpoch: number | null = null
@@ -1383,12 +1385,14 @@ interface AppState {
   // Director Pipeline Dashboard
   dashboardOpen: boolean
   dashboardPipelineList: PipelineListItem[]
+  dashboardPipelineTotal: number
   dashboardSelectedPipeline: SavedPipelineState | null
   dashboardLoading: boolean
   dashboardLoadError: string | null
   dashboardRetryPipelineId: string | null
   setDashboardOpen: (open: boolean, preferredPipelineId?: string) => void
   loadPipelineList: (preferredPipelineId?: string) => Promise<void>
+  loadMorePipelineList: () => Promise<void>
   loadSavedPipeline: (pid: string) => Promise<void>
   retryDashboardLoad: () => Promise<void>
   tagClip: (pid: string, clipIndex: number, tag: string | null) => Promise<void>
@@ -2012,6 +2016,7 @@ function beginAppActivity(
 }
 
 let directorReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let directorReconnectInFlight = false
 
 const defaultParams: GenerateParams = {
   prompt: '',
@@ -2362,10 +2367,15 @@ export const useStore = create<AppState>((set, get) => ({
   editRepaintFrameUrl: '',
   editRepaintMappings: [],
   editRepaintResolutionProfile: '480p',
-  setEditRepaintFrame: (file, path, url) => set({
-    editRepaintFrameFile: file,
-    editRepaintFramePath: path,
-    editRepaintFrameUrl: url,
+  setEditRepaintFrame: (file, path, url) => set(state => {
+    if (state.editRepaintFrameUrl && state.editRepaintFrameUrl !== url && state.editRepaintFrameUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(state.editRepaintFrameUrl)
+    }
+    return {
+      editRepaintFrameFile: file,
+      editRepaintFramePath: path,
+      editRepaintFrameUrl: url,
+    }
   }),
   setEditRepaintMappings: mappings => set({
     editRepaintMappings: mappings.slice(0, 5),
@@ -2679,15 +2689,25 @@ export const useStore = create<AppState>((set, get) => ({
   outpaintWindowOverlap: 9,  // LTX-2 default
   setOutpaintWindowOverlap: (v) => set({ outpaintWindowOverlap: v }),
   setEditVideoPath: (path) => set({ editVideoPath: path }),
-  setEditVideo: (file, path, url, duration, resolution) => set({
-    editVideoFile: file, editVideoPath: path, editVideoUrl: url,
-    editVideoDuration: duration, editVideoResolution: resolution,
-    editEndTime: duration,
+  setEditVideo: (file, path, url, duration, resolution) => set(state => {
+    if (state.editVideoUrl && state.editVideoUrl !== url && state.editVideoUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(state.editVideoUrl)
+    }
+    return {
+      editVideoFile: file, editVideoPath: path, editVideoUrl: url,
+      editVideoDuration: duration, editVideoResolution: resolution,
+      editEndTime: duration,
+    }
   }),
-  clearEditVideo: () => set({
-    editVideoFile: null, editVideoPath: '', editVideoUrl: '',
-    editVideoDuration: 0, editVideoResolution: '', editStartTime: 0, editEndTime: 5,
-    editMasksPath: null, editMaskPreview: null, editDetectedTarget: '',
+  clearEditVideo: () => set(state => {
+    if (state.editVideoUrl.startsWith('blob:')) URL.revokeObjectURL(state.editVideoUrl)
+    if (state.editRepaintFrameUrl.startsWith('blob:')) URL.revokeObjectURL(state.editRepaintFrameUrl)
+    return {
+      editVideoFile: null, editVideoPath: '', editVideoUrl: '',
+      editVideoDuration: 0, editVideoResolution: '', editStartTime: 0, editEndTime: 5,
+      editMasksPath: null, editMaskPreview: null, editDetectedTarget: '',
+      editRepaintFrameFile: null, editRepaintFramePath: '', editRepaintFrameUrl: '',
+    }
   }),
   musicDescription: '',
   setMusicDescription: (s) => set({ musicDescription: s }),
@@ -3030,6 +3050,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   dashboardOpen: false,
   dashboardPipelineList: [],
+  dashboardPipelineTotal: 0,
   dashboardSelectedPipeline: null,
   dashboardLoading: false,
   dashboardLoadError: null,
@@ -3050,17 +3071,27 @@ export const useStore = create<AppState>((set, get) => ({
     const loadToken = ++_dashboardPipelineListLoadToken
     const retryPipelineId = preferredPipelineId || get().dashboardSelectedPipeline?.pipeline_id || null
     try {
-      const { pipelines } = await api.fetchPipelineList()
+      const pageSize = Math.max(DASHBOARD_PIPELINE_PAGE_SIZE, get().dashboardPipelineList.length)
+      const { pipelines, total } = await api.fetchPipelineList({ limit: pageSize, offset: 0 })
       if (loadToken !== _dashboardPipelineListLoadToken) return
-      set({ dashboardPipelineList: pipelines, dashboardLoadError: null, dashboardRetryPipelineId: null })
-      // Opening Productions should take the user straight back to live work,
-      // even if an older production was selected the last time it was open.
+      set({
+        dashboardPipelineList: pipelines,
+        dashboardPipelineTotal: total,
+        dashboardLoadError: null,
+        dashboardRetryPipelineId: null,
+      })
+      // Open the newest thread (or a preferred / still-running one). Older
+      // threads stay as list rows until the user clicks them.
       const preferred = preferredPipelineId
         ? pipelines.find(pipeline => pipeline.id === preferredPipelineId)
         : undefined
-      const active = preferred || pipelines.find(pipeline => pipeline.status === 'running')
+      const active = preferred
+        || pipelines.find(pipeline => pipeline.status === 'running')
+        || (!get().dashboardSelectedPipeline ? pipelines[0] : undefined)
       if (active && get().dashboardSelectedPipeline?.pipeline_id !== active.id) {
         await get().loadSavedPipeline(active.id)
+      } else if (preferredPipelineId && !preferred) {
+        await get().loadSavedPipeline(preferredPipelineId)
       }
 
       // The repair worker belongs to the server, so a browser reload must
@@ -3107,6 +3138,29 @@ export const useStore = create<AppState>((set, get) => ({
       set({
         dashboardLoadError: e instanceof Error ? e.message : 'Failed to load pipeline list',
         dashboardRetryPipelineId: retryPipelineId,
+      })
+    }
+  },
+  loadMorePipelineList: async () => {
+    const loadToken = ++_dashboardPipelineListLoadToken
+    const existing = get().dashboardPipelineList
+    try {
+      const { pipelines, total } = await api.fetchPipelineList({
+        limit: DASHBOARD_PIPELINE_PAGE_SIZE,
+        offset: existing.length,
+      })
+      if (loadToken !== _dashboardPipelineListLoadToken) return
+      const seen = new Set(existing.map(item => item.id))
+      set({
+        dashboardPipelineList: [...existing, ...pipelines.filter(item => !seen.has(item.id))],
+        dashboardPipelineTotal: total,
+        dashboardLoadError: null,
+      })
+    } catch (e) {
+      if (loadToken !== _dashboardPipelineListLoadToken) return
+      console.error('Failed to load more pipelines:', e)
+      set({
+        dashboardLoadError: e instanceof Error ? e.message : 'Failed to load pipeline list',
       })
     }
   },
@@ -6072,6 +6126,8 @@ export const useStore = create<AppState>((set, get) => ({
   reconnectDirectorPipelines: async () => {
     if (directorReconnectTimer) clearTimeout(directorReconnectTimer)
     const refresh = async () => {
+      if (directorReconnectInFlight) return
+      directorReconnectInFlight = true
       try {
         const data = await api.fetchActiveDirectorPipelines()
         set({ activeDirectorPipelines: data.pipelines })
@@ -6130,6 +6186,8 @@ export const useStore = create<AppState>((set, get) => ({
         } catch {
           directorReconnectTimer = null
         }
+      } finally {
+        directorReconnectInFlight = false
       }
     }
     await refresh()
@@ -6794,14 +6852,19 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Live hardware telemetry (HardwareStatusBar). Polled ~2s from the
   // component while mounted. Swallows a single failed tick (e.g. backend
-  // restarting) instead of spamming the console at 2s cadence.
+  // restarting) instead of spamming the console at 2s cadence. Skip if a
+  // tick is already in flight so a slow LAN/backend cannot stack fetches.
   systemStats: null,
   loadSystemStats: async () => {
+    if (_systemStatsInFlight) return
+    _systemStatsInFlight = true
     try {
       const stats = await api.fetchSystemStats()
       set({ systemStats: stats })
     } catch {
       /* transient poll failure — ignore this tick */
+    } finally {
+      _systemStatsInFlight = false
     }
   },
 
@@ -9377,9 +9440,10 @@ export const useStore = create<AppState>((set, get) => ({
     set({ outputsLoading: true, galleryRefreshPending: false })
     try {
       const { outputs: apiOutputs, total } = query.useServerList
-        ? await api.fetchOutputs(query.resultKind || query.favoritesOnly || query.multiclipOnly || query.search ? 0 : PAGE_SIZE, 0, {
+        ? await api.fetchOutputs(query.resultKind || query.favoritesOnly || query.multiclipOnly || query.editsOnly || query.search ? 0 : PAGE_SIZE, 0, {
             favoritesOnly: query.favoritesOnly,
             multiclipOnly: query.multiclipOnly,
+            editsOnly: query.editsOnly,
             resultKind: query.resultKind,
             mediaType: query.mediaType,
             search: query.search,
@@ -9434,6 +9498,7 @@ export const useStore = create<AppState>((set, get) => ({
         resultKind: query.resultKind,
         favoritesOnly: query.favoritesOnly,
         multiclipOnly: query.multiclipOnly,
+        editsOnly: query.editsOnly,
         search: query.search,
         signal: request.controller.signal,
       })
@@ -9478,6 +9543,7 @@ export const useStore = create<AppState>((set, get) => ({
         resultKind: query.resultKind,
         favoritesOnly: query.favoritesOnly,
         multiclipOnly: query.multiclipOnly,
+        editsOnly: query.editsOnly,
         search: query.search,
         signal: request.controller.signal,
       })

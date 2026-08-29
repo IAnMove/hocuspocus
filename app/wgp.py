@@ -6592,7 +6592,7 @@ def concatenate_multi_clip_videos(
         from services.mix_concat import (
             build_hard_concat_filter,
             concat_with_tail_hold_and_crossfade,
-            probe_clip_audio_flags,
+            probe_audio_flags,
             probe_duration_seconds,
             should_use_hold_crossfade,
         )
@@ -6600,7 +6600,7 @@ def concatenate_multi_clip_videos(
         from app.services.mix_concat import (
             build_hard_concat_filter,
             concat_with_tail_hold_and_crossfade,
-            probe_clip_audio_flags,
+            probe_audio_flags,
             probe_duration_seconds,
             should_use_hold_crossfade,
         )
@@ -6611,7 +6611,7 @@ def concatenate_multi_clip_videos(
     audio_flags: list[bool] = []
     clips_have_audio = False
     if not audio_path:
-        audio_flags = probe_clip_audio_flags(valid_paths, ffmpeg_bin)
+        audio_flags = probe_audio_flags(valid_paths, ffmpeg_bin)
         clips_have_audio = any(audio_flags)
 
     use_clip_audio = clips_have_audio and not audio_path

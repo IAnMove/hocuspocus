@@ -1,0 +1,120 @@
+{
+  "mode": "direct_generate",
+  "jobs": [
+    {
+      "job_id": "813f5ea0",
+      "status": "completed",
+      "label": "estableciendo",
+      "shot_id": "shot-1",
+      "reused": true
+    },
+    {
+      "job_id": "25713ef7",
+      "status": "completed",
+      "label": "llamada",
+      "shot_id": "shot-2",
+      "reused": true
+    },
+    {
+      "job_id": "530b3815",
+      "status": "completed",
+      "label": "llegas-tarde",
+      "shot_id": "shot-3",
+      "reused": true
+    },
+    {
+      "job_id": "ae1773f5",
+      "status": "completed",
+      "label": "un-mago-nunca",
+      "shot_id": "shot-4",
+      "reused": true
+    },
+    {
+      "job_id": "6dc08a2b",
+      "status": "completed",
+      "label": "entra",
+      "shot_id": "shot-5",
+      "reused": true
+    },
+    {
+      "job_id": "964ccfb5",
+      "status": "completed",
+      "label": "el-te",
+      "shot_id": "shot-6",
+      "reused": true
+    },
+    {
+      "job_id": "3181dd43",
+      "status": "completed",
+      "label": "hogar",
+      "shot_id": "shot-7",
+      "reused": true
+    },
+    {
+      "job_id": "e7abc2c1",
+      "task_id": "task-generation-e7abc2c1",
+      "root_task_id": "task-generation-e7abc2c1",
+      "status": "queued",
+      "label": "humo",
+      "shot_id": "shot-8"
+    }
+  ],
+  "plans": [
+    {
+      "label": "estableciendo",
+      "start": 0.0,
+      "end": 12.25,
+      "duration_sec": 12.25,
+      "duration_frames": 294
+    },
+    {
+      "label": "llamada",
+      "start": 12.25,
+      "end": 22.375,
+      "duration_sec": 10.125,
+      "duration_frames": 243
+    },
+    {
+      "label": "llegas-tarde",
+      "start": 22.375,
+      "end": 32.5,
+      "duration_sec": 10.125,
+      "duration_frames": 243
+    },
+    {
+      "label": "un-mago-nunca",
+      "start": 32.5,
+      "end": 45.458,
+      "duration_sec": 12.958,
+      "duration_frames": 311
+    },
+    {
+      "label": "entra",
+      "start": 45.458,
+      "end": 55.583,
+      "duration_sec": 10.125,
+      "duration_frames": 243
+    },
+    {
+      "label": "el-te",
+      "start": 55.583,
+      "end": 66.416,
+      "duration_sec": 10.833,
+      "duration_frames": 260
+    },
+    {
+      "label": "hogar",
+      "start": 66.416,
+      "end": 77.958,
+      "duration_sec": 11.542,
+      "duration_frames": 277
+    },
+    {
+      "label": "humo",
+      "start": 77.958,
+      "end": 89.5,
+      "duration_sec": 11.542,
+      "duration_frames": 277
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+[
+  {
+    "index": 1,
+    "series": "The Office",
+    "joke": "Un jefe no cuenta chistes. Un jefe cuenta evaluaciones.",
+    "job_id": "5f13d7b1",
+    "task_id": "task-generation-5f13d7b1",
+    "root_task_id": "task-generation-5f13d7b1",
+    "status": "queued"
+  },
+  {
+    "index": 2,
+    "series": "Friends",
+    "joke": "¿Cómo se llama un sándwich triste? Joey sin pavo.",
+    "job_id": "cf171732",
+    "task_id": "task-generation-cf171732",
+    "root_task_id": "task-generation-cf171732",
+    "status": "queued"
+  },
+  {
+    "index": 3,
+    "series": "Breaking Bad",
+    "joke": "La química es fácil. Lo difícil es no reírse del propio plan.",
+    "job_id": "a26f5973",
+    "task_id": "task-generation-a26f5973",
+    "root_task_id": "task-generation-a26f5973",
+    "status": "queued"
+  },
+  {
+    "index": 4,
+    "series": "Stranger Things",
+    "joke": "Si parpadean las luces, o es el Demogorgon o se ha ido la luz.",
+    "job_id": "9592d677",
+    "task_id": "task-generation-9592d677",
+    "root_task_id": "task-generation-9592d677",
+    "status": "queued"
+  },
+  {
+    "index": 5,
+    "series": "Juego de Tronos",
+    "joke": "Un Lannister siempre paga sus deudas. Los chistes, a plazos.",
+    "job_id": "c63451a2",
+    "task_id": "task-generation-c63451a2",
+    "root_task_id": "task-generation-c63451a2",
+    "status": "queued"
+  },
+  {
+    "index": 6,
+    "series": "Los Simpson",
+    "joke": "Tengo una dieta. Se llama desconocer la nevera.",
+    "job_id": "4d6e30ce",
+    "task_id": "task-generation-4d6e30ce",
+    "root_task_id": "task-generation-4d6e30ce",
+    "status": "queued"
+  },
+  {
+    "index": 7,
+    "series": "Seinfeld",
+    "joke": "Los vecinos no hacen ruido. El ruido es el hobby del edificio.",
+    "job_id": "bad33e9f",
+    "task_id": "task-generation-bad33e9f",
+    "root_task_id": "task-generation-bad33e9f",
+    "status": "queued"
+  },
+  {
+    "index": 8,
+    "series": "Sherlock",
+    "joke": "He deducido el punchline. No merece un segundo plano.",
+    "job_id": "fcce6268",
+    "task_id": "task-generation-fcce6268",
+    "root_task_id": "task-generation-fcce6268",
+    "status": "queued"
+  },
+  {
+    "index": 9,
+    "series": "The Mandalorian",
+    "joke": "No me quito el casco. El chiste tampoco se destapa.",
+    "job_id": "761c376e",
+    "task_id": "task-generation-761c376e",
+    "root_task_id": "task-generation-761c376e",
+    "status": "queued"
+  },
+  {
+    "index": 10,
+    "series": "Dark",
+    "joke": "Si no te ha gustado, ya te gustó en 1986.",
+    "job_id": "595262a8",
+    "task_id": "task-generation-595262a8",
+    "root_task_id": "task-generation-595262a8",
+    "status": "queued"
+  },
+  {
+    "index": 11,
+    "series": "The Big Bang Theory",
+    "joke": "El knock-knock es ineficiente. Tres golpes bastan. Bazinga.",
+    "job_id": "9a283e84",
+    "task_id": "task-generation-9a283e84",
+    "root_task_id": "task-generation-9a283e84",
+    "status": "queued"
+  },
+  {
+    "index": 12,
+    "series": "Better Call Saul",
+    "joke": "Objetamos el silencio. Mi cliente quiere reír, no pensar.",
+    "job_id": "c0c95e46",
+    "task_id": "task-generation-c0c95e46",
+    "root_task_id": "task-generation-c0c95e46",
+    "status": "queued"
+  },
+  {
+    "index": 13,
+    "series": "House",
+    "joke": "No es lupus. Es el chiste. Casi peor.",
+    "job_id": "0b820fa0",
+    "task_id": "task-generation-0b820fa0",
+    "root_task_id": "task-generation-0b820fa0",
+    "status": "queued"
+  },
+  {
+    "index": 14,
+    "series": "The Witcher",
+    "joke": "Un monstruo, dos caminos. El chiste era el peaje.",
+    "job_id": "3466950c",
+    "task_id": "task-generation-3466950c",
+    "root_task_id": "task-generation-3466950c",
+    "status": "queued"
+  },
+  {
+    "index": 15,
+    "series": "Black Mirror",
+    "joke": "Has visto el chiste. El chiste también te ha visto a ti.",
+    "job_id": "1ff22fd9",
+    "task_id": "task-generation-1ff22fd9",
+    "root_task_id": "task-generation-1ff22fd9",
+    "status": "queued"
+  }
+]

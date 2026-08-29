@@ -1,0 +1,10 @@
+{
+  "source": "ace_step",
+  "audio_path": "/home/ina/pinokio/api/Maestro-next.git/app/outputs/2026-08-20-12h18m45s_seed835598373_[Estrofa]Nacimos en foso, en hierro y en gritola luna es un hueso, la tierra un delitoIsengard so.wav",
+  "pipeline": {
+    "pipeline_id": "6442199c",
+    "task_id": "task-director-6442199c",
+    "root_task_id": "task-director-6442199c"
+  },
+  "clip_count": 4
+}

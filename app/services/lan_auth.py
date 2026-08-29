@@ -1,4 +1,4 @@
-"""Session authentication for explicitly LAN-shared Loreframe Lab servers.
+"""Session authentication for explicitly LAN-shared HocusPocus Lab servers.
 
 Loopback remains frictionless.  When the server is bound for LAN access,
 remote API and classic-UI requests require either the configured bearer token

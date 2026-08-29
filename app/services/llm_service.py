@@ -2021,6 +2021,7 @@ def generate(
     presence_penalty: float = 0.0,
     stop: Optional[list[str]] = None,
     json_schema: Optional[dict] = None,
+    cancellation_token=None,
 ) -> str:
     """Generate text via llama-server's OpenAI-compatible chat endpoint.
 
@@ -2041,6 +2042,28 @@ def generate(
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
 
+    # MiniMax M-series completions use max_completion_tokens, reasoning_split
+    # and a provider-specific thinking switch. The generic request below uses
+    # max_tokens and can let M3 consume the entire recipe budget as hidden
+    # reasoning, returning an empty content field. Reuse the hardened
+    # compatible-provider path, which also retries one confirmed empty
+    # response with a larger bounded budget.
+    if _provider == "minimax":
+        return generate_openai_compatible(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model_id=_model_id,
+            base_url=_remote_url or "https://api.minimax.io",
+            api_key=_api_key,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            json_schema=json_schema,
+            image_paths=image_paths,
+        )
+
     # Cancel idle timer during active request — prevents auto-unload mid-generation.
     # Timer is reset at the END of the request (after response is received).
     _cancel_idle_timer()
@@ -2055,6 +2078,29 @@ def generate(
     if json_schema is not None:
         enable_thinking = False
         thinking_budget = 0
+        # Providers without a dependable schema envelope still need the exact
+        # contract in context. Local llama-server and Ollama receive the
+        # schema as a token-level grammar below. OpenAI/DeepSeek use JSON
+        # object mode because this API accepts schemas with optional fields,
+        # while their strict dialect may reject those before generation.
+        # MiniMax, Anthropic and unknown compatible servers get the same
+        # compact prompt copy plus local validation/repair at the caller.
+        prompt_needs_schema = (
+            _provider != "local"
+            and not _is_ollama_remote()
+        )
+        if prompt_needs_schema:
+            compact_schema = json.dumps(
+                json_schema,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            system_prompt = (
+                f"{system_prompt.rstrip()}\n\n"
+                "Return exactly one JSON value matching this schema. "
+                "Do not wrap it in markdown:\n"
+                f"{compact_schema}"
+            ).strip()
 
     # Per-model thinking mode (Gemma vs Qwen)
     system_prompt, enable_thinking, thinking_budget = _prepare_thinking(system_prompt, enable_thinking, thinking_budget)
@@ -2154,12 +2200,21 @@ def generate(
             # detailed schema after generation.
             payload["response_format"] = {"type": "json_object"}
             print("[LLM] DeepSeek JSON output enabled")
+        elif _provider == "openai":
+            payload["response_format"] = {"type": "json_object"}
         else:
             print(f"[LLM] json_schema requested but provider={_provider} — sending unconstrained (grammar is local llama-server only)")
 
-    if _provider == "anthropic":
-        return _generate_anthropic(messages, total_tokens, max(temperature, 0.01), top_p)
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, _provider)
 
+    if _provider == "anthropic":
+        return _generate_anthropic(
+            messages, total_tokens, max(temperature, 0.01), top_p,
+            cancellation_token=cancellation_token,
+        )
+
+    response_watcher = None
     try:
         resp = requests.post(
             f"{_server_url()}/v1/chat/completions",
@@ -2168,13 +2223,32 @@ def generate(
             # (connect, read): fail fast if the server socket is gone;
             # allow a long read for actual generation.
             timeout=(10, 600),
+            stream=bool(cancellation_token),
         )
         resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, _provider,
+        )
+        _raise_if_token_cancelled(
+            cancellation_token, _provider,
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
+        data = resp.json()
+        _raise_if_token_cancelled(
+            cancellation_token, _provider,
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
     except requests.exceptions.RequestException as e:
+        if _token_cancelled(cancellation_token):
+            _raise_if_token_cancelled(
+                cancellation_token, _provider,
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
         # A dead subprocess surfaces here as a ConnectionError; translate it
         # into an actionable error naming the real cause (see the helper).
         raise _diagnose_llm_request_failure(e) from e
-    data = resp.json()
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     raw_content = data["choices"][0]["message"]["content"] or ""
     finish_reason = data["choices"][0].get("finish_reason", "unknown")
@@ -2197,6 +2271,43 @@ def generate(
 
     _reset_idle_timer()
     return content.strip()
+
+
+def _minimax_compatible_json_schema(value):
+    """Adapt valid JSON Schema features that MiniMax's API rejects.
+
+    MiniMax structured output currently accepts numeric fields, but its
+    schema validator treats ``enum`` values as strings.  Preserve the
+    caller's original schema for local validation while relaxing numeric
+    enums to their bounded numeric range in the provider envelope.
+    """
+    if isinstance(value, list):
+        return [_minimax_compatible_json_schema(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    normalized = {
+        key: _minimax_compatible_json_schema(item)
+        for key, item in value.items()
+    }
+    enum_values = normalized.get("enum")
+    if (
+        isinstance(enum_values, list)
+        and enum_values
+        and all(
+            isinstance(item, (int, float)) and not isinstance(item, bool)
+            for item in enum_values
+        )
+    ):
+        normalized.pop("enum", None)
+        normalized["type"] = (
+            "integer"
+            if all(isinstance(item, int) for item in enum_values)
+            else "number"
+        )
+        normalized["minimum"] = min(enum_values)
+        normalized["maximum"] = max(enum_values)
+    return normalized
 
 
 @trace_llm_call("generate_openai_compatible")
@@ -2230,12 +2341,19 @@ def generate_openai_compatible(
         raise RuntimeError("An OpenAI-compatible model name is required")
     if not base_url.startswith(("http://", "https://")):
         raise RuntimeError("The OpenAI-compatible base URL must start with http:// or https://")
+    is_deepseek = "deepseek.com" in base_url.lower()
+    is_minimax = "minimax.io" in base_url.lower()
+    provider_schema = (
+        _minimax_compatible_json_schema(json_schema)
+        if is_minimax and json_schema is not None
+        else json_schema
+    )
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
-    if json_schema is not None:
+    if provider_schema is not None:
         compact_schema = json.dumps(
-            json_schema,
+            provider_schema,
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -2256,8 +2374,6 @@ def generate_openai_compatible(
         messages.append({"role": "user", "content": content_parts})
     else:
         messages.append({"role": "user", "content": prompt})
-    is_deepseek = "deepseek.com" in base_url.lower()
-    is_minimax = "minimax.io" in base_url.lower()
     payload = {
         "model": model_id,
         "messages": messages,
@@ -2281,17 +2397,17 @@ def generate_openai_compatible(
         payload["frequency_penalty"] = frequency_penalty
     if presence_penalty > 0:
         payload["presence_penalty"] = presence_penalty
-    if json_schema is not None and not is_minimax:
-        schema_root = str(json_schema.get("type") or "") if isinstance(json_schema, dict) else ""
+    if provider_schema is not None:
+        schema_root = str(provider_schema.get("type") or "") if isinstance(provider_schema, dict) else ""
         if is_deepseek and schema_root == "object":
             payload["response_format"] = {"type": "json_object"}
         elif not is_deepseek:
             payload["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": "maestro_comic_response",
+                    "name": "maestro_response",
                     "strict": True,
-                    "schema": json_schema,
+                    "schema": provider_schema,
                 },
             }
 
@@ -2860,7 +2976,14 @@ def generate_streaming(
     return content.strip()
 
 
-def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top_p: float) -> str:
+def _generate_anthropic(
+    messages: list,
+    max_tokens: int,
+    temperature: float,
+    top_p: float,
+    *,
+    cancellation_token=None,
+) -> str:
     """Non-streaming generation via Anthropic Messages API."""
     import re as _re
     # Anthropic uses system as a top-level param, not in messages
@@ -2882,14 +3005,39 @@ def _generate_anthropic(messages: list, max_tokens: int, temperature: float, top
     if system_text:
         payload["system"] = system_text
 
-    resp = requests.post(
-        "https://api.anthropic.com/v1/messages",
-        json=payload,
-        headers=_api_headers(),
-        timeout=600,
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    cancellation_token = _resolve_cancellation_token(cancellation_token)
+    _raise_if_token_cancelled(cancellation_token, "Anthropic")
+    response_watcher = None
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            json=payload,
+            headers=_api_headers(),
+            timeout=600,
+            stream=bool(cancellation_token),
+        )
+        resp.raise_for_status()
+        response_watcher = _watch_response_for_cancellation(
+            resp, cancellation_token, "Anthropic",
+        )
+        _raise_if_token_cancelled(
+            cancellation_token, "Anthropic",
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
+        data = resp.json()
+        _raise_if_token_cancelled(
+            cancellation_token, "Anthropic",
+            abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+        )
+    except requests.exceptions.RequestException:
+        if _token_cancelled(cancellation_token):
+            _raise_if_token_cancelled(
+                cancellation_token, "Anthropic",
+                abort_supported=bool(response_watcher and response_watcher[2].get("abort_supported")),
+            )
+        raise
+    finally:
+        _stop_response_cancellation_watcher(response_watcher)
 
     # Anthropic response: {"content": [{"type": "text", "text": "..."}], ...}
     raw_content = ""

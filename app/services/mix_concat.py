@@ -150,111 +150,7 @@ def probe_duration_seconds(path: str, ffmpeg_bin: str = "ffmpeg") -> float | Non
     return None
 
 
-def build_hold_crossfade_filter(
-    durations: Sequence[float],
-    *,
-    hold_sec: float = HOLD_TAIL_SEC,
-    fade_sec: float = FADE_SEC,
-    with_audio: bool = True,
-) -> tuple[str, str, str | None]:
-    """Return ffmpeg filter_complex, video label, optional audio label."""
-    count = len(durations)
-    if count < 2:
-        raise ValueError("need at least two clip durations")
-    fade = float(fade_sec)
-    hold = float(hold_sec)
-    parts: list[str] = []
-    padded = [max(0.1, float(duration)) + hold for duration in durations]
-    for index in range(count):
-        parts.append(
-            f"[{index}:v]tpad=stop_mode=clone:stop_duration={hold:.3f}[v{index}]"
-        )
-        if with_audio:
-            parts.append(f"[{index}:a]apad=pad_dur={hold:.3f}[a{index}]")
-
-    video_label = "v0"
-    audio_label = "a0" if with_audio else None
-    elapsed = padded[0]
-    for index in range(1, count):
-        pair_fade = min(fade, hold, padded[index - 1] * 0.4, padded[index] * 0.4)
-        offset = max(0.05, elapsed - pair_fade)
-        next_video = f"vx{index}"
-        parts.append(
-            f"[{video_label}][v{index}]xfade=transition=fade:duration={pair_fade:.3f}"
-            f":offset={offset:.3f}[{next_video}]"
-        )
-        video_label = next_video
-        if with_audio:
-            next_audio = f"ax{index}"
-            parts.append(
-                f"[{audio_label}][a{index}]acrossfade=d={pair_fade:.3f}[{next_audio}]"
-            )
-            audio_label = next_audio
-        elapsed = elapsed + padded[index] - pair_fade
-    return ";".join(parts), video_label, audio_label
-
-
-def concat_with_tail_hold_and_crossfade(
-    clip_paths: Sequence[str],
-    output_path: str,
-    *,
-    hold_sec: float = HOLD_TAIL_SEC,
-    fade_sec: float = FADE_SEC,
-    abort_callback: Callable[[], bool] | None = None,
-) -> bool:
-    """Re-encode clips with a 0.5s freeze tail and ~0.4s crossfade."""
-    ffmpeg_bin = os.environ.get("FFMPEG_BINARY", "ffmpeg")
-    valid = [os.path.abspath(path) for path in clip_paths if os.path.isfile(path)]
-    if len(valid) < 2:
-        return False
-    durations = [probe_duration_seconds(path, ffmpeg_bin) for path in valid]
-    if any(duration is None for duration in durations):
-        return False
-    # Probe audio on the first clip.
-    with_audio = True
-    try:
-        ffprobe_bin = ffmpeg_bin.replace("ffmpeg", "ffprobe")
-        probe = subprocess.run(
-            [
-                ffprobe_bin, "-i", valid[0], "-show_streams",
-                "-select_streams", "a", "-loglevel", "error",
-            ],
-            capture_output=True, text=True, timeout=10,
-        )
-        with_audio = "codec_type=audio" in (probe.stdout or "") or bool(
-            (probe.stdout or "").strip()
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        with_audio = True
-    filter_str, video_label, audio_label = build_hold_crossfade_filter(
-        [float(value) for value in durations if value is not None],
-        hold_sec=hold_sec,
-        fade_sec=fade_sec,
-        with_audio=with_audio,
-    )
-    cmd = [ffmpeg_bin, "-y"]
-    for path in valid:
-        cmd += ["-i", path.replace("\\", "/")]
-    cmd += ["-filter_complex", filter_str, "-map", f"[{video_label}]"]
-    if with_audio and audio_label:
-        cmd += ["-map", f"[{audio_label}]", "-c:a", "aac"]
-    cmd += [
-        "-c:v", "libx264", "-crf", "18", "-preset", "fast",
-        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-        os.path.abspath(output_path).replace("\\", "/"),
-    ]
-    print(
-        f"[MixConcat] hold={hold_sec:.2f}s fade={fade_sec:.2f}s "
-        f"clips={len(valid)} -> {os.path.basename(output_path)}"
-    )
-    return _run_ffmpeg_command(
-        cmd,
-        output_path,
-        abort_callback=abort_callback,
-    )
-
-
-def probe_clip_has_audio(path: str, ffmpeg_bin: str = "ffmpeg") -> bool:
+def probe_has_audio(path: str, ffmpeg_bin: str = "ffmpeg") -> bool:
     """True when *path* has at least one audio stream.
 
     Fail open on a flaky probe so a later dialogue clip is not dropped
@@ -282,12 +178,139 @@ def probe_clip_has_audio(path: str, ffmpeg_bin: str = "ffmpeg") -> bool:
             return True
 
 
-def probe_clip_audio_flags(
+def probe_audio_flags(
     paths: Sequence[str],
     ffmpeg_bin: str = "ffmpeg",
 ) -> list[bool]:
     """Per-clip audio presence. Do not trust only the first file."""
-    return [probe_clip_has_audio(path, ffmpeg_bin) for path in paths]
+    return [probe_has_audio(path, ffmpeg_bin) for path in paths]
+
+
+def _audio_pad_filter(index: int, padded_duration: float, hold: float, has_stream: bool) -> str:
+    """Keep acrossfade legal when some clips are video-only.
+
+    Missing streams get synthesized stereo silence at 48 kHz so later
+    dialogue is not discarded and ffmpeg does not fail on ``[n:a]``.
+    """
+    if has_stream:
+        return (
+            f"[{index}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+            f"apad=pad_dur={hold:.3f}[a{index}]"
+        )
+    return (
+        f"anullsrc=channel_layout=stereo:sample_rate=48000:d={padded_duration:.3f},"
+        f"aformat=sample_fmts=fltp:channel_layouts=stereo[a{index}]"
+    )
+
+
+def build_hold_crossfade_filter(
+    durations: Sequence[float],
+    *,
+    hold_sec: float = HOLD_TAIL_SEC,
+    fade_sec: float = FADE_SEC,
+    with_audio: bool = True,
+    has_audio: Sequence[bool] | None = None,
+) -> tuple[str, str, str | None]:
+    """Return ffmpeg filter_complex, video label, optional audio label."""
+    count = len(durations)
+    if count < 2:
+        raise ValueError("need at least two clip durations")
+    if has_audio is not None and len(has_audio) != count:
+        raise ValueError("has_audio length must match durations")
+    fade = float(fade_sec)
+    hold = float(hold_sec)
+    parts: list[str] = []
+    padded = [max(0.1, float(duration)) + hold for duration in durations]
+    audio_flags = [True] * count if with_audio and has_audio is None else (
+        [bool(flag) for flag in has_audio] if with_audio and has_audio is not None else None
+    )
+    if audio_flags is not None and not any(audio_flags):
+        audio_flags = None
+    mix_audio = audio_flags is not None
+    use_silence_pads = bool(
+        audio_flags is not None
+        and has_audio is not None
+        and not all(audio_flags)
+    )
+    for index in range(count):
+        parts.append(
+            f"[{index}:v]tpad=stop_mode=clone:stop_duration={hold:.3f}[v{index}]"
+        )
+        if mix_audio:
+            if use_silence_pads and audio_flags is not None:
+                parts.append(
+                    _audio_pad_filter(index, padded[index], hold, audio_flags[index])
+                )
+            else:
+                parts.append(f"[{index}:a]apad=pad_dur={hold:.3f}[a{index}]")
+
+    video_label = "v0"
+    audio_label = "a0" if mix_audio else None
+    elapsed = padded[0]
+    for index in range(1, count):
+        pair_fade = min(fade, hold, padded[index - 1] * 0.4, padded[index] * 0.4)
+        offset = max(0.05, elapsed - pair_fade)
+        next_video = f"vx{index}"
+        parts.append(
+            f"[{video_label}][v{index}]xfade=transition=fade:duration={pair_fade:.3f}"
+            f":offset={offset:.3f}[{next_video}]"
+        )
+        video_label = next_video
+        if mix_audio:
+            next_audio = f"ax{index}"
+            parts.append(
+                f"[{audio_label}][a{index}]acrossfade=d={pair_fade:.3f}[{next_audio}]"
+            )
+            audio_label = next_audio
+        elapsed = elapsed + padded[index] - pair_fade
+    return ";".join(parts), video_label, audio_label
+
+
+def concat_with_tail_hold_and_crossfade(
+    clip_paths: Sequence[str],
+    output_path: str,
+    *,
+    hold_sec: float = HOLD_TAIL_SEC,
+    fade_sec: float = FADE_SEC,
+    abort_callback: Callable[[], bool] | None = None,
+) -> bool:
+    """Re-encode clips with a 0.5s freeze tail and ~0.4s crossfade."""
+    ffmpeg_bin = os.environ.get("FFMPEG_BINARY", "ffmpeg")
+    valid = [os.path.abspath(path) for path in clip_paths if os.path.isfile(path)]
+    if len(valid) < 2:
+        return False
+    durations = [probe_duration_seconds(path, ffmpeg_bin) for path in valid]
+    if any(duration is None for duration in durations):
+        return False
+    audio_flags = probe_audio_flags(valid, ffmpeg_bin)
+    with_audio = any(audio_flags)
+    filter_str, video_label, audio_label = build_hold_crossfade_filter(
+        [float(value) for value in durations if value is not None],
+        hold_sec=hold_sec,
+        fade_sec=fade_sec,
+        with_audio=with_audio,
+        has_audio=audio_flags if with_audio else None,
+    )
+    cmd = [ffmpeg_bin, "-y"]
+    for path in valid:
+        cmd += ["-i", path.replace("\\", "/")]
+    cmd += ["-filter_complex", filter_str, "-map", f"[{video_label}]"]
+    if with_audio and audio_label:
+        cmd += ["-map", f"[{audio_label}]", "-c:a", "aac"]
+    cmd += [
+        "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        os.path.abspath(output_path).replace("\\", "/"),
+    ]
+    print(
+        f"[MixConcat] hold={hold_sec:.2f}s fade={fade_sec:.2f}s "
+        f"clips={len(valid)} -> {os.path.basename(output_path)}"
+    )
+    return _run_ffmpeg_command(
+        cmd,
+        output_path,
+        abort_callback=abort_callback,
+    )
 
 
 def build_hard_concat_filter(

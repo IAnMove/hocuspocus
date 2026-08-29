@@ -55,6 +55,7 @@ test('Workspaces processing lists planned shots, models and a video placeholder'
   useStore.setState({
     dashboardLoading: false,
     dashboardLoadError: null,
+    dashboardPipelineTotal: 12,
     dashboardPipelineList: [{
       id: 'song-1',
       status: 'failed',
@@ -109,6 +110,7 @@ test('Workspaces processing lists planned shots, models and a video placeholder'
       total_time_sec: 1,
     },
     loadPipelineList: async () => undefined,
+    loadMorePipelineList: async () => undefined,
     loadSavedPipeline: async () => undefined,
     retryDashboardLoad: async () => undefined,
     resumePipeline: async () => undefined,
@@ -135,6 +137,7 @@ test('Workspaces processing lists planned shots, models and a video placeholder'
     assert.ok(screen.getByRole('button', { name: /Proponer en seleccionados/ }))
     assert.ok(screen.getByPlaceholderText(/quita todos los MC/))
     assert.ok(screen.getByText(/Queue from planned prompts/))
+    assert.ok(screen.getByRole('button', { name: /Más hilos \(1\/12\)/ }))
   } finally {
     cleanup()
   }
