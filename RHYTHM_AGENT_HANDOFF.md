@@ -814,3 +814,35 @@ Siguientes ampliaciones recomendadas, en orden:
 5. Conectar `analyze_audio` + `apply_beat_motion` para operar el flujo de ritmo ya implementado en 3D Video.
 6. Llevar el bucle al backend si se necesita persistencia cuando el panel/pestaña se cierra.
 7. Mantener un futuro CLI como **Developer Agent** separado, con sandbox, permisos, aprobación y diff; no usarlo para navegación/formularios/cola normal.
+
+## 22. Arreglo de navegación, Markdown y órdenes directas (2026-08-30)
+
+Tras probar el mago en la aplicación se observó este caso real:
+
+- el usuario pidió directamente un vídeo;
+- el LLM respondió con una lista Markdown de preguntas innecesarias;
+- sólo propuso `open_tab("studio")`;
+- Studio ya era la barra lateral activa, pero conservaba el modo 3D;
+- el chat mostró “He abierto Studio” aunque visualmente no cambió nada y no se
+  creó ningún trabajo.
+
+El arreglo mantiene al LLM como planificador, pero añade garantías locales:
+
+- las respuestas del mago renderizan Markdown básico mediante nodos React
+  seguros, sin HTML crudo ni una dependencia nueva;
+- una petición inequívoca como “hazme/genera/crea un vídeo de X” se reconcilia
+  siempre con `prepare_video` + `start_generation` y valores conservadores si
+  el LLM sólo pregunta o navega;
+- preguntas explicativas y órdenes negadas siguen siendo de sólo consulta;
+- `prepare_video` selecciona de verdad Studio, el modo Video y la galería de
+  vídeos antes de rellenar el formulario;
+- `open_tab` usa el estado canónico de cada destino, cierra overlays o el drawer
+  móvil cuando corresponde, expande Director mediante el evento ya existente y
+  distingue “ya estaba visible” de “he abierto”;
+- Character Creator apunta ahora a `characters`, no a la antigua vista `avatars`
+  de Edits.
+
+La verificación de este arreglo no debe lanzar una generación real: basta con
+lint, build y el contrato de marca. La prueba manual posterior debe usar una
+petición explícita y comprobar que el resultado del chat incluye tanto la
+preparación como el identificador real de la tarea creada en la cola.

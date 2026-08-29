@@ -7,8 +7,10 @@ import {
   executeAgentActions,
   HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
   parseAgentTurn,
+  reconcileAgentTurnWithRequest,
   type AgentActionResult,
 } from './agentActions'
+import { AgentMarkdown } from './AgentMarkdown'
 
 export type AgentVisualState = 'idle' | 'listening' | 'thinking' | 'acting' | 'success' | 'error'
 
@@ -141,7 +143,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
         json_schema: HOCUSPOCUS_AGENT_RESPONSE_SCHEMA,
       })
       if (!mountedRef.current) return
-      const turn = parseAgentTurn(answer)
+      const turn = reconcileAgentTurnWithRequest(question, parseAgentTurn(answer))
       let results: AgentActionResult[] = []
       if (turn.actions.length) {
         setState('acting')
@@ -221,8 +223,8 @@ export function AgentAssistantPanel({ workspace, tasks, onClose }: AgentAssistan
           <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={message.role === 'user'
               ? 'max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-blue-500/20 px-3 py-2 leading-relaxed text-blue-50'
-              : 'max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-amber-200/10 bg-amber-100/[.045] px-3 py-2 leading-relaxed text-amber-50/85'}>
-              {message.text}
+              : 'max-w-[92%] rounded-2xl rounded-bl-sm border border-amber-200/10 bg-amber-100/[.045] px-3 py-2 leading-relaxed text-amber-50/85'}>
+              {message.role === 'assistant' ? <AgentMarkdown text={message.text} /> : message.text}
             </div>
           </div>
         ))}

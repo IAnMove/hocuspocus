@@ -196,6 +196,55 @@ export function parseAgentTurn(raw: string): AgentTurn {
   }
 }
 
+const EXPLICIT_VIDEO_REQUESTS = [
+  /\b(?:hazme|hacedme|generame|genérame|creame|créame)\b[^.!?\n]*\b(?:video|vídeo|clip)\b/i,
+  /\b(?:haz|haced|genera|generad|crea|cread|lanza|lanzad|renderiza|renderizad|encola|encolad)\b[^.!?\n]*\b(?:video|vídeo|clip)\b/i,
+  /\b(?:quiero|quisiera)\s+que\s+(?:me\s+)?(?:hagas|generes|crees|lances|pongas\s+en\s+marcha|env[ií]es)\b[^.!?\n]*\b(?:video|vídeo|clip)\b/i,
+  /\b(?:puedes|podr[ií]as)\s+(?:hacerme|generarme|crearme|lanzar|poner\s+en\s+marcha|enviar)\b[^.!?\n]*\b(?:video|vídeo|clip)\b/i,
+  /\b(?:ponme|pones|pon|poned)\b[^.!?\n]*\ben\s+marcha\b[^.!?\n]*\b(?:video|vídeo|clip)\b/i,
+  /\b(?:pon|poned)\b[^.!?\n]*\b(?:video|vídeo|clip)\b[^.!?\n]*\b(?:en\s+marcha|a\s+generar|en\s+cola)\b/i,
+  /\b(?:manda|mandad|env[ií]a|enviad)\b[^.!?\n]*\b(?:video|vídeo|clip)\b[^.!?\n]*\b(?:cola|generaci[oó]n)\b/i,
+  /\b(?:make|create|generate|render|launch|start|queue)\b[^.!?\n]*\b(?:video|clip)\b/i,
+]
+
+const NEGATED_VIDEO_REQUEST = /\b(?:no|sin|don['’]?t|do\s+not)\b[^.!?\n]{0,32}\b(?:hagas|generes|crees|lances|encoles|hacer|generar|crear|lanzar|encolar|make|create|generate|render|launch|start|queue)\b/i
+
+export function isExplicitVideoGenerationRequest(request: string): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_VIDEO_REQUEST.test(text)) return false
+  return EXPLICIT_VIDEO_REQUESTS.some(pattern => pattern.test(text))
+}
+
+/**
+ * The LLM remains the planner, but an unmistakable user command must not turn
+ * into a clarification loop. Repair that one high-value intent locally with
+ * conservative defaults. This is deliberately narrow: questions such as
+ * “how do I generate a video?” and negated requests remain read-only.
+ */
+export function reconcileAgentTurnWithRequest(request: string, turn: AgentTurn): AgentTurn {
+  if (!isExplicitVideoGenerationRequest(request)) return turn
+
+  const navigation = turn.actions
+    .filter((action): action is AgentOpenTabAction => action.type === 'open_tab')
+    .slice(0, MAX_ACTIONS - 2)
+  const prepare = turn.actions.find(
+    (action): action is AgentPrepareVideoAction => action.type === 'prepare_video',
+  ) || {
+      type: 'prepare_video',
+      prompt: request.trim().slice(0, 8_000),
+      durationSeconds: 5,
+      resolutionPreset: '720p',
+      aspectRatio: '16:9',
+      seed: -1,
+      outputCount: 1,
+    } satisfies AgentPrepareVideoAction
+
+  return {
+    reply: '¡La petición está clara! Usaré un conjuro de vídeo estándar con los ajustes disponibles, prepararé Studio → Video y lo enviaré a la cola. 🪄',
+    actions: [...navigation, prepare, { type: 'start_generation' }],
+  }
+}
+
 export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
@@ -275,7 +324,7 @@ const TAB_TARGETS: Partial<Record<AgentTab, MediaFilter>> = {
   video_editor: 'videoeditor',
   video_3d: 'scene3d',
   animate_3d: 'animate3d',
-  character_creator: 'avatars',
+  character_creator: 'characters',
   character_kit: 'characters',
   workspaces: 'workspaces',
 }
@@ -302,28 +351,48 @@ const TAB_LABELS: Record<AgentTab, string> = {
 
 function openTab(tab: AgentTab): string {
   const state = useStore.getState()
+  const overlayWasVisible = state.settingsOpen || state.dashboardOpen
+  const mobile = window.matchMedia('(max-width: 767px)').matches
+  const sidebarWasVisible = !mobile || state.sidebarOpen
   if (tab === 'settings') {
+    const alreadyVisible = state.settingsOpen
     state.setDashboardOpen(false)
+    state.setSidebarOpen(false)
     state.setSettingsOpen(true)
-    return `He abierto ${TAB_LABELS[tab]}.`
+    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
   }
   state.setSettingsOpen(false)
   if (tab === 'productions') {
+    const alreadyVisible = state.dashboardOpen
+    state.setSidebarOpen(false)
     state.setDashboardOpen(true)
-    return `He abierto ${TAB_LABELS[tab]}.`
+    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
   }
   state.setDashboardOpen(false)
   if (tab === 'director') {
+    const directorWasCollapsed = window.localStorage.getItem('maestro-director-sidebar-collapsed') === 'true'
+    const alreadyVisible = state.sidebarMode === 'director'
+      && sidebarWasVisible
+      && !directorWasCollapsed
+      && !overlayWasVisible
     state.setSidebarMode('director')
     state.setSidebarOpen(true)
+    window.dispatchEvent(new Event('maestro:director-open'))
+    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
   } else if (tab === 'studio') {
+    const alreadyVisible = state.sidebarMode === 'studio' && sidebarWasVisible && !overlayWasVisible
     state.setSidebarMode('studio')
     state.setSidebarOpen(true)
+    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
   } else {
     const mediaFilter = TAB_TARGETS[tab]
-    if (mediaFilter) state.setMediaFilter(mediaFilter)
+    const alreadyVisible = mediaFilter === state.mediaFilter && !overlayWasVisible
+    if (mediaFilter) {
+      state.setMediaFilter(mediaFilter)
+      state.setSidebarOpen(false)
+    }
+    return alreadyVisible ? `${TAB_LABELS[tab]} ya estaba visible.` : `He abierto ${TAB_LABELS[tab]}.`
   }
-  return `He abierto ${TAB_LABELS[tab]}.`
 }
 
 function visibleT2vModels(models: ModelDef[]): ModelDef[] {
