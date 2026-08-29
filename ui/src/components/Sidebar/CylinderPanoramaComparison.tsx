@@ -15,6 +15,10 @@ export function CylinderPanoramaComparison({ source, onClose }: { source: string
   const [rotation, setRotation] = useState(0)
   const [fov, setFov] = useState(75)
   const [error, setError] = useState<string | null>(null)
+  const rotationRef = useRef(rotation)
+  const fovRef = useRef(fov)
+  rotationRef.current = rotation
+  fovRef.current = fov
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -57,8 +61,8 @@ export function CylinderPanoramaComparison({ source, onClose }: { source: string
           const height = Math.max(1, Math.round(canvas.clientHeight * devicePixelRatio))
           if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
           gl.viewport(0, 0, width, height)
-          gl.uniform1f(gl.getUniformLocation(program!, 'uHorizontalRotation'), rotation)
-          gl.uniform1f(gl.getUniformLocation(program!, 'uVerticalFov'), fov)
+          gl.uniform1f(gl.getUniformLocation(program!, 'uHorizontalRotation'), rotationRef.current)
+          gl.uniform1f(gl.getUniformLocation(program!, 'uVerticalFov'), fovRef.current)
           gl.uniform1f(gl.getUniformLocation(program!, 'uAspect'), width / height)
           gl.drawArrays(gl.TRIANGLES, 0, 6)
         }

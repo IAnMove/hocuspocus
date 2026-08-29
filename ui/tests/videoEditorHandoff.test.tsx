@@ -38,7 +38,8 @@ function clip(name: string) {
 
 test('Series handoff validates all sources before replacing the draft and can retry', { concurrency: false }, async () => {
   const { render, screen, waitFor, cleanup, fireEvent } = await import('@testing-library/react')
-  const { VideoEditorPanel, videoEditorDraftStorageKey } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
+  const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
+  const { videoEditorDraftStorageKey } = await import('../src/features/video-editor/editorDraft.ts')
   const draftKey = videoEditorDraftStorageKey('default')
   let failSecond = true
   const probed: string[] = []

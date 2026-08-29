@@ -84,7 +84,7 @@ def main() -> int:
     # These names are persisted/API/subprocess contracts. BRAND-01 must never
     # turn a display-name change into a destructive data migration.
     compatibility = {
-        ROOT / "ui" / "src" / "features" / "video-editor" / "VideoEditorPanel.tsx":
+        ROOT / "ui" / "src" / "features" / "video-editor" / "editorDraft.ts":
             "maestro-video-editor-draft-v1",
         ROOT / "ui" / "src" / "features" / "stories" / "types.ts":
             "| 'maestro'",

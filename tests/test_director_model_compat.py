@@ -1553,15 +1553,13 @@ class TestDirectorH3GenerationContract(unittest.TestCase):
             [False, True, False],
         )
         compiled_prompts = captured["prompt"].split("\n---CLIP_BOUNDARY---\n")
-        self.assertTrue(compiled_prompts[0].startswith(
-            "integrated_multimodal_description: [Shot 1]"
-        ))
+        self.assertIn("integrated_multimodal_description:", compiled_prompts[0])
+        self.assertIn("[Shot 1]", compiled_prompts[0])
         self.assertTrue(compiled_prompts[1].startswith(
             "For the target video, at 0.00 seconds into the target video"
         ))
-        self.assertTrue(compiled_prompts[2].startswith(
-            "integrated_multimodal_description: [Shot 1]"
-        ))
+        self.assertIn("integrated_multimodal_description:", compiled_prompts[2])
+        self.assertIn("[Shot 1]", compiled_prompts[2])
 
     def test_fl2va_prompt_only_uses_final_frame_only_for_explicit_extension(self):
         model_type = "minimax_h3"

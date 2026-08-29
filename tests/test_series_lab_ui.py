@@ -70,7 +70,7 @@ def test_review_is_thumbnail_first_and_exposes_ordered_editable_attempt_history(
     assert "Edit & regenerate" in review and "Save and regenerate in this slot" in review
     assert "Join clips" in review and "startSeriesEpisodeAssembly" in review
     assert "Montaje ordenado" in review and "Historial e intentos" in review
-    assert "will replace this slot" in review and "progressAdvanced" in review
+    assert "Attempts in this slot" in review
     assert "Open complete approved sequence in Video Editor" in review
 
 

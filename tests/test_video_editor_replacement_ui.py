@@ -18,7 +18,7 @@ def test_selected_montage_clip_can_be_opened_in_video_creation():
     assert "loadSettingsFromOutput()" in editor
     assert "writeVideoEditorReplacementTarget" in editor
     assert "setMediaFilter('videos')" in editor
-    assert "persistEditorDraft(clips, projectName, resolution, fps)" in editor
+    assert "persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)" in editor
 
 
 def test_generated_video_can_replace_only_the_original_timeline_slot():
@@ -36,4 +36,4 @@ def test_generated_video_can_replace_only_the_original_timeline_slot():
     assert "clip.id === replacement.clipId" in editor
     assert "clearVideoEditorReplacementResult()" in editor
     assert "clearVideoEditorReplacementTarget()" in editor
-    assert "persistEditorDraft(next, projectName, resolution, fps)" in editor
+    assert "persistEditorDraft(next, projectName, resolution, fps, draftWorkspaceRef.current)" in editor

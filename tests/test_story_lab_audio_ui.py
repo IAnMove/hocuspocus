@@ -46,7 +46,7 @@ def test_chained_music_and_director_workflows_expose_cancel_controls():
     assert "cancelMusicQueue" in story
     assert "Cancelling active request" in story
     assert "cancelStoryMusicCandidatesJob(jobId)" in story
-    assert "api.cancelCanonicalTask(task.id, activeWorkspace)" in activity
+    assert "api.cancelCanonicalTask(taskId, workspace)" in activity
     assert "active && task.cancelable" in activity
     assert "Cancelling…" in activity
 

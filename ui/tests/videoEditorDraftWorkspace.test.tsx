@@ -12,7 +12,7 @@ const clip = {
 test('Video Editor drafts are isolated per workspace and migrate the legacy key once', () => {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
   Object.assign(globalThis, { window: dom.window, document: dom.window.document })
-  return import('../src/features/video-editor/VideoEditorPanel.tsx').then(({
+  return import('../src/features/video-editor/editorDraft.ts').then(({
     loadEditorDraft, persistEditorDraft, videoEditorDraftStorageKey,
   }) => {
     dom.window.localStorage.clear()
