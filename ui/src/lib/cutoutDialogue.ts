@@ -31,7 +31,7 @@ export function normalizeFaceBinding(value: unknown): SceneFaceBinding | undefin
   if (!value || typeof value !== 'object') return undefined
   const raw = value as Record<string, unknown>
   const poseLayerId = typeof raw.poseLayerId === 'string' ? raw.poseLayerId.trim() : ''
-  const role = raw.role === 'mouth' || raw.role === 'blink' ? raw.role : undefined
+  const role = raw.role === 'mouth' || raw.role === 'blink' || raw.role === 'eyes' ? raw.role : undefined
   const state = FACE_STATES.includes(raw.state as SceneFaceBindingState) ? raw.state as SceneFaceBindingState : undefined
   if (!poseLayerId || !role) return undefined
   return { poseLayerId, role, ...(state ? { state } : {}) }
@@ -69,7 +69,7 @@ export function findCutoutMouthLayers(layers: SceneLayer[], poseLayerId?: string
 export function isCutoutFaceLayer(layer: SceneLayer): boolean {
   if (layer.faceBinding) return true
   const label = layerLabel(layer)
-  return label.includes('mouth') || /(?:blink|closed)[ _-]*(?:eye|eyes)|(?:eye|eyes)[ _-]*(?:blink|closed)/i.test(label)
+  return label.includes('mouth') || label.includes('eyes') || /(?:blink|closed)[ _-]*(?:eye|eyes)|(?:eye|eyes)[ _-]*(?:blink|closed|open)/i.test(label)
 }
 
 /**
@@ -228,4 +228,70 @@ export function applyCutoutDialogue(layers: CutoutMouthLayers, plan: CutoutDialo
     for (const layer of participants) framesByLayer[layer.id].push(pointFor(layer, plan.end, Number(layer === layers.closed)))
   }
   return framesByLayer
+}
+
+const facePoint = (layer: SceneLayer, time: number, opacity: number): SceneKeyframe => pointFor(layer, time, opacity)
+
+const layerChangesOpacity = (layer: SceneLayer) => {
+  const frames = layer.animation?.keyframes ?? []
+  if (frames.length < 2) return false
+  const values = [layer.transform.opacity ?? 1, ...frames.map(frame => frame.opacity ?? 1)]
+  return Math.max(...values) - Math.min(...values) > .2
+}
+
+function idleBlinkKeyframes(layer: SceneLayer, duration: number, visibleAtRest: boolean): SceneKeyframe[] {
+  const frames = [facePoint(layer, 0, visibleAtRest ? 1 : 0)]
+  const interval = 2.4
+  const closed = .12
+  for (let time = interval; time < duration - .25; time += interval) {
+    frames.push(facePoint(layer, time, visibleAtRest ? 1 : 0))
+    frames.push(facePoint(layer, time + .001, visibleAtRest ? 0 : 1))
+    frames.push(facePoint(layer, Math.min(duration, time + closed), visibleAtRest ? 0 : 1))
+    frames.push(facePoint(layer, Math.min(duration, time + closed + .001), visibleAtRest ? 1 : 0))
+  }
+  frames.push(facePoint(layer, duration, visibleAtRest ? 1 : 0))
+  return frames
+}
+
+/** Make Play/Export actually flap mouths and blink when the kit is only at rest. */
+export function ensureCutoutFacePlayback(
+  layers: SceneLayer[],
+  duration: number,
+  fps = 30,
+  dialogueBeats: SceneDialogueBeat[] = [],
+  spokenLine = '',
+): SceneLayer[] {
+  const mouths = layers.filter(layer => layer.faceBinding?.role === 'mouth')
+  const blinks = layers.filter(layer => layer.faceBinding?.role === 'blink')
+  const openEyes = layers.filter(layer => layer.faceBinding?.role === 'eyes' && layer.faceBinding.state === 'open')
+  if (!mouths.length && !blinks.length && !openEyes.length) return layers
+  let next = layers
+  if (mouths.length >= 2 && !mouths.some(layerChangesOpacity)) {
+    if (dialogueBeats.length) {
+      next = rebuildCutoutDialogueLayers(next, dialogueBeats, fps, duration)
+    } else {
+      const line = spokenLine.trim() || 'Hola, hola, hola.'
+      const plan = planCutoutDialogue(line, .2, Math.max(1.4, duration - .2), fps)
+      const frames = applyCutoutDialogue(findCutoutMouthLayers(next), plan)
+      next = next.map(layer => frames[layer.id]
+        ? { ...layer, animation: { ...layer.animation, keyframes: frames[layer.id], duration, curve: 'hold' } }
+        : layer)
+    }
+  }
+  if (blinks.length && !blinks.some(layerChangesOpacity)) {
+    next = next.map(layer => {
+      if (layer.faceBinding?.role === 'blink') {
+        return { ...layer, animation: { ...layer.animation, keyframes: idleBlinkKeyframes(layer, duration, false), duration, curve: 'hold' } }
+      }
+      if (layer.faceBinding?.role === 'eyes' && layer.faceBinding.state === 'open') {
+        return { ...layer, animation: { ...layer.animation, keyframes: idleBlinkKeyframes(layer, duration, true), duration, curve: 'hold' } }
+      }
+      return layer
+    })
+  } else if (openEyes.length && !openEyes.some(layerChangesOpacity) && blinks.some(layerChangesOpacity)) {
+    next = next.map(layer => layer.faceBinding?.role === 'eyes' && layer.faceBinding.state === 'open'
+      ? { ...layer, animation: { ...layer.animation, keyframes: idleBlinkKeyframes(layer, duration, true), duration, curve: 'hold' } }
+      : layer)
+  }
+  return next
 }

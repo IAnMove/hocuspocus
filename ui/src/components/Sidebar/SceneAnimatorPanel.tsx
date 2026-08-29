@@ -13,8 +13,8 @@ import { PENDING_SCENE_KEY } from '../../lib/sceneOutput'
 import { assessNarrativeAsset } from '../../lib/assetSuitability'
 import { getSceneClipTime } from '../../lib/sceneClip'
 import { sanitizeSceneMotion } from '../../lib/sceneMotion'
-import { applyCutoutDialogue, bindCutoutFaceToPose, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
-import { captureCharacterFaceAnchor, characterKitAssetFromLayer, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
+import { applyCutoutDialogue, bindCutoutFaceToPose, ensureCutoutFacePlayback, findCutoutMouthLayers, isCutoutFaceLayer, normalizeFaceBinding, planCutoutDialogue, rebuildCutoutDialogueLayers, type SceneDialogueBeat } from '../../lib/cutoutDialogue'
+import { captureCharacterFaceAnchor, characterKitAssetFromLayer, createCharacterKit, emptyCharacterKitLibrary, mountCharacterKitLayers, syncMountedCharacterKitLayers, syncSceneCharacterKits, type CharacterKit, type CharacterKitAlphaStatus, type CharacterMouthState } from '../../lib/characterKit'
 import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } from '../../lib/characterKitHandoff'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, NARRATIVE_SCENE_TEMPLATES, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
@@ -23,7 +23,8 @@ import { normalizeSeamOccluder, paintSeamOccluder, seamOccluderDataUri, type Sea
 import type { Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneLayer, SceneLayerType, SceneMask } from '../../types'
 import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
-import { CharacterKitFaceRigPanel } from '../../features/characters/CharacterKitFaceRigPanel'
+import { CharacterKitLibraryPanel } from '../../features/characters/CharacterKitLibraryPanel'
+import type { CharacterKitEditorTab } from '../../features/characters/characterKitGuide'
 
 type Point = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 type AnimatorLayerType = SceneLayerType
@@ -522,7 +523,7 @@ export function SceneAnimatorPanel() {
   const [characterKitPoseId, setCharacterKitPoseId] = useState('base')
   const [characterKitMouthState, setCharacterKitMouthState] = useState<CharacterMouthState>('wide')
   const [characterKitAlphaStatus, setCharacterKitAlphaStatus] = useState<CharacterKitAlphaStatus>('transparent')
-  const [characterKitEditorTab, setCharacterKitEditorTab] = useState<'kit' | 'face-rig'>('kit')
+  const [characterKitEditorTab, setCharacterKitEditorTab] = useState<CharacterKitEditorTab>('face-rig')
   const [characterKitBusy, setCharacterKitBusy] = useState(false)
   const [characterKitError, setCharacterKitError] = useState<string | null>(null)
   const characterKitLibraryRef = useRef(characterKitLibrary)
@@ -685,7 +686,13 @@ export function SceneAnimatorPanel() {
         setMessage(`Opened Character Kit Face Rig from Character Creator. Save the kit after reviewing the base pose.`)
         return
       }
-      setCharacterKitDraft(library.kits[library.activeId] ? structuredClone(library.kits[library.activeId]) : null)
+      const active = library.kits[library.activeId]
+      if (active) {
+        setCharacterKitDraft(structuredClone(active))
+        setCharacterKitEditorTab(active.base?.reviewState === 'approved' || Object.values(active.poses).some(pose => pose.reviewState === 'approved') ? 'face-rig' : 'kit')
+      } else {
+        setCharacterKitDraft(null)
+      }
     }).catch(error => {
       if (!cancelled) setCharacterKitError(error instanceof Error ? error.message : 'Could not load Character Kits.')
     }).finally(() => { if (!cancelled) setCharacterKitBusy(false) })
@@ -716,6 +723,15 @@ export function SceneAnimatorPanel() {
   }, [])
 
   useEffect(() => { sceneRef.current = scene }, [scene])
+  useEffect(() => {
+    if (!Object.keys(characterKitLibrary.kits).length) return
+    const current = sceneRef.current
+    const synced = syncSceneCharacterKits(current.layers, characterKitLibrary) as AnimatorLayer[]
+    if (synced === current.layers) return
+    const next = { ...current, layers: synced }
+    sceneRef.current = next
+    setScene(next)
+  }, [characterKitLibrary])
   useEffect(() => { historyRevisionRef.current = historyRevision }, [historyRevision])
   const replaceScene = (next: AnimatorScene) => { sceneRef.current = next; setScene(next) }
   const updateScene = (updater: (current: AnimatorScene) => AnimatorScene) => {
@@ -1144,7 +1160,29 @@ export function SceneAnimatorPanel() {
     }
     animationRef.current = requestAnimationFrame(frame)
   }
-  const play = () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); setProgress(0); animate() }
+  const applyCharacterKitsToScene = (library = characterKitLibraryRef.current) => {
+    const current = sceneRef.current
+    const synced = syncSceneCharacterKits(current.layers, library) as AnimatorLayer[]
+    if (synced === current.layers) return current
+    const next = { ...current, layers: synced }
+    sceneRef.current = next
+    setScene(next)
+    return next
+  }
+  const prepareFacePlayback = () => {
+    const current = applyCharacterKitsToScene()
+    const layers = ensureCutoutFacePlayback(current.layers, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
+    if (layers === current.layers) return
+    const next = { ...current, layers }
+    sceneRef.current = next
+    setScene(next)
+  }
+  const play = () => {
+    prepareFacePlayback()
+    if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    setProgress(0)
+    animate()
+  }
   const appendPresetAtPlayhead = (layer: AnimatorLayer, preset: Pick<Preset, 'start' | 'end' | 'duration' | 'curve'> | CameraPreset) => {
     const sceneTime = Math.round(progress * scene.duration * fps) / fps
     const timing = getSceneLayerTiming(layer)
@@ -1624,7 +1662,7 @@ export function SceneAnimatorPanel() {
         const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
         return keyframes ? withSceneKeyframes(timedLayer, keyframes, timedLayer.animation.duration) as AnimatorLayer : timedLayer
       }))
-      const layers = breakDependencyCycles(normalizedLayers)
+      const layers = syncSceneCharacterKits(breakDependencyCycles(normalizedLayers), characterKitLibraryRef.current) as AnimatorLayer[]
       const duration = Math.min(3600, Math.max(.1, Number.isFinite(incoming.duration) ? incoming.duration : 5, ...layers.map(layer => { const timing = getSceneLayerTiming(layer); return timing.offset + timing.span / timing.speed })))
       const incomingComposition = incoming.composition as Partial<NonNullable<Scene['composition']>> | undefined
       const safeAreas: NonNullable<Scene['composition']>['safeArea'][] = ['none', 'action', 'title', 'vertical', 'all']
@@ -1766,6 +1804,7 @@ export function SceneAnimatorPanel() {
   const recordCompatibilityWebm = (): Promise<Blob> => new Promise((resolve, reject) => {
     if (recording) { reject(new Error('A recording is already in progress.')); return }
     if (playing) { const error = new Error('Wait for Preview to finish before recording.'); setMessage(error.message); reject(error); return }
+    prepareFacePlayback()
     const current = sceneRef.current
     const currentFps: SceneFrameRate = current.fps === 60 ? 60 : 30
     if (!current.layers.some(layer => layer.visible && isVisualLayer(layer))) { const error = new Error('Add a visible visual layer before recording.'); setMessage(error.message); reject(error); return }
@@ -1966,6 +2005,7 @@ export function SceneAnimatorPanel() {
   const recordToBlob = async (): Promise<Blob> => {
     if (recording) throw new Error('A recording is already in progress.')
     if (playing) throw new Error('Wait for Preview to finish before recording.')
+    prepareFacePlayback()
     if (!('VideoEncoder' in window) || typeof VideoEncoder.isConfigSupported !== 'function') {
       setMessage('This browser lacks deterministic WebCodecs export; using compatibility recording.')
       return recordCompatibilityWebm()
@@ -2193,26 +2233,54 @@ export function SceneAnimatorPanel() {
     } : current)
     setCharacterKitError(null); setMessage(`Captured the ${role === 'blink' ? 'eye' : 'mouth'} anchor for ${poseId}.`)
   }
+  const persistCharacterKitDraft = async (kit: CharacterKit, announce = false) => {
+    try {
+      const next = { ...kit, updatedAt: new Date().toISOString() }
+      const library = await saveCharacterKit(workspace, characterKitLibraryRef.current, next)
+      setCharacterKitLibrary(library)
+      const saved = library.kits[next.id]
+      if (!saved) return
+      setCharacterKitDraft(structuredClone(saved))
+      updateScene(current => {
+        const synced = syncMountedCharacterKitLayers(current.layers, saved, characterKitPoseId.trim() || 'base') as AnimatorLayer[]
+        const layers = ensureCutoutFacePlayback(synced, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
+        return { ...current, layers }
+      })
+      if (announce) setMessage(`${next.name} guardado.`)
+    } catch (error) {
+      setCharacterKitError(error instanceof Error ? error.message : 'Could not save Character Kit. Reload the library and try again.')
+    }
+  }
   const persistCharacterKit = async () => {
     if (!characterKitDraft) return
     setCharacterKitBusy(true); setCharacterKitError(null)
     try {
-      const next = { ...characterKitDraft, updatedAt: new Date().toISOString() }
-      const library = await saveCharacterKit(workspace, characterKitLibrary, next)
-      setCharacterKitLibrary(library); setCharacterKitDraft(structuredClone(library.kits[next.id]))
-      setMessage(`Character Kit ${next.name} saved in workspace ${workspace}.`)
-    } catch (error) {
-      setCharacterKitError(error instanceof Error ? error.message : 'Could not save Character Kit. Reload the library and try again.')
+      await persistCharacterKitDraft(characterKitDraft, true)
     } finally { setCharacterKitBusy(false) }
   }
   const mountCharacterKit = () => {
     if (!characterKitDraft) return
     try {
-      const mounted = mountCharacterKitLayers(characterKitDraft, characterKitPoseId.trim() || 'base', undefined, scene.duration) as AnimatorLayer[]
+      const poseId = characterKitPoseId.trim() || 'base'
+      const mounted = ensureCutoutFacePlayback(
+        mountCharacterKitLayers(characterKitDraft, poseId, undefined, scene.duration),
+        scene.duration,
+        fps,
+        [],
+        cutoutDialogueText,
+      ) as AnimatorLayer[]
       const mountedIds = new Set(mounted.map(layer => layer.id))
-      if (scene.layers.some(layer => mountedIds.has(layer.id))) throw new Error('This Character Kit pose is already mounted in the scene.')
+      if (scene.layers.some(layer => mountedIds.has(layer.id))) {
+        updateScene(current => {
+          const synced = syncMountedCharacterKitLayers(current.layers, characterKitDraft, poseId) as AnimatorLayer[]
+          const layers = ensureCutoutFacePlayback(synced, current.duration, fps, current.dialogueBeats ?? [], cutoutDialogueText) as AnimatorLayer[]
+          return { ...current, layers }
+        })
+        setMessage(`${characterKitDraft.name} ya estaba en la escena. Actualicé boca y ojos.`)
+        return
+      }
       updateScene(current => ({ ...current, layers: normalizeZ([...current.layers, ...mounted]) }))
-      setSelectedId(mounted[0].id); setMessage(`Mounted ${characterKitDraft.name} with ${mounted.length - 1} reviewed face overlays.`)
+      setSelectedId(mounted[0].id); setMessage(`${characterKitDraft.name} está en la escena. Preview mueve boca y parpadeo.`)
     } catch (error) { setCharacterKitError(error instanceof Error ? error.message : 'Could not mount Character Kit.') }
   }
   const removeCharacterKit = async () => {
@@ -2610,27 +2678,36 @@ export function SceneAnimatorPanel() {
         {(scene.audioTracks ?? []).length > 0 && <div className="space-y-1 rounded border border-amber-300/15 bg-black/15 p-1.5">{scene.audioTracks!.map(track => <div key={track.id} className="grid grid-cols-[1fr_44px_44px_18px] items-center gap-1 text-[8px]"><span title={track.prompt ?? track.name} className="truncate text-amber-100">{track.kind} · {track.name}</span><label className="text-text-muted">at<input aria-label={`Start ${track.name}`} type="number" min="0" max={scene.duration} step="0.1" value={track.startTime} onChange={event => { const startTime = Number(event.target.value); if (Number.isFinite(startTime)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, startTime: Math.max(0, Math.min(current.duration, startTime)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><label className="text-text-muted">vol<input aria-label={`Volume ${track.name}`} type="number" min="0" max="2" step="0.1" value={track.volume} onChange={event => { const volume = Number(event.target.value); if (Number.isFinite(volume)) updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).map(item => item.id === track.id ? { ...item, volume: Math.max(0, Math.min(2, volume)) } : item) })) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-0.5 text-[8px]" /></label><button type="button" title={`Remove ${track.name}`} onClick={() => updateScene(current => ({ ...current, audioTracks: (current.audioTracks ?? []).filter(item => item.id !== track.id) }))} className="mt-3 text-red-300"><Trash2 size={12} /></button></div>)}</div>}
         {sceneAudioError && <p className="text-[8px] text-red-300">{sceneAudioError}</p>}
       </div>
-      <div className="space-y-1.5 rounded border border-emerald-400/30 bg-emerald-400/[.04] p-2">
-        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-emerald-100">Character Kits</span><span className="text-[8px] text-emerald-200/75">Workspace library · rev {characterKitLibrary.revision}</span></div>
-        <p className="text-[8px] leading-relaxed text-text-muted">Keep one reviewed identity, pose pack, mouth set and pose-specific face anchors together. The LLM will only receive approved pieces.</p>
-        {Object.keys(characterKitLibrary.kits).length > 0 && <div className="grid grid-cols-3 gap-1">{Object.values(characterKitLibrary.kits).map(kit => <button key={kit.id} type="button" disabled={characterKitBusy} onClick={() => { setCharacterKitDraft(structuredClone(kit)); setCharacterKitPoseId('base'); setCharacterKitEditorTab('kit'); setCharacterKitError(null) }} className={`overflow-hidden rounded border p-1 text-left ${characterKitDraft?.id === kit.id ? 'border-emerald-300 bg-emerald-400/10' : 'border-border bg-black/10'}`}>{kit.base?.source && <img src={kit.base.source} alt="" className="mb-1 aspect-square w-full rounded bg-bg-active object-contain" />}<span className="block truncate text-[8px] text-emerald-100">{kit.name}</span><span className="block text-[7px] text-text-muted">{Object.keys(kit.poses).length + (kit.base ? 1 : 0)} poses · {Object.keys(kit.mouth).length} mouths</span></button>)}</div>}
-        {!characterKitDraft && <div className="space-y-1"><input value={characterKitName} onChange={event => setCharacterKitName(event.target.value)} placeholder="Character name" className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-[9px]" /><button type="button" disabled={!selected || characterKitBusy} onClick={createKitFromSelected} className="w-full rounded border border-emerald-300/40 bg-emerald-400/10 px-2 py-1 text-[9px] text-emerald-100 disabled:opacity-40">New kit from selected base layer</button></div>}
-        {characterKitDraft && <div className="space-y-1.5 rounded border border-emerald-300/20 bg-black/10 p-1.5">
-          <div className="grid grid-cols-[1fr_84px] gap-1"><input aria-label="Character Kit name" value={characterKitDraft.name} onChange={event => setCharacterKitDraft(current => current ? { ...current, name: event.target.value } : current)} className="rounded border border-border bg-bg-primary px-1.5 py-1 text-[9px]" /><select aria-label="Character Kit style" value={characterKitDraft.style} onChange={event => setCharacterKitDraft(current => current ? { ...current, style: event.target.value as CharacterKit['style'] } : current)} className="rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="cutout">Cutout</option><option value="children-illustration">Children</option><option value="anime-2d">Anime 2D</option></select></div>
-          <div className="grid grid-cols-2 gap-1"><button type="button" onClick={() => setCharacterKitEditorTab('kit')} className={`rounded border px-1 py-1 text-[8px] ${characterKitEditorTab === 'kit' ? 'border-emerald-300 bg-emerald-400/10 text-emerald-100' : 'border-border text-text-muted'}`}>Paso 1 · Kit & poses</button><button type="button" onClick={() => setCharacterKitEditorTab('face-rig')} className={`rounded border px-1 py-1 text-[8px] ${characterKitEditorTab === 'face-rig' ? 'border-emerald-300 bg-emerald-400/10 text-emerald-100' : 'border-border text-text-muted'}`}>Paso 2 · Labios / ojos</button></div>
-          {characterKitEditorTab === 'kit' ? <>
-          <div className="grid grid-cols-2 gap-1"><label className="text-[8px] text-text-muted">Pose id<input list="character-kit-pose-ids" value={characterKitPoseId} onChange={event => setCharacterKitPoseId(event.target.value)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]" /><datalist id="character-kit-pose-ids"><option value="base" />{Object.keys(characterKitDraft.poses).map(id => <option key={id} value={id} />)}</datalist></label><label className="text-[8px] text-text-muted">Alpha review<select value={characterKitAlphaStatus} onChange={event => setCharacterKitAlphaStatus(event.target.value as CharacterKitAlphaStatus)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="transparent">Transparent</option><option value="unknown">Unknown</option><option value="opaque">Opaque</option></select></label></div>
-          <div className="grid grid-cols-2 gap-1"><button type="button" disabled={!selected} onClick={() => assignSelectedToKit('base')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Selected → base</button><button type="button" disabled={!selected || !characterKitPoseId.trim()} onClick={() => assignSelectedToKit('pose')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Selected → pose</button></div>
-          <div className="grid grid-cols-[72px_1fr_1fr] gap-1"><select aria-label="Character mouth state" value={characterKitMouthState} onChange={event => setCharacterKitMouthState(event.target.value as CharacterMouthState)} className="rounded border border-border bg-bg-primary px-1 py-1 text-[8px]"><option value="closed">Closed</option><option value="small">Small</option><option value="wide">Wide</option><option value="round">Round</option></select><button type="button" disabled={!selected} onClick={() => assignSelectedToKit('mouth')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Selected → mouth</button><button type="button" disabled={!selected} onClick={() => assignSelectedToKit('blink')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Selected → blink</button></div>
-          <button type="button" disabled={!selected || !isCutoutFaceLayer(selected)} onClick={captureKitAnchor} className="w-full rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Capture selected face anchor for {characterKitPoseId || 'base'}</button>
-          <div className="text-[7px] text-text-muted">Approved: {characterKitDraft.base ? 'base' : 'no base'} · {Object.keys(characterKitDraft.poses).length} extra poses · {Object.keys(characterKitDraft.mouth).join(', ') || 'no mouths'} · {Object.keys(characterKitDraft.anchors).length} anchored poses</div>
-          </> : <CharacterKitFaceRigPanel kit={characterKitDraft} poseId={characterKitPoseId} disabled={characterKitBusy || playing || recording || publishing} onChange={setCharacterKitDraft} onStatus={setMessage} />}
-          <div className="grid grid-cols-[1fr_1fr_24px] gap-1"><button type="button" disabled={characterKitBusy || !characterKitDraft.base} onClick={() => void persistCharacterKit()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{characterKitBusy ? 'Saving…' : 'Save kit'}</button><button type="button" disabled={characterKitBusy || !characterKitDraft.base} onClick={mountCharacterKit} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">Mount pose</button><button type="button" title="Delete kit only" disabled={characterKitBusy || !characterKitLibrary.kits[characterKitDraft.id]} onClick={() => void removeCharacterKit()} className="rounded border border-red-400/30 text-red-300 disabled:opacity-30"><Trash2 size={11} className="mx-auto" /></button></div>
-          <button type="button" onClick={() => { setCharacterKitDraft(null); setCharacterKitError(null) }} className="w-full text-[7px] text-text-muted">Close kit editor</button>
-        </div>}
-        {characterKitBusy && !characterKitDraft && <p className="text-[8px] text-emerald-100"><Loader2 size={9} className="mr-1 inline animate-spin" />Loading Character Kits…</p>}
-        {characterKitError && <p className="text-[8px] text-red-300">{characterKitError}</p>}
-      </div>
+      <CharacterKitLibraryPanel
+        library={characterKitLibrary}
+        draft={characterKitDraft}
+        poseId={characterKitPoseId}
+        tab={characterKitEditorTab}
+        busy={characterKitBusy}
+        error={characterKitError}
+        newName={characterKitName}
+        alphaStatus={characterKitAlphaStatus}
+        mouthState={characterKitMouthState}
+        hasSelectedLayer={Boolean(selected)}
+        selectedIsFace={Boolean(selected && isCutoutFaceLayer(selected))}
+        disabled={playing || recording || publishing}
+        onSelectKit={(kit, tab) => { setCharacterKitDraft(kit); setCharacterKitPoseId('base'); setCharacterKitEditorTab(tab); setCharacterKitError(null) }}
+        onNewNameChange={setCharacterKitName}
+        onCreateFromSelected={createKitFromSelected}
+        onDraftChange={setCharacterKitDraft}
+        onPoseIdChange={setCharacterKitPoseId}
+        onTabChange={setCharacterKitEditorTab}
+        onAlphaStatusChange={setCharacterKitAlphaStatus}
+        onMouthStateChange={setCharacterKitMouthState}
+        onAssignSelected={assignSelectedToKit}
+        onCaptureAnchor={captureKitAnchor}
+        onSave={() => void persistCharacterKit()}
+        onPutOnScene={mountCharacterKit}
+        onDelete={() => void removeCharacterKit()}
+        onCommit={kit => { setCharacterKitDraft(kit); void persistCharacterKitDraft(kit) }}
+        onClose={() => { setCharacterKitDraft(null); setCharacterKitError(null) }}
+        onStatus={setMessage}
+      />
       <div className="space-y-1.5 rounded border border-rose-300/30 bg-rose-400/[.04] p-2">
         <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-rose-100">Cutout dialogue</span><span className="text-[8px] text-rose-200/75">Editable mouth keyframes</span></div>
         <p className="text-[8px] leading-relaxed text-text-muted">With mouth overlays named <em>Open</em>, <em>Small</em>, <em>Wide</em>, <em>Round</em> and optionally <em>Closed</em>, turn a known line into a restrained speaking rhythm. Missing shapes safely fall back to Open.</p>

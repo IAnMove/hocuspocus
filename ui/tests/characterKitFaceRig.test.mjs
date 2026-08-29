@@ -34,13 +34,14 @@ test('Face Rig validates a persistent approved base or pose', () => {
   assert.throws(() => validateFaceRigPose({ ...kit, base: { ...pose, source: 'blob:temporary' } }), /persistent pose source/)
 })
 
-test('Face Rig produces five neutral identity-preserving generation requests', () => {
+test('Face Rig produces six identity-preserving generation requests including open eyes', () => {
   const kit = { ...createCharacterKit('Luna'), base: pose }
   const requests = faceRigGenerationRequests(kit, 'base', 'a shy schoolgirl with red braids')
-  assert.deepEqual(requests.map(request => request.state), ['closed', 'small', 'wide', 'round', 'blink'])
+  assert.deepEqual(requests.map(request => request.state), ['closed', 'small', 'wide', 'round', 'open-eyes', 'blink'])
   assert.ok(requests.every(request => request.reference === 'base.png' && request.prompt.includes('a shy schoolgirl with red braids')))
   assert.ok(requests.every(request => request.prompt.includes('ONLY') && request.prompt.includes('transparent') && request.prompt.includes('no full character')))
-  assert.match(faceRigPrompt(kit, 'blink'), /closed eyelids/)
+  assert.match(faceRigPrompt(kit, 'blink'), /eyelids fully closed/)
+  assert.match(faceRigPrompt(kit, 'open-eyes'), /eyes open/)
   assert.match(faceRigPrompt(kit, 'wide'), /mouth overlay sprite/)
 })
 
@@ -59,6 +60,8 @@ test('blink is registered in eyes and rejects transient generated sources', () =
   const kit = { ...createCharacterKit('Luna'), base: pose }
   const next = registerGeneratedFaceRigAsset(kit, 'blink', generated('blink'), { poseId: 'base', reference: 'base.png', prompt: 'blink prompt' })
   assert.equal(next.eyes.blink.reviewState, 'pending')
+  const open = registerGeneratedFaceRigAsset(kit, 'open-eyes', generated('open-eyes'), { poseId: 'base', reference: 'base.png', prompt: 'open eyes' })
+  assert.equal(open.eyes.open.reviewState, 'pending')
   assert.throws(() => registerGeneratedFaceRigAsset(kit, 'round', { ...generated('round'), source: 'blob:temp' }, { poseId: 'base', reference: 'base.png', prompt: 'round' }), /persistent source/)
 })
 
@@ -157,7 +160,7 @@ test('look chips compose a style-only prompt and fill overlay + body requests', 
   assert.match(characterKitPosePrompt(kit), /plasticine/)
   assert.match(characterKitPosePrompt(kit), /full-body standing character cutout/)
   assert.match(faceRigPrompt(kit, 'wide'), /mouth overlay sprite only/)
-  assert.match(faceRigPrompt(kit, 'blink'), /closed eyelids only/)
+  assert.match(faceRigPrompt(kit, 'blink'), /eyelids fully closed/)
   const requests = faceRigGenerationRequests(kit)
   assert.ok(requests.every(request => request.prompt.includes('afro hair') && request.prompt.includes('plasticine')))
 })

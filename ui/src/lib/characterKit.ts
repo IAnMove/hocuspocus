@@ -198,6 +198,17 @@ export function mountCharacterKitLayers(
       relationship: { type: 'parent', targetLayerId: poseLayerId },
     })
   }
+  const openEyes = kit.eyes.open
+  if (openEyes?.reviewState === 'approved') {
+    const openTransform = { ...faceTransform(anchors?.eyes ?? DEFAULT_CHARACTER_BLINK_ANCHOR), opacity: 1 }
+    layers.push({
+      id: `kit-${kit.id}-eyes-open`, name: `${kit.name} Eyes open`, type: 'overlay', source: openEyes.source,
+      visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: openTransform,
+      animation: { start: { ...openTransform, opacity: 1 }, end: { ...openTransform, opacity: 1 }, duration, curve: 'hold' },
+      faceBinding: { poseLayerId, role: 'eyes', state: 'open' },
+      relationship: { type: 'parent', targetLayerId: poseLayerId },
+    })
+  }
   const blink = kit.eyes.blink
   if (blink?.reviewState === 'approved') {
     const eyeTransform = { ...faceTransform(anchors?.eyes ?? DEFAULT_CHARACTER_BLINK_ANCHOR), opacity: 0 }
@@ -210,6 +221,72 @@ export function mountCharacterKitLayers(
     })
   }
   return layers
+}
+
+/** Push current Face Rig anchors onto a pose that is already in the scene. */
+export function syncMountedCharacterKitLayers(
+  layers: SceneLayer[],
+  kit: CharacterKit,
+  poseId = 'base',
+): SceneLayer[] {
+  const poseLayerId = `kit-${kit.id}-pose-${cleanId(poseId) || 'base'}`
+  const pose = layers.find(layer => layer.id === poseLayerId)
+  if (!pose) return layers
+  const mounted = mountCharacterKitLayers(kit, poseId, pose.transform, pose.animation?.duration ?? 10)
+  const byId = new Map(mounted.map(layer => [layer.id, layer]))
+  const next = layers.map(layer => {
+    const replacement = byId.get(layer.id)
+    if (!replacement) return layer
+    const keyframes = layer.animation?.keyframes
+    if (keyframes?.length) {
+      return {
+        ...layer,
+        source: replacement.source,
+        transform: { ...replacement.transform, opacity: layer.transform.opacity },
+        animation: {
+          ...layer.animation,
+          start: { ...replacement.animation.start, opacity: layer.animation.start.opacity ?? 1 },
+          end: { ...replacement.animation.end, opacity: layer.animation.end.opacity ?? 1 },
+          keyframes: keyframes.map(frame => ({
+            ...frame,
+            x: replacement.transform.x,
+            y: replacement.transform.y,
+            scale: replacement.transform.scale,
+            rotation: replacement.transform.rotation ?? frame.rotation ?? 0,
+          })),
+        },
+      }
+    }
+    return { ...replacement, z: layer.z }
+  })
+  const extras = mounted.filter(layer => !layers.some(existing => existing.id === layer.id))
+  if (!extras.length) return next
+  const top = Math.max(...next.map(layer => layer.z), 20)
+  return [...next, ...extras.map((layer, index) => ({ ...layer, z: top + index + 1 }))]
+}
+
+export function parseCharacterKitPoseLayerId(layerId: string): { kitId: string, poseId: string } | null {
+  const match = /^kit-(.+)-pose-(.+)$/.exec(layerId)
+  if (!match) return null
+  return { kitId: match[1], poseId: match[2] }
+}
+
+/** Re-apply the live Character Kit library onto any kit puppets already in a scene. */
+export function syncSceneCharacterKits(layers: SceneLayer[], library: CharacterKitLibrary): SceneLayer[] {
+  const poseLayerIds = new Set<string>()
+  for (const layer of layers) {
+    if (parseCharacterKitPoseLayerId(layer.id)) poseLayerIds.add(layer.id)
+    const bound = layer.faceBinding?.poseLayerId
+    if (bound && parseCharacterKitPoseLayerId(bound)) poseLayerIds.add(bound)
+  }
+  let next = layers
+  for (const poseLayerId of poseLayerIds) {
+    const parsed = parseCharacterKitPoseLayerId(poseLayerId)
+    const kit = parsed ? library.kits[parsed.kitId] : undefined
+    if (!parsed || !kit) continue
+    next = syncMountedCharacterKitLayers(next, kit, parsed.poseId)
+  }
+  return next
 }
 
 export function characterKitInventory(library: CharacterKitLibrary): Array<Record<string, unknown>> {
