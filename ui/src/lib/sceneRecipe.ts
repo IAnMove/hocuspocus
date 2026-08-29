@@ -1290,6 +1290,25 @@ export function recipeAssetDuration(recipe: SceneRecipe, assetId: string): numbe
   return Math.max(0.5, ...(durations.length ? durations : [recipe.scene.duration || 5]))
 }
 
+/** TTS/SFX/music generation length for one recipe track.
+ *
+ * `scene.duration` is only a per-shot fallback (often the first hold). Qwen3
+ * and the other audio engines treat `duration_seconds` as a hard cap, so a
+ * later 9s spoken shot must not inherit an 6–8s scene default or the line is
+ * truncated while mouth keyframes keep moving.
+ */
+export function recipeAudioDuration(recipe: SceneRecipe, trackId: string): number {
+  const shots = listRecipeShots(recipe)
+  const fromShots = shots
+    .filter(shot => shot.audioTrackIds === undefined || shot.audioTrackIds.includes(trackId))
+    .map(shot => shot.duration || recipe.scene.duration || 5)
+  const fromBeats = (recipe.dialogueBeats ?? [])
+    .filter(beat => beat.audioTrackId === trackId)
+    .map(beat => beat.end)
+  const fallback = recipe.scene.duration || 5
+  return Math.max(0.5, ...(fromShots.length ? fromShots : [fallback]), ...fromBeats)
+}
+
 function scopeRecipeToShot(recipe: SceneRecipe, shot: SceneRecipeShot): SceneRecipe {
   const audioIds = shot.audioTrackIds === undefined ? undefined : new Set(shot.audioTrackIds)
   const beatIds = shot.dialogueBeatIds === undefined ? undefined : new Set(shot.dialogueBeatIds)

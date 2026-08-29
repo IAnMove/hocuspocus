@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { characterKitRecipeInventory, createCharacterKit, mountCharacterKitLayers } from '../src/lib/characterKit.ts'
 import { composeCharacterKitLook, lockFaceRigMouthPlacement } from '../src/lib/characterKitFaceRig.ts'
-import { compileRecipeShot, listRecipeShots, parseSceneRecipe } from '../src/lib/sceneRecipe.ts'
+import { compileRecipeShot, listRecipeShots, parseSceneRecipe, recipeAudioDuration } from '../src/lib/sceneRecipe.ts'
 import { evaluateSceneLayer } from '../src/lib/sceneTimeline.ts'
 
 const asset = (id, source, reviewState = 'approved', kind = 'overlay') => ({
@@ -129,6 +129,9 @@ test('CharacterKit episode recipe mounts only approved pieces and isolates audio
   const pointing = compileRecipeShot(recipe, shots[3], {}, filename => filename)
   assert.ok(pointing.layers.some(layer => layer.id === 'kit-luma-pose-pointing'))
   assert.deepEqual(pointing.audioTracks.map(track => track.id), ['voice-luma-2'])
+  assert.equal(recipe.scene.duration, 8)
+  assert.equal(shots[3].duration, 9)
+  assert.equal(recipeAudioDuration(recipe, 'voice-luma-2'), 9)
 })
 
 test('mini South Park-style cutout dialogue locks mouths and scopes speech per shot', () => {

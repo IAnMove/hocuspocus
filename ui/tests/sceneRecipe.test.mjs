@@ -14,6 +14,7 @@ import {
   parseSceneRecipe,
   parseSceneRecipeText,
   recipeAssetDuration,
+  recipeAudioDuration,
 } from '../src/lib/sceneRecipe.ts'
 
 test('example saucer recipe compiles to a 4-layer scene with space-cruise motion', () => {
@@ -393,6 +394,46 @@ test('H3 plates use supported model canvases and enough temporal-grid frames', (
     scene: { width: 1280, height: 720, fps: 30, duration: 9, layers: [{ id: 'clouds-layer', type: 'video', asset: 'clouds', fill: true }] },
   })
   assert.equal(recipeAssetDuration(recipe, 'clouds'), 9)
+})
+
+test('recipe speech uses the spoken shot length, not the shorter scene default', () => {
+  const layers = [
+    { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },
+    { id: 'hero', type: 'image', asset: 'hero-art' },
+    { id: 'mouth-wide', name: 'Mouth wide', type: 'overlay', asset: 'mouth-art', faceBinding: { poseLayerId: 'hero', role: 'mouth', state: 'wide' } },
+  ]
+  const recipe = parseSceneRecipe({
+    version: 1,
+    name: 'episode-hold-then-line',
+    assets: [
+      { id: 'hero-art', kind: 'image', source: 'hero.png' },
+      { id: 'mouth-art', kind: 'image', source: 'mouth.png' },
+    ],
+    audio: [
+      { id: 'voice-snowman', kind: 'speech', prompt: 'El timbre de verdad está detrás del muñeco de nieve.' },
+      { id: 'voice-bell', kind: 'speech', prompt: 'La campana del patio está congelada.' },
+    ],
+    dialogueBeats: [
+      { id: 'beat-snowman', text: 'El timbre de verdad está detrás del muñeco de nieve.', start: 0.3, end: 7.6, mouthLayerIds: ['mouth-wide'], audioTrackId: 'voice-snowman' },
+      { id: 'beat-bell', text: 'La campana del patio está congelada.', start: 0.4, end: 6.8, mouthLayerIds: ['mouth-wide'], audioTrackId: 'voice-bell' },
+    ],
+    shots: [
+      { name: 'hold', duration: 6, audioTrackIds: [], dialogueBeatIds: [], layers },
+      { name: 'bell', duration: 8, audioTrackIds: ['voice-bell'], dialogueBeatIds: ['beat-bell'], layers },
+      { name: 'snowman', duration: 9, audioTrackIds: ['voice-snowman'], dialogueBeatIds: ['beat-snowman'], layers },
+    ],
+    scene: { width: 1280, height: 720, fps: 30, duration: 8, layers },
+  })
+  assert.equal(recipe.scene.duration, 8)
+  assert.equal(recipeAudioDuration(recipe, 'voice-snowman'), 9)
+  assert.equal(recipeAudioDuration(recipe, 'voice-bell'), 8)
+
+  const omittedSceneDuration = parseSceneRecipe({
+    ...recipe,
+    scene: { width: 1280, height: 720, fps: 30, layers },
+  })
+  assert.equal(omittedSceneDuration.scene.duration, 6)
+  assert.equal(recipeAudioDuration(omittedSceneDuration, 'voice-snowman'), 9)
 })
 
 const gradedRecipe = grade => parseSceneRecipe({

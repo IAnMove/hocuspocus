@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { recipeAudioGenerationParams } from '../src/lib/sceneRecipeAssets.ts'
-import { withResolvedSources } from '../src/lib/sceneRecipe.ts'
+import { parseSceneRecipe, recipeAudioDuration, withResolvedSources } from '../src/lib/sceneRecipe.ts'
 
 test('recipe speech uses the proven HocusPocus voice-generation contract', () => {
   const params = recipeAudioGenerationParams({
@@ -52,4 +52,36 @@ test('recipe audio generation refuses an unresolved silent prompt', () => {
     () => recipeAudioGenerationParams({ id: 'voice', kind: 'speech' }, 3, 'default'),
     /needs a prompt or an existing source/,
   )
+})
+
+test('auto-generated episode speech is capped at the spoken shot, not scene.duration', () => {
+  const layers = [
+    { id: 'camera', type: 'camera', cameraPreset: 'camera-locked' },
+    { id: 'hero', type: 'image', asset: 'hero-art' },
+    { id: 'mouth-wide', name: 'Mouth wide', type: 'overlay', asset: 'mouth-art', faceBinding: { poseLayerId: 'hero', role: 'mouth', state: 'wide' } },
+  ]
+  const recipe = parseSceneRecipe({
+    version: 1,
+    name: 'episode-hold-then-line',
+    assets: [
+      { id: 'hero-art', kind: 'image', source: 'hero.png' },
+      { id: 'mouth-art', kind: 'image', source: 'mouth.png' },
+    ],
+    audio: [
+      { id: 'voice-snowman', kind: 'speech', prompt: 'El timbre de verdad está detrás del muñeco de nieve.' },
+    ],
+    dialogueBeats: [
+      { id: 'beat-snowman', text: 'El timbre de verdad está detrás del muñeco de nieve.', start: 0.3, end: 7.6, mouthLayerIds: ['mouth-wide'], audioTrackId: 'voice-snowman' },
+    ],
+    shots: [
+      { name: 'hold', duration: 6, audioTrackIds: [], dialogueBeatIds: [], layers },
+      { name: 'snowman', duration: 9, audioTrackIds: ['voice-snowman'], dialogueBeatIds: ['beat-snowman'], layers },
+    ],
+    scene: { width: 1280, height: 720, fps: 30, duration: 8, layers },
+  })
+  const seconds = recipeAudioDuration(recipe, 'voice-snowman')
+  assert.equal(seconds, 9)
+  const params = recipeAudioGenerationParams(recipe.audio[0], seconds, 'episode-room')
+  assert.equal(params.duration_seconds, 9)
+  assert.notEqual(params.duration_seconds, recipe.scene.duration)
 })
