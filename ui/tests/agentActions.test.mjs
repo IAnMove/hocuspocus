@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -126,4 +126,10 @@ test('parses collapsed SFX pack keys and ignores trailing JSON junk', async () =
   assert.equal(turn.actions[0].clips[0].name, 'coin_pickup')
   assert.match(humanReply(messy), /Encolo el pack/)
   assert.doesNotMatch(humanReply(messy), /queuesfxpack/)
+})
+
+test('repairs an explicit 3D request into prepare_3d plus start_generation', async () => {
+  const { reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const repaired = reconcileAgentTurnWithRequest('hazme un modelo 3d de una copa de ajo', { reply: '¿De qué tamaño?', actions: [] })
+  assert.deepEqual(repaired.actions.map(action => action.type), ['prepare_3d', 'start_generation'])
 })

@@ -59,6 +59,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['sfx_clips', 'confirm', 'model_type', 'negative_prompt'],
   },
   {
+    type: 'prepare_3d',
+    title: 'Prepare Studio 3D',
+    purpose: 'Open Studio → 3D (Hunyuan3D) and fill a text-to-mesh form. The 3D gallery only displays finished models.',
+    useWhen: 'The user asks to prepare or generate a 3D object, mesh or Hunyuan3D asset.',
+    risk: 'edit',
+    parameters: ['prompt', 'model_type', 'preset', 'seed'],
+  },
+  {
     type: 'open_story_section',
     title: 'Open a Story Lab section',
     purpose: 'Open Story Lab and select Overview, World, Characters, Relationships, Structure or Productions.',

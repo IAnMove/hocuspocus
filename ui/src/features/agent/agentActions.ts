@@ -79,6 +79,14 @@ export interface AgentQueueSfxPackAction {
   confirm: true
 }
 
+export interface AgentPrepare3dAction {
+  type: 'prepare_3d'
+  prompt: string
+  modelType?: string
+  preset?: string
+  seed?: number
+}
+
 export interface AgentStartGenerationAction {
   type: 'start_generation'
 }
@@ -177,6 +185,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentPrepareImageAction
   | AgentPrepareAudioAction
   | AgentQueueSfxPackAction
+  | AgentPrepare3dAction
   | AgentStartGenerationAction
   | AgentCreateStoryAction
   | AgentCreateSeriesEpisodeAction
@@ -245,6 +254,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   preparevideo: 'prepare_video',
   prepareimage: 'prepare_image',
   prepareaudio: 'prepare_audio',
+  prepare3d: 'prepare_3d',
   queuesfxpack: 'queue_sfx_pack',
   startgeneration: 'start_generation',
   createstory: 'create_story',
@@ -354,7 +364,7 @@ const CANONICAL_FIELD_NAMES = [
   'series_logline', 'episode_title', 'episode_premise', 'episode_logline',
   'target_duration_seconds', 'create_if_missing', 'known_universe',
   'queue_scope', 'task_id', 'confirm', 'characters', 'locations', 'outline_beats',
-  'audio_sub_mode', 'sfx_clips', 'name', 'actions', 'reply',
+  'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'actions', 'reply',
 ] as const
 
 function collapsedKey(name: string): string {
@@ -487,6 +497,17 @@ function parseAction(value: unknown): AgentAction | null {
       negativePrompt: cleanString(raw.negative_prompt, 2_000) || undefined,
     }
   }
+  if (type === 'prepare_3d') {
+    const prompt = cleanString(raw.prompt, 8_000)
+    if (!prompt) return null
+    return {
+      type: 'prepare_3d',
+      prompt,
+      modelType: cleanString(raw.model_type, 160) || undefined,
+      preset: cleanString(raw.preset, 40) || undefined,
+      seed: optionalNumber(raw.seed, -1, 2_147_483_647, true),
+    }
+  }
   if (type === 'queue_sfx_pack') {
     if (raw.confirm !== true) return null
     const clips = parseSfxClips(raw.sfx_clips)
@@ -589,7 +610,7 @@ export function parseAgentTurn(raw: string): AgentTurn {
   for (const value of proposed) {
     const action = parseAction(value)
     if (!action) continue
-    if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio') preparedStudio = true
+    if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio' || action.type === 'prepare_3d') preparedStudio = true
     if (action.type === 'start_generation') {
       if (!preparedStudio || startedGeneration) continue
       startedGeneration = true
@@ -656,6 +677,19 @@ const EXPLICIT_SFX_GENERATE = [
 ]
 const GAME_SFX_HINT = /\b(?:vampire\s*survivors|oleadas?|horde|twin[\s-]?stick|arcade|juego|game)\b/i
 
+const EXPLICIT_3D_REQUESTS = [
+  /\b(?:hazme|hacedme|generame|genérame|creame|créame|haz|haced|genera|generad|crea|cread|lanza|lanzad)\b[^.!?\n]*\b(?:modelo|objeto|asset|malla)?\s*3d\b/i,
+  /\b(?:make|create|generate|queue)\b[^.!?\n]*\b3d\s*(?:model|object|asset|mesh)\b/i,
+  /\bhunyuan\s*3d\b/i,
+]
+
+export function isExplicit3dGenerationRequest(request: string): boolean {
+  const text = request.trim()
+  if (!text || NEGATED_VIDEO_REQUEST.test(text)) return false
+  if (isExplicitVideoGenerationRequest(text) || isExplicitImageGenerationRequest(text) || isExplicitSfxGenerationRequest(text)) return false
+  return EXPLICIT_3D_REQUESTS.some(pattern => pattern.test(text))
+}
+
 export function isExplicitSfxGenerationRequest(request: string): boolean {
   const text = request.trim()
   if (!text || NEGATED_VIDEO_REQUEST.test(text)) return false
@@ -719,6 +753,23 @@ export function reconcileAgentTurnWithRequest(request: string, turn: AgentTurn):
       actions: [...navigation, prepare, { type: 'start_generation' }],
     }
   }
+  if (isExplicit3dGenerationRequest(request)) {
+    const navigation = turn.actions
+      .filter((action): action is AgentOpenTabAction => action.type === 'open_tab')
+      .slice(0, MAX_ACTIONS - 2)
+    const prepare = turn.actions.find(
+      (action): action is AgentPrepare3dAction => action.type === 'prepare_3d',
+    ) || {
+        type: 'prepare_3d',
+        prompt: request.trim().slice(0, 8_000),
+        preset: 'balanced',
+        seed: 1234,
+      } satisfies AgentPrepare3dAction
+    return {
+      reply: 'Prepararé Studio → 3D (Hunyuan3D) con un preset equilibrado y lo enviaré a generar. 🪄',
+      actions: [...navigation, prepare, { type: 'start_generation' }],
+    }
+  }
   if (!isExplicitImageGenerationRequest(request)) return turn
 
   const navigation = turn.actions
@@ -753,7 +804,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'inspect_queue', 'cancel_task', 'resume_task'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -796,6 +847,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           task_id: { type: 'string', maxLength: 160 },
           confirm: { type: 'boolean' },
           audio_sub_mode: { type: 'string', enum: ['', 'speech', 'music', 'sfx'] },
+          preset: { type: 'string', maxLength: 40 },
           sfx_clips: {
             type: 'array', maxItems: 12,
             items: {
@@ -1110,7 +1162,57 @@ async function prepareImage(action: AgentPrepareImageAction): Promise<string> {
   return `He preparado Studio → Image con ${selected.name}, ${resolution} y el prompt indicado.`
 }
 
+let prepared3dPreset = 'balanced'
+
+async function prepare3d(action: AgentPrepare3dAction): Promise<string> {
+  let state = useStore.getState()
+  if (!state.modelsLoaded) await state.loadModels()
+  state = useStore.getState()
+  state.setSettingsOpen(false)
+  state.setDashboardOpen(false)
+  state.setSidebarMode('studio')
+  state.setSidebarOpen(true)
+  state.setGenerationMode('model3d')
+  state.setMediaFilter('model3d')
+
+  state = useStore.getState()
+  const families = getFamiliesForMode('model3d', state.families)
+  const candidates = families.flatMap(family => getModelsForFamily(family.id, state.models, 'model3d'))
+    .filter(model => !model.tool_only)
+  const requested = action.modelType
+    ? candidates.find(model => model.model_type === action.modelType)
+    : undefined
+  if (action.modelType && !requested) {
+    throw new Error(`El modelo 3D ${action.modelType} no está disponible.`)
+  }
+  const current = candidates.find(model => model.model_type === state.params.model_type)
+  const selected = requested || current || candidates[0]
+  if (!selected) throw new Error('No hay ningún modelo Hunyuan3D disponible.')
+  if (state.params.model_type !== selected.model_type) state.selectModel(selected.model_type)
+  useStore.getState().setParams({
+    prompt: action.prompt,
+    seed: action.seed ?? 1234,
+  })
+  prepared3dPreset = action.preset || 'balanced'
+  return `He preparado Studio → 3D con ${selected.name}, preset ${prepared3dPreset} y el prompt indicado. La pestaña 3D solo muestra resultados; la creación queda en Studio.`
+}
+
 async function startPreparedGeneration(): Promise<string> {
+  const state = useStore.getState()
+  if (state.generationMode === 'model3d') {
+    const { startHunyuan3DJob } = await import('../../api/client')
+    const job = await startHunyuan3DJob({
+      operation: 'generate',
+      model_id: String(state.params.model_type || ''),
+      prompt: String(state.params.prompt || ''),
+      workspace: state.activeWorkspace || 'default',
+      preset: prepared3dPreset,
+      seed: typeof state.params.seed === 'number' ? state.params.seed : 1234,
+    })
+    return job.job_id
+      ? `He enviado el modelo 3D a Hunyuan3D (${job.job_id}). Aparecerá en la galería 3D al terminar.`
+      : 'He enviado el modelo 3D a Hunyuan3D.'
+  }
   const before = useStore.getState().jobs
   const knownJobs = new Set(before)
   await useStore.getState().startGeneration()
@@ -1143,6 +1245,8 @@ export async function executeAgentActions(
           ? 'Trazando el hechizo de imagen en Studio…'
         : action.type === 'prepare_audio'
           ? 'Trazando el hechizo de audio en Studio…'
+        : action.type === 'prepare_3d'
+          ? 'Trazando el hechizo 3D en Studio…'
         : action.type === 'queue_sfx_pack'
           ? 'Encolando el pack de efectos SFX…'
         : action.type === 'start_generation'
@@ -1183,6 +1287,10 @@ export async function executeAgentActions(
         const message = await prepareAudio(action)
         preparedStudio = true
         results.push({ action, ok: true, message })
+      } else if (action.type === 'prepare_3d') {
+        const message = await prepare3d(action)
+        preparedStudio = true
+        results.push({ action, ok: true, message })
       } else if (action.type === 'queue_sfx_pack') {
         const { queueSfxPack } = await import('./audioActions')
         results.push({ action, ok: true, message: await queueSfxPack(action) })
@@ -1208,7 +1316,7 @@ export async function executeAgentActions(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       results.push({ action, ok: false, message })
-      if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio') preparedStudio = false
+      if (action.type === 'prepare_video' || action.type === 'prepare_image' || action.type === 'prepare_audio' || action.type === 'prepare_3d') preparedStudio = false
     }
   }
   return results

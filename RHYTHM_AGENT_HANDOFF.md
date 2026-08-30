@@ -882,14 +882,15 @@ ahora:
 3. `prepare_image`
 4. `prepare_audio`
 5. `queue_sfx_pack`
-6. `open_story_section`
-7. `open_series_section`
-8. `start_generation`
-9. `create_story`
-10. `create_series_episode`
-11. `inspect_queue`
-12. `cancel_task`
-13. `resume_task`
+6. `prepare_3d`
+7. `open_story_section`
+8. `open_series_section`
+9. `start_generation`
+10. `create_story`
+11. `create_series_episode`
+12. `inspect_queue`
+13. `cancel_task`
+14. `resume_task`
 
 ### Proceso común de cualquier acción
 
@@ -954,7 +955,7 @@ El mismo catálogo debe crecer por familias, no mediante un CLI con shell libre:
 
 - navegación: selección interna de Director, Settings, outputs, workspaces,
   stories, series, episodios, escenas y capas;
-- Studio: vídeo, imagen y audio/SFX ya se preparan; faltan 3D, LoRAs y referencias;
+- Studio: vídeo, imagen, audio/SFX y 3D ya se preparan; faltan LoRAs y referencias;
 - Story: patch, generación de secciones, aplicación de propuestas, aprobación,
   imágenes y staging de producciones;
 - Series: bootstrap conocido, plan completo, aplicación, shots, render,
@@ -988,7 +989,13 @@ ampliación.
 `prepare_image` abre Studio → Image, elige un modelo de familia imagen
 instalado/habilitado y rellena prompt, resolución y recuento. `start_generation`
 acepta esa preparación en el mismo turno. Una orden inequívoca (“hazme una
-imagen de X”) se repara en cliente como el vídeo. 3D sigue pendiente.
+imagen de X”) se repara en cliente como el vídeo. ## 27. Studio 3D (2026-08-30)
+
+`prepare_3d` abre Studio → 3D (Hunyuan3D), elige un modelo de la familia
+`hunyuan3d` y rellena el prompt. `start_generation` llama a
+`/api/v1/model3d/generate` en lugar de la cola de vídeo. La pestaña 3D es
+galería; crear el mesh es Studio. LoRAs y referencias de imagen 3D siguen
+pendientes.
 
 ## 26. Studio Audio / SFX (2026-08-30)
 
