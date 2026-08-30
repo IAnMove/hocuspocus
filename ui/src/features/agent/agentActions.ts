@@ -223,6 +223,13 @@ export interface AgentStageStoryVideoAction {
   confirm: true
 }
 
+export interface AgentStartDirectorProductionAction {
+  type: 'start_director_production'
+  targetStoryTitle: string
+  kind?: 'film' | 'trailer'
+  confirm: true
+}
+
 export interface AgentCreateSeriesEpisodeAction {
   type: 'create_series_episode'
   seriesTitle: string
@@ -440,6 +447,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateStoryVisualsAction
   | AgentStageStoryComicAction
   | AgentStageStoryVideoAction
+  | AgentStartDirectorProductionAction
   | AgentCreateSeriesEpisodeAction
   | AgentUpdateSeriesEpisodeAction
   | AgentGenerateSeriesPlanAction
@@ -568,6 +576,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   generatestoryvisuals: 'generate_story_visuals',
   stagestorycomic: 'stage_story_comic',
   stagestoryvideo: 'stage_story_video',
+  startdirectorproduction: 'start_director_production',
   createseriesepisode: 'create_series_episode',
   updateseriesepisode: 'update_series_episode',
   generateseriesplan: 'generate_series_plan',
@@ -1039,6 +1048,17 @@ function parseAction(value: unknown): AgentAction | null {
     const kind = cleanString(raw.production_kind, 30) as AgentStageStoryVideoAction['kind']
     if (kind !== 'film' && kind !== 'trailer') return null
     return { type: 'stage_story_video', targetStoryTitle: cleanString(raw.target_story_title, 300), kind, direction: cleanString(raw.direction, 4_000), durationSeconds: optionalPositiveNumber(raw.duration_seconds, 15, 3_600, true), confirm: true }
+  }
+  if (type === 'start_director_production') {
+    if (raw.confirm !== true) return null
+    const rawKind = cleanString(raw.production_kind, 30)
+    if (rawKind && rawKind !== 'film' && rawKind !== 'trailer') return null
+    return {
+      type: 'start_director_production',
+      targetStoryTitle: cleanString(raw.target_story_title, 300),
+      kind: rawKind ? rawKind as AgentStartDirectorProductionAction['kind'] : undefined,
+      confirm: true,
+    }
   }
   if (type === 'create_series_episode') {
     const seriesTitle = cleanString(raw.series_title, 300)
@@ -1591,7 +1611,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'approve_story_visuals', 'generate_story_visuals', 'stage_story_comic', 'stage_story_video', 'start_director_production', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'open_3d_scene', 'save_3d_scene', 'export_3d_scene', 'apply_3d_rhythm', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -2153,6 +2173,8 @@ export async function executeAgentActions(
               ? 'Adaptando la historia a Comic Director…'
             : action.type === 'stage_story_video'
               ? `Adaptando la historia como ${action.kind === 'trailer' ? 'tráiler' : 'cortometraje'}…`
+            : action.type === 'start_director_production'
+              ? 'Abriendo el portal de producción en Director…'
             : action.type === 'create_series_episode'
               ? 'Preparando la serie y el nuevo episodio…'
             : action.type === 'update_series_episode'
@@ -2262,6 +2284,9 @@ export async function executeAgentActions(
       } else if (action.type === 'stage_story_video') {
         const { stageStoryVideo } = await import('./labActions')
         results.push({ action, ok: true, message: await stageStoryVideo(action) })
+      } else if (action.type === 'start_director_production') {
+        const { startDirectorProduction } = await import('./labActions')
+        results.push({ action, ok: true, message: await startDirectorProduction(action) })
       } else if (action.type === 'create_series_episode') {
         const { createFilledSeriesEpisode } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledSeriesEpisode(action) })

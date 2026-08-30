@@ -14,6 +14,7 @@ import type {
   AgentCommitSeriesCanonAction,
   AgentStageStoryComicAction,
   AgentStageStoryVideoAction,
+  AgentStartDirectorProductionAction,
   AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
   AgentCreateStoryAction,
@@ -1046,10 +1047,123 @@ export async function stageStoryVideo(action: AgentStageStoryVideoAction): Promi
       } catch { /* Keep the written production even if a legacy asset is gone. */ }
     }
     useStore.setState({ directorStep: 'style' })
+    useStore.setState({
+      directorStoryProductionHandoff: {
+        workspace,
+        projectId: target.id,
+        productionId: production.id,
+      },
+    })
     director.setMediaFilter('all')
     director.setSidebarOpen(true)
     window.dispatchEvent(new Event('maestro:director-open'))
     return `He preparado “${title}” (${duration}s) en Short Film Director con el canon y las referencias aprobadas. No he iniciado ninguna generación.`
+  } finally {
+    useStoryStore.getState().endProjectOperation(target.id)
+  }
+}
+
+export async function startDirectorProduction(action: AgentStartDirectorProductionAction): Promise<string> {
+  if (!action.confirm) throw new Error('Iniciar una producción de Director requiere confirm=true porque consume cómputo.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useStoryStore, normalizeStoryProject }, api] = await Promise.all([
+    import('../stories/store'),
+    import('../../api/client'),
+  ])
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const stories = useStoryStore.getState()
+  if (stories.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de iniciar la producción.')
+  const target = action.targetStoryTitle
+    ? Object.values(stories.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
+    : stories.project
+  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (stories.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+
+  const director = useStore.getState()
+  const handoff = director.directorStoryProductionHandoff
+  if (!handoff || handoff.workspace !== workspace || handoff.projectId !== target.id) {
+    throw new Error(`No hay una producción de “${target.title}” preparada por el Wizard en Director. Usa stage_story_video primero.`)
+  }
+  const production = target.productions.find(item => item.id === handoff.productionId)
+  if (!production || (production.kind !== 'film' && production.kind !== 'trailer')) {
+    throw new Error('La producción preparada ya no existe en el historial de Story Lab.')
+  }
+  if (action.kind && production.kind !== action.kind) {
+    throw new Error(`La producción preparada es ${production.kind === 'trailer' ? 'un tráiler' : 'una película'}, no ${action.kind}.`)
+  }
+  const existingPipelineId = typeof production.targetSnapshot?.pipelineId === 'string'
+    ? production.targetSnapshot.pipelineId.trim() : ''
+  if (existingPipelineId) {
+    director.setSettingsOpen(false)
+    director.setDashboardOpen(false)
+    director.setMediaFilter('all')
+    director.setSidebarMode('director')
+    director.setSidebarOpen(true)
+    window.dispatchEvent(new Event('maestro:director-open'))
+    return `La producción “${production.title}” ya estaba iniciada en Director (pipeline ${existingPipelineId}); no la he duplicado.`
+  }
+  if (director.pipelineId) {
+    throw new Error(`Director ya está vinculado al pipeline ${director.pipelineId}; no iniciaré otro sobre el mismo borrador.`)
+  }
+  if (director.directorSkill !== 'short_film' || director.directorStep !== 'style' || !director.directorSceneDescription.trim()) {
+    throw new Error('El borrador exacto de Story ya no está listo en el paso Style de Short Film Director. Vuelve a prepararlo antes de lanzarlo.')
+  }
+  if (director.directorLoading) throw new Error('Director ya está procesando otra operación; espera a que termine antes de iniciar.')
+
+  useStoryStore.getState().beginProjectOperation(target.id)
+  try {
+    director.setSettingsOpen(false)
+    director.setDashboardOpen(false)
+    director.setMediaFilter('all')
+    director.setSidebarMode('director')
+    director.setSidebarOpen(true)
+    window.dispatchEvent(new Event('maestro:director-open'))
+    await director.startDirectorPipeline()
+    const pipelineId = useStore.getState().pipelineId
+    if (!pipelineId) throw new Error('Director no devolvió un pipelineId; la producción no se inició.')
+
+    let linkWarning = ''
+    try {
+      let saved = false
+      for (let attempt = 0; attempt < 2 && !saved; attempt += 1) {
+        const remote = await api.fetchStoryLibrary(workspace)
+        const remoteProject = remote.projects[target.id]
+        const remoteProduction = remoteProject?.productions.find(item => item.id === production.id)
+        if (!remoteProject || !remoteProduction) throw new Error('La producción ya no existe en la biblioteca remota.')
+        const linkedProject = normalizeStoryProject({
+          ...remoteProject,
+          revision: remoteProject.revision + 1,
+          updatedAt: new Date().toISOString(),
+          productions: remoteProject.productions.map(item => item.id === production.id ? {
+            ...item,
+            targetSnapshot: { ...(item.targetSnapshot || {}), pipelineId },
+          } : item),
+        })
+        try {
+          const library = await api.saveStoryLibrary(workspace, {
+            ...remote,
+            projects: { ...remote.projects, [target.id]: linkedProject },
+          })
+          useStoryStore.setState({
+            workspace,
+            project: library.projects[library.activeId],
+            projects: library.projects,
+            libraryRevision: library.revision,
+            dirty: false,
+            hydrated: true,
+            loading: false,
+            saveError: null,
+            libraryConflicts: [],
+          })
+          saved = true
+        } catch (error) {
+          if (!(error instanceof api.StoryLibraryRevisionError) || attempt === 1) throw error
+        }
+      }
+    } catch (error) {
+      linkWarning = ` El pipeline sí está en marcha, pero no pude enlazarlo al historial de Story Lab: ${(error as Error).message}`
+    }
+    return `He iniciado “${production.title}” en Director con el pipeline real ${pipelineId}. Está en marcha; todavía no está terminado.${linkWarning}`
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
   }

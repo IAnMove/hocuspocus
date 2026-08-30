@@ -163,6 +163,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['target_story_title', 'production_kind', 'direction', 'duration_seconds', 'confirm'],
   },
   {
+    type: 'start_director_production',
+    title: 'Start a staged Story production',
+    purpose: 'Start the exact Story film/trailer draft previously loaded by the Wizard, obtain its real Director pipeline ID and link it to Story production history.',
+    useWhen: 'The user explicitly asks to generate or launch the film/trailer already prepared in Director.',
+    risk: 'compute',
+    parameters: ['target_story_title', 'production_kind', 'confirm'],
+  },
+  {
     type: 'create_series_episode',
     title: 'Create a filled Series Lab episode',
     purpose: 'Find or create a series, prepare the minimum canon needed, create a filled episode outline and show Episode room.',

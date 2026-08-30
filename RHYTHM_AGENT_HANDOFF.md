@@ -1275,3 +1275,9 @@ El guardado usa la revisión CAS de la biblioteca, incrementa las versiones de W
 El panel valida todos los destinos y `visualPrompt` antes de gastar cómputo. Después reutiliza secuencialmente `generateVisual`/`generateImageAsset`, incluida la elección de proveedor/modelo, bloqueo de estilo, negative prompt, referencia primaria, recuperación por `visualJobs`, Activity y protección contra cambiar de historia a mitad del job. Cada resultado se adjunta al destino correcto como asset `draft`; jamás se aprueba automáticamente. Si ocurre un fallo, la respuesta indica cuántas referencias terminaron antes del error y conserva el job recuperable.
 
 Al terminar abre `Story Lab → Assets` y sólo informa el número real de imágenes adjuntadas. Durante el desarrollo se probaron parser/bus/build, pero no se lanzó ninguna generación de imagen ni se consumió GPU.
+
+## 51. Wizard: arranque confirmado de una producción Story en Director
+
+`start_director_production` completa el paso separado posterior a `stage_story_video`. Exige `confirm=true` y sólo acepta la producción exacta que el propio Wizard dejó cargada en Short Film Director para el workspace y la Story actuales; un reset u otro borrador invalida ese handoff. También rechaza un Director ocupado, un pipeline previo o un borrador que ya no esté listo en Style.
+
+La acción llama al arranque canónico de Director y no declara éxito hasta recibir un `pipelineId` real. Después enlaza ese ID con la producción `staged` mediante la biblioteca Story del backend y su revisión CAS, con un reintento ante concurrencia. Repetir la orden sobre una producción ya enlazada es idempotente y devuelve el ID existente sin duplicar cómputo. La respuesta distingue explícitamente **en marcha** de **terminado**, abre Director para mostrar el progreso y deja cancelación/reanudación en la infraestructura canónica de pipelines. Durante el desarrollo no se arrancó ninguna producción.

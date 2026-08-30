@@ -1821,6 +1821,12 @@ interface AppState {
   directorLlmLog: { stage: string; text: string }[]
   directorAppendLlmLog: (stage: string, text: string) => void
   directorSkill: DirectorSkill | null
+  /** Exact Story production currently loaded by the embedded Wizard. */
+  directorStoryProductionHandoff: {
+    workspace: string
+    projectId: string
+    productionId: string
+  } | null
   directorResolution: ResolutionPreset
   directorAspectRatio: AspectRatio
   /** Director-owned inference-step choices, keyed by video model. Keeping
@@ -7261,6 +7267,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Director (Music Video Director)
   sidebarMode: 'studio' as const,
   directorSkill: null,
+  directorStoryProductionHandoff: null,
   llmStreamText: '',
   llmStreamDone: true,
   foregroundActivity: null,
@@ -8786,6 +8793,7 @@ export const useStore = create<AppState>((set, get) => ({
       directorShotImageGuidance: 'auto' as DirectorShotImageGuidance,
       directorLlmLog: [],
       directorSkill: null,
+      directorStoryProductionHandoff: null,
       directorMusicSource: null,
       directorSongDescription: '',
       directorSongInstrumental: false,
