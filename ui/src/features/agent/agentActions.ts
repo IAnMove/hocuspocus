@@ -229,6 +229,12 @@ export interface AgentResumeTaskAction {
   confirm: true
 }
 
+export interface AgentRetryTaskAction {
+  type: 'retry_task'
+  taskId: string
+  confirm: true
+}
+
 export type AgentAction = AgentOpenTabAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
@@ -248,6 +254,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentInspectQueueAction
   | AgentCancelTaskAction
   | AgentResumeTaskAction
+  | AgentRetryTaskAction
 
 export interface AgentTurn {
   reply: string
@@ -328,6 +335,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   inspectqueue: 'inspect_queue',
   canceltask: 'cancel_task',
   resumetask: 'resume_task',
+  retrytask: 'retry_task',
 }
 
 const cleanString = (value: unknown, maxLength: number): string => (
@@ -746,6 +754,10 @@ function parseAction(value: unknown): AgentAction | null {
     if (raw.confirm !== true) return null
     return { type: 'resume_task', taskId: cleanString(raw.task_id, 160), confirm: true }
   }
+  if (type === 'retry_task') {
+    if (raw.confirm !== true) return null
+    return { type: 'retry_task', taskId: cleanString(raw.task_id, 160), confirm: true }
+  }
   return null
 }
 
@@ -806,6 +818,19 @@ export function isExplicitCancelRequest(request: string): boolean {
   const text = request.trim()
   if (!text || NEGATED_CANCEL_REQUEST.test(text)) return false
   return EXPLICIT_CANCEL_REQUESTS.some(pattern => pattern.test(text))
+}
+
+const EXPLICIT_RETRY_REQUESTS = [
+  /\b(?:reintenta|reintentad|reintentar|repite|repetid)\b[^.!?\n]*\b(?:tarea|trabajo|job|generaci[oó]n|fallo|fallida|cancelada|interrumpida)\b/i,
+  /\b(?:retry|try\s+again)\b[^.!?\n]*\b(?:task|job|generation|failed|cancelled|interrupted)\b/i,
+]
+const NEGATED_RETRY_REQUEST = /\b(?:no|sin|don['’]?t|do\s+not)\b[^.!?\n]{0,24}\b(?:reintent|repet|retry|try\s+again)\b/i
+
+export function isExplicitRetryRequest(request: string): boolean {
+  const text = request.trim()
+  return Boolean(text)
+    && !NEGATED_RETRY_REQUEST.test(text)
+    && EXPLICIT_RETRY_REQUESTS.some(pattern => pattern.test(text))
 }
 
 export function isExplicitVideoGenerationRequest(request: string): boolean {
@@ -971,6 +996,20 @@ export async function reconcileAgentTurnWithRequest(
       actions: [{ type: 'cancel_task', taskId: existing?.taskId || '', confirm: true }],
     }
   }
+  if (isExplicitRetryRequest(request)) {
+    const existing = turn.actions.find(
+      (action): action is AgentRetryTaskAction => action.type === 'retry_task',
+    )
+    const latest = /(?:[uú]ltim[oa]|latest|last)/i.test(request)
+    return {
+      reply: 'Reintentaré la tarea canónica indicada desde su estado persistido y abriré Activity para mostrar el resultado. 🪄',
+      actions: [{
+        type: 'retry_task',
+        taskId: existing?.taskId || (latest ? 'latest' : ''),
+        confirm: true,
+      }],
+    }
+  }
   if (isExplicitVideoGenerationRequest(request)) {
     const navigation = turn.actions
       .filter((action): action is AgentOpenTabAction => action.type === 'open_tab')
@@ -1043,7 +1082,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1546,7 +1585,9 @@ export async function executeAgentActions(
                 ? 'Consultando la cola canónica…'
                 : action.type === 'cancel_task'
                   ? 'Cancelando la tarea en la cola…'
-                  : 'Reanudando la tarea en la cola…'
+                  : action.type === 'resume_task'
+                    ? 'Reanudando la tarea en la cola…'
+                    : 'Reintentando la tarea en la cola…'
     onStep?.(working)
     try {
       if (action.type === 'open_tab') {
@@ -1617,9 +1658,12 @@ export async function executeAgentActions(
       } else if (action.type === 'cancel_task') {
         const { cancelCanonicalQueueTask } = await import('./queueActions')
         results.push({ action, ok: true, message: await cancelCanonicalQueueTask(action.taskId, action.confirm) })
-      } else {
+      } else if (action.type === 'resume_task') {
         const { resumeCanonicalQueueTask } = await import('./queueActions')
         results.push({ action, ok: true, message: await resumeCanonicalQueueTask(action.taskId, action.confirm) })
+      } else {
+        const { retryCanonicalQueueTask } = await import('./queueActions')
+        results.push({ action, ok: true, message: await retryCanonicalQueueTask(action.taskId, action.confirm) })
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

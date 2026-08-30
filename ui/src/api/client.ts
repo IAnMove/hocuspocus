@@ -219,6 +219,16 @@ export async function resumeCanonicalTask(taskId: string, workspace: string): Pr
   return payload.task
 }
 
+export async function retryCanonicalTask(taskId: string, workspace: string): Promise<CanonicalTask> {
+  const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}/retry?workspace=${encodeURIComponent(workspace)}`, { method: 'POST' })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Task retry failed' }))
+    throw new Error(error.detail || 'Task retry failed')
+  }
+  const payload = await res.json()
+  return payload.task
+}
+
 export async function dismissCanonicalTask(taskId: string, workspace: string): Promise<void> {
   const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}?workspace=${encodeURIComponent(workspace)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to dismiss HocusPocus task')

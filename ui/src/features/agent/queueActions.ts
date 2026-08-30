@@ -1,4 +1,4 @@
-import { cancelCanonicalTask, fetchCanonicalTasks, resumeCanonicalTask, type CanonicalTask } from '../../api/client'
+import { cancelCanonicalTask, fetchCanonicalTasks, resumeCanonicalTask, retryCanonicalTask, type CanonicalTask } from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { canResumeCanonicalTask } from '../../lib/canonicalTaskEvents'
 import { openAgentActivityDetails } from './agentUiBus'
@@ -37,6 +37,28 @@ function resolveTask(tasks: CanonicalTask[], requestedId: string): CanonicalTask
   const prefix = tasks.filter(task => task.id.startsWith(needle))
   if (prefix.length === 1) return prefix[0]
   throw new Error(`No encontré la tarea “${needle}” en la cola canónica.`)
+}
+
+function resolveRetryTask(tasks: CanonicalTask[], requestedId: string): CanonicalTask {
+  const roots = tasks.filter(task => !task.parent_id && canResumeCanonicalTask(task))
+  const needle = requestedId.trim()
+  if (needle === 'latest') {
+    const latest = [...roots].sort((left, right) => right.updated_at - left.updated_at)[0]
+    if (!latest) throw new Error('No hay ninguna tarea fallida, cancelada o interrumpida que reintentar.')
+    return latest
+  }
+  if (!needle) {
+    if (!roots.length) throw new Error('No hay ninguna tarea reintentable.')
+    if (roots.length > 1) {
+      throw new Error(`Hay ${roots.length} tareas reintentables; indica el id o pide explícitamente “el último fallo”.`)
+    }
+    return roots[0]
+  }
+  const task = resolveTask(tasks, needle)
+  if (!canResumeCanonicalTask(task)) {
+    throw new Error(`La tarea ${task.id} no se puede reintentar ahora (${task.status}).`)
+  }
+  return task
 }
 
 export async function inspectCanonicalQueue(scope: 'active' | 'all'): Promise<string> {
@@ -88,4 +110,13 @@ export async function resumeCanonicalQueueTask(taskId: string, confirm: boolean)
   const resumed = await resumeCanonicalTask(task.id, workspaceId())
   openAgentActivityDetails()
   return `He reanudado “${resumed.title || task.title}” (${resumed.id}); el estado actual es ${resumed.status}.`
+}
+
+export async function retryCanonicalQueueTask(taskId: string, confirm: boolean): Promise<string> {
+  if (!confirm) throw new Error('Reintentar requiere confirm=true tras una petición explícita del usuario.')
+  const snapshot = await fetchCanonicalTasks(workspaceId(), 'all')
+  const task = resolveRetryTask(snapshot.tasks, taskId)
+  const retried = await retryCanonicalTask(task.id, workspaceId())
+  openAgentActivityDetails()
+  return `He reintentado “${retried.title || task.title}” (${retried.id}); Activity muestra el estado ${retried.status}.`
 }

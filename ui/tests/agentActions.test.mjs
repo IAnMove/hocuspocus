@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'create_series_episode', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -170,6 +170,21 @@ test('drops cancel_task unless confirm is true and repairs an explicit cancel re
   const repaired = await reconcileAgentTurnWithRequest('cancela el trabajo activo', { reply: 'Vale.', actions: [] })
   assert.equal(repaired.actions[0].type, 'cancel_task')
   assert.equal(repaired.actions[0].confirm, true)
+})
+
+test('requires confirmation for retry and resolves an explicit latest failure request', async () => {
+  const { parseAgentTurn, reconcileAgentTurnWithRequest } = await import('../src/features/agent/agentActions.ts')
+  const unsigned = parseAgentTurn(JSON.stringify({
+    reply: 'Reintento.', actions: [{ type: 'retry_task', task_id: 'task-9', confirm: false }],
+  }))
+  assert.equal(unsigned.actions.length, 0)
+  const repaired = await reconcileAgentTurnWithRequest(
+    'reintenta el último fallo',
+    { reply: 'Vale.', actions: [] },
+  )
+  assert.deepEqual(repaired.actions[0], {
+    type: 'retry_task', taskId: 'latest', confirm: true,
+  })
 })
 
 test('repairs an explicit image request into prepare_image plus start_generation', async () => {

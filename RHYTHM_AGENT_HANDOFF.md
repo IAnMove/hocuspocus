@@ -1058,3 +1058,11 @@ limitan a `0..2` y se aplican a todas las fases anunciadas por el modelo.
 El snapshot expone `current_studio_loras.available` y `.active`. Una lista
 vacía con `replace_existing=true` desactiva todos los LoRAs actuales. La acción
 no descarga LoRAs ni acepta que el LLM invente uno incompatible.
+
+## 31. Retry de cola canónica (2026-08-30)
+
+`retry_task` llama al endpoint canónico `/tasks/<id>/retry`, exige
+`confirm=true` y sólo admite tareas raíz `failed`, `cancelled` o `interrupted`
+marcadas como reanudables. Si hay varias, exige un id; `task_id="latest"` sólo
+se usa cuando el usuario pide explícitamente el último fallo. Activity se abre
+después para mostrar el estado real devuelto por backend.

@@ -170,6 +170,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     risk: 'edit',
     parameters: ['task_id', 'confirm'],
   },
+  {
+    type: 'retry_task',
+    title: 'Retry a canonical task',
+    purpose: 'Retry a persisted failed, cancelled or interrupted task through the canonical retry endpoint and show Activity.',
+    useWhen: 'The user explicitly asks to retry a specific task or the latest failure.',
+    risk: 'compute',
+    parameters: ['task_id', 'confirm'],
+  },
 ]
 
 export function buildAgentCapabilityGuide(): string {
