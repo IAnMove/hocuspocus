@@ -11,6 +11,7 @@ import type {
   AgentAssembleSeriesEpisodeAction,
   AgentCommitSeriesCanonAction,
   AgentStageStoryComicAction,
+  AgentStageStoryVideoAction,
   AgentUpdateSeriesEpisodeAction,
   AgentCreateSeriesEpisodeAction,
   AgentCreateStoryAction,
@@ -810,6 +811,109 @@ export async function stageStoryComic(action: AgentStageStoryComicAction): Promi
     app.setSidebarOpen(true)
     window.dispatchEvent(new Event('maestro:director-open'))
     return `He preparado “${comic.title}” como capítulo editable de ${action.pageCount} páginas × ${action.panelsPerPage} viñetas en Comic Director. No he generado imágenes.`
+  } finally {
+    useStoryStore.getState().endProjectOperation(target.id)
+  }
+}
+
+export async function stageStoryVideo(action: AgentStageStoryVideoAction): Promise<string> {
+  if (!action.confirm) throw new Error('Preparar una producción de vídeo requiere confirm=true porque sustituye el borrador actual de Director.')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  const [{ useStoryStore, normalizeStoryProject, storyId }, adaptations, api] = await Promise.all([
+    import('../stories/store'), import('../stories/adaptations'), import('../../api/client'),
+  ])
+  await useStoryStore.getState().loadWorkspace(workspace)
+  const current = useStoryStore.getState()
+  if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de preparar una producción.')
+  const target = action.targetStoryTitle
+    ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
+    : current.project
+  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+  if (!target.synopsis.trim() || !target.characters.length) throw new Error('La producción necesita una sinopsis y al menos un personaje.')
+  const duration = boundedDuration(action.durationSeconds, target.creativeBrief.durationSeconds || (action.kind === 'trailer' ? 60 : 90))
+  const direction = action.direction || (action.kind === 'trailer' ? adaptations.DEFAULT_TRAILER_DIRECTION : adaptations.DEFAULT_SHORT_FILM_DIRECTION)
+  const adaptation = action.kind === 'trailer'
+    ? adaptations.buildTrailerAdaptation(target, direction, duration, {
+        format: 'theatrical', narration: 'hybrid', spoiler: 'balanced', intensity: 'rising',
+        tagline: target.logline, titleCards: false, preserveVisualStyle: true,
+      })
+    : adaptations.buildShortFilmAdaptation(target, direction, duration, { preserveVisualStyle: true })
+  const title = `${target.title} · ${action.kind === 'trailer' ? 'epic trailer' : 'short episode'}`
+  const production = {
+    id: storyId('production'), kind: action.kind, title, createdAt: new Date().toISOString(),
+    sourceVersion: target.revision, sourceSnapshot: { ...structuredClone(target), productions: [] },
+    targetName: title,
+    targetSnapshot: {
+      direction, sceneDescription: adaptation.sceneDescription, characters: adaptation.characters,
+      targetDuration: adaptation.targetDuration, narrative: adaptation.narrative,
+      visualStyle: adaptation.visualStyle, preserveVisualStyle: adaptation.preserveVisualStyle,
+      imageModel: target.provider.imageModel, videoModel: target.videoOverride.model,
+      generationMode: target.musicVideoGenerationMode, resolution: target.videoOverride.resolution,
+      aspectRatio: target.videoOverride.aspectRatio,
+    },
+    status: 'staged' as const,
+  }
+  useStoryStore.getState().beginProjectOperation(target.id)
+  try {
+    const project = normalizeStoryProject({ ...target, revision: target.revision + 1, productions: [...target.productions, production], updatedAt: new Date().toISOString() })
+    const library = await api.saveStoryLibrary(workspace, { version: 2, revision: current.libraryRevision, activeId: project.id, projects: { ...current.projects, [project.id]: project } })
+    useStoryStore.setState({ workspace, project: library.projects[project.id], projects: library.projects, libraryRevision: library.revision, dirty: false, hydrated: false, loading: false, saveError: null, libraryConflicts: [] })
+    await useStoryStore.getState().loadWorkspace(workspace)
+
+    const director = useStore.getState()
+    const directVideo = target.musicVideoGenerationMode === 'direct_video'
+    const directReferences = target.musicVideoGenerationMode === 'direct_references'
+    director.directorReset()
+    director.setGenerationMode('video')
+    if (!directVideo && !directReferences && target.provider.imageModel) director.selectDirectorImageModel(target.provider.imageModel)
+    if (target.videoOverride.model) await director.selectDirectorVideoModel(target.videoOverride.model)
+    director.setDirectorResolution(target.videoOverride.resolution)
+    director.setDirectorAspectRatio(target.videoOverride.aspectRatio)
+    director.setDirectorShotImageGuidance(directVideo || directReferences ? 'prompt_only' : 'auto')
+    if (target.videoOverride.model.startsWith('minimax_h3')) director.setDirectorH3ReferenceMode(directReferences ? 'references' : 'first_frame')
+    director.setSidebarMode('director')
+    director.directorSetSceneDescription(adaptation.sceneDescription)
+    director.setDirectorSkill('short_film')
+    director.setDirectorMusicVideoTreatment({ generation_mode: directVideo ? 'direct_video' : 'image_guided', direct_video_master_prompt: target.directVideoMasterPrompt })
+    director.shortFilmSetPath('story')
+    director.shortFilmSetCharacters(adaptation.characters)
+    director.shortFilmSetTargetDuration(adaptation.targetDuration)
+    director.shortFilmSetNarrative(adaptation.narrative)
+    director.shortFilmSetVisualStyle(directVideo ? '' : adaptation.visualStyle)
+    director.shortFilmSetPreserveVisualStyle(directVideo ? false : adaptation.preserveVisualStyle)
+    director.setDirectorCharacterVisualStyle(directVideo ? '' : target.characterVisualStyle)
+    director.setDirectorAllowClipText(target.allowClipText)
+    director.setDirectorSpokenLanguage(target.spokenLanguage)
+    director.setDirectorAutoMode(false)
+    useStore.setState({ directorWritingProvider: target.provider.writingProvider, directorWritingModel: target.provider.writingModel, directorWritingBaseUrl: target.provider.writingBaseUrl })
+    for (const reference of directVideo ? [] : adaptation.characterReferences) {
+      const asset = target.assets[reference.assetId]
+      if (!asset) continue
+      try {
+        const response = await fetch(asset.source)
+        if (!response.ok) continue
+        const blob = await response.blob()
+        director.directorAddCharacterRef(new File([blob], asset.name || `${reference.assetId}.png`, { type: blob.type || 'image/png' }))
+        director.directorSetCharacterRefLabel(useStore.getState().directorCharacterRefs.length - 1, reference.label)
+      } catch { /* The staged canon remains usable when an old reference disappeared. */ }
+    }
+    for (const reference of directVideo ? [] : adaptation.locationReferences) {
+      const asset = target.assets[reference.assetId]
+      if (!asset) continue
+      try {
+        const response = await fetch(asset.source)
+        if (!response.ok) continue
+        const blob = await response.blob()
+        director.directorAddLocationRef(new File([blob], asset.name || `${reference.assetId}.png`, { type: blob.type || 'image/png' }))
+        director.directorSetLocationRefLabel(useStore.getState().directorLocationRefs.length - 1, reference.label)
+      } catch { /* Keep the written production even if a legacy asset is gone. */ }
+    }
+    useStore.setState({ directorStep: 'style' })
+    director.setMediaFilter('all')
+    director.setSidebarOpen(true)
+    window.dispatchEvent(new Event('maestro:director-open'))
+    return `He preparado “${title}” (${duration}s) en Short Film Director con el canon y las referencias aprobadas. No he iniciado ninguna generación.`
   } finally {
     useStoryStore.getState().endProjectOperation(target.id)
   }

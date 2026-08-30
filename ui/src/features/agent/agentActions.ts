@@ -192,6 +192,15 @@ export interface AgentStageStoryComicAction {
   confirm: true
 }
 
+export interface AgentStageStoryVideoAction {
+  type: 'stage_story_video'
+  targetStoryTitle: string
+  kind: 'film' | 'trailer'
+  direction: string
+  durationSeconds?: number
+  confirm: true
+}
+
 export interface AgentCreateSeriesEpisodeAction {
   type: 'create_series_episode'
   seriesTitle: string
@@ -376,6 +385,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentApplyStoryProposalAction
   | AgentApproveStorySectionAction
   | AgentStageStoryComicAction
+  | AgentStageStoryVideoAction
   | AgentCreateSeriesEpisodeAction
   | AgentUpdateSeriesEpisodeAction
   | AgentGenerateSeriesPlanAction
@@ -492,6 +502,7 @@ const ACTION_TYPE_ALIASES: Record<string, AgentAction['type']> = {
   applystoryproposal: 'apply_story_proposal',
   approvestorysection: 'approve_story_section',
   stagestorycomic: 'stage_story_comic',
+  stagestoryvideo: 'stage_story_video',
   createseriesepisode: 'create_series_episode',
   updateseriesepisode: 'update_series_episode',
   generateseriesplan: 'generate_series_plan',
@@ -621,7 +632,7 @@ const CANONICAL_FIELD_NAMES = [
   'series_logline', 'target_episode_title', 'episode_title', 'episode_premise', 'episode_logline',
   'target_duration_seconds', 'create_if_missing', 'known_universe',
   'queue_scope', 'task_id', 'job_id', 'shot_ids', 'shot_numbers', 'attempt_id', 'render_mode',
-  'review_decision', 'review_scope', 'canon_decision', 'canon_item_ids', 'confirm', 'characters', 'locations', 'outline_beats',
+  'review_decision', 'review_scope', 'canon_decision', 'canon_item_ids', 'production_kind', 'confirm', 'characters', 'locations', 'outline_beats',
   'audio_sub_mode', 'sfx_clips', 'name', 'preset', 'comic_panels', 'caption',
   'page_number', 'panel_number',
   'reference_output_names', 'reference_role', 'replace_existing', 'remove_background',
@@ -907,6 +918,12 @@ function parseAction(value: unknown): AgentAction | null {
       panelsPerPage: optionalPositiveNumber(raw.panels_per_page, 1, 12, true) ?? 4,
       confirm: true,
     }
+  }
+  if (type === 'stage_story_video') {
+    if (raw.confirm !== true) return null
+    const kind = cleanString(raw.production_kind, 30) as AgentStageStoryVideoAction['kind']
+    if (kind !== 'film' && kind !== 'trailer') return null
+    return { type: 'stage_story_video', targetStoryTitle: cleanString(raw.target_story_title, 300), kind, direction: cleanString(raw.direction, 4_000), durationSeconds: optionalPositiveNumber(raw.duration_seconds, 15, 3_600, true), confirm: true }
   }
   if (type === 'create_series_episode') {
     const seriesTitle = cleanString(raw.series_title, 300)
@@ -1438,7 +1455,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
+          type: { type: 'string', enum: ['open_tab', 'open_story_section', 'open_series_section', 'prepare_video', 'prepare_image', 'prepare_audio', 'prepare_3d', 'queue_sfx_pack', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'] },
           tab: { type: 'string', enum: ['', ...AGENT_TABS] },
           story_section: { type: 'string', enum: ['', ...STORY_SECTIONS] },
           series_section: { type: 'string', enum: ['', ...SERIES_SECTIONS] },
@@ -1464,6 +1481,7 @@ export const HOCUSPOCUS_AGENT_RESPONSE_SCHEMA: Record<string, unknown> = {
           page_count: { type: 'integer', minimum: 0, maximum: 100 },
           panels_per_page: { type: 'integer', minimum: 0, maximum: 12 },
           project_type: { type: 'string', enum: ['', 'full_story', 'music_video', 'trailer', 'quick_video'] },
+          production_kind: { type: 'string', enum: ['', 'film', 'trailer'] },
           creative_brief: { type: 'string', maxLength: 4_000 },
           premise: { type: 'string', maxLength: 2_000 },
           logline: { type: 'string', maxLength: 2_000 },
@@ -1960,6 +1978,8 @@ export async function executeAgentActions(
               ? `Validando y aprobando Story Lab → ${action.section}…`
             : action.type === 'stage_story_comic'
               ? 'Adaptando la historia a Comic Director…'
+            : action.type === 'stage_story_video'
+              ? `Adaptando la historia como ${action.kind === 'trailer' ? 'tráiler' : 'cortometraje'}…`
             : action.type === 'create_series_episode'
               ? 'Preparando la serie y el nuevo episodio…'
             : action.type === 'update_series_episode'
@@ -2052,6 +2072,9 @@ export async function executeAgentActions(
       } else if (action.type === 'stage_story_comic') {
         const { stageStoryComic } = await import('./labActions')
         results.push({ action, ok: true, message: await stageStoryComic(action) })
+      } else if (action.type === 'stage_story_video') {
+        const { stageStoryVideo } = await import('./labActions')
+        results.push({ action, ok: true, message: await stageStoryVideo(action) })
       } else if (action.type === 'create_series_episode') {
         const { createFilledSeriesEpisode } = await import('./labActions')
         results.push({ action, ok: true, message: await createFilledSeriesEpisode(action) })

@@ -139,6 +139,14 @@ export const AGENT_CAPABILITIES: AgentCapabilityDescriptor[] = [
     parameters: ['target_story_title', 'direction', 'page_count', 'panels_per_page', 'confirm'],
   },
   {
+    type: 'stage_story_video',
+    title: 'Stage a Story film or trailer',
+    purpose: 'Build the official editable film/trailer adaptation, save a reopenable production snapshot and load it into Short Film Director without rendering.',
+    useWhen: 'The user explicitly asks to prepare or open a Story as a film, quick video or trailer in Director.',
+    risk: 'edit',
+    parameters: ['target_story_title', 'production_kind', 'direction', 'duration_seconds', 'confirm'],
+  },
+  {
     type: 'create_series_episode',
     title: 'Create a filled Series Lab episode',
     purpose: 'Find or create a series, prepare the minimum canon needed, create a filled episode outline and show Episode room.',

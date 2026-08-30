@@ -1229,3 +1229,11 @@ El ensamblado no acepta ni rechaza el delta de canon del episodio. Durante el de
 `commit_series_canon` separa expresamente la continuidad narrativa del render y del ensamblado. Requiere `confirm=true` y admite aceptar/rechazar todo el delta o una lista exacta de `canon_item_ids`; los elementos omitidos permanecen pendientes.
 
 La acción usa el `baseRevision` del delta para conservar el bloqueo optimista del backend, valida IDs desconocidos, verifica la serie devuelta, recarga el store y abre `Render & Review → Finalizar y canon`. Un conflicto de revisión obliga a recargar en vez de sobrescribir canon nuevo.
+
+## 45. Wizard: staging Story Lab → Short Film Director
+
+`stage_story_video` exige `confirm=true` y prepara `film` o `trailer` sin iniciar generación. Resuelve la Story activa o un título exacto, valida sinopsis/reparto y reutiliza `buildShortFilmAdaptation` o `buildTrailerAdaptation`.
+
+Antes de sustituir el borrador de Director guarda por CAS una producción `staged` reabrible con dirección, narrativa, estilo, duración, modelos y formato. Después configura Short Film Director con el canon escrito, proveedor, idioma, política de texto y modo visual de la Story; también recupera las referencias aprobadas de personajes/localizaciones que sigan disponibles. Los assets históricos ausentes no falsifican un fallo de staging: quedan visibles desde la producción guardada.
+
+La acción termina en el paso editable de estilo y declara expresamente que no ha lanzado imágenes ni vídeo. El arranque completo seguirá siendo una acción de cómputo separada y confirmada.

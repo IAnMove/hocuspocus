@@ -60,7 +60,7 @@ test('capability knowledge includes every currently executable action family', a
   const { AGENT_CAPABILITIES, buildAgentCapabilityGuide } = await import('../src/features/agent/agentCapabilities.ts')
   assert.deepEqual(
     AGENT_CAPABILITIES.map(item => item.type),
-    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
+    ['open_tab', 'prepare_video', 'prepare_image', 'prepare_audio', 'queue_sfx_pack', 'prepare_3d', 'open_story_section', 'open_series_section', 'start_generation', 'create_story', 'update_story', 'generate_story_section', 'apply_story_proposal', 'approve_story_section', 'stage_story_comic', 'stage_story_video', 'create_series_episode', 'update_series_episode', 'generate_series_plan', 'apply_series_plan', 'render_series_shots', 'review_series_attempts', 'assemble_series_episode', 'commit_series_canon', 'create_comic', 'generate_comic', 'generate_comic_panel', 'attach_studio_references', 'configure_studio_loras', 'inspect_queue', 'cancel_task', 'resume_task', 'retry_task', 'select_workspace', 'create_workspace'],
   )
   assert.match(buildAgentCapabilityGuide(), /create_series_episode/)
 })
@@ -157,6 +157,16 @@ test('parses bounded Story to Comic staging only with confirmation', async () =>
     panelsPerPage: 5,
     confirm: true,
   }])
+})
+
+test('parses confirmed Story film and trailer staging', async () => {
+  const { parseAgentTurn } = await import('../src/features/agent/agentActions.ts')
+  const turn = parseAgentTurn(JSON.stringify({ reply: 'Abro el portal del celuloide.', actions: [
+    { type: 'stage_story_video', production_kind: 'music_video', confirm: true },
+    { type: 'stage_story_video', production_kind: 'film', confirm: false },
+    { type: 'stage_story_video', target_story_title: 'La torre de sal', production_kind: 'trailer', direction: 'Sugiere el misterio sin revelar el final.', duration_seconds: 45, confirm: true },
+  ] }))
+  assert.deepEqual(turn.actions, [{ type: 'stage_story_video', targetStoryTitle: 'La torre de sal', kind: 'trailer', direction: 'Sugiere el misterio sin revelar el final.', durationSeconds: 45, confirm: true }])
 })
 
 test('parses a non-empty Series episode patch without destructive fields', async () => {
